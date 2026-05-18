@@ -139,12 +139,6 @@ export function MobileAccountCreateDrawer({
             <option value="night">Ночная смена</option>
           </select>
         </label>
-        <label>
-          Автоматический выход при неактивности
-          <select defaultValue="15">
-            <option value="15">15 минут</option>
-          </select>
-        </label>
       </div>
 
       <label className="toggle-filter">

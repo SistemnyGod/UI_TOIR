@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { MobileAccountCreateDrawer } from "../components/accounts/MobileAccountCreateDrawer";
 import { MobileAccountListPanel } from "../components/accounts/MobileAccountListPanel";
 import { DashboardRequestsPanel } from "../components/dashboard/DashboardRequestsPanel";
 import { SiteUserFormPanel } from "../components/site-users/SiteUserFormPanel";
@@ -126,5 +127,18 @@ describe("shared UI primitives", () => {
     await user.click(screen.getByRole("button", { name: "Повторить загрузку" }));
 
     expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it("does not render mobile account automatic inactivity logout control", () => {
+    render(
+      <MobileAccountCreateDrawer
+        onCreateAccount={vi.fn()}
+        onEmployeeNameDraftChange={vi.fn()}
+        onNotify={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("Автоматический выход при неактивности")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Автоматический выход при неактивности" })).not.toBeInTheDocument();
   });
 });
