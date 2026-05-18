@@ -114,6 +114,7 @@ npm run verify
 - `tools/Check-Structure.ps1` — структурные проверки solution и project references.
 - `tools/Clean-Workspace.ps1` — очистка generated artifacts.
 - `tools/Test-All.ps1` — единый локальный gate.
+- `tools/Set-GitHubBranchProtection.ps1` — применение GitHub branch protection после настройки remote.
 - `apps/web/playwright.config.ts` — Playwright smoke-конфигурация frontend.
 
 ## Ближайшие шаги

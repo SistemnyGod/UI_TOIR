@@ -52,6 +52,7 @@ RequireFile("tools/Verify-TextEncoding.ps1");
 RequireFile("tools/Clean-Workspace.ps1");
 RequireFile("tools/Test-All.ps1");
 RequireFile("tools/Check-Structure.ps1");
+RequireFile("tools/Set-GitHubBranchProtection.ps1");
 RequireFile("tests/web/unit/run-unit-tests.mjs");
 RequireFile("tests/web/e2e/README.md");
 
@@ -129,6 +130,10 @@ AssertFileContains("docs/runbooks/ci-contract.md", "CI / verify");
 AssertFileContains("docs/runbooks/ci-contract.md", "actions/upload-artifact");
 AssertFileContains("docs/runbooks/branch-review-policy.md", "require status check `CI / verify`");
 AssertFileContains("docs/runbooks/branch-review-policy.md", "squash merge");
+AssertFileContains("docs/runbooks/branch-review-policy.md", "Set-GitHubBranchProtection.ps1");
+AssertFileContains("tools/Set-GitHubBranchProtection.ps1", "required_status_checks");
+AssertFileContains("tools/Set-GitHubBranchProtection.ps1", "CI / verify");
+AssertFileContains("tools/Set-GitHubBranchProtection.ps1", "gh api");
 AssertFileContains("tools/Test-All.ps1", "--logger");
 AssertFileContains("tools/Test-All.ps1", "dotnet format");
 AssertFileContains("tools/Test-All.ps1", "npm run test:ci");
@@ -145,6 +150,7 @@ AssertFileContains("apps/web/playwright.config.ts", "playwright-report");
 RequireFile("apps/web/e2e/dashboard.spec.ts");
 RequireFile("apps/web/src/test/setup.ts");
 RequireFile("apps/web/src/__tests__/ui.test.tsx");
+RequireFile("apps/web/src/__tests__/domain.test.ts");
 AssertDirectoryDoesNotContain("libs/domain", [
     "Microsoft.EntityFrameworkCore",
     "Microsoft.AspNetCore",

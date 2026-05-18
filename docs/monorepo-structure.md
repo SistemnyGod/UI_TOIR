@@ -145,7 +145,8 @@ Application слой.
 - `Verify-TextEncoding.ps1`;
 - `Check-Structure.ps1`;
 - `Clean-Workspace.ps1`;
-- `Test-All.ps1`.
+- `Test-All.ps1`;
+- `Set-GitHubBranchProtection.ps1`.
 
 ## .github
 

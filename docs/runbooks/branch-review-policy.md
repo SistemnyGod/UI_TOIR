@@ -91,6 +91,22 @@ PR должен содержать:
 
 Рекомендуемый merge method: squash merge.
 
+## Применение через GitHub CLI
+
+В текущей рабочей папке remote может быть еще не настроен. После публикации репозитория в GitHub:
+
+```powershell
+git remote add origin https://github.com/<owner>/<repo>.git
+gh auth login
+.\tools\Set-GitHubBranchProtection.ps1 -Repository <owner>/<repo> -Branches main,master
+```
+
+Если `CODEOWNERS` еще не настроен, не включайте `-RequireCodeOwnerReviews`. После появления владельцев кода повторите команду:
+
+```powershell
+.\tools\Set-GitHubBranchProtection.ps1 -Repository <owner>/<repo> -Branches main -RequireCodeOwnerReviews
+```
+
 ## Исключения
 
 Прямой commit в protected branch допустим только для аварийного исправления, когда PR flow блокирует восстановление системы. После такого commit нужно создать follow-up PR с описанием причины и проверок.

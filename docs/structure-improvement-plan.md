@@ -4,14 +4,14 @@
 
 ## Текущая оценка
 
-Готовность структуры проекта после текущего структурного прохода: 88%.
+Готовность структуры проекта после текущего структурного прохода: 89%.
 
 Монорепо организовано правильно для текущего этапа: есть разделение на `apps`, `libs`, `docs`, `infra`, `tools`, слои backend разнесены на API/application/domain/contracts/infrastructure, frontend находится отдельно в `apps/web`, worker вынесен в отдельный host.
 
 Главные причины, почему структура еще не выше 90%:
 
-- Git инициализирован локально, есть базовая история коммитов и формализован branch/review policy; удаленные branch protection rules нужно включить в GitHub settings;
-- xUnit/Vitest/Playwright smoke suites подключены, но сценарное покрытие по модулям еще минимальное;
+- Git инициализирован локально, есть базовая история коммитов, формализован branch/review policy и добавлен скрипт применения branch protection; удаленный `origin` еще не настроен;
+- xUnit/Vitest/Playwright smoke suites подключены, базовые сценарные проверки добавлены, но DB-backed integration и основные e2e-потоки еще не покрыты;
 - есть CI workflow с test artifact upload, но он еще не проверен на удаленном Git-хостинге;
 - generated artifacts очищаются через `tools/Clean-Workspace.ps1`, но `node_modules` остается локальной ignored-зависимостью для frontend-разработки;
 - legacy-прототип перенесен в `legacy/territory-patrol-panel`, но еще не принято решение об окончательном удалении;
@@ -61,6 +61,9 @@
 - Добавлен runbook `docs/runbooks/ci-contract.md`.
 - Добавлен runbook `docs/runbooks/branch-review-policy.md`.
 - Добавлен `.github/pull_request_template.md`.
+- Добавлен `tools/Set-GitHubBranchProtection.ps1` для применения remote branch protection через GitHub CLI.
+- Расширены backend scenario smoke tests для domain/application/API/infrastructure.
+- Добавлены frontend domain workflow tests в Vitest.
 - Добавлен `.github/workflows/ci.yml`.
 - Добавлен `infra/env/.env.example` и `infra/README.md`.
 - Старый `territory-patrol-panel` перенесен в `legacy/territory-patrol-panel`.
@@ -105,6 +108,7 @@
     Verify-TextEncoding.ps1
     Clean-Workspace.ps1
     Test-All.ps1
+    Set-GitHubBranchProtection.ps1
   legacy/
     territory-patrol-panel/
 ```
@@ -302,6 +306,7 @@ Frontend tests:
 - test projects добавлены в `Patrol360.slnx`;
 - есть единая команда запуска всех тестов;
 - минимум один smoke test на API и один frontend smoke test;
+- есть сценарные smoke tests для уже существующих domain/application/API/frontend workflows;
 - новые module changes требуют тестов в соответствующем слое.
 
 ## P2: добавить CI contract
@@ -350,11 +355,15 @@ npm run test:e2e
 
 - добавлен `docs/runbooks/branch-review-policy.md`;
 - добавлен `.github/pull_request_template.md`;
+- добавлен `tools/Set-GitHubBranchProtection.ps1`;
 - branch protection checklist описывает required status check `CI / verify`;
 - structural tests проверяют наличие CI/review policy файлов.
 
 Осталось включить на удаленном Git-хостинге:
 
+- добавить `origin` на GitHub remote;
+- установить и авторизовать GitHub CLI;
+- выполнить `.\tools\Set-GitHubBranchProtection.ps1 -Repository <owner>/<repo> -Branches main,master`;
 - protected branch для `main` или `master`;
 - required pull request;
 - required status check `CI / verify`;
@@ -493,6 +502,8 @@ libs/contracts -> no project refs
 9. Готово частично: xUnit/Vitest/Playwright подключены, следующий шаг - расширить smoke tests до сценарного покрытия.
 10. Готово: добавить TRX/JUnit/Playwright reports в локальный и CI-контур.
 11. Готово локально: формализовать branch/review policy и CI contract.
+12. Готово локально: добавить скрипт применения GitHub branch protection.
+13. Готово частично: расширить smoke tests до первых scenario checks.
 
 ## Обновленная оценка по структуре
 
@@ -503,11 +514,11 @@ libs/contracts -> no project refs
 | Frontend placement | 80% |
 | Infra placement | 75% |
 | Docs placement | 90% |
-| Tests structure | 60% |
-| CI structure | 82% |
-| Repository hygiene | 80% |
+| Tests structure | 68% |
+| CI structure | 85% |
+| Repository hygiene | 82% |
 | Legacy separation | 90% |
 
-После текущего структурного прохода production-готовность структуры выше исходного состояния: добавлены Git, `tests`, `tools`, `docs/adr`, `docs/runbooks`, CI workflow, infra env-шаблон, legacy-раздел, сохраняемые отчеты тестов, CI contract и branch/review policy. Оставшиеся крупные риски: CI и protected branch rules не проверены на удаленном Git-хостинге, smoke tests еще не покрывают реальные сценарии модулей.
+После текущего структурного прохода production-готовность структуры выше исходного состояния: добавлены Git, `tests`, `tools`, `docs/adr`, `docs/runbooks`, CI workflow, infra env-шаблон, legacy-раздел, сохраняемые отчеты тестов, CI contract, branch/review policy, скрипт branch protection и первые scenario smoke tests. Оставшиеся крупные риски: CI и protected branch rules не проверены на удаленном Git-хостинге, нет DB-backed integration tests и e2e-покрытия основных пользовательских потоков.
 
 Главное условие роста до 90%: Git + tests + CI + единые правила source/generated/legacy.

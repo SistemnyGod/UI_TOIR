@@ -59,3 +59,7 @@ Pull request считается готовым к merge только если:
 - обновить `docs/runbooks/branch-review-policy.md`, если меняются правила merge;
 - пройти `.\tools\Test-All.ps1 -IncludeE2E`;
 - быть отмечено в PR checklist.
+
+## Remote protection
+
+Branch protection применяется к удаленному GitHub-репозиторию через `tools/Set-GitHubBranchProtection.ps1`. Локальный репозиторий должен иметь `origin`, а GitHub CLI должен быть авторизован через `gh auth login`.
