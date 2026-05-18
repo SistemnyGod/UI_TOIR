@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PatrolDataSnapshot } from "../repositories/patrolDataRepository";
 import {
   createLocalRoute,
@@ -19,6 +19,7 @@ import {
   isServiceRequestList,
   patrolRequestsFallback,
   patrolRequestsStorageKey,
+  resolveServiceRequests,
 } from "../repositories/patrolRequestsRepository";
 import { createApiPatrolRequestsRepository } from "../repositories/patrolRequestsRepository";
 import {
@@ -84,9 +85,10 @@ export function usePatrolWorkspaceData({
   const [localActivePatrols, setLocalActivePatrols] = useStoredState<ActivePatrol[]>(activePatrolsStorageKey, activePatrolsFallback, {
     validate: isActivePatrolList,
   });
-  const [requests, setRequests] = useStoredState<ServiceRequest[]>(patrolRequestsStorageKey, patrolRequestsFallback, {
+  const [localRequests, setLocalRequests] = useStoredState<ServiceRequest[]>(patrolRequestsStorageKey, patrolRequestsFallback, {
     validate: isServiceRequestList,
   });
+  const [apiCreatedRequests, setApiCreatedRequests] = useState<ServiceRequest[]>([]);
   const [localEmployees, setLocalEmployees] = useStoredState<EmployeeDirectoryItem[]>(
     employeesStorageKey,
     employeesFallback,
@@ -115,6 +117,15 @@ export function usePatrolWorkspaceData({
         snapshotActivePatrols: patrolSnapshot.activePatrols,
       }),
     [dataSourceMode, localActivePatrols, patrolSnapshot.activePatrols],
+  );
+  const requests = useMemo(
+    () =>
+      resolveServiceRequests({
+        apiRequests: apiCreatedRequests,
+        dataSourceMode,
+        localRequests,
+      }),
+    [apiCreatedRequests, dataSourceMode, localRequests],
   );
   const dashboardMetrics = useMemo(
     () =>
@@ -151,7 +162,7 @@ export function usePatrolWorkspaceData({
   async function submitRequestDraft(payload: CreateServiceRequestPayload) {
     if (dataSourceMode === "api") {
       const nextRequest = await apiRequests.createPatrolRequest(payload);
-      setRequests((current) => [nextRequest, ...current.filter((item) => item.id !== nextRequest.id)]);
+      setApiCreatedRequests((current) => [nextRequest, ...current.filter((item) => item.id !== nextRequest.id)]);
       await refreshPatrolData();
       showToast(
         nextRequest.notifyEmployee
@@ -164,11 +175,11 @@ export function usePatrolWorkspaceData({
     const { request: nextRequest, requests: nextRequests } = createLocalPatrolRequest({
       payload,
       requestModal,
-      requests,
+      requests: localRequests,
     });
     const requestRoute = routeDirectory.find((route) => route.name === nextRequest.route);
 
-    setRequests(nextRequests);
+    setLocalRequests(nextRequests);
     setLocalActivePatrols((current) =>
       addActivePatrolFromRequest({
         activePatrols: current,

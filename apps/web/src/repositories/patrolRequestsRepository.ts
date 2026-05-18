@@ -6,11 +6,23 @@ import {
   isServiceRequestList,
   type RequestModalState,
 } from "../domain/serviceRequests";
-import type { CreateServiceRequestPayload, ServiceRequest } from "../types";
+import type { CreateServiceRequestPayload, DataSourceMode, ServiceRequest } from "../types";
 
 export const patrolRequestsStorageKey = "patrol360.patrolRequests";
 export const patrolRequestsFallback = serviceRequests;
 export { isServiceRequestList };
+
+export function resolveServiceRequests({
+  apiRequests,
+  dataSourceMode,
+  localRequests,
+}: {
+  apiRequests: ServiceRequest[];
+  dataSourceMode: DataSourceMode;
+  localRequests: ServiceRequest[];
+}) {
+  return dataSourceMode === "api" ? apiRequests : localRequests;
+}
 
 export function createLocalPatrolRequest({
   payload,

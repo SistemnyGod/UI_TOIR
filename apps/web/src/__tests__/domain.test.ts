@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createMobileAccountDraft } from "../domain/mobileAccounts";
 import { moveRoutePoint } from "../domain/routes";
+import { resolveServiceRequests } from "../repositories/patrolRequestsRepository";
+import type { ServiceRequest } from "../types";
 import type { RoutePoint } from "../types";
 
 describe("domain workflows", () => {
@@ -38,7 +40,39 @@ describe("domain workflows", () => {
     expect(temporaryPassword).toHaveLength(10);
     expect(account.password).not.toBe(temporaryPassword);
   });
+
+  it("keeps API-created requests separate from local request storage", () => {
+    const localRequests = [createRequest("local-1")];
+    const apiRequests = [createRequest("api-1")];
+
+    expect(resolveServiceRequests({ apiRequests, dataSourceMode: "api", localRequests })).toEqual(apiRequests);
+    expect(resolveServiceRequests({ apiRequests, dataSourceMode: "mock", localRequests })).toEqual(localRequests);
+  });
 });
+
+function createRequest(id: string): ServiceRequest {
+  return {
+    id,
+    requestKind: "patrol-assignment",
+    title: id,
+    status: "Новая",
+    priority: "Средний",
+    sourceResultId: "",
+    source: "test",
+    route: "Route",
+    point: "",
+    employee: "Employee",
+    scheduledDate: "2026-05-18",
+    scheduledTime: "",
+    notifyEmployee: false,
+    notificationText: "",
+    createdAt: "2026-05-18",
+    dueAt: "",
+    responsible: "Employee",
+    description: "",
+    timeline: [],
+  };
+}
 
 function createPoint(id: string, order: number): RoutePoint {
   return {
