@@ -4,6 +4,7 @@
 
 - `.\tools\Test-All.ps1` проходит локально.
 - CI зеленый.
+- Изменения прошли через PR по `docs/runbooks/branch-review-policy.md`.
 - В CI опубликован артефакт `test-results`, если запуск падал или нужен аудит.
 - Нет незакоммиченных generated artifacts.
 - `docs/architecture.md`, `docs/modules.md` и профильные планы не противоречат фактическому состоянию.

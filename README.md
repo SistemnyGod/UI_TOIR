@@ -106,6 +106,8 @@ npm run verify
 - `docs/modules.md` — модули системы и их функциональные границы.
 - `docs/monorepo-structure.md` — правила структуры репозитория.
 - `docs/structure-improvement-plan.md` — план и критерии доработки структуры.
+- `docs/runbooks/ci-contract.md` — обязательный CI gate и публикуемые test artifacts.
+- `docs/runbooks/branch-review-policy.md` — правила веток, PR и ревью.
 - `docs/stabilization.md` — текущие правила стабилизации и обязательные проверки.
 - `docs/tz-normalization.md` — нормализация ТЗ перед MVP.
 - `tools/Verify-TextEncoding.ps1` — проверка текстовых файлов на UTF-8 без BOM.

@@ -147,6 +147,18 @@ Application слой.
 - `Clean-Workspace.ps1`;
 - `Test-All.ps1`.
 
+## .github
+
+Репозиторные правила GitHub.
+
+Сейчас:
+
+- `.github/workflows/ci.yml` - обязательный CI gate для pull request и protected branches;
+- `.github/pull_request_template.md` - checklist для структуры, тестов, generated artifacts и документации.
+
+Правила branch protection и review policy описаны в `docs/runbooks/branch-review-policy.md`.
+CI-контракт описан в `docs/runbooks/ci-contract.md`.
+
 ## legacy
 
 Каталог для старых прототипов и материалов, которые больше не являются активной production-частью проекта.
@@ -167,4 +179,6 @@ Legacy-код не должен участвовать в CI и новой featu
 - `technology-stack.md`;
 - `modules.md`;
 - `tz-normalization.md`;
+- `runbooks/ci-contract.md`;
+- `runbooks/branch-review-policy.md`;
 - ADR при принятии крупных решений.

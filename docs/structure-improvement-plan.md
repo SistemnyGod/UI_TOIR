@@ -4,13 +4,13 @@
 
 ## Текущая оценка
 
-Готовность структуры проекта после текущего структурного прохода: 85%.
+Готовность структуры проекта после текущего структурного прохода: 88%.
 
 Монорепо организовано правильно для текущего этапа: есть разделение на `apps`, `libs`, `docs`, `infra`, `tools`, слои backend разнесены на API/application/domain/contracts/infrastructure, frontend находится отдельно в `apps/web`, worker вынесен в отдельный host.
 
 Главные причины, почему структура еще не выше 90%:
 
-- Git инициализирован локально и есть базовая история коммитов, но еще нет branch policy и review policy;
+- Git инициализирован локально, есть базовая история коммитов и формализован branch/review policy; удаленные branch protection rules нужно включить в GitHub settings;
 - xUnit/Vitest/Playwright smoke suites подключены, но сценарное покрытие по модулям еще минимальное;
 - есть CI workflow с test artifact upload, но он еще не проверен на удаленном Git-хостинге;
 - generated artifacts очищаются через `tools/Clean-Workspace.ps1`, но `node_modules` остается локальной ignored-зависимостью для frontend-разработки;
@@ -58,6 +58,9 @@
 - Добавлен CI artifact upload для `TestResults`, Playwright JUnit и HTML report.
 - `dotnet format --verify-no-changes --no-restore` закреплен в локальном и CI gate.
 - Добавлен runbook `docs/runbooks/test-artifacts.md`.
+- Добавлен runbook `docs/runbooks/ci-contract.md`.
+- Добавлен runbook `docs/runbooks/branch-review-policy.md`.
+- Добавлен `.github/pull_request_template.md`.
 - Добавлен `.github/workflows/ci.yml`.
 - Добавлен `infra/env/.env.example` и `infra/README.md`.
 - Старый `territory-patrol-panel` перенесен в `legacy/territory-patrol-panel`.
@@ -318,25 +321,45 @@ Frontend tests:
 ```powershell
 dotnet restore .\Patrol360.slnx
 dotnet build .\Patrol360.slnx --no-restore
-dotnet test .\Patrol360.slnx --no-build
+dotnet format .\Patrol360.slnx --verify-no-changes --no-restore
+dotnet run --project .\tests\Patrol360.Structure.Tests\Patrol360.Structure.Tests.csproj --no-restore
+dotnet test .\Patrol360.slnx --no-build --logger trx --results-directory .\TestResults\dotnet
 .\tools\Verify-TextEncoding.ps1
 cd .\apps\web
 npm ci
 npm run verify
-npm run test:run
-```
-
-После появления e2e:
-
-```powershell
-npm run e2e
+npm run test:ci
+npx playwright install chromium
+npm run test:e2e
 ```
 
 Критерии готовности:
 
 - pull request не считается готовым без зеленого CI;
 - CI проверяет backend, frontend, кодировку и тесты;
+- CI публикует test artifacts;
 - локальные команды совпадают с CI, чтобы не было отдельной "магии" на сервере.
+
+Актуальный контракт вынесен в `docs/runbooks/ci-contract.md`.
+
+## P2.1: добавить branch/review policy
+
+Цель: изменения структуры должны попадать в основную ветку только через понятный PR flow.
+
+Реализовано:
+
+- добавлен `docs/runbooks/branch-review-policy.md`;
+- добавлен `.github/pull_request_template.md`;
+- branch protection checklist описывает required status check `CI / verify`;
+- structural tests проверяют наличие CI/review policy файлов.
+
+Осталось включить на удаленном Git-хостинге:
+
+- protected branch для `main` или `master`;
+- required pull request;
+- required status check `CI / verify`;
+- conversation resolution;
+- запрет force push и branch deletion.
 
 ## P3: формализовать docs и ADR
 
@@ -448,6 +471,7 @@ libs/contracts -> no project refs
 - `tests/` создан и добавлен в solution;
 - backend и frontend тесты запускаются одной командой;
 - отчеты тестов сохраняются в `TestResults/` и публикуются CI как артефакты;
+- branch/review policy описан и связан с PR checklist;
 - generated artifacts не находятся в tracked files;
 - legacy-прототип явно вынесен или помечен;
 - есть `docs/adr`;
@@ -468,6 +492,7 @@ libs/contracts -> no project refs
 8. Готово: обновить `README.md` и `docs/monorepo-structure.md`.
 9. Готово частично: xUnit/Vitest/Playwright подключены, следующий шаг - расширить smoke tests до сценарного покрытия.
 10. Готово: добавить TRX/JUnit/Playwright reports в локальный и CI-контур.
+11. Готово локально: формализовать branch/review policy и CI contract.
 
 ## Обновленная оценка по структуре
 
@@ -477,12 +502,12 @@ libs/contracts -> no project refs
 | Backend layer split | 80% |
 | Frontend placement | 80% |
 | Infra placement | 75% |
-| Docs placement | 85% |
+| Docs placement | 90% |
 | Tests structure | 60% |
-| CI structure | 75% |
-| Repository hygiene | 75% |
+| CI structure | 82% |
+| Repository hygiene | 80% |
 | Legacy separation | 90% |
 
-После текущего структурного прохода production-готовность структуры выше исходного состояния: добавлены Git, `tests`, `tools`, `docs/adr`, `docs/runbooks`, CI workflow, infra env-шаблон, legacy-раздел и сохраняемые отчеты тестов. Оставшиеся крупные риски: CI не проверен на удаленном Git-хостинге, smoke tests еще не покрывают реальные сценарии модулей, branch/review policy не формализованы.
+После текущего структурного прохода production-готовность структуры выше исходного состояния: добавлены Git, `tests`, `tools`, `docs/adr`, `docs/runbooks`, CI workflow, infra env-шаблон, legacy-раздел, сохраняемые отчеты тестов, CI contract и branch/review policy. Оставшиеся крупные риски: CI и protected branch rules не проверены на удаленном Git-хостинге, smoke tests еще не покрывают реальные сценарии модулей.
 
 Главное условие роста до 90%: Git + tests + CI + единые правила source/generated/legacy.
