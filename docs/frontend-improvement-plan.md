@@ -158,19 +158,19 @@ apps/web/
 Сейчас:
 
 - backend имеет `GET /api/v1/patrol-requests` и `POST /api/v1/patrol-requests`;
-- frontend умеет POST; API-created заявки теперь отделены от `localStorage`, но backend list еще не подключен.
+- frontend умеет POST и читает backend list через `GET /api/v1/patrol-requests`;
 
 Доработать:
 
-- добавить `getPatrolRequests()` в `patrolRequestsRepository`;
-- в API mode читать список заявок из backend;
+- добавить `getPatrolRequests()` в `patrolRequestsRepository` - сделано;
+- в API mode читать список заявок из backend - сделано;
 - убрать сохранение API-created request в localStorage - сделано через отдельный session state API-заявок;
 - добавить loading/error state для request list;
 - добавить view endpoint после появления backend `GET /api/v1/patrol-requests/{id}`.
 
 Критерий готовности:
 
-- созданная через API заявка видна после reload - останется после подключения `GET /api/v1/patrol-requests`;
+- созданная через API заявка видна после reload - закрыто на уровне frontend API list;
 - локальные mock-заявки не смешиваются с API-заявками - базово закрыто для frontend state.
 
 ### 2. Results

@@ -88,7 +88,7 @@ export function usePatrolWorkspaceData({
   const [localRequests, setLocalRequests] = useStoredState<ServiceRequest[]>(patrolRequestsStorageKey, patrolRequestsFallback, {
     validate: isServiceRequestList,
   });
-  const [apiCreatedRequests, setApiCreatedRequests] = useState<ServiceRequest[]>([]);
+  const [apiRequests, setApiRequests] = useState<ServiceRequest[]>([]);
   const [localEmployees, setLocalEmployees] = useStoredState<EmployeeDirectoryItem[]>(
     employeesStorageKey,
     employeesFallback,
@@ -97,7 +97,7 @@ export function usePatrolWorkspaceData({
     },
   );
   const apiRoutes = useMemo(() => createApiRoutesRepository(), []);
-  const apiRequests = useMemo(() => createApiPatrolRequestsRepository(), []);
+  const apiRequestsRepository = useMemo(() => createApiPatrolRequestsRepository(), []);
   const apiEmployees = useMemo(() => createApiEmployeesRepository(), []);
 
   const routeDirectory = useMemo(
@@ -121,11 +121,11 @@ export function usePatrolWorkspaceData({
   const requests = useMemo(
     () =>
       resolveServiceRequests({
-        apiRequests: apiCreatedRequests,
+        apiRequests,
         dataSourceMode,
         localRequests,
       }),
-    [apiCreatedRequests, dataSourceMode, localRequests],
+    [apiRequests, dataSourceMode, localRequests],
   );
   const dashboardMetrics = useMemo(
     () =>
@@ -159,10 +159,32 @@ export function usePatrolWorkspaceData({
     }
   }, [routeDirectory, selectedPointId, selectedRouteDirectoryId, setSelectedPointId, setSelectedRouteDirectoryId]);
 
+  useEffect(() => {
+    if (dataSourceMode !== "api") return;
+
+    const controller = new AbortController();
+
+    async function loadApiRequests() {
+      try {
+        const nextRequests = await apiRequestsRepository.getPatrolRequests({ signal: controller.signal });
+        setApiRequests(nextRequests);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+
+        setApiRequests([]);
+        showToast(error instanceof Error ? `Не удалось загрузить заявки API: ${error.message}` : "Не удалось загрузить заявки API");
+      }
+    }
+
+    void loadApiRequests();
+
+    return () => controller.abort();
+  }, [apiRequestsRepository, dataSourceMode, showToast]);
+
   async function submitRequestDraft(payload: CreateServiceRequestPayload) {
     if (dataSourceMode === "api") {
-      const nextRequest = await apiRequests.createPatrolRequest(payload);
-      setApiCreatedRequests((current) => [nextRequest, ...current.filter((item) => item.id !== nextRequest.id)]);
+      const nextRequest = await apiRequestsRepository.createPatrolRequest(payload);
+      setApiRequests((current) => [nextRequest, ...current.filter((item) => item.id !== nextRequest.id)]);
       await refreshPatrolData();
       showToast(
         nextRequest.notifyEmployee

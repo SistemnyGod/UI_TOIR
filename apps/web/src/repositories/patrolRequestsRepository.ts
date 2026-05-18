@@ -1,5 +1,5 @@
 import { patrolResults, serviceRequests } from "../data";
-import { ApiClient } from "../api/client";
+import { ApiClient, type ApiRequestOptions } from "../api/client";
 import type { CreatePatrolRequestDto, PatrolRequestDto } from "../api/contracts";
 import {
   createServiceRequestDraft,
@@ -49,10 +49,21 @@ export function createLocalPatrolRequest({
   };
 }
 
-export function createApiPatrolRequestsRepository({ baseUrl }: { baseUrl?: string } = {}) {
-  const client = new ApiClient({ baseUrl });
+export function createApiPatrolRequestsRepository({
+  baseUrl,
+  fetcher,
+}: {
+  baseUrl?: string;
+  fetcher?: typeof fetch;
+} = {}) {
+  const client = new ApiClient({ baseUrl, fetcher });
 
   return {
+    async getPatrolRequests(options: ApiRequestOptions = {}) {
+      const requests = await client.get<PatrolRequestDto[]>("/api/v1/patrol-requests", options);
+      return requests.map(mapPatrolRequest);
+    },
+
     async createPatrolRequest(payload: CreateServiceRequestPayload) {
       const request = await client.post<PatrolRequestDto, CreatePatrolRequestDto>("/api/v1/patrol-requests", {
         employeeName: payload.employee,
