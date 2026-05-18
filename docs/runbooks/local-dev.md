@@ -33,6 +33,26 @@ npm install
 npm run dev
 ```
 
+## Полный запуск через Docker
+
+```powershell
+docker compose -f .\infra\docker\compose.yaml --profile app up --build
+```
+
+Порты:
+
+- Web: `http://localhost:5173`
+- API: `http://localhost:5080`
+- PostgreSQL: `localhost:5432`
+- RabbitMQ Management: `http://localhost:15672`
+- MinIO Console: `http://localhost:9001`
+
+Остановить:
+
+```powershell
+docker compose -f .\infra\docker\compose.yaml --profile app down
+```
+
 ## Проверки
 
 ```powershell

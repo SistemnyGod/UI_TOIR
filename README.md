@@ -64,6 +64,22 @@ npm run dev
 
 Для прямого обращения frontend к backend без Vite proxy можно задать `VITE_API_BASE_URL` по примеру `apps/web/.env.example`.
 
+Полный Docker-запуск API, web и локальной инфраструктуры:
+
+```powershell
+docker compose -f .\infra\docker\compose.yaml --profile app up --build
+```
+
+- Web: `http://localhost:5173`
+- API: `http://localhost:5080`
+- Health: `http://localhost:5080/health/ready`
+
+Остановить Docker-стек:
+
+```powershell
+docker compose -f .\infra\docker\compose.yaml --profile app down
+```
+
 Проверка сборки:
 
 ```powershell
@@ -110,6 +126,7 @@ npm run verify
 - `docs/structure-improvement-plan.md` — план и критерии доработки структуры.
 - `docs/structure-remaining-work.md` — остаток работ по структуре до 90%+.
 - `docs/runbooks/ci-contract.md` — обязательный CI gate и публикуемые test artifacts.
+- `docs/runbooks/docker.md` — Docker-запуск API, web и локальной инфраструктуры.
 - `docs/runbooks/branch-review-policy.md` — правила веток, PR и ревью.
 - `docs/stabilization.md` — текущие правила стабилизации и обязательные проверки.
 - `docs/tz-normalization.md` — нормализация ТЗ перед MVP.
