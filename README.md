@@ -62,6 +62,8 @@ npm install
 npm run dev
 ```
 
+Для прямого обращения frontend к backend без Vite proxy можно задать `VITE_API_BASE_URL` по примеру `apps/web/.env.example`.
+
 Проверка сборки:
 
 ```powershell

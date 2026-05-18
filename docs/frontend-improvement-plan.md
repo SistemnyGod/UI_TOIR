@@ -563,14 +563,14 @@ Smoke сценарии:
 
 Текущий `ApiClient` уже централизует HTTP, но для production ему не хватает:
 
-- `VITE_API_BASE_URL` или другого env-based base URL вместо неявного `""`;
-- поддержки `AbortSignal` для отмены запросов при смене экрана, режима данных и размонтировании;
-- timeout/abort policy для зависших запросов;
+- `VITE_API_BASE_URL` или другого env-based base URL вместо неявного `""` - добавлено;
+- поддержки `AbortSignal` для отмены запросов при смене экрана, режима данных и размонтировании - добавлено на уровне `ApiClient`;
+- timeout/abort policy для зависших запросов - добавлено на уровне `ApiClient`;
 - единого обработчика `401/403` с переводом пользователя в login/session-expired state;
 - auth strategy: cookie credentials или bearer token, согласованная с backend;
-- нормальной обработки `ProblemDetails.errors` на уровне полей формы;
-- обработки non-JSON ответов и пустого тела не только для `204`;
-- correlation/request id в ошибках, чтобы связывать frontend toast с backend logs.
+- нормальной обработки `ProblemDetails.errors` на уровне полей формы - базовый контракт добавлен в `ApiError.errors`;
+- обработки non-JSON ответов и пустого тела не только для `204` - добавлено;
+- correlation/request id в ошибках, чтобы связывать frontend toast с backend logs - добавлено через `ApiError.requestId`.
 
 После этого все repositories должны получать `ApiClient` через factory/dependency injection, а не создавать собственный клиент без конфигурации.
 

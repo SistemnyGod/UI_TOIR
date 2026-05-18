@@ -30,7 +30,7 @@ export function createMockPatrolDataRepository(): PatrolDataRepository {
 }
 
 export function createApiPatrolDataRepository({
-  baseUrl = "",
+  baseUrl,
   fetcher = fetch,
 }: {
   baseUrl?: string;

@@ -72,7 +72,7 @@ export function deleteLocalEmployee(employees: EmployeeDirectoryItem[], employee
   );
 }
 
-export function createApiEmployeesRepository({ baseUrl = "" }: { baseUrl?: string } = {}) {
+export function createApiEmployeesRepository({ baseUrl }: { baseUrl?: string } = {}) {
   const client = new ApiClient({ baseUrl });
 
   return {

@@ -102,7 +102,7 @@ export function moveLocalRoutePoint(
   );
 }
 
-export function createApiRoutesRepository({ baseUrl = "" }: { baseUrl?: string } = {}) {
+export function createApiRoutesRepository({ baseUrl }: { baseUrl?: string } = {}) {
   const client = new ApiClient({ baseUrl });
 
   return {

@@ -37,7 +37,7 @@ export function createLocalPatrolRequest({
   };
 }
 
-export function createApiPatrolRequestsRepository({ baseUrl = "" }: { baseUrl?: string } = {}) {
+export function createApiPatrolRequestsRepository({ baseUrl }: { baseUrl?: string } = {}) {
   const client = new ApiClient({ baseUrl });
 
   return {

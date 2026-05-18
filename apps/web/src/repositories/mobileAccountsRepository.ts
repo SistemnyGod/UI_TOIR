@@ -45,7 +45,7 @@ export function resetMobileAccountLocalPassword(accounts: MobileAccount[], accou
   return resetMobileAccountPassword(accounts, accountId);
 }
 
-export function createApiMobileAccountsRepository({ baseUrl = "" }: { baseUrl?: string } = {}) {
+export function createApiMobileAccountsRepository({ baseUrl }: { baseUrl?: string } = {}) {
   const client = new ApiClient({ baseUrl });
 
   return {
