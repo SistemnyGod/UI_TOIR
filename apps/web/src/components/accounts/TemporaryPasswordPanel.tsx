@@ -23,12 +23,20 @@ export function TemporaryPasswordPanel({
   }
 
   return (
-    <aside className="secure-password-panel" aria-live="polite">
-      <div>
-        <strong>{title}</strong>
-        <span>{accountLogin}</span>
+    <aside aria-label={title} aria-live="polite" className="secure-password-panel" role="dialog">
+      <div className="secure-password-head">
+        <div>
+          <strong>{title}</strong>
+          <span>{accountLogin}</span>
+        </div>
+        <button aria-label="Закрыть временный пароль" className="secure-password-close" onClick={onDismiss} type="button">
+          ×
+        </button>
       </div>
-      <code>{password}</code>
+      <div className="secure-password-body">
+        <span>Временный пароль</span>
+        <code>{password}</code>
+      </div>
       <p>Покажите пароль сотруднику один раз. После закрытия панель не сохраняет пароль в истории уведомлений.</p>
       <div className="secure-password-actions">
         <button className="button ghost" onClick={copyPassword} type="button">

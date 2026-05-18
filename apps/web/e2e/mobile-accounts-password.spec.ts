@@ -3,8 +3,10 @@ import { expect, test } from "@playwright/test";
 test("mobile account password operations use one-time panel without password toast", async ({ page }) => {
   await page.goto("/#accounts");
 
-  const createForm = page.locator("form.create-account-drawer");
-  await createForm.getByRole("button", { name: "Создать аккаунт" }).click();
+  await page.getByRole("button", { name: "Создать аккаунт" }).first().click();
+  const createForm = page.locator(".account-panel-card").filter({ hasText: "Создание аккаунта" });
+  await createForm.getByRole("button", { name: "Создать" }).click();
+  await expect(createForm).toBeHidden();
 
   const panel = page.locator(".secure-password-panel");
   await expect(panel).toBeVisible();
@@ -19,7 +21,10 @@ test("mobile account password operations use one-time panel without password toa
   await panel.getByRole("button", { name: "Скрыть" }).click();
   await expect(panel).toBeHidden();
 
-  await page.getByRole("button", { name: "Сбросить пароль" }).click();
+  await page.getByRole("button", { name: "Изменить пароль" }).click();
+  const passwordForm = page.locator(".account-panel-card").filter({ hasText: "Изменение пароля" });
+  await passwordForm.getByRole("button", { name: "Выдать временный пароль" }).click();
+  await expect(passwordForm).toBeHidden();
 
   await expect(panel).toBeVisible();
   await expect(panel.getByText("Временный пароль после локального сброса")).toBeVisible();

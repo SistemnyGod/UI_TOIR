@@ -4,6 +4,7 @@ test("mobile accounts API mode shows reloadable error state", async ({ page }) =
   await page.addInitScript(() => {
     window.localStorage.setItem("patrol360.dataSourceMode", JSON.stringify({ version: 1, value: "api" }));
   });
+  await page.route("**/api/v1/mobile-accounts", (route) => route.abort());
 
   await page.goto("/#accounts");
 

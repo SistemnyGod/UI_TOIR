@@ -31,7 +31,7 @@ export function createMockPatrolDataRepository(): PatrolDataRepository {
 
 export function createApiPatrolDataRepository({
   baseUrl,
-  fetcher = fetch,
+  fetcher,
 }: {
   baseUrl?: string;
   fetcher?: typeof fetch;

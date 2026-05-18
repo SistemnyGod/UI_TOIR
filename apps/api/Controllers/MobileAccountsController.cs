@@ -50,6 +50,72 @@ public sealed class MobileAccountsController(IMobileAccountService mobileAccount
         return Ok(result.Account);
     }
 
+    [HttpPut("{id:guid}")]
+    public ActionResult<MobileAccountDto> Update(Guid id, UpdateMobileAccountDto request)
+    {
+        var result = mobileAccountService.UpdateAccount(id, request);
+        if (!result.Succeeded)
+        {
+            if (result.Errors.ContainsKey("account"))
+            {
+                return NotFound();
+            }
+
+            return MobileAccountValidationProblem(result.Errors);
+        }
+
+        return Ok(result.Account);
+    }
+
+    [HttpPost("{id:guid}/block")]
+    public ActionResult<MobileAccountDto> Block(Guid id)
+    {
+        var result = mobileAccountService.BlockAccount(id);
+        if (!result.Succeeded)
+        {
+            return NotFound();
+        }
+
+        return Ok(result.Account);
+    }
+
+    [HttpPost("{id:guid}/unblock")]
+    public ActionResult<MobileAccountDto> Unblock(Guid id)
+    {
+        var result = mobileAccountService.UnblockAccount(id);
+        if (!result.Succeeded)
+        {
+            return NotFound();
+        }
+
+        return Ok(result.Account);
+    }
+
+    [HttpDelete("{id:guid}/employees/{employeeId:guid}")]
+    public ActionResult<MobileAccountDto> DetachEmployee(Guid id, Guid employeeId)
+    {
+        var result = mobileAccountService.DetachEmployee(id, employeeId);
+        if (!result.Succeeded)
+        {
+            if (result.Errors.ContainsKey("account"))
+            {
+                return NotFound();
+            }
+
+            return MobileAccountValidationProblem(result.Errors);
+        }
+
+        return Ok(result.Account);
+    }
+
+    [HttpGet("{id:guid}/sessions")]
+    public ActionResult<IReadOnlyList<MobileAccountSessionDto>> Sessions(Guid id) =>
+        Ok(mobileAccountService.GetSessions(id));
+
+    [HttpGet("{id:guid}/security-events")]
+    public ActionResult<IReadOnlyList<MobileAccountSecurityEventDto>> SecurityEvents(Guid id) =>
+        Ok(mobileAccountService.GetSecurityEvents(id));
+
     [HttpPost("{id:guid}/reset-password")]
     public ActionResult<ResetMobileAccountPasswordDto> ResetPassword(Guid id)
     {

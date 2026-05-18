@@ -6,6 +6,7 @@ public sealed record MobileAccountDto(
     string PasswordState,
     string Employee,
     string EmployeeScope,
+    IReadOnlyList<Guid> BoundEmployeeIds,
     IReadOnlyList<string> BoundEmployees,
     string Role,
     string Status,
@@ -27,8 +28,33 @@ public sealed record CreateMobileAccountDto(
     bool RestrictToBoundDevice,
     bool TemporaryPassword);
 
-public sealed record AttachMobileAccountEmployeeDto(string EmployeeName);
+public sealed record UpdateMobileAccountDto(
+    string? Login,
+    string? Role,
+    string? Status);
+
+public sealed record AttachMobileAccountEmployeeDto(
+    Guid? EmployeeId,
+    string? EmployeeName);
 
 public sealed record ResetMobileAccountPasswordDto(
     string TemporaryPassword,
     DateTimeOffset ResetAt);
+
+public sealed record MobileAccountSessionDto(
+    Guid Id,
+    Guid AccountId,
+    string Status,
+    string Device,
+    string Platform,
+    string AppVersion,
+    string IpAddress,
+    DateTimeOffset LastSeenAt);
+
+public sealed record MobileAccountSecurityEventDto(
+    Guid Id,
+    Guid AccountId,
+    string EventType,
+    string Message,
+    DateTimeOffset CreatedAt,
+    string Actor);

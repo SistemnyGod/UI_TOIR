@@ -10,5 +10,7 @@ internal sealed class MobileAccountAuditEventEntity
 
     public string Details { get; set; } = string.Empty;
 
+    public string Actor { get; set; } = string.Empty;
+
     public DateTimeOffset CreatedAt { get; set; }
 }

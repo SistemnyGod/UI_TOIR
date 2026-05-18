@@ -1,6 +1,7 @@
 # Frontend improvement plan
 
 Дата аудита: 18.05.2026
+Последнее обновление: 18.05.2026 после подключения mobile account edit/block/unblock/detach к backend API, employeeId binding и field-level ProblemDetails ошибок.
 
 ## Назначение документа
 
@@ -10,7 +11,7 @@
 
 Фронтенд уже прошел важный этап разбиения монолитного UI на экраны, компоненты, хуки, domain helpers и repositories. Приложение собирается через `npm run verify`, TypeScript strict включен, Vite build проходит.
 
-Текущая готовность фронтенда к MVP: примерно 65%.
+Текущая готовность фронтенда к MVP: примерно 70-75%.
 
 Главное ограничение: приложение все еще частично живет как локальный UI-прототип. В режиме `API` часть экранов берет данные из backend, а часть продолжает работать через `localStorage`, fallback arrays и локальные заглушки. Из-за этого пользовательский сценарий может выглядеть рабочим, но фактически не быть синхронизированным с сервером.
 
@@ -38,18 +39,20 @@ apps/web/
 - есть режимы `Mock/API`;
 - есть `browserStorageRepository`;
 - есть dirty-close protection для request modal;
+- есть Vitest/unit, structural и Playwright e2e smoke tests;
+- mobile accounts получили modal-flow для create/link/edit/view/password/delete и одноразовую панель временного пароля;
 - сборка frontend проходит.
 
 Основные слабые стороны:
 
-- нет тестов;
+- тестовый контур есть, но покрытие пока узкое и не закрывает все MVP flows;
 - нет OpenAPI/generated DTO;
 - нет единой политики loading/error/empty состояний;
 - часть API-режима смешивает серверные данные и `localStorage`;
 - `styles.css` слишком большой;
 - часть экранов остается на fallback/static данных;
 - нет полноценного API слоя для schedule/results/site users/assignments;
-- нет production-настроек API base URL, auth headers и session handling.
+- API base URL, timeout, abort и ProblemDetails базово есть, но auth headers, session handling и RBAC еще не подключены.
 
 ## Карта экранов
 
@@ -61,8 +64,8 @@ apps/web/
 | Assignments | Визуальный workflow есть | Нет API create/start/cancel/complete assignments, данные fallback | P1 |
 | Schedule | UI-композиция готова | Нет API данных, нет правил конфликтов/исключений/автозаполнения | P2 |
 | Employees | CRUD через API есть | Валидация слабая, mobile binding может расходиться с backend, нет истории обходов | P1 |
-| Mobile Accounts | CRUD/reset/bind частично через API | Пароли показываются в UI toast/panel, нет блокировки/сессий/audit API, нет auth контекста | P0/P1 |
-| Site Users | UI-прототип | Нет API, нет RBAC/contracts, фиксированный временный пароль в форме | P0/P2 |
+| Mobile Accounts | List/create/bind/edit/block/unblock/detach/reset/delete частично через API, modal-flow, employeeId binding и secure temporary password panel добавлены | Sessions/security events пока есть в repository/backend, но не выведены как live UI panels; нет auth/RBAC контекста и feature hook | P0/P1 |
+| Site Users | UI-прототип, локальная генерация фиксированного пароля убрана | Нет API, нет RBAC/contracts, нет реального password reset flow | P0/P2 |
 
 ## P0: стабилизация перед расширением
 
@@ -103,21 +106,21 @@ apps/web/
 
 ### 3. Добавить frontend test runner
 
-Проблема: тестов нет, хотя domain helpers и repository mapping уже достаточно важны.
+Статус: test runner подключен, базовые проверки проходят, но покрытие еще не соответствует MVP-рискам.
 
-Что добавить:
+Что уже добавлено:
 
 - `vitest` - подключен;
 - `@testing-library/react` - подключен;
 - `@testing-library/user-event` - подключен;
 - отдельный script: `test`, `test:run` - подключен;
 - `@playwright/test` и `test:e2e` - подключены для smoke-проверки frontend shell;
-- smoke/component tests для ключевых flows.
+- smoke/component tests для dashboard requests, mobile accounts loading/error/modals/password flow, domain helpers и API client.
 
-Минимальный набор тестов:
+Что еще добавить:
 
 - `domain/routes.ts`: create/update/reorder/move route points;
-- `domain/mobileAccounts.ts`: login normalization, temporary password branch, binding;
+- `domain/mobileAccounts.ts`: расширить тесты для block/unblock/detach/edit local helpers;
 - `domain/serviceRequests.ts`: draft creation;
 - `repositories/patrolDataRepository.ts`: DTO -> UI mapping;
 - request modal: submit и dirty-close;
@@ -128,6 +131,7 @@ apps/web/
 
 - `npm run verify` включает typecheck/build;
 - отдельный `npm run test:run` проходит в CI;
+- `npm run test:e2e` проходит локально и в CI;
 - новые domain helpers покрываются тестами до расширения логики.
 
 ### 4. Убрать небезопасные password-заглушки
@@ -136,6 +140,8 @@ apps/web/
 
 - `SiteUserFormPanel` больше не генерирует фиксированный пароль `tmp-Patrol-360`, но еще ждет backend API;
 - временные пароли больше не отображаются в UI toast, базовый одноразовый panel-flow добавлен;
+- `MobileAccount` больше не хранит поле `password`; в основной UI-модели остается только `passwordState`;
+- legacy localStorage записи с `password` не проходят validator и не подхватываются как актуальные аккаунты;
 - старый `legacy/territory-patrol-panel` содержит plaintext password-прототип и теперь явно вынесен из активной frontend-зоны.
 
 Что сделать:
@@ -148,7 +154,8 @@ apps/web/
 Критерий готовности:
 
 - в production UI нет фиксированного временного пароля - базово закрыто;
-- password display изолирован в одном компоненте - базово закрыто через `TemporaryPasswordPanel`;
+- отображение временного пароля изолировано в одном компоненте - базово закрыто через `TemporaryPasswordPanel`;
+- account view/password modal показывают только `passwordState`, не секрет;
 - reset/create password actions готовы к auth/RBAC.
 
 ## P1: завершить API-интеграцию ключевых экранов
@@ -235,17 +242,23 @@ apps/web/
 Сейчас:
 
 - list/create/bind/reset/delete частично через API;
+- create/link/edit/view/password/delete открываются как modal-flow поверх страницы;
 - loading/error/retry state для API list добавлен в mobile account panel;
+- temporary password показывается только в `TemporaryPasswordPanel`;
+- основная UI-модель хранит `passwordState`, а не пароль;
+- delete имеет confirmation modal и корректное empty-state поведение;
 - security events fallback;
 - sessions fallback/display-only.
 
 Доработать:
 
 - добавить API repository для sessions/security events;
+- добавить edit endpoint и frontend save-flow для login/role/status;
 - добавить block/unblock после backend;
+- добавить detach employee после backend;
 - заменить binding по ФИО на employee ID после изменения backend contract;
-- изолировать temporary password display;
-- добавить confirmation dialog на reset/delete.
+- добавить confirmation dialog на reset;
+- показать field-level validation и saving/error state внутри account modals.
 
 ## P2: довести вторичные экраны
 
@@ -434,7 +447,7 @@ npm run test:run
 ```powershell
 npm run verify
 npm run test:run
-npm run e2e
+npm run test:e2e
 ```
 
 Smoke сценарии:
@@ -457,10 +470,10 @@ Smoke сценарии:
 Оценка: 1-2 дня.
 
 - решить LF/CRLF policy;
-- добавить `test` scripts;
-- зафиксировать frontend gates;
-- убрать фиксированный site-user password;
-- описать API/mock/local source rules.
+- добавить `test` scripts - сделано;
+- зафиксировать frontend gates - базово сделано через `verify`, `test:run`, `test:e2e`;
+- убрать фиксированный site-user password - сделано;
+- описать API/mock/local source rules - сделано через ADR, требуется доведение fallback-only repositories.
 
 ### Этап 1: Data source cleanup
 
@@ -479,7 +492,7 @@ Smoke сценарии:
 - Results API repository;
 - Assignments API repository;
 - Employees form errors;
-- Mobile accounts sessions/security events;
+- Mobile accounts edit/block/unblock/detach/sessions/security events;
 - Dashboard refresh/stale indicators.
 
 ### Этап 3: Feature hooks
@@ -514,7 +527,7 @@ Smoke сценарии:
 Фронтенд можно считать MVP-ready, когда:
 
 - `npm run verify` проходит;
-- тестовый runner подключен и основные domain/repository tests проходят;
+- тестовый runner подключен, `test:run` и `test:e2e` проходят;
 - API mode не показывает localStorage данные как server data;
 - основные экраны имеют loading/empty/error states;
 - routes/employees/requests/mobile accounts работают через API;
@@ -531,17 +544,17 @@ Smoke сценарии:
 |---|---:|
 | UI composition | 75% |
 | API integration | 45% |
-| Local/mock separation | 45% |
+| Local/mock separation | 55% |
 | Forms/workflows | 60% |
-| Error/loading states | 35% |
-| Tests | 0% |
+| Error/loading states | 45% |
+| Tests | 45% |
 | Accessibility | 45% |
 | Performance readiness | 50% |
 | Frontend architecture | 70% |
 
-Итоговая frontend готовность к MVP: 60-65%.
+Итоговая frontend готовность к MVP: 65-70%.
 
-Главное условие роста до 80%: завершить разделение API/local/mock, добавить тесты и подключить API для requests/results/assignments.
+Главное условие роста до 80%: завершить разделение API/local/mock, расширить e2e/component coverage и подключить API для results/assignments/schedule/site users.
 
 ## Дополнение от 18.05.2026: уточненная ревизия фронта
 
@@ -607,7 +620,7 @@ Smoke сценарии:
 
 ### Mobile accounts: форма и безопасный password flow
 
-В `MobileAccountCreateDrawer` список кандидатов сейчас зафиксирован как `employeeCandidates: string[] = []`, поэтому UI всегда показывает empty state. Кроме того, кнопки "Создать и привязать" и "Создать аккаунт" отправляют один и тот же submit без различия действия.
+После последней доработки mobile account screen работает через modal-flow: create, link, edit, view, password и delete открываются поверх страницы, backdrop закрывает окно, create/link получают autofocus, delete имеет confirmation state. Password-flow базово безопасен: временный пароль показывается только в одноразовой `TemporaryPasswordPanel`, а `MobileAccount` хранит `passwordState`, не секрет.
 
 Доработать:
 
@@ -616,11 +629,13 @@ Smoke сценарии:
 - развести intent кнопок: создать, создать и привязать, создать без привязки;
 - добавить field-level validation для login/role/scope;
 - заменить отображение temporary password в toast на одноразовую secure panel - сделано;
-- добавить confirm для reset/delete;
+- добавить confirm для reset; delete confirmation уже добавлен;
 - показать loading/error внутри drawer, а не только глобальным toast;
-- синхронизировать sessions/security events с API.
+- реализовать сохранение edit modal через backend endpoint - сделано;
+- реализовать block/unblock/detach через backend endpoints - сделано;
+- синхронизировать sessions/security events с API в UI panel.
 
-Критерий готовности: создание аккаунта из API mode не зависит от локального справочника, а временный пароль не остается в глобальном toast/history. Password-flow часть закрыта, источник сотрудников и field validation остаются в работе.
+Критерий готовности: создание аккаунта из API mode не зависит от локального справочника, редактирование/блокировка/отвязка работают через backend, а временный пароль не остается в глобальном toast/history. Password-flow, employeeId binding, edit/block/detach и базовая field validation закрыты; sessions/security events UI и feature hook остаются в работе.
 
 ### State ownership и prop drilling
 
@@ -700,6 +715,6 @@ Smoke сценарии:
 4. Подключить API list для requests и убрать API-created requests из localStorage.
 5. Довести Results и Assignments до MVP API flow.
 6. Подключить session/RBAC read model и убрать hardcoded topbar user.
-7. Добавить Vitest/component tests на domain/repository/form flows.
-8. Сделать Playwright smoke и console-error gate.
+7. Расширить Vitest/component tests на routes/employees/results/assignments forms.
+8. Расширить Playwright smoke до CRUD и responsive scenarios.
 9. Разделить CSS после стабилизации поведения, чтобы не смешивать визуальный refactor с API-логикой.

@@ -9,7 +9,9 @@ import type {
   ResultMode,
   RouteMode,
   ScheduleMode,
+  UpdateMobileAccountPayload,
 } from "./types";
+import { ApiError } from "./api/client";
 import { RequestModals } from "./components/RequestModals";
 import { ScreenRouter } from "./components/ScreenRouter";
 import { Sidebar } from "./components/Sidebar";
@@ -18,13 +20,17 @@ import { WorkspaceHeader } from "./components/WorkspaceHeader";
 import { TemporaryPasswordPanel } from "./components/accounts/TemporaryPasswordPanel";
 import {
   attachEmployeeToMobileAccount,
+  blockMobileAccountLocal,
   createApiMobileAccountsRepository,
   createLocalMobileAccount,
   deleteMobileAccount,
+  detachEmployeeFromMobileAccount,
   isMobileAccountList,
   mobileAccountsFallback,
   mobileAccountsStorageKey,
   resetMobileAccountLocalPassword,
+  unblockMobileAccountLocal,
+  updateMobileAccountLocal,
 } from "./repositories/mobileAccountsRepository";
 import { type RequestModalState } from "./domain/serviceRequests";
 import { employeesFallback } from "./repositories/employeesRepository";
@@ -58,6 +64,7 @@ export function App() {
   });
   const [accountMode, setAccountMode] = useState<AccountMode>("accounts");
   const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id ?? "");
+  const [accountCreateIntent, setAccountCreateIntent] = useState(0);
   const [routeMode, setRouteMode] = useState<RouteMode>("points");
   const [routeCreateIntent, setRouteCreateIntent] = useState(0);
   const [employeeCreateIntent, setEmployeeCreateIntent] = useState(0);
@@ -253,7 +260,7 @@ export function App() {
 
     if (screen === "accounts") {
       setAccountMode("accounts");
-      showToast("Заполните форму создания мобильного аккаунта справа");
+      setAccountCreateIntent((value) => value + 1);
       return;
     }
 
@@ -287,6 +294,7 @@ export function App() {
         showToast(`Мобильный аккаунт ${result.account.login} создан`);
       } catch (error) {
         showToast(getErrorMessage(error, "Не удалось создать мобильный аккаунт"));
+        throw error;
       }
       return;
     }
@@ -306,31 +314,111 @@ export function App() {
     showToast(`Мобильный аккаунт ${account.login} создан: ${account.employee}`);
   }
 
-  async function attachEmployeeToSelectedAccount(employeeName: string) {
+  async function attachEmployeeToSelectedAccount(employeeId: string, employeeName: string) {
     if (!selectedAccountId) {
       showToast("Сначала выберите мобильный аккаунт");
       return;
     }
 
     const normalizedEmployeeName = employeeName.trim();
-    if (!normalizedEmployeeName) {
-      showToast("Укажите ФИО сотрудника для привязки");
+    if (!employeeId || !normalizedEmployeeName) {
+      showToast("Выберите сотрудника из справочника");
       return;
     }
 
     if (dataSourceMode === "api") {
       try {
-        await apiMobileAccounts.attachEmployee(selectedAccountId, normalizedEmployeeName);
+        await apiMobileAccounts.attachEmployee(selectedAccountId, employeeId, normalizedEmployeeName);
         await refreshMobileAccounts();
         showToast(`Аккаунт привязан к ${normalizedEmployeeName}`);
       } catch (error) {
         showToast(getErrorMessage(error, "Не удалось привязать сотрудника"));
+        throw error;
       }
       return;
     }
 
-    setAccounts(attachEmployeeToMobileAccount(accounts, selectedAccountId, normalizedEmployeeName));
+    setAccounts(attachEmployeeToMobileAccount(accounts, selectedAccountId, normalizedEmployeeName, employeeId));
     showToast(`Аккаунт привязан к ${normalizedEmployeeName}`);
+  }
+
+  async function updateSelectedAccount(payload: UpdateMobileAccountPayload) {
+    if (!selectedAccountId) {
+      showToast("Сначала выберите мобильный аккаунт");
+      return;
+    }
+
+    if (dataSourceMode === "api") {
+      try {
+        const account = await apiMobileAccounts.updateAccount(selectedAccountId, payload);
+        await refreshMobileAccounts();
+        setSelectedAccountId(account.id);
+        showToast(`Аккаунт ${account.login} сохранен`);
+      } catch (error) {
+        showToast(getErrorMessage(error, "Не удалось сохранить аккаунт"));
+        throw error;
+      }
+      return;
+    }
+
+    setAccounts(updateMobileAccountLocal(accounts, selectedAccountId, payload));
+    showToast(`Аккаунт ${payload.login} сохранен`);
+  }
+
+  async function toggleSelectedAccountBlock() {
+    if (!selectedAccountId) {
+      showToast("Сначала выберите мобильный аккаунт");
+      return;
+    }
+
+    const account = visibleAccounts.find((item) => item.id === selectedAccountId);
+    const isBlocked = account?.status === "Заблокирован";
+
+    if (dataSourceMode === "api") {
+      try {
+        const nextAccount = isBlocked
+          ? await apiMobileAccounts.unblockAccount(selectedAccountId)
+          : await apiMobileAccounts.blockAccount(selectedAccountId);
+        await refreshMobileAccounts();
+        showToast(isBlocked ? `Аккаунт ${nextAccount.login} разблокирован` : `Аккаунт ${nextAccount.login} заблокирован`);
+      } catch (error) {
+        showToast(getErrorMessage(error, isBlocked ? "Не удалось разблокировать аккаунт" : "Не удалось заблокировать аккаунт"));
+        throw error;
+      }
+      return;
+    }
+
+    setAccounts(isBlocked ? unblockMobileAccountLocal(accounts, selectedAccountId) : blockMobileAccountLocal(accounts, selectedAccountId));
+    showToast(isBlocked ? "Аккаунт разблокирован" : "Аккаунт заблокирован");
+  }
+
+  async function detachEmployeeFromSelectedAccount(employeeId?: string) {
+    if (!selectedAccountId) {
+      showToast("Сначала выберите мобильный аккаунт");
+      return;
+    }
+
+    const account = visibleAccounts.find((item) => item.id === selectedAccountId);
+    const resolvedEmployeeId = employeeId ?? account?.boundEmployeeIds?.[0];
+    if (!resolvedEmployeeId && dataSourceMode === "api") {
+      showToast("Для отвязки нужен employeeId. Перепривяжите сотрудника из справочника или обновите данные аккаунта.");
+      return;
+    }
+
+    if (dataSourceMode === "api") {
+      try {
+        await apiMobileAccounts.detachEmployee(selectedAccountId, resolvedEmployeeId!);
+        await refreshMobileAccounts();
+        showToast("Сотрудник отвязан от аккаунта");
+      } catch (error) {
+        showToast(getErrorMessage(error, "Не удалось отвязать сотрудника"));
+        throw error;
+      }
+      return;
+    }
+
+    setAccounts(detachEmployeeFromMobileAccount(accounts, selectedAccountId, resolvedEmployeeId));
+    showToast("Сотрудник отвязан от аккаунта");
   }
 
   async function deleteSelectedAccount() {
@@ -348,6 +436,7 @@ export function App() {
         showToast(account ? `Аккаунт ${account.login} удален` : "Аккаунт удален");
       } catch (error) {
         showToast(getErrorMessage(error, "Не удалось удалить аккаунт"));
+        throw error;
       }
       return;
     }
@@ -377,6 +466,7 @@ export function App() {
         showToast("Временный пароль выдан");
       } catch (error) {
         showToast(getErrorMessage(error, "Не удалось сбросить пароль"));
+        throw error;
       }
       return;
     }
@@ -422,6 +512,7 @@ export function App() {
         />
 
         <ScreenRouter
+          accountCreateIntent={accountCreateIntent}
           accountMode={accountMode}
           accountListErrorMessage={accountListErrorMessage}
           accountListStatus={accountListStatus}
@@ -438,6 +529,7 @@ export function App() {
           onCreateRoute={createRoute}
           onCreateRoutePoint={createRoutePoint}
           onDeleteAccount={deleteSelectedAccount}
+          onDetachEmployee={detachEmployeeFromSelectedAccount}
           onDeleteEmployee={deleteEmployee}
           onDeleteRoute={deleteRoute}
           onDeleteRoutePoint={deleteRoutePoint}
@@ -459,6 +551,8 @@ export function App() {
           onSelectRouteDirectory={selectRouteDirectory}
           onSelectScheduleCell={setSelectedScheduleCellId}
           onSelectUser={setSelectedUserId}
+          onToggleBlockAccount={toggleSelectedAccountBlock}
+          onUpdateAccount={updateSelectedAccount}
           onUpdateRoute={updateRoute}
           onUpdateRoutePoint={updateRoutePoint}
           onUpdateEmployee={updateEmployee}
@@ -513,5 +607,12 @@ export function App() {
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError && error.errors) {
+    const fieldMessages = Object.values(error.errors).flat().filter(Boolean);
+    if (fieldMessages.length > 0) {
+      return `${fallback}: ${fieldMessages[0]}`;
+    }
+  }
+
   return error instanceof Error ? `${fallback}: ${error.message}` : fallback;
 }

@@ -10,11 +10,23 @@ public interface IMobileAccountService
 
     CreateMobileAccountResult CreateAccount(CreateMobileAccountDto request);
 
+    UpdateMobileAccountResult UpdateAccount(Guid id, UpdateMobileAccountDto request);
+
     UpdateMobileAccountResult AttachEmployee(Guid id, AttachMobileAccountEmployeeDto request);
+
+    UpdateMobileAccountResult DetachEmployee(Guid id, Guid employeeId);
+
+    UpdateMobileAccountResult BlockAccount(Guid id);
+
+    UpdateMobileAccountResult UnblockAccount(Guid id);
 
     ResetMobileAccountPasswordDto? ResetPassword(Guid id);
 
     bool DeleteAccount(Guid id);
+
+    IReadOnlyList<MobileAccountSessionDto> GetSessions(Guid id);
+
+    IReadOnlyList<MobileAccountSecurityEventDto> GetSecurityEvents(Guid id);
 }
 
 public sealed record CreateMobileAccountResult(

@@ -106,6 +106,7 @@ export interface MobileAccountDto {
   passwordState: string;
   employee: string;
   employeeScope: "selected" | "all";
+  boundEmployeeIds: string[];
   boundEmployees: string[];
   role: string;
   status: string;
@@ -131,12 +132,39 @@ export interface CreateMobileAccountDto {
 }
 
 export interface AttachMobileAccountEmployeeDto {
-  employeeName: string;
+  employeeId?: string;
+  employeeName?: string;
 }
 
 export interface ResetMobileAccountPasswordDto {
   temporaryPassword: string;
   resetAt: string;
+}
+
+export interface UpdateMobileAccountDto {
+  login?: string;
+  role?: string;
+  status?: string;
+}
+
+export interface MobileAccountSessionDto {
+  id: string;
+  accountId: string;
+  status: string;
+  device: string;
+  platform: string;
+  appVersion: string;
+  ipAddress: string;
+  lastSeenAt: string;
+}
+
+export interface MobileAccountSecurityEventDto {
+  id: string;
+  accountId: string;
+  eventType: string;
+  message: string;
+  createdAt: string;
+  actor: string;
 }
 
 export interface PatrolRequestDto {

@@ -36,9 +36,9 @@ describe("domain workflows", () => {
     expect(account.login).toBe("ivan.petrov2");
     expect(account.boundEmployees).toEqual(["Ivan Petrov", "Anna Sidorova"]);
     expect(account.employee).toBe("Ivan Petrov +1");
-    expect(account.password).toBe("Требует смены пароля");
+    expect(account.passwordState).toBe("Требует смены пароля");
     expect(temporaryPassword).toHaveLength(10);
-    expect(account.password).not.toBe(temporaryPassword);
+    expect(JSON.stringify(account)).not.toContain(temporaryPassword);
   });
 
   it("keeps API-created requests separate from local request storage", () => {

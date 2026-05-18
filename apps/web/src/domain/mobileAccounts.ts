@@ -21,7 +21,9 @@ export function isMobileAccountList(value: unknown): value is MobileAccount[] {
         typeof (item as MobileAccount).id === "string" &&
         typeof (item as MobileAccount).login === "string" &&
         typeof (item as MobileAccount).employee === "string" &&
+        typeof (item as MobileAccount).passwordState === "string" &&
         ((item as MobileAccount).employeeScope === "selected" || (item as MobileAccount).employeeScope === "all") &&
+        (!("boundEmployeeIds" in item) || Array.isArray((item as MobileAccount).boundEmployeeIds)) &&
         Array.isArray((item as MobileAccount).boundEmployees) &&
         typeof (item as MobileAccount).status === "string",
     )
@@ -49,9 +51,10 @@ export function createMobileAccountDraft({
     account: {
       id: `mobile-${Date.now()}-${existingCount + 1}`,
       login,
-      password: temporaryPassword ? PASSWORD_STATE_REQUIRES_CHANGE : PASSWORD_STATE_SET_ON_FIRST_LOGIN,
+      passwordState: temporaryPassword ? PASSWORD_STATE_REQUIRES_CHANGE : PASSWORD_STATE_SET_ON_FIRST_LOGIN,
       employee: bindEmployee ? formatEmployeeAccess(employeeScope, boundEmployees) : UNBOUND_EMPLOYEE,
       employeeScope,
+      boundEmployeeIds: [],
       boundEmployees,
       role: payload.role.trim() || DEFAULT_ROLE,
       status: bindEmployee ? "Активен" : "Не привязан",
@@ -79,6 +82,7 @@ export function bindMobileAccountToEmployee(
 
     return {
       ...account,
+      boundEmployeeIds: account.boundEmployeeIds ?? [],
       boundEmployees: nextEmployees,
       employee: formatEmployeeAccess("selected", nextEmployees),
       employeeScope: "selected",
@@ -92,7 +96,7 @@ export function resetMobileAccountPassword(accounts: MobileAccount[], accountId:
 
   return {
     accounts: accounts.map((account) =>
-      account.id === accountId ? { ...account, password: PASSWORD_STATE_REQUIRES_CHANGE } : account,
+      account.id === accountId ? { ...account, passwordState: PASSWORD_STATE_REQUIRES_CHANGE } : account,
     ),
     temporaryPassword,
   };

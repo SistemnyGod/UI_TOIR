@@ -15,6 +15,7 @@ import type {
   ScheduleMode,
   ScreenId,
   ServiceRequest,
+  UpdateMobileAccountPayload,
 } from "../types";
 import { AssignmentScreen } from "../screens/AssignmentScreen";
 import { DashboardScreen } from "../screens/DashboardScreen";
@@ -28,6 +29,7 @@ import { SiteUsersScreen } from "../screens/SiteUsersScreen";
 type MaybePromise<T> = T | Promise<T>;
 
 export function ScreenRouter({
+  accountCreateIntent,
   accountMode,
   accountListErrorMessage,
   accountListStatus,
@@ -44,6 +46,7 @@ export function ScreenRouter({
   onCreateRoute,
   onCreateRoutePoint,
   onDeleteAccount,
+  onDetachEmployee,
   onDeleteEmployee,
   onDeleteRoute,
   onDeleteRoutePoint,
@@ -66,6 +69,8 @@ export function ScreenRouter({
   onSelectRouteDirectory,
   onSelectScheduleCell,
   onSelectUser,
+  onToggleBlockAccount,
+  onUpdateAccount,
   onUpdateRoute,
   onUpdateRoutePoint,
   onUpdateEmployee,
@@ -90,6 +95,7 @@ export function ScreenRouter({
   selectedScheduleCellId,
   selectedUserId,
 }: {
+  accountCreateIntent: number;
   accountMode: AccountMode;
   accountListErrorMessage?: string;
   accountListStatus: DataSourceStatus;
@@ -99,13 +105,14 @@ export function ScreenRouter({
   employeeDirectory: EmployeeDirectoryItem[];
   onAccountModeChange: (mode: AccountMode) => void;
   onAssign: () => void;
-  onAttachEmployee: (employeeName: string) => MaybePromise<void>;
+  onAttachEmployee: (employeeId: string, employeeName: string) => MaybePromise<void>;
   onCreateAccount: (payload: CreateMobileAccountPayload) => MaybePromise<void>;
   onCreateEmployee: (payload: EmployeeFormPayload) => MaybePromise<string>;
   onCreateRequest: (sourceResultId?: string) => void;
   onCreateRoute: (payload: RouteFormPayload) => MaybePromise<string>;
   onCreateRoutePoint: (routeId: string, payload: RoutePointFormPayload) => MaybePromise<string>;
   onDeleteAccount: () => MaybePromise<void>;
+  onDetachEmployee: (employeeId?: string) => MaybePromise<void>;
   onDeleteEmployee: (employeeId: string) => MaybePromise<void>;
   onDeleteRoute: (routeId: string) => MaybePromise<void>;
   onDeleteRoutePoint: (routeId: string, pointId: string) => MaybePromise<void>;
@@ -114,6 +121,7 @@ export function ScreenRouter({
   onOpenRequest: (resultId?: string) => void;
   onOpenRequestById: (requestId: string) => void;
   onResetPassword: () => MaybePromise<void>;
+  onToggleBlockAccount: () => MaybePromise<void>;
   onRetryAccounts: () => MaybePromise<void>;
   onRetryRequests: () => MaybePromise<void>;
   onResultModeChange: (mode: ResultMode) => void;
@@ -131,6 +139,7 @@ export function ScreenRouter({
   onUpdateRoute: (routeId: string, payload: RouteFormPayload) => MaybePromise<void>;
   onUpdateRoutePoint: (routeId: string, pointId: string, payload: RoutePointFormPayload) => MaybePromise<void>;
   onUpdateEmployee: (employeeId: string, payload: EmployeeFormPayload) => MaybePromise<void>;
+  onUpdateAccount: (payload: UpdateMobileAccountPayload) => MaybePromise<void>;
   onMoveRoutePoint: (routeId: string, pointId: string, direction: -1 | 1) => MaybePromise<void>;
   requests: ServiceRequest[];
   requestListErrorMessage?: string;
@@ -217,19 +226,24 @@ export function ScreenRouter({
       ) : null}
       {screen === "accounts" ? (
         <MobileAccountsScreen
+          accountCreateIntent={accountCreateIntent}
           accounts={accounts}
           accountListErrorMessage={accountListErrorMessage}
           accountListStatus={accountListStatus}
           selectedAccountId={selectedAccountId}
+          employeeDirectory={employeeDirectory}
           mode={accountMode}
           onModeChange={onAccountModeChange}
           onSelectAccount={onSelectAccount}
           onAttachEmployee={onAttachEmployee}
           onCreateAccount={onCreateAccount}
           onDeleteAccount={onDeleteAccount}
+          onDetachEmployee={onDetachEmployee}
           onNotify={onNotify}
           onResetPassword={onResetPassword}
           onRetryAccounts={onRetryAccounts}
+          onToggleBlockAccount={onToggleBlockAccount}
+          onUpdateAccount={onUpdateAccount}
         />
       ) : null}
       {screen === "routes" ? (

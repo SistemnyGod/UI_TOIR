@@ -38,6 +38,24 @@ describe("ApiClient", () => {
     await expect(client.delete("/api/v1/routes/1")).resolves.toBeUndefined();
   });
 
+  it("binds default browser fetch to the global object", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetcher = vi.fn(function (this: typeof globalThis) {
+      expect(this).toBe(globalThis);
+      return Promise.resolve(jsonResponse({ ok: true }));
+    });
+
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      const client = new ApiClient();
+
+      await expect(client.get("/api/v1/mobile-accounts")).resolves.toEqual({ ok: true });
+      expect(fetcher).toHaveBeenCalledOnce();
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
+    }
+  });
+
   it("maps ProblemDetails errors and request id into ApiError", async () => {
     const problem = {
       title: "Validation failed",

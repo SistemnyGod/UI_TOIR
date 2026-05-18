@@ -195,9 +195,10 @@ export interface RouteOption {
 export interface MobileAccount {
   id: string;
   login: string;
-  password: string;
+  passwordState: string;
   employee: string;
   employeeScope: "selected" | "all";
+  boundEmployeeIds: string[];
   boundEmployees: string[];
   role: string;
   status: "Активен" | "Не привязан" | "Заблокирован";
@@ -215,6 +216,32 @@ export interface CreateMobileAccountPayload {
   bindEmployee: boolean;
   restrictToBoundDevice: boolean;
   temporaryPassword: boolean;
+}
+
+export interface UpdateMobileAccountPayload {
+  login: string;
+  role: string;
+  status: MobileAccount["status"];
+}
+
+export interface MobileAccountSession {
+  id: string;
+  accountId: string;
+  status: string;
+  device: string;
+  platform: string;
+  appVersion: string;
+  ipAddress: string;
+  lastSeenAt: string;
+}
+
+export interface MobileAccountSecurityEvent {
+  id: string;
+  accountId: string;
+  eventType: string;
+  message: string;
+  createdAt: string;
+  actor: string;
 }
 
 export interface RoutePoint {

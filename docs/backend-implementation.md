@@ -1,6 +1,7 @@
 # Backend implementation notes
 
 Date: 2026-05-15
+Last updated: 2026-05-18 after Mobile Accounts edit/block/unblock/detach/session/security endpoints and binding schema.
 
 ## Current backend slice
 
@@ -37,6 +38,9 @@ Implemented EF tables:
 - `route_points`
 - `employees`
 - `mobile_accounts`
+- `mobile_account_employee_bindings`
+- `mobile_account_sessions`
+- `mobile_account_audit_events`
 - `patrol_requests`
 - `assignments`
 
@@ -54,6 +58,7 @@ Checked-in migrations:
 - `20260514201028_RouteCatalogCrudFields` adds editable route and point catalog fields used by the frontend route editor.
 - `20260514223719_MobileAccounts` adds `mobile_accounts` with login uniqueness and employee binding scope.
 - `20260515024643_MobileAccountPasswordSecurity` replaces plaintext mobile passwords with `password_hash`, adds password reset state, and creates `mobile_account_audit_events`.
+- `20260518155301_MobileAccountBindingsSessions` adds employee binding rows, mobile session rows, and the audit actor column.
 
 Development compatibility:
 
@@ -103,7 +108,13 @@ Mobile accounts:
 - `GET /api/v1/mobile-accounts`
 - `GET /api/v1/mobile-accounts/{id}`
 - `POST /api/v1/mobile-accounts`
+- `PUT /api/v1/mobile-accounts/{id}`
 - `POST /api/v1/mobile-accounts/{id}/employees`
+- `POST /api/v1/mobile-accounts/{id}/block`
+- `POST /api/v1/mobile-accounts/{id}/unblock`
+- `DELETE /api/v1/mobile-accounts/{id}/employees/{employeeId}`
+- `GET /api/v1/mobile-accounts/{id}/sessions`
+- `GET /api/v1/mobile-accounts/{id}/security-events`
 - `POST /api/v1/mobile-accounts/{id}/reset-password`
 - `DELETE /api/v1/mobile-accounts/{id}`
 
@@ -175,7 +186,13 @@ PUT /api/v1/routes/{routeId}/points/{pointId}/order
 DELETE /api/v1/routes/{routeId}/points/{pointId}
 GET /api/v1/mobile-accounts
 POST /api/v1/mobile-accounts
+PUT /api/v1/mobile-accounts/{id}
 POST /api/v1/mobile-accounts/{id}/employees
+POST /api/v1/mobile-accounts/{id}/block
+POST /api/v1/mobile-accounts/{id}/unblock
+DELETE /api/v1/mobile-accounts/{id}/employees/{employeeId}
+GET /api/v1/mobile-accounts/{id}/sessions
+GET /api/v1/mobile-accounts/{id}/security-events
 POST /api/v1/mobile-accounts/{id}/reset-password
 DELETE /api/v1/mobile-accounts/{id}
 ```
@@ -192,12 +209,24 @@ Employee directory integration:
 Mobile account integration:
 
 - API mode renders the `mobile_accounts` table from PostgreSQL through `GET /api/v1/mobile-accounts`.
-- Creating an account supports selected-employee access or all-employee access. A selected account stores bound employee names in `bound_employees`.
-- `POST /api/v1/mobile-accounts/{id}/employees` appends a new employee binding and syncs employee mobile flags when the employee exists in the directory.
+- Creating an account supports selected-employee access or all-employee access. A selected account keeps legacy display names in `bound_employees` and new relationships in `mobile_account_employee_bindings`.
+- `POST /api/v1/mobile-accounts/{id}/employees` accepts `employeeId` first, keeps `employeeName` as a transition fallback, appends/reactivates a binding and syncs employee mobile flags.
+- `PUT /api/v1/mobile-accounts/{id}` updates login, role and status with uniqueness/status validation.
+- `POST /api/v1/mobile-accounts/{id}/block` and `/unblock` update account access state.
+- `DELETE /api/v1/mobile-accounts/{id}/employees/{employeeId}` detaches an employee and moves the account to `Не привязан` when the last selected binding is removed.
+- `GET /api/v1/mobile-accounts/{id}/sessions` and `/security-events` expose session and audit read models for the frontend panels.
 - Mobile account passwords are stored only as `password_hash`; list/get endpoints return password state, not the secret.
+- The frontend `MobileAccount` model now stores `passwordState` only. It does not keep a `password` field for account list/detail state.
 - `POST /api/v1/mobile-accounts` and `POST /api/v1/mobile-accounts/{id}/reset-password` return a temporary password only once in the command response.
 - Password create/reset writes `mobile_account_audit_events` records for audit and later security review.
-- Next production hardening step: add the real mobile login endpoint, verify the hash there, force password change when `password_reset_required = true`, and include actor/correlation id in audit events.
+- Next production hardening step: add the real mobile login endpoint, verify the hash there, force password change when `password_reset_required = true`, and replace the temporary `system` actor with authenticated actor/correlation id.
+
+Mobile account backend gaps after the current frontend/API pass:
+
+- Backend still needs real mobile auth/session write flow that creates/updates `mobile_account_sessions`.
+- Audit events currently carry a default `system` actor until auth/RBAC lands.
+- Frontend still needs to render live sessions/security events from the new endpoints.
+- OpenAPI generation and generated frontend DTOs are not wired yet.
 
 Local PostgreSQL startup:
 
@@ -223,8 +252,9 @@ dotnet ef database update `
 
 ## Next backend steps
 
-1. Add integration tests for health, routes, route points, employees and patrol request creation against PostgreSQL.
-2. Split `EfPatrolStore` into module-specific repositories/services when write behavior grows.
-3. Generate/OpenAPI-export API contracts for frontend DTO alignment.
-4. Add auth/RBAC and audit fields around write endpoints.
-5. Add the next persistence slice: patrol result facts, issue facts, mobile account bindings and file attachments.
+1. Add integration tests for health, routes, route points, employees, patrol request creation and mobile account create/reset/delete against PostgreSQL.
+2. Split `EfPatrolStore` into module-specific repositories/services before adding more mobile account, results and schedule commands.
+3. Generate/OpenAPI-export API contracts for frontend DTO alignment and replace temporary manual TypeScript DTOs.
+4. Add auth/RBAC and audit fields around write endpoints, including actor and correlation id.
+5. Complete mobile account commands needed by the frontend: edit, block/unblock, detach employee, sessions and security events.
+6. Add the next persistence slice: patrol result facts, issue facts, schedule rules/conflicts and file attachments.

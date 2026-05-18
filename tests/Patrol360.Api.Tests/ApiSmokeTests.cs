@@ -79,6 +79,50 @@ public class ApiSmokeTests
         Assert.IsType<NotFoundResult>(missingController.Delete(routeId));
     }
 
+    [Fact]
+    public void MobileAccountsControllerUpdateReturnsOkWhenServiceSucceeds()
+    {
+        var account = CreateMobileAccount();
+        var controller = new MobileAccountsController(new FakeMobileAccountService(
+            updateResult: new UpdateMobileAccountResult(account, new Dictionary<string, string[]>())));
+
+        var result = controller.Update(account.Id, new UpdateMobileAccountDto(account.Login, account.Role, account.Status));
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(account, ok.Value);
+    }
+
+    [Fact]
+    public void MobileAccountsControllerDetachReturnsValidationProblemWhenServiceRejectsRequest()
+    {
+        var controller = new MobileAccountsController(new FakeMobileAccountService(
+            detachResult: new UpdateMobileAccountResult(null, new Dictionary<string, string[]>
+            {
+                ["employeeId"] = ["Employee is not bound"],
+            })));
+
+        var result = controller.DetachEmployee(Guid.NewGuid(), Guid.NewGuid());
+
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result.Result);
+        var problem = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.Equal(400, objectResult.StatusCode);
+        Assert.Contains("employeeId", problem.Errors.Keys);
+    }
+
+    [Fact]
+    public void MobileAccountsControllerBlockMapsMissingAccountToNotFound()
+    {
+        var controller = new MobileAccountsController(new FakeMobileAccountService(
+            blockResult: new UpdateMobileAccountResult(null, new Dictionary<string, string[]>
+            {
+                ["account"] = ["Not found"],
+            })));
+
+        var result = controller.Block(Guid.NewGuid());
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
     private static RouteDto CreateRoute() =>
         new(
             Guid.NewGuid(),
@@ -91,6 +135,22 @@ public class ApiSmokeTests
             Periodicity: "Daily",
             VersionNo: 1,
             Points: []);
+
+    private static MobileAccountDto CreateMobileAccount() =>
+        new(
+            Guid.NewGuid(),
+            Login: "mobile_01",
+            PasswordState: "Password set",
+            Employee: "Employee One",
+            EmployeeScope: "selected",
+            BoundEmployeeIds: [Guid.NewGuid()],
+            BoundEmployees: ["Employee One"],
+            Role: "Inspector",
+            Status: "Active",
+            Session: "-",
+            LastSeen: "Never",
+            Device: "-",
+            Version: "-");
 
     private sealed class FakeRouteCatalogQuery(IReadOnlyList<RouteDto> routes) : IRouteCatalogQuery
     {
@@ -122,5 +182,41 @@ public class ApiSmokeTests
 
         public UpdateRoutePointResult ReorderRoutePoint(Guid routeId, Guid pointId, ReorderRoutePointDto request) =>
             throw new NotImplementedException();
+    }
+
+    private sealed class FakeMobileAccountService(
+        UpdateMobileAccountResult? updateResult = null,
+        UpdateMobileAccountResult? detachResult = null,
+        UpdateMobileAccountResult? blockResult = null) : IMobileAccountService
+    {
+        public IReadOnlyList<MobileAccountDto> GetAccounts() => [];
+
+        public MobileAccountDto? GetAccount(Guid id) => null;
+
+        public CreateMobileAccountResult CreateAccount(CreateMobileAccountDto request) =>
+            throw new NotImplementedException();
+
+        public UpdateMobileAccountResult UpdateAccount(Guid id, UpdateMobileAccountDto request) =>
+            updateResult ?? new UpdateMobileAccountResult(null, new Dictionary<string, string[]>());
+
+        public UpdateMobileAccountResult AttachEmployee(Guid id, AttachMobileAccountEmployeeDto request) =>
+            throw new NotImplementedException();
+
+        public UpdateMobileAccountResult DetachEmployee(Guid id, Guid employeeId) =>
+            detachResult ?? new UpdateMobileAccountResult(null, new Dictionary<string, string[]>());
+
+        public UpdateMobileAccountResult BlockAccount(Guid id) =>
+            blockResult ?? new UpdateMobileAccountResult(null, new Dictionary<string, string[]>());
+
+        public UpdateMobileAccountResult UnblockAccount(Guid id) =>
+            throw new NotImplementedException();
+
+        public ResetMobileAccountPasswordDto? ResetPassword(Guid id) => null;
+
+        public bool DeleteAccount(Guid id) => false;
+
+        public IReadOnlyList<MobileAccountSessionDto> GetSessions(Guid id) => [];
+
+        public IReadOnlyList<MobileAccountSecurityEventDto> GetSecurityEvents(Guid id) => [];
     }
 }

@@ -16,6 +16,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
     IRouteCatalogService
 {
     private static readonly PasswordHasher<MobileAccountEntity> MobilePasswordHasher = new();
+    private static readonly string[] EditableMobileAccountStatuses = ["Активен", "Не привязан", "Заблокирован"];
 
     public DashboardSummaryDto GetSummary()
     {
@@ -347,6 +348,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
     public IReadOnlyList<MobileAccountDto> GetAccounts() =>
         dbContext.MobileAccounts
             .AsNoTracking()
+            .Include(account => account.EmployeeBindings)
             .OrderBy(account => account.Login)
             .AsEnumerable()
             .Select(account => MapMobileAccount(account))
@@ -354,7 +356,10 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
 
     public MobileAccountDto? GetAccount(Guid id)
     {
-        var account = dbContext.MobileAccounts.AsNoTracking().FirstOrDefault(item => item.Id == id);
+        var account = dbContext.MobileAccounts
+            .AsNoTracking()
+            .Include(item => item.EmployeeBindings)
+            .FirstOrDefault(item => item.Id == id);
         return account is null ? null : MapMobileAccount(account);
     }
 
@@ -396,6 +401,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             LastPasswordResetAt = temporaryPassword is null ? null : now
         };
         accountEntity.PasswordHash = MobilePasswordHasher.HashPassword(accountEntity, temporaryPassword ?? CreateTemporaryPassword());
+        AddInitialMobileAccountBindings(accountEntity);
 
         dbContext.MobileAccounts.Add(accountEntity);
         AddMobileAccountAuditEvent(
@@ -408,30 +414,177 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
         return new CreateMobileAccountResult(MapMobileAccount(accountEntity), temporaryPassword, new Dictionary<string, string[]>());
     }
 
-    public UpdateMobileAccountResult AttachEmployee(Guid id, AttachMobileAccountEmployeeDto request)
+    public UpdateMobileAccountResult UpdateAccount(Guid id, UpdateMobileAccountDto request)
     {
-        var account = dbContext.MobileAccounts.FirstOrDefault(item => item.Id == id);
+        var account = dbContext.MobileAccounts
+            .Include(item => item.EmployeeBindings)
+            .FirstOrDefault(item => item.Id == id);
         if (account is null)
         {
-            return new UpdateMobileAccountResult(null, new Dictionary<string, string[]> { ["account"] = ["Мобильный аккаунт не найден."] });
+            return MissingMobileAccountResult();
         }
 
-        var employeeName = NormalizeOptionalText(request.EmployeeName);
-        if (string.IsNullOrWhiteSpace(employeeName))
+        var errors = ValidateUpdateMobileAccount(id, request);
+        if (errors.Count > 0)
         {
-            return new UpdateMobileAccountResult(null, new Dictionary<string, string[]> { ["employeeName"] = ["Укажите ФИО сотрудника."] });
+            return new UpdateMobileAccountResult(null, errors);
+        }
+
+        var nextStatus = NormalizeOptionalText(request.Status);
+        account.Login = NormalizeLogin(request.Login);
+        account.Role = NormalizeOptionalText(request.Role);
+        account.Status = nextStatus;
+
+        if (nextStatus == "Не привязан")
+        {
+            DetachAllBindings(account);
+        }
+
+        AddMobileAccountAuditEvent(account.Id, "mobile_account.updated", "Login, role or status updated.");
+        SyncMobileAccountDerivedState(account);
+        RebuildEmployeeMobileFlags();
+        dbContext.SaveChanges();
+
+        return new UpdateMobileAccountResult(MapMobileAccount(account), new Dictionary<string, string[]>());
+    }
+
+    public UpdateMobileAccountResult AttachEmployee(Guid id, AttachMobileAccountEmployeeDto request)
+    {
+        var account = dbContext.MobileAccounts
+            .Include(item => item.EmployeeBindings)
+            .FirstOrDefault(item => item.Id == id);
+        if (account is null)
+        {
+            return MissingMobileAccountResult();
+        }
+
+        var employee = ResolveMobileBindingEmployee(request);
+        if (employee is null)
+        {
+            return new UpdateMobileAccountResult(null, new Dictionary<string, string[]>
+            {
+                ["employeeId"] = ["Выберите сотрудника из справочника."],
+            });
+        }
+
+        var activeBindings = GetActiveBindings(account).ToList();
+        var displayNames = GetDisplayBoundEmployeeNames(account);
+        var isAlreadyBound = activeBindings.Any(binding => binding.EmployeeId == employee.Id)
+            || displayNames.Contains(employee.FullName, StringComparer.OrdinalIgnoreCase);
+        if (displayNames.Length >= 5 && !isAlreadyBound)
+        {
+            return new UpdateMobileAccountResult(null, new Dictionary<string, string[]>
+            {
+                ["employeeId"] = ["К одному мобильному аккаунту можно привязать до 5 сотрудников."],
+            });
         }
 
         account.EmployeeScope = "selected";
-        account.BoundEmployees = account.BoundEmployees.Contains(employeeName)
-            ? account.BoundEmployees
-            : [.. account.BoundEmployees, employeeName];
+        var existingBinding = account.EmployeeBindings.FirstOrDefault(binding => binding.EmployeeId == employee.Id);
+        if (existingBinding is null)
+        {
+            account.EmployeeBindings.Add(new MobileAccountEmployeeBindingEntity
+            {
+                Id = Guid.NewGuid(),
+                MobileAccountId = account.Id,
+                EmployeeId = employee.Id,
+                DisplayName = employee.FullName,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+        }
+        else
+        {
+            existingBinding.DisplayName = employee.FullName;
+            existingBinding.DetachedAt = null;
+        }
+
         if (account.Status != "Заблокирован")
         {
             account.Status = "Активен";
         }
 
-        SyncEmployeeMobileFlags(account);
+        AddMobileAccountAuditEvent(account.Id, "mobile_account.employee_attached", $"Employee {employee.Id} attached.");
+        SyncMobileAccountDerivedState(account);
+        RebuildEmployeeMobileFlags();
+        dbContext.SaveChanges();
+
+        return new UpdateMobileAccountResult(MapMobileAccount(account), new Dictionary<string, string[]>());
+    }
+
+    public UpdateMobileAccountResult DetachEmployee(Guid id, Guid employeeId)
+    {
+        var account = dbContext.MobileAccounts
+            .Include(item => item.EmployeeBindings)
+            .FirstOrDefault(item => item.Id == id);
+        if (account is null)
+        {
+            return MissingMobileAccountResult();
+        }
+
+        var binding = GetActiveBindings(account).FirstOrDefault(item => item.EmployeeId == employeeId);
+        if (binding is null)
+        {
+            var employee = dbContext.Employees.FirstOrDefault(item => item.Id == employeeId);
+            if (employee is null || !account.BoundEmployees.Contains(employee.FullName, StringComparer.OrdinalIgnoreCase))
+            {
+                return new UpdateMobileAccountResult(null, new Dictionary<string, string[]>
+                {
+                    ["employeeId"] = ["Сотрудник не привязан к этому аккаунту."],
+                });
+            }
+
+            account.BoundEmployees = account.BoundEmployees
+                .Where(name => !string.Equals(name, employee.FullName, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+        }
+        else
+        {
+            binding.DetachedAt = DateTimeOffset.UtcNow;
+        }
+
+        AddMobileAccountAuditEvent(account.Id, "mobile_account.employee_detached", $"Employee {employeeId} detached.");
+        SyncMobileAccountDerivedState(account);
+        if (account.Status == "Активен" && GetActiveBindings(account).Count == 0)
+        {
+            account.Status = "Не привязан";
+        }
+
+        RebuildEmployeeMobileFlags();
+        dbContext.SaveChanges();
+
+        return new UpdateMobileAccountResult(MapMobileAccount(account), new Dictionary<string, string[]>());
+    }
+
+    public UpdateMobileAccountResult BlockAccount(Guid id)
+    {
+        var account = dbContext.MobileAccounts
+            .Include(item => item.EmployeeBindings)
+            .FirstOrDefault(item => item.Id == id);
+        if (account is null)
+        {
+            return MissingMobileAccountResult();
+        }
+
+        account.Status = "Заблокирован";
+        account.Session = "-";
+        AddMobileAccountAuditEvent(account.Id, "mobile_account.blocked", "Mobile account blocked.");
+        dbContext.SaveChanges();
+
+        return new UpdateMobileAccountResult(MapMobileAccount(account), new Dictionary<string, string[]>());
+    }
+
+    public UpdateMobileAccountResult UnblockAccount(Guid id)
+    {
+        var account = dbContext.MobileAccounts
+            .Include(item => item.EmployeeBindings)
+            .FirstOrDefault(item => item.Id == id);
+        if (account is null)
+        {
+            return MissingMobileAccountResult();
+        }
+
+        account.Status = account.EmployeeScope == "all" || GetDisplayBoundEmployeeNames(account).Length > 0 ? "Активен" : "Не привязан";
+        AddMobileAccountAuditEvent(account.Id, "mobile_account.unblocked", "Mobile account unblocked.");
         dbContext.SaveChanges();
 
         return new UpdateMobileAccountResult(MapMobileAccount(account), new Dictionary<string, string[]>());
@@ -463,6 +616,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             return false;
         }
 
+        AddMobileAccountAuditEvent(account.Id, "mobile_account.deleted", "Mobile account deleted.");
         dbContext.MobileAccounts.Remove(account);
         dbContext.SaveChanges();
 
@@ -470,6 +624,50 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
         dbContext.SaveChanges();
 
         return true;
+    }
+
+    public IReadOnlyList<MobileAccountSessionDto> GetSessions(Guid id)
+    {
+        if (!dbContext.MobileAccounts.Any(account => account.Id == id))
+        {
+            return [];
+        }
+
+        return dbContext.MobileAccountSessions
+            .AsNoTracking()
+            .Where(session => session.MobileAccountId == id)
+            .OrderByDescending(session => session.LastSeenAt)
+            .Select(session => new MobileAccountSessionDto(
+                session.Id,
+                session.MobileAccountId,
+                session.Status,
+                session.Device,
+                session.Platform,
+                session.AppVersion,
+                session.IpAddress,
+                session.LastSeenAt))
+            .ToList();
+    }
+
+    public IReadOnlyList<MobileAccountSecurityEventDto> GetSecurityEvents(Guid id)
+    {
+        if (!dbContext.MobileAccounts.Any(account => account.Id == id))
+        {
+            return [];
+        }
+
+        return dbContext.MobileAccountAuditEvents
+            .AsNoTracking()
+            .Where(auditEvent => auditEvent.MobileAccountId == id)
+            .OrderByDescending(auditEvent => auditEvent.CreatedAt)
+            .Select(auditEvent => new MobileAccountSecurityEventDto(
+                auditEvent.Id,
+                auditEvent.MobileAccountId,
+                auditEvent.Action,
+                auditEvent.Details,
+                auditEvent.CreatedAt,
+                auditEvent.Actor))
+            .ToList();
     }
 
     public IReadOnlyList<PatrolRequestDto> GetRequests() =>
@@ -667,6 +865,119 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
         return errors;
     }
 
+    private Dictionary<string, string[]> ValidateUpdateMobileAccount(Guid accountId, UpdateMobileAccountDto request)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var login = NormalizeLogin(request.Login);
+        var role = NormalizeOptionalText(request.Role);
+        var status = NormalizeOptionalText(request.Status);
+
+        if (string.IsNullOrWhiteSpace(login))
+        {
+            errors["login"] = ["Укажите логин мобильного аккаунта."];
+        }
+        else if (login.Length > 120)
+        {
+            errors["login"] = ["Логин мобильного аккаунта не должен быть длиннее 120 символов."];
+        }
+        else if (dbContext.MobileAccounts.Any(account => account.Id != accountId && account.Login == login))
+        {
+            errors["login"] = ["Мобильный аккаунт с таким логином уже есть."];
+        }
+
+        if (string.IsNullOrWhiteSpace(role))
+        {
+            errors["role"] = ["Укажите роль мобильного аккаунта."];
+        }
+
+        if (string.IsNullOrWhiteSpace(status) || !EditableMobileAccountStatuses.Contains(status))
+        {
+            errors["status"] = ["Выберите допустимый статус аккаунта."];
+        }
+
+        return errors;
+    }
+
+    private EmployeeEntity? ResolveMobileBindingEmployee(AttachMobileAccountEmployeeDto request)
+    {
+        if (request.EmployeeId is not null)
+        {
+            return dbContext.Employees.FirstOrDefault(employee => employee.Id == request.EmployeeId.Value);
+        }
+
+        var employeeName = NormalizeOptionalText(request.EmployeeName);
+        return string.IsNullOrWhiteSpace(employeeName)
+            ? null
+            : dbContext.Employees.FirstOrDefault(employee => employee.FullName == employeeName);
+    }
+
+    private static IReadOnlyList<MobileAccountEmployeeBindingEntity> GetActiveBindings(MobileAccountEntity account) =>
+        account.EmployeeBindings
+            .Where(binding => binding.DetachedAt is null)
+            .OrderBy(binding => binding.CreatedAt)
+            .ToList();
+
+    private static string[] GetDisplayBoundEmployeeNames(MobileAccountEntity account)
+    {
+        var activeBindingNames = GetActiveBindings(account)
+            .Select(binding => binding.DisplayName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return activeBindingNames.Length > 0 ? activeBindingNames : account.BoundEmployees;
+    }
+
+    private void AddInitialMobileAccountBindings(MobileAccountEntity account)
+    {
+        if (account.BoundEmployees.Length == 0)
+        {
+            return;
+        }
+
+        foreach (var employeeName in account.BoundEmployees)
+        {
+            var employee = dbContext.Employees.FirstOrDefault(item => item.FullName == employeeName);
+            if (employee is null || account.EmployeeBindings.Any(binding => binding.EmployeeId == employee.Id))
+            {
+                continue;
+            }
+
+            account.EmployeeBindings.Add(new MobileAccountEmployeeBindingEntity
+            {
+                Id = Guid.NewGuid(),
+                MobileAccountId = account.Id,
+                EmployeeId = employee.Id,
+                DisplayName = employee.FullName,
+                CreatedAt = account.CreatedAt
+            });
+        }
+    }
+
+    private static void SyncMobileAccountDerivedState(MobileAccountEntity account)
+    {
+        account.BoundEmployees = GetDisplayBoundEmployeeNames(account);
+        if (account.EmployeeScope != "all" && account.Status == "Активен" && account.BoundEmployees.Length == 0)
+        {
+            account.Status = "Не привязан";
+        }
+    }
+
+    private static void DetachAllBindings(MobileAccountEntity account)
+    {
+        var detachedAt = DateTimeOffset.UtcNow;
+        foreach (var binding in account.EmployeeBindings.Where(binding => binding.DetachedAt is null))
+        {
+            binding.DetachedAt = detachedAt;
+        }
+    }
+
+    private static UpdateMobileAccountResult MissingMobileAccountResult() =>
+        new(null, new Dictionary<string, string[]>
+        {
+            ["account"] = ["Мобильный аккаунт не найден."],
+        });
+
     private static string NormalizeEmployeeScope(string? scope) =>
         string.Equals(scope, "all", StringComparison.OrdinalIgnoreCase) ? "all" : "selected";
 
@@ -731,6 +1042,19 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             return;
         }
 
+        var activeBindingEmployeeIds = GetActiveBindings(account)
+            .Select(binding => binding.EmployeeId)
+            .ToArray();
+        if (activeBindingEmployeeIds.Length > 0)
+        {
+            foreach (var employee in dbContext.Employees.Where(employee => activeBindingEmployeeIds.Contains(employee.Id)))
+            {
+                employee.HasMobileAccount = true;
+            }
+
+            return;
+        }
+
         foreach (var employee in dbContext.Employees.Where(employee => account.BoundEmployees.Contains(employee.FullName)))
         {
             employee.HasMobileAccount = true;
@@ -758,6 +1082,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             MobileAccountId = accountId,
             Action = action,
             Details = details,
+            Actor = "system",
             CreatedAt = DateTimeOffset.UtcNow
         });
     }
@@ -851,7 +1176,10 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
 
     private static MobileAccountDto MapMobileAccount(MobileAccountEntity account)
     {
-        var boundEmployees = account.BoundEmployees;
+        var boundEmployeeIds = GetActiveBindings(account)
+            .Select(binding => binding.EmployeeId)
+            .ToList();
+        var boundEmployees = GetDisplayBoundEmployeeNames(account);
         var employee = account.EmployeeScope == "all"
             ? "Все сотрудники"
             : boundEmployees.Length == 0
@@ -866,6 +1194,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             account.PasswordResetRequired ? "Требует смены пароля" : "Пароль задан",
             employee,
             account.EmployeeScope,
+            boundEmployeeIds,
             boundEmployees,
             account.Role,
             account.Status,

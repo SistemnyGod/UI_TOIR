@@ -17,6 +17,10 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
 
     public DbSet<MobileAccountEntity> MobileAccounts => Set<MobileAccountEntity>();
 
+    public DbSet<MobileAccountEmployeeBindingEntity> MobileAccountEmployeeBindings => Set<MobileAccountEmployeeBindingEntity>();
+
+    public DbSet<MobileAccountSessionEntity> MobileAccountSessions => Set<MobileAccountSessionEntity>();
+
     public DbSet<MobileAccountAuditEventEntity> MobileAccountAuditEvents => Set<MobileAccountAuditEventEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -27,6 +31,8 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
         ConfigurePatrolRequests(modelBuilder);
         ConfigureAssignments(modelBuilder);
         ConfigureMobileAccounts(modelBuilder);
+        ConfigureMobileAccountEmployeeBindings(modelBuilder);
+        ConfigureMobileAccountSessions(modelBuilder);
         ConfigureMobileAccountAuditEvents(modelBuilder);
     }
 
@@ -225,6 +231,63 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
         });
     }
 
+    private static void ConfigureMobileAccountEmployeeBindings(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<MobileAccountEmployeeBindingEntity>(entity =>
+        {
+            entity.ToTable("mobile_account_employee_bindings");
+            entity.HasKey(binding => binding.Id);
+
+            entity.Property(binding => binding.Id).HasColumnName("id");
+            entity.Property(binding => binding.MobileAccountId).HasColumnName("mobile_account_id");
+            entity.Property(binding => binding.EmployeeId).HasColumnName("employee_id");
+            entity.Property(binding => binding.DisplayName).HasColumnName("display_name").HasMaxLength(240).IsRequired();
+            entity.Property(binding => binding.CreatedAt).HasColumnName("created_at");
+            entity.Property(binding => binding.DetachedAt).HasColumnName("detached_at");
+
+            entity.HasOne(binding => binding.MobileAccount)
+                .WithMany(account => account.EmployeeBindings)
+                .HasForeignKey(binding => binding.MobileAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(binding => binding.Employee)
+                .WithMany()
+                .HasForeignKey(binding => binding.EmployeeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(binding => new { binding.MobileAccountId, binding.EmployeeId, binding.DetachedAt })
+                .HasDatabaseName("ix_mobile_account_employee_bindings_account_employee");
+            entity.HasIndex(binding => binding.EmployeeId)
+                .HasDatabaseName("ix_mobile_account_employee_bindings_employee");
+        });
+    }
+
+    private static void ConfigureMobileAccountSessions(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<MobileAccountSessionEntity>(entity =>
+        {
+            entity.ToTable("mobile_account_sessions");
+            entity.HasKey(session => session.Id);
+
+            entity.Property(session => session.Id).HasColumnName("id");
+            entity.Property(session => session.MobileAccountId).HasColumnName("mobile_account_id");
+            entity.Property(session => session.Status).HasColumnName("status").HasMaxLength(60).IsRequired();
+            entity.Property(session => session.Device).HasColumnName("device").HasMaxLength(160).IsRequired();
+            entity.Property(session => session.Platform).HasColumnName("platform").HasMaxLength(80).IsRequired();
+            entity.Property(session => session.AppVersion).HasColumnName("app_version").HasMaxLength(40).IsRequired();
+            entity.Property(session => session.IpAddress).HasColumnName("ip_address").HasMaxLength(80).IsRequired();
+            entity.Property(session => session.LastSeenAt).HasColumnName("last_seen_at");
+
+            entity.HasOne(session => session.MobileAccount)
+                .WithMany(account => account.Sessions)
+                .HasForeignKey(session => session.MobileAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(session => new { session.MobileAccountId, session.LastSeenAt })
+                .HasDatabaseName("ix_mobile_account_sessions_account_seen");
+        });
+    }
+
     private static void ConfigureMobileAccountAuditEvents(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<MobileAccountAuditEventEntity>(entity =>
@@ -236,6 +299,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(auditEvent => auditEvent.MobileAccountId).HasColumnName("mobile_account_id");
             entity.Property(auditEvent => auditEvent.Action).HasColumnName("action").HasMaxLength(120).IsRequired();
             entity.Property(auditEvent => auditEvent.Details).HasColumnName("details").HasMaxLength(500).IsRequired();
+            entity.Property(auditEvent => auditEvent.Actor).HasColumnName("actor").HasMaxLength(160).IsRequired();
             entity.Property(auditEvent => auditEvent.CreatedAt).HasColumnName("created_at");
 
             entity.HasIndex(auditEvent => new { auditEvent.MobileAccountId, auditEvent.CreatedAt })

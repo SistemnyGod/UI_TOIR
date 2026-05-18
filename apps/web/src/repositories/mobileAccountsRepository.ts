@@ -5,7 +5,10 @@ import type {
   CreateMobileAccountDto,
   MobileAccountCreatedDto,
   MobileAccountDto,
+  MobileAccountSecurityEventDto,
+  MobileAccountSessionDto,
   ResetMobileAccountPasswordDto,
+  UpdateMobileAccountDto,
 } from "../api/contracts";
 import {
   bindMobileAccountToEmployee,
@@ -13,7 +16,13 @@ import {
   isMobileAccountList,
   resetMobileAccountPassword,
 } from "../domain/mobileAccounts";
-import type { CreateMobileAccountPayload, MobileAccount } from "../types";
+import type {
+  CreateMobileAccountPayload,
+  MobileAccount,
+  MobileAccountSecurityEvent,
+  MobileAccountSession,
+  UpdateMobileAccountPayload,
+} from "../types";
 
 export interface MobileAccountCreateResult {
   account: MobileAccount;
@@ -39,8 +48,71 @@ export function createLocalMobileAccount(accounts: MobileAccount[], payload: Cre
   };
 }
 
-export function attachEmployeeToMobileAccount(accounts: MobileAccount[], accountId: string, employeeName: string) {
-  return bindMobileAccountToEmployee(accounts, accountId, employeeName);
+export function attachEmployeeToMobileAccount(
+  accounts: MobileAccount[],
+  accountId: string,
+  employeeName: string,
+  employeeId?: string,
+) {
+  const nextAccounts = bindMobileAccountToEmployee(accounts, accountId, employeeName);
+  return nextAccounts.map((account) => {
+    if (account.id !== accountId || !employeeId) return account;
+    const nextIds = account.boundEmployeeIds?.includes(employeeId)
+      ? account.boundEmployeeIds
+      : [...(account.boundEmployeeIds ?? []), employeeId];
+    return { ...account, boundEmployeeIds: nextIds };
+  });
+}
+
+export function updateMobileAccountLocal(
+  accounts: MobileAccount[],
+  accountId: string,
+  payload: UpdateMobileAccountPayload,
+) {
+  return accounts.map((account) =>
+    account.id === accountId
+      ? {
+          ...account,
+          login: payload.login.trim(),
+          role: payload.role.trim(),
+          status: payload.status,
+        }
+      : account,
+  );
+}
+
+export function blockMobileAccountLocal(accounts: MobileAccount[], accountId: string) {
+  return accounts.map((account) =>
+    account.id === accountId ? { ...account, status: "Заблокирован" as const, session: "-" as const } : account,
+  );
+}
+
+export function unblockMobileAccountLocal(accounts: MobileAccount[], accountId: string) {
+  return accounts.map((account) => {
+    if (account.id !== accountId) return account;
+    const hasAccess = account.employeeScope === "all" || (account.boundEmployees ?? []).length > 0;
+    return { ...account, status: hasAccess ? ("Активен" as const) : ("Не привязан" as const) };
+  });
+}
+
+export function detachEmployeeFromMobileAccount(accounts: MobileAccount[], accountId: string, employeeId?: string) {
+  return accounts.map((account) => {
+    if (account.id !== accountId) return account;
+    const boundEmployeeIds = account.boundEmployeeIds ?? [];
+    const removeIndex = employeeId ? boundEmployeeIds.indexOf(employeeId) : 0;
+    const nextEmployees = (account.boundEmployees ?? []).filter((_, index) => index !== removeIndex);
+    const nextIds = employeeId ? boundEmployeeIds.filter((id) => id !== employeeId) : boundEmployeeIds.slice(1);
+    const nextStatus =
+      account.status === "Заблокирован" ? account.status : nextEmployees.length > 0 ? ("Активен" as const) : ("Не привязан" as const);
+
+    return {
+      ...account,
+      boundEmployeeIds: nextIds,
+      boundEmployees: nextEmployees,
+      employee: nextEmployees.length > 0 ? nextEmployees[0] : "Не привязан",
+      status: nextStatus,
+    };
+  });
 }
 
 export function deleteMobileAccount(accounts: MobileAccount[], accountId: string) {
@@ -71,12 +143,51 @@ export function createApiMobileAccountsRepository({ baseUrl }: { baseUrl?: strin
       } satisfies MobileAccountCreateResult;
     },
 
-    async attachEmployee(accountId: string, employeeName: string) {
+    async attachEmployee(accountId: string, employeeId: string, employeeName?: string) {
       const account = await client.post<MobileAccountDto, AttachMobileAccountEmployeeDto>(
         `/api/v1/mobile-accounts/${accountId}/employees`,
-        { employeeName },
+        { employeeId, employeeName },
       );
       return mapMobileAccount(account);
+    },
+
+    async updateAccount(accountId: string, payload: UpdateMobileAccountPayload) {
+      const account = await client.put<MobileAccountDto, UpdateMobileAccountDto>(
+        `/api/v1/mobile-accounts/${accountId}`,
+        payload,
+      );
+      return mapMobileAccount(account);
+    },
+
+    async blockAccount(accountId: string) {
+      const account = await client.post<MobileAccountDto, Record<string, never>>(
+        `/api/v1/mobile-accounts/${accountId}/block`,
+        {},
+      );
+      return mapMobileAccount(account);
+    },
+
+    async unblockAccount(accountId: string) {
+      const account = await client.post<MobileAccountDto, Record<string, never>>(
+        `/api/v1/mobile-accounts/${accountId}/unblock`,
+        {},
+      );
+      return mapMobileAccount(account);
+    },
+
+    async detachEmployee(accountId: string, employeeId: string) {
+      const account = await client.delete<MobileAccountDto>(`/api/v1/mobile-accounts/${accountId}/employees/${employeeId}`);
+      return mapMobileAccount(account);
+    },
+
+    async getSessions(accountId: string) {
+      const sessions = await client.get<MobileAccountSessionDto[]>(`/api/v1/mobile-accounts/${accountId}/sessions`);
+      return sessions.map(mapMobileAccountSession);
+    },
+
+    async getSecurityEvents(accountId: string) {
+      const events = await client.get<MobileAccountSecurityEventDto[]>(`/api/v1/mobile-accounts/${accountId}/security-events`);
+      return events.map(mapMobileAccountSecurityEvent);
     },
 
     async resetPassword(accountId: string) {
@@ -108,9 +219,10 @@ function mapMobileAccount(account: MobileAccountDto): MobileAccount {
   return {
     id: account.id,
     login: account.login,
-    password: account.passwordState,
+    passwordState: account.passwordState,
     employee: account.employee,
     employeeScope: account.employeeScope,
+    boundEmployeeIds: account.boundEmployeeIds ?? [],
     boundEmployees: account.boundEmployees,
     role: account.role,
     status: account.status as MobileAccount["status"],
@@ -118,5 +230,29 @@ function mapMobileAccount(account: MobileAccountDto): MobileAccount {
     lastSeen: account.lastSeen,
     device: account.device,
     version: account.version,
+  };
+}
+
+function mapMobileAccountSession(session: MobileAccountSessionDto): MobileAccountSession {
+  return {
+    id: session.id,
+    accountId: session.accountId,
+    status: session.status,
+    device: session.device,
+    platform: session.platform,
+    appVersion: session.appVersion,
+    ipAddress: session.ipAddress,
+    lastSeenAt: session.lastSeenAt,
+  };
+}
+
+function mapMobileAccountSecurityEvent(event: MobileAccountSecurityEventDto): MobileAccountSecurityEvent {
+  return {
+    id: event.id,
+    accountId: event.accountId,
+    eventType: event.eventType,
+    message: event.message,
+    createdAt: event.createdAt,
+    actor: event.actor,
   };
 }

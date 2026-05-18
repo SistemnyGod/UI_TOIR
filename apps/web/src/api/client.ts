@@ -75,7 +75,7 @@ export class ApiClient {
     baseUrl,
     credentials = "same-origin",
     defaultHeaders,
-    fetcher = fetch,
+    fetcher,
     getAuthToken,
     onUnauthorized,
     timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -83,7 +83,7 @@ export class ApiClient {
     this.baseUrl = normalizeBaseUrl(baseUrl ?? getDefaultApiBaseUrl());
     this.credentials = credentials;
     this.defaultHeaders = defaultHeaders;
-    this.fetcher = fetcher;
+    this.fetcher = fetcher ?? globalThis.fetch.bind(globalThis);
     this.getAuthToken = getAuthToken;
     this.onUnauthorized = onUnauthorized;
     this.timeoutMs = timeoutMs;

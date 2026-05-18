@@ -14,6 +14,10 @@ internal sealed class MobileAccountEntity
 
     public string EmployeeScope { get; set; } = string.Empty;
 
+    public List<MobileAccountEmployeeBindingEntity> EmployeeBindings { get; set; } = [];
+
+    public List<MobileAccountSessionEntity> Sessions { get; set; } = [];
+
     public string[] BoundEmployees { get; set; } = [];
 
     public string Role { get; set; } = string.Empty;
