@@ -129,7 +129,7 @@ describe("shared UI primitives", () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
-  it("does not render mobile account automatic inactivity logout control", () => {
+  it("does not render mobile account inactivity session policy control", () => {
     render(
       <MobileAccountCreateDrawer
         onCreateAccount={vi.fn()}
@@ -138,7 +138,6 @@ describe("shared UI primitives", () => {
       />,
     );
 
-    expect(screen.queryByText("Автоматический выход при неактивности")).not.toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: "Автоматический выход при неактивности" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("combobox")).toHaveLength(2);
   });
 });
