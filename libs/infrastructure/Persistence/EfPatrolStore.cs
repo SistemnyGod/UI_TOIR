@@ -442,8 +442,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
 
         AddMobileAccountAuditEvent(account.Id, "mobile_account.updated", "Login, role or status updated.");
         SyncMobileAccountDerivedState(account);
-        RebuildEmployeeMobileFlags();
-        dbContext.SaveChanges();
+        SaveChangesAndRebuildEmployeeMobileFlags();
 
         return new UpdateMobileAccountResult(MapMobileAccount(account), new Dictionary<string, string[]>());
     }
@@ -483,14 +482,16 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
         var existingBinding = account.EmployeeBindings.FirstOrDefault(binding => binding.EmployeeId == employee.Id);
         if (existingBinding is null)
         {
-            account.EmployeeBindings.Add(new MobileAccountEmployeeBindingEntity
+            var binding = new MobileAccountEmployeeBindingEntity
             {
                 Id = Guid.NewGuid(),
                 MobileAccountId = account.Id,
                 EmployeeId = employee.Id,
                 DisplayName = employee.FullName,
                 CreatedAt = DateTimeOffset.UtcNow
-            });
+            };
+            account.EmployeeBindings.Add(binding);
+            dbContext.Entry(binding).State = EntityState.Added;
         }
         else
         {
@@ -505,8 +506,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
 
         AddMobileAccountAuditEvent(account.Id, "mobile_account.employee_attached", $"Employee {employee.Id} attached.");
         SyncMobileAccountDerivedState(account);
-        RebuildEmployeeMobileFlags();
-        dbContext.SaveChanges();
+        SaveChangesAndRebuildEmployeeMobileFlags();
 
         return new UpdateMobileAccountResult(MapMobileAccount(account), new Dictionary<string, string[]>());
     }
@@ -549,8 +549,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             account.Status = "Не привязан";
         }
 
-        RebuildEmployeeMobileFlags();
-        dbContext.SaveChanges();
+        SaveChangesAndRebuildEmployeeMobileFlags();
 
         return new UpdateMobileAccountResult(MapMobileAccount(account), new Dictionary<string, string[]>());
     }
@@ -1034,7 +1033,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
     {
         if (account.EmployeeScope == "all")
         {
-            foreach (var employee in dbContext.Employees)
+            foreach (var employee in dbContext.Employees.ToList())
             {
                 employee.HasMobileAccount = true;
             }
@@ -1047,7 +1046,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             .ToArray();
         if (activeBindingEmployeeIds.Length > 0)
         {
-            foreach (var employee in dbContext.Employees.Where(employee => activeBindingEmployeeIds.Contains(employee.Id)))
+            foreach (var employee in dbContext.Employees.Where(employee => activeBindingEmployeeIds.Contains(employee.Id)).ToList())
             {
                 employee.HasMobileAccount = true;
             }
@@ -1055,7 +1054,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             return;
         }
 
-        foreach (var employee in dbContext.Employees.Where(employee => account.BoundEmployees.Contains(employee.FullName)))
+        foreach (var employee in dbContext.Employees.Where(employee => account.BoundEmployees.Contains(employee.FullName)).ToList())
         {
             employee.HasMobileAccount = true;
         }
@@ -1063,15 +1062,22 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
 
     private void RebuildEmployeeMobileFlags()
     {
-        foreach (var employee in dbContext.Employees)
+        foreach (var employee in dbContext.Employees.ToList())
         {
             employee.HasMobileAccount = false;
         }
 
-        foreach (var account in dbContext.MobileAccounts)
+        foreach (var account in dbContext.MobileAccounts.Include(account => account.EmployeeBindings).ToList())
         {
             SyncEmployeeMobileFlags(account);
         }
+    }
+
+    private void SaveChangesAndRebuildEmployeeMobileFlags()
+    {
+        dbContext.SaveChanges();
+        RebuildEmployeeMobileFlags();
+        dbContext.SaveChanges();
     }
 
     private void AddMobileAccountAuditEvent(Guid accountId, string action, string details)

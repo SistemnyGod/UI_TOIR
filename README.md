@@ -101,6 +101,13 @@ npm run verify
 .\tools\Test-All.ps1 -IncludeE2E
 ```
 
+С DB-backed integration smoke через локальный PostgreSQL:
+
+```powershell
+docker compose -f .\infra\docker\compose.yaml up -d postgres
+.\tools\Test-All.ps1 -IncludeDbIntegration
+```
+
 ## Текущие API endpoints
 
 - `GET /health/live`

@@ -1,6 +1,7 @@
 param(
   [switch]$SkipFrontendInstall,
   [switch]$IncludeE2E,
+  [switch]$IncludeDbIntegration,
   [switch]$CollectCoverage,
   [string]$ResultsDirectory = "TestResults"
 )
@@ -54,7 +55,32 @@ try {
     $dotnetTestArgs += @("--collect", "XPlat Code Coverage")
   }
 
-  Invoke-Native dotnet @dotnetTestArgs
+  $previousDbIntegration = $env:PATROL360_RUN_DB_INTEGRATION
+  $previousDbAdminConnectionString = $env:PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING
+  if ($IncludeDbIntegration) {
+    $env:PATROL360_RUN_DB_INTEGRATION = "true"
+    if ([string]::IsNullOrWhiteSpace($env:PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING)) {
+      $env:PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING = "Host=localhost;Port=5432;Database=postgres;Username=patrol360;Password=patrol360_dev"
+    }
+  }
+  try {
+    Invoke-Native dotnet @dotnetTestArgs
+  }
+  finally {
+    if ($null -eq $previousDbIntegration) {
+      Remove-Item Env:\PATROL360_RUN_DB_INTEGRATION -ErrorAction SilentlyContinue
+    }
+    else {
+      $env:PATROL360_RUN_DB_INTEGRATION = $previousDbIntegration
+    }
+
+    if ($null -eq $previousDbAdminConnectionString) {
+      Remove-Item Env:\PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING -ErrorAction SilentlyContinue
+    }
+    else {
+      $env:PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING = $previousDbAdminConnectionString
+    }
+  }
   Invoke-Native dotnet run --project .\tests\Patrol360.Structure.Tests\Patrol360.Structure.Tests.csproj --no-restore
   .\tools\Verify-TextEncoding.ps1
 

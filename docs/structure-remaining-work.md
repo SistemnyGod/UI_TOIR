@@ -90,20 +90,20 @@ gh auth login
 
 ### P1: добавить DB-backed integration tests
 
-Сейчас есть scenario smoke tests, но они не проверяют реальные EF/PostgreSQL сценарии.
+Добавлен первый опциональный DB-backed smoke для Mobile Accounts через реальный PostgreSQL. Оставшийся риск: route/request/assignment lifecycle еще не покрыт DB integration профилем.
 
 Сделать:
 
-- добавить отдельный integration test layer или профиль внутри `tests/Patrol360.Infrastructure.Tests`;
-- проверить минимум один CRUD-сценарий маршрута через EF store;
+- готово: добавить профиль внутри `tests/Patrol360.Infrastructure.Tests` и switch `-IncludeDbIntegration`;
+- добавить минимум один CRUD-сценарий маршрута через EF store;
 - проверить создание заявки на обход и связанное назначение;
-- определить, запускаются ли эти тесты через Docker PostgreSQL или test container;
+- принято: запускать через Docker PostgreSQL и временную test database;
 - добавить инструкцию в `docs/runbooks/database-migrations.md` или отдельный runbook.
 
 Критерии закрытия:
 
-- integration tests запускаются воспроизводимо;
-- `Test-All.ps1` умеет запускать их явно или через отдельный switch;
+- Mobile Accounts integration smoke запускается воспроизводимо через `-IncludeDbIntegration`;
+- `Test-All.ps1` умеет запускать DB profile через `-IncludeDbIntegration`;
 - CI либо запускает их, либо документирует причину отложенного запуска.
 
 ### P1: расширить Playwright e2e до основных потоков
@@ -188,7 +188,7 @@ Legacy уже отделен, но решение о долгосрочном х
 2. Дождаться первого GitHub Actions run.
 3. Применить branch protection.
 4. Создать тестовый PR и проверить, что merge gate работает.
-5. Добавить DB-backed integration tests.
+5. Расширить DB-backed integration tests на routes/requests/assignments.
 6. Расширить Playwright e2e до 3 ключевых потоков.
 7. Добавить CODEOWNERS.
 8. Принять решение по legacy.

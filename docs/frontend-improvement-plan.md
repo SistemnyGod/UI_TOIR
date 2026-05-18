@@ -64,7 +64,7 @@ apps/web/
 | Assignments | Визуальный workflow есть | Нет API create/start/cancel/complete assignments, данные fallback | P1 |
 | Schedule | UI-композиция готова | Нет API данных, нет правил конфликтов/исключений/автозаполнения | P2 |
 | Employees | CRUD через API есть | Валидация слабая, mobile binding может расходиться с backend, нет истории обходов | P1 |
-| Mobile Accounts | List/create/bind/edit/block/unblock/detach/reset/delete частично через API, modal-flow, employeeId binding и secure temporary password panel добавлены | Sessions/security events пока есть в repository/backend, но не выведены как live UI panels; нет auth/RBAC контекста и feature hook | P0/P1 |
+| Mobile Accounts | List/create/bind/edit/block/unblock/detach/reset/delete через API, modal-flow, employeeId binding, secure temporary password panel, `useMobileAccountsWorkspace` и live sessions/security panels добавлены | Нет auth/RBAC контекста; нужно расширить API-mode e2e до полного lifecycle и permission states | P1 |
 | Site Users | UI-прототип, локальная генерация фиксированного пароля убрана | Нет API, нет RBAC/contracts, нет реального password reset flow | P0/P2 |
 
 ## P0: стабилизация перед расширением
@@ -543,16 +543,16 @@ Smoke сценарии:
 | Направление | Готовность |
 |---|---:|
 | UI composition | 75% |
-| API integration | 45% |
-| Local/mock separation | 55% |
-| Forms/workflows | 60% |
+| API integration | 50% |
+| Local/mock separation | 60% |
+| Forms/workflows | 65% |
 | Error/loading states | 45% |
-| Tests | 45% |
+| Tests | 50% |
 | Accessibility | 45% |
 | Performance readiness | 50% |
-| Frontend architecture | 70% |
+| Frontend architecture | 75% |
 
-Итоговая frontend готовность к MVP: 65-70%.
+Итоговая frontend готовность к MVP: 68-72%.
 
 Главное условие роста до 80%: завершить разделение API/local/mock, расширить e2e/component coverage и подключить API для results/assignments/schedule/site users.
 
@@ -643,7 +643,7 @@ Smoke сценарии:
 
 Доработать:
 
-- вынести mobile accounts из `App.tsx` в `useMobileAccountsWorkspace`;
+- готово: mobile accounts вынесены из `App.tsx` в `useMobileAccountsWorkspace`;
 - вынести request modal orchestration в `useRequestsWorkspace`;
 - сгруппировать props по feature-model объектам вместо длинного списка однотипных callbacks;
 - оставить `ScreenRouter` только для маршрутизации screens;
@@ -711,7 +711,7 @@ Smoke сценарии:
 
 1. `ApiClient` config/auth/error contract.
 2. Разделить fallback-only repositories на mock/api contracts.
-3. Вынести `useMobileAccountsWorkspace` и `useRequestsWorkspace`.
+3. Готово для Mobile Accounts: дальше вынести `useRequestsWorkspace` и остальные feature hooks.
 4. Подключить API list для requests и убрать API-created requests из localStorage.
 5. Довести Results и Assignments до MVP API flow.
 6. Подключить session/RBAC read model и убрать hardcoded topbar user.

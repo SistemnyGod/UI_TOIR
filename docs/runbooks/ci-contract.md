@@ -27,6 +27,15 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
+Опциональный локальный DB-backed профиль для изменений EF/PostgreSQL lifecycle:
+
+```powershell
+docker compose -f .\infra\docker\compose.yaml up -d postgres
+.\tools\Test-All.ps1 -IncludeDbIntegration
+```
+
+CI может держать этот профиль manual/scheduled, пока GitHub runner не поднимает PostgreSQL service для каждого PR.
+
 ## Обязательные артефакты
 
 CI публикует `test-results` через `actions/upload-artifact`:
@@ -58,6 +67,7 @@ Pull request считается готовым к merge только если:
 - обновить этот runbook;
 - обновить `docs/runbooks/branch-review-policy.md`, если меняются правила merge;
 - пройти `.\tools\Test-All.ps1 -IncludeE2E`;
+- пройти `.\tools\Test-All.ps1 -IncludeDbIntegration`, если менялись EF mappings, migrations или DB-backed lifecycle;
 - быть отмечено в PR checklist.
 
 ## Remote protection
