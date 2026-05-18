@@ -39,6 +39,14 @@ npm run dev
 .\tools\Test-All.ps1
 ```
 
+Скрипт сохраняет отчеты в `TestResults/`. Для e2e-проверок frontend:
+
+```powershell
+.\tools\Test-All.ps1 -IncludeE2E
+```
+
+Подробности по generated test reports описаны в `docs/runbooks/test-artifacts.md`.
+
 Для очистки generated artifacts:
 
 ```powershell

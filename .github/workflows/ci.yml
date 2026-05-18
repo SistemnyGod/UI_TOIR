@@ -33,11 +33,17 @@ jobs:
       - name: Build .NET
         run: dotnet build .\Patrol360.slnx --no-restore
 
+      - name: Format .NET
+        run: dotnet format .\Patrol360.slnx --verify-no-changes --no-restore
+
+      - name: Prepare test result directories
+        run: New-Item -ItemType Directory -Force -Path .\TestResults\dotnet, .\TestResults\vitest | Out-Null
+
       - name: Structure tests
         run: dotnet run --project .\tests\Patrol360.Structure.Tests\Patrol360.Structure.Tests.csproj --no-restore
 
       - name: Test .NET
-        run: dotnet test .\Patrol360.slnx --no-build
+        run: dotnet test .\Patrol360.slnx --no-build --logger trx --results-directory .\TestResults\dotnet
 
       - name: Encoding check
         run: .\tools\Verify-TextEncoding.ps1
@@ -52,7 +58,7 @@ jobs:
 
       - name: Frontend structural tests
         working-directory: apps/web
-        run: npm run test:run
+        run: npm run test:ci
 
       - name: Install Playwright browsers
         working-directory: apps/web
@@ -61,3 +67,14 @@ jobs:
       - name: Frontend e2e tests
         working-directory: apps/web
         run: npm run test:e2e
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          if-no-files-found: ignore
+          path: |
+            TestResults/**
+            apps/web/test-results/**
+            apps/web/playwright-report/**

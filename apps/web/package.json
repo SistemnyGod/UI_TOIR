@@ -10,7 +10,11 @@
     "preview": "vite preview",
     "verify": "npm run build",
     "test": "vitest",
-    "test:run": "vitest run && node ../../tests/web/unit/run-unit-tests.mjs",
+    "test:unit": "vitest run",
+    "test:unit:ci": "node -e \"require('node:fs').mkdirSync('../../TestResults/vitest',{recursive:true})\" && vitest run --reporter=default --reporter=junit --outputFile.junit=../../TestResults/vitest/junit.xml",
+    "test:structural": "node ../../tests/web/unit/run-unit-tests.mjs",
+    "test:run": "npm run test:unit && npm run test:structural",
+    "test:ci": "npm run test:unit:ci && npm run test:structural",
     "test:e2e": "playwright test --config playwright.config.ts"
   },
   "dependencies": {

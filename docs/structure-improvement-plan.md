@@ -4,19 +4,19 @@
 
 ## Текущая оценка
 
-Готовность структуры проекта: 80%.
+Готовность структуры проекта после текущего структурного прохода: 85%.
 
 Монорепо организовано правильно для текущего этапа: есть разделение на `apps`, `libs`, `docs`, `infra`, `tools`, слои backend разнесены на API/application/domain/contracts/infrastructure, frontend находится отдельно в `apps/web`, worker вынесен в отдельный host.
 
-Главные причины, почему структура после первого прохода еще не выше 90%:
+Главные причины, почему структура еще не выше 90%:
 
-- Git инициализирован локально, но еще нет осмысленной истории коммитов, branch policy и review policy;
-- есть первичный `tests` каркас, но нет полноценных xUnit/Vitest/Playwright test suites;
-- есть CI workflow, но он еще не проверен на удаленном Git-хостинге;
-- в рабочей области физически присутствуют generated artifacts: `bin`, `obj`, `dist`, `node_modules`, `output`;
+- Git инициализирован локально и есть базовая история коммитов, но еще нет branch policy и review policy;
+- xUnit/Vitest/Playwright smoke suites подключены, но сценарное покрытие по модулям еще минимальное;
+- есть CI workflow с test artifact upload, но он еще не проверен на удаленном Git-хостинге;
+- generated artifacts очищаются через `tools/Clean-Workspace.ps1`, но `node_modules` остается локальной ignored-зависимостью для frontend-разработки;
 - legacy-прототип перенесен в `legacy/territory-patrol-panel`, но еще не принято решение об окончательном удалении;
 - ADR-структура создана, но будущие крупные решения еще нужно регулярно фиксировать;
-- line endings policy переведен на LF, но `dotnet format` нужно держать в регулярном gate.
+- line endings policy переведен на LF, `dotnet format` закреплен в регулярном gate.
 
 ## Фактическая структура
 
@@ -54,6 +54,10 @@
 - Добавлен Playwright smoke test для frontend на отдельном Vite-порту `5176`.
 - Добавлен frontend structural test runner в `tests/web/unit`.
 - Добавлен `tests/web/e2e` как место под будущие cross-app Playwright smoke tests.
+- Добавлены JUnit/TRX test reports для локального `tools/Test-All.ps1` и CI.
+- Добавлен CI artifact upload для `TestResults`, Playwright JUnit и HTML report.
+- `dotnet format --verify-no-changes --no-restore` закреплен в локальном и CI gate.
+- Добавлен runbook `docs/runbooks/test-artifacts.md`.
 - Добавлен `.github/workflows/ci.yml`.
 - Добавлен `infra/env/.env.example` и `infra/README.md`.
 - Старый `territory-patrol-panel` перенесен в `legacy/territory-patrol-panel`.
@@ -443,6 +447,7 @@ libs/contracts -> no project refs
 - есть `.github/workflows/ci.yml`;
 - `tests/` создан и добавлен в solution;
 - backend и frontend тесты запускаются одной командой;
+- отчеты тестов сохраняются в `TestResults/` и публикуются CI как артефакты;
 - generated artifacts не находятся в tracked files;
 - legacy-прототип явно вынесен или помечен;
 - есть `docs/adr`;
@@ -456,12 +461,13 @@ libs/contracts -> no project refs
 1. Готово: инициализировать Git.
 2. Готово: решить LF/CRLF policy в пользу LF.
 3. Готово: добавить `docs/adr` и первые ADR.
-4. Готово частично: добавить `tests/` и zero-dependency structural tests.
+4. Готово: добавить `tests/`, zero-dependency structural tests и smoke suites.
 5. Готово: добавить `tools/Test-All.ps1`, `tools/Clean-Workspace.ps1`, `tools/Check-Structure.ps1`.
-6. Готово локально: добавить CI workflow.
+6. Готово локально: добавить CI workflow с test artifacts.
 7. Готово: перенести `territory-patrol-panel` в `legacy`.
 8. Готово: обновить `README.md` и `docs/monorepo-structure.md`.
 9. Готово частично: xUnit/Vitest/Playwright подключены, следующий шаг - расширить smoke tests до сценарного покрытия.
+10. Готово: добавить TRX/JUnit/Playwright reports в локальный и CI-контур.
 
 ## Обновленная оценка по структуре
 
@@ -472,11 +478,11 @@ libs/contracts -> no project refs
 | Frontend placement | 80% |
 | Infra placement | 75% |
 | Docs placement | 85% |
-| Tests structure | 45% |
-| CI structure | 60% |
+| Tests structure | 60% |
+| CI structure | 75% |
 | Repository hygiene | 75% |
 | Legacy separation | 90% |
 
-После первого структурного прохода production-готовность структуры выше исходного состояния: добавлены Git, `tests`, `tools`, `docs/adr`, `docs/runbooks`, CI workflow, infra env-шаблон и legacy-раздел. Оставшиеся крупные риски: полноценные backend/frontend test frameworks еще не подключены, CI не проверен на удаленном Git-хостинге, generated artifacts все еще физически лежат в рабочей папке.
+После текущего структурного прохода production-готовность структуры выше исходного состояния: добавлены Git, `tests`, `tools`, `docs/adr`, `docs/runbooks`, CI workflow, infra env-шаблон, legacy-раздел и сохраняемые отчеты тестов. Оставшиеся крупные риски: CI не проверен на удаленном Git-хостинге, smoke tests еще не покрывают реальные сценарии модулей, branch/review policy не формализованы.
 
 Главное условие роста до 90%: Git + tests + CI + единые правила source/generated/legacy.

@@ -3,6 +3,14 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   timeout: 30_000,
+  outputDir: "test-results",
+  reporter: process.env.CI
+    ? [
+        ["list"],
+        ["junit", { outputFile: "test-results/playwright-junit.xml" }],
+        ["html", { outputFolder: "playwright-report", open: "never" }],
+      ]
+    : "list",
   expect: {
     timeout: 5_000,
   },
