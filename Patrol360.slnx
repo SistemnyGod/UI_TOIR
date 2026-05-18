@@ -20,7 +20,22 @@
     <Project Path="libs/infrastructure/Patrol360.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/" />
+  <Folder Name="/tests/Patrol360.Api.Tests/">
+    <Project Path="tests/Patrol360.Api.Tests/Patrol360.Api.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Patrol360.Application.Tests/">
+    <Project Path="tests/Patrol360.Application.Tests/Patrol360.Application.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Patrol360.Domain.Tests/">
+    <Project Path="tests/Patrol360.Domain.Tests/Patrol360.Domain.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Patrol360.Infrastructure.Tests/">
+    <Project Path="tests/Patrol360.Infrastructure.Tests/Patrol360.Infrastructure.Tests.csproj" />
+  </Folder>
   <Folder Name="/tests/Patrol360.Structure.Tests/">
     <Project Path="tests/Patrol360.Structure.Tests/Patrol360.Structure.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Patrol360.Worker.Tests/">
+    <Project Path="tests/Patrol360.Worker.Tests/Patrol360.Worker.Tests.csproj" />
   </Folder>
 </Solution>

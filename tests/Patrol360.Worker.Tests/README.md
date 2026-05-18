@@ -1,6 +1,6 @@
 # Patrol360.Worker.Tests
 
-Будущий test project для worker слоя.
+xUnit test project для worker слоя.
 
 Покрыть:
 
@@ -9,4 +9,4 @@
 - idempotency;
 - outbox/inbox processing после появления фоновых сценариев.
 
-Пакеты xUnit/MSTest/NUnit пока не добавлены, чтобы не ломать offline restore.
+Проект добавлен в `Patrol360.slnx`.

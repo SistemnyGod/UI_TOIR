@@ -1,5 +1,6 @@
 param(
-  [switch]$SkipFrontendInstall
+  [switch]$SkipFrontendInstall,
+  [switch]$IncludeE2E
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,6 +26,7 @@ Push-Location $repoRoot
 try {
   Invoke-Native dotnet restore .\Patrol360.slnx
   Invoke-Native dotnet build .\Patrol360.slnx --no-restore
+  Invoke-Native dotnet test .\Patrol360.slnx --no-build
   Invoke-Native dotnet run --project .\tests\Patrol360.Structure.Tests\Patrol360.Structure.Tests.csproj --no-restore
   .\tools\Verify-TextEncoding.ps1
 
@@ -36,6 +38,10 @@ try {
 
     Invoke-Native npm run verify
     Invoke-Native npm run test:run
+
+    if ($IncludeE2E) {
+      Invoke-Native npm run test:e2e
+    }
   }
   finally {
     Pop-Location

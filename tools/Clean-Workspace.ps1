@@ -37,6 +37,8 @@ $fixedTargets = @(
   "coverage",
   "apps/web/dist",
   "apps/web/.vite",
+  "apps/web/test-results",
+  "apps/web/playwright-report",
   "apps/web/coverage"
 )
 

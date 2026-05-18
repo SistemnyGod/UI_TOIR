@@ -49,8 +49,11 @@
 - Добавлены `tools/Clean-Workspace.ps1`, `tools/Check-Structure.ps1`, `tools/Test-All.ps1`.
 - Добавлен `tests/Patrol360.Structure.Tests` без внешних NuGet-зависимостей.
 - Добавлены placeholders для `Domain`, `Application`, `Infrastructure`, `Api`, `Worker` test projects.
+- Placeholders заменены на реальные xUnit-проекты со smoke-тестами по слоям.
+- Добавлен Vitest + Testing Library smoke test для frontend.
+- Добавлен Playwright smoke test для frontend на отдельном Vite-порту `5176`.
 - Добавлен frontend structural test runner в `tests/web/unit`.
-- Добавлен `tests/web/e2e` как место под будущие Playwright smoke tests.
+- Добавлен `tests/web/e2e` как место под будущие cross-app Playwright smoke tests.
 - Добавлен `.github/workflows/ci.yml`.
 - Добавлен `infra/env/.env.example` и `infra/README.md`.
 - Старый `territory-patrol-panel` перенесен в `legacy/territory-patrol-panel`.
@@ -458,7 +461,7 @@ libs/contracts -> no project refs
 6. Готово локально: добавить CI workflow.
 7. Готово: перенести `territory-patrol-panel` в `legacy`.
 8. Готово: обновить `README.md` и `docs/monorepo-structure.md`.
-9. Следующее: добавить полноценные xUnit/Vitest/Playwright tests после подключения test dependencies.
+9. Готово частично: xUnit/Vitest/Playwright подключены, следующий шаг - расширить smoke tests до сценарного покрытия.
 
 ## Обновленная оценка по структуре
 

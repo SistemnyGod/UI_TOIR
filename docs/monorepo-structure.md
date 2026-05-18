@@ -122,17 +122,17 @@ Application слой.
 Сейчас:
 
 - `tests/Patrol360.Structure.Tests` - zero-dependency структурные проверки solution, project references и repository hygiene;
-- `tests/Patrol360.Domain.Tests` - каркас будущих доменных тестов;
-- `tests/Patrol360.Application.Tests` - каркас будущих application-тестов;
-- `tests/Patrol360.Infrastructure.Tests` - каркас будущих infrastructure-тестов;
-- `tests/Patrol360.Api.Tests` - каркас будущих API-тестов;
-- `tests/Patrol360.Worker.Tests` - каркас будущих worker-тестов;
+- `tests/Patrol360.Domain.Tests` - xUnit smoke tests доменного слоя;
+- `tests/Patrol360.Application.Tests` - xUnit smoke tests application слоя;
+- `tests/Patrol360.Infrastructure.Tests` - xUnit smoke tests infrastructure DI;
+- `tests/Patrol360.Api.Tests` - xUnit smoke tests API assembly;
+- `tests/Patrol360.Worker.Tests` - xUnit smoke tests worker assembly;
 - `tests/web/unit` - frontend structural smoke tests;
 - `tests/web/e2e` - место для будущих Playwright smoke tests.
 
 Позже:
 
-- заменить README-заготовки backend test projects на реальные `.csproj` после подключения test dependencies;
+- расширить xUnit smoke tests до сценарных тестов;
 - добавить Vitest;
 - добавить Playwright smoke.
 

@@ -1,6 +1,6 @@
 # Patrol360.Domain.Tests
 
-Будущий test project для доменного слоя.
+xUnit test project для доменного слоя.
 
 Покрыть:
 
@@ -9,4 +9,4 @@
 - доменные инварианты;
 - доменные правила без инфраструктурных зависимостей.
 
-Пакеты xUnit/MSTest/NUnit пока не добавлены, чтобы не ломать offline restore. После подключения test dependencies этот каталог должен получить `.csproj` и войти в `Patrol360.slnx`.
+Проект добавлен в `Patrol360.slnx`.

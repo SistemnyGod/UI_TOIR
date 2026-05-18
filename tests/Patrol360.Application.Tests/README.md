@@ -1,6 +1,6 @@
 # Patrol360.Application.Tests
 
-Будущий test project для application слоя.
+xUnit test project для application слоя.
 
 Покрыть:
 
@@ -10,4 +10,4 @@
 - ports через fakes;
 - отсутствие зависимости от инфраструктурных реализаций.
 
-Пакеты xUnit/MSTest/NUnit пока не добавлены, чтобы не ломать offline restore.
+Проект добавлен в `Patrol360.slnx`.

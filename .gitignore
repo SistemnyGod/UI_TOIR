@@ -9,6 +9,8 @@ output/
 .env.*
 !.env.example
 TestResults/
+test-results/
+playwright-report/
 coverage/
 *.user
 *.suo

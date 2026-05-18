@@ -107,10 +107,11 @@ apps/web/
 
 Что добавить:
 
-- `vitest`;
-- `@testing-library/react`;
-- `@testing-library/user-event`;
-- отдельный script: `test`, `test:run`;
+- `vitest` - подключен;
+- `@testing-library/react` - подключен;
+- `@testing-library/user-event` - подключен;
+- отдельный script: `test`, `test:run` - подключен;
+- `@playwright/test` и `test:e2e` - подключены для smoke-проверки frontend shell;
 - smoke/component tests для ключевых flows.
 
 Минимальный набор тестов:

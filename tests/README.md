@@ -2,25 +2,17 @@
 
 Тестовая структура разделяет backend, frontend и архитектурные проверки.
 
-## Текущий каркас
+## Текущий состав
 
 - `Patrol360.Structure.Tests` - zero-dependency runner для проверки структуры solution, правил project references и repository hygiene.
-- `Patrol360.Domain.Tests` - место под будущие доменные тесты.
-- `Patrol360.Application.Tests` - место под будущие application tests.
-- `Patrol360.Infrastructure.Tests` - место под будущие infrastructure tests.
-- `Patrol360.Api.Tests` - место под будущие API tests.
-- `Patrol360.Worker.Tests` - место под будущие worker tests.
+- `Patrol360.Domain.Tests` - xUnit smoke tests для доменного слоя.
+- `Patrol360.Application.Tests` - xUnit smoke tests для application слоя.
+- `Patrol360.Infrastructure.Tests` - xUnit smoke tests для infrastructure DI.
+- `Patrol360.Api.Tests` - xUnit smoke tests для API assembly.
+- `Patrol360.Worker.Tests` - xUnit smoke tests для worker assembly.
 - `web/unit` - frontend structural/unit smoke tests без дополнительных npm-зависимостей.
 - `web/e2e` - место для будущих Playwright smoke tests.
 
 ## Следующий шаг
 
-Когда будет разрешен restore внешних test packages, добавить:
-
-- `Patrol360.Domain.Tests`
-- `Patrol360.Application.Tests`
-- `Patrol360.Infrastructure.Tests`
-- `Patrol360.Api.Tests`
-- `Patrol360.Worker.Tests`
-
-Эти проекты должны быть добавлены в `Patrol360.slnx` и запускаться из `tools/Test-All.ps1`.
+Расширить smoke tests до сценарных тестов и добавить frontend Vitest/Playwright coverage.

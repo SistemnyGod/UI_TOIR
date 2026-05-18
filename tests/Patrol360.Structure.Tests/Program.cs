@@ -68,9 +68,25 @@ AssertReferences(
   "libs/contracts/Patrol360.Contracts.csproj",
   "libs/infrastructure/Patrol360.Infrastructure.csproj");
 AssertReferences(
-  "apps/worker/Patrol360.Worker.csproj",
-  "libs/application/Patrol360.Application.csproj",
-  "libs/infrastructure/Patrol360.Infrastructure.csproj");
+    "apps/worker/Patrol360.Worker.csproj",
+    "libs/application/Patrol360.Application.csproj",
+    "libs/infrastructure/Patrol360.Infrastructure.csproj");
+AssertReferences(
+    "tests/Patrol360.Domain.Tests/Patrol360.Domain.Tests.csproj",
+    "libs/domain/Patrol360.Domain.csproj");
+AssertReferences(
+    "tests/Patrol360.Application.Tests/Patrol360.Application.Tests.csproj",
+    "libs/application/Patrol360.Application.csproj",
+    "libs/contracts/Patrol360.Contracts.csproj");
+AssertReferences(
+    "tests/Patrol360.Infrastructure.Tests/Patrol360.Infrastructure.Tests.csproj",
+    "libs/infrastructure/Patrol360.Infrastructure.csproj");
+AssertReferences(
+    "tests/Patrol360.Api.Tests/Patrol360.Api.Tests.csproj",
+    "apps/api/Patrol360.Api.csproj");
+AssertReferences(
+    "tests/Patrol360.Worker.Tests/Patrol360.Worker.Tests.csproj",
+    "apps/worker/Patrol360.Worker.csproj");
 
 AssertFileContains(".editorconfig", "end_of_line = lf");
 AssertFileContains(".gitattributes", "* text=auto eol=lf");
@@ -88,12 +104,23 @@ AssertSolutionContains("libs/domain/Patrol360.Domain.csproj");
 AssertSolutionContains("libs/application/Patrol360.Application.csproj");
 AssertSolutionContains("libs/contracts/Patrol360.Contracts.csproj");
 AssertSolutionContains("libs/infrastructure/Patrol360.Infrastructure.csproj");
+AssertSolutionContains("tests/Patrol360.Api.Tests/Patrol360.Api.Tests.csproj");
+AssertSolutionContains("tests/Patrol360.Application.Tests/Patrol360.Application.Tests.csproj");
+AssertSolutionContains("tests/Patrol360.Domain.Tests/Patrol360.Domain.Tests.csproj");
+AssertSolutionContains("tests/Patrol360.Infrastructure.Tests/Patrol360.Infrastructure.Tests.csproj");
 AssertSolutionContains("tests/Patrol360.Structure.Tests/Patrol360.Structure.Tests.csproj");
+AssertSolutionContains("tests/Patrol360.Worker.Tests/Patrol360.Worker.Tests.csproj");
 AssertFileDoesNotContain("Patrol360.slnx", "legacy/");
 AssertFileDoesNotContain("Patrol360.slnx", "territory-patrol-panel");
 AssertFileContains(".github/workflows/ci.yml", "Structure tests");
 AssertFileContains(".github/workflows/ci.yml", "Frontend structural tests");
+AssertFileContains(".github/workflows/ci.yml", "dotnet test");
 AssertFileContains("apps/web/package.json", "\"test:run\"");
+AssertFileContains("apps/web/package.json", "\"test:e2e\"");
+RequireFile("apps/web/playwright.config.ts");
+RequireFile("apps/web/e2e/dashboard.spec.ts");
+RequireFile("apps/web/src/test/setup.ts");
+RequireFile("apps/web/src/__tests__/ui.test.tsx");
 AssertDirectoryDoesNotContain("libs/domain", [
     "Microsoft.EntityFrameworkCore",
     "Microsoft.AspNetCore",

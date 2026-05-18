@@ -36,6 +36,9 @@ jobs:
       - name: Structure tests
         run: dotnet run --project .\tests\Patrol360.Structure.Tests\Patrol360.Structure.Tests.csproj --no-restore
 
+      - name: Test .NET
+        run: dotnet test .\Patrol360.slnx --no-build
+
       - name: Encoding check
         run: .\tools\Verify-TextEncoding.ps1
 
@@ -50,3 +53,11 @@ jobs:
       - name: Frontend structural tests
         working-directory: apps/web
         run: npm run test:run
+
+      - name: Install Playwright browsers
+        working-directory: apps/web
+        run: npx playwright install chromium
+
+      - name: Frontend e2e tests
+        working-directory: apps/web
+        run: npm run test:e2e

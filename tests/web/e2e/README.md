@@ -1,6 +1,8 @@
 # Frontend e2e tests
 
-Этот каталог зарезервирован под Playwright smoke tests.
+Этот каталог зарезервирован под общие cross-app Playwright smoke tests.
+
+Текущие app-specific Playwright tests для frontend находятся в `apps/web/e2e`, потому что они используют зависимости пакета `apps/web`.
 
 Минимальный будущий набор:
 

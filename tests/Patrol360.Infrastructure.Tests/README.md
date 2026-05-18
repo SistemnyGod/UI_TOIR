@@ -1,6 +1,6 @@
 # Patrol360.Infrastructure.Tests
 
-Будущий test project для infrastructure слоя.
+xUnit test project для infrastructure слоя.
 
 Покрыть:
 
@@ -9,4 +9,4 @@
 - repository implementations;
 - PostgreSQL integration через test database/container после стабилизации CI.
 
-Пакеты xUnit/MSTest/NUnit пока не добавлены, чтобы не ломать offline restore.
+Проект добавлен в `Patrol360.slnx`.

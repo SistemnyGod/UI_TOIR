@@ -1,6 +1,6 @@
 # Patrol360.Api.Tests
 
-Будущий test project для API слоя.
+xUnit test project для API слоя.
 
 Покрыть:
 
@@ -10,4 +10,4 @@
 - auth/RBAC;
 - OpenAPI contract smoke после подключения OpenAPI.
 
-Пакеты xUnit/MSTest/NUnit пока не добавлены, чтобы не ломать offline restore.
+Проект добавлен в `Patrol360.slnx`.

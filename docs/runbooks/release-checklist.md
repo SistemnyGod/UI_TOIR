@@ -21,4 +21,5 @@ cd .\apps\web
 npm ci
 npm run verify
 npm run test:run
+npm run test:e2e
 ```

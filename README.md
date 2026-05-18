@@ -77,6 +77,12 @@ npm run verify
 .\tools\Test-All.ps1
 ```
 
+С e2e smoke-тестом frontend:
+
+```powershell
+.\tools\Test-All.ps1 -IncludeE2E
+```
+
 ## Текущие API endpoints
 
 - `GET /health/live`
@@ -106,6 +112,7 @@ npm run verify
 - `tools/Check-Structure.ps1` — структурные проверки solution и project references.
 - `tools/Clean-Workspace.ps1` — очистка generated artifacts.
 - `tools/Test-All.ps1` — единый локальный gate.
+- `apps/web/playwright.config.ts` — Playwright smoke-конфигурация frontend.
 
 ## Ближайшие шаги
 
