@@ -4,11 +4,13 @@ import { MobileAccountListPanel } from "../components/accounts/MobileAccountList
 import { MobileAccountMetrics } from "../components/accounts/MobileAccountMetrics";
 import { MobileAccountSecurityPanels } from "../components/accounts/MobileAccountSecurityPanels";
 import { securityEventsFallback } from "../repositories/mobileAccountsRepository";
-import type { AccountMode, CreateMobileAccountPayload, MobileAccount } from "../types";
+import type { AccountMode, CreateMobileAccountPayload, DataSourceStatus, MobileAccount } from "../types";
 
 type MaybePromise<T> = T | Promise<T>;
 
 export function MobileAccountsScreen({
+  accountListErrorMessage,
+  accountListStatus,
   accounts,
   selectedAccountId,
   mode,
@@ -19,7 +21,10 @@ export function MobileAccountsScreen({
   onDeleteAccount,
   onNotify,
   onResetPassword,
+  onRetryAccounts,
 }: {
+  accountListErrorMessage?: string;
+  accountListStatus: DataSourceStatus;
   accounts: MobileAccount[];
   selectedAccountId: string;
   mode: AccountMode;
@@ -30,6 +35,7 @@ export function MobileAccountsScreen({
   onDeleteAccount: () => MaybePromise<void>;
   onNotify: (message: string) => void;
   onResetPassword: () => MaybePromise<void>;
+  onRetryAccounts: () => MaybePromise<void>;
 }) {
   const securityEvents = securityEventsFallback;
   const selected = accounts.find((account) => account.id === selectedAccountId);
@@ -42,14 +48,17 @@ export function MobileAccountsScreen({
       <div className="two-column wide-left">
         <MobileAccountListPanel
           accounts={accounts}
+          errorMessage={accountListErrorMessage}
           employeeName={employeeNameDraft}
           mode={mode}
           selectedAccountId={selectedAccountId}
+          status={accountListStatus}
           onAttachEmployee={onAttachEmployee}
           onDeleteAccount={onDeleteAccount}
           onModeChange={onModeChange}
           onNotify={onNotify}
           onResetPassword={onResetPassword}
+          onRetry={onRetryAccounts}
           onSelectAccount={onSelectAccount}
         />
         <MobileAccountCreateDrawer

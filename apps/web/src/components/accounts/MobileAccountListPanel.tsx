@@ -1,33 +1,41 @@
 import { getMobileAccountAccessLabel, getMobileAccountBindingCount } from "../../domain/mobileAccounts";
-import type { AccountMode, MobileAccount } from "../../types";
+import type { AccountMode, DataSourceStatus, MobileAccount } from "../../types";
 import { Chip, EmptyState, Panel, SectionTabs } from "../ui";
 
 type MaybePromise<T> = T | Promise<T>;
 
 export function MobileAccountListPanel({
   accounts,
+  errorMessage,
   employeeName,
   mode,
   selectedAccountId,
+  status = "idle",
   onAttachEmployee,
   onDeleteAccount,
   onModeChange,
   onNotify,
   onResetPassword,
+  onRetry,
   onSelectAccount,
 }: {
   accounts: MobileAccount[];
+  errorMessage?: string;
   employeeName: string;
   mode: AccountMode;
   selectedAccountId: string;
+  status?: DataSourceStatus;
   onAttachEmployee: (employeeName: string) => MaybePromise<void>;
   onDeleteAccount: () => MaybePromise<void>;
   onModeChange: (mode: AccountMode) => void;
   onNotify: (message: string) => void;
   onResetPassword: () => MaybePromise<void>;
+  onRetry?: () => MaybePromise<void>;
   onSelectAccount: (id: string) => void;
 }) {
   const selected = accounts.find((account) => account.id === selectedAccountId);
+  const isLoading = status === "loading";
+  const isError = status === "error";
   const onlineSessions = accounts.filter((account) => account.session === "Онлайн").length;
   const boundAccounts = accounts.filter((account) => account.status !== "Не привязан").length;
 
@@ -91,7 +99,28 @@ export function MobileAccountListPanel({
         ]}
       />
 
-      {mode === "accounts" ? (
+      {isLoading ? (
+        <EmptyState
+          title="Мобильные аккаунты загружаются"
+          description="Получаем список мобильных аккаунтов из backend API. Локальный список в этом режиме не подмешивается."
+        />
+      ) : null}
+
+      {isError ? (
+        <EmptyState
+          title="Мобильные аккаунты API не загружены"
+          description={errorMessage ?? "Проверьте доступность backend API и повторите загрузку."}
+          action={
+            onRetry ? (
+              <button className="button ghost" onClick={() => void onRetry()} type="button">
+                Повторить загрузку
+              </button>
+            ) : undefined
+          }
+        />
+      ) : null}
+
+      {!isLoading && !isError && mode === "accounts" ? (
         accounts.length > 0 ? (
           <MobileAccountsTable accounts={accounts} selectedAccountId={selected?.id ?? ""} onSelectAccount={onSelectAccount} />
         ) : (
@@ -111,7 +140,7 @@ export function MobileAccountListPanel({
         )
       ) : null}
 
-      {mode === "sessions" ? (
+      {!isLoading && !isError && mode === "sessions" ? (
         accounts.length > 0 ? (
           <div className="session-grid">
             {accounts.map((account) => (
@@ -136,7 +165,7 @@ export function MobileAccountListPanel({
         )
       ) : null}
 
-      {mode === "bindings" ? (
+      {!isLoading && !isError && mode === "bindings" ? (
         accounts.length > 0 ? (
           <div className="binding-grid">
             {accounts.map((account) => (

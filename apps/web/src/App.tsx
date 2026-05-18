@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   AccountMode,
   CreateMobileAccountPayload,
   CreateServiceRequestPayload,
   DataSourceMode,
+  DataSourceStatus,
   MobileAccount,
   ResultMode,
   RouteMode,
@@ -71,6 +72,8 @@ export function App() {
   const patrolData = usePatrolDataSource(dataSourceMode);
   const apiMobileAccounts = useMemo(() => createApiMobileAccountsRepository(), []);
   const [apiAccounts, setApiAccounts] = useState<MobileAccount[]>([]);
+  const [accountListStatus, setAccountListStatus] = useState<DataSourceStatus>("idle");
+  const [accountListErrorMessage, setAccountListErrorMessage] = useState<string | undefined>();
   const [temporaryPasswordNotice, setTemporaryPasswordNotice] = useState<TemporaryPasswordNotice | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -126,6 +129,38 @@ export function App() {
     [requestModal],
   );
 
+  const refreshMobileAccounts = useCallback(
+    async ({ signal }: { signal?: AbortSignal } = {}) => {
+      if (dataSourceMode !== "api") {
+        setAccountListStatus("idle");
+        setAccountListErrorMessage(undefined);
+        return;
+      }
+
+      setAccountListStatus("loading");
+      setAccountListErrorMessage(undefined);
+
+      try {
+        const nextAccounts = await apiMobileAccounts.getAccounts({ signal });
+        setApiAccounts(nextAccounts);
+        setSelectedAccountId((currentId) => {
+          if (nextAccounts.some((account) => account.id === currentId)) return currentId;
+          return nextAccounts[0]?.id ?? "";
+        });
+        setAccountListStatus("ready");
+      } catch (error) {
+        if (signal?.aborted) return;
+
+        const message = error instanceof Error ? error.message : "Не удалось загрузить мобильные аккаунты API";
+        setApiAccounts([]);
+        setAccountListStatus("error");
+        setAccountListErrorMessage(message);
+        showToast(`Не удалось загрузить мобильные аккаунты API: ${message}`);
+      }
+    },
+    [apiMobileAccounts, dataSourceMode, showToast],
+  );
+
   useEffect(() => {
     if (visibleAccounts.length === 0) {
       if (selectedAccountId) setSelectedAccountId("");
@@ -138,25 +173,24 @@ export function App() {
   }, [selectedAccountId, visibleAccounts]);
 
   useEffect(() => {
-    if (dataSourceMode !== "api") return;
+    if (dataSourceMode !== "api") {
+      setAccountListStatus("idle");
+      setAccountListErrorMessage(undefined);
+      return;
+    }
 
-    void refreshMobileAccounts();
-  }, [dataSourceMode]);
+    const controller = new AbortController();
+
+    void refreshMobileAccounts({ signal: controller.signal });
+
+    return () => controller.abort();
+  }, [dataSourceMode, refreshMobileAccounts]);
 
   useEffect(() => {
     if (dataSourceMode === "api" && patrolData.status === "error" && patrolData.errorMessage) {
       showToast(`API недоступен: ${patrolData.errorMessage}`);
     }
   }, [dataSourceMode, patrolData.errorMessage, patrolData.status, showToast]);
-
-  async function refreshMobileAccounts() {
-    const nextAccounts = await apiMobileAccounts.getAccounts();
-    setApiAccounts(nextAccounts);
-    setSelectedAccountId((currentId) => {
-      if (nextAccounts.some((account) => account.id === currentId)) return currentId;
-      return nextAccounts[0]?.id ?? "";
-    });
-  }
 
   function openRequestForResult(resultId = selectedResultId) {
     if (!resultId) {
@@ -389,6 +423,8 @@ export function App() {
 
         <ScreenRouter
           accountMode={accountMode}
+          accountListErrorMessage={accountListErrorMessage}
+          accountListStatus={accountListStatus}
           accounts={visibleAccounts}
           activePatrols={activePatrols}
           dashboardMetrics={dashboardMetrics}
@@ -410,6 +446,7 @@ export function App() {
           onOpenRequest={openRequestForResult}
           onOpenRequestById={openRequestById}
           onResetPassword={resetSelectedPassword}
+          onRetryAccounts={refreshMobileAccounts}
           onResultModeChange={setResultMode}
           onRouteModeChange={setRouteMode}
           onScheduleModeChange={setScheduleMode}

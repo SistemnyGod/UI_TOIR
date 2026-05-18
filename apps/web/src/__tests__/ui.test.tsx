@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { MobileAccountListPanel } from "../components/accounts/MobileAccountListPanel";
 import { DashboardRequestsPanel } from "../components/dashboard/DashboardRequestsPanel";
 import { SiteUserFormPanel } from "../components/site-users/SiteUserFormPanel";
 import { Chip, EmptyState, ProgressBar } from "../components/ui";
@@ -70,6 +71,57 @@ describe("shared UI primitives", () => {
 
     expect(screen.getByText("Заявки API не загружены")).toBeInTheDocument();
     expect(screen.getByText("Backend unavailable")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Повторить загрузку" }));
+
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it("renders mobile account list loading state", () => {
+    render(
+      <MobileAccountListPanel
+        accounts={[]}
+        employeeName=""
+        mode="accounts"
+        selectedAccountId=""
+        status="loading"
+        onAttachEmployee={vi.fn()}
+        onDeleteAccount={vi.fn()}
+        onModeChange={vi.fn()}
+        onNotify={vi.fn()}
+        onResetPassword={vi.fn()}
+        onSelectAccount={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Мобильные аккаунты загружаются")).toBeInTheDocument();
+    expect(screen.getByText(/backend API/)).toBeInTheDocument();
+  });
+
+  it("renders mobile account list error state with retry action", async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+
+    render(
+      <MobileAccountListPanel
+        accounts={[]}
+        employeeName=""
+        errorMessage="Accounts endpoint unavailable"
+        mode="accounts"
+        selectedAccountId=""
+        status="error"
+        onAttachEmployee={vi.fn()}
+        onDeleteAccount={vi.fn()}
+        onModeChange={vi.fn()}
+        onNotify={vi.fn()}
+        onResetPassword={vi.fn()}
+        onRetry={onRetry}
+        onSelectAccount={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Мобильные аккаунты API не загружены")).toBeInTheDocument();
+    expect(screen.getByText("Accounts endpoint unavailable")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Повторить загрузку" }));
 

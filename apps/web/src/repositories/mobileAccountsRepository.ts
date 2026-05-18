@@ -1,5 +1,5 @@
 import { initialAccounts, securityEvents } from "../data";
-import { ApiClient } from "../api/client";
+import { ApiClient, type ApiRequestOptions } from "../api/client";
 import type {
   AttachMobileAccountEmployeeDto,
   CreateMobileAccountDto,
@@ -55,8 +55,8 @@ export function createApiMobileAccountsRepository({ baseUrl }: { baseUrl?: strin
   const client = new ApiClient({ baseUrl });
 
   return {
-    async getAccounts() {
-      const accounts = await client.get<MobileAccountDto[]>("/api/v1/mobile-accounts");
+    async getAccounts(options: ApiRequestOptions = {}) {
+      const accounts = await client.get<MobileAccountDto[]>("/api/v1/mobile-accounts", options);
       return accounts.map((account) => mapMobileAccount(account));
     },
 

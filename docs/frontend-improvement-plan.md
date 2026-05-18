@@ -235,6 +235,7 @@ apps/web/
 Сейчас:
 
 - list/create/bind/reset/delete частично через API;
+- loading/error/retry state для API list добавлен в mobile account panel;
 - security events fallback;
 - sessions fallback/display-only.
 
@@ -469,7 +470,7 @@ Smoke сценарии:
 - requests перевести на API list;
 - убрать API-created requests из localStorage;
 - добавить loading/error state в `usePatrolDataSource`;
-- добавить error handling для `refreshMobileAccounts`.
+- добавить error handling для `refreshMobileAccounts` - сделано, включая loading/error/retry state.
 
 ### Этап 2: Core API screens
 

@@ -29,6 +29,8 @@ type MaybePromise<T> = T | Promise<T>;
 
 export function ScreenRouter({
   accountMode,
+  accountListErrorMessage,
+  accountListStatus,
   accounts,
   activePatrols,
   dashboardMetrics,
@@ -50,6 +52,7 @@ export function ScreenRouter({
   onOpenRequest,
   onOpenRequestById,
   onResetPassword,
+  onRetryAccounts,
   onRetryRequests,
   onResultModeChange,
   onRouteModeChange,
@@ -88,6 +91,8 @@ export function ScreenRouter({
   selectedUserId,
 }: {
   accountMode: AccountMode;
+  accountListErrorMessage?: string;
+  accountListStatus: DataSourceStatus;
   accounts: MobileAccount[];
   activePatrols: ActivePatrol[];
   dashboardMetrics: Metric[];
@@ -109,6 +114,7 @@ export function ScreenRouter({
   onOpenRequest: (resultId?: string) => void;
   onOpenRequestById: (requestId: string) => void;
   onResetPassword: () => MaybePromise<void>;
+  onRetryAccounts: () => MaybePromise<void>;
   onRetryRequests: () => MaybePromise<void>;
   onResultModeChange: (mode: ResultMode) => void;
   onRouteModeChange: (mode: RouteMode) => void;
@@ -212,6 +218,8 @@ export function ScreenRouter({
       {screen === "accounts" ? (
         <MobileAccountsScreen
           accounts={accounts}
+          accountListErrorMessage={accountListErrorMessage}
+          accountListStatus={accountListStatus}
           selectedAccountId={selectedAccountId}
           mode={accountMode}
           onModeChange={onAccountModeChange}
@@ -221,6 +229,7 @@ export function ScreenRouter({
           onDeleteAccount={onDeleteAccount}
           onNotify={onNotify}
           onResetPassword={onResetPassword}
+          onRetryAccounts={onRetryAccounts}
         />
       ) : null}
       {screen === "routes" ? (
