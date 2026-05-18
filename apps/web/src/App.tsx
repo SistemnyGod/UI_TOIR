@@ -79,6 +79,9 @@ export function App() {
     activePatrols,
     dashboardMetrics,
     employeeDirectory,
+    refreshRequests,
+    requestListErrorMessage,
+    requestListStatus,
     requests,
     routeDirectory,
     createEmployee,
@@ -424,6 +427,9 @@ export function App() {
           onUpdateEmployee={updateEmployee}
           onMoveRoutePoint={movePoint}
           requests={requests}
+          requestListErrorMessage={requestListErrorMessage}
+          requestListStatus={requestListStatus}
+          onRetryRequests={refreshRequests}
           resultMode={resultMode}
           employeeCreateIntent={employeeCreateIntent}
           routeCreateIntent={routeCreateIntent}

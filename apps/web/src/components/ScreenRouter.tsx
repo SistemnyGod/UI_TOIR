@@ -2,6 +2,7 @@ import type {
   AccountMode,
   ActivePatrol,
   CreateMobileAccountPayload,
+  DataSourceStatus,
   Metric,
   EmployeeDirectoryItem,
   EmployeeFormPayload,
@@ -49,6 +50,7 @@ export function ScreenRouter({
   onOpenRequest,
   onOpenRequestById,
   onResetPassword,
+  onRetryRequests,
   onResultModeChange,
   onRouteModeChange,
   onScheduleModeChange,
@@ -66,6 +68,8 @@ export function ScreenRouter({
   onUpdateEmployee,
   onMoveRoutePoint,
   requests,
+  requestListErrorMessage,
+  requestListStatus,
   resultMode,
   employeeCreateIntent,
   routeCreateIntent,
@@ -105,6 +109,7 @@ export function ScreenRouter({
   onOpenRequest: (resultId?: string) => void;
   onOpenRequestById: (requestId: string) => void;
   onResetPassword: () => MaybePromise<void>;
+  onRetryRequests: () => MaybePromise<void>;
   onResultModeChange: (mode: ResultMode) => void;
   onRouteModeChange: (mode: RouteMode) => void;
   onScheduleModeChange: (mode: ScheduleMode) => void;
@@ -122,6 +127,8 @@ export function ScreenRouter({
   onUpdateEmployee: (employeeId: string, payload: EmployeeFormPayload) => MaybePromise<void>;
   onMoveRoutePoint: (routeId: string, pointId: string, direction: -1 | 1) => MaybePromise<void>;
   requests: ServiceRequest[];
+  requestListErrorMessage?: string;
+  requestListStatus: DataSourceStatus;
   resultMode: ResultMode;
   employeeCreateIntent: number;
   routeCreateIntent: number;
@@ -152,6 +159,9 @@ export function ScreenRouter({
           onNotify={onNotify}
           routeDirectory={routeDirectory}
           requests={requests}
+          requestListErrorMessage={requestListErrorMessage}
+          requestListStatus={requestListStatus}
+          onRetryRequests={onRetryRequests}
         />
       ) : null}
       {screen === "results" ? (

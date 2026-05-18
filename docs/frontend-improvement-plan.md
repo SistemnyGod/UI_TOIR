@@ -165,7 +165,7 @@ apps/web/
 - добавить `getPatrolRequests()` в `patrolRequestsRepository` - сделано;
 - в API mode читать список заявок из backend - сделано;
 - убрать сохранение API-created request в localStorage - сделано через отдельный session state API-заявок;
-- добавить loading/error state для request list;
+- добавить loading/error state для request list - сделано в dashboard request panel;
 - добавить view endpoint после появления backend `GET /api/v1/patrol-requests/{id}`.
 
 Критерий готовности:

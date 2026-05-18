@@ -1,15 +1,24 @@
-import type { ServiceRequest } from "../../types";
+import type { DataSourceStatus, ServiceRequest } from "../../types";
 import { Chip, EmptyState, Panel } from "../ui";
 
 export function DashboardRequestsPanel({
   requests,
+  status = "idle",
+  errorMessage,
   onCreateRequest,
   onOpenRequestById,
+  onRetry,
 }: {
   requests: ServiceRequest[];
+  status?: DataSourceStatus;
+  errorMessage?: string;
   onCreateRequest: () => void;
   onOpenRequestById: (requestId: string) => void;
+  onRetry?: () => void | Promise<void>;
 }) {
+  const isLoading = status === "loading";
+  const isError = status === "error";
+
   return (
     <Panel
       className="dashboard-requests-panel"
@@ -21,7 +30,24 @@ export function DashboardRequestsPanel({
         </button>
       }
     >
-      {requests.length > 0 ? (
+      {isLoading ? (
+        <EmptyState
+          title="Заявки загружаются"
+          description="Получаем список заявок из backend API. Данные localStorage в этом режиме не подмешиваются."
+        />
+      ) : isError ? (
+        <EmptyState
+          title="Заявки API не загружены"
+          description={errorMessage ?? "Проверьте доступность backend API и повторите загрузку."}
+          action={
+            onRetry ? (
+              <button className="button ghost" onClick={() => void onRetry()} type="button">
+                Повторить загрузку
+              </button>
+            ) : undefined
+          }
+        />
+      ) : requests.length > 0 ? (
         <div className="request-list">
           {requests.slice(0, 4).map((request) => (
             <button

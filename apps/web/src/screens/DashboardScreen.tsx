@@ -14,7 +14,7 @@ import { employeesFallback } from "../repositories/employeesRepository";
 import { patrolResultsFallback } from "../repositories/resultsRepository";
 import { routesFallback } from "../repositories/routesRepository";
 import { scheduleCellsFallback } from "../repositories/scheduleRepository";
-import type { ActivePatrol, Metric, RouteDirectoryItem, ScreenId, ServiceRequest } from "../types";
+import type { ActivePatrol, DataSourceStatus, Metric, RouteDirectoryItem, ScreenId, ServiceRequest } from "../types";
 
 const emptyDashboardMetrics: Metric[] = [
   { label: "Завершенные обходы сегодня", value: "0", delta: "нет загруженных данных", tone: "green", icon: "ok" },
@@ -31,6 +31,9 @@ export function DashboardScreen({
   onNotify,
   onOpenRequestById,
   onOpenRequest,
+  onRetryRequests,
+  requestListErrorMessage,
+  requestListStatus,
   routeDirectory = routesFallback,
   requests,
 }: {
@@ -41,6 +44,9 @@ export function DashboardScreen({
   onNotify: (message: string) => void;
   onOpenRequestById: (requestId: string) => void;
   onOpenRequest: (resultId?: string) => void;
+  onRetryRequests: () => void | Promise<void>;
+  requestListErrorMessage?: string;
+  requestListStatus: DataSourceStatus;
   routeDirectory?: RouteDirectoryItem[];
   requests: ServiceRequest[];
 }) {
@@ -96,8 +102,11 @@ export function DashboardScreen({
             />
             <DashboardRequestsPanel
               requests={requests}
+              status={requestListStatus}
+              errorMessage={requestListErrorMessage}
               onCreateRequest={() => onCreateRequest()}
               onOpenRequestById={onOpenRequestById}
+              onRetry={onRetryRequests}
             />
           </div>
         </div>

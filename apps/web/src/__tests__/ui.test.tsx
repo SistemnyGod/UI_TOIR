@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { DashboardRequestsPanel } from "../components/dashboard/DashboardRequestsPanel";
 import { SiteUserFormPanel } from "../components/site-users/SiteUserFormPanel";
 import { Chip, EmptyState, ProgressBar } from "../components/ui";
 
@@ -36,5 +37,42 @@ describe("shared UI primitives", () => {
     expect(screen.queryByText("tmp-Patrol-360")).not.toBeInTheDocument();
     expect(screen.getByText("Пароль не генерируется в UI")).toBeInTheDocument();
     expect(onNotify).toHaveBeenCalledWith("Сброс пароля будет выполнен через backend");
+  });
+
+  it("renders request list loading state", () => {
+    render(
+      <DashboardRequestsPanel
+        requests={[]}
+        status="loading"
+        onCreateRequest={vi.fn()}
+        onOpenRequestById={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Заявки загружаются")).toBeInTheDocument();
+    expect(screen.getByText(/backend API/)).toBeInTheDocument();
+  });
+
+  it("renders request list error state with retry action", async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+
+    render(
+      <DashboardRequestsPanel
+        errorMessage="Backend unavailable"
+        requests={[]}
+        status="error"
+        onCreateRequest={vi.fn()}
+        onOpenRequestById={vi.fn()}
+        onRetry={onRetry}
+      />,
+    );
+
+    expect(screen.getByText("Заявки API не загружены")).toBeInTheDocument();
+    expect(screen.getByText("Backend unavailable")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Повторить загрузку" }));
+
+    expect(onRetry).toHaveBeenCalledOnce();
   });
 });

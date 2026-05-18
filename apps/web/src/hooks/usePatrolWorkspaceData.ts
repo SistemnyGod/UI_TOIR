@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PatrolDataSnapshot } from "../repositories/patrolDataRepository";
 import {
   createLocalRoute,
@@ -44,6 +44,7 @@ import type {
   ActivePatrol,
   CreateServiceRequestPayload,
   DataSourceMode,
+  DataSourceStatus,
   EmployeeDirectoryItem,
   EmployeeFormPayload,
   RouteDirectoryItem,
@@ -89,6 +90,8 @@ export function usePatrolWorkspaceData({
     validate: isServiceRequestList,
   });
   const [apiRequests, setApiRequests] = useState<ServiceRequest[]>([]);
+  const [requestListStatus, setRequestListStatus] = useState<DataSourceStatus>("idle");
+  const [requestListErrorMessage, setRequestListErrorMessage] = useState<string | undefined>();
   const [localEmployees, setLocalEmployees] = useStoredState<EmployeeDirectoryItem[]>(
     employeesStorageKey,
     employeesFallback,
@@ -139,6 +142,34 @@ export function usePatrolWorkspaceData({
     [dataSourceMode, localEmployees, patrolSnapshot.employees],
   );
 
+  const refreshRequests = useCallback(
+    async ({ signal }: { signal?: AbortSignal } = {}) => {
+      if (dataSourceMode !== "api") {
+        setRequestListStatus("idle");
+        setRequestListErrorMessage(undefined);
+        return;
+      }
+
+      setRequestListStatus("loading");
+      setRequestListErrorMessage(undefined);
+
+      try {
+        const nextRequests = await apiRequestsRepository.getPatrolRequests({ signal });
+        setApiRequests(nextRequests);
+        setRequestListStatus("ready");
+      } catch (error) {
+        if (signal?.aborted) return;
+
+        const message = error instanceof Error ? error.message : "Не удалось загрузить заявки API";
+        setApiRequests([]);
+        setRequestListStatus("error");
+        setRequestListErrorMessage(message);
+        showToast(`Не удалось загрузить заявки API: ${message}`);
+      }
+    },
+    [apiRequestsRepository, dataSourceMode, showToast],
+  );
+
   useEffect(() => {
     const routes = routeDirectory;
     if (routes.length === 0) {
@@ -160,31 +191,25 @@ export function usePatrolWorkspaceData({
   }, [routeDirectory, selectedPointId, selectedRouteDirectoryId, setSelectedPointId, setSelectedRouteDirectoryId]);
 
   useEffect(() => {
-    if (dataSourceMode !== "api") return;
+    if (dataSourceMode !== "api") {
+      setRequestListStatus("idle");
+      setRequestListErrorMessage(undefined);
+      return;
+    }
 
     const controller = new AbortController();
 
-    async function loadApiRequests() {
-      try {
-        const nextRequests = await apiRequestsRepository.getPatrolRequests({ signal: controller.signal });
-        setApiRequests(nextRequests);
-      } catch (error) {
-        if (controller.signal.aborted) return;
-
-        setApiRequests([]);
-        showToast(error instanceof Error ? `Не удалось загрузить заявки API: ${error.message}` : "Не удалось загрузить заявки API");
-      }
-    }
-
-    void loadApiRequests();
+    void refreshRequests({ signal: controller.signal });
 
     return () => controller.abort();
-  }, [apiRequestsRepository, dataSourceMode, showToast]);
+  }, [dataSourceMode, refreshRequests]);
 
   async function submitRequestDraft(payload: CreateServiceRequestPayload) {
     if (dataSourceMode === "api") {
       const nextRequest = await apiRequestsRepository.createPatrolRequest(payload);
       setApiRequests((current) => [nextRequest, ...current.filter((item) => item.id !== nextRequest.id)]);
+      setRequestListStatus("ready");
+      setRequestListErrorMessage(undefined);
       await refreshPatrolData();
       showToast(
         nextRequest.notifyEmployee
@@ -376,6 +401,9 @@ export function usePatrolWorkspaceData({
     activePatrols,
     dashboardMetrics,
     employeeDirectory,
+    refreshRequests,
+    requestListErrorMessage,
+    requestListStatus,
     requests,
     routeDirectory,
     createRoute,
