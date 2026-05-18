@@ -106,6 +106,7 @@ npm run verify
 - `docs/modules.md` — модули системы и их функциональные границы.
 - `docs/monorepo-structure.md` — правила структуры репозитория.
 - `docs/structure-improvement-plan.md` — план и критерии доработки структуры.
+- `docs/structure-remaining-work.md` — остаток работ по структуре до 90%+.
 - `docs/runbooks/ci-contract.md` — обязательный CI gate и публикуемые test artifacts.
 - `docs/runbooks/branch-review-policy.md` — правила веток, PR и ревью.
 - `docs/stabilization.md` — текущие правила стабилизации и обязательные проверки.

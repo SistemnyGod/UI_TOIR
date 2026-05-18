@@ -38,6 +38,7 @@ RequireFile(".github/pull_request_template.md");
 RequireFile("docs/adr/0001-monorepo-modular-monolith.md");
 RequireFile("docs/adr/0002-layer-dependency-rules.md");
 RequireFile("docs/adr/0003-frontend-data-source-boundaries.md");
+RequireFile("docs/structure-remaining-work.md");
 RequireFile("docs/runbooks/ci-contract.md");
 RequireFile("docs/runbooks/branch-review-policy.md");
 RequireFile("docs/runbooks/local-dev.md");
@@ -128,6 +129,9 @@ AssertFileContains(".github/pull_request_template.md", ".\\tools\\Test-All.ps1")
 AssertFileContains(".github/pull_request_template.md", "Generated artifacts are not committed");
 AssertFileContains("docs/runbooks/ci-contract.md", "CI / verify");
 AssertFileContains("docs/runbooks/ci-contract.md", "actions/upload-artifact");
+AssertFileContains("docs/structure-remaining-work.md", "DB-backed integration tests");
+AssertFileContains("docs/structure-remaining-work.md", "Set-GitHubBranchProtection.ps1");
+AssertFileContains("docs/structure-remaining-work.md", "CODEOWNERS");
 AssertFileContains("docs/runbooks/branch-review-policy.md", "require status check `CI / verify`");
 AssertFileContains("docs/runbooks/branch-review-policy.md", "squash merge");
 AssertFileContains("docs/runbooks/branch-review-policy.md", "Set-GitHubBranchProtection.ps1");
