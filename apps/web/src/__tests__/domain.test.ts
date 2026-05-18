@@ -15,7 +15,7 @@ describe("domain workflows", () => {
   });
 
   it("creates mobile account with normalized unique login and employee binding", () => {
-    const account = createMobileAccountDraft({
+    const result = createMobileAccountDraft({
       payload: {
         employee: "Ivan Petrov; Anna Sidorova; Ivan Petrov",
         employeeScope: "selected",
@@ -29,10 +29,14 @@ describe("domain workflows", () => {
       existingLogins: new Set(["ivan.petrov"]),
     });
 
+    const { account, temporaryPassword } = result;
+
     expect(account.login).toBe("ivan.petrov2");
     expect(account.boundEmployees).toEqual(["Ivan Petrov", "Anna Sidorova"]);
     expect(account.employee).toBe("Ivan Petrov +1");
-    expect(account.password).toHaveLength(10);
+    expect(account.password).toBe("Требует смены пароля");
+    expect(temporaryPassword).toHaveLength(10);
+    expect(account.password).not.toBe(temporaryPassword);
   });
 });
 

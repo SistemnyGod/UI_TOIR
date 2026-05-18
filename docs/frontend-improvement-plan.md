@@ -134,21 +134,21 @@ apps/web/
 
 Проблемы:
 
-- `SiteUserFormPanel` генерирует фиксированный пароль `tmp-Patrol-360`;
-- временные пароли отображаются в UI toast и panel;
+- `SiteUserFormPanel` больше не генерирует фиксированный пароль `tmp-Patrol-360`, но еще ждет backend API;
+- временные пароли больше не отображаются в UI toast, базовый одноразовый panel-flow добавлен;
 - старый `legacy/territory-patrol-panel` содержит plaintext password-прототип и теперь явно вынесен из активной frontend-зоны.
 
 Что сделать:
 
-- в основном React app не генерировать site-user password локально;
-- показывать temporary password только в одноразовом secure result panel;
-- добавить явное предупреждение "доступно только до закрытия окна";
+- в основном React app не генерировать site-user password локально - сделано для текущего UI-прототипа;
+- показывать temporary password только в одноразовом secure result panel - базово добавлено для mobile accounts;
+- добавить явное предупреждение "доступно только до закрытия окна" - добавлено в secure panel;
 - старый `legacy/territory-patrol-panel` не подключать к production build и CI.
 
 Критерий готовности:
 
-- в production UI нет фиксированного временного пароля;
-- password display изолирован в одном компоненте;
+- в production UI нет фиксированного временного пароля - базово закрыто;
+- password display изолирован в одном компоненте - базово закрыто через `TemporaryPasswordPanel`;
 - reset/create password actions готовы к auth/RBAC.
 
 ## P1: завершить API-интеграцию ключевых экранов
@@ -614,12 +614,12 @@ Smoke сценарии:
 - выбирать сотрудников по ID, а не по ФИО;
 - развести intent кнопок: создать, создать и привязать, создать без привязки;
 - добавить field-level validation для login/role/scope;
-- заменить отображение temporary password в toast на одноразовую secure panel;
+- заменить отображение temporary password в toast на одноразовую secure panel - сделано;
 - добавить confirm для reset/delete;
 - показать loading/error внутри drawer, а не только глобальным toast;
 - синхронизировать sessions/security events с API.
 
-Критерий готовности: создание аккаунта из API mode не зависит от локального справочника, а временный пароль не остается в глобальном toast/history.
+Критерий готовности: создание аккаунта из API mode не зависит от локального справочника, а временный пароль не остается в глобальном toast/history. Password-flow часть закрыта, источник сотрудников и field validation остаются в работе.
 
 ### State ownership и prop drilling
 

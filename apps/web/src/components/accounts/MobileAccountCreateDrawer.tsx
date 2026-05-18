@@ -99,7 +99,7 @@ export function MobileAccountCreateDrawer({
       {selected ? (
         <dl className="meta-list">
           <Field label="Логин" value={selected.login} />
-          <Field label="Пароль" value={selected.password} />
+          <Field label="Статус пароля" value={selected.password} />
           <Field label="Доступ" value={getMobileAccountAccessLabel(selected)} />
         </dl>
       ) : (

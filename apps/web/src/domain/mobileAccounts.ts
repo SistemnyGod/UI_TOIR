@@ -3,6 +3,13 @@ import type { CreateMobileAccountPayload, MobileAccount } from "../types";
 const DEFAULT_ROLE = "Маршрутный обходчик";
 const UNBOUND_EMPLOYEE = "Не привязан";
 const ALL_EMPLOYEES = "Все сотрудники";
+export const PASSWORD_STATE_REQUIRES_CHANGE = "Требует смены пароля";
+export const PASSWORD_STATE_SET_ON_FIRST_LOGIN = "Задается при первом входе";
+
+export interface MobileAccountDraftResult {
+  account: MobileAccount;
+  temporaryPassword?: string;
+}
 
 export function isMobileAccountList(value: unknown): value is MobileAccount[] {
   return (
@@ -29,27 +36,31 @@ export function createMobileAccountDraft({
   payload: CreateMobileAccountPayload;
   existingCount: number;
   existingLogins: Set<string>;
-}): MobileAccount {
+}): MobileAccountDraftResult {
   const employee = payload.employee.trim();
   const employeeScope = payload.employeeScope;
   const boundEmployees = employeeScope === "all" ? [] : normalizeEmployeeList(employee);
   const bindEmployee = employeeScope === "all" || (payload.bindEmployee && boundEmployees.length > 0);
   const loginBase = normalizeLogin(payload.login || employee || `mobile-${existingCount + 1}`);
   const login = makeUniqueLogin(loginBase, existingLogins);
+  const temporaryPassword = payload.temporaryPassword ? createTemporaryPassword() : undefined;
 
   return {
-    id: `mobile-${Date.now()}-${existingCount + 1}`,
-    login,
-    password: payload.temporaryPassword ? createTemporaryPassword() : "Задается при первом входе",
-    employee: bindEmployee ? formatEmployeeAccess(employeeScope, boundEmployees) : UNBOUND_EMPLOYEE,
-    employeeScope,
-    boundEmployees,
-    role: payload.role.trim() || DEFAULT_ROLE,
-    status: bindEmployee ? "Активен" : "Не привязан",
-    session: "-",
-    lastSeen: "Не входил",
-    device: payload.restrictToBoundDevice ? "Ожидает привязки" : "Любое устройство",
-    version: "-",
+    account: {
+      id: `mobile-${Date.now()}-${existingCount + 1}`,
+      login,
+      password: temporaryPassword ? PASSWORD_STATE_REQUIRES_CHANGE : PASSWORD_STATE_SET_ON_FIRST_LOGIN,
+      employee: bindEmployee ? formatEmployeeAccess(employeeScope, boundEmployees) : UNBOUND_EMPLOYEE,
+      employeeScope,
+      boundEmployees,
+      role: payload.role.trim() || DEFAULT_ROLE,
+      status: bindEmployee ? "Активен" : "Не привязан",
+      session: "-",
+      lastSeen: "Не входил",
+      device: payload.restrictToBoundDevice ? "Ожидает привязки" : "Любое устройство",
+      version: "-",
+    },
+    temporaryPassword,
   };
 }
 
@@ -77,11 +88,13 @@ export function bindMobileAccountToEmployee(
 }
 
 export function resetMobileAccountPassword(accounts: MobileAccount[], accountId: string) {
-  const password = createTemporaryPassword();
+  const temporaryPassword = createTemporaryPassword();
 
   return {
-    accounts: accounts.map((account) => (account.id === accountId ? { ...account, password } : account)),
-    password,
+    accounts: accounts.map((account) =>
+      account.id === accountId ? { ...account, password: PASSWORD_STATE_REQUIRES_CHANGE } : account,
+    ),
+    temporaryPassword,
   };
 }
 

@@ -15,21 +15,27 @@ import {
 } from "../domain/mobileAccounts";
 import type { CreateMobileAccountPayload, MobileAccount } from "../types";
 
+export interface MobileAccountCreateResult {
+  account: MobileAccount;
+  temporaryPassword?: string;
+}
+
 export const mobileAccountsStorageKey = "patrol360.mobileAccounts.v2";
 export const mobileAccountsFallback = initialAccounts;
 export const securityEventsFallback = securityEvents;
 export { isMobileAccountList };
 
 export function createLocalMobileAccount(accounts: MobileAccount[], payload: CreateMobileAccountPayload) {
-  const account = createMobileAccountDraft({
+  const result = createMobileAccountDraft({
     payload,
     existingCount: accounts.length,
     existingLogins: new Set(accounts.map((item) => item.login)),
   });
 
   return {
-    account,
-    accounts: [account, ...accounts],
+    account: result.account,
+    accounts: [result.account, ...accounts],
+    temporaryPassword: result.temporaryPassword,
   };
 }
 
@@ -59,7 +65,10 @@ export function createApiMobileAccountsRepository({ baseUrl }: { baseUrl?: strin
         "/api/v1/mobile-accounts",
         mapCreateMobileAccountPayload(payload),
       );
-      return mapMobileAccount(result.account, result.temporaryPassword ?? undefined);
+      return {
+        account: mapMobileAccount(result.account),
+        temporaryPassword: result.temporaryPassword ?? undefined,
+      } satisfies MobileAccountCreateResult;
     },
 
     async attachEmployee(accountId: string, employeeName: string) {
@@ -95,11 +104,11 @@ function mapCreateMobileAccountPayload(payload: CreateMobileAccountPayload): Cre
   };
 }
 
-function mapMobileAccount(account: MobileAccountDto, passwordOverride?: string): MobileAccount {
+function mapMobileAccount(account: MobileAccountDto): MobileAccount {
   return {
     id: account.id,
     login: account.login,
-    password: passwordOverride ?? account.passwordState,
+    password: account.passwordState,
     employee: account.employee,
     employeeScope: account.employeeScope,
     boundEmployees: account.boundEmployees,

@@ -3,16 +3,16 @@ import { Panel } from "../ui";
 
 export function SiteUserFormPanel({ onNotify }: { onNotify: (message: string) => void }) {
   const [formKey, setFormKey] = useState(0);
-  const [generatedPassword, setGeneratedPassword] = useState("");
+  const [passwordResetRequested, setPasswordResetRequested] = useState(false);
 
-  function generateTemporaryPassword() {
-    setGeneratedPassword("tmp-Patrol-360");
-    onNotify("Временный пароль сгенерирован в UI-прототипе");
+  function requestPasswordReset() {
+    setPasswordResetRequested(true);
+    onNotify("Сброс пароля будет выполнен через backend");
   }
 
   function clearForm() {
     setFormKey((value) => value + 1);
-    setGeneratedPassword("");
+    setPasswordResetRequested(false);
     onNotify("Форма пользователя очищена");
   }
 
@@ -38,14 +38,14 @@ export function SiteUserFormPanel({ onNotify }: { onNotify: (message: string) =>
         </label>
         <label>
           Сброс пароля
-          <button className="button ghost" onClick={generateTemporaryPassword} type="button">
-            Сгенерировать временный пароль
+          <button className="button ghost" onClick={requestPasswordReset} type="button">
+            Запросить сброс пароля
           </button>
         </label>
-        {generatedPassword ? (
+        {passwordResetRequested ? (
           <div className="notice info-soft">
-            <strong>Временный пароль</strong>
-            <span>{generatedPassword}</span>
+            <strong>Пароль не генерируется в UI</strong>
+            <span>Временный пароль должен вернуться только из backend как одноразовый результат операции.</span>
           </div>
         ) : null}
         <label className="toggle-filter">

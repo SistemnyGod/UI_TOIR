@@ -3397,6 +3397,58 @@ label textarea {
   box-shadow: var(--shadow);
 }
 
+.secure-password-panel {
+  position: fixed;
+  right: 28px;
+  bottom: 86px;
+  z-index: 21;
+  display: grid;
+  gap: 12px;
+  width: min(380px, calc(100vw - 32px));
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.secure-password-panel > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.secure-password-panel > div:first-child strong {
+  font-size: 15px;
+}
+
+.secure-password-panel > div:first-child span,
+.secure-password-panel p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.secure-password-panel code {
+  display: block;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 10px 12px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 18px;
+  font-weight: 850;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.secure-password-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 /* Visual cleanup pass: keep operational data, remove decorative chrome. */
 .stat-tile {
   min-height: 96px;

@@ -14,6 +14,7 @@ import { ScreenRouter } from "./components/ScreenRouter";
 import { Sidebar } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
 import { WorkspaceHeader } from "./components/WorkspaceHeader";
+import { TemporaryPasswordPanel } from "./components/accounts/TemporaryPasswordPanel";
 import {
   attachEmployeeToMobileAccount,
   createApiMobileAccountsRepository,
@@ -35,6 +36,12 @@ import { usePatrolDataSource } from "./hooks/usePatrolDataSource";
 import { usePatrolWorkspaceData } from "./hooks/usePatrolWorkspaceData";
 import { useStoredState } from "./hooks/useStoredState";
 import { useToast } from "./hooks/useToast";
+
+interface TemporaryPasswordNotice {
+  accountLogin: string;
+  password: string;
+  title: string;
+}
 
 export function App() {
   const [screen, navigate] = useHashScreen();
@@ -64,6 +71,7 @@ export function App() {
   const patrolData = usePatrolDataSource(dataSourceMode);
   const apiMobileAccounts = useMemo(() => createApiMobileAccountsRepository(), []);
   const [apiAccounts, setApiAccounts] = useState<MobileAccount[]>([]);
+  const [temporaryPasswordNotice, setTemporaryPasswordNotice] = useState<TemporaryPasswordNotice | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -228,26 +236,36 @@ export function App() {
   async function createMobileAccount(payload: CreateMobileAccountPayload) {
     if (dataSourceMode === "api") {
       try {
-        const account = await apiMobileAccounts.createAccount(payload);
+        const result = await apiMobileAccounts.createAccount(payload);
         await refreshMobileAccounts();
-        setSelectedAccountId(account.id);
+        setSelectedAccountId(result.account.id);
         setAccountMode("accounts");
-        showToast(
-          isTemporaryPasswordValue(account.password)
-            ? `Мобильный аккаунт ${account.login} создан. Временный пароль: ${account.password}`
-            : `Мобильный аккаунт ${account.login} создан. Пароль нужно задать перед первым входом`,
-        );
+        if (result.temporaryPassword) {
+          showTemporaryPassword({
+            accountLogin: result.account.login,
+            password: result.temporaryPassword,
+            title: "Временный пароль для нового аккаунта",
+          });
+        }
+        showToast(`Мобильный аккаунт ${result.account.login} создан`);
       } catch (error) {
         showToast(getErrorMessage(error, "Не удалось создать мобильный аккаунт"));
       }
       return;
     }
 
-    const { account, accounts: nextAccounts } = createLocalMobileAccount(accounts, payload);
+    const { account, accounts: nextAccounts, temporaryPassword } = createLocalMobileAccount(accounts, payload);
 
     setAccounts(nextAccounts);
     setSelectedAccountId(account.id);
     setAccountMode("accounts");
+    if (temporaryPassword) {
+      showTemporaryPassword({
+        accountLogin: account.login,
+        password: temporaryPassword,
+        title: "Временный пароль для локального аккаунта",
+      });
+    }
     showToast(`Мобильный аккаунт ${account.login} создан: ${account.employee}`);
   }
 
@@ -313,7 +331,13 @@ export function App() {
       try {
         const result = await apiMobileAccounts.resetPassword(selectedAccountId);
         await refreshMobileAccounts();
-        showToast(`Временный пароль выдан: ${result.temporaryPassword}`);
+        const account = visibleAccounts.find((item) => item.id === selectedAccountId);
+        showTemporaryPassword({
+          accountLogin: account?.login ?? selectedAccountId,
+          password: result.temporaryPassword,
+          title: "Временный пароль после сброса",
+        });
+        showToast("Временный пароль выдан");
       } catch (error) {
         showToast(getErrorMessage(error, "Не удалось сбросить пароль"));
       }
@@ -322,7 +346,17 @@ export function App() {
 
     const result = resetMobileAccountLocalPassword(accounts, selectedAccountId);
     setAccounts(result.accounts);
-    showToast(`Пароль обновлен: ${result.password}`);
+    const account = visibleAccounts.find((item) => item.id === selectedAccountId);
+    showTemporaryPassword({
+      accountLogin: account?.login ?? selectedAccountId,
+      password: result.temporaryPassword,
+      title: "Временный пароль после локального сброса",
+    });
+    showToast("Пароль обновлен");
+  }
+
+  function showTemporaryPassword(nextNotice: TemporaryPasswordNotice) {
+    setTemporaryPasswordNotice(nextNotice);
   }
 
   return (
@@ -420,6 +454,16 @@ export function App() {
         onSubmitCreate={submitRequestDraft}
       />
 
+      {temporaryPasswordNotice ? (
+        <TemporaryPasswordPanel
+          accountLogin={temporaryPasswordNotice.accountLogin}
+          password={temporaryPasswordNotice.password}
+          title={temporaryPasswordNotice.title}
+          onDismiss={() => setTemporaryPasswordNotice(null)}
+          onNotify={showToast}
+        />
+      ) : null}
+
       {toast ? <div className="toast">{toast}</div> : null}
     </div>
   );
@@ -427,8 +471,4 @@ export function App() {
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? `${fallback}: ${error.message}` : fallback;
-}
-
-function isTemporaryPasswordValue(value: string) {
-  return value !== "Требует смены пароля" && value !== "Пароль задан";
 }
