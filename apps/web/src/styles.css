@@ -2007,6 +2007,10 @@ label textarea {
   gap: 18px;
 }
 
+.mobile-security-panels {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+}
+
 .donut-row {
   display: grid;
   grid-template-columns: 132px 1fr;

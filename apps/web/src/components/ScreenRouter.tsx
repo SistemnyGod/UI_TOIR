@@ -7,6 +7,8 @@ import type {
   EmployeeDirectoryItem,
   EmployeeFormPayload,
   MobileAccount,
+  MobileAccountSecurityEvent,
+  MobileAccountSession,
   ResultMode,
   RouteDirectoryItem,
   RouteFormPayload,
@@ -37,6 +39,10 @@ export function ScreenRouter({
   activePatrols,
   dashboardMetrics,
   employeeDirectory,
+  mobileAccountSecurityErrorMessage,
+  mobileAccountSecurityEvents,
+  mobileAccountSecurityStatus,
+  mobileAccountSessions,
   onAccountModeChange,
   onAssign,
   onAttachEmployee,
@@ -54,6 +60,7 @@ export function ScreenRouter({
   onNotify,
   onOpenRequest,
   onOpenRequestById,
+  onRefreshAccountSecurity,
   onResetPassword,
   onRetryAccounts,
   onRetryRequests,
@@ -103,6 +110,10 @@ export function ScreenRouter({
   activePatrols: ActivePatrol[];
   dashboardMetrics: Metric[];
   employeeDirectory: EmployeeDirectoryItem[];
+  mobileAccountSecurityErrorMessage?: string;
+  mobileAccountSecurityEvents: MobileAccountSecurityEvent[];
+  mobileAccountSecurityStatus: DataSourceStatus;
+  mobileAccountSessions: MobileAccountSession[];
   onAccountModeChange: (mode: AccountMode) => void;
   onAssign: () => void;
   onAttachEmployee: (employeeId: string, employeeName: string) => MaybePromise<void>;
@@ -120,6 +131,7 @@ export function ScreenRouter({
   onNotify: (message: string) => void;
   onOpenRequest: (resultId?: string) => void;
   onOpenRequestById: (requestId: string) => void;
+  onRefreshAccountSecurity: () => MaybePromise<void>;
   onResetPassword: () => MaybePromise<void>;
   onToggleBlockAccount: () => MaybePromise<void>;
   onRetryAccounts: () => MaybePromise<void>;
@@ -232,6 +244,10 @@ export function ScreenRouter({
           accountListStatus={accountListStatus}
           selectedAccountId={selectedAccountId}
           employeeDirectory={employeeDirectory}
+          mobileAccountSecurityErrorMessage={mobileAccountSecurityErrorMessage}
+          mobileAccountSecurityEvents={mobileAccountSecurityEvents}
+          mobileAccountSecurityStatus={mobileAccountSecurityStatus}
+          mobileAccountSessions={mobileAccountSessions}
           mode={accountMode}
           onModeChange={onAccountModeChange}
           onSelectAccount={onSelectAccount}
@@ -240,6 +256,7 @@ export function ScreenRouter({
           onDeleteAccount={onDeleteAccount}
           onDetachEmployee={onDetachEmployee}
           onNotify={onNotify}
+          onRefreshAccountSecurity={onRefreshAccountSecurity}
           onResetPassword={onResetPassword}
           onRetryAccounts={onRetryAccounts}
           onToggleBlockAccount={onToggleBlockAccount}

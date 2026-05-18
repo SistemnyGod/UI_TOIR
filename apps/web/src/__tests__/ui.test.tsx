@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MobileAccountCreateDrawer, MobileAccountLinkPanel } from "../components/accounts/MobileAccountCreateDrawer";
 import { MobileAccountListPanel } from "../components/accounts/MobileAccountListPanel";
+import { MobileAccountSecurityPanels } from "../components/accounts/MobileAccountSecurityPanels";
 import { DashboardRequestsPanel } from "../components/dashboard/DashboardRequestsPanel";
 import { SiteUserFormPanel } from "../components/site-users/SiteUserFormPanel";
 import { Chip, EmptyState, ProgressBar } from "../components/ui";
@@ -129,6 +130,51 @@ describe("shared UI primitives", () => {
     await user.click(screen.getByRole("button", { name: "Повторить загрузку" }));
 
     expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it("renders mobile account sessions and security events", async () => {
+    const user = userEvent.setup();
+    const onRefresh = vi.fn();
+    const onNotify = vi.fn();
+
+    render(
+      <MobileAccountSecurityPanels
+        onNotify={onNotify}
+        onRefresh={onRefresh}
+        securityEvents={[
+          {
+            id: "event-1",
+            accountId: "account-1",
+            eventType: "mobile.account.login",
+            message: "Login accepted",
+            createdAt: "2026-05-18T10:30:00Z",
+            actor: "operator",
+          },
+        ]}
+        sessions={[
+          {
+            id: "session-1",
+            accountId: "account-1",
+            status: "online",
+            device: "Xiaomi",
+            platform: "Android",
+            appVersion: "2.3.0",
+            ipAddress: "127.0.0.1",
+            lastSeenAt: "2026-05-18T10:20:00Z",
+          },
+        ]}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByText("online")).toBeInTheDocument();
+    expect(screen.getByText("Xiaomi / Android / 2.3.0")).toBeInTheDocument();
+    expect(screen.getByText("Login accepted")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Обновить" }));
+
+    expect(onRefresh).toHaveBeenCalledOnce();
+    expect(onNotify).not.toHaveBeenCalled();
   });
 
   it("does not render mobile account inactivity session policy control", () => {

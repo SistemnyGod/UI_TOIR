@@ -10,13 +10,14 @@ import {
 import { MobileAccountListPanel, type MobileAccountWorkspacePanel } from "../components/accounts/MobileAccountListPanel";
 import { MobileAccountMetrics } from "../components/accounts/MobileAccountMetrics";
 import { MobileAccountSecurityPanels } from "../components/accounts/MobileAccountSecurityPanels";
-import { securityEventsFallback } from "../repositories/mobileAccountsRepository";
 import type {
   AccountMode,
   CreateMobileAccountPayload,
   DataSourceStatus,
   EmployeeDirectoryItem,
   MobileAccount,
+  MobileAccountSecurityEvent,
+  MobileAccountSession,
   UpdateMobileAccountPayload,
 } from "../types";
 
@@ -28,6 +29,10 @@ export function MobileAccountsScreen({
   accountListStatus,
   accounts,
   employeeDirectory,
+  mobileAccountSecurityErrorMessage,
+  mobileAccountSecurityEvents,
+  mobileAccountSecurityStatus,
+  mobileAccountSessions,
   selectedAccountId,
   mode,
   onModeChange,
@@ -37,6 +42,7 @@ export function MobileAccountsScreen({
   onDeleteAccount,
   onDetachEmployee,
   onNotify,
+  onRefreshAccountSecurity,
   onResetPassword,
   onRetryAccounts,
   onToggleBlockAccount,
@@ -47,6 +53,10 @@ export function MobileAccountsScreen({
   accountListStatus: DataSourceStatus;
   accounts: MobileAccount[];
   employeeDirectory: EmployeeDirectoryItem[];
+  mobileAccountSecurityErrorMessage?: string;
+  mobileAccountSecurityEvents: MobileAccountSecurityEvent[];
+  mobileAccountSecurityStatus: DataSourceStatus;
+  mobileAccountSessions: MobileAccountSession[];
   selectedAccountId: string;
   mode: AccountMode;
   onModeChange: (mode: AccountMode) => void;
@@ -56,12 +66,12 @@ export function MobileAccountsScreen({
   onDeleteAccount: () => MaybePromise<void>;
   onDetachEmployee: (employeeId?: string) => MaybePromise<void>;
   onNotify: (message: string) => void;
+  onRefreshAccountSecurity: () => MaybePromise<void>;
   onResetPassword: () => MaybePromise<void>;
   onRetryAccounts: () => MaybePromise<void>;
   onToggleBlockAccount: () => MaybePromise<void>;
   onUpdateAccount: (payload: UpdateMobileAccountPayload) => MaybePromise<void>;
 }) {
-  const securityEvents = securityEventsFallback;
   const selected = accounts.find((account) => account.id === selectedAccountId);
   const [activePanel, setActivePanel] = useState<MobileAccountWorkspacePanel | null>(null);
 
@@ -205,7 +215,14 @@ export function MobileAccountsScreen({
         </div>
       ) : null}
 
-      <MobileAccountSecurityPanels securityEvents={securityEvents} onNotify={onNotify} />
+      <MobileAccountSecurityPanels
+        errorMessage={mobileAccountSecurityErrorMessage}
+        onNotify={onNotify}
+        onRefresh={onRefreshAccountSecurity}
+        securityEvents={mobileAccountSecurityEvents}
+        sessions={mobileAccountSessions}
+        status={mobileAccountSecurityStatus}
+      />
     </div>
   );
 }
