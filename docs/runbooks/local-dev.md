@@ -1,0 +1,46 @@
+# Local development runbook
+
+## Требования
+
+- .NET SDK из `global.json`.
+- Node.js, совместимый с Vite 7.
+- Docker Desktop или совместимый Docker runtime для локальной инфраструктуры.
+
+## Инфраструктура
+
+```powershell
+docker compose -f .\infra\docker\compose.yaml up -d
+```
+
+Сервисы:
+
+- PostgreSQL: `localhost:5432`
+- Redis: `localhost:6379`
+- RabbitMQ: `localhost:5672`, management UI `localhost:15672`
+- MinIO: API `localhost:9000`, console `localhost:9001`
+
+## Backend
+
+```powershell
+dotnet run --project .\apps\api\Patrol360.Api.csproj
+```
+
+## Frontend
+
+```powershell
+cd .\apps\web
+npm install
+npm run dev
+```
+
+## Проверки
+
+```powershell
+.\tools\Test-All.ps1
+```
+
+Для очистки generated artifacts:
+
+```powershell
+.\tools\Clean-Workspace.ps1
+```

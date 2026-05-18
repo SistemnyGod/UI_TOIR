@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\libs\application\Patrol360.Application.csproj" />
+    <ProjectReference Include="..\..\libs\contracts\Patrol360.Contracts.csproj" />
+    <ProjectReference Include="..\..\libs\infrastructure\Patrol360.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

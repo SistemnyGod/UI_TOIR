@@ -1,0 +1,26 @@
+<Solution>
+  <Folder Name="/apps/" />
+  <Folder Name="/apps/api/">
+    <Project Path="apps/api/Patrol360.Api.csproj" />
+  </Folder>
+  <Folder Name="/apps/worker/">
+    <Project Path="apps/worker/Patrol360.Worker.csproj" />
+  </Folder>
+  <Folder Name="/libs/" />
+  <Folder Name="/libs/application/">
+    <Project Path="libs/application/Patrol360.Application.csproj" />
+  </Folder>
+  <Folder Name="/libs/contracts/">
+    <Project Path="libs/contracts/Patrol360.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/libs/domain/">
+    <Project Path="libs/domain/Patrol360.Domain.csproj" />
+  </Folder>
+  <Folder Name="/libs/infrastructure/">
+    <Project Path="libs/infrastructure/Patrol360.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+  <Folder Name="/tests/Patrol360.Structure.Tests/">
+    <Project Path="tests/Patrol360.Structure.Tests/Patrol360.Structure.Tests.csproj" />
+  </Folder>
+</Solution>

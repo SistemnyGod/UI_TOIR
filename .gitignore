@@ -1,0 +1,16 @@
+bin/
+obj/
+.vs/
+node_modules/
+dist/
+.vite/
+output/
+.env
+.env.*
+!.env.example
+TestResults/
+coverage/
+*.user
+*.suo
+*.log
+*.binlog

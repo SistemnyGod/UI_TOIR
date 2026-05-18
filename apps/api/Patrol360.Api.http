@@ -1,0 +1,45 @@
+@Patrol360.Api_HostAddress = http://localhost:5080
+
+GET {{Patrol360.Api_HostAddress}}/health/ready
+Accept: application/json
+
+###
+
+GET {{Patrol360.Api_HostAddress}}/api/v1/dashboards/summary
+Accept: application/json
+
+###
+
+GET {{Patrol360.Api_HostAddress}}/api/v1/dashboards/active-patrols
+Accept: application/json
+
+###
+
+GET {{Patrol360.Api_HostAddress}}/api/v1/routes
+Accept: application/json
+
+###
+
+GET {{Patrol360.Api_HostAddress}}/api/v1/employees
+Accept: application/json
+
+###
+
+GET {{Patrol360.Api_HostAddress}}/api/v1/patrol-requests
+Accept: application/json
+
+###
+
+POST {{Patrol360.Api_HostAddress}}/api/v1/patrol-requests
+Content-Type: application/json
+Accept: application/json
+
+{
+  "employeeName": "Петров Иван Александрович",
+  "routeName": "Складской периметр",
+  "scheduledDate": "2026-05-14",
+  "scheduledTime": "10:30:00",
+  "notifyEmployee": true,
+  "notificationText": "Необходимо пройти обход по заявке.",
+  "description": "Проверить состояние ворот и ограждения."
+}

@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Панель обходов территории</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Основная навигация">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">ОТ</div>
+          <div>
+            <strong>Патруль 360</strong>
+            <span>Администрирование</span>
+          </div>
+        </div>
+
+        <nav class="nav-list" id="navList">
+          <button class="nav-item active" data-screen="dashboard" type="button">
+            <span class="nav-icon">⌂</span>
+            Главное окно
+          </button>
+          <button class="nav-item" data-screen="results" type="button">
+            <span class="nav-icon">≡</span>
+            Результаты обходов
+          </button>
+          <button class="nav-item" data-screen="assign" type="button">
+            <span class="nav-icon">＋</span>
+            Назначение сейчас
+          </button>
+          <button class="nav-item" data-screen="schedule" type="button">
+            <span class="nav-icon">▦</span>
+            Плановый обход
+          </button>
+          <button class="nav-item" data-screen="accounts" type="button">
+            <span class="nav-icon">◉</span>
+            Аккаунты телефона
+          </button>
+          <button class="nav-item" data-screen="routes" type="button">
+            <span class="nav-icon">⌖</span>
+            Маршруты и точки
+          </button>
+        </nav>
+
+        <div class="shift-card">
+          <span>Смена сейчас</span>
+          <strong>Дневная 08:00-20:00</strong>
+          <small>Ночная готовится: 6 сотрудников</small>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div class="page-title">
+            <div class="topbar-meta">
+              <span>24 мая 2025, суббота</span>
+              <span>10:42:18 МСК</span>
+              <span>Территория: Промзона Север</span>
+            </div>
+            <h1 id="screenTitle">Главное окно</h1>
+            <p id="screenSubtitle">Мини-дашборд и вход в основные сценарии обходов территории</p>
+          </div>
+          <div class="topbar-actions">
+            <label class="search-field">
+              <span>Поиск</span>
+              <input id="globalSearch" type="search" placeholder="Сотрудник, маршрут, метка" />
+            </label>
+            <button class="button primary" id="createButton" type="button">Создать</button>
+            <span class="user-chip">Иванов А. С.<small>Оператор</small></span>
+            <span class="status-dot">Система в норме</span>
+          </div>
+        </header>
+
+        <nav class="module-tabs" aria-label="Разделы панели" role="tablist">
+          <button class="module-tab active" id="tab-dashboard" data-screen="dashboard" role="tab" aria-controls="dashboard" aria-selected="true" type="button">
+            <span>Главное</span>
+            <small>сводка смены</small>
+          </button>
+          <button class="module-tab" id="tab-results" data-screen="results" role="tab" aria-controls="results" aria-selected="false" type="button">
+            <span>Результаты</span>
+            <small>обходы и проблемы</small>
+          </button>
+          <button class="module-tab" id="tab-assign" data-screen="assign" role="tab" aria-controls="assign" aria-selected="false" type="button">
+            <span>Назначение</span>
+            <small>сейчас</small>
+          </button>
+          <button class="module-tab" id="tab-schedule" data-screen="schedule" role="tab" aria-controls="schedule" aria-selected="false" type="button">
+            <span>План</span>
+            <small>день / ночь</small>
+          </button>
+          <button class="module-tab" id="tab-accounts" data-screen="accounts" role="tab" aria-controls="accounts" aria-selected="false" type="button">
+            <span>Аккаунты</span>
+            <small>мобильный вход</small>
+          </button>
+          <button class="module-tab" id="tab-routes" data-screen="routes" role="tab" aria-controls="routes" aria-selected="false" type="button">
+            <span>Маршруты</span>
+            <small>точки и NFC</small>
+          </button>
+        </nav>
+
+        <section class="screen active" id="dashboard" role="tabpanel" aria-labelledby="tab-dashboard">
+          <div class="metric-grid">
+            <article class="metric-card">
+              <span>Активные обходы</span>
+              <strong>14</strong>
+              <em class="chip success">норма</em>
+            </article>
+            <article class="metric-card">
+              <span>Просрочены</span>
+              <strong>3</strong>
+              <em class="chip danger">требует реакции</em>
+            </article>
+            <article class="metric-card">
+              <span>Проблемы</span>
+              <strong>5</strong>
+              <em class="chip warning">разбор</em>
+            </article>
+            <article class="metric-card">
+              <span>Покрытие смен</span>
+              <strong>92%</strong>
+              <em class="chip info">план</em>
+            </article>
+          </div>
+
+          <div class="dashboard-grid">
+            <section class="panel assignments-panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Назначения сегодня</h2>
+                  <p>Текущие обходы дневной и ночной смены</p>
+                </div>
+                <button class="button ghost" data-screen-link="assign" type="button">Назначить</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Время</th>
+                      <th>Маршрут</th>
+                      <th>Сотрудник</th>
+                      <th>Смена</th>
+                      <th>Статус</th>
+                    </tr>
+                  </thead>
+                  <tbody id="todayAssignments"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel territory-panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Схема территории</h2>
+                  <p>Упрощенная карта активных точек</p>
+                </div>
+              </div>
+              <div class="territory-map" aria-label="Схема территории">
+                <svg viewBox="0 0 360 190" role="img" aria-label="Активные точки маршрута">
+                  <path d="M36 132 L94 58 L156 88 L218 38 L292 112 L330 70" />
+                  <circle class="point ok" cx="36" cy="132" r="8" />
+                  <circle class="point ok" cx="94" cy="58" r="8" />
+                  <circle class="point danger" cx="156" cy="88" r="9" />
+                  <circle class="point ok" cx="218" cy="38" r="8" />
+                  <circle class="point ok" cx="292" cy="112" r="8" />
+                  <circle class="point ok" cx="330" cy="70" r="8" />
+                </svg>
+                <p>Красная точка: проблема на ТП-4. Последний скан 11:42.</p>
+              </div>
+            </section>
+
+            <section class="panel quick-panel">
+              <h2>Быстрые действия</h2>
+              <div class="quick-actions">
+                <button class="button primary" data-screen-link="assign" type="button">Назначить сейчас</button>
+                <button class="button ghost" data-screen-link="schedule" type="button">Открыть план</button>
+                <button class="button ghost" data-screen-link="routes" type="button">Добавить маршрут</button>
+                <button class="button ghost" data-screen-link="accounts" type="button">Моб. аккаунты</button>
+              </div>
+            </section>
+
+            <section class="panel events-panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Журнал событий</h2>
+                  <p>Последние изменения по обходам</p>
+                </div>
+                <button class="button ghost" data-screen-link="results" type="button">К результатам</button>
+              </div>
+              <ol class="event-list" id="eventList"></ol>
+            </section>
+          </div>
+        </section>
+
+        <section class="screen" id="results" role="tabpanel" aria-labelledby="tab-results">
+          <div class="two-column wide-left">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Журнал результатов</h2>
+                  <p>Фильтры, статусы, фото и комментарии по точкам обхода</p>
+                </div>
+              </div>
+              <div class="section-tabs" id="resultsTabs" aria-label="Виды результатов"></div>
+              <div class="filters">
+                <label>Дата<input type="text" value="13.05.2026" /></label>
+                <label>Маршрут<select><option>Все маршруты</option><option>Периметр 1</option><option>Склад ГСМ</option></select></label>
+                <label>Сотрудник<select><option>Все</option><option>Иванов П.</option><option>Смирнова А.</option></select></label>
+                <label>Статус<select><option>Все</option><option>Проблема</option><option>Пройдено</option><option>Пропуск</option></select></label>
+                <button class="button primary" type="button">Применить</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Маршрут</th>
+                      <th>Точка</th>
+                      <th>Сотрудник</th>
+                      <th>Время</th>
+                      <th>Статус</th>
+                      <th>Фото</th>
+                      <th>Проблема</th>
+                    </tr>
+                  </thead>
+                  <tbody id="resultsTable"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <aside class="panel detail-drawer">
+              <div class="drawer-content" id="resultDetail"></div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="screen" id="assign" role="tabpanel" aria-labelledby="tab-assign">
+          <div class="assign-layout">
+            <section class="panel">
+              <h2>Сотрудники на смене</h2>
+              <p class="panel-note">Кого можно назначить сейчас</p>
+              <div class="select-list" id="employeeList"></div>
+            </section>
+
+            <section class="panel">
+              <h2>Маршруты для назначения</h2>
+              <p class="panel-note">Выберите маршрут и время старта</p>
+              <div class="select-list" id="routeList"></div>
+            </section>
+
+            <section class="panel assignment-draft">
+              <h2>Черновик назначения</h2>
+              <p class="panel-note">Сводка перед отправкой сотруднику</p>
+              <div id="assignmentDraft"></div>
+              <div class="draft-actions">
+                <button class="button primary" id="assignNowButton" type="button">Назначить сейчас</button>
+                <button class="button ghost" type="button">Отменить выбор</button>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="screen" id="schedule" role="tabpanel" aria-labelledby="tab-schedule">
+          <div class="two-column wide-left">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Недельный наряд</h2>
+                  <p>Дневные и ночные смены по обходам</p>
+                </div>
+                <button class="button ghost" type="button">Печать недели</button>
+              </div>
+              <div class="section-tabs" id="scheduleTabs" aria-label="Виды планирования"></div>
+              <div class="subtab-content" id="scheduleWeekPanel">
+                <div class="schedule-grid" id="weekGrid"></div>
+              </div>
+              <div class="subtab-content" id="scheduleMonthPanel">
+                <h3 class="section-title">Месячный обзор</h3>
+                <div class="month-grid" id="monthGrid"></div>
+              </div>
+              <div class="subtab-content" id="scheduleExceptionsPanel">
+                <h3 class="section-title">Исключения и корректировки</h3>
+                <div class="exception-list" id="scheduleExceptions"></div>
+              </div>
+            </section>
+
+            <aside class="panel shift-editor">
+              <h2>Редактирование смены</h2>
+              <p class="panel-note">Правка наряда без пересоздания правил</p>
+              <form class="form-stack">
+                <label>Дата<input id="shiftDate" type="text" value="20.05.2026" /></label>
+                <label>Смена<select id="shiftType"><option>Ночная</option><option>Дневная</option></select></label>
+                <label>Сотрудник<input id="shiftEmployee" type="text" value="Орлов М. А." /></label>
+                <label>Маршрут<input id="shiftRoute" type="text" value="КПП Север" /></label>
+              </form>
+              <div class="notice danger-soft">
+                Исключение: сотрудник Ким Д. отсутствует. Назначена замена Орлов М.
+              </div>
+              <div class="drawer-actions">
+                <button class="button primary" type="button">Сохранить смену</button>
+                <button class="button ghost" type="button">Добавить исключение</button>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="screen" id="accounts" role="tabpanel" aria-labelledby="tab-accounts">
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Аккаунты телефона</h2>
+                  <p>Логины для мобильного приложения</p>
+                </div>
+                <button class="button primary" id="createAccountButton" type="button">Создать аккаунт</button>
+              </div>
+              <div class="section-tabs" id="accountTabs" aria-label="Виды мобильных аккаунтов"></div>
+              <div class="subtab-content" id="accountListPanel">
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Логин</th>
+                        <th>Сотрудники</th>
+                        <th>Статус</th>
+                        <th>Сессии</th>
+                      </tr>
+                    </thead>
+                    <tbody id="accountsTable"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="subtab-content" id="accountSessionsPanel">
+                <div class="status-list" id="accountSessions"></div>
+              </div>
+              <div class="subtab-content" id="accountBindingsPanel">
+                <div id="accountBindings"></div>
+              </div>
+            </section>
+
+            <aside class="panel account-card">
+              <div id="accountDetail"></div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="screen" id="routes" role="tabpanel" aria-labelledby="tab-routes">
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Список маршрутов</h2>
+                  <p>Маршруты можно архивировать и редактировать</p>
+                </div>
+                <button class="button primary" id="newRouteButton" type="button">Новый маршрут</button>
+              </div>
+              <div class="select-list" id="routesDirectory"></div>
+            </section>
+
+            <section class="panel route-editor">
+              <div id="routeEditor"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>
