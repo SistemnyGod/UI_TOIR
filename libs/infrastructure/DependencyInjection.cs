@@ -1,7 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Patrol360.Application;
+using Patrol360.Infrastructure.MobilePush;
 using Patrol360.Infrastructure.Persistence;
 
 namespace Patrol360.Infrastructure;
@@ -13,7 +16,9 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("Patrol360")
             ?? "Host=localhost;Port=5432;Database=patrol360;Username=patrol360;Password=patrol360_dev";
 
-        services.AddDbContext<Patrol360DbContext>(options => options.UseNpgsql(connectionString));
+        services.AddDbContext<Patrol360DbContext>(options => options
+            .UseNpgsql(connectionString)
+            .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning)));
         services.AddScoped<Patrol360DbSeeder>();
         services.AddScoped<EfPatrolStore>();
         services.AddScoped<IPatrolDashboardQuery>(provider => provider.GetRequiredService<EfPatrolStore>());
@@ -22,7 +27,26 @@ public static class DependencyInjection
         services.AddScoped<IEmployeeDirectoryQuery>(provider => provider.GetRequiredService<EfPatrolStore>());
         services.AddScoped<IEmployeeDirectoryService>(provider => provider.GetRequiredService<EfPatrolStore>());
         services.AddScoped<IMobileAccountService>(provider => provider.GetRequiredService<EfPatrolStore>());
+        services.AddScoped<IMobileAppService, EfMobileAppService>();
+        services.TryAddScoped<IMobilePushSender, FirebaseMobilePushSender>();
+        services.AddScoped<IMobilePushDeliveryService, EfMobilePushDeliveryService>();
         services.AddScoped<IPatrolRequestService>(provider => provider.GetRequiredService<EfPatrolStore>());
+        services.AddScoped<IAssignmentService>(provider => provider.GetRequiredService<EfPatrolStore>());
+        services.AddScoped<IPatrolResultQuery, EfPatrolResultQuery>();
+        services.AddScoped<IMobileSyncAdminService, EfMobileSyncAdminService>();
+        services.AddScoped<IInventoryCatalogQuery, EfInventoryCatalogQuery>();
+        services.AddScoped<IInventoryCatalogCommandService, EfInventoryCatalogCommandService>();
+        services.AddScoped<IInventoryWorkflowService, EfInventoryWorkflowService>();
+        services.AddScoped<IInventoryExportService, EfInventoryExportService>();
+        services.AddScoped<IInventoryLegacyImportService, EfInventoryLegacyImportService>();
+        services.AddScoped<EfEmuService>();
+        services.AddScoped<IEmuCatalogService>(provider => provider.GetRequiredService<EfEmuService>());
+        services.AddScoped<IEmuWorkService>(provider => provider.GetRequiredService<EfEmuService>());
+        services.AddScoped<IEmuPlanService>(provider => provider.GetRequiredService<EfEmuService>());
+        services.AddScoped<IEmuMaintenanceService>(provider => provider.GetRequiredService<EfEmuService>());
+        services.AddScoped<IAuthSessionService, EfAuthSessionService>();
+        services.AddScoped<ISiteUserAdminService, EfSiteUserAdminService>();
+        services.AddScoped<ISystemNotificationService, EfSystemNotificationService>();
 
         return services;
     }

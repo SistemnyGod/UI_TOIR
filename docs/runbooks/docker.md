@@ -2,14 +2,40 @@
 
 ## Назначение
 
-Docker используется для воспроизводимого локального запуска Patrol360 без ручного старта API, frontend и PostgreSQL отдельными командами.
+Docker-стек нужен для воспроизводимого локального запуска Patrol360: PostgreSQL, API, frontend, reverse proxy и фоновые сервисы поднимаются одной командой.
 
-## Инфраструктура
+## Быстрый запуск приложения
 
-Поднять только stateful-сервисы:
+Из корня репозитория:
 
 ```powershell
-docker compose -f .\infra\docker\compose.yaml up -d
+docker compose -f .\infra\docker\compose.yaml --profile app up -d --build
+```
+
+Проверка:
+
+```powershell
+curl http://localhost:5173/health/ready
+curl http://192.168.2.194:5173/health/ready
+```
+
+Открыть UI:
+
+```text
+http://localhost:5173
+http://192.168.2.194:5173
+https://localhost
+https://192.168.2.194
+```
+
+Основной рабочий URL для локальной сети: `http://192.168.2.194:5173`.
+
+## Только инфраструктура
+
+Если нужно поднять только stateful-сервисы без API и frontend:
+
+```powershell
+docker compose -f .\infra\docker\compose.yaml up -d postgres redis rabbitmq minio
 ```
 
 Сервисы:
@@ -19,54 +45,76 @@ docker compose -f .\infra\docker\compose.yaml up -d
 - RabbitMQ: `localhost:5672`, management UI `http://localhost:15672`
 - MinIO: API `http://localhost:9000`, console `http://localhost:9001`
 
-## Приложение
+## Что изменено для стабильности
 
-Поднять API, web и инфраструктуру:
+- `api`, `web`, `proxy`, `postgres`, `redis`, `rabbitmq` получили healthcheck.
+- `web` и `proxy` ждут готовности API, а не просто старта контейнера.
+- Добавлен контейнер `worker` для фоновых задач ЭМУ.
+- У всех сервисов включен `restart: unless-stopped`.
+- Логи контейнеров ограничены `10 MB x 3`, чтобы Docker не раздувал диск.
+- `apps/web/nginx.conf` умеет проксировать `/api/*` и `/health/*` напрямую в API. Это помогает, если web-контейнер открывают без Caddy.
+- Статические ассеты кешируются долго, а `index.html` не кешируется, чтобы после пересборки браузер не держал старый shell.
+
+## Полная пересборка без кеша
+
+Если UI выглядит старым после правок:
 
 ```powershell
-docker compose -f .\infra\docker\compose.yaml --profile app up --build
+docker compose -f .\infra\docker\compose.yaml build --no-cache web
+docker compose -f .\infra\docker\compose.yaml --profile app up -d web proxy
 ```
 
-Проверить:
+Если менялся backend или worker:
 
 ```powershell
-curl http://localhost:5080/health/ready
+docker compose -f .\infra\docker\compose.yaml build --no-cache api worker
+docker compose -f .\infra\docker\compose.yaml --profile app up -d api worker proxy
 ```
 
-Открыть UI:
+## Диагностика
 
-```text
-http://localhost:5173
+```powershell
+docker ps
+docker compose -f .\infra\docker\compose.yaml ps
+docker logs --tail 120 patrol360-api
+docker logs --tail 120 patrol360-web
+docker logs --tail 120 patrol360-proxy
+docker logs --tail 120 patrol360-worker
 ```
 
-Остановить:
+Проверка API через proxy:
+
+```powershell
+curl http://192.168.2.194:5173/health/ready
+curl http://192.168.2.194:5173/api/v1/auth/me
+```
+
+`/api/v1/auth/me` без токена должен вернуть `401`. Это нормально.
+
+## HTTPS и сертификат
+
+HTTPS включен через Caddy и локальный сертификат из `infra/docker/certs`.
+
+Если браузер показывает `ERR_CERT_AUTHORITY_INVALID`, нужно импортировать root CA на клиентскую машину:
+
+```powershell
+certutil -user -addstore Root .\infra\docker\certs\patrol360.rootCA.crt
+```
+
+HTTP на `:5173` остается основным рабочим вариантом для локальной проверки без сертификата.
+
+## Остановка
+
+Остановить приложение:
 
 ```powershell
 docker compose -f .\infra\docker\compose.yaml --profile app down
 ```
 
-Удалить volumes с локальными данными PostgreSQL и MinIO:
+Остановить и удалить локальные данные PostgreSQL/MinIO:
 
 ```powershell
 docker compose -f .\infra\docker\compose.yaml --profile app down -v
 ```
 
-## Как устроено
-
-- `apps/api/Dockerfile` собирает и публикует ASP.NET Core API.
-- `apps/web/Dockerfile` собирает Vite production build и отдает его через Nginx.
-- `apps/web/nginx.conf` проксирует `/api/*` и `/health/*` во внутренний compose-сервис `api`.
-- `infra/docker/compose.yaml` держит приложения в профиле `app`, чтобы обычный `up -d` по-прежнему поднимал только инфраструктуру.
-
-## Что можно автоматизировать через Docker
-
-- One-command local start: полный запуск API, web, PostgreSQL, Redis, RabbitMQ и MinIO.
-- Integration tests: прогон API/infrastructure тестов против контейнерного PostgreSQL.
-- E2E tests: отдельный compose-профиль `e2e`, который поднимает stack и запускает Playwright.
-- Database lifecycle: миграции, seed, reset test database, backup/restore локального volume.
-- Contract checks: генерация OpenAPI и проверка frontend DTO against backend contract.
-- CI parity: тот же compose stack использовать в GitHub Actions перед merge.
-- Local observability: добавить Grafana/Prometheus/Loki или Seq для логов API и worker.
-- Background services: отдельный Dockerfile и профиль для `apps/worker`.
-- Object storage flow: MinIO bucket initialization и smoke-загрузка тестового файла.
-- Message broker flow: RabbitMQ definitions/import и smoke queue publish/consume.
+Команду с `-v` использовать осторожно: она удаляет локальную базу.

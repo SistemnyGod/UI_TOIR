@@ -1,31 +1,33 @@
 import type { ScheduleMode } from "../../types";
 
 interface PlanningSummaryCardsProps {
+  coveragePercent: number;
+  dayCount: number;
   plannedCount: number;
   exceptionCount: number;
+  nightCount: number;
   onModeChange: (mode: ScheduleMode) => void;
 }
 
 export function PlanningSummaryCards({
+  coveragePercent,
+  dayCount,
   plannedCount,
   exceptionCount,
+  nightCount,
   onModeChange,
 }: PlanningSummaryCardsProps) {
-  const coveragePercent = plannedCount > 0
-    ? Math.max(0, Math.round(((plannedCount - exceptionCount) / plannedCount) * 100))
-    : 0;
-
   return (
     <div className="planning-summary-grid">
       <button className="planning-summary-card day" onClick={() => onModeChange("week")} type="button">
         <span>День</span>
-        <strong>{plannedCount}</strong>
+        <strong>{dayCount}</strong>
         <small>запланировано</small>
       </button>
       <button className="planning-summary-card night" onClick={() => onModeChange("week")} type="button">
         <span>Ночь</span>
-        <strong>0</strong>
-        <small>ожидает правил</small>
+        <strong>{nightCount}</strong>
+        <small>запланировано</small>
       </button>
       <button className="planning-summary-card warning" onClick={() => onModeChange("exceptions")} type="button">
         <span>Исключения</span>
@@ -39,7 +41,7 @@ export function PlanningSummaryCards({
       >
         <span>Покрытие смен</span>
         <strong>{coveragePercent}%</strong>
-        <small>по локальному плану</small>
+        <small>{plannedCount} ячеек в недельном плане</small>
       </button>
     </div>
   );

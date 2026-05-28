@@ -6,11 +6,13 @@ import type { RouteDirectoryItem, RouteFormPayload, RoutePointFormPayload } from
 type MaybePromise<T> = T | Promise<T>;
 
 interface UseRoutesEditorParams {
+  canManage?: boolean;
   routeCreateIntent: number;
   routeDirectory: RouteDirectoryItem[];
   selectedPointId: string;
   selectedRouteId: string;
   onCreateRoute: (payload: RouteFormPayload) => MaybePromise<string>;
+  onCreateRouteWithPoints: (routePayload: RouteFormPayload, pointPayloads: RoutePointFormPayload[]) => MaybePromise<string>;
   onCreateRoutePoint: (routeId: string, payload: RoutePointFormPayload) => MaybePromise<string>;
   onDeleteRoute: (routeId: string) => MaybePromise<void>;
   onDeleteRoutePoint: (routeId: string, pointId: string) => MaybePromise<void>;
@@ -22,6 +24,7 @@ interface UseRoutesEditorParams {
 }
 
 export function useRoutesEditor({
+  canManage = true,
   routeCreateIntent,
   routeDirectory,
   selectedPointId,
@@ -34,11 +37,10 @@ export function useRoutesEditor({
   onSelectPoint,
   onSelectRoute,
   onUpdateRoute,
+  onCreateRouteWithPoints,
   onUpdateRoutePoint,
 }: UseRoutesEditorParams) {
-  const [routeEditorMode, setRouteEditorMode] = useState<"create" | "edit" | null>(
-    routeDirectory.length === 0 ? "create" : null,
-  );
+  const [routeEditorMode, setRouteEditorMode] = useState<"create" | "edit" | null>(null);
   const [routeDraft, setRouteDraft] = useState<RouteFormPayload>(emptyRouteDraft);
   const [pointEditorMode, setPointEditorMode] = useState<"create" | "edit">("edit");
   const [pointDraft, setPointDraft] = useState<RoutePointFormPayload>(emptyPointDraft);
@@ -60,12 +62,22 @@ export function useRoutesEditor({
 
   useEffect(() => {
     if (routeCreateIntent > 0) {
+      if (!canManage) {
+        onNotify("Недостаточно прав для управления маршрутами.");
+        return;
+      }
+
       startRouteCreate();
     }
-  }, [routeCreateIntent]);
+  }, [canManage, routeCreateIntent]);
 
   async function submitRoute(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canManage) {
+      onNotify("Недостаточно прав для управления маршрутами.");
+      return;
+    }
+
     if (!routeDraft.name.trim()) {
       onNotify("Укажите название маршрута");
       return;
@@ -82,8 +94,43 @@ export function useRoutesEditor({
     setRouteEditorMode(null);
   }
 
+  async function submitRouteWithPoints(routePayload: RouteFormPayload, pointPayloads: RoutePointFormPayload[]) {
+    if (!canManage) {
+      onNotify("Недостаточно прав для управления маршрутами.");
+      return;
+    }
+
+    if (!routePayload.name.trim()) {
+      onNotify("Укажите название маршрута");
+      return;
+    }
+
+    const invalidPointIndex = pointPayloads.findIndex((point) => !point.name.trim());
+    if (invalidPointIndex >= 0) {
+      onNotify(`Укажите название точки №${invalidPointIndex + 1}`);
+      return;
+    }
+
+    const routeId = await onCreateRouteWithPoints(routePayload, pointPayloads);
+    if (!routeId) return;
+
+    onSelectRoute(routeId);
+    setRouteEditorMode(null);
+    setPointEditorMode("edit");
+    onNotify(
+      pointPayloads.length
+        ? `Маршрут создан, добавлено точек: ${pointPayloads.length}`
+        : "Маршрут создан без точек",
+    );
+  }
+
   async function submitPoint(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canManage) {
+      onNotify("Недостаточно прав для управления маршрутами.");
+      return;
+    }
+
     if (!selectedRoute) return;
     if (!pointDraft.name.trim()) {
       onNotify("Укажите название точки");
@@ -101,26 +148,46 @@ export function useRoutesEditor({
   }
 
   function startRouteCreate() {
+    if (!canManage) {
+      onNotify("Недостаточно прав для управления маршрутами.");
+      return;
+    }
+
     setRouteDraft(emptyRouteDraft);
     setRouteEditorMode("create");
   }
 
   function startPointCreate() {
+    if (!canManage) {
+      onNotify("Недостаточно прав для управления маршрутами.");
+      return;
+    }
+
     setPointDraft({
       ...emptyPointDraft,
       zone: selectedRoute?.territory ?? "",
-      tag: routePoints[0]?.tag ?? "",
+      tag: "",
     });
     setPointEditorMode("create");
   }
 
   async function deleteSelectedRoute() {
+    if (!canManage) {
+      onNotify("Недостаточно прав для управления маршрутами.");
+      return;
+    }
+
     if (!selectedRoute) return;
     await onDeleteRoute(selectedRoute.id);
     setRouteEditorMode(routeDirectory.length <= 1 ? "create" : null);
   }
 
   async function deleteSelectedPoint() {
+    if (!canManage) {
+      onNotify("Недостаточно прав для управления маршрутами.");
+      return;
+    }
+
     if (!selectedRoute || !selectedPoint) return;
     await onDeleteRoutePoint(selectedRoute.id, selectedPoint.id);
     setPointEditorMode("edit");
@@ -132,7 +199,7 @@ export function useRoutesEditor({
   }
 
   function cancelRouteEdit() {
-    setRouteEditorMode(selectedRoute ? null : "create");
+    setRouteEditorMode(null);
   }
 
   function cancelPointEdit() {
@@ -157,9 +224,17 @@ export function useRoutesEditor({
       setRouteDraft,
       startPointCreate,
       startRouteCreate,
-      startRouteEdit: () => setRouteEditorMode("edit"),
+      startRouteEdit: () => {
+        if (!canManage) {
+          onNotify("Недостаточно прав для управления маршрутами.");
+          return;
+        }
+
+        setRouteEditorMode("edit");
+      },
       submitPoint,
       submitRoute,
+      submitRouteWithPoints,
     },
   };
 }

@@ -11,7 +11,15 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
 
     public DbSet<EmployeeEntity> Employees => Set<EmployeeEntity>();
 
+    public DbSet<AccountingEmployeeReferenceEntity> AccountingEmployeeReferences => Set<AccountingEmployeeReferenceEntity>();
+
     public DbSet<PatrolRequestEntity> PatrolRequests => Set<PatrolRequestEntity>();
+
+    public DbSet<PatrolResultEntity> PatrolResults => Set<PatrolResultEntity>();
+
+    public DbSet<PatrolResultIssueEntity> PatrolResultIssues => Set<PatrolResultIssueEntity>();
+
+    public DbSet<PatrolResultAttachmentEntity> PatrolResultAttachments => Set<PatrolResultAttachmentEntity>();
 
     public DbSet<AssignmentEntity> Assignments => Set<AssignmentEntity>();
 
@@ -23,17 +31,134 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
 
     public DbSet<MobileAccountAuditEventEntity> MobileAccountAuditEvents => Set<MobileAccountAuditEventEntity>();
 
+    public DbSet<MobileNotificationEntity> MobileNotifications => Set<MobileNotificationEntity>();
+
+    public DbSet<MobileOutboxOperationEntity> MobileOutboxOperations => Set<MobileOutboxOperationEntity>();
+
+    public DbSet<MobileSyncConflictResolutionEntity> MobileSyncConflictResolutions => Set<MobileSyncConflictResolutionEntity>();
+
+    public DbSet<MobileUploadedFileEntity> MobileUploadedFiles => Set<MobileUploadedFileEntity>();
+
+    public DbSet<SiteUserEntity> SiteUsers => Set<SiteUserEntity>();
+
+    public DbSet<RoleEntity> Roles => Set<RoleEntity>();
+
+    public DbSet<PermissionEntity> Permissions => Set<PermissionEntity>();
+
+    public DbSet<SiteUserRoleEntity> SiteUserRoles => Set<SiteUserRoleEntity>();
+
+    public DbSet<RolePermissionEntity> RolePermissions => Set<RolePermissionEntity>();
+
+    public DbSet<SiteUserSessionEntity> SiteUserSessions => Set<SiteUserSessionEntity>();
+
+    public DbSet<InventoryCategoryEntity> InventoryCategories => Set<InventoryCategoryEntity>();
+
+    public DbSet<InventoryUnitEntity> InventoryUnits => Set<InventoryUnitEntity>();
+
+    public DbSet<InventoryItemEntity> InventoryItems => Set<InventoryItemEntity>();
+
+    public DbSet<InventoryWarehouseEntity> InventoryWarehouses => Set<InventoryWarehouseEntity>();
+
+    public DbSet<InventoryStockMoveEntity> InventoryStockMoves => Set<InventoryStockMoveEntity>();
+
+    public DbSet<InventoryCustodyCategoryEntity> InventoryCustodyCategories => Set<InventoryCustodyCategoryEntity>();
+
+    public DbSet<InventoryCustodyDocumentEntity> InventoryCustodyDocuments => Set<InventoryCustodyDocumentEntity>();
+
+    public DbSet<InventoryCustodyRecordEntity> InventoryCustodyRecords => Set<InventoryCustodyRecordEntity>();
+
+    public DbSet<InventoryCustodyRecordEventEntity> InventoryCustodyRecordEvents => Set<InventoryCustodyRecordEventEntity>();
+
+    public DbSet<InventoryPpeCardEntity> InventoryPpeCards => Set<InventoryPpeCardEntity>();
+
+    public DbSet<InventoryPpeCardLineEntity> InventoryPpeCardLines => Set<InventoryPpeCardLineEntity>();
+
+    public DbSet<InventoryPpeCardLineEventEntity> InventoryPpeCardLineEvents => Set<InventoryPpeCardLineEventEntity>();
+
+    public DbSet<InventoryPpeIssueTemplateEntity> InventoryPpeIssueTemplates => Set<InventoryPpeIssueTemplateEntity>();
+
+    public DbSet<InventoryItemSetEntity> InventoryItemSets => Set<InventoryItemSetEntity>();
+
+    public DbSet<InventoryItemSetItemEntity> InventoryItemSetItems => Set<InventoryItemSetItemEntity>();
+
+    public DbSet<InventoryPositionNormEntity> InventoryPositionNorms => Set<InventoryPositionNormEntity>();
+
+    public DbSet<InventoryPositionItemSetMapEntity> InventoryPositionItemSetMaps => Set<InventoryPositionItemSetMapEntity>();
+
+    public DbSet<InventoryReturnReasonEntity> InventoryReturnReasons => Set<InventoryReturnReasonEntity>();
+
+    public DbSet<InventoryWriteOffReasonEntity> InventoryWriteOffReasons => Set<InventoryWriteOffReasonEntity>();
+
+    public DbSet<InventorySystemLogEntity> InventorySystemLogs => Set<InventorySystemLogEntity>();
+
+    public DbSet<InventoryExportJobEntity> InventoryExportJobs => Set<InventoryExportJobEntity>();
+
+    public DbSet<InventoryLegacyImportRunEntity> InventoryLegacyImportRuns => Set<InventoryLegacyImportRunEntity>();
+
+    public DbSet<InventoryEmployeeLegacyLinkEntity> InventoryEmployeeLegacyLinks => Set<InventoryEmployeeLegacyLinkEntity>();
+
+    public DbSet<InventoryUserLegacyLinkEntity> InventoryUserLegacyLinks => Set<InventoryUserLegacyLinkEntity>();
+
+    public DbSet<EmuWorkSectionEntity> EmuWorkSections => Set<EmuWorkSectionEntity>();
+
+    public DbSet<EmuWaitReasonEntity> EmuWaitReasons => Set<EmuWaitReasonEntity>();
+
+    public DbSet<EmuNotCompletedReasonEntity> EmuNotCompletedReasons => Set<EmuNotCompletedReasonEntity>();
+
+    public DbSet<EmuWorkTemplateEntity> EmuWorkTemplates => Set<EmuWorkTemplateEntity>();
+
+    public DbSet<EmuFavoriteEmployeeEntity> EmuFavoriteEmployees => Set<EmuFavoriteEmployeeEntity>();
+
+    public DbSet<EmuWorkPlanTaskEntity> EmuWorkPlanTasks => Set<EmuWorkPlanTaskEntity>();
+
+    public DbSet<EmuWorkPlanTaskEmployeeEntity> EmuWorkPlanTaskEmployees => Set<EmuWorkPlanTaskEmployeeEntity>();
+
+    public DbSet<EmuWorkSessionEntity> EmuWorkSessions => Set<EmuWorkSessionEntity>();
+
+    public DbSet<EmuWorkSessionEmployeeEntity> EmuWorkSessionEmployees => Set<EmuWorkSessionEmployeeEntity>();
+
+    public DbSet<EmuWorkPauseEntity> EmuWorkPauses => Set<EmuWorkPauseEntity>();
+
+    public DbSet<EmuWorkPauseEmployeeEntity> EmuWorkPauseEmployees => Set<EmuWorkPauseEmployeeEntity>();
+
+    public DbSet<EmuWorkSessionCarryOverEntity> EmuWorkSessionCarryOvers => Set<EmuWorkSessionCarryOverEntity>();
+
+    public DbSet<EmuWorkAuditEventEntity> EmuWorkAuditEvents => Set<EmuWorkAuditEventEntity>();
+
+    public DbSet<EmuNotificationEntity> EmuNotifications => Set<EmuNotificationEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureRoutes(modelBuilder);
         ConfigureRoutePoints(modelBuilder);
         ConfigureEmployees(modelBuilder);
+        ConfigureAccountingEmployeeReferences(modelBuilder);
         ConfigurePatrolRequests(modelBuilder);
+        ConfigurePatrolResults(modelBuilder);
+        ConfigurePatrolResultIssues(modelBuilder);
+        ConfigurePatrolResultAttachments(modelBuilder);
         ConfigureAssignments(modelBuilder);
         ConfigureMobileAccounts(modelBuilder);
         ConfigureMobileAccountEmployeeBindings(modelBuilder);
         ConfigureMobileAccountSessions(modelBuilder);
         ConfigureMobileAccountAuditEvents(modelBuilder);
+        ConfigureMobileNotifications(modelBuilder);
+        ConfigureMobileOutboxOperations(modelBuilder);
+        ConfigureMobileSyncConflictResolutions(modelBuilder);
+        ConfigureMobileUploadedFiles(modelBuilder);
+        ConfigureSiteUsers(modelBuilder);
+        ConfigureRoles(modelBuilder);
+        ConfigurePermissions(modelBuilder);
+        ConfigureSiteUserRoles(modelBuilder);
+        ConfigureRolePermissions(modelBuilder);
+        ConfigureSiteUserSessions(modelBuilder);
+        ConfigureInventoryCategories(modelBuilder);
+        ConfigureInventoryUnits(modelBuilder);
+        ConfigureInventoryItems(modelBuilder);
+        ConfigureInventoryWarehouses(modelBuilder);
+        ConfigureInventoryStockMoves(modelBuilder);
+        ConfigureInventoryWorkflow(modelBuilder);
+        ConfigureEmu(modelBuilder);
     }
 
     private static void ConfigureRoutes(ModelBuilder modelBuilder)
@@ -90,7 +215,10 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
                 .IsUnique()
                 .HasDatabaseName("ux_route_points_route_seq");
 
-            entity.HasIndex(point => point.NfcCode).HasDatabaseName("ix_route_points_nfc_code");
+            entity.HasIndex(point => new { point.RouteId, point.NfcCode })
+                .IsUnique()
+                .HasFilter("nfc_code IS NOT NULL AND nfc_code <> ''")
+                .HasDatabaseName("ux_route_points_route_nfc_code");
         });
     }
 
@@ -106,6 +234,9 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(employee => employee.PersonnelNo).HasColumnName("personnel_no").HasMaxLength(60).IsRequired();
             entity.Property(employee => employee.Position).HasColumnName("position").HasMaxLength(160).IsRequired();
             entity.Property(employee => employee.Department).HasColumnName("department").HasMaxLength(160).IsRequired();
+            entity.Property(employee => employee.EmployeeGroup).HasColumnName("employee_group").HasMaxLength(120).IsRequired();
+            entity.Property(employee => employee.HiredAt).HasColumnName("hired_at");
+            entity.Property(employee => employee.BirthDate).HasColumnName("birth_date");
             entity.Property(employee => employee.Status).HasColumnName("status").HasMaxLength(60).IsRequired();
             entity.Property(employee => employee.Shift).HasColumnName("shift").HasMaxLength(40).IsRequired();
             entity.Property(employee => employee.HasMobileAccount).HasColumnName("has_mobile_account");
@@ -116,6 +247,29 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
                 .HasDatabaseName("ux_employees_personnel_no");
 
             entity.HasIndex(employee => employee.Status).HasDatabaseName("ix_employees_status");
+            entity.HasIndex(employee => employee.Department).HasDatabaseName("ix_employees_department");
+            entity.HasIndex(employee => employee.EmployeeGroup).HasDatabaseName("ix_employees_employee_group");
+        });
+    }
+
+    private static void ConfigureAccountingEmployeeReferences(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AccountingEmployeeReferenceEntity>(entity =>
+        {
+            entity.ToTable("accounting_employee_references");
+            entity.HasKey(reference => reference.Id);
+
+            entity.Property(reference => reference.Id).HasColumnName("id");
+            entity.Property(reference => reference.Kind).HasColumnName("kind").HasMaxLength(40).IsRequired();
+            entity.Property(reference => reference.Name).HasColumnName("name").HasMaxLength(180).IsRequired();
+            entity.Property(reference => reference.IsArchived).HasColumnName("is_archived");
+            entity.Property(reference => reference.CreatedAt).HasColumnName("created_at");
+
+            entity.HasIndex(reference => new { reference.Kind, reference.Name })
+                .IsUnique()
+                .HasDatabaseName("ux_accounting_employee_references_kind_name");
+            entity.HasIndex(reference => new { reference.Kind, reference.IsArchived })
+                .HasDatabaseName("ix_accounting_employee_references_kind_active");
         });
     }
 
@@ -132,6 +286,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(request => request.EmployeeName).HasColumnName("employee_name").HasMaxLength(220).IsRequired();
             entity.Property(request => request.RouteId).HasColumnName("route_id");
             entity.Property(request => request.RouteName).HasColumnName("route_name").HasMaxLength(160).IsRequired();
+            entity.Property(request => request.SourceResultId).HasColumnName("source_result_id");
             entity.Property(request => request.ScheduledDate).HasColumnName("scheduled_date");
             entity.Property(request => request.ScheduledTime).HasColumnName("scheduled_time");
             entity.Property(request => request.NotifyEmployee).HasColumnName("notify_employee");
@@ -150,12 +305,123 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
                 .HasForeignKey(request => request.RouteId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            entity.HasOne(request => request.SourceResult)
+                .WithMany()
+                .HasForeignKey(request => request.SourceResultId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             entity.HasIndex(request => request.Number)
                 .IsUnique()
                 .HasDatabaseName("ux_patrol_requests_number");
 
             entity.HasIndex(request => request.Status).HasDatabaseName("ix_patrol_requests_status");
             entity.HasIndex(request => request.ScheduledDate).HasDatabaseName("ix_patrol_requests_scheduled_date");
+            entity.HasIndex(request => request.SourceResultId).HasDatabaseName("ix_patrol_requests_source_result_id");
+        });
+    }
+
+    private static void ConfigurePatrolResults(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PatrolResultEntity>(entity =>
+        {
+            entity.ToTable("patrol_results");
+            entity.HasKey(result => result.Id);
+
+            entity.Property(result => result.Id).HasColumnName("id");
+            entity.Property(result => result.AssignmentId).HasColumnName("assignment_id");
+            entity.Property(result => result.RouteId).HasColumnName("route_id");
+            entity.Property(result => result.EmployeeId).HasColumnName("employee_id");
+            entity.Property(result => result.RoutePointId).HasColumnName("route_point_id");
+            entity.Property(result => result.Status).HasColumnName("status").HasMaxLength(80).IsRequired();
+            entity.Property(result => result.PointName).HasColumnName("point_name").HasMaxLength(160).IsRequired();
+            entity.Property(result => result.EmployeeName).HasColumnName("employee_name").HasMaxLength(220).IsRequired();
+            entity.Property(result => result.RouteName).HasColumnName("route_name").HasMaxLength(160).IsRequired();
+            entity.Property(result => result.Territory).HasColumnName("territory").HasMaxLength(160).IsRequired();
+            entity.Property(result => result.Shift).HasColumnName("shift").HasMaxLength(40).IsRequired();
+            entity.Property(result => result.PlannedAt).HasColumnName("planned_at");
+            entity.Property(result => result.ActualAt).HasColumnName("actual_at");
+            entity.Property(result => result.Deviation).HasColumnName("deviation").HasMaxLength(40).IsRequired();
+            entity.Property(result => result.Comment).HasColumnName("comment").HasMaxLength(1200).IsRequired();
+            entity.Property(result => result.IssueType).HasColumnName("issue_type").HasMaxLength(160).IsRequired();
+            entity.Property(result => result.Severity).HasColumnName("severity").HasMaxLength(60).IsRequired();
+            entity.Property(result => result.Photos).HasColumnName("photos");
+            entity.Property(result => result.CreatedAt).HasColumnName("created_at");
+
+            entity.HasOne(result => result.Assignment)
+                .WithMany()
+                .HasForeignKey(result => result.AssignmentId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(result => result.AssignmentId)
+                .HasDatabaseName("ix_patrol_results_assignment_id");
+
+            entity.HasOne(result => result.Route)
+                .WithMany()
+                .HasForeignKey(result => result.RouteId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(result => result.Employee)
+                .WithMany()
+                .HasForeignKey(result => result.EmployeeId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(result => result.RoutePoint)
+                .WithMany()
+                .HasForeignKey(result => result.RoutePointId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(result => result.Status).HasDatabaseName("ix_patrol_results_status");
+            entity.HasIndex(result => result.RouteId).HasDatabaseName("ix_patrol_results_route_id");
+            entity.HasIndex(result => result.EmployeeId).HasDatabaseName("ix_patrol_results_employee_id");
+            entity.HasIndex(result => result.ActualAt).HasDatabaseName("ix_patrol_results_actual_at");
+        });
+    }
+
+    private static void ConfigurePatrolResultIssues(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PatrolResultIssueEntity>(entity =>
+        {
+            entity.ToTable("patrol_result_issues");
+            entity.HasKey(issue => issue.Id);
+
+            entity.Property(issue => issue.Id).HasColumnName("id");
+            entity.Property(issue => issue.PatrolResultId).HasColumnName("patrol_result_id");
+            entity.Property(issue => issue.Type).HasColumnName("issue_type").HasMaxLength(160).IsRequired();
+            entity.Property(issue => issue.Severity).HasColumnName("severity").HasMaxLength(60).IsRequired();
+            entity.Property(issue => issue.Message).HasColumnName("message").HasMaxLength(1200).IsRequired();
+            entity.Property(issue => issue.CreatedAt).HasColumnName("created_at");
+
+            entity.HasOne(issue => issue.PatrolResult)
+                .WithMany(result => result.Issues)
+                .HasForeignKey(issue => issue.PatrolResultId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(issue => new { issue.PatrolResultId, issue.CreatedAt })
+                .HasDatabaseName("ix_patrol_result_issues_result_created");
+        });
+    }
+
+    private static void ConfigurePatrolResultAttachments(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PatrolResultAttachmentEntity>(entity =>
+        {
+            entity.ToTable("patrol_result_attachments");
+            entity.HasKey(attachment => attachment.Id);
+
+            entity.Property(attachment => attachment.Id).HasColumnName("id");
+            entity.Property(attachment => attachment.PatrolResultId).HasColumnName("patrol_result_id");
+            entity.Property(attachment => attachment.FileName).HasColumnName("file_name").HasMaxLength(260).IsRequired();
+            entity.Property(attachment => attachment.ContentType).HasColumnName("content_type").HasMaxLength(120).IsRequired();
+            entity.Property(attachment => attachment.SizeBytes).HasColumnName("size_bytes");
+            entity.Property(attachment => attachment.CreatedAt).HasColumnName("created_at");
+
+            entity.HasOne(attachment => attachment.PatrolResult)
+                .WithMany(result => result.Attachments)
+                .HasForeignKey(attachment => attachment.PatrolResultId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(attachment => new { attachment.PatrolResultId, attachment.CreatedAt })
+                .HasDatabaseName("ix_patrol_result_attachments_result_created");
         });
     }
 
@@ -272,10 +538,20 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(session => session.Id).HasColumnName("id");
             entity.Property(session => session.MobileAccountId).HasColumnName("mobile_account_id");
             entity.Property(session => session.Status).HasColumnName("status").HasMaxLength(60).IsRequired();
+            entity.Property(session => session.DeviceId).HasColumnName("device_id").HasMaxLength(120).IsRequired();
             entity.Property(session => session.Device).HasColumnName("device").HasMaxLength(160).IsRequired();
             entity.Property(session => session.Platform).HasColumnName("platform").HasMaxLength(80).IsRequired();
             entity.Property(session => session.AppVersion).HasColumnName("app_version").HasMaxLength(40).IsRequired();
             entity.Property(session => session.IpAddress).HasColumnName("ip_address").HasMaxLength(80).IsRequired();
+            entity.Property(session => session.PushToken).HasColumnName("push_token").HasMaxLength(512).IsRequired();
+            entity.Property(session => session.PushTokenRegisteredAt).HasColumnName("push_token_registered_at");
+            entity.Property(session => session.PushTokenRevokedAt).HasColumnName("push_token_revoked_at");
+            entity.Property(session => session.TokenHash).HasColumnName("token_hash").HasMaxLength(128).IsRequired();
+            entity.Property(session => session.RefreshTokenHash).HasColumnName("refresh_token_hash").HasMaxLength(128).IsRequired();
+            entity.Property(session => session.CreatedAt).HasColumnName("created_at");
+            entity.Property(session => session.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(session => session.RefreshExpiresAt).HasColumnName("refresh_expires_at");
+            entity.Property(session => session.RevokedAt).HasColumnName("revoked_at");
             entity.Property(session => session.LastSeenAt).HasColumnName("last_seen_at");
 
             entity.HasOne(session => session.MobileAccount)
@@ -285,6 +561,14 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
 
             entity.HasIndex(session => new { session.MobileAccountId, session.LastSeenAt })
                 .HasDatabaseName("ix_mobile_account_sessions_account_seen");
+            entity.HasIndex(session => session.TokenHash)
+                .IsUnique()
+                .HasFilter("token_hash <> ''")
+                .HasDatabaseName("ux_mobile_account_sessions_token_hash");
+            entity.HasIndex(session => session.RefreshTokenHash)
+                .IsUnique()
+                .HasFilter("refresh_token_hash <> ''")
+                .HasDatabaseName("ux_mobile_account_sessions_refresh_token_hash");
         });
     }
 
@@ -306,6 +590,1016 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
                 .HasDatabaseName("ix_mobile_account_audit_account_created");
             entity.HasIndex(auditEvent => auditEvent.Action)
                 .HasDatabaseName("ix_mobile_account_audit_action");
+        });
+    }
+
+    private static void ConfigureMobileNotifications(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<MobileNotificationEntity>(entity =>
+        {
+            entity.ToTable("mobile_notifications");
+            entity.HasKey(notification => notification.Id);
+
+            entity.Property(notification => notification.Id).HasColumnName("id");
+            entity.Property(notification => notification.MobileAccountId).HasColumnName("mobile_account_id");
+            entity.Property(notification => notification.EmployeeId).HasColumnName("employee_id");
+            entity.Property(notification => notification.Type).HasColumnName("notification_type").HasMaxLength(80).IsRequired();
+            entity.Property(notification => notification.Title).HasColumnName("title").HasMaxLength(220).IsRequired();
+            entity.Property(notification => notification.Message).HasColumnName("message").HasMaxLength(1200).IsRequired();
+            entity.Property(notification => notification.EntityType).HasColumnName("entity_type").HasMaxLength(80);
+            entity.Property(notification => notification.EntityId).HasColumnName("entity_id").HasMaxLength(120);
+            entity.Property(notification => notification.IdempotencyKey).HasColumnName("idempotency_key").HasMaxLength(160).IsRequired();
+            entity.Property(notification => notification.PushStatus).HasColumnName("push_status").HasMaxLength(40).IsRequired();
+            entity.Property(notification => notification.PushTokenSnapshot).HasColumnName("push_token_snapshot").HasMaxLength(512).IsRequired();
+            entity.Property(notification => notification.PushAttemptCount).HasColumnName("push_attempt_count");
+            entity.Property(notification => notification.PushLastError).HasColumnName("push_last_error").HasMaxLength(1200).IsRequired();
+            entity.Property(notification => notification.PushSentAt).HasColumnName("push_sent_at");
+            entity.Property(notification => notification.PushClaimedAt).HasColumnName("push_claimed_at");
+            entity.Property(notification => notification.CreatedAt).HasColumnName("created_at");
+            entity.Property(notification => notification.ReadAt).HasColumnName("read_at");
+
+            entity.HasOne(notification => notification.MobileAccount)
+                .WithMany()
+                .HasForeignKey(notification => notification.MobileAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(notification => new { notification.MobileAccountId, notification.CreatedAt })
+                .HasDatabaseName("ix_mobile_notifications_account_created");
+            entity.HasIndex(notification => new { notification.MobileAccountId, notification.IdempotencyKey })
+                .IsUnique()
+                .HasDatabaseName("ux_mobile_notifications_account_idempotency");
+            entity.HasIndex(notification => notification.ReadAt)
+                .HasDatabaseName("ix_mobile_notifications_read_at");
+            entity.HasIndex(notification => new { notification.PushStatus, notification.CreatedAt })
+                .HasDatabaseName("ix_mobile_notifications_push_status_created");
+        });
+    }
+
+    private static void ConfigureMobileOutboxOperations(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<MobileOutboxOperationEntity>(entity =>
+        {
+            entity.ToTable("mobile_outbox_operations");
+            entity.HasKey(operation => operation.ClientOperationId);
+
+            entity.Property(operation => operation.ClientOperationId).HasColumnName("client_operation_id").HasMaxLength(80);
+            entity.Property(operation => operation.MobileAccountId).HasColumnName("mobile_account_id");
+            entity.Property(operation => operation.CommandType).HasColumnName("command_type").HasMaxLength(80).IsRequired();
+            entity.Property(operation => operation.EntityType).HasColumnName("entity_type").HasMaxLength(80).IsRequired();
+            entity.Property(operation => operation.EntityLocalId).HasColumnName("entity_local_id").HasMaxLength(120);
+            entity.Property(operation => operation.EntityServerId).HasColumnName("entity_server_id").HasMaxLength(120);
+            entity.Property(operation => operation.PayloadJson).HasColumnName("payload_json").HasColumnType("jsonb").IsRequired();
+            entity.Property(operation => operation.CreatedAtLocal).HasColumnName("created_at_local");
+            entity.Property(operation => operation.CreatedAtServer).HasColumnName("created_at_server");
+            entity.Property(operation => operation.AttemptCount).HasColumnName("attempt_count");
+            entity.Property(operation => operation.Status).HasColumnName("status").HasMaxLength(40).IsRequired();
+            entity.Property(operation => operation.ResponseJson).HasColumnName("response_json").HasColumnType("jsonb").IsRequired();
+
+            entity.HasOne(operation => operation.MobileAccount)
+                .WithMany()
+                .HasForeignKey(operation => operation.MobileAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(operation => new { operation.MobileAccountId, operation.CreatedAtServer })
+                .HasDatabaseName("ix_mobile_outbox_operations_account_created");
+            entity.HasIndex(operation => operation.Status)
+                .HasDatabaseName("ix_mobile_outbox_operations_status");
+        });
+    }
+
+    private static void ConfigureMobileUploadedFiles(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<MobileUploadedFileEntity>(entity =>
+        {
+            entity.ToTable("mobile_uploaded_files");
+            entity.HasKey(file => file.Id);
+
+            entity.Property(file => file.Id).HasColumnName("id");
+            entity.Property(file => file.MobileAccountId).HasColumnName("mobile_account_id");
+            entity.Property(file => file.ClientFileId).HasColumnName("client_file_id").HasMaxLength(80).IsRequired();
+            entity.Property(file => file.AssignmentId).HasColumnName("assignment_id");
+            entity.Property(file => file.PointId).HasColumnName("point_id");
+            entity.Property(file => file.RemarkId).HasColumnName("remark_id").HasMaxLength(80);
+            entity.Property(file => file.StorageFileName).HasColumnName("storage_file_name").HasMaxLength(260).IsRequired();
+            entity.Property(file => file.OriginalFileName).HasColumnName("original_file_name").HasMaxLength(260).IsRequired();
+            entity.Property(file => file.ContentType).HasColumnName("content_type").HasMaxLength(120).IsRequired();
+            entity.Property(file => file.Sha256).HasColumnName("sha256").HasMaxLength(128).IsRequired();
+            entity.Property(file => file.SizeBytes).HasColumnName("size_bytes");
+            entity.Property(file => file.CapturedAtLocal).HasColumnName("captured_at_local");
+            entity.Property(file => file.UploadedAt).HasColumnName("uploaded_at");
+
+            entity.HasOne(file => file.MobileAccount)
+                .WithMany()
+                .HasForeignKey(file => file.MobileAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(file => file.Assignment)
+                .WithMany()
+                .HasForeignKey(file => file.AssignmentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(file => file.Point)
+                .WithMany()
+                .HasForeignKey(file => file.PointId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(file => new { file.MobileAccountId, file.ClientFileId })
+                .IsUnique()
+                .HasDatabaseName("ux_mobile_uploaded_files_account_client_file");
+            entity.HasIndex(file => new { file.AssignmentId, file.PointId })
+                .HasDatabaseName("ix_mobile_uploaded_files_assignment_point");
+            entity.HasIndex(file => new { file.MobileAccountId, file.RemarkId })
+                .HasDatabaseName("ix_mobile_uploaded_files_account_remark");
+        });
+    }
+
+    private static void ConfigureMobileSyncConflictResolutions(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<MobileSyncConflictResolutionEntity>(entity =>
+        {
+            entity.ToTable("mobile_sync_conflict_resolutions");
+            entity.HasKey(resolution => resolution.ClientOperationId);
+
+            entity.Property(resolution => resolution.ClientOperationId)
+                .HasColumnName("client_operation_id")
+                .HasMaxLength(80);
+            entity.Property(resolution => resolution.Status)
+                .HasColumnName("status")
+                .HasMaxLength(40)
+                .IsRequired();
+            entity.Property(resolution => resolution.Comment)
+                .HasColumnName("comment")
+                .HasMaxLength(1200)
+                .IsRequired();
+            entity.Property(resolution => resolution.ResolvedBy)
+                .HasColumnName("resolved_by")
+                .HasMaxLength(220)
+                .IsRequired();
+            entity.Property(resolution => resolution.ResolvedAt).HasColumnName("resolved_at");
+
+            entity.HasOne(resolution => resolution.Operation)
+                .WithOne()
+                .HasForeignKey<MobileSyncConflictResolutionEntity>(resolution => resolution.ClientOperationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(resolution => resolution.Status)
+                .HasDatabaseName("ix_mobile_sync_conflict_resolutions_status");
+        });
+    }
+
+    private static void ConfigureSiteUsers(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SiteUserEntity>(entity =>
+        {
+            entity.ToTable("site_users");
+            entity.HasKey(user => user.Id);
+
+            entity.Property(user => user.Id).HasColumnName("id");
+            entity.Property(user => user.Login).HasColumnName("login").HasMaxLength(120).IsRequired();
+            entity.Property(user => user.NormalizedLogin).HasColumnName("normalized_login").HasMaxLength(120).IsRequired();
+            entity.Property(user => user.DisplayName).HasColumnName("display_name").HasMaxLength(220).IsRequired();
+            entity.Property(user => user.PasswordHash).HasColumnName("password_hash").HasMaxLength(512).IsRequired();
+            entity.Property(user => user.Status).HasColumnName("status").HasMaxLength(60).IsRequired();
+            entity.Property(user => user.CreatedAt).HasColumnName("created_at");
+            entity.Property(user => user.LastLoginAt).HasColumnName("last_login_at");
+
+            entity.HasIndex(user => user.NormalizedLogin)
+                .IsUnique()
+                .HasDatabaseName("ux_site_users_normalized_login");
+            entity.HasIndex(user => user.Status).HasDatabaseName("ix_site_users_status");
+            entity.HasIndex(user => user.DisplayName).HasDatabaseName("ix_site_users_display_name");
+        });
+    }
+
+    private static void ConfigureRoles(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<RoleEntity>(entity =>
+        {
+            entity.ToTable("roles");
+            entity.HasKey(role => role.Id);
+
+            entity.Property(role => role.Id).HasColumnName("id");
+            entity.Property(role => role.Code).HasColumnName("code").HasMaxLength(120).IsRequired();
+            entity.Property(role => role.Name).HasColumnName("name").HasMaxLength(220).IsRequired();
+
+            entity.HasIndex(role => role.Code)
+                .IsUnique()
+                .HasDatabaseName("ux_roles_code");
+        });
+    }
+
+    private static void ConfigurePermissions(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PermissionEntity>(entity =>
+        {
+            entity.ToTable("permissions");
+            entity.HasKey(permission => permission.Id);
+
+            entity.Property(permission => permission.Id).HasColumnName("id");
+            entity.Property(permission => permission.Code).HasColumnName("code").HasMaxLength(160).IsRequired();
+            entity.Property(permission => permission.Name).HasColumnName("name").HasMaxLength(220).IsRequired();
+
+            entity.HasIndex(permission => permission.Code)
+                .IsUnique()
+                .HasDatabaseName("ux_permissions_code");
+        });
+    }
+
+    private static void ConfigureSiteUserRoles(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SiteUserRoleEntity>(entity =>
+        {
+            entity.ToTable("site_user_roles");
+            entity.HasKey(userRole => new { userRole.SiteUserId, userRole.RoleId });
+
+            entity.Property(userRole => userRole.SiteUserId).HasColumnName("site_user_id");
+            entity.Property(userRole => userRole.RoleId).HasColumnName("role_id");
+
+            entity.HasOne(userRole => userRole.SiteUser)
+                .WithMany(user => user.Roles)
+                .HasForeignKey(userRole => userRole.SiteUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(userRole => userRole.Role)
+                .WithMany(role => role.Users)
+                .HasForeignKey(userRole => userRole.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureRolePermissions(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<RolePermissionEntity>(entity =>
+        {
+            entity.ToTable("role_permissions");
+            entity.HasKey(rolePermission => new { rolePermission.RoleId, rolePermission.PermissionId });
+
+            entity.Property(rolePermission => rolePermission.RoleId).HasColumnName("role_id");
+            entity.Property(rolePermission => rolePermission.PermissionId).HasColumnName("permission_id");
+
+            entity.HasOne(rolePermission => rolePermission.Role)
+                .WithMany(role => role.Permissions)
+                .HasForeignKey(rolePermission => rolePermission.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(rolePermission => rolePermission.Permission)
+                .WithMany(permission => permission.Roles)
+                .HasForeignKey(rolePermission => rolePermission.PermissionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureSiteUserSessions(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SiteUserSessionEntity>(entity =>
+        {
+            entity.ToTable("site_user_sessions");
+            entity.HasKey(session => session.Id);
+
+            entity.Property(session => session.Id).HasColumnName("id");
+            entity.Property(session => session.SiteUserId).HasColumnName("site_user_id");
+            entity.Property(session => session.TokenHash).HasColumnName("token_hash").HasMaxLength(128).IsRequired();
+            entity.Property(session => session.CreatedAt).HasColumnName("created_at");
+            entity.Property(session => session.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(session => session.RevokedAt).HasColumnName("revoked_at");
+
+            entity.HasOne(session => session.SiteUser)
+                .WithMany(user => user.Sessions)
+                .HasForeignKey(session => session.SiteUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(session => session.TokenHash)
+                .IsUnique()
+                .HasDatabaseName("ux_site_user_sessions_token_hash");
+            entity.HasIndex(session => new { session.SiteUserId, session.ExpiresAt })
+                .HasDatabaseName("ix_site_user_sessions_user_expires");
+        });
+    }
+
+    private static void ConfigureInventoryCategories(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<InventoryCategoryEntity>(entity =>
+        {
+            entity.ToTable("categories", "inventory");
+            entity.HasKey(category => category.Id);
+
+            entity.Property(category => category.Id).HasColumnName("id");
+            entity.Property(category => category.ParentId).HasColumnName("parent_id");
+            entity.Property(category => category.LegacyId).HasColumnName("legacy_id");
+            entity.Property(category => category.Name).HasColumnName("name").HasMaxLength(160).IsRequired();
+            entity.Property(category => category.IsArchived).HasColumnName("is_archived");
+            entity.Property(category => category.CreatedAt).HasColumnName("created_at");
+
+            entity.HasOne(category => category.Parent)
+                .WithMany(category => category.Children)
+                .HasForeignKey(category => category.ParentId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(category => new { category.ParentId, category.Name })
+                .IsUnique()
+                .HasDatabaseName("ux_inventory_categories_parent_name");
+
+            entity.HasIndex(category => category.LegacyId)
+                .HasDatabaseName("ix_inventory_categories_legacy_id");
+        });
+    }
+
+    private static void ConfigureInventoryUnits(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<InventoryUnitEntity>(entity =>
+        {
+            entity.ToTable("units", "inventory");
+            entity.HasKey(unit => unit.Id);
+
+            entity.Property(unit => unit.Id).HasColumnName("id");
+            entity.Property(unit => unit.LegacyId).HasColumnName("legacy_id");
+            entity.Property(unit => unit.Name).HasColumnName("name").HasMaxLength(80).IsRequired();
+            entity.Property(unit => unit.Symbol).HasColumnName("symbol").HasMaxLength(24).IsRequired();
+
+            entity.HasIndex(unit => unit.Name)
+                .IsUnique()
+                .HasDatabaseName("ux_inventory_units_name");
+
+            entity.HasIndex(unit => unit.Symbol)
+                .IsUnique()
+                .HasDatabaseName("ux_inventory_units_symbol");
+
+            entity.HasIndex(unit => unit.LegacyId)
+                .HasDatabaseName("ix_inventory_units_legacy_id");
+        });
+    }
+
+    private static void ConfigureInventoryItems(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<InventoryItemEntity>(entity =>
+        {
+            entity.ToTable("items", "inventory");
+            entity.HasKey(item => item.Id);
+
+            entity.Property(item => item.Id).HasColumnName("id");
+            entity.Property(item => item.LegacyId).HasColumnName("legacy_id");
+            entity.Property(item => item.Name).HasColumnName("name").HasMaxLength(260).IsRequired();
+            entity.Property(item => item.Sku).HasColumnName("sku").HasMaxLength(140).IsRequired();
+            entity.Property(item => item.CategoryId).HasColumnName("category_id");
+            entity.Property(item => item.UnitId).HasColumnName("unit_id");
+            entity.Property(item => item.ItemKind).HasColumnName("item_kind").HasMaxLength(140).IsRequired();
+            entity.Property(item => item.NormItemName).HasColumnName("norm_item_name").HasMaxLength(260).IsRequired();
+            entity.Property(item => item.ActualItemName).HasColumnName("actual_item_name").HasMaxLength(260).IsRequired();
+            entity.Property(item => item.BrandName).HasColumnName("brand_name").HasMaxLength(140).IsRequired();
+            entity.Property(item => item.ModelName).HasColumnName("model_name").HasMaxLength(140).IsRequired();
+            entity.Property(item => item.Article).HasColumnName("article").HasMaxLength(140).IsRequired();
+            entity.Property(item => item.ProtectionClass).HasColumnName("protection_class").HasMaxLength(140).IsRequired();
+            entity.Property(item => item.ClothingSize).HasColumnName("clothing_size").HasMaxLength(80).IsRequired();
+            entity.Property(item => item.HeightSize).HasColumnName("height_size").HasMaxLength(80).IsRequired();
+            entity.Property(item => item.ShoeSize).HasColumnName("shoe_size").HasMaxLength(80).IsRequired();
+            entity.Property(item => item.HeadSize).HasColumnName("head_size").HasMaxLength(80).IsRequired();
+            entity.Property(item => item.GloveSize).HasColumnName("glove_size").HasMaxLength(80).IsRequired();
+            entity.Property(item => item.RespiratorSize).HasColumnName("respirator_size").HasMaxLength(80).IsRequired();
+            entity.Property(item => item.DefaultLifeMonths).HasColumnName("default_life_months");
+            entity.Property(item => item.DefaultUnitPriceMinor).HasColumnName("default_unit_price_minor");
+            entity.Property(item => item.MinStockQty).HasColumnName("min_stock_qty").HasPrecision(12, 3);
+            entity.Property(item => item.IsConsumable).HasColumnName("is_consumable");
+            entity.Property(item => item.TrackLife).HasColumnName("track_life");
+            entity.Property(item => item.TrackingType).HasColumnName("tracking_type").HasMaxLength(40).IsRequired();
+            entity.Property(item => item.Comment).HasColumnName("comment").HasMaxLength(1200).IsRequired();
+            entity.Property(item => item.IsActive).HasColumnName("is_active");
+            entity.Property(item => item.CreatedAt).HasColumnName("created_at");
+
+            entity.HasOne(item => item.Category)
+                .WithMany(category => category.Items)
+                .HasForeignKey(item => item.CategoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(item => item.Unit)
+                .WithMany(unit => unit.Items)
+                .HasForeignKey(item => item.UnitId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(item => item.Name)
+                .IsUnique()
+                .HasDatabaseName("ux_inventory_items_name");
+
+            entity.HasIndex(item => item.Sku).HasDatabaseName("ix_inventory_items_sku");
+            entity.HasIndex(item => item.CategoryId).HasDatabaseName("ix_inventory_items_category_id");
+            entity.HasIndex(item => item.LegacyId).HasDatabaseName("ix_inventory_items_legacy_id");
+            entity.HasIndex(item => item.IsActive).HasDatabaseName("ix_inventory_items_is_active");
+        });
+    }
+
+    private static void ConfigureInventoryWarehouses(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<InventoryWarehouseEntity>(entity =>
+        {
+            entity.ToTable("warehouses", "inventory");
+            entity.HasKey(warehouse => warehouse.Id);
+
+            entity.Property(warehouse => warehouse.Id).HasColumnName("id");
+            entity.Property(warehouse => warehouse.LegacyId).HasColumnName("legacy_id");
+            entity.Property(warehouse => warehouse.Name).HasColumnName("name").HasMaxLength(160).IsRequired();
+            entity.Property(warehouse => warehouse.IsDefault).HasColumnName("is_default");
+            entity.Property(warehouse => warehouse.IsArchived).HasColumnName("is_archived");
+
+            entity.HasIndex(warehouse => warehouse.Name)
+                .IsUnique()
+                .HasDatabaseName("ux_inventory_warehouses_name");
+
+            entity.HasIndex(warehouse => warehouse.LegacyId)
+                .HasDatabaseName("ix_inventory_warehouses_legacy_id");
+        });
+    }
+
+    private static void ConfigureInventoryStockMoves(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<InventoryStockMoveEntity>(entity =>
+        {
+            entity.ToTable("stock_moves", "inventory");
+            entity.HasKey(move => move.Id);
+
+            entity.Property(move => move.Id).HasColumnName("id");
+            entity.Property(move => move.LegacyId).HasColumnName("legacy_id");
+            entity.Property(move => move.ItemId).HasColumnName("item_id");
+            entity.Property(move => move.WarehouseId).HasColumnName("warehouse_id");
+            entity.Property(move => move.QuantityDelta).HasColumnName("qty_delta").HasPrecision(12, 3);
+            entity.Property(move => move.MovedAt).HasColumnName("moved_at");
+            entity.Property(move => move.EmployeeId).HasColumnName("employee_id");
+            entity.Property(move => move.MoveType).HasColumnName("move_type").HasMaxLength(60).IsRequired();
+            entity.Property(move => move.ReferenceType).HasColumnName("reference_type").HasMaxLength(80).IsRequired();
+            entity.Property(move => move.ReferenceId).HasColumnName("reference_id");
+            entity.Property(move => move.CustodyRecordId).HasColumnName("custody_record_id");
+            entity.Property(move => move.PpeCardLineId).HasColumnName("ppe_card_line_id");
+
+            entity.HasOne(move => move.Item)
+                .WithMany(item => item.StockMoves)
+                .HasForeignKey(move => move.ItemId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(move => move.Warehouse)
+                .WithMany(warehouse => warehouse.StockMoves)
+                .HasForeignKey(move => move.WarehouseId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(move => move.Employee)
+                .WithMany()
+                .HasForeignKey(move => move.EmployeeId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(move => move.CustodyRecord)
+                .WithMany(record => record.StockMoves)
+                .HasForeignKey(move => move.CustodyRecordId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(move => move.PpeCardLine)
+                .WithMany(line => line.StockMoves)
+                .HasForeignKey(move => move.PpeCardLineId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(move => new { move.ItemId, move.MovedAt })
+                .HasDatabaseName("ix_inventory_stock_moves_item_moved");
+
+            entity.HasIndex(move => new { move.WarehouseId, move.MovedAt })
+                .HasDatabaseName("ix_inventory_stock_moves_warehouse_moved");
+
+            entity.HasIndex(move => move.LegacyId)
+                .HasDatabaseName("ix_inventory_stock_moves_legacy_id");
+
+            entity.HasIndex(move => move.CustodyRecordId)
+                .HasDatabaseName("ix_inventory_stock_moves_custody_record_id");
+
+            entity.HasIndex(move => move.PpeCardLineId)
+                .HasDatabaseName("ix_inventory_stock_moves_ppe_card_line_id");
+        });
+    }
+
+    private static void ConfigureInventoryWorkflow(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<InventoryCustodyCategoryEntity>(entity =>
+        {
+            entity.ToTable("custody_categories", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.LegacyId).HasColumnName("legacy_id");
+            entity.Property(row => row.Name).HasColumnName("name").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.IsArchived).HasColumnName("is_archived");
+            entity.HasIndex(row => row.Name).IsUnique().HasDatabaseName("ux_inventory_custody_categories_name");
+            entity.HasIndex(row => row.LegacyId).HasDatabaseName("ix_inventory_custody_categories_legacy_id");
+        });
+
+        modelBuilder.Entity<InventoryCustodyDocumentEntity>(entity =>
+        {
+            entity.ToTable("custody_documents", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.LegacyId).HasColumnName("legacy_id");
+            entity.Property(row => row.Number).HasColumnName("number").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.EmployeeId).HasColumnName("employee_id");
+            entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.ClosedAt).HasColumnName("closed_at");
+            entity.Property(row => row.ArchivedAt).HasColumnName("archived_at");
+            entity.HasOne(row => row.Employee).WithMany().HasForeignKey(row => row.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => row.Number).IsUnique().HasDatabaseName("ux_inventory_custody_documents_number");
+            entity.HasIndex(row => new { row.EmployeeId, row.Status }).HasDatabaseName("ix_inventory_custody_documents_employee_status");
+            entity.HasIndex(row => row.LegacyId).HasDatabaseName("ix_inventory_custody_documents_legacy_id");
+        });
+
+        modelBuilder.Entity<InventoryCustodyRecordEntity>(entity =>
+        {
+            entity.ToTable("custody_records", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.LegacyId).HasColumnName("legacy_id");
+            entity.Property(row => row.DocumentId).HasColumnName("document_id");
+            entity.Property(row => row.EmployeeId).HasColumnName("employee_id");
+            entity.Property(row => row.ItemId).HasColumnName("item_id");
+            entity.Property(row => row.WarehouseId).HasColumnName("warehouse_id");
+            entity.Property(row => row.Quantity).HasColumnName("quantity").HasPrecision(12, 3);
+            entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.Comment).HasColumnName("comment").HasMaxLength(1200).IsRequired();
+            entity.Property(row => row.IssuedAt).HasColumnName("issued_at");
+            entity.Property(row => row.ClosedAt).HasColumnName("closed_at");
+            entity.Property(row => row.ArchivedAt).HasColumnName("archived_at");
+            entity.HasOne(row => row.Document).WithMany(document => document.Records).HasForeignKey(row => row.DocumentId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.Employee).WithMany().HasForeignKey(row => row.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(row => row.Item).WithMany().HasForeignKey(row => row.ItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(row => row.Warehouse).WithMany().HasForeignKey(row => row.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.EmployeeId, row.Status }).HasDatabaseName("ix_inventory_custody_records_employee_status");
+            entity.HasIndex(row => row.DocumentId).HasDatabaseName("ix_inventory_custody_records_document_id");
+            entity.HasIndex(row => row.LegacyId).HasDatabaseName("ix_inventory_custody_records_legacy_id");
+        });
+
+        modelBuilder.Entity<InventoryCustodyRecordEventEntity>(entity =>
+        {
+            entity.ToTable("custody_record_events", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.LegacyId).HasColumnName("legacy_id");
+            entity.Property(row => row.RecordId).HasColumnName("record_id");
+            entity.Property(row => row.EventType).HasColumnName("event_type").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.FromStatus).HasColumnName("from_status").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.ToStatus).HasColumnName("to_status").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.Comment).HasColumnName("comment").HasMaxLength(1200).IsRequired();
+            entity.Property(row => row.Actor).HasColumnName("actor").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasOne(row => row.Record).WithMany(record => record.Events).HasForeignKey(row => row.RecordId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(row => new { row.RecordId, row.CreatedAt }).HasDatabaseName("ix_inventory_custody_events_record_created");
+            entity.HasIndex(row => row.LegacyId).HasDatabaseName("ix_inventory_custody_events_legacy_id");
+        });
+
+        modelBuilder.Entity<InventoryPpeCardEntity>(entity =>
+        {
+            entity.ToTable("ppe_cards", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.LegacyId).HasColumnName("legacy_id");
+            entity.Property(row => row.EmployeeId).HasColumnName("employee_id");
+            entity.Property(row => row.Position).HasColumnName("position").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.Comment).HasColumnName("comment").HasMaxLength(1200).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.ArchivedAt).HasColumnName("archived_at");
+            entity.HasOne(row => row.Employee).WithMany().HasForeignKey(row => row.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.EmployeeId, row.ArchivedAt }).HasDatabaseName("ix_inventory_ppe_cards_employee_archived");
+            entity.HasIndex(row => row.LegacyId).HasDatabaseName("ix_inventory_ppe_cards_legacy_id");
+        });
+
+        modelBuilder.Entity<InventoryPpeCardLineEntity>(entity =>
+        {
+            entity.ToTable("ppe_card_lines", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.LegacyId).HasColumnName("legacy_id");
+            entity.Property(row => row.CardId).HasColumnName("card_id");
+            entity.Property(row => row.ItemId).HasColumnName("item_id");
+            entity.Property(row => row.WarehouseId).HasColumnName("warehouse_id");
+            entity.Property(row => row.Quantity).HasColumnName("quantity").HasPrecision(12, 3);
+            entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.IssuedAt).HasColumnName("issued_at");
+            entity.Property(row => row.DueAt).HasColumnName("due_at");
+            entity.Property(row => row.Comment).HasColumnName("comment").HasMaxLength(1200).IsRequired();
+            entity.HasOne(row => row.Card).WithMany(card => card.Lines).HasForeignKey(row => row.CardId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.Item).WithMany().HasForeignKey(row => row.ItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(row => row.Warehouse).WithMany().HasForeignKey(row => row.WarehouseId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(row => new { row.CardId, row.Status }).HasDatabaseName("ix_inventory_ppe_lines_card_status");
+            entity.HasIndex(row => row.LegacyId).HasDatabaseName("ix_inventory_ppe_lines_legacy_id");
+        });
+
+        modelBuilder.Entity<InventoryPpeCardLineEventEntity>(entity =>
+        {
+            entity.ToTable("ppe_card_line_events", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.LegacyId).HasColumnName("legacy_id");
+            entity.Property(row => row.LineId).HasColumnName("line_id");
+            entity.Property(row => row.EventType).HasColumnName("event_type").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.FromStatus).HasColumnName("from_status").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.ToStatus).HasColumnName("to_status").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.Comment).HasColumnName("comment").HasMaxLength(1200).IsRequired();
+            entity.Property(row => row.Actor).HasColumnName("actor").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasOne(row => row.Line).WithMany(line => line.Events).HasForeignKey(row => row.LineId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(row => new { row.LineId, row.CreatedAt }).HasDatabaseName("ix_inventory_ppe_events_line_created");
+            entity.HasIndex(row => row.LegacyId).HasDatabaseName("ix_inventory_ppe_events_legacy_id");
+        });
+
+        ConfigureSimpleInventoryEntity<InventoryPpeIssueTemplateEntity>(modelBuilder, "ppe_issue_templates");
+        ConfigureSimpleInventoryEntity<InventoryReturnReasonEntity>(modelBuilder, "return_reasons");
+        ConfigureSimpleInventoryEntity<InventoryWriteOffReasonEntity>(modelBuilder, "write_off_reasons");
+
+        modelBuilder.Entity<InventoryItemSetEntity>(entity =>
+        {
+            entity.ToTable("item_sets", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.LegacyId).HasColumnName("legacy_id");
+            entity.Property(row => row.Name).HasColumnName("name").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.IsArchived).HasColumnName("is_archived");
+            entity.HasIndex(row => row.Name).IsUnique().HasDatabaseName("ux_inventory_item_sets_name");
+            entity.HasIndex(row => row.LegacyId).HasDatabaseName("ix_inventory_item_sets_legacy_id");
+        });
+
+        modelBuilder.Entity<InventoryItemSetItemEntity>(entity =>
+        {
+            entity.ToTable("item_set_items", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.ItemSetId).HasColumnName("item_set_id");
+            entity.Property(row => row.ItemId).HasColumnName("item_id");
+            entity.Property(row => row.Quantity).HasColumnName("quantity").HasPrecision(12, 3);
+            entity.HasOne(row => row.ItemSet).WithMany(set => set.Items).HasForeignKey(row => row.ItemSetId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.Item).WithMany().HasForeignKey(row => row.ItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.ItemSetId, row.ItemId }).IsUnique().HasDatabaseName("ux_inventory_item_set_items_set_item");
+        });
+
+        modelBuilder.Entity<InventoryPositionNormEntity>(entity =>
+        {
+            entity.ToTable("position_norms", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.LegacyId).HasColumnName("legacy_id");
+            entity.Property(row => row.PositionName).HasColumnName("position_name").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.ItemId).HasColumnName("item_id");
+            entity.Property(row => row.Quantity).HasColumnName("quantity").HasPrecision(12, 3);
+            entity.Property(row => row.LifeMonths).HasColumnName("life_months");
+            entity.HasOne(row => row.Item).WithMany().HasForeignKey(row => row.ItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.PositionName, row.ItemId }).IsUnique().HasDatabaseName("ux_inventory_position_norms_position_item");
+            entity.HasIndex(row => row.LegacyId).HasDatabaseName("ix_inventory_position_norms_legacy_id");
+        });
+
+        modelBuilder.Entity<InventoryPositionItemSetMapEntity>(entity =>
+        {
+            entity.ToTable("position_item_set_maps", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.PositionName).HasColumnName("position_name").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.ItemSetId).HasColumnName("item_set_id");
+            entity.HasOne(row => row.ItemSet).WithMany().HasForeignKey(row => row.ItemSetId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(row => new { row.PositionName, row.ItemSetId }).IsUnique().HasDatabaseName("ux_inventory_position_item_sets_position_set");
+        });
+
+        modelBuilder.Entity<InventorySystemLogEntity>(entity =>
+        {
+            entity.ToTable("system_log", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.LegacyId).HasColumnName("legacy_id");
+            entity.Property(row => row.EntityType).HasColumnName("entity_type").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.Action).HasColumnName("action").HasMaxLength(120).IsRequired();
+            entity.Property(row => row.Details).HasColumnName("details").HasMaxLength(2000).IsRequired();
+            entity.Property(row => row.Actor).HasColumnName("actor").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasIndex(row => new { row.EntityType, row.CreatedAt }).HasDatabaseName("ix_inventory_system_log_entity_created");
+            entity.HasIndex(row => row.CreatedAt).HasDatabaseName("ix_inventory_system_log_created_at");
+            entity.HasIndex(row => row.Action).HasDatabaseName("ix_inventory_system_log_action");
+            entity.HasIndex(row => row.Actor).HasDatabaseName("ix_inventory_system_log_actor");
+            entity.HasIndex(row => row.LegacyId).HasDatabaseName("ix_inventory_system_log_legacy_id");
+        });
+
+        modelBuilder.Entity<InventoryExportJobEntity>(entity =>
+        {
+            entity.ToTable("export_jobs", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.ReportId).HasColumnName("report_id").HasMaxLength(120).IsRequired();
+            entity.Property(row => row.Format).HasColumnName("format").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.DownloadName).HasColumnName("download_name").HasMaxLength(260).IsRequired();
+            entity.Property(row => row.PayloadJson).HasColumnName("payload_json").HasColumnType("jsonb").IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasIndex(row => new { row.ReportId, row.CreatedAt }).HasDatabaseName("ix_inventory_export_jobs_report_created");
+        });
+
+        modelBuilder.Entity<InventoryLegacyImportRunEntity>(entity =>
+        {
+            entity.ToTable("legacy_import_runs", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.DryRun).HasColumnName("dry_run");
+            entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.CompletedAt).HasColumnName("completed_at");
+            entity.Property(row => row.TablesScanned).HasColumnName("tables_scanned");
+            entity.Property(row => row.RowsRead).HasColumnName("rows_read");
+            entity.Property(row => row.RowsInserted).HasColumnName("rows_inserted");
+            entity.Property(row => row.RowsUpdated).HasColumnName("rows_updated");
+            entity.Property(row => row.RowsSkipped).HasColumnName("rows_skipped");
+            entity.Property(row => row.Error).HasColumnName("error").HasMaxLength(4000).IsRequired();
+            entity.Property(row => row.StockChecksum).HasColumnName("stock_checksum").HasColumnType("jsonb").IsRequired();
+            entity.Property(row => row.TablesJson).HasColumnName("tables_json").HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(row => row.CreatedAt).HasDatabaseName("ix_inventory_legacy_import_runs_created");
+        });
+
+        modelBuilder.Entity<InventoryEmployeeLegacyLinkEntity>(entity =>
+        {
+            entity.ToTable("employee_legacy_links", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.LegacyId).HasColumnName("legacy_id");
+            entity.Property(row => row.EmployeeId).HasColumnName("employee_id");
+            entity.Property(row => row.SourceKey).HasColumnName("source_key").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasOne(row => row.Employee).WithMany().HasForeignKey(row => row.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(row => new { row.SourceKey, row.LegacyId }).IsUnique().HasDatabaseName("ux_inventory_employee_legacy_links_source_legacy");
+            entity.HasIndex(row => row.EmployeeId).HasDatabaseName("ix_inventory_employee_legacy_links_employee");
+        });
+
+        modelBuilder.Entity<InventoryUserLegacyLinkEntity>(entity =>
+        {
+            entity.ToTable("user_legacy_links", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.LegacyId).HasColumnName("legacy_id");
+            entity.Property(row => row.UserId).HasColumnName("user_id");
+            entity.Property(row => row.SourceKey).HasColumnName("source_key").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasOne(row => row.User).WithMany().HasForeignKey(row => row.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(row => new { row.SourceKey, row.LegacyId }).IsUnique().HasDatabaseName("ux_inventory_user_legacy_links_source_legacy");
+            entity.HasIndex(row => row.UserId).HasDatabaseName("ix_inventory_user_legacy_links_user");
+        });
+    }
+
+    private static void ConfigureEmu(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EmuWorkSectionEntity>(entity =>
+        {
+            entity.ToTable("emu_work_sections");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.Name).HasColumnName("name").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.Code).HasColumnName("code").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.Description).HasColumnName("description").HasMaxLength(1000).IsRequired();
+            entity.Property(row => row.IsActive).HasColumnName("is_active");
+            entity.Property(row => row.SortOrder).HasColumnName("sort_order");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasIndex(row => row.Code).IsUnique().HasDatabaseName("ux_emu_work_sections_code");
+            entity.HasIndex(row => row.IsActive).HasDatabaseName("ix_emu_work_sections_active");
+        });
+
+        modelBuilder.Entity<EmuWaitReasonEntity>(entity =>
+        {
+            entity.ToTable("emu_wait_reasons");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.Name).HasColumnName("name").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.Code).HasColumnName("code").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.IsActive).HasColumnName("is_active");
+            entity.Property(row => row.SortOrder).HasColumnName("sort_order");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasIndex(row => row.Code).IsUnique().HasDatabaseName("ux_emu_wait_reasons_code");
+        });
+
+        modelBuilder.Entity<EmuNotCompletedReasonEntity>(entity =>
+        {
+            entity.ToTable("emu_not_completed_reasons");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.Name).HasColumnName("name").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.Code).HasColumnName("code").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.IsActive).HasColumnName("is_active");
+            entity.Property(row => row.SortOrder).HasColumnName("sort_order");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasIndex(row => row.Code).IsUnique().HasDatabaseName("ux_emu_not_completed_reasons_code");
+        });
+
+        modelBuilder.Entity<EmuWorkTemplateEntity>(entity =>
+        {
+            entity.ToTable("emu_work_templates");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.Name).HasColumnName("name").HasMaxLength(180).IsRequired();
+            entity.Property(row => row.Description).HasColumnName("description").HasMaxLength(1400).IsRequired();
+            entity.Property(row => row.SectionId).HasColumnName("section_id");
+            entity.Property(row => row.IsActive).HasColumnName("is_active");
+            entity.Property(row => row.SortOrder).HasColumnName("sort_order");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasOne(row => row.Section).WithMany().HasForeignKey(row => row.SectionId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(row => row.IsActive).HasDatabaseName("ix_emu_work_templates_active");
+        });
+
+        modelBuilder.Entity<EmuFavoriteEmployeeEntity>(entity =>
+        {
+            entity.ToTable("emu_favorite_employees");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.EmployeeId).HasColumnName("employee_id");
+            entity.Property(row => row.IsActive).HasColumnName("is_active");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasOne(row => row.Employee).WithMany().HasForeignKey(row => row.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => row.EmployeeId).IsUnique().HasDatabaseName("ux_emu_favorite_employees_employee");
+            entity.HasIndex(row => row.IsActive).HasDatabaseName("ix_emu_favorite_employees_active");
+        });
+
+        modelBuilder.Entity<EmuWorkPlanTaskEntity>(entity =>
+        {
+            entity.ToTable("emu_work_plan_tasks");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(220).IsRequired();
+            entity.Property(row => row.Description).HasColumnName("description").HasMaxLength(2000).IsRequired();
+            entity.Property(row => row.PlannedDate).HasColumnName("planned_date");
+            entity.Property(row => row.SectionId).HasColumnName("section_id");
+            entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.ApprovalStatus).HasColumnName("approval_status").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.Priority).HasColumnName("priority").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.IsRecurring).HasColumnName("is_recurring");
+            entity.Property(row => row.RecurrenceRule).HasColumnName("recurrence_rule").HasMaxLength(200).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.Property(row => row.ApprovedByUserId).HasColumnName("approved_by_user_id");
+            entity.Property(row => row.ApprovedAt).HasColumnName("approved_at");
+            entity.Property(row => row.RowVersion).HasColumnName("row_version");
+            entity.HasOne(row => row.Section).WithMany().HasForeignKey(row => row.SectionId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(row => row.ApprovedByUser).WithMany().HasForeignKey(row => row.ApprovedByUserId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(row => row.PlannedDate).HasDatabaseName("ix_emu_plan_tasks_planned_date");
+            entity.HasIndex(row => row.ApprovalStatus).HasDatabaseName("ix_emu_plan_tasks_approval_status");
+        });
+
+        modelBuilder.Entity<EmuWorkPlanTaskEmployeeEntity>(entity =>
+        {
+            entity.ToTable("emu_work_plan_task_employees");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.PlanTaskId).HasColumnName("plan_task_id");
+            entity.Property(row => row.EmployeeId).HasColumnName("employee_id");
+            entity.HasOne(row => row.PlanTask).WithMany(task => task.Employees).HasForeignKey(row => row.PlanTaskId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.Employee).WithMany().HasForeignKey(row => row.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.PlanTaskId, row.EmployeeId }).IsUnique().HasDatabaseName("ux_emu_plan_task_employees_task_employee");
+        });
+
+        modelBuilder.Entity<EmuWorkSessionEntity>(entity =>
+        {
+            entity.ToTable("emu_work_sessions");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.WorkNumber).HasColumnName("work_number").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.WorkDate).HasColumnName("work_date");
+            entity.Property(row => row.SectionId).HasColumnName("section_id");
+            entity.Property(row => row.PlanTaskId).HasColumnName("plan_task_id");
+            entity.Property(row => row.TaskDescription).HasColumnName("task_description").HasMaxLength(2400).IsRequired();
+            entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.ResultStatus).HasColumnName("result_status").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.ResultComment).HasColumnName("result_comment").HasMaxLength(2400).IsRequired();
+            entity.Property(row => row.NotCompletedReasonId).HasColumnName("not_completed_reason_id");
+            entity.Property(row => row.ArrivedAt).HasColumnName("arrived_at");
+            entity.Property(row => row.CompletedAt).HasColumnName("completed_at");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.Property(row => row.CreatedByUserId).HasColumnName("created_by_user_id");
+            entity.Property(row => row.DeletedAt).HasColumnName("deleted_at");
+            entity.Property(row => row.DeletedByUserId).HasColumnName("deleted_by_user_id");
+            entity.Property(row => row.DeleteReason).HasColumnName("delete_reason").HasMaxLength(1000).IsRequired();
+            entity.Property(row => row.WorkMinutes).HasColumnName("work_minutes");
+            entity.Property(row => row.WaitingMinutes).HasColumnName("waiting_minutes");
+            entity.Property(row => row.OtherWorkMinutes).HasColumnName("other_work_minutes");
+            entity.Property(row => row.RowVersion).HasColumnName("row_version");
+            entity.Property(row => row.IsCarriedOver).HasColumnName("is_carried_over");
+            entity.HasOne(row => row.Section).WithMany().HasForeignKey(row => row.SectionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(row => row.PlanTask).WithMany().HasForeignKey(row => row.PlanTaskId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(row => row.NotCompletedReason).WithMany().HasForeignKey(row => row.NotCompletedReasonId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(row => row.CreatedByUser).WithMany().HasForeignKey(row => row.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(row => row.DeletedByUser).WithMany().HasForeignKey(row => row.DeletedByUserId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(row => row.WorkNumber).IsUnique().HasDatabaseName("ux_emu_work_sessions_number");
+            entity.HasIndex(row => row.WorkDate).HasDatabaseName("ix_emu_work_sessions_work_date");
+            entity.HasIndex(row => row.Status).HasDatabaseName("ix_emu_work_sessions_status");
+            entity.HasIndex(row => row.DeletedAt).HasDatabaseName("ix_emu_work_sessions_deleted_at");
+        });
+
+        modelBuilder.Entity<EmuWorkSessionEmployeeEntity>(entity =>
+        {
+            entity.ToTable("emu_work_session_employees");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.WorkSessionId).HasColumnName("work_session_id");
+            entity.Property(row => row.EmployeeId).HasColumnName("employee_id");
+            entity.Property(row => row.FullNameSnapshot).HasColumnName("full_name_snapshot").HasMaxLength(220).IsRequired();
+            entity.Property(row => row.PositionSnapshot).HasColumnName("position_snapshot").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.ArrivedAt).HasColumnName("arrived_at");
+            entity.Property(row => row.FinishedAt).HasColumnName("finished_at");
+            entity.Property(row => row.WorkMinutes).HasColumnName("work_minutes");
+            entity.Property(row => row.WaitingMinutes).HasColumnName("waiting_minutes");
+            entity.Property(row => row.OtherWorkMinutes).HasColumnName("other_work_minutes");
+            entity.HasOne(row => row.WorkSession).WithMany(session => session.Employees).HasForeignKey(row => row.WorkSessionId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.Employee).WithMany().HasForeignKey(row => row.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.EmployeeId, row.Status }).HasDatabaseName("ix_emu_work_session_employees_employee_status");
+        });
+
+        modelBuilder.Entity<EmuWorkPauseEntity>(entity =>
+        {
+            entity.ToTable("emu_work_pauses");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.WorkSessionId).HasColumnName("work_session_id");
+            entity.Property(row => row.WaitReasonId).HasColumnName("wait_reason_id");
+            entity.Property(row => row.StartedAt).HasColumnName("started_at");
+            entity.Property(row => row.EndedAt).HasColumnName("ended_at");
+            entity.Property(row => row.Comment).HasColumnName("comment").HasMaxLength(1400).IsRequired();
+            entity.Property(row => row.IsOtherWork).HasColumnName("is_other_work");
+            entity.HasOne(row => row.WorkSession).WithMany(session => session.Pauses).HasForeignKey(row => row.WorkSessionId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.WaitReason).WithMany().HasForeignKey(row => row.WaitReasonId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.WorkSessionId, row.StartedAt }).HasDatabaseName("ix_emu_work_pauses_session_started");
+        });
+
+        modelBuilder.Entity<EmuWorkPauseEmployeeEntity>(entity =>
+        {
+            entity.ToTable("emu_work_pause_employees");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.PauseId).HasColumnName("pause_id");
+            entity.Property(row => row.EmployeeId).HasColumnName("employee_id");
+            entity.HasOne(row => row.Pause).WithMany(pause => pause.Employees).HasForeignKey(row => row.PauseId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.Employee).WithMany().HasForeignKey(row => row.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.PauseId, row.EmployeeId }).IsUnique().HasDatabaseName("ux_emu_work_pause_employees_pause_employee");
+        });
+
+        modelBuilder.Entity<EmuWorkSessionCarryOverEntity>(entity =>
+        {
+            entity.ToTable("emu_work_session_carry_overs");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.WorkSessionId).HasColumnName("work_session_id");
+            entity.Property(row => row.FromDate).HasColumnName("from_date");
+            entity.Property(row => row.ToDate).HasColumnName("to_date");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasOne(row => row.WorkSession).WithMany().HasForeignKey(row => row.WorkSessionId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(row => new { row.WorkSessionId, row.ToDate }).IsUnique().HasDatabaseName("ux_emu_work_carry_overs_session_date");
+        });
+
+        modelBuilder.Entity<EmuWorkAuditEventEntity>(entity =>
+        {
+            entity.ToTable("emu_work_audit_events");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.WorkSessionId).HasColumnName("work_session_id");
+            entity.Property(row => row.PlanTaskId).HasColumnName("plan_task_id");
+            entity.Property(row => row.EventType).HasColumnName("event_type").HasMaxLength(120).IsRequired();
+            entity.Property(row => row.FromStatus).HasColumnName("from_status").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.ToStatus).HasColumnName("to_status").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.Comment).HasColumnName("comment").HasMaxLength(2400).IsRequired();
+            entity.Property(row => row.ActorUserId).HasColumnName("actor_user_id");
+            entity.Property(row => row.Actor).HasColumnName("actor").HasMaxLength(220).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasOne(row => row.WorkSession).WithMany(session => session.AuditEvents).HasForeignKey(row => row.WorkSessionId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.PlanTask).WithMany().HasForeignKey(row => row.PlanTaskId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.ActorUser).WithMany().HasForeignKey(row => row.ActorUserId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(row => new { row.WorkSessionId, row.CreatedAt }).HasDatabaseName("ix_emu_audit_session_created");
+            entity.HasIndex(row => new { row.PlanTaskId, row.CreatedAt }).HasDatabaseName("ix_emu_audit_plan_created");
+        });
+
+        modelBuilder.Entity<EmuNotificationEntity>(entity =>
+        {
+            entity.ToTable("emu_notifications");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.EmployeeId).HasColumnName("employee_id");
+            entity.Property(row => row.WorkSessionId).HasColumnName("work_session_id");
+            entity.Property(row => row.PlanTaskId).HasColumnName("plan_task_id");
+            entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(220).IsRequired();
+            entity.Property(row => row.Message).HasColumnName("message").HasMaxLength(1200).IsRequired();
+            entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasOne(row => row.Employee).WithMany().HasForeignKey(row => row.EmployeeId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(row => row.WorkSession).WithMany().HasForeignKey(row => row.WorkSessionId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.PlanTask).WithMany().HasForeignKey(row => row.PlanTaskId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(row => row.Status).HasDatabaseName("ix_emu_notifications_status");
+        });
+    }
+
+    private static void ConfigureSimpleInventoryEntity<TEntity>(ModelBuilder modelBuilder, string tableName)
+        where TEntity : class
+    {
+        modelBuilder.Entity<TEntity>(entity =>
+        {
+            entity.ToTable(tableName, "inventory");
+            entity.HasKey("Id");
+            entity.Property<Guid>("Id").HasColumnName("id");
+            entity.Property<int?>("LegacyId").HasColumnName("legacy_id");
+            entity.Property<string>("Name").HasColumnName("name").HasMaxLength(160).IsRequired();
+            entity.Property<bool>("IsArchived").HasColumnName("is_archived");
+            entity.HasIndex("Name").IsUnique().HasDatabaseName($"ux_inventory_{tableName}_name");
+            entity.HasIndex("LegacyId").HasDatabaseName($"ix_inventory_{tableName}_legacy_id");
         });
     }
 }

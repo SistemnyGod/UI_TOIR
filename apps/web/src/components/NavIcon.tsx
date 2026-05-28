@@ -63,6 +63,33 @@ export function NavIcon({ screen }: { screen: ScreenId }) {
           <path d="M16.4 10.1 11.3 16" />
         </>
       ) : null}
+      {screen === "emu-dashboard" ? (
+        <>
+          <path d="M5 18h14" />
+          <path d="M7 14l3-4 3 2 4-6" />
+          <circle cx="7" cy="14" r="1.2" />
+          <circle cx="10" cy="10" r="1.2" />
+          <circle cx="13" cy="12" r="1.2" />
+          <circle cx="17" cy="6" r="1.2" />
+        </>
+      ) : null}
+      {screen === "emu-work-accounting" ? (
+        <>
+          <rect x="5" y="4" width="14" height="16" rx="2" />
+          <path d="M8 8h8" />
+          <path d="M8 12h5" />
+          <path d="M8 16h4" />
+          <path d="M16 15l2 2 3-4" />
+        </>
+      ) : null}
+      {screen === "emu-completed-work-history" ? (
+        <>
+          <path d="M12 8v5l3 2" />
+          <path d="M5 5v5h5" />
+          <path d="M5.5 10a7 7 0 1 0 2-4.8" />
+          <path d="M9 19h6" />
+        </>
+      ) : null}
       {screen === "users" ? (
         <>
           <rect x="4" y="4" width="16" height="16" rx="3" />

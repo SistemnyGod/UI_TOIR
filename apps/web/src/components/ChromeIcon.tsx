@@ -1,4 +1,4 @@
-type ChromeIconName = "bell" | "calendar" | "menu" | "message" | "plant" | "search" | "shield" | "sun";
+type ChromeIconName = "bell" | "calendar" | "logout" | "menu" | "message" | "plant" | "search" | "shield" | "sun";
 
 export function ChromeIcon({ name }: { name: ChromeIconName }) {
   return (
@@ -61,6 +61,13 @@ export function ChromeIcon({ name }: { name: ChromeIconName }) {
           <path d="M5 5h14v10H8l-3 3V5Z" />
           <path d="M8 9h8" />
           <path d="M8 12h5" />
+        </>
+      ) : null}
+      {name === "logout" ? (
+        <>
+          <path d="M10 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4" />
+          <path d="M15 8l4 4-4 4" />
+          <path d="M19 12H9" />
         </>
       ) : null}
     </svg>

@@ -6,6 +6,8 @@ function readScreenFromHash(): ScreenId {
   if (typeof window === "undefined") return "dashboard";
 
   const hash = window.location.hash.replace("#", "");
+  if (hash === "assignment") return "assign";
+
   return screenRegistry.some((item) => item.id === hash) ? (hash as ScreenId) : "dashboard";
 }
 

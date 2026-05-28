@@ -1,0 +1,185 @@
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Patrol360.Application;
+using Patrol360.Contracts;
+using Patrol360.Infrastructure.Persistence.Entities;
+
+namespace Patrol360.Infrastructure.Persistence;
+
+internal sealed class EfMobileSyncAdminService(Patrol360DbContext dbContext) : IMobileSyncAdminService
+{
+    private static readonly string[] ConflictStatuses = ["conflict", "rejected"];
+    private static readonly HashSet<string> ResolutionStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "accepted",
+        "rejected",
+        "repeatRequested"
+    };
+
+    public IReadOnlyList<MobileSyncConflictListItemDto> GetConflicts()
+    {
+        var resolutions = dbContext.MobileSyncConflictResolutions
+            .AsNoTracking()
+            .ToDictionary(resolution => resolution.ClientOperationId);
+
+        return dbContext.MobileOutboxOperations
+            .AsNoTracking()
+            .Include(operation => operation.MobileAccount)
+            .Where(operation => ConflictStatuses.Contains(operation.Status))
+            .OrderByDescending(operation => operation.CreatedAtServer)
+            .Take(200)
+            .AsEnumerable()
+            .Select(operation =>
+            {
+                resolutions.TryGetValue(operation.ClientOperationId, out var resolution);
+                return new MobileSyncConflictListItemDto(
+                    operation.ClientOperationId,
+                    operation.MobileAccountId,
+                    operation.MobileAccount?.Login ?? "-",
+                    operation.CommandType,
+                    operation.EntityType,
+                    operation.EntityServerId,
+                    ReadMessage(operation),
+                    ParseJson(operation.PayloadJson),
+                    operation.CreatedAtServer,
+                    resolution?.Status ?? "open");
+            })
+            .ToList();
+    }
+
+    public MobileSyncConflictDetailDto? GetConflict(string clientOperationId)
+    {
+        var operation = dbContext.MobileOutboxOperations
+            .AsNoTracking()
+            .Include(item => item.MobileAccount)
+            .FirstOrDefault(item => item.ClientOperationId == clientOperationId && ConflictStatuses.Contains(item.Status));
+
+        if (operation is null)
+        {
+            return null;
+        }
+
+        var resolution = dbContext.MobileSyncConflictResolutions
+            .AsNoTracking()
+            .FirstOrDefault(item => item.ClientOperationId == clientOperationId);
+
+        return MapDetail(operation, resolution);
+    }
+
+    public MobileSyncConflictResolutionDto? SetResolution(
+        string clientOperationId,
+        MobileSyncConflictResolutionRequestDto request,
+        string actor)
+    {
+        var status = request.Status.Trim();
+        if (!ResolutionStatuses.Contains(status))
+        {
+            return null;
+        }
+
+        var operationExists = dbContext.MobileOutboxOperations
+            .Any(item => item.ClientOperationId == clientOperationId && ConflictStatuses.Contains(item.Status));
+        if (!operationExists)
+        {
+            return null;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var resolution = dbContext.MobileSyncConflictResolutions
+            .FirstOrDefault(item => item.ClientOperationId == clientOperationId);
+        if (resolution is null)
+        {
+            resolution = new MobileSyncConflictResolutionEntity
+            {
+                ClientOperationId = clientOperationId
+            };
+            dbContext.MobileSyncConflictResolutions.Add(resolution);
+        }
+
+        resolution.Status = status;
+        resolution.Comment = NormalizeComment(request.Comment);
+        resolution.ResolvedBy = string.IsNullOrWhiteSpace(actor) ? "system" : actor.Trim();
+        resolution.ResolvedAt = now;
+        dbContext.SaveChanges();
+
+        return new MobileSyncConflictResolutionDto(
+            resolution.ClientOperationId,
+            resolution.Status,
+            string.IsNullOrWhiteSpace(resolution.Comment) ? null : resolution.Comment,
+            resolution.ResolvedBy,
+            resolution.ResolvedAt);
+    }
+
+    private static MobileSyncConflictDetailDto MapDetail(
+        MobileOutboxOperationEntity operation,
+        MobileSyncConflictResolutionEntity? resolution) =>
+        new(
+            operation.ClientOperationId,
+            operation.MobileAccountId,
+            operation.MobileAccount?.Login ?? "-",
+            operation.CommandType,
+            operation.EntityType,
+            operation.EntityLocalId,
+            operation.EntityServerId,
+            ParseJson(operation.PayloadJson),
+            ParseJson(operation.ResponseJson),
+            ReadMessage(operation),
+            operation.CreatedAtLocal,
+            operation.CreatedAtServer,
+            operation.AttemptCount,
+            operation.Status,
+            resolution?.Status ?? "open",
+            string.IsNullOrWhiteSpace(resolution?.Comment) ? null : resolution.Comment,
+            string.IsNullOrWhiteSpace(resolution?.ResolvedBy) ? null : resolution.ResolvedBy,
+            resolution?.ResolvedAt);
+
+    private static string ReadMessage(MobileOutboxOperationEntity operation)
+    {
+        var parsed = TryDeserialize<MobileOutboxResponseDto>(operation.ResponseJson);
+        if (!string.IsNullOrWhiteSpace(parsed?.Message))
+        {
+            return parsed.Message;
+        }
+
+        return operation.Status.Equals("conflict", StringComparison.OrdinalIgnoreCase)
+            ? "Конфликт синхронизации"
+            : "Команда отклонена сервером";
+    }
+
+    private static object? ParseJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<JsonElement>(json);
+        }
+        catch (JsonException)
+        {
+            return json;
+        }
+    }
+
+    private static T? TryDeserialize<T>(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return default;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<T>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
+    }
+
+    private static string NormalizeComment(string? comment) =>
+        string.IsNullOrWhiteSpace(comment) ? string.Empty : comment.Trim();
+}

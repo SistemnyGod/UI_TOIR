@@ -26,7 +26,13 @@ public sealed record CreateMobileAccountDto(
     string Role,
     bool BindEmployee,
     bool RestrictToBoundDevice,
-    bool TemporaryPassword);
+    bool TemporaryPassword,
+    string? Password = null,
+    string? ConfirmPassword = null,
+    string? Status = null,
+    string? Language = null,
+    bool? RequirePasswordChange = null,
+    bool? RestrictToLinkedDevices = null);
 
 public sealed record UpdateMobileAccountDto(
     string? Login,
@@ -45,6 +51,7 @@ public sealed record MobileAccountSessionDto(
     Guid Id,
     Guid AccountId,
     string Status,
+    string DeviceId,
     string Device,
     string Platform,
     string AppVersion,
@@ -58,3 +65,32 @@ public sealed record MobileAccountSecurityEventDto(
     string Message,
     DateTimeOffset CreatedAt,
     string Actor);
+
+public sealed record AccountBindingInfoDto(
+    Guid Id,
+    string Name,
+    string Code,
+    string DeviceType,
+    string Status);
+
+public sealed record LinkedEmployeeDto(
+    Guid Id,
+    string FullName,
+    string Position,
+    string? AvatarUrl);
+
+public sealed record AvailableEmployeeDto(
+    Guid Id,
+    string FullName,
+    string Role,
+    string Department,
+    string Area,
+    string? AvatarUrl);
+
+public sealed record EmployeeBindingDataDto(
+    AccountBindingInfoDto Account,
+    IReadOnlyList<LinkedEmployeeDto> LinkedEmployees,
+    IReadOnlyList<AvailableEmployeeDto> AvailableEmployees);
+
+public sealed record BindMobileAccountEmployeesDto(
+    IReadOnlyList<Guid> EmployeeIds);

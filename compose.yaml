@@ -1,0 +1,4 @@
+name: docker
+
+include:
+  - ./infra/docker/compose.yaml

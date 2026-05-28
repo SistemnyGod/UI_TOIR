@@ -1,12 +1,14 @@
 import type { FormEvent } from "react";
 import type { RouteDirectoryItem, RouteFormPayload, RouteMode, RoutePoint, ScreenId } from "../../types";
-import { Chip, EmptyState, Panel, SectionTabs } from "../ui";
+import { EmptyState, Panel, SectionTabs } from "../ui";
 import { RouteEditorForm } from "./RouteEditorForm";
 import { RoutePointTable } from "./RoutePointTable";
 
 type MaybePromise<T> = T | Promise<T>;
 
 interface RouteWorkspacePanelProps {
+  canAssign?: boolean;
+  canManage?: boolean;
   mode: RouteMode;
   routeDraft: RouteFormPayload;
   routeEditorMode: "create" | "edit" | null;
@@ -27,6 +29,8 @@ interface RouteWorkspacePanelProps {
 }
 
 export function RouteWorkspacePanel({
+  canAssign = true,
+  canManage = true,
   mode,
   routeDraft,
   routeEditorMode,
@@ -53,11 +57,10 @@ export function RouteWorkspacePanel({
       actions={
         selectedRoute ? (
           <>
-            <Chip>{selectedRoute.status}</Chip>
-            <button className="button ghost compact-button" onClick={onStartRouteEdit} type="button">
+            <button className="button ghost compact-button" disabled={!canManage} onClick={onStartRouteEdit} type="button">
               Редактировать
             </button>
-            <button className="button ghost compact-button" onClick={() => onNavigate("assign")} type="button">
+            <button className="button ghost compact-button" disabled={!canAssign} onClick={() => onNavigate("assign")} type="button">
               Назначить
             </button>
           </>
@@ -80,7 +83,7 @@ export function RouteWorkspacePanel({
           title="Нет выбранного маршрута"
           description="Редактор точек, схема маршрута и история появятся после создания или выбора маршрута."
           action={
-            <button className="button primary" onClick={onStartRouteCreate} type="button">
+            <button className="button primary" disabled={!canManage} onClick={onStartRouteCreate} type="button">
               Создать маршрут
             </button>
           }
@@ -100,6 +103,7 @@ export function RouteWorkspacePanel({
           />
 
           <RouteModeContent
+            canManage={canManage}
             mode={mode}
             route={selectedRoute}
             routePoints={routePoints}
@@ -127,13 +131,14 @@ function RouteFacts({ route, routePoints }: { route: RouteDirectoryItem; routePo
     <div className="route-facts">
       <div><span>Точек в маршруте</span><strong>{routePoints.length}</strong></div>
       <div><span>NFC-меток</span><strong>{routePoints.filter((point) => point.type === "NFC").length}</strong></div>
-      <div><span>Ожидаемое время</span><strong>{route.duration}</strong></div>
       <div><span>Длина маршрута</span><strong>{route.distance}</strong></div>
+      <div><span>Типов точек</span><strong>{new Set(routePoints.map((point) => point.type)).size}</strong></div>
     </div>
   );
 }
 
 function RouteModeContent({
+  canManage,
   mode,
   route,
   routePoints,
@@ -142,6 +147,7 @@ function RouteModeContent({
   onSelectPoint,
   onStartPointCreate,
 }: {
+  canManage: boolean;
   mode: RouteMode;
   route: RouteDirectoryItem;
   routePoints: RoutePoint[];
@@ -155,12 +161,13 @@ function RouteModeContent({
       <div className="route-point-section">
         <div className="section-line-title">
           <h3>Точки маршрута</h3>
-          <button className="button ghost compact-button" onClick={onStartPointCreate} type="button">
+          <button className="button ghost compact-button" disabled={!canManage} onClick={onStartPointCreate} type="button">
             + Добавить точку
           </button>
         </div>
         {routePoints.length > 0 ? (
           <RoutePointTable
+            canManage={canManage}
             points={routePoints}
             route={route}
             selectedPointId={selectedPointId}
@@ -172,7 +179,7 @@ function RouteModeContent({
             title="Точек в маршруте нет"
             description="Добавьте контрольные точки, порядок обхода и NFC/QR-метки."
             action={
-              <button className="button ghost" onClick={onStartPointCreate} type="button">
+              <button className="button ghost" disabled={!canManage} onClick={onStartPointCreate} type="button">
                 Добавить точку
               </button>
             }
@@ -189,7 +196,7 @@ function RouteModeContent({
           <li className={selectedPointId === point.id ? "active" : ""} key={point.id}>
             <span>{point.order}</span>
             <button onClick={() => onSelectPoint(point.id)} type="button">
-              {point.name} / {point.zone} / {point.tag}
+              {point.name} / {point.type} / {point.tag || "без метки"}
             </button>
           </li>
         ))}

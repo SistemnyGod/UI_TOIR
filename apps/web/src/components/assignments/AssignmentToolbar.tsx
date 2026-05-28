@@ -6,8 +6,8 @@ export function AssignmentToolbar() {
       </label>
       <label>
         Территория
-        <select defaultValue="north">
-          <option value="north">Промзона Север</option>
+        <select defaultValue="all">
+          <option value="all">Все территории</option>
         </select>
       </label>
       <label>

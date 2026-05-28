@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const useExternalWebServer = process.env.PATROL360_E2E_EXTERNAL_SERVER === "true";
+
 export default defineConfig({
   testDir: "./e2e",
   timeout: 30_000,
@@ -18,11 +20,15 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:5176",
     trace: "on-first-retry",
   },
-  webServer: {
-    command: "npm run dev -- --host 127.0.0.1 --port 5176 --strictPort",
-    reuseExistingServer: false,
-    url: "http://127.0.0.1:5176",
-  },
+  ...(useExternalWebServer
+    ? {}
+    : {
+        webServer: {
+          command: "npm run build && node ./node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 5176 --strictPort --configLoader runner",
+          reuseExistingServer: false,
+          url: "http://127.0.0.1:5176",
+        },
+      }),
   projects: [
     {
       name: "chromium",

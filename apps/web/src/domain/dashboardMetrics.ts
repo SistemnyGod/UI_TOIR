@@ -9,7 +9,8 @@ export function buildLocalDashboardMetrics({
   requests: ServiceRequest[];
   routeDirectory: RouteDirectoryItem[];
 }): Metric[] {
-  const assignedToday = requests.filter((request) => request.status === "Новая" || request.status === "Назначена").length;
+  const assignedRequestIds = new Set(activePatrols.map((patrol) => patrol.patrolRequestId).filter(Boolean));
+  const assignedToday = requests.filter((request) => request.status !== "Закрыта" && !assignedRequestIds.has(request.id)).length;
 
   return [
     {
@@ -36,7 +37,7 @@ export function buildLocalDashboardMetrics({
     {
       label: "Маршрутов в справочнике",
       value: String(routeDirectory.length),
-      delta: "локальный справочник",
+      delta: "по текущим данным",
       tone: "violet",
       icon: "⌖",
     },

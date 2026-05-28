@@ -1,0 +1,1102 @@
+[
+    {
+        "id":  "780bd40d-e816-9468-38fb-ebe3420c83bc",
+        "fullName":  "Никитин Александр Валериевич",
+        "personnelNo":  "00463",
+        "position":  "Подсобный рабочий",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2022-05-23",
+        "birthDate":  "1963-11-16"
+    },
+    {
+        "id":  "dd163e32-351c-8284-d271-46295b005863",
+        "fullName":  "Плинер Леонид Викторович",
+        "personnelNo":  "00743",
+        "position":  "Подсобный рабочий",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-08-22",
+        "birthDate":  "1973-12-17"
+    },
+    {
+        "id":  "a87c1093-e1dd-53b2-df8b-02f1c4c1c800",
+        "fullName":  "Брагин Анатолий Александрович",
+        "personnelNo":  "00227",
+        "position":  "Начальник производства",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2020-04-20",
+        "birthDate":  "1980-01-04"
+    },
+    {
+        "id":  "4e52fab6-2ce8-e25a-1044-bbdf8c4f5f52",
+        "fullName":  "Ананьева Нина Александровна",
+        "personnelNo":  "00785",
+        "position":  "Уборщик производственных помещений",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-03-03",
+        "birthDate":  "1967-07-24"
+    },
+    {
+        "id":  "b0af0acd-e756-f70a-8699-318b7f4f6885",
+        "fullName":  "Гамула Надежда Михайловна",
+        "personnelNo":  "00582",
+        "position":  "Уборщик производственных помещений",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2023-08-07",
+        "birthDate":  "1972-09-25"
+    },
+    {
+        "id":  "a16074b1-ef69-076a-1555-afeabc561af0",
+        "fullName":  "Макарова Надежда Ивановна",
+        "personnelNo":  "00793",
+        "position":  "Уборщик производственных помещений",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-04-01",
+        "birthDate":  "1959-08-11"
+    },
+    {
+        "id":  "6d76744d-b29d-939a-b0eb-787d79f187dc",
+        "fullName":  "Есемчик Наталья Александровна",
+        "personnelNo":  "0000000235",
+        "position":  "Директор ОП",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2017-10-23",
+        "birthDate":  "1987-03-02"
+    },
+    {
+        "id":  "499d9058-fc99-0390-ec96-be47594d0a62",
+        "fullName":  "Сусенко Михаил Андреевич",
+        "personnelNo":  "00788",
+        "position":  "Дворник",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-03-11",
+        "birthDate":  "1990-06-30"
+    },
+    {
+        "id":  "cbdf7e63-fd21-a744-3b8b-2fed109d0044",
+        "fullName":  "Деветьярова Екатерина Сергеевна",
+        "personnelNo":  "00779",
+        "position":  "Маркетолог",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-01-26",
+        "birthDate":  "1982-07-17"
+    },
+    {
+        "id":  "4a4894e7-a936-acd6-b37d-a590e81b34d5",
+        "fullName":  "Борноволоков Даниил Юрьевич",
+        "personnelNo":  "00485",
+        "position":  "Специалист по благоустройству",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2022-05-24",
+        "birthDate":  "2000-11-09"
+    },
+    {
+        "id":  "0b625f96-ac86-6ccb-90dc-9e650785e7df",
+        "fullName":  "Матюшова Яна Ивановна",
+        "personnelNo":  "00742",
+        "position":  "Ведущий специалист по охране труда",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-08-08",
+        "birthDate":  "1992-01-13"
+    },
+    {
+        "id":  "d307c7d6-e5ff-9338-045b-52ae4b8447e4",
+        "fullName":  "Скопина Дарья Александровна",
+        "personnelNo":  "00420",
+        "position":  "Ведущий специалист по охране труда",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2021-10-27",
+        "birthDate":  "1998-11-08"
+    },
+    {
+        "id":  "673d11db-644c-79ed-ffd8-87216ede19a8",
+        "fullName":  "Воропаева Татьяна Александровна",
+        "personnelNo":  "00630",
+        "position":  "Главный эколог",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-03-26",
+        "birthDate":  "1997-09-27"
+    },
+    {
+        "id":  "54f4f8df-54c5-d037-9844-403f49611075",
+        "fullName":  "Азанов Илья Алексеевич",
+        "personnelNo":  "00761",
+        "position":  "Системный администратор",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-09-24",
+        "birthDate":  "2002-03-26"
+    },
+    {
+        "id":  "d8717183-029e-5081-7dc8-2c80aeeeefe4",
+        "fullName":  "Белоногова Юлия Андреевна",
+        "personnelNo":  "00796",
+        "position":  "Контролер КПП",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-04-13",
+        "birthDate":  "1999-08-28"
+    },
+    {
+        "id":  "57f95cdb-60dc-dc27-7ebd-2a937ce47290",
+        "fullName":  "Ильиных Инна Витальевна",
+        "personnelNo":  "00671",
+        "position":  "Контролер КПП",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-09-10",
+        "birthDate":  "1968-02-06"
+    },
+    {
+        "id":  "5f738343-df3f-57e0-21c5-fe15a3c9b1b1",
+        "fullName":  "Качусова Ирина Владимировна",
+        "personnelNo":  "00741",
+        "position":  "Контролер КПП",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-07-21",
+        "birthDate":  "1975-04-13"
+    },
+    {
+        "id":  "14fc768f-fc69-a323-2710-1d96b8263c25",
+        "fullName":  "Коркина Галина Николаевна",
+        "personnelNo":  "00710",
+        "position":  "Контролер КПП",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-03-28",
+        "birthDate":  "1975-12-27"
+    },
+    {
+        "id":  "8ac3bc2d-6a1f-d13f-4817-62c522dbb46c",
+        "fullName":  "Бубенщикова Анастасия Васильевна",
+        "personnelNo":  "00481",
+        "position":  "Заместитель начальника производства",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2022-05-16",
+        "birthDate":  "1983-03-06"
+    },
+    {
+        "id":  "91cfc3fb-2eb1-615a-6898-02f9b0ffb784",
+        "fullName":  "Попов Сергей Анатольевич",
+        "personnelNo":  "00769",
+        "position":  "Графический дизайнер",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-10-22",
+        "birthDate":  "2000-12-29"
+    },
+    {
+        "id":  "f3ddfeab-f8aa-23e5-5aae-505b84416996",
+        "fullName":  "Шахматова Анна Витальевна",
+        "personnelNo":  "00791",
+        "position":  "Помощник главного эколога",
+        "department":  "Управление",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-03-23",
+        "birthDate":  "1988-07-14"
+    },
+    {
+        "id":  "d9224a64-4b8a-f3cf-199f-2f421d53b928",
+        "fullName":  "Выймова Елена Геннадьевна",
+        "personnelNo":  "00790",
+        "position":  "Лаборант производства строительных материалов",
+        "department":  "Лаборатория",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-03-11",
+        "birthDate":  "1987-02-20"
+    },
+    {
+        "id":  "9ef5b524-02ad-d183-6523-87f3c053029c",
+        "fullName":  "Гвоздев Павел Анатольевич",
+        "personnelNo":  "00683",
+        "position":  "Лаборант производства строительных материалов",
+        "department":  "Лаборатория",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-11-01",
+        "birthDate":  "1980-01-01"
+    },
+    {
+        "id":  "db7d456b-74d6-7c58-c8bd-732c5611fdbe",
+        "fullName":  "Задорин Валерий Семенович",
+        "personnelNo":  "00289",
+        "position":  "Лаборант производства строительных материалов",
+        "department":  "Лаборатория",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2020-10-08",
+        "birthDate":  "1998-08-17"
+    },
+    {
+        "id":  "3894e80b-4c71-c1b6-1e52-8b052e326e05",
+        "fullName":  "Оборина Светлана Юрьевна",
+        "personnelNo":  "00592",
+        "position":  "Лаборант производства строительных материалов",
+        "department":  "Лаборатория",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2023-08-29",
+        "birthDate":  "1974-02-13"
+    },
+    {
+        "id":  "9e1dc912-4c92-9325-18ee-e1eabeb07355",
+        "fullName":  "Тимухина Анна Александровна",
+        "personnelNo":  "00768",
+        "position":  "Лаборант производства строительных материалов",
+        "department":  "Лаборатория",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-10-22",
+        "birthDate":  "1980-07-03"
+    },
+    {
+        "id":  "6232ad13-8f75-37d0-ab2c-9a5b66b3f8cf",
+        "fullName":  "Тетюшева Ольга Михайловна",
+        "personnelNo":  "00257",
+        "position":  "Заведующий лабораторией",
+        "department":  "Лаборатория",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2020-07-24",
+        "birthDate":  "1977-12-11"
+    },
+    {
+        "id":  "ac24f55f-240b-87bb-0819-568b94a48f7c",
+        "fullName":  "Брагин Алексей Александрович",
+        "personnelNo":  "00720",
+        "position":  "Главный инженер",
+        "department":  "Технический отдел",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-05-16",
+        "birthDate":  "1983-02-22"
+    },
+    {
+        "id":  "9531cf22-ea46-f6b6-fe8f-a9e6e1cfad54",
+        "fullName":  "Русинов Андрей Анатольевич",
+        "personnelNo":  "0000000148",
+        "position":  "Начальник энерго-механического участка",
+        "department":  "Технический отдел",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2016-01-11",
+        "birthDate":  "1979-08-07"
+    },
+    {
+        "id":  "ae0a34ec-d4ae-00d0-497e-97d91e2c302e",
+        "fullName":  "Грезев Илья Константинович",
+        "personnelNo":  "00773",
+        "position":  "Весовщик",
+        "department":  "Отдел продаж",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-11-14",
+        "birthDate":  "1985-02-13"
+    },
+    {
+        "id":  "419b23a9-970b-826c-ba57-c40492d6142e",
+        "fullName":  "Дюгаев Геннадий Алексеевич",
+        "personnelNo":  "00693",
+        "position":  "Весовщик",
+        "department":  "Отдел продаж",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-12-17",
+        "birthDate":  "1973-09-10"
+    },
+    {
+        "id":  "da4aa20b-4a2a-ac4e-968b-a04492e53a72",
+        "fullName":  "Нехорошков Сергей Николаевич",
+        "personnelNo":  "00774",
+        "position":  "Весовщик",
+        "department":  "Отдел продаж",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-12-01",
+        "birthDate":  "1984-12-08"
+    },
+    {
+        "id":  "897e99f1-1fc1-cb84-78f7-354fa97d4542",
+        "fullName":  "Холкин Андрей Анатольевич",
+        "personnelNo":  "00729",
+        "position":  "Весовщик",
+        "department":  "Отдел продаж",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-06-10",
+        "birthDate":  "1990-01-28"
+    },
+    {
+        "id":  "2edc2e91-cf53-70a8-f2a6-7a846a48d0bd",
+        "fullName":  "Коптяев Дмитрий Михайлович",
+        "personnelNo":  "00639",
+        "position":  "Укладчик-упаковщик",
+        "department":  "Отдел продаж",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-05-29",
+        "birthDate":  "1986-08-27"
+    },
+    {
+        "id":  "095791f5-2f95-d991-8942-a2cd13ed92da",
+        "fullName":  "Ниазян Оксана Игоревна",
+        "personnelNo":  "00604",
+        "position":  "Укладчик-упаковщик",
+        "department":  "Отдел продаж",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2023-11-15",
+        "birthDate":  "1974-10-09"
+    },
+    {
+        "id":  "cedd2632-a601-dc50-6aa6-ffe6abe7feb0",
+        "fullName":  "Стародумов Александр Валерьевич",
+        "personnelNo":  "00745",
+        "position":  "Укладчик-упаковщик",
+        "department":  "Отдел продаж",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-09-05",
+        "birthDate":  "1981-11-30"
+    },
+    {
+        "id":  "d4efe88b-7778-e596-697b-f248b6bdbc91",
+        "fullName":  "Сухобрус Анатолий Викторович",
+        "personnelNo":  "00304",
+        "position":  "Укладчик-упаковщик",
+        "department":  "Отдел продаж",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2020-11-03",
+        "birthDate":  "1986-08-27"
+    },
+    {
+        "id":  "029b9ad1-45c8-2d47-dd25-26869c63c62c",
+        "fullName":  "Тарабаев Дмитрий Александрович",
+        "personnelNo":  "00226",
+        "position":  "Укладчик-упаковщик",
+        "department":  "Отдел продаж",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2020-04-15",
+        "birthDate":  "1989-03-30"
+    },
+    {
+        "id":  "e0647624-dc06-190a-ba90-a60dc4c1a58d",
+        "fullName":  "Бубенщикова Светлана Николаевна",
+        "personnelNo":  "00290",
+        "position":  "Заместитель руководителя отдела продаж по логистике",
+        "department":  "Отдел продаж",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2020-10-08",
+        "birthDate":  "1982-07-29"
+    },
+    {
+        "id":  "a1ccc784-43b3-74bf-62a7-719105e6c497",
+        "fullName":  "Секачев Денис Николаевич",
+        "personnelNo":  "00631",
+        "position":  "Заместитель руководителя отдела продаж",
+        "department":  "Отдел продаж",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-03-27",
+        "birthDate":  "1984-11-17"
+    },
+    {
+        "id":  "50a10398-de50-afdb-af3b-71fa5104842c",
+        "fullName":  "Губин Константин Евгеньевич",
+        "personnelNo":  "00595",
+        "position":  "Оператор-технолог",
+        "department":  "Участок гидратации",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2023-10-10",
+        "birthDate":  "1993-11-29"
+    },
+    {
+        "id":  "3c4276e1-b96e-f2cb-ed86-64f6b32a2b7e",
+        "fullName":  "Измоденов Андрей Сергеевич",
+        "personnelNo":  "00453",
+        "position":  "Оператор-технолог",
+        "department":  "Участок гидратации",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2022-02-17",
+        "birthDate":  "1986-04-28"
+    },
+    {
+        "id":  "2a9148f9-a55f-d278-eacb-8de8a331c5de",
+        "fullName":  "Кальченко Александр Андреевич",
+        "personnelNo":  "00726",
+        "position":  "Оператор-технолог",
+        "department":  "Участок гидратации",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-05-27",
+        "birthDate":  "1994-03-22"
+    },
+    {
+        "id":  "548cebe9-a2fb-471b-13f9-5f72379dab2e",
+        "fullName":  "Прокин Николай Алексеевич",
+        "personnelNo":  "00235",
+        "position":  "Оператор-технолог",
+        "department":  "Участок гидратации",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2020-04-28",
+        "birthDate":  "1992-03-08"
+    },
+    {
+        "id":  "3adc2f67-5421-c360-acab-a6b06f232698",
+        "fullName":  "Тюляев Евгений Николаевич (вн.совм.)",
+        "personnelNo":  "00792",
+        "position":  "Электрогазосварщик",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-03-25",
+        "birthDate":  "1978-11-14"
+    },
+    {
+        "id":  "97a5ab81-cb91-38c8-12f5-caba18b89dc3",
+        "fullName":  "Усманов Руслан Рафикович",
+        "personnelNo":  "00797",
+        "position":  "Электрогазосварщик",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-04-14",
+        "birthDate":  "1984-06-11"
+    },
+    {
+        "id":  "3a8f8c38-c959-c6c6-83fc-ece81c3e0ac4",
+        "fullName":  "Лысцов Сергей Викторович",
+        "personnelNo":  "00682",
+        "position":  "Электромонтер по обслуживанию электроустановок",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-10-24",
+        "birthDate":  "1975-02-13"
+    },
+    {
+        "id":  "9d0cc846-788f-d081-e015-78fd1be555c4",
+        "fullName":  "Осинцев Антон Михайлович",
+        "personnelNo":  "00728",
+        "position":  "Электромонтер по обслуживанию электроустановок",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-06-04",
+        "birthDate":  "2004-08-02"
+    },
+    {
+        "id":  "5c5a9b6a-acd0-aa9a-ea47-b1b070c2ae16",
+        "fullName":  "Потапов Владислав Константинович",
+        "personnelNo":  "00723",
+        "position":  "Электромонтер по обслуживанию электроустановок",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-05-21",
+        "birthDate":  "1997-09-23"
+    },
+    {
+        "id":  "70fc8607-b0d3-fa85-d492-d07e4e5d4acd",
+        "fullName":  "Черданцев Илья Владимирович",
+        "personnelNo":  "00019",
+        "position":  "Электромонтер по обслуживанию электроустановок",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2018-06-18",
+        "birthDate":  "1990-05-29"
+    },
+    {
+        "id":  "557dcdf2-e40c-4872-60cf-6160c8233c8e",
+        "fullName":  "Авдеев Андрей Борисович",
+        "personnelNo":  "00766",
+        "position":  "Водитель погрузчика",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-10-10",
+        "birthDate":  "1980-12-25"
+    },
+    {
+        "id":  "ff8fd42f-f190-64e2-8c28-615e6048889f",
+        "fullName":  "Ершов Александр Евгеньевич",
+        "personnelNo":  "00651",
+        "position":  "Водитель погрузчика",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-08-15",
+        "birthDate":  "1996-10-08"
+    },
+    {
+        "id":  "dc074a5d-3d9c-a07c-0f68-7b0ac2f04f81",
+        "fullName":  "Лысцов Владимир Николаевич",
+        "personnelNo":  "00596",
+        "position":  "Слесарь по эксплуатации и ремонту газового оборудования",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2023-10-11",
+        "birthDate":  "1961-05-01"
+    },
+    {
+        "id":  "cf6cb09d-907d-1d6a-cacd-31af98606b4b",
+        "fullName":  "Кашбеев Олег Флюрович",
+        "personnelNo":  "0000000072",
+        "position":  "Слесарь по обслуживанию и ремонту оборудования",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2016-01-11",
+        "birthDate":  "1962-07-11"
+    },
+    {
+        "id":  "bcc4fab7-2fdb-7181-3817-a329c91e952c",
+        "fullName":  "Ляпустин Александр Владимирович",
+        "personnelNo":  "00786",
+        "position":  "Слесарь по обслуживанию и ремонту оборудования",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-03-03",
+        "birthDate":  "1990-09-08"
+    },
+    {
+        "id":  "8886af42-f5aa-124e-9ede-ea1b41038eef",
+        "fullName":  "Юхта Сергей Анатольевич",
+        "personnelNo":  "00789",
+        "position":  "Инженер по контрольно-измерительным приборам и автоматике",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-03-11",
+        "birthDate":  "1996-07-09"
+    },
+    {
+        "id":  "9d2b10e0-f5f1-54e3-2eb5-a54988d28988",
+        "fullName":  "Ставров Максим Александрович",
+        "personnelNo":  "00708",
+        "position":  "Аспираторщик",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-03-27",
+        "birthDate":  "1987-06-01"
+    },
+    {
+        "id":  "0f99b3f7-2434-ffa2-06b5-8997c0709466",
+        "fullName":  "Ковязин Алексей Сергеевич",
+        "personnelNo":  "00594",
+        "position":  "Слесарь по контрольно-измерительным приборам и автоматике",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2023-09-27",
+        "birthDate":  "1976-01-02"
+    },
+    {
+        "id":  "89192413-d6e7-0946-d389-29b9f6daac73",
+        "fullName":  "Корякин Александр Алексеевич",
+        "personnelNo":  "00661",
+        "position":  "Слесарь по контрольно-измерительным приборам и автоматике",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-08-12",
+        "birthDate":  "2001-08-23"
+    },
+    {
+        "id":  "f64b7bdc-4fac-2c52-8740-6b29d07950a2",
+        "fullName":  "Русинов Андрей Анатольевич",
+        "personnelNo":  "00739",
+        "position":  "Главный энергетик",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-07-09",
+        "birthDate":  "1979-08-07"
+    },
+    {
+        "id":  "4345a037-f3f3-900e-497d-1d2dbb9fa91f",
+        "fullName":  "Бурухин Никита Сергеевич",
+        "personnelNo":  "00698",
+        "position":  "Слесарь-ремонтник",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-02-07",
+        "birthDate":  "1994-06-27"
+    },
+    {
+        "id":  "7fffa0f3-f3af-8498-5f3b-a2a374182af2",
+        "fullName":  "Карандашев Александр Сергеевич",
+        "personnelNo":  "00799",
+        "position":  "Слесарь-ремонтник",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-04-21",
+        "birthDate":  "1978-02-25"
+    },
+    {
+        "id":  "58b43fb7-cffc-270b-8e6a-a4a52c6168f5",
+        "fullName":  "Пакулин Даниил Андреевич",
+        "personnelNo":  "00794",
+        "position":  "Слесарь-ремонтник",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-04-06",
+        "birthDate":  "2003-01-10"
+    },
+    {
+        "id":  "30651371-175f-6b7e-a684-c1ed642841f4",
+        "fullName":  "Сухоносов Виталий Александрович",
+        "personnelNo":  "00657",
+        "position":  "Слесарь-ремонтник",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-07-31",
+        "birthDate":  "2004-07-02"
+    },
+    {
+        "id":  "82fdbfe7-cc3f-346b-c005-5cd3288f7802",
+        "fullName":  "Колмаков Александр Владимирович",
+        "personnelNo":  "00787",
+        "position":  "Заместитель начальника энерго-механического участка",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-03-06",
+        "birthDate":  "1981-04-23"
+    },
+    {
+        "id":  "3ddc80f6-fb5d-7026-42e2-aff1e120612d",
+        "fullName":  "Чиркин Виталий Сергеевич",
+        "personnelNo":  "00638",
+        "position":  "Инженер проекта",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-05-03",
+        "birthDate":  "1989-06-12"
+    },
+    {
+        "id":  "fa3814c4-f410-8bc2-e72b-f9055cffe12e",
+        "fullName":  "Шаньгин Игорь Сергеевич",
+        "personnelNo":  "00731",
+        "position":  "Электрослесарь по обслуживанию и ремонту электроустановок",
+        "department":  "Энерго-механический участок",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-06-17",
+        "birthDate":  "1997-08-04"
+    },
+    {
+        "id":  "8717a2c7-ed57-78fb-5e73-edf1a5a58481",
+        "fullName":  "Левенских Татьяна Ивановна",
+        "personnelNo":  "00748",
+        "position":  "Руководитель отдела управления персоналом",
+        "department":  "Отдел управления персоналом",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-09-11",
+        "birthDate":  "1988-01-18"
+    },
+    {
+        "id":  "24ed3bd4-e104-a00a-e701-b9d099fb21e3",
+        "fullName":  "Кожека Елена Анатольевна",
+        "personnelNo":  "00526",
+        "position":  "Менеджер по персоналу",
+        "department":  "Отдел управления персоналом",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2022-10-27",
+        "birthDate":  "1989-05-24"
+    },
+    {
+        "id":  "f5582a1e-a9a5-0a1a-299f-d519e97bfa54",
+        "fullName":  "Хорькова Анна Ивановна",
+        "personnelNo":  "00712",
+        "position":  "Административный HR-координатор",
+        "department":  "Отдел управления персоналом",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-04-09",
+        "birthDate":  "1991-10-22"
+    },
+    {
+        "id":  "b8e13411-6a7a-ec4c-fd40-c48fca2e8160",
+        "fullName":  "Воробьева Наталья Владимировна",
+        "personnelNo":  "00798",
+        "position":  "Заведующий складом",
+        "department":  "Отдел материально-технического снабжения",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-04-21",
+        "birthDate":  "1981-08-07"
+    },
+    {
+        "id":  "d3ccfc72-032f-a625-af08-99fcacb89f97",
+        "fullName":  "Каргапольцева Виктория Сергеевна",
+        "personnelNo":  "00678",
+        "position":  "Заведующий складом",
+        "department":  "Отдел материально-технического снабжения",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-10-18",
+        "birthDate":  "1996-10-02"
+    },
+    {
+        "id":  "48d67119-10ff-1d95-92e2-1896512ec7db",
+        "fullName":  "Корякина Инга Евгеньевна",
+        "personnelNo":  "00643",
+        "position":  "Бухгалтер",
+        "department":  "Отдел материально-технического снабжения",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-05-22",
+        "birthDate":  "1975-10-18"
+    },
+    {
+        "id":  "0897c52c-25d6-6963-acb9-0e44ad1a3538",
+        "fullName":  "Перегримов Александр Алексеевич",
+        "personnelNo":  "00662",
+        "position":  "Начальник отдела",
+        "department":  "Отдел материально-технического снабжения",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-08-12",
+        "birthDate":  "1988-11-15"
+    },
+    {
+        "id":  "7fc218bf-9134-9644-318f-573cd4374f89",
+        "fullName":  "Масленников Николай Олегович",
+        "personnelNo":  "00778",
+        "position":  "Мельник извести",
+        "department":  "Участок помола",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2026-01-26",
+        "birthDate":  "1985-04-11"
+    },
+    {
+        "id":  "1a9e85f3-224f-d647-19ed-6b8069687eda",
+        "fullName":  "Скобелев Сергей Валентинович",
+        "personnelNo":  "00633",
+        "position":  "Мельник извести",
+        "department":  "Участок помола",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-05-02",
+        "birthDate":  "1965-11-30"
+    },
+    {
+        "id":  "4fbeadaf-0b34-bd32-e061-dbe31d8f2524",
+        "fullName":  "Ударцев Дмитрий Владимирович",
+        "personnelNo":  "00512",
+        "position":  "Мельник извести",
+        "department":  "Участок помола",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2022-09-07",
+        "birthDate":  "1987-01-14"
+    },
+    {
+        "id":  "da9eff9b-2c41-68ff-7ee4-97a3493a72fc",
+        "fullName":  "Чертов Валерий Сергеевич",
+        "personnelNo":  "00744",
+        "position":  "Мельник извести",
+        "department":  "Участок помола",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-08-27",
+        "birthDate":  "1986-07-04"
+    },
+    {
+        "id":  "4843429c-a421-fe8a-f4a0-7b3ba7eb2c4e",
+        "fullName":  "Булдаков Владимир Сергеевич",
+        "personnelNo":  "00253",
+        "position":  "Оператор-технолог",
+        "department":  "Участок обжига",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2020-07-17",
+        "birthDate":  "1991-06-07"
+    },
+    {
+        "id":  "40263703-8afe-28c4-6956-914284727768",
+        "fullName":  "Родионов Александр Андреевич",
+        "personnelNo":  "0000000137",
+        "position":  "Оператор-технолог",
+        "department":  "Участок обжига",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2016-11-01",
+        "birthDate":  "1997-03-22"
+    },
+    {
+        "id":  "533b44cd-4472-be21-77ea-2310797199a4",
+        "fullName":  "Уфимцев Денис Андреевич",
+        "personnelNo":  "00264",
+        "position":  "Оператор-технолог",
+        "department":  "Участок обжига",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2020-08-13",
+        "birthDate":  "1990-11-29"
+    },
+    {
+        "id":  "d7e25ee7-c6b3-c568-3845-cf547d67026a",
+        "fullName":  "Ширяев Дмитрий Александрович",
+        "personnelNo":  "00449",
+        "position":  "Оператор-технолог",
+        "department":  "Участок обжига",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2022-02-02",
+        "birthDate":  "1980-09-15"
+    },
+    {
+        "id":  "9452e8e8-78bb-f86c-a052-8bac936a2296",
+        "fullName":  "Шабалин Александр Владимирович",
+        "personnelNo":  "0000000139",
+        "position":  "Старший оператор-технолог",
+        "department":  "Участок обжига",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2016-01-11",
+        "birthDate":  "1985-09-21"
+    },
+    {
+        "id":  "c51fee76-3428-adb0-230d-9494ebdb0981",
+        "fullName":  "Скурихина Наталья Валерьевна",
+        "personnelNo":  "00589",
+        "position":  "Главный бухгалтер",
+        "department":  "Основное подразделение",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2023-08-18",
+        "birthDate":  "1980-03-15"
+    },
+    {
+        "id":  "6b47ad2a-c8a8-f176-e5de-15d7bf7bf88a",
+        "fullName":  "Захаров Максим Викторович",
+        "personnelNo":  "00702",
+        "position":  "Начальник юридического отдела",
+        "department":  "Основное подразделение",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-02-10",
+        "birthDate":  "1976-05-08"
+    },
+    {
+        "id":  "2daf2599-31c5-f6ad-7e67-3608e69e2644",
+        "fullName":  "Иванова Анна Викторовна",
+        "personnelNo":  "0000000209",
+        "position":  "Секретарь-референт",
+        "department":  "Основное подразделение",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2017-06-13",
+        "birthDate":  "1977-01-09"
+    },
+    {
+        "id":  "89e30223-edb6-0bdd-0609-17a8afec9033",
+        "fullName":  "Мартюшев Александр Владимирович",
+        "personnelNo":  "0000000008",
+        "position":  "Директор",
+        "department":  "Основное подразделение",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2017-08-26",
+        "birthDate":  "1984-07-20"
+    },
+    {
+        "id":  "3f0ced51-4919-f55e-4c6e-1e9a2dd2fd8a",
+        "fullName":  "Дорофеева Анна Николаевна",
+        "personnelNo":  "00017",
+        "position":  "Заместитель директора по финансам",
+        "department":  "Основное подразделение",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2018-05-29",
+        "birthDate":  "1984-12-21"
+    },
+    {
+        "id":  "9803184b-bd07-2ae0-5b14-48239a93cdb1",
+        "fullName":  "Култышева Ольга Михайловна",
+        "personnelNo":  "00018",
+        "position":  "Бухгалтер по расчету заработной платы",
+        "department":  "Основное подразделение",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2018-06-04",
+        "birthDate":  "1978-11-13"
+    },
+    {
+        "id":  "ca10386e-2d3d-e2a8-0290-0d9024512c23",
+        "fullName":  "Осотов Алексей Леонидович",
+        "personnelNo":  "00716",
+        "position":  "Заместитель директора по развитию",
+        "department":  "Основное подразделение",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-04-14",
+        "birthDate":  "1982-03-12"
+    },
+    {
+        "id":  "38d9eea5-40c2-7f48-f4dd-96192de287b5",
+        "fullName":  "Степанова Софья Сергеевна",
+        "personnelNo":  "00427",
+        "position":  "Корпоративный психолог",
+        "department":  "Основное подразделение",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2021-11-15",
+        "birthDate":  "1996-11-05"
+    },
+    {
+        "id":  "490b387e-7542-799b-dcc7-b687f5c9cdfc",
+        "fullName":  "Хмиль Наталья Николаевна",
+        "personnelNo":  "00438",
+        "position":  "Бухгалтер",
+        "department":  "Основное подразделение",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2021-12-03",
+        "birthDate":  "1978-02-01"
+    },
+    {
+        "id":  "cefae058-84f3-79cf-1c5a-9e284caa982a",
+        "fullName":  "Пермякова Екатерина Михайловна",
+        "personnelNo":  "00598",
+        "position":  "Финансист",
+        "department":  "Основное подразделение",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2023-10-18",
+        "birthDate":  "1981-08-27"
+    },
+    {
+        "id":  "49cd032e-166f-422e-addc-1fa37fe3a2fb",
+        "fullName":  "Зезюлина Наталья Викторовна",
+        "personnelNo":  "00635",
+        "position":  "Заместитель главного бухгалтера",
+        "department":  "Основное подразделение",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-04-17",
+        "birthDate":  "1979-05-09"
+    },
+    {
+        "id":  "860f3be8-0bac-fe9d-dae0-dece57e8b100",
+        "fullName":  "Большаков Лев Игоревич",
+        "personnelNo":  "00674",
+        "position":  "Юрист",
+        "department":  "Основное подразделение",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2024-10-02",
+        "birthDate":  "2000-12-05"
+    },
+    {
+        "id":  "fb433a47-df33-247a-64a1-42867e3c2de6",
+        "fullName":  "Мартюшев Владимир Александрович",
+        "personnelNo":  "00713",
+        "position":  "Консультант",
+        "department":  "Основное подразделение",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2025-04-09",
+        "birthDate":  "1952-09-30"
+    },
+    {
+        "id":  "d7a322f0-2369-e599-726e-99fe1cb7d426",
+        "fullName":  "Крылова Елена Игоревна",
+        "personnelNo":  "00532",
+        "position":  "Менеджер по работе с клиентами",
+        "department":  "Отдел продаж",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2022-10-31",
+        "birthDate":  "1987-09-09"
+    },
+    {
+        "id":  "a488df6e-ab27-a90b-04df-904d84637393",
+        "fullName":  "Фром Юлия Алексеевна",
+        "personnelNo":  "00001",
+        "position":  "Менеджер по работе с клиентами",
+        "department":  "Отдел продаж",
+        "employeeGroup":  "Атом",
+        "hiredAt":  "2018-04-18",
+        "birthDate":  "1990-03-09"
+    },
+    {
+        "id":  "346c8454-bbbc-d258-f359-5daa49fd5473",
+        "fullName":  "Осотов Алексей Леонидович",
+        "personnelNo":  "00037",
+        "position":  "Директор",
+        "department":  "Управление",
+        "employeeGroup":  "Атом Экология",
+        "hiredAt":  "2023-07-04",
+        "birthDate":  "1982-03-12"
+    },
+    {
+        "id":  "4f5ecd17-7c3e-fcf7-8685-917d6a03c44b",
+        "fullName":  "Хмиль Наталья Николаевна",
+        "personnelNo":  "00002",
+        "position":  "Главный бухгалтер",
+        "department":  "Управление",
+        "employeeGroup":  "Атом Экология",
+        "hiredAt":  "2023-10-01",
+        "birthDate":  "1978-02-01"
+    },
+    {
+        "id":  "18d68fbd-3212-c9ae-3b52-edf21c53d603",
+        "fullName":  "Русинов Андрей Анатольевич",
+        "personnelNo":  "00038",
+        "position":  "Главный энергетик",
+        "department":  "Управление",
+        "employeeGroup":  "Атом Экология",
+        "hiredAt":  "2023-07-04",
+        "birthDate":  "1979-08-07"
+    },
+    {
+        "id":  "77ab79f8-9685-d126-cc50-377a6f376f46",
+        "fullName":  "Арсеваткина Жанна Аркадьевна",
+        "personnelNo":  "00036",
+        "position":  "Лаборант химического анализа",
+        "department":  "Производственная лаборатория",
+        "employeeGroup":  "Атом Экология",
+        "hiredAt":  "2023-07-04",
+        "birthDate":  "1983-08-24"
+    },
+    {
+        "id":  "f7726f1a-24cf-99fa-48fe-2d98781bf068",
+        "fullName":  "Коптяев Даниил Андреевич",
+        "personnelNo":  "00003",
+        "position":  "Аппаратчик получения углекислоты",
+        "department":  "Цех утилизации углекислого газа",
+        "employeeGroup":  "Атом Экология",
+        "hiredAt":  "2023-11-01",
+        "birthDate":  "2001-03-17"
+    },
+    {
+        "id":  "395038fc-eda9-6556-38c8-ddf421c2daa1",
+        "fullName":  "Копылов Сергей Андреевич",
+        "personnelNo":  "00031",
+        "position":  "Аппаратчик получения углекислоты",
+        "department":  "Цех утилизации углекислого газа",
+        "employeeGroup":  "Атом Экология",
+        "hiredAt":  "2023-06-20",
+        "birthDate":  "1996-06-26"
+    },
+    {
+        "id":  "86f7f7f6-cd26-fbc0-0536-fb72bcdf446f",
+        "fullName":  "Тепикин Артем Евгеньевич",
+        "personnelNo":  "00007",
+        "position":  "Аппаратчик получения углекислоты",
+        "department":  "Цех утилизации углекислого газа",
+        "employeeGroup":  "Атом Экология",
+        "hiredAt":  "2024-02-06",
+        "birthDate":  "1987-09-02"
+    },
+    {
+        "id":  "19cd1354-9316-1c63-c952-4c31213c5c30",
+        "fullName":  "Тюшев Евгений Сергеевич",
+        "personnelNo":  "00014",
+        "position":  "Аппаратчик получения углекислоты",
+        "department":  "Цех утилизации углекислого газа",
+        "employeeGroup":  "Атом Экология",
+        "hiredAt":  "2025-04-10",
+        "birthDate":  "2002-11-18"
+    },
+    {
+        "id":  "1df9ba90-57cf-85f5-53c1-bf92a8f08e21",
+        "fullName":  "Зорин Владимир Владимирович",
+        "personnelNo":  "00035",
+        "position":  "Слесарь по ремонту оборудования",
+        "department":  "Цех утилизации углекислого газа",
+        "employeeGroup":  "Атом Экология",
+        "hiredAt":  "2023-06-21",
+        "birthDate":  "1973-04-24"
+    },
+    {
+        "id":  "3f586cae-4676-83bb-64cd-93f0ebae38e6",
+        "fullName":  "Комин Владимир Владиславович",
+        "personnelNo":  "00010",
+        "position":  "Слесарь по ремонту оборудования",
+        "department":  "Цех утилизации углекислого газа",
+        "employeeGroup":  "Атом Экология",
+        "hiredAt":  "2024-06-13",
+        "birthDate":  "1970-11-07"
+    },
+    {
+        "id":  "544d5d3a-ee3e-250f-b9d2-d1d44245de8a",
+        "fullName":  "Осколкова Марина Александровна",
+        "personnelNo":  "00004",
+        "position":  "Начальник цеха утилизации углекислого газа",
+        "department":  "Цех утилизации углекислого газа",
+        "employeeGroup":  "Атом Экология",
+        "hiredAt":  "2023-11-01",
+        "birthDate":  "1983-11-20"
+    },
+    {
+        "id":  "fd437add-424c-6103-b155-d421aae83ce2",
+        "fullName":  "Гущин Максим Алексеевич",
+        "personnelNo":  "00030",
+        "position":  "Заместитель начальника производства по получению углекислоты",
+        "department":  "Цех утилизации углекислого газа",
+        "employeeGroup":  "Атом Экология",
+        "hiredAt":  "2023-06-20",
+        "birthDate":  "1981-05-29"
+    }
+]

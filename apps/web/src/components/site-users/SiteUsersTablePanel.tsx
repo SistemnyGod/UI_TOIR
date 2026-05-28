@@ -1,14 +1,26 @@
 import { Chip, EmptyState, Panel } from "../ui";
 import type { SiteUser } from "../../types";
+import type { DataSourceStatus } from "../../types";
 
 interface SiteUsersTablePanelProps {
   users: SiteUser[];
+  errorMessage?: string;
   selectedUserId?: string;
+  status?: DataSourceStatus;
   onNotify: (message: string) => void;
+  onRetry?: () => void;
   onSelectUser: (id: string) => void;
 }
 
-export function SiteUsersTablePanel({ users, selectedUserId, onNotify, onSelectUser }: SiteUsersTablePanelProps) {
+export function SiteUsersTablePanel({
+  users,
+  errorMessage,
+  selectedUserId,
+  status = "idle",
+  onNotify,
+  onRetry,
+  onSelectUser,
+}: SiteUsersTablePanelProps) {
   return (
     <Panel
       title="Пользователи"
@@ -51,7 +63,21 @@ export function SiteUsersTablePanel({ users, selectedUserId, onNotify, onSelectU
           </select>
         </label>
       </div>
-      {users.length > 0 ? (
+      {status === "loading" ? (
+        <EmptyState title="Пользователи сайта загружаются" description="Получаем список пользователей из backend API." />
+      ) : status === "error" ? (
+        <EmptyState
+          title="Пользователи сайта API не загружены"
+          description={errorMessage}
+          action={
+            onRetry ? (
+              <button className="button ghost" onClick={onRetry} type="button">
+                Повторить загрузку
+              </button>
+            ) : undefined
+          }
+        />
+      ) : users.length > 0 ? (
         <div className="table-wrap">
           <table>
             <thead>

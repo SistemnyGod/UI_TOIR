@@ -6,6 +6,9 @@ public sealed record EmployeeDto(
     string PersonnelNo,
     string Position,
     string Department,
+    string EmployeeGroup,
+    DateOnly? HiredAt,
+    DateOnly? BirthDate,
     string Status,
     string Shift,
     bool HasMobileAccount,
@@ -18,7 +21,10 @@ public sealed record CreateEmployeeDto(
     string Department,
     string Status,
     string Shift,
-    bool HasMobileAccount);
+    bool HasMobileAccount,
+    string EmployeeGroup = "",
+    DateOnly? HiredAt = null,
+    DateOnly? BirthDate = null);
 
 public sealed record UpdateEmployeeDto(
     string FullName,
@@ -27,4 +33,7 @@ public sealed record UpdateEmployeeDto(
     string Department,
     string Status,
     string Shift,
-    bool HasMobileAccount);
+    bool HasMobileAccount,
+    string EmployeeGroup = "",
+    DateOnly? HiredAt = null,
+    DateOnly? BirthDate = null);

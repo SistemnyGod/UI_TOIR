@@ -4,10 +4,16 @@ import type { SiteUser } from "../../types";
 export function SiteUserProfileDrawer({
   user,
   onNotify,
+  onResetPassword,
+  onToggleBlock,
 }: {
   user?: SiteUser;
   onNotify: (message: string) => void;
+  onResetPassword?: (user: SiteUser) => Promise<void> | void;
+  onToggleBlock?: (user: SiteUser) => Promise<void> | void;
 }) {
+  const canManage = Boolean(onResetPassword && onToggleBlock);
+
   return (
     <aside className="side-drawer user-profile-drawer">
       {!user ? (
@@ -31,13 +37,13 @@ export function SiteUserProfileDrawer({
             <Field label="Создан" value={user.createdAt} />
           </dl>
 
-          <Panel title="Доступ и разрешения" actions={<span>{user.access.length} модулей</span>}>
+          <Panel title="Доступ и разрешения" actions={<span>{user.access.length} прав</span>}>
             <div className="permission-list">
-              {user.access.map((module) => <Chip key={module}>{module}</Chip>)}
+              {user.access.map((permission) => <Chip key={permission}>{permission}</Chip>)}
             </div>
             <button
               className="link-button"
-              onClick={() => onNotify("Управление доступом будет доступно после RBAC-модели")}
+              onClick={() => onNotify("Редактирование матрицы доступа будет вынесено в отдельный RBAC экран")}
               type="button"
             >
               Управление доступом
@@ -47,16 +53,13 @@ export function SiteUserProfileDrawer({
           <Panel title="Последние входы">
             {user.recentSessions.length > 0 ? (
               <ol className="event-list compact-list">
-                {user.recentSessions.map((session) => {
-                  const [date, ...details] = session.split(" / ");
-                  return (
-                    <li key={session}>
-                      <time>{date}</time>
-                      <span>{details.join(" / ") || session}</span>
-                      <Chip>Успешно</Chip>
-                    </li>
-                  );
-                })}
+                {user.recentSessions.map((session) => (
+                  <li key={session}>
+                    <time>{session}</time>
+                    <span>{user.login}</span>
+                    <Chip>Успешно</Chip>
+                  </li>
+                ))}
               </ol>
             ) : (
               <EmptyState title="Входов нет" />
@@ -72,19 +75,13 @@ export function SiteUserProfileDrawer({
 
           <Panel title="Безопасность и действия">
             <div className="security-action-list">
-              <button
-                onClick={() => onNotify("Ссылка для сброса пароля будет отправляться после почтового сервиса")}
-                type="button"
-              >
+              <button disabled={!canManage} onClick={() => void onResetPassword?.(user)} type="button">
                 <strong>Сбросить пароль</strong>
-                <span>Отправить ссылку для сброса</span>
+                <span>Выдать временный пароль из backend</span>
               </button>
-              <button
-                onClick={() => onNotify("Блокировка пользователя будет доступна после backend RBAC")}
-                type="button"
-              >
-                <strong>Заблокировать пользователя</strong>
-                <span>Временно запретить вход</span>
+              <button disabled={!canManage} onClick={() => void onToggleBlock?.(user)} type="button">
+                <strong>{user.status === "Заблокирован" ? "Разблокировать пользователя" : "Заблокировать пользователя"}</strong>
+                <span>{user.status === "Заблокирован" ? "Вернуть доступ к входу" : "Временно запретить вход"}</span>
               </button>
               <button
                 onClick={() => onNotify("Журнал активности будет доступен после подключения аудита")}

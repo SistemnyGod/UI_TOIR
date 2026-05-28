@@ -1,6 +1,13 @@
 import { routeDirectory as defaultRouteDirectory } from "../data";
 import { ApiClient } from "../api/client";
-import type { CreateRouteDto, CreateRoutePointDto, RouteDto, UpdateRouteDto } from "../api/contracts";
+import type {
+  CreateRouteDto,
+  CreateRoutePointDto,
+  CreateRouteWithPointsDto,
+  RouteDto,
+  RoutePointDto,
+  UpdateRouteDto,
+} from "../api/contracts";
 import {
   createRouteDraft,
   createRoutePointDraft,
@@ -111,6 +118,14 @@ export function createApiRoutesRepository({ baseUrl }: { baseUrl?: string } = {}
       return mapRoute(route);
     },
 
+    async createRouteWithPoints(routePayload: RouteFormPayload, pointPayloads: RoutePointFormPayload[]) {
+      const route = await client.post<RouteDto, CreateRouteWithPointsDto>("/api/v1/routes/with-points", {
+        route: mapRoutePayload(routePayload),
+        points: pointPayloads.map(mapPointPayload),
+      });
+      return mapRoute(route);
+    },
+
     async updateRoute(routeId: string, payload: RouteFormPayload) {
       const route = await client.put<RouteDto, UpdateRouteDto>(`/api/v1/routes/${routeId}`, mapRoutePayload(payload));
       return mapRoute(route);
@@ -121,7 +136,8 @@ export function createApiRoutesRepository({ baseUrl }: { baseUrl?: string } = {}
     },
 
     async createRoutePoint(routeId: string, payload: RoutePointFormPayload) {
-      await client.post(`/api/v1/routes/${routeId}/points`, mapPointPayload(payload));
+      const point = await client.post<RoutePointDto, CreateRoutePointDto>(`/api/v1/routes/${routeId}/points`, mapPointPayload(payload));
+      return point.id;
     },
 
     async updateRoutePoint(routeId: string, pointId: string, payload: RoutePointFormPayload) {

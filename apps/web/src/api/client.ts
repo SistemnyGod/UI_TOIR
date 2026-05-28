@@ -1,10 +1,12 @@
 const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_AUTH_TOKEN_STORAGE_KEY = "patrol360.sessionToken";
 
 type HeaderMap = Record<string, string>;
 
 interface ViteImportMeta {
   env?: {
     VITE_API_BASE_URL?: string;
+    VITE_API_URL?: string;
   };
 }
 
@@ -22,6 +24,13 @@ export interface ApiRequestOptions {
   headers?: HeadersInit;
   signal?: AbortSignal;
   timeoutMs?: number;
+}
+
+export interface ApiFileResponse {
+  blob: Blob;
+  contentType: string;
+  downloadName: string;
+  fileName: string;
 }
 
 export interface ApiProblem {
@@ -123,8 +132,115 @@ export class ApiClient {
     );
   }
 
-  async delete<TResponse = void>(path: string, options: ApiRequestOptions = {}): Promise<TResponse> {
-    return this.request<TResponse>(path, { method: "DELETE" }, options);
+  async patch<TResponse, TBody = unknown>(
+    path: string,
+    body?: TBody,
+    options: ApiRequestOptions = {},
+  ): Promise<TResponse> {
+    return this.request<TResponse>(
+      path,
+      {
+        body: body === undefined ? undefined : JSON.stringify(body),
+        method: "PATCH",
+      },
+      options,
+    );
+  }
+
+  async delete<TResponse = void, TBody = unknown>(
+    path: string,
+    body?: TBody,
+    options: ApiRequestOptions = {},
+  ): Promise<TResponse> {
+    return this.request<TResponse>(
+      path,
+      {
+        body: body === undefined ? undefined : JSON.stringify(body),
+        method: "DELETE",
+      },
+      options,
+    );
+  }
+
+  async download(path: string, init: RequestInit = { method: "GET" }, options: ApiRequestOptions = {}): Promise<ApiFileResponse> {
+    const { cleanup, signal, timedOut } = createRequestSignal(options.signal, options.timeoutMs ?? this.timeoutMs);
+
+    try {
+      const response = await this.fetcher(buildUrl(this.baseUrl, path), {
+        ...init,
+        credentials: this.credentials,
+        headers: this.buildFileHeaders(init.headers, options.headers),
+        signal,
+      });
+
+      if (!response.ok) {
+        const error = await buildHttpError(response, path);
+        if (response.status === 401 || response.status === 403) {
+          this.onUnauthorized?.(error);
+        }
+
+        throw error;
+      }
+
+      const fileName = readContentDispositionFileName(response) ?? "download.bin";
+      return {
+        blob: await response.blob(),
+        contentType: response.headers.get("content-type") ?? "application/octet-stream",
+        downloadName: fileName,
+        fileName,
+      };
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      if (timedOut()) throw new ApiError(`API ${path} timed out`, 0, { kind: "timeout", path });
+      if (options.signal?.aborted || isAbortError(error)) {
+        throw new ApiError(`API ${path} was aborted`, 0, { kind: "abort", path });
+      }
+
+      throw new ApiError(error instanceof Error ? error.message : `API ${path} network error`, 0, {
+        kind: "network",
+        path,
+      });
+    } finally {
+      cleanup();
+    }
+  }
+
+  async postForm<TResponse>(path: string, body: FormData, options: ApiRequestOptions = {}): Promise<TResponse> {
+    const { cleanup, signal, timedOut } = createRequestSignal(options.signal, options.timeoutMs ?? this.timeoutMs);
+
+    try {
+      const response = await this.fetcher(buildUrl(this.baseUrl, path), {
+        body,
+        credentials: this.credentials,
+        headers: this.buildFileHeaders(options.headers),
+        method: "POST",
+        signal,
+      });
+
+      if (!response.ok) {
+        const error = await buildHttpError(response, path);
+        if (response.status === 401 || response.status === 403) {
+          this.onUnauthorized?.(error);
+        }
+
+        throw error;
+      }
+
+      return await readResponseBody<TResponse>(response, path);
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      if (timedOut()) throw new ApiError(`API ${path} timed out`, 0, { kind: "timeout", path });
+      if (options.signal?.aborted || isAbortError(error)) {
+        throw new ApiError(`API ${path} was aborted`, 0, { kind: "abort", path });
+      }
+
+      throw new ApiError(error instanceof Error ? error.message : `API ${path} network error`, 0, {
+        kind: "network",
+        path,
+      });
+    } finally {
+      cleanup();
+    }
   }
 
   private async request<T>(path: string, init: RequestInit, options: ApiRequestOptions): Promise<T> {
@@ -186,12 +302,65 @@ export class ApiClient {
       });
     }
 
-    const token = this.getAuthToken?.();
+    const token = this.getAuthToken?.() ?? getDefaultAuthToken();
     if (token) {
       nextHeaders.set("Authorization", `Bearer ${token}`);
     }
 
     return Object.fromEntries(nextHeaders.entries());
+  }
+
+  private buildFileHeaders(...headers: Array<HeadersInit | undefined>): HeaderMap {
+    const nextHeaders = new Headers({
+      Accept: "application/json, application/octet-stream",
+    });
+
+    for (const headerSet of [this.defaultHeaders, ...headers]) {
+      if (!headerSet) {
+        continue;
+      }
+
+      new Headers(headerSet).forEach((value, key) => {
+        if (key.toLowerCase() !== "content-type") {
+          nextHeaders.set(key, value);
+        }
+      });
+    }
+
+    const token = this.getAuthToken?.() ?? getDefaultAuthToken();
+    if (token) {
+      nextHeaders.set("Authorization", `Bearer ${token}`);
+    }
+
+    return Object.fromEntries(nextHeaders.entries());
+  }
+}
+
+export function buildApiUrl(path: string, baseUrl?: string) {
+  return buildUrl(normalizeBaseUrl(baseUrl ?? getDefaultApiBaseUrl()), path);
+}
+
+function getDefaultAuthToken() {
+  const runtime = globalThis as typeof globalThis & {
+    process?: { versions?: { node?: string } };
+  };
+
+  if (runtime.process?.versions?.node) {
+    return undefined;
+  }
+
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  try {
+    return (
+      window.localStorage?.getItem(DEFAULT_AUTH_TOKEN_STORAGE_KEY) ??
+      window.sessionStorage?.getItem(DEFAULT_AUTH_TOKEN_STORAGE_KEY) ??
+      undefined
+    );
+  } catch {
+    return undefined;
   }
 }
 
@@ -278,7 +447,11 @@ function createRequestSignal(signal: AbortSignal | undefined, timeoutMs: number)
 }
 
 function getDefaultApiBaseUrl() {
-  return ((import.meta as ViteImportMeta).env?.VITE_API_BASE_URL ?? "").trim();
+  const env = (import.meta as ViteImportMeta).env;
+  const configuredBaseUrl = (env?.VITE_API_BASE_URL ?? env?.VITE_API_URL ?? "").trim();
+  if (configuredBaseUrl) return configuredBaseUrl;
+
+  return "";
 }
 
 function normalizeBaseUrl(baseUrl: string) {
@@ -301,6 +474,19 @@ function readRequestId(response: Response, problem?: ApiProblem) {
     response.headers.get("traceparent") ??
     undefined
   );
+}
+
+function readContentDispositionFileName(response: Response) {
+  const header = response.headers.get("content-disposition");
+  if (!header) return undefined;
+
+  const encodedMatch = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (encodedMatch?.[1]) {
+    return decodeURIComponent(encodedMatch[1]);
+  }
+
+  const match = /filename="?([^";]+)"?/i.exec(header);
+  return match?.[1];
 }
 
 function isAbortError(error: unknown) {

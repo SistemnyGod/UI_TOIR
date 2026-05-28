@@ -22,6 +22,45 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.AccountingEmployeeReferenceEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_archived");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(180)
+                        .HasColumnType("character varying(180)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Kind", "IsArchived")
+                        .HasDatabaseName("ix_accounting_employee_references_kind_active");
+
+                    b.HasIndex("Kind", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_accounting_employee_references_kind_name");
+
+                    b.ToTable("accounting_employee_references", (string)null);
+                });
+
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.AssignmentEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -98,11 +137,21 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateOnly?>("BirthDate")
+                        .HasColumnType("date")
+                        .HasColumnName("birth_date");
+
                     b.Property<string>("Department")
                         .IsRequired()
                         .HasMaxLength(160)
                         .HasColumnType("character varying(160)")
                         .HasColumnName("department");
+
+                    b.Property<string>("EmployeeGroup")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("employee_group");
 
                     b.Property<string>("FullName")
                         .IsRequired()
@@ -113,6 +162,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Property<bool>("HasMobileAccount")
                         .HasColumnType("boolean")
                         .HasColumnName("has_mobile_account");
+
+                    b.Property<DateOnly?>("HiredAt")
+                        .HasColumnType("date")
+                        .HasColumnName("hired_at");
 
                     b.Property<DateTimeOffset>("LastSeenAt")
                         .HasColumnType("timestamp with time zone")
@@ -144,6 +197,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Department")
+                        .HasDatabaseName("ix_employees_department");
+
+                    b.HasIndex("EmployeeGroup")
+                        .HasDatabaseName("ix_employees_employee_group");
+
                     b.HasIndex("PersonnelNo")
                         .IsUnique()
                         .HasDatabaseName("ux_employees_personnel_no");
@@ -152,6 +211,2008 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_employees_status");
 
                     b.ToTable("employees", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuFavoriteEmployeeEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_emu_favorite_employees_employee");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("ix_emu_favorite_employees_active");
+
+                    b.ToTable("emu_favorite_employees", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuNotCompletedReasonEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ux_emu_not_completed_reasons_code");
+
+                    b.ToTable("emu_not_completed_reasons", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuNotificationEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)")
+                        .HasColumnName("message");
+
+                    b.Property<Guid?>("PlanTaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plan_task_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(220)
+                        .HasColumnType("character varying(220)")
+                        .HasColumnName("title");
+
+                    b.Property<Guid?>("WorkSessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("work_session_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeId");
+
+                    b.HasIndex("PlanTaskId");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_emu_notifications_status");
+
+                    b.HasIndex("WorkSessionId");
+
+                    b.ToTable("emu_notifications", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWaitReasonEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ux_emu_wait_reasons_code");
+
+                    b.ToTable("emu_wait_reasons", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkAuditEventEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasMaxLength(220)
+                        .HasColumnType("character varying(220)")
+                        .HasColumnName("actor");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(2400)
+                        .HasColumnType("character varying(2400)")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("FromStatus")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("from_status");
+
+                    b.Property<Guid?>("PlanTaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plan_task_id");
+
+                    b.Property<string>("ToStatus")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("to_status");
+
+                    b.Property<Guid?>("WorkSessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("work_session_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("PlanTaskId", "CreatedAt")
+                        .HasDatabaseName("ix_emu_audit_plan_created");
+
+                    b.HasIndex("WorkSessionId", "CreatedAt")
+                        .HasDatabaseName("ix_emu_audit_session_created");
+
+                    b.ToTable("emu_work_audit_events", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkPauseEmployeeEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<Guid>("PauseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pause_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeId");
+
+                    b.HasIndex("PauseId", "EmployeeId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_emu_work_pause_employees_pause_employee");
+
+                    b.ToTable("emu_work_pause_employees", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkPauseEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(1400)
+                        .HasColumnType("character varying(1400)")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<bool>("IsOtherWork")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_other_work");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<Guid>("WaitReasonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("wait_reason_id");
+
+                    b.Property<Guid>("WorkSessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("work_session_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WaitReasonId");
+
+                    b.HasIndex("WorkSessionId", "StartedAt")
+                        .HasDatabaseName("ix_emu_work_pauses_session_started");
+
+                    b.ToTable("emu_work_pauses", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkPlanTaskEmployeeEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<Guid>("PlanTaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plan_task_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeId");
+
+                    b.HasIndex("PlanTaskId", "EmployeeId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_emu_plan_task_employees_task_employee");
+
+                    b.ToTable("emu_work_plan_task_employees", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkPlanTaskEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ApprovalStatus")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("approval_status");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<Guid?>("ApprovedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approved_by_user_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsRecurring")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_recurring");
+
+                    b.Property<DateOnly>("PlannedDate")
+                        .HasColumnType("date")
+                        .HasColumnName("planned_date");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("priority");
+
+                    b.Property<string>("RecurrenceRule")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("recurrence_rule");
+
+                    b.Property<int>("RowVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid?>("SectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("section_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(220)
+                        .HasColumnType("character varying(220)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovalStatus")
+                        .HasDatabaseName("ix_emu_plan_tasks_approval_status");
+
+                    b.HasIndex("ApprovedByUserId");
+
+                    b.HasIndex("PlannedDate")
+                        .HasDatabaseName("ix_emu_plan_tasks_planned_date");
+
+                    b.HasIndex("SectionId");
+
+                    b.ToTable("emu_work_plan_tasks", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSectionEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ux_emu_work_sections_code");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("ix_emu_work_sections_active");
+
+                    b.ToTable("emu_work_sections", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSessionCarryOverEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly>("FromDate")
+                        .HasColumnType("date")
+                        .HasColumnName("from_date");
+
+                    b.Property<DateOnly>("ToDate")
+                        .HasColumnType("date")
+                        .HasColumnName("to_date");
+
+                    b.Property<Guid>("WorkSessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("work_session_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkSessionId", "ToDate")
+                        .IsUnique()
+                        .HasDatabaseName("ux_emu_work_carry_overs_session_date");
+
+                    b.ToTable("emu_work_session_carry_overs", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSessionEmployeeEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ArrivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("arrived_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
+                    b.Property<string>("FullNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(220)
+                        .HasColumnType("character varying(220)")
+                        .HasColumnName("full_name_snapshot");
+
+                    b.Property<int>("OtherWorkMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("other_work_minutes");
+
+                    b.Property<string>("PositionSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("position_snapshot");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("WaitingMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("waiting_minutes");
+
+                    b.Property<int>("WorkMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("work_minutes");
+
+                    b.Property<Guid>("WorkSessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("work_session_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkSessionId");
+
+                    b.HasIndex("EmployeeId", "Status")
+                        .HasDatabaseName("ix_emu_work_session_employees_employee_status");
+
+                    b.ToTable("emu_work_session_employees", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSessionEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ArrivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("arrived_at");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("DeleteReason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("delete_reason");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by_user_id");
+
+                    b.Property<bool>("IsCarriedOver")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_carried_over");
+
+                    b.Property<Guid?>("NotCompletedReasonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("not_completed_reason_id");
+
+                    b.Property<int>("OtherWorkMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("other_work_minutes");
+
+                    b.Property<Guid?>("PlanTaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plan_task_id");
+
+                    b.Property<string>("ResultComment")
+                        .IsRequired()
+                        .HasMaxLength(2400)
+                        .HasColumnType("character varying(2400)")
+                        .HasColumnName("result_comment");
+
+                    b.Property<string>("ResultStatus")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("result_status");
+
+                    b.Property<int>("RowVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("SectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("section_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TaskDescription")
+                        .IsRequired()
+                        .HasMaxLength(2400)
+                        .HasColumnType("character varying(2400)")
+                        .HasColumnName("task_description");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("WaitingMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("waiting_minutes");
+
+                    b.Property<DateOnly>("WorkDate")
+                        .HasColumnType("date")
+                        .HasColumnName("work_date");
+
+                    b.Property<int>("WorkMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("work_minutes");
+
+                    b.Property<string>("WorkNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("work_number");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("DeletedAt")
+                        .HasDatabaseName("ix_emu_work_sessions_deleted_at");
+
+                    b.HasIndex("DeletedByUserId");
+
+                    b.HasIndex("NotCompletedReasonId");
+
+                    b.HasIndex("PlanTaskId");
+
+                    b.HasIndex("SectionId");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_emu_work_sessions_status");
+
+                    b.HasIndex("WorkDate")
+                        .HasDatabaseName("ix_emu_work_sessions_work_date");
+
+                    b.HasIndex("WorkNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ux_emu_work_sessions_number");
+
+                    b.ToTable("emu_work_sessions", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkTemplateEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1400)
+                        .HasColumnType("character varying(1400)")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(180)
+                        .HasColumnType("character varying(180)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid?>("SectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("section_id");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("ix_emu_work_templates_active");
+
+                    b.HasIndex("SectionId");
+
+                    b.ToTable("emu_work_templates", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryCategoryEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_archived");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid?>("ParentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_categories_legacy_id");
+
+                    b.HasIndex("ParentId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_categories_parent_name");
+
+                    b.ToTable("categories", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryCustodyCategoryEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_archived");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_custody_categories_legacy_id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_custody_categories_name");
+
+                    b.ToTable("custody_categories", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryCustodyDocumentEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("number");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_custody_documents_legacy_id");
+
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_custody_documents_number");
+
+                    b.HasIndex("EmployeeId", "Status")
+                        .HasDatabaseName("ix_inventory_custody_documents_employee_status");
+
+                    b.ToTable("custody_documents", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryCustodyRecordEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)")
+                        .HasColumnName("comment");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_id");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<DateTimeOffset>("IssuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("issued_at");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("item_id");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentId")
+                        .HasDatabaseName("ix_inventory_custody_records_document_id");
+
+                    b.HasIndex("ItemId");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_custody_records_legacy_id");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.HasIndex("EmployeeId", "Status")
+                        .HasDatabaseName("ix_inventory_custody_records_employee_status");
+
+                    b.ToTable("custody_records", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryCustodyRecordEventEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("actor");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("FromStatus")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("from_status");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<Guid>("RecordId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("record_id");
+
+                    b.Property<string>("ToStatus")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("to_status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_custody_events_legacy_id");
+
+                    b.HasIndex("RecordId", "CreatedAt")
+                        .HasDatabaseName("ix_inventory_custody_events_record_created");
+
+                    b.ToTable("custody_record_events", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryEmployeeLegacyLinkEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<int>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<string>("SourceKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("source_key");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeId")
+                        .HasDatabaseName("ix_inventory_employee_legacy_links_employee");
+
+                    b.HasIndex("SourceKey", "LegacyId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_employee_legacy_links_source_legacy");
+
+                    b.ToTable("employee_legacy_links", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryExportJobEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DownloadName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)")
+                        .HasColumnName("download_name");
+
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("format");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload_json");
+
+                    b.Property<string>("ReportId")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("report_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportId", "CreatedAt")
+                        .HasDatabaseName("ix_inventory_export_jobs_report_created");
+
+                    b.ToTable("export_jobs", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryItemEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActualItemName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)")
+                        .HasColumnName("actual_item_name");
+
+                    b.Property<string>("Article")
+                        .IsRequired()
+                        .HasMaxLength(140)
+                        .HasColumnType("character varying(140)")
+                        .HasColumnName("article");
+
+                    b.Property<string>("BrandName")
+                        .IsRequired()
+                        .HasMaxLength(140)
+                        .HasColumnType("character varying(140)")
+                        .HasColumnName("brand_name");
+
+                    b.Property<Guid?>("CategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("category_id");
+
+                    b.Property<string>("ClothingSize")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("clothing_size");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int?>("DefaultLifeMonths")
+                        .HasColumnType("integer")
+                        .HasColumnName("default_life_months");
+
+                    b.Property<long?>("DefaultUnitPriceMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("default_unit_price_minor");
+
+                    b.Property<string>("GloveSize")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("glove_size");
+
+                    b.Property<string>("HeadSize")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("head_size");
+
+                    b.Property<string>("HeightSize")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("height_size");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsConsumable")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_consumable");
+
+                    b.Property<string>("ItemKind")
+                        .IsRequired()
+                        .HasMaxLength(140)
+                        .HasColumnType("character varying(140)")
+                        .HasColumnName("item_kind");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<decimal?>("MinStockQty")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("min_stock_qty");
+
+                    b.Property<string>("ModelName")
+                        .IsRequired()
+                        .HasMaxLength(140)
+                        .HasColumnType("character varying(140)")
+                        .HasColumnName("model_name");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("NormItemName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)")
+                        .HasColumnName("norm_item_name");
+
+                    b.Property<string>("ProtectionClass")
+                        .IsRequired()
+                        .HasMaxLength(140)
+                        .HasColumnType("character varying(140)")
+                        .HasColumnName("protection_class");
+
+                    b.Property<string>("RespiratorSize")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("respirator_size");
+
+                    b.Property<string>("ShoeSize")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("shoe_size");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasMaxLength(140)
+                        .HasColumnType("character varying(140)")
+                        .HasColumnName("sku");
+
+                    b.Property<bool>("TrackLife")
+                        .HasColumnType("boolean")
+                        .HasColumnName("track_life");
+
+                    b.Property<string>("TrackingType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("tracking_type");
+
+                    b.Property<Guid?>("UnitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("unit_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoryId")
+                        .HasDatabaseName("ix_inventory_items_category_id");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("ix_inventory_items_is_active");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_items_legacy_id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_items_name");
+
+                    b.HasIndex("Sku")
+                        .HasDatabaseName("ix_inventory_items_sku");
+
+                    b.HasIndex("UnitId");
+
+                    b.ToTable("items", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryItemSetEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_archived");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_item_sets_legacy_id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_item_sets_name");
+
+                    b.ToTable("item_sets", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryItemSetItemEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("item_id");
+
+                    b.Property<Guid>("ItemSetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("item_set_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("quantity");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ItemId");
+
+                    b.HasIndex("ItemSetId", "ItemId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_item_set_items_set_item");
+
+                    b.ToTable("item_set_items", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryLegacyImportRunEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("DryRun")
+                        .HasColumnType("boolean")
+                        .HasColumnName("dry_run");
+
+                    b.Property<string>("Error")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("error");
+
+                    b.Property<int>("RowsInserted")
+                        .HasColumnType("integer")
+                        .HasColumnName("rows_inserted");
+
+                    b.Property<int>("RowsRead")
+                        .HasColumnType("integer")
+                        .HasColumnName("rows_read");
+
+                    b.Property<int>("RowsSkipped")
+                        .HasColumnType("integer")
+                        .HasColumnName("rows_skipped");
+
+                    b.Property<int>("RowsUpdated")
+                        .HasColumnType("integer")
+                        .HasColumnName("rows_updated");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("StockChecksum")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("stock_checksum");
+
+                    b.Property<string>("TablesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("tables_json");
+
+                    b.Property<int>("TablesScanned")
+                        .HasColumnType("integer")
+                        .HasColumnName("tables_scanned");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_inventory_legacy_import_runs_created");
+
+                    b.ToTable("legacy_import_runs", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPositionItemSetMapEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ItemSetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("item_set_id");
+
+                    b.Property<string>("PositionName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("position_name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ItemSetId");
+
+                    b.HasIndex("PositionName", "ItemSetId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_position_item_sets_position_set");
+
+                    b.ToTable("position_item_set_maps", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPositionNormEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("item_id");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<int?>("LifeMonths")
+                        .HasColumnType("integer")
+                        .HasColumnName("life_months");
+
+                    b.Property<string>("PositionName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("position_name");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("quantity");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ItemId");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_position_norms_legacy_id");
+
+                    b.HasIndex("PositionName", "ItemId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_position_norms_position_item");
+
+                    b.ToTable("position_norms", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<string>("Position")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("position");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_ppe_cards_legacy_id");
+
+                    b.HasIndex("EmployeeId", "ArchivedAt")
+                        .HasDatabaseName("ix_inventory_ppe_cards_employee_archived");
+
+                    b.ToTable("ppe_cards", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardLineEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CardId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("card_id");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTimeOffset?>("DueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("due_at");
+
+                    b.Property<DateTimeOffset?>("IssuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("issued_at");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("item_id");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ItemId");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_ppe_lines_legacy_id");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.HasIndex("CardId", "Status")
+                        .HasDatabaseName("ix_inventory_ppe_lines_card_status");
+
+                    b.ToTable("ppe_card_lines", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardLineEventEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("actor");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("FromStatus")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("from_status");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<Guid>("LineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("line_id");
+
+                    b.Property<string>("ToStatus")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("to_status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_ppe_events_legacy_id");
+
+                    b.HasIndex("LineId", "CreatedAt")
+                        .HasDatabaseName("ix_inventory_ppe_events_line_created");
+
+                    b.ToTable("ppe_card_line_events", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeIssueTemplateEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_archived");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_ppe_issue_templates_legacy_id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_ppe_issue_templates_name");
+
+                    b.ToTable("ppe_issue_templates", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryReturnReasonEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_archived");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_return_reasons_legacy_id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_return_reasons_name");
+
+                    b.ToTable("return_reasons", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryStockMoveEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("CustodyRecordId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("custody_record_id");
+
+                    b.Property<Guid?>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("item_id");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<string>("MoveType")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("move_type");
+
+                    b.Property<DateTimeOffset>("MovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("moved_at");
+
+                    b.Property<Guid?>("PpeCardLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ppe_card_line_id");
+
+                    b.Property<decimal>("QuantityDelta")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("qty_delta");
+
+                    b.Property<Guid?>("ReferenceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reference_id");
+
+                    b.Property<string>("ReferenceType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("reference_type");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustodyRecordId")
+                        .HasDatabaseName("ix_inventory_stock_moves_custody_record_id");
+
+                    b.HasIndex("EmployeeId");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_stock_moves_legacy_id");
+
+                    b.HasIndex("PpeCardLineId")
+                        .HasDatabaseName("ix_inventory_stock_moves_ppe_card_line_id");
+
+                    b.HasIndex("ItemId", "MovedAt")
+                        .HasDatabaseName("ix_inventory_stock_moves_item_moved");
+
+                    b.HasIndex("WarehouseId", "MovedAt")
+                        .HasDatabaseName("ix_inventory_stock_moves_warehouse_moved");
+
+                    b.ToTable("stock_moves", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventorySystemLogEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("action");
+
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("actor");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Details")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("details");
+
+                    b.Property<Guid?>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("entity_type");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Action")
+                        .HasDatabaseName("ix_inventory_system_log_action");
+
+                    b.HasIndex("Actor")
+                        .HasDatabaseName("ix_inventory_system_log_actor");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_inventory_system_log_created_at");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_system_log_legacy_id");
+
+                    b.HasIndex("EntityType", "CreatedAt")
+                        .HasDatabaseName("ix_inventory_system_log_entity_created");
+
+                    b.ToTable("system_log", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryUnitEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("symbol");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_units_legacy_id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_units_name");
+
+                    b.HasIndex("Symbol")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_units_symbol");
+
+                    b.ToTable("units", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryUserLegacyLinkEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<string>("SourceKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("source_key");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_inventory_user_legacy_links_user");
+
+                    b.HasIndex("SourceKey", "LegacyId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_user_legacy_links_source_legacy");
+
+                    b.ToTable("user_legacy_links", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryWarehouseEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_archived");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_default");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_warehouses_legacy_id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_warehouses_name");
+
+                    b.ToTable("warehouses", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryWriteOffReasonEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_archived");
+
+                    b.Property<int?>("LegacyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LegacyId")
+                        .HasDatabaseName("ix_inventory_write_off_reasons_legacy_id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_write_off_reasons_name");
+
+                    b.ToTable("write_off_reasons", "inventory");
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.MobileAccountAuditEventEntity", b =>
@@ -339,11 +2400,25 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("app_version");
 
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
                     b.Property<string>("Device")
                         .IsRequired()
                         .HasMaxLength(160)
                         .HasColumnType("character varying(160)")
                         .HasColumnName("device");
+
+                    b.Property<string>("DeviceId")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("device_id");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
 
                     b.Property<string>("IpAddress")
                         .IsRequired()
@@ -365,18 +2440,351 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(80)")
                         .HasColumnName("platform");
 
+                    b.Property<string>("PushToken")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("push_token");
+
+                    b.Property<DateTimeOffset?>("PushTokenRegisteredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("push_token_registered_at");
+
+                    b.Property<DateTimeOffset?>("PushTokenRevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("push_token_revoked_at");
+
+                    b.Property<DateTimeOffset>("RefreshExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("refresh_expires_at");
+
+                    b.Property<string>("RefreshTokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("refresh_token_hash");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)")
                         .HasColumnName("status");
 
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("token_hash");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("RefreshTokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_mobile_account_sessions_refresh_token_hash")
+                        .HasFilter("refresh_token_hash <> ''");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_mobile_account_sessions_token_hash")
+                        .HasFilter("token_hash <> ''");
 
                     b.HasIndex("MobileAccountId", "LastSeenAt")
                         .HasDatabaseName("ix_mobile_account_sessions_account_seen");
 
                     b.ToTable("mobile_account_sessions", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.MobileNotificationEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<string>("EntityId")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("entity_type");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)")
+                        .HasColumnName("message");
+
+                    b.Property<Guid>("MobileAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("mobile_account_id");
+
+                    b.Property<int>("PushAttemptCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("push_attempt_count");
+
+                    b.Property<DateTimeOffset?>("PushClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("push_claimed_at");
+
+                    b.Property<string>("PushLastError")
+                        .IsRequired()
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)")
+                        .HasColumnName("push_last_error");
+
+                    b.Property<DateTimeOffset?>("PushSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("push_sent_at");
+
+                    b.Property<string>("PushStatus")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("push_status");
+
+                    b.Property<string>("PushTokenSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("push_token_snapshot");
+
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("read_at");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(220)
+                        .HasColumnType("character varying(220)")
+                        .HasColumnName("title");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("notification_type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReadAt")
+                        .HasDatabaseName("ix_mobile_notifications_read_at");
+
+                    b.HasIndex("PushStatus", "CreatedAt")
+                        .HasDatabaseName("ix_mobile_notifications_push_status_created");
+
+                    b.HasIndex("MobileAccountId", "CreatedAt")
+                        .HasDatabaseName("ix_mobile_notifications_account_created");
+
+                    b.HasIndex("MobileAccountId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_mobile_notifications_account_idempotency");
+
+                    b.ToTable("mobile_notifications", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.MobileOutboxOperationEntity", b =>
+                {
+                    b.Property<string>("ClientOperationId")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("client_operation_id");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt_count");
+
+                    b.Property<string>("CommandType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("command_type");
+
+                    b.Property<DateTimeOffset>("CreatedAtLocal")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_local");
+
+                    b.Property<DateTimeOffset>("CreatedAtServer")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_server");
+
+                    b.Property<string>("EntityLocalId")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("entity_local_id");
+
+                    b.Property<string>("EntityServerId")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("entity_server_id");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("entity_type");
+
+                    b.Property<Guid>("MobileAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("mobile_account_id");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload_json");
+
+                    b.Property<string>("ResponseJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("response_json");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.HasKey("ClientOperationId");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_mobile_outbox_operations_status");
+
+                    b.HasIndex("MobileAccountId", "CreatedAtServer")
+                        .HasDatabaseName("ix_mobile_outbox_operations_account_created");
+
+                    b.ToTable("mobile_outbox_operations", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.MobileSyncConflictResolutionEntity", b =>
+                {
+                    b.Property<string>("ClientOperationId")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("client_operation_id");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTimeOffset>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<string>("ResolvedBy")
+                        .IsRequired()
+                        .HasMaxLength(220)
+                        .HasColumnType("character varying(220)")
+                        .HasColumnName("resolved_by");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.HasKey("ClientOperationId");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_mobile_sync_conflict_resolutions_status");
+
+                    b.ToTable("mobile_sync_conflict_resolutions", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.MobileUploadedFileEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AssignmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assignment_id");
+
+                    b.Property<DateTimeOffset>("CapturedAtLocal")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("captured_at_local");
+
+                    b.Property<string>("ClientFileId")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("client_file_id");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("content_type");
+
+                    b.Property<Guid>("MobileAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("mobile_account_id");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)")
+                        .HasColumnName("original_file_name");
+
+                    b.Property<Guid>("PointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("point_id");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("sha256");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<string>("StorageFileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)")
+                        .HasColumnName("storage_file_name");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("uploaded_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PointId");
+
+                    b.HasIndex("AssignmentId", "PointId")
+                        .HasDatabaseName("ix_mobile_uploaded_files_assignment_point");
+
+                    b.HasIndex("MobileAccountId", "ClientFileId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_mobile_uploaded_files_account_client_file");
+
+                    b.ToTable("mobile_uploaded_files", (string)null);
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolRequestEntity", b =>
@@ -440,6 +2848,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("time without time zone")
                         .HasColumnName("scheduled_time");
 
+                    b.Property<Guid?>("SourceResultId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_result_id");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(60)
@@ -459,10 +2871,287 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.HasIndex("ScheduledDate")
                         .HasDatabaseName("ix_patrol_requests_scheduled_date");
 
+                    b.HasIndex("SourceResultId")
+                        .HasDatabaseName("ix_patrol_requests_source_result_id");
+
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_patrol_requests_status");
 
                     b.ToTable("patrol_requests", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolResultAttachmentEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)")
+                        .HasColumnName("file_name");
+
+                    b.Property<Guid>("PatrolResultId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patrol_result_id");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PatrolResultId", "CreatedAt")
+                        .HasDatabaseName("ix_patrol_result_attachments_result_created");
+
+                    b.ToTable("patrol_result_attachments", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolResultEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ActualAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actual_at");
+
+                    b.Property<Guid?>("AssignmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assignment_id");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Deviation")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("deviation");
+
+                    b.Property<Guid?>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<string>("EmployeeName")
+                        .IsRequired()
+                        .HasMaxLength(220)
+                        .HasColumnType("character varying(220)")
+                        .HasColumnName("employee_name");
+
+                    b.Property<string>("IssueType")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("issue_type");
+
+                    b.Property<int>("Photos")
+                        .HasColumnType("integer")
+                        .HasColumnName("photos");
+
+                    b.Property<DateTimeOffset>("PlannedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("planned_at");
+
+                    b.Property<string>("PointName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("point_name");
+
+                    b.Property<Guid?>("RouteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("route_id");
+
+                    b.Property<string>("RouteName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("route_name");
+
+                    b.Property<Guid?>("RoutePointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("route_point_id");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("severity");
+
+                    b.Property<string>("Shift")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("shift");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Territory")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("territory");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActualAt")
+                        .HasDatabaseName("ix_patrol_results_actual_at");
+
+                    b.HasIndex("AssignmentId")
+                        .HasDatabaseName("ix_patrol_results_assignment_id");
+
+                    b.HasIndex("EmployeeId")
+                        .HasDatabaseName("ix_patrol_results_employee_id");
+
+                    b.HasIndex("RouteId")
+                        .HasDatabaseName("ix_patrol_results_route_id");
+
+                    b.HasIndex("RoutePointId");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_patrol_results_status");
+
+                    b.ToTable("patrol_results", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolResultIssueEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)")
+                        .HasColumnName("message");
+
+                    b.Property<Guid>("PatrolResultId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patrol_result_id");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("severity");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("issue_type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PatrolResultId", "CreatedAt")
+                        .HasDatabaseName("ix_patrol_result_issues_result_created");
+
+                    b.ToTable("patrol_result_issues", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PermissionEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(220)
+                        .HasColumnType("character varying(220)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ux_permissions_code");
+
+                    b.ToTable("permissions", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.RoleEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(220)
+                        .HasColumnType("character varying(220)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ux_roles_code");
+
+                    b.ToTable("roles", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.RolePermissionEntity", b =>
+                {
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_id");
+
+                    b.Property<Guid>("PermissionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("permission_id");
+
+                    b.HasKey("RoleId", "PermissionId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.ToTable("role_permissions", (string)null);
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.RouteEntity", b =>
@@ -609,14 +3298,134 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("NfcCode")
-                        .HasDatabaseName("ix_route_points_nfc_code");
+                    b.HasIndex("RouteId", "NfcCode")
+                        .IsUnique()
+                        .HasDatabaseName("ux_route_points_route_nfc_code")
+                        .HasFilter("nfc_code IS NOT NULL AND nfc_code <> ''");
 
                     b.HasIndex("RouteId", "SequenceNo")
                         .IsUnique()
                         .HasDatabaseName("ux_route_points_route_seq");
 
                     b.ToTable("route_points", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(220)
+                        .HasColumnType("character varying(220)")
+                        .HasColumnName("display_name");
+
+                    b.Property<DateTimeOffset?>("LastLoginAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_login_at");
+
+                    b.Property<string>("Login")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("login");
+
+                    b.Property<string>("NormalizedLogin")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("normalized_login");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("password_hash");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DisplayName")
+                        .HasDatabaseName("ix_site_users_display_name");
+
+                    b.HasIndex("NormalizedLogin")
+                        .IsUnique()
+                        .HasDatabaseName("ux_site_users_normalized_login");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_site_users_status");
+
+                    b.ToTable("site_users", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.SiteUserRoleEntity", b =>
+                {
+                    b.Property<Guid>("SiteUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_user_id");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_id");
+
+                    b.HasKey("SiteUserId", "RoleId");
+
+                    b.HasIndex("RoleId");
+
+                    b.ToTable("site_user_roles", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.SiteUserSessionEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<Guid>("SiteUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_user_id");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("token_hash");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_site_user_sessions_token_hash");
+
+                    b.HasIndex("SiteUserId", "ExpiresAt")
+                        .HasDatabaseName("ix_site_user_sessions_user_expires");
+
+                    b.ToTable("site_user_sessions", (string)null);
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.AssignmentEntity", b =>
@@ -644,6 +3453,453 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Navigation("PatrolRequest");
 
                     b.Navigation("Route");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuFavoriteEmployeeEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuNotificationEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuWorkPlanTaskEntity", "PlanTask")
+                        .WithMany()
+                        .HasForeignKey("PlanTaskId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSessionEntity", "WorkSession")
+                        .WithMany()
+                        .HasForeignKey("WorkSessionId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("PlanTask");
+
+                    b.Navigation("WorkSession");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkAuditEventEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", "ActorUser")
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuWorkPlanTaskEntity", "PlanTask")
+                        .WithMany()
+                        .HasForeignKey("PlanTaskId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSessionEntity", "WorkSession")
+                        .WithMany("AuditEvents")
+                        .HasForeignKey("WorkSessionId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("ActorUser");
+
+                    b.Navigation("PlanTask");
+
+                    b.Navigation("WorkSession");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkPauseEmployeeEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuWorkPauseEntity", "Pause")
+                        .WithMany("Employees")
+                        .HasForeignKey("PauseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("Pause");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkPauseEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuWaitReasonEntity", "WaitReason")
+                        .WithMany()
+                        .HasForeignKey("WaitReasonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSessionEntity", "WorkSession")
+                        .WithMany("Pauses")
+                        .HasForeignKey("WorkSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("WaitReason");
+
+                    b.Navigation("WorkSession");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkPlanTaskEmployeeEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuWorkPlanTaskEntity", "PlanTask")
+                        .WithMany("Employees")
+                        .HasForeignKey("PlanTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("PlanTask");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkPlanTaskEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", "ApprovedByUser")
+                        .WithMany()
+                        .HasForeignKey("ApprovedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSectionEntity", "Section")
+                        .WithMany()
+                        .HasForeignKey("SectionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ApprovedByUser");
+
+                    b.Navigation("Section");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSessionCarryOverEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSessionEntity", "WorkSession")
+                        .WithMany()
+                        .HasForeignKey("WorkSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("WorkSession");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSessionEmployeeEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSessionEntity", "WorkSession")
+                        .WithMany("Employees")
+                        .HasForeignKey("WorkSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("WorkSession");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSessionEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", "DeletedByUser")
+                        .WithMany()
+                        .HasForeignKey("DeletedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuNotCompletedReasonEntity", "NotCompletedReason")
+                        .WithMany()
+                        .HasForeignKey("NotCompletedReasonId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuWorkPlanTaskEntity", "PlanTask")
+                        .WithMany()
+                        .HasForeignKey("PlanTaskId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSectionEntity", "Section")
+                        .WithMany()
+                        .HasForeignKey("SectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("DeletedByUser");
+
+                    b.Navigation("NotCompletedReason");
+
+                    b.Navigation("PlanTask");
+
+                    b.Navigation("Section");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkTemplateEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSectionEntity", "Section")
+                        .WithMany()
+                        .HasForeignKey("SectionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Section");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryCategoryEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryCategoryEntity", "Parent")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Parent");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryCustodyDocumentEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryCustodyRecordEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryCustodyDocumentEntity", "Document")
+                        .WithMany("Records")
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryItemEntity", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryWarehouseEntity", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Document");
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryCustodyRecordEventEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryCustodyRecordEntity", "Record")
+                        .WithMany("Events")
+                        .HasForeignKey("RecordId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Record");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryEmployeeLegacyLinkEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryItemEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryCategoryEntity", "Category")
+                        .WithMany("Items")
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryUnitEntity", "Unit")
+                        .WithMany("Items")
+                        .HasForeignKey("UnitId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Category");
+
+                    b.Navigation("Unit");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryItemSetItemEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryItemEntity", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryItemSetEntity", "ItemSet")
+                        .WithMany("Items")
+                        .HasForeignKey("ItemSetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Item");
+
+                    b.Navigation("ItemSet");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPositionItemSetMapEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryItemSetEntity", "ItemSet")
+                        .WithMany()
+                        .HasForeignKey("ItemSetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ItemSet");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPositionNormEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryItemEntity", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Item");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardLineEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardEntity", "Card")
+                        .WithMany("Lines")
+                        .HasForeignKey("CardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryItemEntity", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryWarehouseEntity", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Card");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardLineEventEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardLineEntity", "Line")
+                        .WithMany("Events")
+                        .HasForeignKey("LineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Line");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryStockMoveEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryCustodyRecordEntity", "CustodyRecord")
+                        .WithMany("StockMoves")
+                        .HasForeignKey("CustodyRecordId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryItemEntity", "Item")
+                        .WithMany("StockMoves")
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardLineEntity", "PpeCardLine")
+                        .WithMany("StockMoves")
+                        .HasForeignKey("PpeCardLineId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryWarehouseEntity", "Warehouse")
+                        .WithMany("StockMoves")
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CustodyRecord");
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("PpeCardLine");
+
+                    b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryUserLegacyLinkEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.MobileAccountEmployeeBindingEntity", b =>
@@ -676,6 +3932,66 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Navigation("MobileAccount");
                 });
 
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.MobileNotificationEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.MobileAccountEntity", "MobileAccount")
+                        .WithMany()
+                        .HasForeignKey("MobileAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MobileAccount");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.MobileOutboxOperationEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.MobileAccountEntity", "MobileAccount")
+                        .WithMany()
+                        .HasForeignKey("MobileAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MobileAccount");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.MobileSyncConflictResolutionEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.MobileOutboxOperationEntity", "Operation")
+                        .WithOne()
+                        .HasForeignKey("Patrol360.Infrastructure.Persistence.Entities.MobileSyncConflictResolutionEntity", "ClientOperationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Operation");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.MobileUploadedFileEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.AssignmentEntity", "Assignment")
+                        .WithMany()
+                        .HasForeignKey("AssignmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.MobileAccountEntity", "MobileAccount")
+                        .WithMany()
+                        .HasForeignKey("MobileAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.RoutePointEntity", "Point")
+                        .WithMany()
+                        .HasForeignKey("PointId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Assignment");
+
+                    b.Navigation("MobileAccount");
+
+                    b.Navigation("Point");
+                });
+
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolRequestEntity", b =>
                 {
                     b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", "Employee")
@@ -688,9 +4004,88 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasForeignKey("RouteId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.PatrolResultEntity", "SourceResult")
+                        .WithMany()
+                        .HasForeignKey("SourceResultId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Employee");
 
                     b.Navigation("Route");
+
+                    b.Navigation("SourceResult");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolResultAttachmentEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.PatrolResultEntity", "PatrolResult")
+                        .WithMany("Attachments")
+                        .HasForeignKey("PatrolResultId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PatrolResult");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolResultEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.AssignmentEntity", "Assignment")
+                        .WithMany()
+                        .HasForeignKey("AssignmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.RouteEntity", "Route")
+                        .WithMany()
+                        .HasForeignKey("RouteId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.RoutePointEntity", "RoutePoint")
+                        .WithMany()
+                        .HasForeignKey("RoutePointId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Assignment");
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("Route");
+
+                    b.Navigation("RoutePoint");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolResultIssueEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.PatrolResultEntity", "PatrolResult")
+                        .WithMany("Issues")
+                        .HasForeignKey("PatrolResultId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PatrolResult");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.RolePermissionEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.PermissionEntity", "Permission")
+                        .WithMany("Roles")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.RoleEntity", "Role")
+                        .WithMany("Permissions")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Permission");
+
+                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.RoutePointEntity", b =>
@@ -704,11 +4099,111 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Navigation("Route");
                 });
 
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.SiteUserRoleEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.RoleEntity", "Role")
+                        .WithMany("Users")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", "SiteUser")
+                        .WithMany("Roles")
+                        .HasForeignKey("SiteUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Role");
+
+                    b.Navigation("SiteUser");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.SiteUserSessionEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", "SiteUser")
+                        .WithMany("Sessions")
+                        .HasForeignKey("SiteUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SiteUser");
+                });
+
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", b =>
                 {
                     b.Navigation("Assignments");
 
                     b.Navigation("PatrolRequests");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkPauseEntity", b =>
+                {
+                    b.Navigation("Employees");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkPlanTaskEntity", b =>
+                {
+                    b.Navigation("Employees");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuWorkSessionEntity", b =>
+                {
+                    b.Navigation("AuditEvents");
+
+                    b.Navigation("Employees");
+
+                    b.Navigation("Pauses");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryCategoryEntity", b =>
+                {
+                    b.Navigation("Children");
+
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryCustodyDocumentEntity", b =>
+                {
+                    b.Navigation("Records");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryCustodyRecordEntity", b =>
+                {
+                    b.Navigation("Events");
+
+                    b.Navigation("StockMoves");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryItemEntity", b =>
+                {
+                    b.Navigation("StockMoves");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryItemSetEntity", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardEntity", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardLineEntity", b =>
+                {
+                    b.Navigation("Events");
+
+                    b.Navigation("StockMoves");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryUnitEntity", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryWarehouseEntity", b =>
+                {
+                    b.Navigation("StockMoves");
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.MobileAccountEntity", b =>
@@ -723,9 +4218,35 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Navigation("Assignment");
                 });
 
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolResultEntity", b =>
+                {
+                    b.Navigation("Attachments");
+
+                    b.Navigation("Issues");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PermissionEntity", b =>
+                {
+                    b.Navigation("Roles");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.RoleEntity", b =>
+                {
+                    b.Navigation("Permissions");
+
+                    b.Navigation("Users");
+                });
+
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.RouteEntity", b =>
                 {
                     b.Navigation("Points");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", b =>
+                {
+                    b.Navigation("Roles");
+
+                    b.Navigation("Sessions");
                 });
 #pragma warning restore 612, 618
         }

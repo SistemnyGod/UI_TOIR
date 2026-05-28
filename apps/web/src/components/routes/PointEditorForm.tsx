@@ -1,11 +1,10 @@
 import type { FormEvent } from "react";
 import type { RouteDirectoryItem, RoutePoint, RoutePointFormPayload } from "../../types";
-import { Chip, EmptyState, Field } from "../ui";
+import { EmptyState, Field } from "../ui";
 
 type MaybePromise<T> = T | Promise<T>;
 
 const pointTypeOptions = ["NFC", "QR-код", "Ручной контроль"] as RoutePoint["type"][];
-const pointStatusOptions = ["Активна", "Повтор метки", "Черновик"] as RoutePoint["status"][];
 
 export const emptyPointDraft: RoutePointFormPayload = {
   name: "",
@@ -15,7 +14,7 @@ export const emptyPointDraft: RoutePointFormPayload = {
   interval: "00:10",
   expectedTime: "00:05",
   status: "Активна" as RoutePoint["status"],
-  requiresPhoto: true,
+  requiresPhoto: false,
 };
 
 export function PointEditorForm({
@@ -39,6 +38,11 @@ export function PointEditorForm({
   onDelete?: () => MaybePromise<void>;
   onSubmit: (event: FormEvent<HTMLFormElement>) => MaybePromise<void>;
 }) {
+  const normalizedTag = draft.tag.trim().toLowerCase();
+  const hasDuplicateTag =
+    normalizedTag.length > 0 &&
+    route.points.some((routePoint) => routePoint.id !== point?.id && routePoint.tag.trim().toLowerCase() === normalizedTag);
+
   if (mode === "edit" && !point) {
     return (
       <EmptyState
@@ -64,10 +68,6 @@ export function PointEditorForm({
           <input required value={draft.name} onChange={(event) => onChange({ ...draft, name: event.currentTarget.value })} />
         </label>
         <label>
-          Зона / локация
-          <input value={draft.zone} onChange={(event) => onChange({ ...draft, zone: event.currentTarget.value })} />
-        </label>
-        <label>
           Тип точки
           <select value={draft.type} onChange={(event) => onChange({ ...draft, type: event.currentTarget.value as RoutePoint["type"] })}>
             {pointTypeOptions.map((item) => <option key={item}>{item}</option>)}
@@ -77,40 +77,37 @@ export function PointEditorForm({
           NFC / тег / ярлык
           <input value={draft.tag} onChange={(event) => onChange({ ...draft, tag: event.currentTarget.value })} />
         </label>
-        <div className="form-grid two">
-          <label>
-            Интервал
-            <input value={draft.interval} onChange={(event) => onChange({ ...draft, interval: event.currentTarget.value })} />
-          </label>
-          <label>
-            Ожид. время
-            <input value={draft.expectedTime} onChange={(event) => onChange({ ...draft, expectedTime: event.currentTarget.value })} />
-          </label>
-        </div>
         <label>
-          Статус
-          <select value={draft.status} onChange={(event) => onChange({ ...draft, status: event.currentTarget.value as RoutePoint["status"] })}>
-            {pointStatusOptions.map((item) => <option key={item}>{item}</option>)}
-          </select>
+          Зона точки
+          <input value={draft.zone} onChange={(event) => onChange({ ...draft, zone: event.currentTarget.value })} />
+        </label>
+        <label className="route-create-check">
+          <input
+            checked={draft.requiresPhoto}
+            onChange={(event) => onChange({ ...draft, requiresPhoto: event.currentTarget.checked })}
+            type="checkbox"
+          />
+          Фото обязательно
         </label>
       </div>
       <dl className="meta-list">
         <Field label="Порядок" value={point?.order ?? route.points.length + 1} />
         <Field label="Маршрут" value={route.name} />
-        {point ? <Field label="Текущий статус" value={<Chip>{point.status}</Chip>} /> : null}
       </dl>
       <div className="notice info-soft">
-        <strong>Повтор NFC-метки разрешен.</strong>
-        <span>Одинаковый тег можно сохранить в другом маршруте или в этом маршруте, если это нужно для реального обхода.</span>
+        <strong>NFC-метка должна быть уникальной внутри маршрута.</strong>
+        <span>Одинаковый тег допустим только в другом маршруте. В этом маршруте сохранение дубля будет заблокировано.</span>
       </div>
-      <label className="toggle-filter">
-        <input checked={draft.requiresPhoto} onChange={(event) => onChange({ ...draft, requiresPhoto: event.currentTarget.checked })} type="checkbox" />
-        Требовать фото
-      </label>
+      {hasDuplicateTag ? (
+        <div className="notice warning-soft">
+          <strong>Такая NFC/QR-метка уже есть в этом маршруте.</strong>
+          <span>Измените тег или выберите существующую точку с этой меткой.</span>
+        </div>
+      ) : null}
       <div className="drawer-actions">
         {onDelete ? <button className="button danger-outline" onClick={onDelete} type="button">Удалить</button> : null}
         <button className="button ghost" onClick={onCancel} type="button">Отмена</button>
-        <button className="button primary" type="submit">{mode === "create" ? "Добавить точку" : "Сохранить точку"}</button>
+        <button className="button primary" disabled={hasDuplicateTag} type="submit">{mode === "create" ? "Добавить точку" : "Сохранить точку"}</button>
       </div>
     </form>
   );

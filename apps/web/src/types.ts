@@ -1,4 +1,19 @@
-export type ScreenId = "dashboard" | "results" | "assign" | "employees" | "schedule" | "accounts" | "routes" | "users";
+export type PatrolScreenId = "dashboard" | "results" | "assign" | "employees" | "schedule" | "accounts" | "routes";
+export type InventoryScreenId =
+  | "inventory-overview"
+  | "inventory-employees"
+  | "inventory-items"
+  | "inventory-issue"
+  | "inventory-operations"
+  | "inventory-custody"
+  | "inventory-ppe"
+  | "inventory-history"
+  | "inventory-reports"
+  | "inventory-users"
+  | "inventory-settings"
+  | "inventory-system-log";
+export type EmuScreenId = "emu-dashboard" | "emu-work-accounting" | "emu-completed-work-history";
+export type ScreenId = PatrolScreenId | InventoryScreenId | EmuScreenId | "users";
 
 export type ResultMode = "all" | "issues" | "late" | "photos";
 export type ScheduleMode = "week" | "month" | "exceptions";
@@ -41,8 +56,10 @@ export interface Metric {
 
 export interface ActivePatrol {
   id: string;
+  patrolRequestId?: string;
   employee: string;
   employeeId: string;
+  routeId?: string;
   route: string;
   zone: string;
   shift: "День" | "Ночь";
@@ -74,13 +91,30 @@ export interface PatrolMediaAttachment {
   createdAt?: string;
 }
 
+export interface PatrolCompletionPhotoPayload {
+  fileName: string;
+  contentType: string;
+  dataBase64: string;
+}
+
+export interface PatrolResultAttachment {
+  id: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+  downloadUrl: string;
+}
+
 export interface PatrolResult {
   id: string;
+  assignmentId?: string;
   status: "Подтверждено" | "Замечание" | "Просрочено" | "Не подтверждено";
   point: string;
   pointId: string;
   employee: string;
   employeeId: string;
+  routeId?: string;
   route: string;
   territory: string;
   shift: "День" | "Ночь";
@@ -92,6 +126,8 @@ export interface PatrolResult {
   issueType: string;
   severity: "Низкая" | "Средняя" | "Высокая" | "-";
   chronology: string[];
+  source?: "mobile" | "web";
+  attachments?: PatrolResultAttachment[];
 }
 
 export interface ServiceRequest {
@@ -102,11 +138,14 @@ export interface ServiceRequest {
   priority: "Низкий" | "Средний" | "Высокий" | "Критический";
   sourceResultId: string;
   source: string;
+  employeeId?: string;
+  routeId?: string;
   route: string;
   point: string;
   employee: string;
   scheduledDate: string;
   scheduledTime: string;
+  shift?: string;
   notifyEmployee: boolean;
   notificationText: string;
   createdAt: string;
@@ -117,13 +156,55 @@ export interface ServiceRequest {
 }
 
 export interface CreateServiceRequestPayload {
+  sourceResultId?: string;
+  employeeId?: string;
   employee: string;
+  routeId?: string;
   route: string;
   scheduledDate: string;
   scheduledTime: string;
+  plannedAt?: string;
+  shift?: string;
   notifyEmployee: boolean;
   notificationText: string;
   description: string;
+}
+
+export interface CreateAssignmentPayload {
+  patrolRequestId?: string;
+  employeeId?: string;
+  employeeName?: string;
+  routeId?: string;
+  routeName?: string;
+  plannedAt?: string;
+  plannedEndAt?: string;
+  priority?: "high" | "medium" | "low";
+  shift?: string;
+  notifyEmployee?: boolean;
+  notificationText?: string;
+  comment?: string;
+}
+
+export interface CompleteAssignmentPayload {
+  actualAt?: string;
+  status?: "Подтверждено" | "Замечание" | "Просрочено" | "Не подтверждено";
+  routePointId?: string;
+  comment?: string;
+  issueType?: string;
+  severity?: "Низкая" | "Средняя" | "Высокая" | "-";
+  photos?: number;
+  pointResults?: CompleteAssignmentPointPayload[];
+  photoAttachments?: PatrolCompletionPhotoPayload[];
+}
+
+export interface CompleteAssignmentPointPayload {
+  routePointId: string;
+  status?: string;
+  comment?: string;
+  issueType?: string;
+  severity?: string;
+  photos?: number;
+  photoAttachments?: PatrolCompletionPhotoPayload[];
 }
 
 export interface Employee {
@@ -143,6 +224,8 @@ export interface EmployeeDirectoryItem {
   personnelNo: string;
   position: string;
   department: string;
+  employeeGroup: string;
+  birthDate: string;
   zone: string;
   status: "Активен" | "На смене" | "Офлайн" | "Отпуск";
   routesDone: number;
@@ -162,6 +245,9 @@ export interface EmployeeFormPayload {
   personnelNo: string;
   position: string;
   department: string;
+  employeeGroup: string;
+  hiredAt: string;
+  birthDate: string;
   status: EmployeeDirectoryItem["status"];
   shift: string;
   hasMobileAccount: boolean;
@@ -216,6 +302,12 @@ export interface CreateMobileAccountPayload {
   bindEmployee: boolean;
   restrictToBoundDevice: boolean;
   temporaryPassword: boolean;
+  password?: string;
+  confirmPassword?: string;
+  status?: MobileAccount["status"];
+  language?: string;
+  requirePasswordChange?: boolean;
+  restrictToLinkedDevices?: boolean;
 }
 
 export interface UpdateMobileAccountPayload {
@@ -228,6 +320,7 @@ export interface MobileAccountSession {
   id: string;
   accountId: string;
   status: string;
+  deviceId: string;
   device: string;
   platform: string;
   appVersion: string;
@@ -242,6 +335,25 @@ export interface MobileAccountSecurityEvent {
   message: string;
   createdAt: string;
   actor: string;
+}
+
+export interface MobileSyncConflict {
+  clientOperationId: string;
+  mobileAccountId: string;
+  accountLogin: string;
+  commandType: string;
+  entityType: string;
+  entityServerId?: string | null;
+  message: string;
+  payloadSnapshot?: unknown;
+  responseSnapshot?: unknown;
+  createdAtServer: string;
+  status: "open" | "accepted" | "rejected" | "repeatRequested" | string;
+  attemptCount?: number;
+  operationStatus?: string;
+  resolutionComment?: string | null;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
 }
 
 export interface RoutePoint {
@@ -292,11 +404,18 @@ export interface RoutePointFormPayload {
 
 export interface ScheduleCell {
   id: string;
+  assignmentId?: string;
+  requestId?: string;
   employee: string;
   employeeId: string;
   shift: "Дневная" | "Ночная";
   day: string;
+  date: string;
   route: string;
+  routeId?: string;
   zone: string;
   state: "planned" | "alternate" | "transfer" | "vacation" | "sick" | "empty";
+  scheduledTime?: string;
+  notificationText?: string;
+  notifyEmployee?: boolean;
 }

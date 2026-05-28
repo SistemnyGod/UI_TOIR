@@ -4,7 +4,7 @@ namespace Patrol360.Application;
 
 public interface IRouteCatalogQuery
 {
-    IReadOnlyList<RouteDto> GetRoutes();
+    IReadOnlyList<RouteDto> GetRoutes(bool includeArchived = false);
 
     RouteDto? GetRoute(Guid id);
 }
@@ -12,6 +12,8 @@ public interface IRouteCatalogQuery
 public interface IRouteCatalogService
 {
     CreateRouteResult CreateRoute(CreateRouteDto request);
+
+    CreateRouteResult CreateRouteWithPoints(CreateRouteWithPointsDto request);
 
     UpdateRouteResult UpdateRoute(Guid id, UpdateRouteDto request);
 

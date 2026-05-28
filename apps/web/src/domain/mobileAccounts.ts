@@ -46,18 +46,19 @@ export function createMobileAccountDraft({
   const loginBase = normalizeLogin(payload.login || employee || `mobile-${existingCount + 1}`);
   const login = makeUniqueLogin(loginBase, existingLogins);
   const temporaryPassword = payload.temporaryPassword ? createTemporaryPassword() : undefined;
+  const hasProvidedPassword = Boolean(payload.password?.trim());
 
   return {
     account: {
       id: `mobile-${Date.now()}-${existingCount + 1}`,
       login,
-      passwordState: temporaryPassword ? PASSWORD_STATE_REQUIRES_CHANGE : PASSWORD_STATE_SET_ON_FIRST_LOGIN,
+      passwordState: temporaryPassword || payload.requirePasswordChange ? PASSWORD_STATE_REQUIRES_CHANGE : hasProvidedPassword ? "Установлен" : PASSWORD_STATE_SET_ON_FIRST_LOGIN,
       employee: bindEmployee ? formatEmployeeAccess(employeeScope, boundEmployees) : UNBOUND_EMPLOYEE,
       employeeScope,
       boundEmployeeIds: [],
       boundEmployees,
       role: payload.role.trim() || DEFAULT_ROLE,
-      status: bindEmployee ? "Активен" : "Не привязан",
+      status: payload.status ?? (bindEmployee ? "Активен" : "Не привязан"),
       session: "-",
       lastSeen: "Не входил",
       device: payload.restrictToBoundDevice ? "Ожидает привязки" : "Любое устройство",

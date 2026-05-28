@@ -1,15 +1,20 @@
+import { useMemo, useState } from "react";
 import { ResultDetailDrawer } from "../components/results/ResultDetailDrawer";
+import { MobileSyncPanel } from "../components/results/MobileSyncPanel";
 import { ResultsJournalPanel } from "../components/results/ResultsJournalPanel";
 import { Chip, EmptyState, Panel } from "../components/ui";
+import { useMobileSyncWorkspace } from "../hooks/useMobileSyncWorkspace";
+import { useResultsWorkspace } from "../hooks/useResultsWorkspace";
 import {
   filterPatrolResults,
-  findPatrolResult,
   getResultMetrics,
-  patrolResultsFallback,
+  type ResultFilterOptions,
 } from "../repositories/resultsRepository";
-import type { ResultMode, ScreenId } from "../types";
+import type { DataSourceMode, PatrolResult, ResultMode, ScreenId } from "../types";
 
 export function ResultsScreen({
+  canCreateRequest = true,
+  dataSourceMode,
   mode,
   onModeChange,
   onCreateRequest,
@@ -19,6 +24,8 @@ export function ResultsScreen({
   selectedResultId,
   onSelectResult,
 }: {
+  canCreateRequest?: boolean;
+  dataSourceMode: DataSourceMode;
   mode: ResultMode;
   onModeChange: (mode: ResultMode) => void;
   onCreateRequest: (sourceResultId?: string) => void;
@@ -28,13 +35,42 @@ export function ResultsScreen({
   selectedResultId: string;
   onSelectResult: (id: string) => void;
 }) {
-  const patrolResults = patrolResultsFallback;
+  const [journalFilters, setJournalFilters] = useState<ResultFilterOptions>({});
+  const resultFilters = useMemo(
+    () => ({
+      ...journalFilters,
+      status: modeToApiStatus(mode),
+    }),
+    [journalFilters, mode],
+  );
+  const { errorMessage, exportResults, listStatus, refreshResults, results: patrolResults, selectedResult } = useResultsWorkspace({
+    dataSourceMode,
+    filters: resultFilters,
+    onSelectResult,
+    selectedResultId,
+    showToast: onNotify,
+  });
+  const mobileSync = useMobileSyncWorkspace({ dataSourceMode, showToast: onNotify });
   const visibleResults = filterPatrolResults(patrolResults, mode);
-  const selected = findPatrolResult(patrolResults, selectedResultId);
   const metrics = getResultMetrics(patrolResults);
 
   return (
     <div className="screen-stack">
+      {listStatus === "loading" ? (
+        <Panel>
+          <EmptyState title="Результаты загружаются" description="Получаем журнал обходов из backend API." />
+        </Panel>
+      ) : null}
+      {listStatus === "error" ? (
+        <Panel>
+          <EmptyState
+            title="Не удалось загрузить результаты"
+            description={errorMessage ?? "Backend API вернул ошибку при загрузке журнала результатов."}
+            action={<button className="button ghost" onClick={() => void refreshResults()} type="button">Повторить</button>}
+          />
+        </Panel>
+      ) : null}
+
       <div className="metric-grid compact">
         <Panel className="metric-panel"><strong>{metrics.total}</strong><span>Всего результатов</span><small>за выбранный период</small></Panel>
         <Panel className="metric-panel warning"><strong>{metrics.issues}</strong><span>С замечаниями</span><small>по загруженным данным</small></Panel>
@@ -47,8 +83,10 @@ export function ResultsScreen({
         <ResultsJournalPanel
           mode={mode}
           results={visibleResults}
-          selectedResultId={selected?.id ?? ""}
+          selectedResultId={selectedResult?.id ?? ""}
           totalResults={patrolResults}
+          onExportResults={exportResults}
+          onFiltersChange={setJournalFilters}
           onModeChange={onModeChange}
           onNavigate={onNavigate}
           onNotify={onNotify}
@@ -56,7 +94,8 @@ export function ResultsScreen({
         />
 
         <ResultDetailDrawer
-          result={selected}
+          canCreateRequest={canCreateRequest}
+          result={selectedResult}
           onCreateRequest={onCreateRequest}
           onNavigate={onNavigate}
           onNotify={onNotify}
@@ -65,6 +104,13 @@ export function ResultsScreen({
       </div>
 
       <div className="bottom-analytics">
+        <MobileSyncPanel
+          conflicts={mobileSync.conflicts}
+          errorMessage={mobileSync.errorMessage}
+          status={mobileSync.status}
+          onRefresh={() => void mobileSync.refreshConflicts()}
+          onResolve={(clientOperationId, status) => void mobileSync.resolveConflict(clientOperationId, status)}
+        />
         <ResultIssueTypesPanel results={patrolResults} />
         <ResultShiftPanel results={patrolResults} />
         <ResultAnomaliesPanel results={patrolResults} onSelectResult={onSelectResult} />
@@ -73,7 +119,13 @@ export function ResultsScreen({
   );
 }
 
-function ResultIssueTypesPanel({ results }: { results: typeof patrolResultsFallback }) {
+function modeToApiStatus(mode: ResultMode) {
+  if (mode === "issues") return "Замечание";
+  if (mode === "late") return "Просрочено";
+  return undefined;
+}
+
+function ResultIssueTypesPanel({ results }: { results: PatrolResult[] }) {
   const issueRows = buildIssueTypeRows(results);
 
   return (
@@ -96,7 +148,7 @@ function ResultIssueTypesPanel({ results }: { results: typeof patrolResultsFallb
   );
 }
 
-function ResultShiftPanel({ results }: { results: typeof patrolResultsFallback }) {
+function ResultShiftPanel({ results }: { results: PatrolResult[] }) {
   const shiftRows = buildShiftRows(results);
 
   return (
@@ -136,7 +188,7 @@ function ResultAnomaliesPanel({
   onSelectResult,
   results,
 }: {
-  results: typeof patrolResultsFallback;
+  results: PatrolResult[];
   onSelectResult: (id: string) => void;
 }) {
   const anomalies = results.filter((result) => result.status !== "Подтверждено").slice(0, 4);
@@ -165,7 +217,7 @@ function ResultAnomaliesPanel({
   );
 }
 
-function buildIssueTypeRows(results: typeof patrolResultsFallback) {
+function buildIssueTypeRows(results: PatrolResult[]) {
   const issueResults = results.filter((result) => result.issueType !== "-" && result.issueType.trim().length > 0);
   const total = issueResults.length || 1;
   const counts = new Map<string, number>();
@@ -185,7 +237,7 @@ function buildIssueTypeRows(results: typeof patrolResultsFallback) {
     }));
 }
 
-function buildShiftRows(results: typeof patrolResultsFallback) {
+function buildShiftRows(results: PatrolResult[]) {
   const shifts = Array.from(new Set(results.map((result) => result.shift)));
 
   return shifts.map((shift) => {

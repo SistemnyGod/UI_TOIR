@@ -60,6 +60,7 @@ public class ApplicationSmokeTests
             EmployeeName: "Ivan Petrov",
             RouteId: Guid.NewGuid(),
             RouteName: "North perimeter",
+            SourceResultId: null,
             ScheduledDate: new DateOnly(2026, 5, 18),
             ScheduledTime: new TimeOnly(9, 30),
             NotifyEmployee: true,

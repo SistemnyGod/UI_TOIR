@@ -1,0 +1,195 @@
+import { getDatabase } from "@/db/database";
+import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
+import { LocalMobileFile } from "@/domain/files/fileTypes";
+
+export async function insertLocalFile(file: LocalMobileFile) {
+  const db = await getDatabase();
+
+  await insertLocalFileInTransaction(db, file);
+}
+
+export async function insertLocalFileInTransaction(executor: Pick<Awaited<ReturnType<typeof getDatabase>>, "runAsync">, file: LocalMobileFile) {
+  await executor.runAsync(
+    `
+      INSERT OR REPLACE INTO files (
+        client_file_id,
+        owner_user_id,
+        local_path,
+        preview_path,
+        server_file_id,
+        status,
+        sha256,
+        size_bytes,
+        content_type,
+        media_kind,
+        assignment_id,
+        point_id,
+        remark_id,
+        created_at_local
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      file.clientFileId,
+      file.ownerUserId,
+      file.localPath,
+      file.previewPath ?? null,
+      file.serverFileId ?? null,
+      file.status,
+      file.sha256 ?? null,
+      file.sizeBytes ?? null,
+      file.contentType ?? null,
+      file.mediaKind ?? null,
+      file.assignmentId ?? null,
+      file.pointId ?? null,
+      file.remarkId ?? null,
+      file.createdAtLocal
+    ]
+  );
+}
+
+export async function listPointFiles(assignmentId: string, pointId: string) {
+  const db = await getDatabase();
+
+  return withSqliteBusyRetry(() =>
+    db.getAllAsync<LocalMobileFile>(
+      `
+        SELECT
+          client_file_id AS clientFileId,
+          owner_user_id AS ownerUserId,
+          local_path AS localPath,
+          preview_path AS previewPath,
+          server_file_id AS serverFileId,
+          status,
+          sha256,
+          size_bytes AS sizeBytes,
+          content_type AS contentType,
+          media_kind AS mediaKind,
+          assignment_id AS assignmentId,
+          point_id AS pointId,
+          remark_id AS remarkId,
+          created_at_local AS createdAtLocal
+        FROM files
+        WHERE assignment_id = ?
+          AND point_id = ?
+        ORDER BY created_at_local ASC
+      `,
+      [assignmentId, pointId]
+    )
+  );
+}
+
+export async function listFilesByClientIds(clientFileIds: string[]) {
+  if (clientFileIds.length === 0) {
+    return [];
+  }
+
+  const db = await getDatabase();
+  const placeholders = clientFileIds.map(() => "?").join(", ");
+
+  return db.getAllAsync<LocalMobileFile>(
+    `
+      SELECT
+        client_file_id AS clientFileId,
+        owner_user_id AS ownerUserId,
+        local_path AS localPath,
+        preview_path AS previewPath,
+        server_file_id AS serverFileId,
+        status,
+        sha256,
+        size_bytes AS sizeBytes,
+        content_type AS contentType,
+        media_kind AS mediaKind,
+        assignment_id AS assignmentId,
+        point_id AS pointId,
+        remark_id AS remarkId,
+        created_at_local AS createdAtLocal
+      FROM files
+      WHERE client_file_id IN (${placeholders})
+      ORDER BY created_at_local ASC
+    `,
+    clientFileIds
+  );
+}
+
+export async function listRemarkFiles(remarkId: string) {
+  const db = await getDatabase();
+
+  return db.getAllAsync<LocalMobileFile>(
+    `
+      SELECT
+        client_file_id AS clientFileId,
+        owner_user_id AS ownerUserId,
+        local_path AS localPath,
+        preview_path AS previewPath,
+        server_file_id AS serverFileId,
+        status,
+        sha256,
+        size_bytes AS sizeBytes,
+        content_type AS contentType,
+        media_kind AS mediaKind,
+        assignment_id AS assignmentId,
+        point_id AS pointId,
+        remark_id AS remarkId,
+        created_at_local AS createdAtLocal
+      FROM files
+      WHERE remark_id = ?
+      ORDER BY created_at_local ASC
+    `,
+    [remarkId]
+  );
+}
+
+export async function listKnownLocalFilePaths() {
+  const db = await getDatabase();
+
+  const rows = await db.getAllAsync<{ local_path: string }>(
+    `
+      SELECT local_path
+      FROM files
+      WHERE local_path IS NOT NULL
+    `
+  );
+
+  return rows.map((row) => row.local_path);
+}
+
+export async function markFileUploading(clientFileId: string) {
+  const db = await getDatabase();
+
+  await db.runAsync(
+    `
+      UPDATE files
+      SET status = 'uploading'
+      WHERE client_file_id = ?
+    `,
+    [clientFileId]
+  );
+}
+
+export async function markFileUploaded(clientFileId: string, serverFileId: string) {
+  const db = await getDatabase();
+
+  await db.runAsync(
+    `
+      UPDATE files
+      SET status = 'uploaded',
+          server_file_id = ?
+      WHERE client_file_id = ?
+    `,
+    [serverFileId, clientFileId]
+  );
+}
+
+export async function markFileUploadFailed(clientFileId: string) {
+  const db = await getDatabase();
+
+  await db.runAsync(
+    `
+      UPDATE files
+      SET status = 'retryLater'
+      WHERE client_file_id = ?
+    `,
+    [clientFileId]
+  );
+}

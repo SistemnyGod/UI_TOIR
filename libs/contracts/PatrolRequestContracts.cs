@@ -5,11 +5,14 @@ public sealed record CreatePatrolRequestDto(
     string? EmployeeName,
     Guid? RouteId,
     string? RouteName,
+    Guid? SourceResultId,
     DateOnly ScheduledDate,
     TimeOnly? ScheduledTime,
+    string? Shift,
     bool NotifyEmployee,
     string? NotificationText,
-    string? Description);
+    string? Description,
+    DateTimeOffset? PlannedAt = null);
 
 public sealed record PatrolRequestDto(
     Guid Id,
@@ -18,6 +21,7 @@ public sealed record PatrolRequestDto(
     string EmployeeName,
     Guid? RouteId,
     string RouteName,
+    Guid? SourceResultId,
     DateOnly ScheduledDate,
     TimeOnly? ScheduledTime,
     bool NotifyEmployee,

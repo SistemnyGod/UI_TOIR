@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { getMobileAccountAccessLabel, getMobileAccountBindingCount } from "../../domain/mobileAccounts";
 import type { AccountMode, DataSourceStatus, MobileAccount } from "../../types";
-import { Chip, EmptyState, Panel, SectionTabs } from "../ui";
+import { Chip, EmptyState, SectionTabs } from "../ui";
 
 type MaybePromise<T> = T | Promise<T>;
 export type MobileAccountWorkspacePanel = "create" | "link" | "edit" | "password" | "view" | "delete";
@@ -9,6 +9,7 @@ export type MobileAccountWorkspacePanel = "create" | "link" | "edit" | "password
 export function MobileAccountListPanel({
   activePanel,
   accounts,
+  canManage = true,
   errorMessage,
   mode,
   selectedAccountId,
@@ -23,24 +24,25 @@ export function MobileAccountListPanel({
 }: {
   activePanel: MobileAccountWorkspacePanel | null;
   accounts: MobileAccount[];
+  canManage?: boolean;
   errorMessage?: string;
   mode: AccountMode;
   selectedAccountId: string;
   status?: DataSourceStatus;
   onDeleteAccount: () => MaybePromise<void>;
-  onDetachEmployee: (employeeId?: string) => MaybePromise<void>;
+  onDetachEmployee: (employeeId?: string, accountId?: string) => MaybePromise<void>;
   onModeChange: (mode: AccountMode) => void;
   onNotify: (message: string) => void;
   onOpenPanel: (panel: MobileAccountWorkspacePanel) => void;
   onRetry?: () => MaybePromise<void>;
   onSelectAccount: (id: string) => void;
-  onToggleBlockAccount: () => MaybePromise<void>;
+  onToggleBlockAccount: (accountId?: string) => MaybePromise<void>;
 }) {
   const selected = accounts.find((account) => account.id === selectedAccountId);
   const isLoading = status === "loading";
   const isError = status === "error";
-  const onlineSessions = accounts.filter((account) => account.session === "Онлайн").length;
-  const boundAccounts = accounts.filter((account) => account.status !== "Не привязан").length;
+  const onlineSessions = accounts.filter((account) => isOnline(account.session)).length;
+  const boundAccounts = accounts.filter((account) => account.boundEmployees.length > 0 || account.employeeScope === "all").length;
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [accountStatusFilter, setAccountStatusFilter] = useState("all");
@@ -58,7 +60,7 @@ export function MobileAccountListPanel({
       const matchesSearch =
         query.length === 0 ||
         account.login.toLowerCase().includes(query) ||
-        account.role.toLowerCase().includes(query) ||
+        displayKnownValue(account.role).toLowerCase().includes(query) ||
         employeeText.includes(query);
       const matchesRole = roleFilter === "all" || account.role === roleFilter;
       const matchesAccountStatus = accountStatusFilter === "all" || account.status === accountStatusFilter;
@@ -77,108 +79,93 @@ export function MobileAccountListPanel({
 
   function openPanelForAccount(panel: MobileAccountWorkspacePanel, account?: MobileAccount) {
     if (account) onSelectAccount(account.id);
+    if (!canManage && panel !== "view") {
+      onNotify("Недостаточно прав для управления мобильными аккаунтами.");
+      setOpenMenuId(null);
+      return;
+    }
+
     onOpenPanel(panel);
     setOpenMenuId(null);
   }
 
   async function detachFirstEmployee(account?: MobileAccount) {
+    if (!canManage) {
+      onNotify("Недостаточно прав для управления мобильными аккаунтами.");
+      setOpenMenuId(null);
+      return;
+    }
+
     if (account) onSelectAccount(account.id);
     setOpenMenuId(null);
     const employeeId = account?.boundEmployeeIds?.[0];
     if (!employeeId && !account?.boundEmployees?.length) {
-      onNotify("У аккаунта нет привязанных сотрудников");
+      onNotify("У аккаунта нет привязанных сотрудников.");
       return;
     }
 
-    await onDetachEmployee(employeeId);
+    await onDetachEmployee(employeeId, account?.id);
   }
 
   async function toggleBlock(account?: MobileAccount) {
+    if (!canManage) {
+      onNotify("Недостаточно прав для управления мобильными аккаунтами.");
+      setOpenMenuId(null);
+      return;
+    }
+
     if (account) onSelectAccount(account.id);
     setOpenMenuId(null);
-    await onToggleBlockAccount();
+    await onToggleBlockAccount(account?.id);
   }
 
   return (
-    <Panel
-      className="accounts-panel"
-      title="Аккаунты телефона"
-      note="Создание, управление и привязка сотрудников к мобильным аккаунтам"
-      actions={
-        <>
-          <button
-            className={`button ${activePanel === "create" ? "primary" : "ghost"}`}
-            onClick={() => onOpenPanel("create")}
-            type="button"
-          >
-            Создать аккаунт
+    <section className="mobile-am-panel mobile-am-accounts-panel">
+      <div className="mobile-am-panel-head">
+        <div>
+          <h2>Аккаунты телефона</h2>
+          <p>Создание, управление и привязка сотрудников к мобильным аккаунтам</p>
+        </div>
+        <div className="mobile-am-actions">
+          <button className={activePanel === "create" ? "primary" : ""} disabled={!canManage} onClick={() => onOpenPanel("create")} type="button">
+            <span aria-hidden="true">+</span> Создать аккаунт
           </button>
-          <button className={`button ${activePanel === "link" ? "primary" : "ghost"}`} onClick={() => onOpenPanel("link")} type="button">
-            Привязать сотрудника
+          <button disabled={!canManage} onClick={() => onOpenPanel("link")} type="button">
+            <span aria-hidden="true">↔</span> Привязать сотрудника
           </button>
-          <button className={`button ${activePanel === "password" ? "primary" : "ghost"}`} onClick={() => onOpenPanel("password")} type="button">
-            Изменить пароль
+          <button disabled={!canManage} onClick={() => onOpenPanel("password")} type="button">
+            <span aria-hidden="true">⌘</span> Изменить пароль
           </button>
-          <button className={`button ${activePanel === "edit" ? "primary" : "ghost"}`} onClick={() => onOpenPanel("edit")} type="button">
-            Редактировать
+          <button disabled={!canManage} onClick={() => onOpenPanel("edit")} type="button">
+            <span aria-hidden="true">✎</span> Редактировать
           </button>
-          <button className={`button ${activePanel === "view" ? "primary" : "ghost"}`} onClick={() => onOpenPanel("view")} type="button">
-            Просмотр
+          <button onClick={() => onOpenPanel("view")} type="button">
+            <span aria-hidden="true">◎</span> Просмотр
           </button>
-          <button className={`button ghost danger-outline ${activePanel === "delete" ? "active-danger" : ""}`} onClick={() => onOpenPanel("delete")} type="button">
-            Удалить
+          <button className="danger" disabled={!canManage} onClick={() => onOpenPanel("delete")} type="button">
+            <span aria-hidden="true">×</span> Удалить
           </button>
-        </>
-      }
-    >
-      <div className="filters account-filters">
-        <label className="wide-filter">
-          Поиск
+        </div>
+      </div>
+
+      <div className="mobile-am-filters">
+        <label className="mobile-am-search">
+          <span>Поиск</span>
           <input
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Поиск по логину или сотруднику..."
             value={searchQuery}
           />
         </label>
-        <label>
-          Роль
-          <select onChange={(event) => setRoleFilter(event.target.value)} value={roleFilter}>
-            <option value="all">Все</option>
-            {roles.map((role) => (
-              <option key={role} value={role}>
-                {role}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Статус аккаунта
-          <select onChange={(event) => setAccountStatusFilter(event.target.value)} value={accountStatusFilter}>
-            <option value="all">Все</option>
-            {accountStatuses.map((accountStatus) => (
-              <option key={accountStatus} value={accountStatus}>
-                {accountStatus}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Статус сессии
-          <select onChange={(event) => setSessionStatusFilter(event.target.value)} value={sessionStatusFilter}>
-            <option value="all">Все</option>
-            {sessionStatuses.map((sessionStatus) => (
-              <option key={sessionStatus} value={sessionStatus}>
-                {sessionStatus}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button className="button ghost" onClick={resetFilters} type="button">
+        <FilterSelect label="Роль" onChange={setRoleFilter} value={roleFilter} values={roles} />
+        <FilterSelect label="Статус аккаунта" onChange={setAccountStatusFilter} value={accountStatusFilter} values={accountStatuses} />
+        <FilterSelect label="Статус сессии" onChange={setSessionStatusFilter} value={sessionStatusFilter} values={sessionStatuses} />
+        <button className="mobile-am-reset" onClick={resetFilters} type="button">
           Сбросить фильтры
         </button>
       </div>
 
-      <div className="account-section-row">
+      <div className="mobile-am-tabs-row">
         <SectionTabs
           value={mode}
           onChange={onModeChange}
@@ -194,7 +181,7 @@ export function MobileAccountListPanel({
       {isLoading ? (
         <EmptyState
           title="Мобильные аккаунты загружаются"
-          description="Получаем список мобильных аккаунтов из backend API. Локальный список в этом режиме не подмешивается."
+          description="Получаем список из backend API. Локальные записи в API mode не подмешиваются."
         />
       ) : null}
 
@@ -216,6 +203,7 @@ export function MobileAccountListPanel({
         filteredAccounts.length > 0 ? (
           <MobileAccountsTable
             accounts={filteredAccounts}
+            canManage={canManage}
             openMenuId={openMenuId}
             selectedAccountId={selected?.id ?? ""}
             setOpenMenuId={setOpenMenuId}
@@ -231,6 +219,7 @@ export function MobileAccountListPanel({
             action={
               <button
                 className="button ghost"
+                disabled={accounts.length === 0 && !canManage}
                 onClick={accounts.length > 0 ? resetFilters : () => onOpenPanel("create")}
                 type="button"
               >
@@ -243,35 +232,32 @@ export function MobileAccountListPanel({
 
       {!isLoading && !isError && mode === "sessions" ? (
         filteredAccounts.length > 0 ? (
-          <div className="session-grid">
+          <div className="mobile-am-card-grid">
             {filteredAccounts.map((account) => (
               <button
-                className={`session-card ${selected?.id === account.id ? "active" : ""}`}
+                className={`mobile-am-card ${selected?.id === account.id ? "active" : ""}`}
                 key={account.id}
                 onClick={() => onSelectAccount(account.id)}
                 type="button"
               >
                 <strong>{account.login}</strong>
-                <span>{account.session === "Онлайн" ? "Активная сессия" : "Сессия не активна"}</span>
-                <em>{account.device}</em>
-                <Chip>{account.session}</Chip>
+                <span>{isOnline(account.session) ? "Активная сессия" : "Сессия не активна"}</span>
+                <em>{formatDevice(account)}</em>
+                <Chip>{displaySession(account.session)}</Chip>
               </button>
             ))}
           </div>
         ) : (
-          <EmptyState
-            title="Активных сессий нет"
-            description="Сессии появятся после первого входа из мобильного приложения."
-          />
+          <EmptyState title="Активных сессий нет" description="Сессии появятся после первого входа из мобильного приложения." />
         )
       ) : null}
 
       {!isLoading && !isError && mode === "bindings" ? (
         filteredAccounts.length > 0 ? (
-          <div className="binding-grid">
+          <div className="mobile-am-card-grid">
             {filteredAccounts.map((account) => (
               <button
-                className={`binding-card ${selected?.id === account.id ? "selected" : ""}`}
+                className={`mobile-am-card ${selected?.id === account.id ? "active" : ""}`}
                 key={account.id}
                 onClick={() => onSelectAccount(account.id)}
                 type="button"
@@ -279,23 +265,47 @@ export function MobileAccountListPanel({
                 <strong>{getMobileAccountAccessLabel(account)}</strong>
                 <span>{account.login}</span>
                 <em>{getMobileAccountBindingCount(account)}</em>
-                <Chip>{account.status}</Chip>
+                <Chip>{displayStatus(account.status)}</Chip>
               </button>
             ))}
           </div>
         ) : (
-          <EmptyState
-            title="Привязок нет"
-            description="Привязка появится после создания аккаунта и выбора сотрудника."
-          />
+          <EmptyState title="Привязок нет" description="Привязка появится после создания аккаунта и выбора сотрудника." />
         )
       ) : null}
-    </Panel>
+    </section>
+  );
+}
+
+function FilterSelect({
+  label,
+  onChange,
+  value,
+  values,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+  values: string[];
+}) {
+  return (
+    <label>
+      <span>{label}</span>
+      <select onChange={(event) => onChange(event.target.value)} value={value}>
+        <option value="all">Все</option>
+        {values.map((item) => (
+          <option key={item} value={item}>
+            {displayKnownValue(item)}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
 function MobileAccountsTable({
   accounts,
+  canManage,
   openMenuId,
   selectedAccountId,
   setOpenMenuId,
@@ -305,6 +315,7 @@ function MobileAccountsTable({
   onToggleBlockAccount,
 }: {
   accounts: MobileAccount[];
+  canManage: boolean;
   openMenuId: string | null;
   selectedAccountId: string;
   setOpenMenuId: (id: string | null) => void;
@@ -314,12 +325,12 @@ function MobileAccountsTable({
   onToggleBlockAccount: (account?: MobileAccount) => MaybePromise<void>;
 }) {
   return (
-    <div className="table-wrap account-table-wrap">
+    <div className="mobile-am-table-wrap">
       <table>
         <thead>
           <tr>
-            <th>Логин ↓</th>
-            <th>Привязанные сотрудники ↓</th>
+            <th>Логин</th>
+            <th>Привязанные сотрудники</th>
             <th>Роль</th>
             <th>Статус аккаунта</th>
             <th>Статус сессии</th>
@@ -331,43 +342,42 @@ function MobileAccountsTable({
         <tbody>
           {accounts.map((account) => (
             <tr
-              className={`clickable ${selectedAccountId === account.id ? "selected" : ""}`}
+              className={selectedAccountId === account.id ? "selected" : ""}
               key={account.id}
               onClick={() => onSelectAccount(account.id)}
             >
               <td>
-                <strong>{account.login}</strong>
+                <strong className="mobile-am-login">{account.login}</strong>
               </td>
               <td>
                 <EmployeeChipList account={account} />
               </td>
-              <td>{account.role}</td>
+              <td>{displayKnownValue(account.role)}</td>
               <td>
-                <Chip>{account.status}</Chip>
+                <StatusBadge value={account.status} />
               </td>
               <td>
                 <SessionBadge value={account.session} />
               </td>
-              <td>{account.lastSeen}</td>
+              <td>{account.lastSeen || "-"}</td>
               <td>
-                <span className="device-cell">{account.device}</span>
-                <span className="muted-line">{account.version}</span>
+                <span className="mobile-am-device">{account.device || "-"}</span>
+                <span className="muted-line">{account.version || ""}</span>
               </td>
-              <td className="account-actions-cell">
+              <td className="mobile-am-actions-cell">
                 <button
                   aria-label={`Просмотр ${account.login}`}
-                  className="icon-button"
                   onClick={(event) => {
                     event.stopPropagation();
                     onOpenPanel("view", account);
                   }}
                   type="button"
                 >
-                  ◉
+                  ◎
                 </button>
                 <button
                   aria-label={`Редактировать ${account.login}`}
-                  className="icon-button"
+                  disabled={!canManage}
                   onClick={(event) => {
                     event.stopPropagation();
                     onOpenPanel("edit", account);
@@ -378,7 +388,7 @@ function MobileAccountsTable({
                 </button>
                 <button
                   aria-label={`Действия ${account.login}`}
-                  className="icon-button"
+                  disabled={!canManage}
                   onClick={(event) => {
                     event.stopPropagation();
                     setOpenMenuId(openMenuId === account.id ? null : account.id);
@@ -390,8 +400,8 @@ function MobileAccountsTable({
                 {openMenuId === account.id ? (
                   <AccountActionMenu
                     account={account}
-                    onOpenPanel={onOpenPanel}
                     onDetachEmployee={onDetachEmployee}
+                    onOpenPanel={onOpenPanel}
                     onToggleBlockAccount={onToggleBlockAccount}
                   />
                 ) : null}
@@ -400,6 +410,14 @@ function MobileAccountsTable({
           ))}
         </tbody>
       </table>
+      <div className="mobile-am-pagination">
+        <span>Показано {accounts.length} из {accounts.length}</span>
+        <div>
+          <button type="button">‹</button>
+          <button className="active" type="button">1</button>
+          <button type="button">›</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -409,37 +427,37 @@ function EmployeeChipList({ account }: { account: MobileAccount }) {
 
   if (employees.length === 0) {
     return (
-      <span className="empty-binding">
-        —
+      <span className="mobile-am-empty-binding">
+        -
         <small>Нет привязанных сотрудников</small>
       </span>
     );
   }
 
   return (
-    <div className="employee-chip-list">
-      {employees.slice(0, 3).map((employee) => (
-        <span className="employee-chip" key={employee}>
-          <span className="employee-avatar">{getInitials(employee)}</span>
-          <span>
-            <strong>{employee}</strong>
-            <small>{account.employeeScope === "all" ? "Общий доступ" : "Сотрудник"}</small>
-          </span>
+    <div className="mobile-am-employee-list">
+      {employees.slice(0, 4).map((employee) => (
+        <span className="mobile-am-avatar" key={employee} title={employee}>
+          {getInitials(employee)}
         </span>
       ))}
-      {employees.length > 3 ? <Chip tone="slate">+ еще {employees.length - 3}</Chip> : null}
-      <span className="binding-count">{getMobileAccountBindingCount(account)}</span>
+      {employees.length > 4 ? <span className="mobile-am-more">+{employees.length - 4}</span> : null}
+      <span className="mobile-am-binding-count">{getMobileAccountBindingCount(account)}</span>
     </div>
   );
 }
 
+function StatusBadge({ value }: { value: MobileAccount["status"] }) {
+  return <span className={`mobile-am-badge ${statusTone(value)}`}>{displayStatus(value)}</span>;
+}
+
 function SessionBadge({ value }: { value: MobileAccount["session"] }) {
-  if (value === "-") return <span className="session-empty">—</span>;
+  if (displaySession(value) === "-") return <span className="mobile-am-session-empty">-</span>;
 
   return (
-    <span className={`session-badge ${value === "Онлайн" ? "online" : "offline"}`}>
+    <span className={`mobile-am-session ${isOnline(value) ? "online" : "offline"}`}>
       <span />
-      {value}
+      {displaySession(value)}
     </span>
   );
 }
@@ -455,44 +473,28 @@ function AccountActionMenu({
   onOpenPanel: (panel: MobileAccountWorkspacePanel, account?: MobileAccount) => void;
   onToggleBlockAccount: (account?: MobileAccount) => MaybePromise<void>;
 }) {
-  const isBlocked = account.status === "Заблокирован";
+  const isBlocked = isAccountStatus(account.status, "blocked");
 
   return (
-    <div className="account-action-menu" onClick={(event) => event.stopPropagation()}>
-      <button onClick={() => onOpenPanel("view", account)} type="button">
-        <span>◉</span> Просмотр
-      </button>
-      <button onClick={() => onOpenPanel("edit", account)} type="button">
-        <span>✎</span> Редактировать
-      </button>
-      <button onClick={() => onOpenPanel("password", account)} type="button">
-        <span>▣</span> Изменить пароль
-      </button>
-      <button onClick={() => onOpenPanel("link", account)} type="button">
-        <span>+</span> Привязать сотрудника
-      </button>
-      <button onClick={() => onDetachEmployee(account)} type="button">
-        <span>−</span> Отвязать сотрудника
-      </button>
+    <div className="mobile-am-menu" onClick={(event) => event.stopPropagation()}>
+      <button onClick={() => onOpenPanel("view", account)} type="button">◎ Просмотр</button>
+      <button onClick={() => onOpenPanel("edit", account)} type="button">✎ Редактировать</button>
+      <button onClick={() => onOpenPanel("password", account)} type="button">⌘ Изменить пароль</button>
+      <button onClick={() => onOpenPanel("link", account)} type="button">+ Привязать сотрудника</button>
+      <button onClick={() => onDetachEmployee(account)} type="button">- Отвязать сотрудника</button>
       <hr />
       <button className="danger-text" onClick={() => onToggleBlockAccount(account)} type="button">
-        <span>!</span> {isBlocked ? "Разблокировать" : "Заблокировать"}
+        ! {isBlocked ? "Разблокировать" : "Заблокировать"}
       </button>
-      <button
-        className="danger-text"
-        onClick={() => {
-          onOpenPanel("delete", account);
-        }}
-        type="button"
-      >
-        <span>×</span> Удалить
+      <button className="danger-text" onClick={() => onOpenPanel("delete", account)} type="button">
+        × Удалить
       </button>
     </div>
   );
 }
 
 function uniqueSorted(values: string[]) {
-  return [...new Set(values.filter(Boolean))].sort((left, right) => left.localeCompare(right, "ru"));
+  return [...new Set(values.filter(Boolean))].sort((left, right) => displayKnownValue(left).localeCompare(displayKnownValue(right), "ru"));
 }
 
 function getInitials(value: string) {
@@ -504,4 +506,63 @@ function getInitials(value: string) {
   if (words.length === 0) return "АК";
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
   return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
+}
+
+function isOnline(value: string) {
+  return normalizeValue(value).includes("онлайн");
+}
+
+function isAccountStatus(value: string, status: "active" | "blocked" | "unbound") {
+  const normalized = normalizeValue(value);
+  if (status === "active") return normalized.includes("актив");
+  if (status === "blocked") return normalized.includes("заблок");
+  return normalized.includes("не привязан");
+}
+
+function statusTone(value: string) {
+  if (isAccountStatus(value, "active")) return "green";
+  if (isAccountStatus(value, "blocked")) return "red";
+  if (isAccountStatus(value, "unbound")) return "orange";
+  return "slate";
+}
+
+function displayStatus(value: string) {
+  if (isAccountStatus(value, "active")) return "Активен";
+  if (isAccountStatus(value, "blocked")) return "Заблокирован";
+  if (isAccountStatus(value, "unbound")) return "Не привязан";
+  return displayKnownValue(value);
+}
+
+function displaySession(value: string) {
+  const normalized = normalizeValue(value);
+  if (normalized.includes("онлайн")) return "Онлайн";
+  if (normalized.includes("офлайн")) return "Оффлайн";
+  return "-";
+}
+
+function displayKnownValue(value: string) {
+  return decodeMojibake(value);
+}
+
+function formatDevice(account: MobileAccount) {
+  return [account.device, account.version].filter(Boolean).join(" / ") || "-";
+}
+
+function normalizeValue(value: string) {
+  return decodeMojibake(value).toLowerCase();
+}
+
+function decodeMojibake(value: string) {
+  const map: Record<string, string> = {
+    "Активен": "Активен",
+    "Не привязан": "Не привязан",
+    "Заблокирован": "Заблокирован",
+    "Онлайн": "Онлайн",
+    "Офлайн": "Оффлайн",
+    "Маршрутный обходчик": "Маршрутный обходчик",
+    "Оператор": "Оператор",
+    "Администратор мобильного доступа": "Администратор мобильного доступа",
+  };
+
+  return map[value] ?? value;
 }

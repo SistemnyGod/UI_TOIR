@@ -12,6 +12,12 @@ internal sealed class EmployeeEntity
 
     public string Department { get; set; } = string.Empty;
 
+    public string EmployeeGroup { get; set; } = string.Empty;
+
+    public DateOnly? HiredAt { get; set; }
+
+    public DateOnly? BirthDate { get; set; }
+
     public string Status { get; set; } = string.Empty;
 
     public string Shift { get; set; } = string.Empty;

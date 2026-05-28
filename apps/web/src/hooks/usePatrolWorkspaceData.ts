@@ -82,12 +82,15 @@ export function usePatrolWorkspaceData({
 }: UsePatrolWorkspaceDataOptions) {
   const [localRoutes, setLocalRoutes] = useStoredState<RouteDirectoryItem[]>(routesStorageKey, routesFallback, {
     validate: isRouteDirectoryList,
+    version: 2,
   });
   const [localActivePatrols, setLocalActivePatrols] = useStoredState<ActivePatrol[]>(activePatrolsStorageKey, activePatrolsFallback, {
     validate: isActivePatrolList,
+    version: 2,
   });
   const [localRequests, setLocalRequests] = useStoredState<ServiceRequest[]>(patrolRequestsStorageKey, patrolRequestsFallback, {
     validate: isServiceRequestList,
+    version: 2,
   });
   const [apiRequests, setApiRequests] = useState<ServiceRequest[]>([]);
   const [requestListStatus, setRequestListStatus] = useState<DataSourceStatus>("idle");
@@ -97,6 +100,7 @@ export function usePatrolWorkspaceData({
     employeesFallback,
     {
       validate: isEmployeeDirectoryList,
+      version: 2,
     },
   );
   const apiRoutes = useMemo(() => createApiRoutesRepository(), []);
@@ -271,6 +275,35 @@ export function usePatrolWorkspaceData({
     return nextRoute.id;
   }
 
+  async function createRouteWithPoints(routePayload: RouteFormPayload, pointPayloads: RoutePointFormPayload[]) {
+    if (dataSourceMode === "api") {
+      const nextRoute = await apiRoutes.createRouteWithPoints(routePayload, pointPayloads);
+      await refreshPatrolData();
+      setSelectedRouteDirectoryId(nextRoute.id);
+      setSelectedPointId(nextRoute.points.at(-1)?.id ?? "");
+      setRouteMode("points");
+      showToast(`Маршрут "${nextRoute.name}" создан через API, точек: ${nextRoute.points.length}`);
+      return nextRoute.id;
+    }
+
+    const { route: nextRoute } = createLocalRoute(localRoutes, routePayload);
+    let nextRoutes: RouteDirectoryItem[] = [nextRoute, ...localRoutes];
+    let lastPointId = "";
+
+    for (const pointPayload of pointPayloads) {
+      const created = createLocalRoutePoint(nextRoutes, nextRoute.id, pointPayload);
+      nextRoutes = created.routes;
+      lastPointId = created.point.id;
+    }
+
+    setLocalRoutes(nextRoutes);
+    setSelectedRouteDirectoryId(nextRoute.id);
+    setSelectedPointId(lastPointId);
+    setRouteMode("points");
+    showToast(`Маршрут "${nextRoute.name}" создан, точек: ${pointPayloads.length}`);
+    return nextRoute.id;
+  }
+
   async function updateRoute(routeId: string, payload: RouteFormPayload) {
     if (dataSourceMode === "api") {
       await apiRoutes.updateRoute(routeId, payload);
@@ -303,17 +336,22 @@ export function usePatrolWorkspaceData({
 
   async function createRoutePoint(routeId: string, payload: RoutePointFormPayload) {
     if (dataSourceMode === "api") {
-      await apiRoutes.createRoutePoint(routeId, payload);
+      const pointId = await apiRoutes.createRoutePoint(routeId, payload);
       await refreshPatrolData();
+      setSelectedPointId(pointId);
       showToast("Точка маршрута добавлена через API");
-      return "";
+      return pointId;
     }
 
-    const { point, routes: nextRoutes } = createLocalRoutePoint(localRoutes, routeId, payload);
-    setLocalRoutes(nextRoutes);
-    setSelectedPointId(point.id);
+    let createdPointId = "";
+    setLocalRoutes((current) => {
+      const { point, routes: nextRoutes } = createLocalRoutePoint(current, routeId, payload);
+      createdPointId = point.id;
+      return nextRoutes;
+    });
+    setSelectedPointId(createdPointId);
     showToast("Точка маршрута добавлена");
-    return point.id;
+    return createdPointId;
   }
 
   async function updateRoutePoint(routeId: string, pointId: string, payload: RoutePointFormPayload) {
@@ -407,6 +445,7 @@ export function usePatrolWorkspaceData({
     requests,
     routeDirectory,
     createRoute,
+    createRouteWithPoints,
     createRoutePoint,
     createEmployee,
     deleteEmployee,

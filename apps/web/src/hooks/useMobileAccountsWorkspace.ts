@@ -46,6 +46,7 @@ export function useMobileAccountsWorkspace({
 }: UseMobileAccountsWorkspaceParams) {
   const [accounts, setAccounts] = useStoredState<MobileAccount[]>(mobileAccountsStorageKey, mobileAccountsFallback, {
     validate: isMobileAccountList,
+    version: 2,
   });
   const [accountMode, setAccountMode] = useState<AccountMode>("accounts");
   const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id ?? "");
@@ -239,6 +240,57 @@ export function useMobileAccountsWorkspace({
     showToast(`Аккаунт привязан к ${normalizedEmployeeName}`);
   }
 
+  async function bindEmployeesToSelectedAccount(employeeIds: string[]) {
+    if (!selectedAccountId) {
+      showToast("Сначала выберите мобильный аккаунт");
+      return;
+    }
+
+    if (employeeIds.length === 0) {
+      showToast("Выберите хотя бы одного сотрудника");
+      return;
+    }
+
+    if (employeeIds.length > 5) {
+      showToast("К одному аккаунту можно привязать не более 5 сотрудников");
+      return;
+    }
+
+    if (dataSourceMode === "api") {
+      try {
+        await apiMobileAccounts.bindEmployees(selectedAccountId, employeeIds);
+        await refreshMobileAccounts();
+        await refreshMobileAccountSecurity();
+        showToast(`Привязано сотрудников: ${employeeIds.length}`);
+      } catch (error) {
+        showToast(getErrorMessage(error, "Не удалось сохранить привязку сотрудников"));
+        throw error;
+      }
+      return;
+    }
+
+    const employeesById = new Map<string, string>();
+    for (const account of accounts) {
+      account.boundEmployeeIds.forEach((id, index) => employeesById.set(id, account.boundEmployees[index] ?? id));
+    }
+
+    setAccounts((current) =>
+      current.map((account) =>
+        account.id === selectedAccountId
+          ? {
+              ...account,
+              boundEmployeeIds: employeeIds,
+              boundEmployees: employeeIds.map((id) => employeesById.get(id) ?? id),
+              employee: employeeIds.length > 0 ? employeesById.get(employeeIds[0]) ?? employeeIds[0] : "Не привязан",
+              employeeScope: "selected",
+              status: account.status === "Заблокирован" ? account.status : "Активен",
+            }
+          : account,
+      ),
+    );
+    showToast(`Привязано сотрудников: ${employeeIds.length}`);
+  }
+
   async function updateSelectedAccount(payload: UpdateMobileAccountPayload) {
     if (!selectedAccountId) {
       showToast("Сначала выберите мобильный аккаунт");
@@ -263,20 +315,21 @@ export function useMobileAccountsWorkspace({
     showToast(`Аккаунт ${payload.login} сохранен`);
   }
 
-  async function toggleSelectedAccountBlock() {
-    if (!selectedAccountId) {
+  async function toggleSelectedAccountBlock(accountId?: string) {
+    const targetAccountId = accountId ?? selectedAccountId;
+    if (!targetAccountId) {
       showToast("Сначала выберите мобильный аккаунт");
       return;
     }
 
-    const account = visibleAccounts.find((item) => item.id === selectedAccountId);
+    const account = visibleAccounts.find((item) => item.id === targetAccountId);
     const isBlocked = account?.status === "Заблокирован";
 
     if (dataSourceMode === "api") {
       try {
         const nextAccount = isBlocked
-          ? await apiMobileAccounts.unblockAccount(selectedAccountId)
-          : await apiMobileAccounts.blockAccount(selectedAccountId);
+          ? await apiMobileAccounts.unblockAccount(targetAccountId)
+          : await apiMobileAccounts.blockAccount(targetAccountId);
         await refreshMobileAccounts();
         await refreshMobileAccountSecurity();
         showToast(isBlocked ? `Аккаунт ${nextAccount.login} разблокирован` : `Аккаунт ${nextAccount.login} заблокирован`);
@@ -287,17 +340,18 @@ export function useMobileAccountsWorkspace({
       return;
     }
 
-    setAccounts(isBlocked ? unblockMobileAccountLocal(accounts, selectedAccountId) : blockMobileAccountLocal(accounts, selectedAccountId));
+    setAccounts(isBlocked ? unblockMobileAccountLocal(accounts, targetAccountId) : blockMobileAccountLocal(accounts, targetAccountId));
     showToast(isBlocked ? "Аккаунт разблокирован" : "Аккаунт заблокирован");
   }
 
-  async function detachEmployeeFromSelectedAccount(employeeId?: string) {
-    if (!selectedAccountId) {
+  async function detachEmployeeFromSelectedAccount(employeeId?: string, accountId?: string) {
+    const targetAccountId = accountId ?? selectedAccountId;
+    if (!targetAccountId) {
       showToast("Сначала выберите мобильный аккаунт");
       return;
     }
 
-    const account = visibleAccounts.find((item) => item.id === selectedAccountId);
+    const account = visibleAccounts.find((item) => item.id === targetAccountId);
     const resolvedEmployeeId = employeeId ?? account?.boundEmployeeIds?.[0];
     if (!resolvedEmployeeId && dataSourceMode === "api") {
       showToast("Для отвязки нужен employeeId. Перепривяжите сотрудника из справочника или обновите данные аккаунта.");
@@ -306,7 +360,7 @@ export function useMobileAccountsWorkspace({
 
     if (dataSourceMode === "api") {
       try {
-        await apiMobileAccounts.detachEmployee(selectedAccountId, resolvedEmployeeId!);
+        await apiMobileAccounts.detachEmployee(targetAccountId, resolvedEmployeeId!);
         await refreshMobileAccounts();
         await refreshMobileAccountSecurity();
         showToast("Сотрудник отвязан от аккаунта");
@@ -317,7 +371,7 @@ export function useMobileAccountsWorkspace({
       return;
     }
 
-    setAccounts(detachEmployeeFromMobileAccount(accounts, selectedAccountId, resolvedEmployeeId));
+    setAccounts(detachEmployeeFromMobileAccount(accounts, targetAccountId, resolvedEmployeeId));
     showToast("Сотрудник отвязан от аккаунта");
   }
 
@@ -405,6 +459,7 @@ export function useMobileAccountsWorkspace({
     setAccountMode,
     setSelectedAccountId,
     attachEmployeeToSelectedAccount,
+    bindEmployeesToSelectedAccount,
     toggleSelectedAccountBlock,
     updateSelectedAccount,
   };
@@ -423,11 +478,11 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 function mapFallbackSecurityEvents(): MobileAccountSecurityEvent[] {
   return securityEventsFallback.map((event, index) => ({
-    id: `mock-security-${index}`,
-    accountId: "mock",
-    eventType: event[1] ?? "mock.event",
+    id: `local-security-${index}`,
+    accountId: "local",
+    eventType: event[1] ?? "local.event",
     message: event[2] ?? "",
     createdAt: event[0] ?? "",
-    actor: event[3] ?? "mock",
+    actor: event[3] ?? "local",
   }));
 }

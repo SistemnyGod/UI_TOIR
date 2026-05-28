@@ -1,0 +1,895 @@
+Patrol360 / Atom Minerals
+Полный стек технологий проекта
+Дата актуализации: 22.05.2026
+
+0. Весь стек, который фактически используется в проекте
+
+Языки и платформы:
+- C# latest.
+- TypeScript 5.9.3.
+- JavaScript / JSX / TSX.
+- HTML.
+- CSS.
+- SQL / PostgreSQL.
+- PowerShell для локальных tools-скриптов.
+- Dockerfile.
+- YAML / Docker Compose.
+- Caddyfile.
+
+Backend:
+- .NET SDK 10.0.202.
+- .NET runtime / ASP.NET Core 10.
+- Target framework: net10.0.
+- ASP.NET Core Web API.
+- ASP.NET Core hosted services / BackgroundService.
+- Microsoft.AspNetCore.App framework reference.
+- EF Core 10.0.4.
+- Npgsql.EntityFrameworkCore.PostgreSQL 10.0.1.
+- Npgsql 10.0.2 в infrastructure tests.
+- Microsoft.AspNetCore.Identity PasswordHasher.
+- SHA256 для хеширования session token.
+- ProblemDetails для API-ошибок.
+- Bearer token auth.
+- RBAC / permissions.
+- Планируемые библиотеки печати и документов:
+  - QuestPDF или другой .NET PDF generator для PDF-бланков.
+  - DocumentFormat.OpenXml для DOCX-документов.
+  - ClosedXML для XLSX-отчетов.
+
+Backend-проекты:
+- apps/api/Patrol360.Api.csproj.
+- apps/worker/Patrol360.Worker.csproj.
+- libs/domain/Patrol360.Domain.csproj.
+- libs/application/Patrol360.Application.csproj.
+- libs/contracts/Patrol360.Contracts.csproj.
+- libs/infrastructure/Patrol360.Infrastructure.csproj.
+
+Frontend:
+- Node.js 22-alpine в Docker build.
+- npm.
+- React 19.2.1.
+- react-dom 19.2.1.
+- Vite 7.2.6.
+- @vitejs/plugin-react 5.1.2.
+- TypeScript 5.9.3.
+- lucide-react 0.561.0.
+- Native fetch через собственный ApiClient.
+- Hash routing внутри SPA.
+- CSS без отдельного Tailwind-пакета в текущем package.json.
+- Предпросмотр документов:
+  - PDF preview в браузере через Blob URL, iframe/object или отдельную
+    preview-модалку.
+  - Печать через browser print из PDF preview.
+  - DOCX и XLSX - скачивание файла; предпросмотр DOCX лучше делать через
+    серверную PDF-версию того же документа.
+
+Frontend-проекты и стили:
+- apps/web.
+- apps/web/src/App.tsx.
+- apps/web/src/styles.css.
+- apps/web/src/screens/inventory/inventoryWeb.css.
+- apps/web/src/screens/emu/emu.css.
+
+Frontend testing:
+- Vitest 4.1.6.
+- @testing-library/react 16.3.2.
+- @testing-library/jest-dom 6.9.1.
+- @testing-library/user-event 14.6.1.
+- jsdom 27.3.0.
+- Playwright 1.60.0.
+
+Backend testing:
+- xUnit 2.9.3.
+- xunit.runner.visualstudio 3.1.4.
+- Microsoft.NET.Test.Sdk 17.14.1.
+- coverlet.collector 6.0.4.
+
+Database:
+- PostgreSQL 17-alpine.
+- EF Core migrations.
+- Основная БД patrol360.
+- Основные области данных: Patrol, Inventory, EMU, Auth/RBAC.
+
+Infrastructure:
+- Docker Compose.
+- Caddy 2.8-alpine.
+- Nginx 1.27-alpine для web runtime.
+- PostgreSQL 17-alpine.
+- Redis 7-alpine.
+- RabbitMQ 3-management.
+- MinIO latest.
+- Локальные TLS-сертификаты для LAN HTTPS.
+
+Контейнеры:
+- api - ASP.NET Core runtime на порту 8080 внутри Docker-сети.
+- web - nginx со static production build.
+- proxy - Caddy reverse proxy на 80/443/5173.
+- postgres - PostgreSQL.
+- redis - Redis.
+- rabbitmq - RabbitMQ Management.
+- minio - S3-like object storage.
+
+Основные модули приложения:
+- Обход.
+- Бухгалтерия / Inventory / Web-инвентарь.
+- ЭМУ / Учет работ.
+- Пользователи сайта / RBAC.
+- Мобильные аккаунты.
+- Печать документов и предпросмотр PDF.
+
+Основные backend API:
+- /api/v1/auth/*
+- /api/v1/users/*
+- /api/v1/routes/*
+- /api/v1/patrol-requests/*
+- /api/v1/assignments/*
+- /api/v1/mobile-accounts/*
+- /api/v1/inventory/*
+- /api/v1/emu/*
+- /health/*
+
+Dev/test commands:
+- dotnet build Patrol360.slnx --no-restore.
+- dotnet test Patrol360.slnx --no-build.
+- npm run build.
+- npm run typecheck.
+- npm run test:unit.
+- npm run test:e2e.
+- .\tools\Verify-TextEncoding.ps1.
+
+1. Назначение проекта
+
+Patrol360 - веб-система для управления обходами территории, маршрутами,
+точками контроля NFC/QR, заявками, назначениями сотрудников, мобильными
+аккаунтами и результатами обходов.
+
+В проект также интегрируется модуль "Бухгалтерия" / Web-инвентарь:
+номенклатура, складские остатки, выдача, возвраты, списания, СИЗ,
+учет "под запись", история, отчеты, настройки справочников и импорт
+legacy-данных из старой Inventory-системы.
+
+Отдельно добавлен модуль ЭМУ / "Учет работ": дашборд ЭМУ, учет текущих
+работ, план работ, избранные сотрудники, справочники участков и причин,
+история выполненных работ, аудит и перенос незавершенных работ через worker.
+
+2. Общая архитектура
+
+Тип проекта:
+- Monorepo.
+- Frontend SPA.
+- Backend ASP.NET Core Web API.
+- EF Core + PostgreSQL.
+- Docker Compose для локального и LAN-запуска.
+- Caddy reverse proxy для HTTPS и проксирования API.
+
+Основные продуктовые модули:
+- Обход.
+- Бухгалтерия / Inventory.
+- ЭМУ / Учет работ.
+
+Основные директории:
+- apps/api - ASP.NET Core API host.
+- apps/web - React + TypeScript + Vite frontend.
+- apps/worker - .NET Worker для фоновых задач.
+- libs/domain - доменные типы.
+- libs/application - use cases, query/command interfaces.
+- libs/contracts - DTO и API-контракты.
+- libs/infrastructure - EF Core, PostgreSQL, сервисы, миграции.
+- infra/docker - Docker Compose, Caddy, сертификаты, инфраструктура.
+- tests - backend и frontend тесты.
+- tools - локальные проверки и утилиты.
+- legacy - материалы старых проектов для миграции.
+
+3. Frontend
+
+Платформа:
+- Node.js: 22-alpine в Docker build.
+- Package manager: npm.
+- Build tool: Vite 7.2.6.
+- Язык: TypeScript 5.9.3.
+- UI framework: React 19.2.1.
+- DOM renderer: react-dom 19.2.1.
+
+Основные frontend-библиотеки:
+- lucide-react 0.561.0 - иконки интерфейса.
+- @vitejs/plugin-react 5.1.2 - React plugin для Vite.
+
+Тестирование frontend:
+- Vitest 4.1.6.
+- @testing-library/react 16.3.2.
+- @testing-library/jest-dom 6.9.1.
+- @testing-library/user-event 14.6.1.
+- jsdom 27.3.0.
+- Playwright 1.60.0.
+
+Frontend-скрипты:
+- npm run dev - локальный Vite dev server.
+- npm run build - TypeScript build + production build.
+- npm run typecheck - проверка TypeScript.
+- npm run test:unit - unit tests.
+- npm run test:e2e - Playwright e2e tests.
+- npm run test - unit + e2e.
+
+Маршрутизация frontend:
+- Используется hash-routing внутри SPA.
+- Примеры routes:
+  - #dashboard
+  - #routes
+  - #assign
+  - #schedule
+  - #accounts
+  - #emu-dashboard
+  - #emu-work-accounting
+  - #emu-completed-work-history
+  - #inventory-overview
+  - #inventory-items
+  - #inventory-issue
+  - #inventory-operations
+  - #inventory-custody
+  - #inventory-ppe
+  - #inventory-history
+  - #inventory-reports
+  - #inventory-employees
+  - #inventory-settings
+  - #inventory-users
+  - #inventory-system-log
+
+Frontend API client:
+- apps/web/src/api/client.ts
+- Поддерживает:
+  - JSON requests.
+  - file downloads.
+  - FormData uploads.
+  - timeout.
+  - ProblemDetails parsing.
+  - Bearer token.
+- Токен по умолчанию хранится в localStorage:
+  - patrol360.sessionToken
+
+Frontend переменные окружения:
+- VITE_API_BASE_URL - базовый URL API.
+- VITE_API_URL - fallback базового URL API.
+- VITE_DATA_SOURCE_MODE - режим источника данных, если используется.
+
+CSS / визуальный слой:
+- Основные стили лежат в apps/web/src/styles.css и модульных CSS файлах экранов.
+- Для Inventory используется apps/web/src/screens/inventory/inventoryWeb.css.
+- TailwindCSS не найден как npm-зависимость в текущем apps/web/package.json;
+  текущий рабочий UI реализован обычным CSS.
+
+4. Backend
+
+Платформа:
+- .NET SDK: 10.0.202 через global.json.
+- Target Framework: net10.0.
+- Язык: C# latest.
+- Nullable reference types: включены.
+- Implicit usings: включены.
+
+Backend host:
+- apps/api/Patrol360.Api.csproj
+- ASP.NET Core Web API.
+- Docker runtime: mcr.microsoft.com/dotnet/aspnet:10.0.
+- Docker internal port: 8080.
+- ASPNETCORE_URLS=http://+:8080.
+
+Worker:
+- apps/worker/Patrol360.Worker.csproj
+- .NET Worker / BackgroundService.
+- Использует Microsoft.AspNetCore.App и infrastructure/application слои.
+
+Слои backend:
+- Patrol360.Domain - доменные модели и базовые типы.
+- Patrol360.Contracts - DTO/API contracts.
+- Patrol360.Application - интерфейсы команд/запросов и сценарии приложения.
+- Patrol360.Infrastructure - EF Core, PostgreSQL, реализации сервисов, миграции.
+- Patrol360.Api - HTTP controllers, auth, authorization, ProblemDetails.
+
+Основные backend технологии:
+- ASP.NET Core 10.
+- EF Core 10.0.4.
+- Npgsql.EntityFrameworkCore.PostgreSQL 10.0.1.
+- Microsoft.AspNetCore.Identity PasswordHasher для паролей пользователей
+  сайта и мобильных аккаунтов.
+- SHA256 для хеширования session token.
+
+Аутентификация и доступ:
+- Сайт использует session token/Bearer token.
+- Frontend отправляет Authorization: Bearer <token>.
+- Сессии сайта хранятся в БД с token_hash.
+- Есть RBAC/permissions для системных пользователей.
+- Старые Inventory-пользователи переносятся как роли/права внутри Patrol360,
+  без отдельной старой авторизации.
+
+5. База данных
+
+Основная БД:
+- PostgreSQL.
+- Docker image: postgres:17-alpine.
+- Локальная база по умолчанию:
+  - database: patrol360
+  - user: patrol360
+  - password: patrol360_dev
+  - port: 5432
+
+Connection string:
+- appsettings.json:
+  Host=localhost;Port=5432;Database=patrol360;Username=patrol360;Password=patrol360_dev
+- Docker compose:
+  ConnectionStrings__Patrol360=Host=postgres;Port=5432;Database=patrol360;Username=patrol360;Password=patrol360_dev
+
+Схемы и области данных:
+- Patrol / Обход:
+  - сотрудники.
+  - маршруты.
+  - точки маршрутов.
+  - NFC/QR/manual контроль.
+  - заявки на обход.
+  - назначения.
+  - результаты обходов.
+  - мобильные аккаунты.
+  - привязки сотрудников к аккаунтам.
+  - пользователи сайта и права.
+
+- Inventory / Бухгалтерия:
+  - inventory.items.
+  - inventory.categories.
+  - inventory.units.
+  - inventory.warehouses.
+  - inventory.stock_moves.
+  - inventory.custody_*.
+  - inventory.ppe_*.
+  - inventory.item_sets.
+  - inventory.item_set_items.
+  - inventory.position_norms.
+  - inventory.return_reasons.
+  - inventory.write_off_reasons.
+  - inventory.system_log.
+  - inventory.export_jobs.
+  - inventory.legacy_import_runs.
+  - legacy links для сотрудников и пользователей Inventory.
+
+- ЭМУ / Учет работ:
+  - emu_work_sections.
+  - emu_wait_reasons.
+  - emu_not_completed_reasons.
+  - emu_work_templates.
+  - emu_favorite_employees.
+  - emu_work_plan_tasks.
+  - emu_work_plan_task_employees.
+  - emu_work_sessions.
+  - emu_work_session_employees.
+  - emu_work_pauses.
+  - emu_work_pause_employees.
+  - emu_work_session_carry_overs.
+  - emu_work_audit_events.
+  - emu_notifications.
+
+Миграции:
+- EF Core migrations находятся в libs/infrastructure/Persistence/Migrations.
+- Основные миграционные блоки:
+  - InitialPatrolCore.
+  - RouteCatalogCrudFields.
+  - MobileAccounts.
+  - AuthSessionRbac.
+  - PatrolResults.
+  - InventoryCatalog.
+  - InventoryCatalogItemDetails.
+  - InventoryCustodyPpeWorkflow.
+
+Legacy import:
+- Источник старого Inventory задается через:
+  - InventoryLegacy:ConnectionString
+  - или INVENTORY_LEGACY_CONNECTION_STRING
+- Пароли и .env старого проекта не должны попадать в код.
+- Import должен быть идемпотентным через legacy_id.
+
+6. Инфраструктура Docker
+
+Файл:
+- infra/docker/compose.yaml
+
+Сервисы:
+- api:
+  - container: patrol360-api
+  - ASP.NET Core API.
+  - internal port 8080.
+  - profile: app.
+
+- web:
+  - React production build.
+  - runtime: nginx:1.27-alpine.
+  - internal port 80.
+  - profile: app.
+
+- proxy:
+  - Caddy 2.8-alpine.
+  - ports:
+    - 80:80
+    - 443:443
+    - 5173:443
+  - TLS certificates:
+    - infra/docker/certs/patrol360.local.crt
+    - infra/docker/certs/patrol360.local.key
+  - profile: app.
+  - /api/* и /health/* проксируются в api:8080.
+  - остальные запросы проксируются в web:80.
+
+- postgres:
+  - postgres:17-alpine.
+  - port 5432.
+  - volume patrol360-postgres-data.
+
+- redis:
+  - redis:7-alpine.
+  - port 6379.
+
+- rabbitmq:
+  - rabbitmq:3-management.
+  - ports:
+    - 5672
+    - 15672
+
+- minio:
+  - minio/minio:latest.
+  - ports:
+    - 9000
+    - 9001
+  - root user: patrol360.
+
+Примечание:
+- Redis, RabbitMQ и MinIO присутствуют в инфраструктурном стеке как
+  сервисы для фоновых задач, очередей и файлового хранения. Не все сценарии
+  обязательно полностью задействованы в текущем UI.
+
+7. Reverse proxy и HTTPS
+
+Файл:
+- infra/docker/Caddyfile
+
+Caddy:
+- Отключен автоматический HTTPS:
+  auto_https off
+- HTTP :80 редиректит на HTTPS.
+- HTTPS :443 использует локальный сертификат.
+- /api/* -> api:8080.
+- /health/* -> api:8080.
+- все остальное -> web:80.
+
+Локальные URL:
+- https://localhost
+- https://192.168.2.194
+- https://192.168.2.194:5173
+- API через proxy:
+  - https://192.168.2.194/api/...
+  - https://192.168.2.194/health/ready
+
+8. Локальный запуск
+
+Запуск backend напрямую:
+dotnet run --project .\apps\api\Patrol360.Api.csproj
+
+Запуск frontend напрямую:
+cd .\apps\web
+npm install
+npm run dev
+
+Запуск инфраструктуры без app profile:
+docker compose -f .\infra\docker\compose.yaml up -d
+
+Полный Docker-запуск приложения:
+docker compose -f .\infra\docker\compose.yaml --profile app up --build
+
+Остановка Docker-стека:
+docker compose -f .\infra\docker\compose.yaml --profile app down
+
+9. Проверки качества
+
+Backend:
+- dotnet build Patrol360.slnx --no-restore
+- dotnet test Patrol360.slnx --no-build
+
+Frontend:
+- cd apps/web
+- npm run typecheck
+- npm run build
+- npm run test:unit
+- npm run test:e2e
+
+Кодировка:
+- .\tools\Verify-TextEncoding.ps1
+
+Особое правило проекта:
+- Русский интерфейс должен быть в UTF-8.
+- Mojibake в видимом UI считается дефектом.
+
+10. Основные API-группы
+
+Auth / пользователи:
+- /api/v1/auth/*
+- /api/v1/users/*
+
+Обход:
+- /api/v1/routes
+- /api/v1/routes/{id}/points
+- /api/v1/patrol-requests
+- /api/v1/assignments
+- /api/v1/mobile-accounts
+- /api/v1/dashboard
+- /api/v1/schedule, если включен отдельный schedule contract
+
+Inventory / Бухгалтерия:
+- /api/v1/inventory/items
+- /api/v1/inventory/categories
+- /api/v1/inventory/units
+- /api/v1/inventory/warehouses
+- /api/v1/inventory/documents
+- /api/v1/inventory/operations
+- /api/v1/inventory/custody/*
+- /api/v1/inventory/ppe/*
+- /api/v1/inventory/history
+- /api/v1/inventory/reports
+- /api/v1/inventory/settings/*
+- /api/v1/inventory/system-log
+- /api/v1/inventory/legacy/import
+- /api/v1/inventory/legacy/import/dry-run
+
+ЭМУ / Учет работ:
+- /api/v1/emu/dashboard
+- /api/v1/emu/settings
+- /api/v1/emu/sections
+- /api/v1/emu/wait-reasons
+- /api/v1/emu/not-completed-reasons
+- /api/v1/emu/work-templates
+- /api/v1/emu/favorite-employees
+- /api/v1/emu/work-sessions
+- /api/v1/emu/work-sessions/{id}/pause
+- /api/v1/emu/work-sessions/{id}/resume
+- /api/v1/emu/work-sessions/{id}/complete
+- /api/v1/emu/work-sessions/{id}/audit
+- /api/v1/emu/plan-tasks
+- /api/v1/emu/plan-tasks/{id}/approve
+- /api/v1/emu/plan-tasks/approve-week
+
+11. Модули "Обход"
+
+Маршруты и точки:
+- Создание маршрута.
+- Создание точек внутри маршрута.
+- Перемещение точек и сохранение порядка.
+- Типы контроля:
+  - NFC
+  - QR
+  - Ручной
+- NFC/QR-код хранится как код точки.
+- Для дублей NFC внутри маршрута нужен UI warning.
+
+Назначения:
+- Выбор сотрудника.
+- Выбор маршрута.
+- Плановое время.
+- Смена.
+- Комментарий/текст уведомления.
+- Создание заявки на обход.
+- Backend создает связанное назначение.
+- notifyEmployee=true сейчас сохраняет подготовленное уведомление;
+  мобильная push-доставка относится к следующему этапу.
+
+Плановый обход:
+- Недельный и месячный режим.
+- Дата-якорь.
+- Фильтр смены.
+- Создание плановой ячейки через заявку/назначение.
+
+Мобильные аккаунты:
+- Создание аккаунта.
+- Редактирование.
+- Блокировка/разблокировка.
+- Сброс пароля.
+- Удаление.
+- Привязка 1-5 сотрудников.
+
+Дашборд:
+- Реальные counts из API:
+  - активные обходы.
+  - задержки.
+  - точки.
+  - сотрудники онлайн.
+  - покрытие смен.
+
+12. Модули "Бухгалтерия" / Inventory
+
+Обзор учета:
+- KPI по сотрудникам, позициям, остаткам, просрочкам и операциям.
+- Текущие позиции на руках.
+- Требующие внимания записи.
+
+Сотрудники учета:
+- Read-model по общей таблице сотрудников.
+- Бухгалтерские поля.
+- Архив.
+- Excel import.
+
+Номенклатура:
+- Позиции.
+- Категории.
+- Единицы измерения.
+- Склады.
+- Остатки.
+
+Выдача:
+- Подбор номенклатуры.
+- Черновик выдачи.
+- Проведение через createOperation type=issue.
+- Журнал выдач.
+
+Операции:
+- Возврат.
+- Списание.
+- Корректировка.
+- Поступление.
+- Подтверждение перед проведением.
+- Журнал операций.
+
+Под запись:
+- Акты.
+- Строки акта.
+- Возврат.
+- Списание.
+- Архив.
+- История.
+- Печать PDF/DOCX.
+
+СИЗ:
+- Журнал карточек СИЗ.
+- Wizard создания карточки.
+- Добавление строк СИЗ.
+- Нормы по должности.
+- Наборы.
+- Личная карточка.
+- Лист подписи.
+- Печать.
+
+История:
+- Единый журнал событий учета.
+- Фильтры.
+- Drawer деталей.
+
+Отчеты:
+- Остатки.
+- Движения.
+- СИЗ.
+- Под запись.
+- История.
+- Сотрудники.
+- System log.
+
+Настройки:
+- Группы/категории.
+- Единицы измерения.
+- Склады.
+- Категории "под запись".
+- Причины возврата.
+- Причины списания.
+- Нормы СИЗ по должности.
+- Наборы номенклатуры и состав набора.
+
+Пользователи Inventory:
+- Роли и права бухгалтерского модуля поверх Patrol360 RBAC.
+- Без отдельной старой авторизации.
+
+Системный журнал:
+- Аудит действий Inventory.
+- Фильтры по сущности, действию, пользователю, дате.
+
+13. Модуль ЭМУ / Учет работ
+
+Экраны:
+- #emu-dashboard - сводка по работам, активные работы, забытые/перенесенные
+  работы, последние события, недельный план.
+- #emu-work-accounting - основной учет работ: отправить в работу, пауза,
+  продолжить, завершить, удалить, справочники, избранные сотрудники,
+  плановая доска.
+- #emu-completed-work-history - история выполненных работ, фильтры, детали
+  работы и аудит.
+
+Функции:
+- Создание работы.
+- Изменение работы.
+- Постановка на паузу.
+- Продолжение работы.
+- Завершение работы с результатом.
+- Удаление работы с причиной.
+- Учет сотрудников-участников работы.
+- Учет рабочего времени, ожидания и времени "на другой работе".
+- Плановые задачи на неделю.
+- Согласование задач и недели.
+- Избранные сотрудники ЭМУ.
+- Справочники участков, причин ожидания и причин невыполнения.
+- Типовые работы.
+- Аудит изменений.
+- Перенос незавершенных работ через apps/worker.
+
+Права ЭМУ:
+- emu.view
+- emu.work.create
+- emu.work.update
+- emu.work.pause
+- emu.work.complete
+- emu.work.delete
+- emu.directories.manage
+- emu.favorite-employees.manage
+- emu.plan.view
+- emu.plan.manage
+- emu.plan.approve
+- emu.plan.override-approval
+- emu.plan.recurrence.manage
+- emu.reports.view
+- emu.time.override
+- emu.audit.view
+
+Frontend-файлы ЭМУ:
+- apps/web/src/screens/EmuScreen.tsx
+- apps/web/src/screens/emu/EmuDashboardScreen.tsx
+- apps/web/src/screens/emu/EmuWorkAccountingScreen.tsx
+- apps/web/src/screens/emu/EmuCompletedWorkHistoryScreen.tsx
+- apps/web/src/hooks/useEmuWorkspace.ts
+- apps/web/src/repositories/emuRepository.ts
+- apps/web/src/screens/emu/emu.css
+
+Backend-файлы ЭМУ:
+- libs/contracts/EmuContracts.cs
+- libs/infrastructure/Persistence/EfEmuService.cs
+- libs/infrastructure/Persistence/EfEmuMaintenanceService.cs
+- apps/worker/Worker.cs
+
+14. Печать и экспорт
+
+Текущий целевой подход:
+- Server-side file generation.
+- Для v1 допускается синхронная генерация файлов.
+- export_jobs используется как аудит выгрузок.
+- Для предпросмотра основным форматом является PDF.
+- Пользователь открывает документ в preview-модалке, проверяет содержимое
+  и затем печатает или скачивает файл.
+
+Форматы:
+- PDF.
+- DOCX.
+- XLSX.
+
+Рекомендуемые технологии:
+- PDF: QuestPDF или аналогичный .NET PDF generator.
+- DOCX: DocumentFormat.OpenXml.
+- XLSX: ClosedXML.
+- Frontend preview: Blob URL + iframe/object в React-модалке.
+- Browser print: печать открытого PDF preview.
+
+Приоритетные печатные формы:
+- СИЗ-карточка.
+- СИЗ-лист подписи.
+- Акт "Под запись".
+- Маршрутный лист обхода.
+- Результат обхода.
+- Заявка/назначение обхода.
+- Отчет ЭМУ по выполненным работам.
+- Табель/история работ ЭМУ.
+
+Важно:
+- В текущих csproj не найдены отдельные NuGet-зависимости ClosedXML,
+  DocumentFormat.OpenXml или QuestPDF. Если понадобятся полноценные красивые
+  файлы промышленного качества, эти пакеты нужно добавить явно.
+
+Минимальный API-паттерн для печати:
+- GET .../print?format=pdf - получить PDF для предпросмотра и печати.
+- GET .../print?format=docx - скачать DOCX.
+- GET .../export?format=xlsx - скачать Excel-отчет.
+- POST .../export - создать audit-запись export_jobs, если нужен журнал выгрузок.
+
+Минимальный frontend-паттерн:
+- Кнопка "Предпросмотр" загружает PDF Blob.
+- PDF открывается в модальном окне или drawer.
+- Кнопка "Печать" печатает PDF preview.
+- Кнопка "Скачать PDF/DOCX/XLSX" скачивает файл с именем из Content-Disposition.
+
+15. Безопасность и секреты
+
+Не коммитить:
+- production connection strings.
+- пароли.
+- .env с секретами.
+- приватные ключи сертификатов.
+- дампы БД и backup-файлы.
+
+Текущие backup-файлы БД складываются в:
+- backups/
+
+Папка backups/ добавлена в .gitignore.
+
+16. Текущие важные состояния данных
+
+Сотрудники:
+- Таблица сотрудников была очищена по отдельной задаче.
+- Связанные assignments, patrol requests, mobile bindings и employee-linked
+  inventory workflow rows были удалены.
+
+Номенклатура:
+- Основная номенклатура сохранена.
+- Тестовые Smoke/Codex/Test/QA/UI MODAL позиции и категории были удалены.
+- После чистки оставалось:
+  - inventory_items: 1324
+  - inventory_categories: 6
+  - units: 8
+  - warehouses: 1
+
+17. Команды, которые чаще всего нужны
+
+Проверка всего backend:
+dotnet build Patrol360.slnx --no-restore
+dotnet test Patrol360.slnx --no-build
+
+Проверка frontend:
+cd .\apps\web
+npm run build
+npm run typecheck
+npm run test:unit
+
+Проверка кодировки:
+.\tools\Verify-TextEncoding.ps1
+
+Полный Docker-запуск:
+docker compose -f .\infra\docker\compose.yaml --profile app up --build
+
+Остановка:
+docker compose -f .\infra\docker\compose.yaml --profile app down
+
+18. Текущие технические риски
+
+- Старые README-файлы в консоли могут отображаться mojibake, поэтому важно
+  проверять видимый UI и запускать Verify-TextEncoding.ps1.
+- Часть модулей "Обход" еще требует доведения кнопок и рабочих сценариев
+  до состояния без fake/local fallback.
+- Мобильная push-доставка уведомлений еще не является частью текущего сайта;
+  сейчас уведомление нужно сохранять и показывать как подготовленное.
+- Inventory импорт из live legacy PostgreSQL требует заданного
+  INVENTORY_LEGACY_CONNECTION_STRING и dry-run сверки с реальной схемой.
+
+19. Краткая сводка стека
+
+Frontend:
+- React 19.2.1
+- TypeScript 5.9.3
+- Vite 7.2.6
+- lucide-react 0.561.0
+- Vitest
+- Testing Library
+- Playwright
+- Nginx runtime в Docker
+
+Backend:
+- .NET 10
+- ASP.NET Core Web API
+- EF Core 10.0.4
+- Npgsql PostgreSQL provider 10.0.1
+- ASP.NET Identity PasswordHasher
+- Bearer session token auth
+- .NET Worker
+
+Основные модули приложения:
+- Обход.
+- Бухгалтерия / Inventory.
+- ЭМУ / Учет работ.
+
+Database and infra:
+- PostgreSQL 17
+- Caddy reverse proxy
+- Docker Compose
+- Redis 7
+- RabbitMQ 3 Management
+- MinIO
+
+Quality:
+- dotnet build/test
+- npm build/typecheck/test
+- Playwright smoke
+- UTF-8 encoding verification

@@ -14,6 +14,8 @@ internal sealed class PatrolRequestEntity
 
     public string RouteName { get; set; } = string.Empty;
 
+    public Guid? SourceResultId { get; set; }
+
     public DateOnly ScheduledDate { get; set; }
 
     public TimeOnly? ScheduledTime { get; set; }
@@ -31,6 +33,8 @@ internal sealed class PatrolRequestEntity
     public EmployeeEntity? Employee { get; set; }
 
     public RouteEntity? Route { get; set; }
+
+    public PatrolResultEntity? SourceResult { get; set; }
 
     public AssignmentEntity? Assignment { get; set; }
 }

@@ -9,7 +9,13 @@ export interface StoredStateOptions<T> {
 }
 
 export function canUseStorage() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  if (typeof window === "undefined") return false;
+
+  try {
+    return typeof window.localStorage !== "undefined";
+  } catch {
+    return false;
+  }
 }
 
 export function readStoredState<T>(key: string, fallback: T, options: StoredStateOptions<T>): T {
@@ -20,6 +26,8 @@ export function readStoredState<T>(key: string, fallback: T, options: StoredStat
     if (!rawValue) return fallback;
 
     const parsed = JSON.parse(rawValue) as Partial<StoredStateEnvelope<unknown>>;
+    if (options.validate && options.validate(parsed)) return parsed as T;
+
     if (parsed.version !== (options.version ?? 1)) return fallback;
     if (options.validate && !options.validate(parsed.value)) return fallback;
 
@@ -33,5 +41,10 @@ export function writeStoredState<T>(key: string, value: T, version: number) {
   if (!canUseStorage()) return;
 
   const envelope: StoredStateEnvelope<T> = { version, value };
-  window.localStorage.setItem(key, JSON.stringify(envelope));
+  try {
+    window.localStorage.setItem(key, JSON.stringify(envelope));
+  } catch {
+    // Some browser modes expose localStorage but reject writes. In that case
+    // keep the in-memory React state and skip persistence.
+  }
 }

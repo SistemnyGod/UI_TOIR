@@ -1,7 +1,9 @@
 import { initialAccounts, securityEvents } from "../data";
 import { ApiClient, type ApiRequestOptions } from "../api/client";
 import type {
+  AvailableEmployeeDto,
   AttachMobileAccountEmployeeDto,
+  BindMobileAccountEmployeesDto,
   CreateMobileAccountDto,
   MobileAccountCreatedDto,
   MobileAccountDto,
@@ -18,6 +20,7 @@ import {
 } from "../domain/mobileAccounts";
 import type {
   CreateMobileAccountPayload,
+  EmployeeDirectoryItem,
   MobileAccount,
   MobileAccountSecurityEvent,
   MobileAccountSession,
@@ -151,6 +154,14 @@ export function createApiMobileAccountsRepository({ baseUrl }: { baseUrl?: strin
       return mapMobileAccount(account);
     },
 
+    async bindEmployees(accountId: string, employeeIds: string[]) {
+      const account = await client.put<MobileAccountDto, BindMobileAccountEmployeesDto>(
+        `/api/v1/mobile-accounts/${accountId}/employees/bind`,
+        { employeeIds },
+      );
+      return mapMobileAccount(account);
+    },
+
     async updateAccount(accountId: string, payload: UpdateMobileAccountPayload) {
       const account = await client.put<MobileAccountDto, UpdateMobileAccountDto>(
         `/api/v1/mobile-accounts/${accountId}`,
@@ -190,6 +201,11 @@ export function createApiMobileAccountsRepository({ baseUrl }: { baseUrl?: strin
       return events.map(mapMobileAccountSecurityEvent);
     },
 
+    async getAvailableEmployees(accountId: string) {
+      const employees = await client.get<AvailableEmployeeDto[]>(`/api/v1/mobile-accounts/${accountId}/available-employees`);
+      return employees.map(mapAvailableEmployee);
+    },
+
     async resetPassword(accountId: string) {
       return client.post<ResetMobileAccountPasswordDto, Record<string, never>>(
         `/api/v1/mobile-accounts/${accountId}/reset-password`,
@@ -212,6 +228,12 @@ function mapCreateMobileAccountPayload(payload: CreateMobileAccountPayload): Cre
     bindEmployee: payload.bindEmployee,
     restrictToBoundDevice: payload.restrictToBoundDevice,
     temporaryPassword: payload.temporaryPassword,
+    password: payload.password,
+    confirmPassword: payload.confirmPassword,
+    status: payload.status,
+    language: payload.language,
+    requirePasswordChange: payload.requirePasswordChange,
+    restrictToLinkedDevices: payload.restrictToLinkedDevices,
   };
 }
 
@@ -238,6 +260,7 @@ function mapMobileAccountSession(session: MobileAccountSessionDto): MobileAccoun
     id: session.id,
     accountId: session.accountId,
     status: session.status,
+    deviceId: session.deviceId,
     device: session.device,
     platform: session.platform,
     appVersion: session.appVersion,
@@ -254,5 +277,35 @@ function mapMobileAccountSecurityEvent(event: MobileAccountSecurityEventDto): Mo
     message: event.message,
     createdAt: event.createdAt,
     actor: event.actor,
+  };
+}
+
+function mapAvailableEmployee(employee: AvailableEmployeeDto): EmployeeDirectoryItem {
+  return {
+    id: employee.id,
+    fullName: employee.fullName,
+    initials: employee.fullName
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join(""),
+    personnelNo: "",
+    position: employee.role,
+    department: employee.department,
+    employeeGroup: "",
+    birthDate: "",
+    zone: employee.department,
+    status: "Активен",
+    routesDone: 0,
+    routesTotal: 0,
+    mobileStatus: "Не привязан",
+    lastSeen: "",
+    phone: "",
+    hiredAt: "",
+    brigade: "",
+    shift: employee.area,
+    leader: "",
+    email: "",
   };
 }

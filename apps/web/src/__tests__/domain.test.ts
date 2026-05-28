@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { buildLocalDashboardMetrics } from "../domain/dashboardMetrics";
 import { createMobileAccountDraft } from "../domain/mobileAccounts";
 import { moveRoutePoint } from "../domain/routes";
-import { resolveServiceRequests } from "../repositories/patrolRequestsRepository";
+import { createApiAssignmentsRepository } from "../repositories/assignmentsRepository";
+import { createApiPatrolRequestsRepository, resolveServiceRequests } from "../repositories/patrolRequestsRepository";
+import { createApiResultsRepository } from "../repositories/resultsRepository";
 import type { ServiceRequest } from "../types";
 import type { RoutePoint } from "../types";
 
@@ -48,7 +51,200 @@ describe("domain workflows", () => {
     expect(resolveServiceRequests({ apiRequests, dataSourceMode: "api", localRequests })).toEqual(apiRequests);
     expect(resolveServiceRequests({ apiRequests, dataSourceMode: "mock", localRequests })).toEqual(localRequests);
   });
+
+  it("maps API result DTOs without reading fallback results", async () => {
+    const repository = createApiResultsRepository({
+      fetcher: async () =>
+        new Response(
+          JSON.stringify([
+            {
+              id: "result-1",
+              status: "Замечание",
+              pointId: "point-1",
+              point: "КПП-1",
+              employeeId: "employee-1",
+              employee: "Иванов И.И.",
+              routeId: "route-1",
+              route: "Периметр",
+              territory: "Север",
+              shift: "День",
+              plannedAt: "2026-05-18T10:00:00Z",
+              actualAt: "2026-05-18T10:12:00Z",
+              deviation: "+12 мин",
+              comment: "Нужна проверка",
+              photos: 2,
+              issueType: "Повреждение",
+              severity: "Высокая",
+            },
+          ]),
+          { headers: { "content-type": "application/json" } },
+        ),
+    });
+
+    const results = await repository.getResults();
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      id: "result-1",
+      status: "Замечание",
+      issueType: "Повреждение",
+      severity: "Высокая",
+    });
+  });
+
+  it("sends sourceResultId when creating a request through API repository", async () => {
+    let requestBody = "";
+    const repository = createApiPatrolRequestsRepository({
+      fetcher: async (_input, init) => {
+        requestBody = String(init?.body ?? "");
+        return new Response(
+          JSON.stringify({
+            id: "request-1",
+            number: "REQ-1",
+            employeeId: "employee-1",
+            employeeName: "Иванов И.И.",
+            routeId: "route-1",
+            routeName: "Периметр",
+            sourceResultId: "result-1",
+            scheduledDate: "2026-05-18",
+            scheduledTime: null,
+            notifyEmployee: true,
+            notificationText: "Проверить",
+            status: "Новая",
+            createdAt: "2026-05-18T10:00:00Z",
+            description: "Проверить результат",
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
+      },
+    });
+
+    const request = await repository.createPatrolRequest({
+      employee: "Иванов И.И.",
+      route: "Периметр",
+      sourceResultId: "result-1",
+      scheduledDate: "2026-05-18",
+      scheduledTime: "",
+      notifyEmployee: true,
+      notificationText: "Проверить",
+      description: "Проверить результат",
+    });
+
+    expect(JSON.parse(requestBody)).toMatchObject({ sourceResultId: "result-1" });
+    expect(request.sourceResultId).toBe("result-1");
+  });
+
+  it("maps API assignments and sends command endpoints", async () => {
+    const requestedPaths: string[] = [];
+    let createBody = "";
+    const repository = createApiAssignmentsRepository({
+      fetcher: async (input, init) => {
+        const path = String(input);
+        requestedPaths.push(path);
+        if (path.endsWith("/api/v1/assignments") && init?.method === "POST") {
+          createBody = String(init.body ?? "");
+          return jsonResponse(createAssignmentDto("assignment-2"));
+        }
+
+        if (path.endsWith("/api/v1/assignments/assignment-2/start")) {
+          return jsonResponse({
+            assignment: createAssignmentDto("assignment-2", "В пути", 1),
+            changed: true,
+            message: "started",
+          });
+        }
+
+        return jsonResponse([createAssignmentDto("assignment-1")]);
+      },
+    });
+
+    const assignments = await repository.getAssignments();
+    const created = await repository.createAssignment({
+      employeeId: "employee-1",
+      employeeName: "Иванов И.И.",
+      comment: "Проверить северную зону",
+      notificationText: "Новое назначение",
+      notifyEmployee: true,
+      patrolRequestId: "request-1",
+      plannedAt: "2026-05-18T10:00:00Z",
+      plannedEndAt: "2026-05-18T12:00:00Z",
+      priority: "high",
+      routeId: "route-1",
+      routeName: "Периметр",
+      shift: "День",
+    });
+    const command = await repository.startAssignment("assignment-2");
+
+    expect(assignments[0]).toMatchObject({ id: "assignment-1", patrolRequestId: "request-1", employeeId: "employee-1", progress: 0 });
+    expect(JSON.parse(createBody)).toMatchObject({
+      comment: "Проверить северную зону",
+      employeeId: "employee-1",
+      notificationText: "Новое назначение",
+      notifyEmployee: true,
+      patrolRequestId: "request-1",
+      plannedEndAt: "2026-05-18T12:00:00Z",
+      priority: "high",
+    });
+    expect(JSON.parse(createBody)).not.toHaveProperty("employeeName");
+    expect(JSON.parse(createBody)).not.toHaveProperty("routeName");
+    expect(created.id).toBe("assignment-2");
+    expect(command.changed).toBe(true);
+    expect(command.assignment.id).toBe("assignment-2");
+    expect(requestedPaths.some((path) => path.endsWith("/api/v1/assignments/assignment-2/start"))).toBe(true);
+  });
+
+  it("does not double count requests that already have active assignments in dashboard metrics", () => {
+    const metrics = buildLocalDashboardMetrics({
+      activePatrols: [
+        {
+          id: "assignment-1",
+          patrolRequestId: "request-1",
+          employee: "Ivan Petrov",
+          employeeId: "employee-1",
+          route: "North route",
+          routeId: "route-1",
+          zone: "North",
+          shift: "День",
+          currentPoint: "ожидает старта",
+          status: "Ожидает",
+          progress: 0,
+          eta: "09:00",
+          deviation: "-",
+        },
+      ],
+      requests: [
+        createRequest("request-1"),
+        { ...createRequest("request-2"), status: "Закрыта" },
+        createRequest("request-3"),
+      ],
+      routeDirectory: [],
+    });
+
+    expect(metrics.find((metric) => metric.label === "Заявки на обход")?.value).toBe("1");
+  });
 });
+
+function jsonResponse(body: unknown) {
+  return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
+}
+
+function createAssignmentDto(id: string, status = "Назначена", progressPercent = 0) {
+  return {
+    id,
+    patrolRequestId: "request-1",
+    employeeId: "employee-1",
+    employeeName: "Иванов И.И.",
+    routeId: "route-1",
+    routeName: "Периметр",
+    shift: "День",
+    status,
+    plannedAt: "2026-05-18T10:00:00Z",
+    startedAt: null,
+    finishedAt: null,
+    progressPercent,
+    eta: "10:00",
+  };
+}
 
 function createRequest(id: string): ServiceRequest {
   return {

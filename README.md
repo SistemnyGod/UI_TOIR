@@ -1,16 +1,30 @@
 # Патруль 360
 
-Monorepo для новой веб-системы обходов территории.
+Monorepo для новой веб-системы обходов территории и интеграции модуля Web-инвентаря.
 
-Основной целевой стек:
+## Inventory / Web-инвентарь
+
+Перенос Web-инвентаря в Patrol360 уже начат. Главные документы лежат в корне и `docs`:
+
+- [INVENTORY_MIGRATION_NAVIGATION.md](./INVENTORY_MIGRATION_NAVIGATION.md) - где что находится, откуда брать данные, какие API/CSS/документы использовать и как проверять перенос.
+- [INVENTORY_INTEGRATION_PLAYBOOK.md](./INVENTORY_INTEGRATION_PLAYBOOK.md) - пошаговая инструкция интеграции интерфейса и механики Web-инвентаря по модулям.
+- [docs/inventory-interface-style.css](./docs/inventory-interface-style.css) - standalone CSS-пакет интерфейсов Inventory.
+- [docs/inventory-interface-map.md](./docs/inventory-interface-map.md) - карта классов CSS по экранам и модулям.
+- [docs/adr/0004-inventory-bounded-context.md](./docs/adr/0004-inventory-bounded-context.md) - ADR по Inventory bounded context и схемам БД.
+- [docs/inventory-legacy-import-run-2026-05-20.md](./docs/inventory-legacy-import-run-2026-05-20.md) - отчет последнего импорта legacy БД.
+
+Текущий статус Inventory:
+
+- Данные импортированы из копии PostgreSQL `inventory_app_migration_copy` в целевую БД `patrol360`.
+- Production БД Web-инвентаря и пароль `admin` не менялись.
+- Основной следующий этап: read-only parity по `Inventory.Catalog`, затем Stock, Operations, Custody, PPE и Reports.
+
+## Основной стек
 
 - Backend: ASP.NET Core на C#.
 - Frontend: React + TypeScript + Vite.
 - Worker: .NET Worker для фоновых задач.
 - БД и инфраструктура: PostgreSQL, Redis, RabbitMQ, MinIO через `infra/docker`.
-
-Текущий этап: skeleton проекта и перенос вкладок интерфейса без backend-интеграции.
-Frontend уже имеет переключатель источника данных `Mock/API`; API-режим подключен к текущим endpoint-ам dashboard и routes.
 
 ## Структура
 
@@ -30,20 +44,22 @@ docs/
   modules.md
   monorepo-structure.md
   tz-normalization.md
+  inventory-interface-style.css
+  inventory-interface-map.md
 infra/
   docker/    локальные PostgreSQL/Redis/RabbitMQ/MinIO
 tests/
-  Patrol360.Structure.Tests/      структурные проверки solution и слоев
-  Patrol360.Domain.Tests/         каркас будущих доменных тестов
-  Patrol360.Application.Tests/    каркас будущих application-тестов
-  Patrol360.Infrastructure.Tests/ каркас будущих infrastructure-тестов
-  Patrol360.Api.Tests/            каркас будущих API-тестов
-  Patrol360.Worker.Tests/         каркас будущих worker-тестов
-  web/                            frontend smoke/unit/e2e каркас
+  Patrol360.Structure.Tests/
+  Patrol360.Domain.Tests/
+  Patrol360.Application.Tests/
+  Patrol360.Infrastructure.Tests/
+  Patrol360.Api.Tests/
+  Patrol360.Worker.Tests/
+  web/
 tools/
   локальные проверки и утилиты
 legacy/
-  territory-patrol-panel/     старый статический UI-прототип без backend
+  territory-patrol-panel/
 ```
 
 ## Локальный запуск
@@ -67,26 +83,49 @@ npm run dev
 Полный Docker-запуск API, web и локальной инфраструктуры:
 
 ```powershell
-docker compose -f .\infra\docker\compose.yaml --profile app up --build
+docker compose --profile app up -d --build
 ```
 
-- Web: `http://localhost:5173`
-- API: `http://localhost:5080`
-- Health: `http://localhost:5080/health/ready`
+- Web HTTPS: `https://localhost`
+- Web HTTPS LAN: `https://192.168.2.194`
+- Web HTTPS LAN legacy-port: `https://192.168.2.194:5173`
+- API через proxy: `https://192.168.2.194/api/...`
+- Health через proxy: `https://192.168.2.194/health/ready`
+
+В Docker-профиле `app` наружу смотрит только `proxy` на портах `80`, `443` и `5173`. Контейнеры `web` и `api` доступны только внутри Docker-сети.
+
+Перед первым HTTPS-запуском создать локальный Root CA и серверный сертификат:
+
+```powershell
+openssl req -x509 -nodes -days 1825 -newkey rsa:4096 -keyout .\infra\docker\certs\patrol360.rootCA.key -out .\infra\docker\certs\patrol360.rootCA.crt -config .\infra\docker\certs\openssl-ca.cnf
+openssl req -new -nodes -newkey rsa:2048 -keyout .\infra\docker\certs\patrol360.local.key -out .\infra\docker\certs\patrol360.local.csr -config .\infra\docker\certs\openssl-san.cnf
+openssl x509 -req -days 825 -in .\infra\docker\certs\patrol360.local.csr -CA .\infra\docker\certs\patrol360.rootCA.crt -CAkey .\infra\docker\certs\patrol360.rootCA.key -CAcreateserial -out .\infra\docker\certs\patrol360.local.crt -extfile .\infra\docker\certs\openssl-san.cnf -extensions v3_req
+```
+
+Чтобы у пользователей не было предупреждения браузера, файл `infra/docker/certs/patrol360.rootCA.crt` нужно добавить в доверенные корневые сертификаты на их компьютерах.
+
+Для Windows-клиента импортировать нужно Root CA:
+
+```powershell
+certutil -user -addstore Root .\infra\docker\certs\patrol360.rootCA.crt
+```
+
+Windows может показать системное подтверждение доверия к корневому сертификату. После подтверждения браузер будет открывать `https://192.168.2.194` и `https://192.168.2.194:5173` без предупреждения.
 
 Остановить Docker-стек:
 
 ```powershell
-docker compose -f .\infra\docker\compose.yaml --profile app down
+docker compose --profile app down
 ```
 
-Проверка сборки:
+## Проверки
+
+Проверка сборки и кодировки:
 
 ```powershell
 dotnet build .\Patrol360.slnx
 .\tools\Verify-TextEncoding.ps1
-cd .\apps\web
-npm run verify
+npm run verify --prefix apps\web
 ```
 
 Единая локальная проверка структуры, backend, frontend и кодировки:
@@ -112,42 +151,21 @@ docker compose -f .\infra\docker\compose.yaml up -d postgres
 
 - `GET /health/live`
 - `GET /health/ready`
-- `GET /api/v1/dashboard/summary`
-- `GET /api/v1/dashboard/active-assignments`
-- `GET /api/v1/routes`
-- `GET /api/v1/routes/{id}`
+- `GET /api/v1/inventory/overview`
+- `GET /api/v1/inventory/items?page=1&pageSize=25`
+- `GET /api/v1/inventory/stock?page=1&pageSize=25`
+- `GET /api/v1/inventory/documents?page=1&pageSize=25`
+- `GET /api/v1/inventory/custody/records?page=1&pageSize=25`
+- `GET /api/v1/inventory/custody/documents?page=1&pageSize=25`
+- `GET /api/v1/inventory/ppe/cards?page=1&pageSize=25`
+- `GET /api/v1/inventory/history?page=1&pageSize=25`
+- `GET /api/v1/inventory/reports?page=1&pageSize=25`
+- `GET /api/v1/inventory/system-log?page=1&pageSize=25`
 
-## Frontend data-source
+## Важные ограничения
 
-- `apps/web/src/api/contracts.ts` — временные typed DTO для текущих endpoint-ов.
-- `apps/web/src/api/patrolData.ts` — mock/API клиенты и маппинг DTO в UI-модель.
-- `apps/web/src/hooks/usePatrolDataSource.ts` — загрузка выбранного источника данных.
-- Переключатель `Mock/API` находится в верхней панели интерфейса.
-
-## Документация
-
-- `docs/architecture.md` — целевая архитектура и границы приложений.
-- `docs/technology-stack.md` — принятый технологический стек.
-- `docs/modules.md` — модули системы и их функциональные границы.
-- `docs/monorepo-structure.md` — правила структуры репозитория.
-- `docs/structure-improvement-plan.md` — план и критерии доработки структуры.
-- `docs/structure-remaining-work.md` — остаток работ по структуре до 90%+.
-- `docs/runbooks/ci-contract.md` — обязательный CI gate и публикуемые test artifacts.
-- `docs/runbooks/docker.md` — Docker-запуск API, web и локальной инфраструктуры.
-- `docs/runbooks/branch-review-policy.md` — правила веток, PR и ревью.
-- `docs/stabilization.md` — текущие правила стабилизации и обязательные проверки.
-- `docs/tz-normalization.md` — нормализация ТЗ перед MVP.
-- `tools/Verify-TextEncoding.ps1` — проверка текстовых файлов на UTF-8 без BOM.
-- `tools/Check-Structure.ps1` — структурные проверки solution и project references.
-- `tools/Clean-Workspace.ps1` — очистка generated artifacts.
-- `tools/Test-All.ps1` — единый локальный gate.
-- `tools/Set-GitHubBranchProtection.ps1` — применение GitHub branch protection после настройки remote.
-- `apps/web/playwright.config.ts` — Playwright smoke-конфигурация frontend.
-
-## Ближайшие шаги
-
-1. Подключить EF Core + Npgsql и заменить seed read-store на PostgreSQL.
-2. Добавить OpenAPI-контракты.
-3. Подключить frontend к API через typed client.
-4. Добавить auth/RBAC skeleton.
-5. Подключить MinIO для фото и файлов.
+- Повторный импорт Inventory выполнять только из копии `inventory_app_migration_copy`.
+- Рабочую БД Web-инвентаря не менять.
+- Пароль `admin` не менять автоматически.
+- Исторические данные не удалять физически без отдельного решения.
+- Если `Test-All.ps1` падает на `npm ci` с `EPERM unlink ... rollup/esbuild`, это известная блокировка Windows native module; frontend проверять отдельными командами `npm run test/typecheck/build --prefix apps\web`.

@@ -5,6 +5,7 @@ import { buildNotificationText, getDateInputValue } from "./requestModalUtils";
 
 export function RequestCreateModal({
   sourceResult,
+  sourceResultId,
   employeeOptions,
   routeOptions,
   onClose,
@@ -12,53 +13,70 @@ export function RequestCreateModal({
   onSubmitCreate,
 }: {
   sourceResult?: PatrolResult;
+  sourceResultId?: string;
   employeeOptions: EmployeeDirectoryItem[];
   routeOptions: RouteDirectoryItem[];
   onClose: () => void;
   onDirtyChange: (isDirty: boolean) => void;
   onSubmitCreate: (payload: CreateServiceRequestPayload) => void | Promise<void>;
 }) {
-  const [employee, setEmployee] = useState(sourceResult?.employee ?? employeeOptions[0]?.fullName ?? "");
-  const [route, setRoute] = useState(sourceResult?.route ?? routeOptions[0]?.name ?? "");
+  const [employeeId, setEmployeeId] = useState(() => findEmployeeOption(employeeOptions, sourceResult?.employee)?.id ?? employeeOptions[0]?.id ?? "");
+  const [routeId, setRouteId] = useState(() => findRouteOption(routeOptions, sourceResult?.route)?.id ?? routeOptions[0]?.id ?? "");
   const [scheduledDate, setScheduledDate] = useState(getDateInputValue(new Date()));
   const [scheduledTime, setScheduledTime] = useState("");
   const [description, setDescription] = useState(
     sourceResult ? `Повторно проверить точку ${sourceResult.point}. Комментарий результата: ${sourceResult.comment}` : "",
   );
-  const [notifyEmployee, setNotifyEmployee] = useState(true);
-  const [notificationEdited, setNotificationEdited] = useState(false);
+  const selectedEmployee = useMemo(() => employeeOptions.find((item) => item.id === employeeId), [employeeId, employeeOptions]);
+  const selectedRoute = useMemo(() => routeOptions.find((item) => item.id === routeId), [routeId, routeOptions]);
   const defaultNotificationText = useMemo(
-    () => buildNotificationText({ employee, route, scheduledDate, scheduledTime }),
-    [employee, route, scheduledDate, scheduledTime],
+    () => buildNotificationText({ employee: selectedEmployee?.fullName ?? "", route: selectedRoute?.name ?? "", scheduledDate, scheduledTime }),
+    [scheduledDate, scheduledTime, selectedEmployee?.fullName, selectedRoute?.name],
   );
-  const [notificationText, setNotificationText] = useState(defaultNotificationText);
 
   function markDirty() {
     onDirtyChange(true);
   }
 
   useEffect(() => {
-    if (!notificationEdited) {
-      setNotificationText(defaultNotificationText);
+    if (!employeeOptions.length || selectedEmployee) {
+      return;
     }
-  }, [defaultNotificationText, notificationEdited]);
+
+    setEmployeeId(findEmployeeOption(employeeOptions, sourceResult?.employee)?.id ?? employeeOptions[0].id);
+  }, [employeeOptions, selectedEmployee, sourceResult?.employee]);
+
+  useEffect(() => {
+    if (!routeOptions.length || selectedRoute) {
+      return;
+    }
+
+    setRouteId(findRouteOption(routeOptions, sourceResult?.route)?.id ?? routeOptions[0].id);
+  }, [routeOptions, selectedRoute, sourceResult?.route]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const normalizedEmployee = employee.trim();
-    const normalizedRoute = route.trim();
+    if (!selectedEmployee || !selectedRoute) {
+      return;
+    }
 
-    if (!normalizedEmployee || !normalizedRoute) {
+    const plannedAt = scheduledTime ? new Date(`${scheduledDate}T${scheduledTime}:00`) : null;
+    if (plannedAt && Number.isNaN(plannedAt.getTime())) {
       return;
     }
 
     onSubmitCreate({
-      employee: normalizedEmployee,
-      route: normalizedRoute,
+      employeeId: selectedEmployee.id,
+      employee: selectedEmployee.fullName,
+      routeId: selectedRoute.id,
+      route: selectedRoute.name,
+      sourceResultId: sourceResult?.id ?? sourceResultId,
       scheduledDate,
       scheduledTime,
-      notifyEmployee,
-      notificationText: notifyEmployee ? notificationText.trim() || defaultNotificationText : "",
+      plannedAt: plannedAt?.toISOString(),
+      shift: selectedEmployee.shift,
+      notifyEmployee: true,
+      notificationText: defaultNotificationText,
       description: description.trim() || "Заявка на проведение обхода территории.",
     });
   }
@@ -76,7 +94,7 @@ export function RequestCreateModal({
         <div>
           <span className="modal-kicker">Новая заявка</span>
           <h2>Заявка на проведение обхода</h2>
-          <p>Выберите дату, сотрудника и маршрут. Время прохождения можно не указывать.</p>
+          <p>Выберите сотрудника, маршрут и дату. Уведомление сотруднику отправляется автоматически после создания заявки.</p>
         </div>
         <button aria-label="Закрыть" className="modal-close" onClick={onClose} type="button">
           ×
@@ -95,124 +113,113 @@ export function RequestCreateModal({
         </div>
       ) : null}
 
-      <div className="form-grid two request-form-grid">
-        <label>
-          Дата обхода
-          <input
-            name="scheduledDate"
-            onChange={(event) => {
-              markDirty();
-              setScheduledDate(event.currentTarget.value);
-            }}
-            required
-            type="date"
-            value={scheduledDate}
-          />
-        </label>
-        <label>
-          Время прохождения
-          <input
-            name="scheduledTime"
-            onChange={(event) => {
-              markDirty();
-              setScheduledTime(event.currentTarget.value);
-            }}
-            type="time"
-            value={scheduledTime}
-          />
-          <span className="field-help">Необязательно</span>
-        </label>
-        <label>
-          Сотрудник
-          <input
-            autoComplete="off"
-            list="request-employee-options"
-            name="employee"
-            onChange={(event) => {
-              markDirty();
-              setEmployee(event.currentTarget.value);
-            }}
-            placeholder="Введите или выберите ФИО"
-            required
-            value={employee}
-          />
-          <datalist id="request-employee-options">
-            {employeeOptions.map((item) => (
-              <option key={item.id} value={item.fullName} />
-            ))}
-          </datalist>
-        </label>
-        <label>
-          Маршрут обхода
-          <input
-            autoComplete="off"
-            list="request-route-options"
-            name="route"
-            onChange={(event) => {
-              markDirty();
-              setRoute(event.currentTarget.value);
-            }}
-            placeholder="Введите или выберите маршрут"
-            required
-            value={route}
-          />
-          <datalist id="request-route-options">
-            {routeOptions.map((item) => (
-              <option key={item.id} value={item.name} />
-            ))}
-          </datalist>
-        </label>
-        <label className="full-label">
-          Комментарий к заявке
-          <textarea
-            name="description"
-            onChange={(event) => {
-              markDirty();
-              setDescription(event.currentTarget.value);
-            }}
-            placeholder="Например: проверить внешний периметр и зафиксировать состояние ворот"
-            value={description}
-          />
-        </label>
-      </div>
+      <div className="request-create-layout">
+        <div className="request-create-primary">
+          <div className="form-grid two request-form-grid">
+            <label>
+              Сотрудник
+              <select
+                name="employeeId"
+                onChange={(event) => {
+                  markDirty();
+                  setEmployeeId(event.currentTarget.value);
+                }}
+                required
+                value={employeeId}
+              >
+                {employeeOptions.length === 0 ? <option value="">Сотрудники не загружены</option> : null}
+                {employeeOptions.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.fullName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Маршрут обхода
+              <select
+                name="routeId"
+                onChange={(event) => {
+                  markDirty();
+                  setRouteId(event.currentTarget.value);
+                }}
+                required
+                value={routeId}
+              >
+                {routeOptions.length === 0 ? <option value="">Маршруты не загружены</option> : null}
+                {routeOptions.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Дата обхода
+              <input
+                name="scheduledDate"
+                onChange={(event) => {
+                  markDirty();
+                  setScheduledDate(event.currentTarget.value);
+                }}
+                required
+                type="date"
+                value={scheduledDate}
+              />
+            </label>
+            <label>
+              Время старта
+              <input
+                name="scheduledTime"
+                onChange={(event) => {
+                  markDirty();
+                  setScheduledTime(event.currentTarget.value);
+                }}
+                type="time"
+                value={scheduledTime}
+              />
+              <span className="field-help">Можно оставить пустым</span>
+            </label>
+            <label className="full-label">
+              Комментарий к заявке
+              <textarea
+                name="description"
+                onChange={(event) => {
+                  markDirty();
+                  setDescription(event.currentTarget.value);
+                }}
+                placeholder="Например: проверить внешний периметр и зафиксировать состояние ворот"
+                value={description}
+              />
+            </label>
+          </div>
+        </div>
 
-      <label className="notify-card">
-        <input
-          checked={notifyEmployee}
-          name="notifyEmployee"
-          onChange={(event) => {
-            markDirty();
-            setNotifyEmployee(event.currentTarget.checked);
-          }}
-          type="checkbox"
-        />
-        <span>
-          <strong>Уведомить сотрудника</strong>
-          <small>Подготовить сообщение о необходимости пройти обход.</small>
-        </span>
-      </label>
-
-      {notifyEmployee ? (
-        <label className="notification-message">
-          Текст уведомления
-          <textarea
-            name="notificationText"
-            onChange={(event) => {
-              markDirty();
-              setNotificationEdited(true);
-              setNotificationText(event.currentTarget.value);
-            }}
-            value={notificationText}
-          />
-        </label>
-      ) : null}
-
-      <div className="notice info-soft">
-        <strong>Логика заявки</strong>
-        <span>
-          После подключения backend эта форма будет создавать назначение обхода и отправлять уведомление выбранному
-          сотруднику через мобильный контур.
-        </span>
+        <aside className="request-create-summary">
+          <div className="request-summary-card">
+            <strong>Отправка заявки</strong>
+            <span>После создания заявка попадет в Обход, назначение создастся на сервере, сотрудник получит уведомление.</span>
+          </div>
+          <div className="request-summary-row">
+            <span>Сотрудник</span>
+            <strong>{selectedEmployee?.fullName ?? "Не выбран"}</strong>
+            <small>{selectedEmployee ? `${selectedEmployee.position || "Должность не указана"} · ${selectedEmployee.shift || "смена не указана"}` : "Выберите сотрудника"}</small>
+          </div>
+          <div className="request-summary-row">
+            <span>Маршрут</span>
+            <strong>{selectedRoute?.name ?? "Не выбран"}</strong>
+            <small>{selectedRoute ? `${selectedRoute.points?.length ?? 0} точек · ${selectedRoute.duration || "длительность не указана"}` : "Выберите маршрут"}</small>
+          </div>
+          <div className="request-summary-row">
+            <span>План</span>
+            <strong>{formatRequestDateTime(scheduledDate, scheduledTime)}</strong>
+            <small>Время можно не указывать</small>
+          </div>
+          <div className="request-notification-preview">
+            <strong>Сообщение сотруднику</strong>
+            <span>{defaultNotificationText}</span>
+          </div>
+        </aside>
       </div>
 
       <div className="modal-actions">
@@ -225,4 +232,23 @@ export function RequestCreateModal({
       </div>
     </form>
   );
+}
+
+function findEmployeeOption(options: EmployeeDirectoryItem[], name?: string) {
+  if (!name) return undefined;
+  return options.find((item) => item.fullName === name);
+}
+
+function findRouteOption(options: RouteDirectoryItem[], name?: string) {
+  if (!name) return undefined;
+  return options.find((item) => item.name === name);
+}
+
+function formatRequestDateTime(date: string, time: string) {
+  const parsed = new Date(`${date}T00:00:00`);
+  const dateText = Number.isNaN(parsed.getTime())
+    ? date
+    : new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" }).format(parsed);
+
+  return time ? `${dateText}, ${time}` : dateText;
 }

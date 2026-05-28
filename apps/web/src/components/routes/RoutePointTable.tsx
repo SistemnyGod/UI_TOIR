@@ -1,15 +1,16 @@
 import type { RouteDirectoryItem, RoutePoint } from "../../types";
-import { Chip } from "../ui";
 
 type MaybePromise<T> = T | Promise<T>;
 
 export function RoutePointTable({
+  canManage = true,
   points,
   route,
   selectedPointId,
   onMovePoint,
   onSelectPoint,
 }: {
+  canManage?: boolean;
   points: RoutePoint[];
   route: RouteDirectoryItem;
   selectedPointId: string;
@@ -26,9 +27,7 @@ export function RoutePointTable({
             <th>Зона</th>
             <th>Тип</th>
             <th>NFC / тег</th>
-            <th>Интервал</th>
-            <th>Ожид. время</th>
-            <th>Статус</th>
+            <th>Фото</th>
             <th>Порядок</th>
           </tr>
         </thead>
@@ -43,20 +42,16 @@ export function RoutePointTable({
               <td>
                 <strong>{point.name}</strong>
               </td>
-              <td>{point.zone}</td>
+              <td>{point.zone || "-"}</td>
               <td>{point.type}</td>
               <td>{point.tag}</td>
-              <td>{point.interval}</td>
-              <td>{point.expectedTime}</td>
-              <td>
-                <Chip>{point.status}</Chip>
-              </td>
+              <td>{point.requiresPhoto ? "Да" : "Нет"}</td>
               <td>
                 <div className="order-actions" onClick={(event) => event.stopPropagation()}>
-                  <button className="icon-button mini-icon" onClick={() => onMovePoint(route.id, point.id, -1)} type="button">
+                  <button className="icon-button mini-icon" disabled={!canManage} onClick={() => onMovePoint(route.id, point.id, -1)} type="button">
                     ↑
                   </button>
-                  <button className="icon-button mini-icon" onClick={() => onMovePoint(route.id, point.id, 1)} type="button">
+                  <button className="icon-button mini-icon" disabled={!canManage} onClick={() => onMovePoint(route.id, point.id, 1)} type="button">
                     ↓
                   </button>
                 </div>

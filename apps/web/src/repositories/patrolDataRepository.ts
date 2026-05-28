@@ -2,6 +2,7 @@ import { activePatrols, dashboardMetrics, routeDirectory } from "../data";
 import { ApiClient } from "../api/client";
 import type { AssignmentDto, DashboardSummaryDto, EmployeeDto, RouteDto } from "../api/contracts";
 import type { ActivePatrol, EmployeeDirectoryItem, Metric, RouteDirectoryItem, RoutePoint } from "../types";
+import { mapAssignment as mapApiAssignment } from "./assignmentsRepository";
 
 export interface PatrolDataSnapshot {
   activePatrols: ActivePatrol[];
@@ -43,13 +44,13 @@ export function createApiPatrolDataRepository({
       const [summary, assignments, routes, employees] = await Promise.all([
         client.get<DashboardSummaryDto>("/api/v1/dashboards/summary"),
         client.get<AssignmentDto[]>("/api/v1/dashboards/active-patrols"),
-        client.get<RouteDto[]>("/api/v1/routes"),
+        client.get<RouteDto[]>("/api/v1/routes?includeArchived=true"),
         client.get<EmployeeDto[]>("/api/v1/employees"),
       ]);
 
       return {
-        activePatrols: assignments.map(mapAssignment),
-        dashboardMetrics: mapDashboardMetrics(summary, routes.length),
+        activePatrols: assignments.map(mapApiAssignment),
+        dashboardMetrics: mapDashboardMetrics(summary, routes.filter((route) => route.status !== "Архив").length),
         employees: employees.map(mapEmployee),
         routeDirectory: routes.map(mapRoute),
       };
@@ -83,6 +84,13 @@ function mapDashboardMetrics(summary: DashboardSummaryDto, routeCount: number): 
       icon: "!",
     },
     {
+      label: "Завершено обходов сегодня",
+      value: String(summary.completedToday ?? 0),
+      delta: "по результатам обходов",
+      tone: "green",
+      icon: "check",
+    },
+    {
       label: "Выявленные замечания",
       value: String(summary.issues),
       delta: "по активной смене",
@@ -97,33 +105,6 @@ function mapDashboardMetrics(summary: DashboardSummaryDto, routeCount: number): 
       icon: "map",
     },
   ];
-}
-
-function mapAssignment(assignment: AssignmentDto): ActivePatrol {
-  return {
-    id: assignment.id,
-    employee: assignment.employeeName,
-    employeeId: "из API",
-    route: assignment.routeName,
-    zone: "территория из API",
-    shift: (assignment.shift === "Ночь" ? "Ночь" : "День") as ActivePatrol["shift"],
-    currentPoint: "ожидает детализации",
-    status: mapAssignmentStatus(assignment.status),
-    progress: assignment.progressPercent,
-    eta: assignment.eta,
-    deviation: "—",
-  };
-}
-
-function mapAssignmentStatus(status: string): ActivePatrol["status"] {
-  if (status === "В пути") return "В пути" as ActivePatrol["status"];
-  if (status === "Задержка") return "Задержка" as ActivePatrol["status"];
-  if (status === "Нет связи") return "Нет связи" as ActivePatrol["status"];
-  if (status === "Завершает") return "Завершает" as ActivePatrol["status"];
-  if (status === "Ожидает") return "Ожидает" as ActivePatrol["status"];
-  if (status === "Запланирован") return "Запланирован" as ActivePatrol["status"];
-
-  return "Ожидает" as ActivePatrol["status"];
 }
 
 export function mapRoute(route: RouteDto): RouteDirectoryItem {
@@ -164,6 +145,8 @@ export function mapEmployee(employee: EmployeeDto): EmployeeDirectoryItem {
     personnelNo: employee.personnelNo,
     position: employee.position,
     department: employee.department,
+    employeeGroup: employee.employeeGroup ?? "",
+    birthDate: employee.birthDate ?? "",
     zone: employee.department,
     status: employee.status as EmployeeDirectoryItem["status"],
     routesDone: 0,
@@ -171,7 +154,7 @@ export function mapEmployee(employee: EmployeeDto): EmployeeDirectoryItem {
     mobileStatus: (employee.hasMobileAccount ? "Привязан" : "Не привязан") as EmployeeDirectoryItem["mobileStatus"],
     lastSeen: new Date(employee.lastSeenAt).toLocaleString("ru-RU"),
     phone: "",
-    hiredAt: "",
+    hiredAt: employee.hiredAt ?? "",
     brigade: "",
     shift: employee.shift,
     leader: "",

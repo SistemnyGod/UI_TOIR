@@ -2,6 +2,7 @@ import { Chip, EmptyState, Field, Panel, ProgressBar } from "../ui";
 import type { EmployeeDirectoryItem, ScreenId } from "../../types";
 
 interface EmployeeProfileDrawerProps {
+  canManage?: boolean;
   employee?: EmployeeDirectoryItem;
   progress: number;
   onDeleteEmployee: (id: string) => void;
@@ -12,6 +13,7 @@ interface EmployeeProfileDrawerProps {
 
 export function EmployeeProfileDrawer({
   employee,
+  canManage = true,
   progress,
   onDeleteEmployee,
   onEditEmployee,
@@ -36,13 +38,13 @@ export function EmployeeProfileDrawer({
             <Chip>{employee.status}</Chip>
           </div>
           <div className="drawer-actions">
-            <button className="button primary" onClick={() => onEditEmployee(employee)} type="button">
+            <button className="button primary" disabled={!canManage} onClick={() => onEditEmployee(employee)} type="button">
               Редактировать
             </button>
             <button className="button ghost" onClick={() => onNavigate("assign")} type="button">
               Назначить маршрут
             </button>
-            <button className="button ghost danger-text" onClick={() => onDeleteEmployee(employee.id)} type="button">
+            <button className="button ghost danger-text" disabled={!canManage} onClick={() => onDeleteEmployee(employee.id)} type="button">
               Деактивировать
             </button>
           </div>
@@ -76,7 +78,9 @@ export function EmployeeProfileDrawer({
             <dl className="meta-list">
               <Field label="Табельный номер" value={employee.personnelNo} />
               <Field label="Дата приема" value={employee.hiredAt || "Не указана"} />
-              <Field label="Участок" value={`${employee.zone} / ${employee.department}`} />
+              <Field label="Дата рождения" value={employee.birthDate || "Не указана"} />
+              <Field label="Подразделение" value={employee.department || "Не указано"} />
+              <Field label="Основная группа" value={employee.employeeGroup || "Не указана"} />
               <Field label="Бригада" value={employee.brigade || "Не указана"} />
               <Field label="Смена" value={employee.shift} />
               <Field label="Руководитель" value={employee.leader || "Не указан"} />

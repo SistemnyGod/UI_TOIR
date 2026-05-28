@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Patrol360.Api.Authorization;
 using Patrol360.Application;
 using Patrol360.Contracts;
 
@@ -11,9 +12,11 @@ public sealed class EmployeesController(
     IEmployeeDirectoryService employeeDirectoryService) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission("employees.read")]
     public ActionResult<IReadOnlyList<EmployeeDto>> List() => Ok(employeeDirectoryQuery.GetEmployees());
 
     [HttpGet("{id:guid}")]
+    [RequirePermission("employees.read")]
     public ActionResult<EmployeeDto> Get(Guid id)
     {
         var employee = employeeDirectoryQuery.GetEmployee(id);
@@ -21,6 +24,7 @@ public sealed class EmployeesController(
     }
 
     [HttpPost]
+    [RequirePermission("employees.write")]
     public ActionResult<EmployeeDto> Create(CreateEmployeeDto request)
     {
         var result = employeeDirectoryService.CreateEmployee(request);
@@ -33,6 +37,7 @@ public sealed class EmployeesController(
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission("employees.write")]
     public ActionResult<EmployeeDto> Update(Guid id, UpdateEmployeeDto request)
     {
         var result = employeeDirectoryService.UpdateEmployee(id, request);
@@ -50,6 +55,7 @@ public sealed class EmployeesController(
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission("employees.write")]
     public IActionResult Delete(Guid id)
     {
         return employeeDirectoryService.DeleteEmployee(id) ? NoContent() : NotFound();

@@ -66,10 +66,15 @@ export function createApiPatrolRequestsRepository({
 
     async createPatrolRequest(payload: CreateServiceRequestPayload) {
       const request = await client.post<PatrolRequestDto, CreatePatrolRequestDto>("/api/v1/patrol-requests", {
+        employeeId: payload.employeeId,
         employeeName: payload.employee,
+        routeId: payload.routeId,
         routeName: payload.route,
+        sourceResultId: payload.sourceResultId,
         scheduledDate: payload.scheduledDate,
         scheduledTime: payload.scheduledTime || null,
+        plannedAt: payload.plannedAt ?? null,
+        shift: payload.shift ?? null,
         notifyEmployee: payload.notifyEmployee,
         notificationText: payload.notificationText,
         description: payload.description,
@@ -85,10 +90,12 @@ function mapPatrolRequest(request: PatrolRequestDto): ServiceRequest {
     id: request.id,
     requestKind: "patrol-assignment",
     title: request.number,
-    status: "Назначена" as ServiceRequest["status"],
+    status: mapPatrolRequestStatus(request.status),
     priority: "Средний" as ServiceRequest["priority"],
-    sourceResultId: "",
+    sourceResultId: request.sourceResultId ?? "",
     source: "API",
+    employeeId: request.employeeId ?? undefined,
+    routeId: request.routeId ?? undefined,
     route: request.routeName,
     point: "",
     employee: request.employeeName,
@@ -102,4 +109,21 @@ function mapPatrolRequest(request: PatrolRequestDto): ServiceRequest {
     description: request.description,
     timeline: [`${request.number}: ${request.status}`],
   };
+}
+
+function mapPatrolRequestStatus(status: string): ServiceRequest["status"] {
+  const normalized = status.trim().toLowerCase();
+  if (normalized === "закрыта" || normalized === "закрыто" || normalized === "завершена" || normalized === "завершено" || normalized === "отменена" || normalized === "cancelled" || normalized === "completed" || normalized === "closed") {
+    return "Закрыта";
+  }
+
+  if (normalized === "в работе" || normalized === "inprogress" || normalized === "in progress") {
+    return "В работе";
+  }
+
+  if (normalized === "назначена" || normalized === "отправлена" || normalized === "assigned" || normalized === "sent") {
+    return "Назначена";
+  }
+
+  return "Новая";
 }

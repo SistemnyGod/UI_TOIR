@@ -1,0 +1,143 @@
+import { useRouter } from "expo-router";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+
+import { useAppTheme } from "@/features/settings/themePreference";
+import { Card } from "@/ui/Card";
+import { Screen } from "@/ui/Screen";
+import { StatusPill } from "@/ui/StatusPill";
+
+export default function SettingsRoute() {
+  const router = useRouter();
+  const { colors, effectiveScheme, preference } = useAppTheme();
+
+  return (
+    <Screen title="Настройки" subtitle="Персонализация, аккаунт и параметры приложения.">
+      <Card>
+        <View style={styles.headerRow}>
+          <View style={styles.headerText}>
+            <Text style={[styles.title, { color: colors.text }]}>Внешний вид</Text>
+            <Text style={[styles.text, { color: colors.mutedText }]}>
+              Сейчас: {themeLabel(preference)}. Активная схема: {effectiveScheme === "dark" ? "темная" : "светлая"}.
+            </Text>
+          </View>
+          <StatusPill label={effectiveScheme === "dark" ? "Темная" : "Светлая"} tone="neutral" />
+        </View>
+        <SettingsRow label="Тема" value="Системная, светлая или темная" onPress={() => router.push("/settings/theme")} />
+      </Card>
+
+      <Card>
+        <Text style={[styles.title, { color: colors.text }]}>Аккаунт</Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>
+          Смена пользователя очищает локальные заявки, результаты, фото, outbox и конфликты прошлого аккаунта.
+        </Text>
+        <SettingsRow label="Аккаунт и выход" value="Сменить пользователя безопасно" onPress={() => router.push("/settings/account")} />
+      </Card>
+
+      <Card>
+        <Text style={[styles.title, { color: colors.text }]}>Сервер</Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>
+          Адрес backend API для входа, загрузки заявок, отправки отчетов и фото.
+        </Text>
+        <SettingsRow
+          label="Адрес сервера"
+          value="Проверка подключения и локальный HTTP для пилота"
+          onPress={() => router.push("/(auth)/server-settings")}
+        />
+      </Card>
+
+      <Card>
+        <Text style={[styles.title, { color: colors.text }]}>Режим работы</Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>
+          Приложение хранит обходы локально и отправляет отчет автоматически после появления интернета.
+        </Text>
+        <View style={styles.pills}>
+          <StatusPill label="Offline-first" tone="success" />
+          <StatusPill label="NFC" tone="success" />
+          <StatusPill label="Фото необязательно" tone="neutral" />
+        </View>
+      </Card>
+    </Screen>
+  );
+}
+
+function SettingsRow({ label, value, onPress }: { label: string; value: string; onPress: () => void }) {
+  const { colors } = useAppTheme();
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.row,
+        { borderColor: colors.border },
+        pressed ? { backgroundColor: colors.background } : null
+      ]}
+    >
+      <View style={styles.rowText}>
+        <Text style={[styles.rowLabel, { color: colors.text }]}>{label}</Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>{value}</Text>
+      </View>
+      <Text style={[styles.chevron, { color: colors.mutedText }]}>›</Text>
+    </Pressable>
+  );
+}
+
+function themeLabel(preference: string) {
+  if (preference === "dark") {
+    return "темная";
+  }
+
+  if (preference === "light") {
+    return "светлая";
+  }
+
+  return "как в системе";
+}
+
+const styles = StyleSheet.create({
+  headerRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between"
+  },
+  headerText: {
+    flex: 1,
+    gap: 4
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: "600"
+  },
+  text: {
+    fontSize: 14,
+    lineHeight: 20
+  },
+  row: {
+    alignItems: "center",
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 12
+  },
+  rowText: {
+    flex: 1,
+    gap: 2
+  },
+  rowLabel: {
+    fontSize: 16,
+    fontWeight: "600"
+  },
+  chevron: {
+    fontSize: 28,
+    lineHeight: 28
+  },
+  pills: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  }
+});

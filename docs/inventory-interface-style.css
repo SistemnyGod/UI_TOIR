@@ -1,0 +1,1005 @@
+/*
+  Web Inventory UI integration stylesheet.
+
+  Purpose:
+  - Standalone CSS package for moving Web Inventory interfaces into Patrol360.
+  - Each section is marked with the module it belongs to.
+  - Class names are intentionally domain-prefixed so they can be used next to
+    existing Patrol360 screens without colliding with patrol UI styles.
+
+  Module map:
+  01. Design tokens and base shell               -> all inventory modules
+  02. Shared controls, KPI, tables and dialogs   -> all inventory modules
+  03. Overview / Home                            -> main inventory overview
+  04. Employees                                  -> employee directory and cards
+  05. Items / Catalog                            -> nomenclature and item card
+  06. Operations                                 -> issue, return and write-off
+  07. Custody / Под запись                       -> custody records and acts
+  08. PPE / СИЗ                                  -> PPE cards, issue wizard, print
+  09. History                                    -> operation history
+  10. Reports                                    -> report preview and export
+  11. Users and permissions                      -> inventory users/admin bridge
+  12. Settings and references                    -> norms, sets, references
+  13. System log                                 -> audit journal
+  14. Print                                      -> printable PPE/reports/forms
+  15. Responsive                                 -> tablet/mobile layout
+  16. State classes                              -> shared loading/error/selection states
+  17. Dark theme                                 -> optional Patrol360 dark theme bridge
+  18. Accessibility                              -> focus, disabled and reduced motion
+*/
+
+/* 01. Design tokens and base shell -> all inventory modules */
+:root {
+  --inv-bg: #f6f9fe;
+  --inv-surface: #ffffff;
+  --inv-surface-soft: #f7faff;
+  --inv-border: #dbe5f4;
+  --inv-border-strong: #c8d6eb;
+  --inv-text: #17213a;
+  --inv-muted: #6f809b;
+  --inv-primary: #2b6df3;
+  --inv-primary-strong: #1657dc;
+  --inv-primary-soft: #edf4ff;
+  --inv-success: #16a373;
+  --inv-success-soft: #e8f8f1;
+  --inv-warning: #f97316;
+  --inv-warning-soft: #fff3e6;
+  --inv-danger: #ef4444;
+  --inv-danger-soft: #fff1f2;
+  --inv-violet: #7c5cff;
+  --inv-violet-soft: #f3f0ff;
+  --inv-radius: 8px;
+  --inv-shadow: 0 14px 38px rgba(46, 74, 119, 0.09);
+  --inv-shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.035), 0 18px 52px rgba(58, 92, 145, 0.08);
+  --inv-font: "Segoe UI", Arial, sans-serif;
+}
+
+.inventory-shell {
+  min-height: 100vh;
+  background: var(--inv-bg);
+  color: var(--inv-text);
+  font-family: var(--inv-font);
+  font-size: 14px;
+}
+
+.inventory-screen {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+}
+
+.inventory-screen__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.inventory-screen__title {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.inventory-screen__subtitle {
+  margin: 6px 0 0;
+  color: var(--inv-muted);
+}
+
+/* 02. Shared controls, KPI, tables and dialogs -> all inventory modules */
+.inventory-card,
+.inventory-panel,
+.inventory-kpi,
+.inventory-dialog {
+  border: 1px solid var(--inv-border);
+  border-radius: var(--inv-radius);
+  background: var(--inv-surface);
+  box-shadow: var(--inv-shadow-soft);
+}
+
+.inventory-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--inv-border);
+  border-radius: var(--inv-radius);
+  background: var(--inv-surface);
+}
+
+.inventory-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.inventory-field > span {
+  color: var(--inv-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inventory-input,
+.inventory-select,
+.inventory-textarea {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--inv-border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--inv-text);
+  font: inherit;
+  outline: none;
+  padding: 8px 10px;
+}
+
+.inventory-input:focus,
+.inventory-select:focus,
+.inventory-textarea:focus {
+  border-color: rgba(43, 109, 243, 0.65);
+  box-shadow: 0 0 0 3px rgba(43, 109, 243, 0.12);
+}
+
+.inventory-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid var(--inv-border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--inv-text);
+  font: inherit;
+  font-weight: 700;
+  padding: 8px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.inventory-button_primary {
+  border-color: var(--inv-primary);
+  background: var(--inv-primary);
+  color: #fff;
+}
+
+.inventory-button_danger {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: var(--inv-danger-soft);
+  color: #c91f32;
+}
+
+.inventory-button_ghost {
+  background: transparent;
+}
+
+.inventory-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.inventory-kpi {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  align-items: center;
+  min-height: 96px;
+  gap: 12px;
+  padding: 16px;
+}
+
+.inventory-kpi__icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: var(--inv-primary-soft);
+  color: var(--inv-primary);
+}
+
+.inventory-kpi strong {
+  display: block;
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.inventory-kpi span {
+  display: block;
+  color: var(--inv-muted);
+  overflow-wrap: anywhere;
+}
+
+.inventory-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--inv-border);
+  border-radius: var(--inv-radius);
+  background: var(--inv-surface);
+}
+
+.inventory-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.inventory-table th,
+.inventory-table td {
+  border-bottom: 1px solid var(--inv-border);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.inventory-table th {
+  background: var(--inv-surface-soft);
+  color: #51627f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.inventory-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  background: var(--inv-primary-soft);
+  color: var(--inv-primary);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+
+.inventory-badge_success {
+  background: var(--inv-success-soft);
+  color: var(--inv-success);
+}
+
+.inventory-badge_warning {
+  background: var(--inv-warning-soft);
+  color: var(--inv-warning);
+}
+
+.inventory-badge_danger {
+  background: var(--inv-danger-soft);
+  color: var(--inv-danger);
+}
+
+.inventory-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.inventory-dialog {
+  width: min(1120px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 18px;
+}
+
+/* 03. Overview / Home -> main inventory overview */
+.inventory-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr);
+  gap: 16px;
+}
+
+.inventory-overview-onhand {
+  display: grid;
+  gap: 12px;
+}
+
+.inventory-overview-onhand__filters {
+  display: grid;
+  grid-template-columns: 1fr 220px 180px;
+  gap: 10px;
+}
+
+.inventory-overview-onhand__list {
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-overview-onhand__item {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(160px, 1.3fr) 80px 110px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--inv-border);
+  border-radius: var(--inv-radius);
+  background: #fff;
+}
+
+.inventory-overview-operations {
+  order: 2;
+}
+
+/* 04. Employees -> employee directory and professional detail card */
+.inventory-employees-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: start;
+}
+
+.inventory-employees-archive-mode .inventory-table tr[data-status="archived"] {
+  background: #fbfcff;
+}
+
+.inventory-employee-inspector {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.inventory-employee-detail {
+  display: grid;
+  gap: 16px;
+}
+
+.inventory-employee-detail__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.inventory-employee-detail__section {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--inv-border);
+  border-radius: var(--inv-radius);
+}
+
+/* 05. Items / Catalog -> nomenclature, categories and item card */
+.inventory-items-layout {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr) 330px;
+  gap: 16px;
+  align-items: start;
+}
+
+.inventory-category-rail {
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-category-button {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--inv-text);
+  font-weight: 700;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.inventory-category-button_active {
+  border-color: rgba(43, 109, 243, 0.25);
+  background: var(--inv-primary-soft);
+  color: var(--inv-primary);
+}
+
+.inventory-item-card {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+/* 06. Operations -> issue, return, write-off and stock movements */
+.inventory-operations-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.inventory-operation-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.inventory-operation-form .inventory-field_wide {
+  grid-column: 1 / -1;
+}
+
+.inventory-stock-warning {
+  border: 1px solid rgba(249, 115, 22, 0.35);
+  border-radius: var(--inv-radius);
+  background: var(--inv-warning-soft);
+  color: #9a4d06;
+  padding: 10px 12px;
+}
+
+/* 07. Custody / Под запись -> custody records, acts and right panel */
+.inventory-custody-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: start;
+}
+
+.inventory-custody-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inventory-custody-act-panel {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.inventory-custody-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inventory-custody-action-grid .inventory-button_danger {
+  color: #c91f32;
+}
+
+/* 08. PPE / СИЗ -> PPE journal, issue wizard, sets and print preview */
+.inventory-ppe-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: start;
+}
+
+.inventory-ppe-summary {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.inventory-ppe-wizard {
+  display: grid;
+  gap: 16px;
+}
+
+.inventory-ppe-combobox {
+  position: relative;
+}
+
+.inventory-ppe-combobox__list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--inv-border);
+  border-radius: var(--inv-radius);
+  background: #fff;
+  box-shadow: var(--inv-shadow);
+}
+
+.inventory-ppe-catalog {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 14px;
+}
+
+.inventory-ppe-category-select {
+  min-width: 180px;
+}
+
+.inventory-ppe-set-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--inv-border);
+  border-radius: var(--inv-radius);
+  background: linear-gradient(180deg, #fff, #f9fbff);
+  padding: 12px;
+}
+
+.inventory-ppe-set-card:hover {
+  border-color: rgba(43, 109, 243, 0.45);
+  box-shadow: var(--inv-shadow-soft);
+}
+
+.inventory-ppe-set-card__meta {
+  color: var(--inv-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* 09. History -> operation history and per-employee timeline */
+.inventory-history-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.inventory-history-person-list {
+  display: grid;
+  gap: 8px;
+  max-height: calc(100vh - 220px);
+  overflow: auto;
+}
+
+.inventory-history-person {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--inv-border);
+  border-radius: 7px;
+  background: #fff;
+  padding: 10px;
+}
+
+.inventory-history-person_active {
+  border-color: rgba(43, 109, 243, 0.5);
+  background: var(--inv-primary-soft);
+}
+
+/* 10. Reports -> report selector, preview, totals and export */
+.inventory-reports-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.inventory-report-selector {
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-report-preview {
+  display: grid;
+  gap: 12px;
+  min-height: 420px;
+}
+
+.inventory-report-totals {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* 11. Users and permissions -> inventory users/admin bridge */
+.inventory-users-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+}
+
+.inventory-user-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.inventory-user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 12. Settings and references -> norms, sets, organization parameters */
+.inventory-settings-layout {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.inventory-settings-nav {
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-settings-nav__item {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--inv-border);
+  border-radius: 7px;
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.inventory-settings-nav__item_active {
+  border-color: rgba(43, 109, 243, 0.4);
+  background: var(--inv-primary-soft);
+}
+
+.inventory-settings-workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.inventory-settings-two-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+/* 13. System log -> audit journal */
+.inventory-system-log {
+  display: grid;
+  gap: 12px;
+}
+
+.inventory-system-log .inventory-table {
+  min-width: 920px;
+}
+
+.inventory-system-log__payload {
+  max-width: 460px;
+  color: var(--inv-muted);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* 14. Print -> PPE cards, signature sheets, reports and custody acts */
+@media print {
+  body {
+    background: #fff !important;
+  }
+
+  .inventory-shell,
+  .inventory-screen {
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  .inventory-no-print,
+  .inventory-toolbar,
+  .inventory-screen__header,
+  .inventory-button {
+    display: none !important;
+  }
+
+  .inventory-print-page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0;
+    padding: 12mm;
+    color: #000;
+    background: #fff;
+    box-shadow: none;
+  }
+
+  .inventory-print-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 10px;
+  }
+
+  .inventory-print-table th,
+  .inventory-print-table td {
+    border: 1px solid #000;
+    padding: 4px;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* 15. Responsive -> tablet/mobile layout */
+@media (max-width: 1366px) {
+  .inventory-ppe-summary {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 1024px) {
+  .inventory-overview-grid,
+  .inventory-employees-layout,
+  .inventory-items-layout,
+  .inventory-custody-layout,
+  .inventory-ppe-layout,
+  .inventory-history-layout,
+  .inventory-reports-layout,
+  .inventory-users-layout,
+  .inventory-settings-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-employee-inspector,
+  .inventory-item-card,
+  .inventory-custody-act-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .inventory-screen {
+    padding: 16px;
+  }
+
+  .inventory-screen__header,
+  .inventory-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-kpi-grid,
+  .inventory-ppe-summary,
+  .inventory-report-totals,
+  .inventory-employee-detail__summary,
+  .inventory-settings-two-columns,
+  .inventory-operations-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-overview-onhand__filters,
+  .inventory-operation-form,
+  .inventory-ppe-catalog {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 390px) {
+  .inventory-screen {
+    padding: 12px;
+  }
+
+  .inventory-screen__title {
+    font-size: 22px;
+  }
+
+  .inventory-kpi {
+    grid-template-columns: 36px 1fr;
+    min-height: 84px;
+    padding: 12px;
+  }
+
+  .inventory-dialog-backdrop {
+    padding: 8px;
+  }
+
+  .inventory-dialog {
+    max-height: calc(100vh - 16px);
+    padding: 12px;
+  }
+}
+
+/* 16. State classes -> shared loading/error/selection states */
+.inventory-is-loading,
+.inventory-is-empty,
+.inventory-is-error {
+  display: grid;
+  place-items: center;
+  min-height: 140px;
+  border: 1px dashed var(--inv-border-strong);
+  border-radius: var(--inv-radius);
+  background: var(--inv-surface-soft);
+  color: var(--inv-muted);
+  text-align: center;
+  padding: 20px;
+}
+
+.inventory-is-error {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: var(--inv-danger-soft);
+  color: #b91c1c;
+}
+
+.inventory-is-loading::before {
+  content: "";
+  width: 28px;
+  height: 28px;
+  margin-bottom: 10px;
+  border: 3px solid rgba(43, 109, 243, 0.18);
+  border-top-color: var(--inv-primary);
+  border-radius: 999px;
+  animation: inventory-spin 900ms linear infinite;
+}
+
+.inventory-skeleton {
+  position: relative;
+  overflow: hidden;
+  min-height: 18px;
+  border-radius: 6px;
+  background: #eaf0f8;
+}
+
+.inventory-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  animation: inventory-shimmer 1300ms infinite;
+}
+
+.inventory-is-selected,
+.inventory-table tr.inventory-is-selected,
+.inventory-table tr.is-selected {
+  background: var(--inv-primary-soft);
+  box-shadow: inset 3px 0 0 var(--inv-primary);
+}
+
+.inventory-is-archived,
+.inventory-table tr.inventory-is-archived {
+  color: #738199;
+  background: #f8fafc;
+}
+
+.inventory-is-disabled,
+.inventory-button:disabled,
+.inventory-input:disabled,
+.inventory-select:disabled,
+.inventory-textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.inventory-is-overdue,
+.inventory-table tr.inventory-is-overdue {
+  background: var(--inv-danger-soft);
+}
+
+.inventory-is-locked {
+  position: relative;
+}
+
+.inventory-is-locked::after {
+  content: "Закрыто";
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border-radius: 999px;
+  background: var(--inv-violet-soft);
+  color: var(--inv-violet);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+}
+
+@keyframes inventory-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes inventory-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* 17. Dark theme -> optional Patrol360 dark theme bridge */
+[data-theme="dark"] {
+  --inv-bg: #07111f;
+  --inv-surface: #0d1828;
+  --inv-surface-soft: #111f33;
+  --inv-border: #24344d;
+  --inv-border-strong: #344966;
+  --inv-text: #eef5ff;
+  --inv-muted: #9fb1ca;
+  --inv-primary: #6ea0ff;
+  --inv-primary-strong: #8db4ff;
+  --inv-primary-soft: rgba(70, 122, 220, 0.18);
+  --inv-success: #49d09d;
+  --inv-success-soft: rgba(22, 163, 115, 0.16);
+  --inv-warning: #ffb060;
+  --inv-warning-soft: rgba(249, 115, 22, 0.16);
+  --inv-danger: #ff7b88;
+  --inv-danger-soft: rgba(239, 68, 68, 0.16);
+  --inv-violet: #a99cff;
+  --inv-violet-soft: rgba(124, 92, 255, 0.18);
+  --inv-shadow: 0 18px 48px rgba(0, 0, 0, 0.36);
+  --inv-shadow-soft: 0 1px 1px rgba(255, 255, 255, 0.03), 0 18px 42px rgba(0, 0, 0, 0.22);
+}
+
+[data-theme="dark"] .inventory-shell,
+[data-theme="dark"] .inventory-screen {
+  background: var(--inv-bg);
+  color: var(--inv-text);
+}
+
+[data-theme="dark"] .inventory-card,
+[data-theme="dark"] .inventory-panel,
+[data-theme="dark"] .inventory-kpi,
+[data-theme="dark"] .inventory-dialog,
+[data-theme="dark"] .inventory-toolbar,
+[data-theme="dark"] .inventory-table-wrap,
+[data-theme="dark"] .inventory-item-card,
+[data-theme="dark"] .inventory-employee-inspector,
+[data-theme="dark"] .inventory-custody-act-panel,
+[data-theme="dark"] .inventory-user-card {
+  background: var(--inv-surface);
+  border-color: var(--inv-border);
+}
+
+[data-theme="dark"] .inventory-input,
+[data-theme="dark"] .inventory-select,
+[data-theme="dark"] .inventory-textarea,
+[data-theme="dark"] .inventory-button,
+[data-theme="dark"] .inventory-ppe-combobox__list,
+[data-theme="dark"] .inventory-overview-onhand__item,
+[data-theme="dark"] .inventory-category-button,
+[data-theme="dark"] .inventory-history-person,
+[data-theme="dark"] .inventory-settings-nav__item {
+  background: #0a1422;
+  border-color: var(--inv-border);
+  color: var(--inv-text);
+}
+
+[data-theme="dark"] .inventory-table th {
+  background: var(--inv-surface-soft);
+  color: #b8c7dd;
+}
+
+[data-theme="dark"] .inventory-table td {
+  border-color: var(--inv-border);
+}
+
+[data-theme="dark"] .inventory-is-archived,
+[data-theme="dark"] .inventory-table tr.inventory-is-archived {
+  background: rgba(148, 163, 184, 0.08);
+  color: #9fb1ca;
+}
+
+[data-theme="dark"] .inventory-skeleton {
+  background: #17263a;
+}
+
+/* 18. Accessibility -> focus, disabled and reduced motion */
+.inventory-button:focus-visible,
+.inventory-input:focus-visible,
+.inventory-select:focus-visible,
+.inventory-textarea:focus-visible,
+.inventory-category-button:focus-visible,
+.inventory-settings-nav__item:focus-visible,
+.inventory-history-person:focus-visible {
+  outline: 3px solid rgba(43, 109, 243, 0.28);
+  outline-offset: 2px;
+}
+
+.inventory-button[aria-disabled="true"],
+.inventory-category-button[aria-disabled="true"] {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.inventory-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  padding: 0;
+  margin: -1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

@@ -14,6 +14,7 @@ export function RequestModals({
   modal,
   request,
   sourceResult,
+  sourceResultId,
   employeeOptions,
   routeOptions,
   onClose,
@@ -23,6 +24,7 @@ export function RequestModals({
   modal: RequestModalState;
   request?: ServiceRequest;
   sourceResult?: PatrolResult;
+  sourceResultId?: string;
   employeeOptions: EmployeeDirectoryItem[];
   routeOptions: RouteDirectoryItem[];
   onClose: () => void;
@@ -106,6 +108,7 @@ export function RequestModals({
           employeeOptions={employeeOptions}
           routeOptions={routeOptions}
           sourceResult={sourceResult}
+          sourceResultId={sourceResultId}
           onClose={requestClose}
           onDirtyChange={setIsCreateDirty}
           onSubmitCreate={async (payload) => {

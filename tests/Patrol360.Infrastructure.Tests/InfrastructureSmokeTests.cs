@@ -27,5 +27,13 @@ public class InfrastructureSmokeTests
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IEmployeeDirectoryService));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IMobileAccountService));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IPatrolRequestService));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IAssignmentService));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IPatrolResultQuery));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IAuthSessionService));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(ISiteUserAdminService));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IEmuCatalogService));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IEmuWorkService));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IEmuPlanService));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IEmuMaintenanceService));
     }
 }

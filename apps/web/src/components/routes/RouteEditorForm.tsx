@@ -3,11 +3,9 @@ import type { RouteDirectoryItem, RouteFormPayload } from "../../types";
 
 type MaybePromise<T> = T | Promise<T>;
 
-const routeStatusOptions = ["Активен", "Черновик", "Архив"] as RouteDirectoryItem["status"][];
-
 export const emptyRouteDraft: RouteFormPayload = {
   name: "",
-  territory: "Промзона Север",
+  territory: "",
   status: "Активен" as RouteDirectoryItem["status"],
   description: "",
   duration: "00:30",
@@ -44,24 +42,6 @@ export function RouteEditorForm({
         <label>
           Территория
           <input value={draft.territory} onChange={(event) => onChange({ ...draft, territory: event.currentTarget.value })} />
-        </label>
-        <label>
-          Статус
-          <select value={draft.status} onChange={(event) => onChange({ ...draft, status: event.currentTarget.value as RouteDirectoryItem["status"] })}>
-            {routeStatusOptions.map((item) => <option key={item}>{item}</option>)}
-          </select>
-        </label>
-        <label>
-          Периодичность
-          <input value={draft.periodicity} onChange={(event) => onChange({ ...draft, periodicity: event.currentTarget.value })} />
-        </label>
-        <label>
-          Ожидаемое время
-          <input value={draft.duration} onChange={(event) => onChange({ ...draft, duration: event.currentTarget.value })} />
-        </label>
-        <label>
-          Длина маршрута
-          <input value={draft.distance} onChange={(event) => onChange({ ...draft, distance: event.currentTarget.value })} />
         </label>
         <label className="full-label">
           Описание

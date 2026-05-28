@@ -2,12 +2,14 @@ import type { PatrolResult, ScreenId } from "../../types";
 import { Chip, EmptyState, Field } from "../ui";
 
 export function ResultDetailDrawer({
+  canCreateRequest = true,
   onCreateRequest,
   onNavigate,
   onNotify,
   onOpenRequest,
   result,
 }: {
+  canCreateRequest?: boolean;
   onCreateRequest: (sourceResultId?: string) => void;
   onNavigate: (screen: ScreenId) => void;
   onNotify: (message: string) => void;
@@ -35,6 +37,7 @@ export function ResultDetailDrawer({
       </div>
 
       <dl className="meta-list">
+        <Field label="Источник" value={result.source === "mobile" ? "Мобильное приложение" : "Web-панель"} />
         <Field label="Сотрудник" value={`${result.employee} · ID: ${result.employeeId}`} />
         <Field label="Маршрут" value={result.route} />
         <Field label="Точка" value={`${result.point} · ID: ${result.pointId}`} />
@@ -51,20 +54,21 @@ export function ResultDetailDrawer({
 
       <h3>Вложения</h3>
       <div className="attachment-list">
-        {result.photos > 0 ? (
-          Array.from({ length: result.photos }, (_, index) => (
-            <button
+        {result.attachments && result.attachments.length > 0 ? (
+          result.attachments.map((attachment, index) => (
+            <a
               className="attachment-row"
-              key={`${result.id}:photo:${index}`}
-              onClick={() => onNotify("Вложение откроется после подключения файлового API")}
-              type="button"
+              href={attachment.downloadUrl}
+              key={attachment.id}
+              rel="noreferrer"
+              target="_blank"
             >
-              <span>Фото {index + 1}</span>
-              <small>ожидает файлового API</small>
-            </button>
+              <span>{attachment.fileName || `Фото ${index + 1}`}</span>
+              <small>{formatAttachmentSize(attachment.sizeBytes)} · {attachment.createdAt}</small>
+            </a>
           ))
         ) : (
-          <span className="attachment-empty">Вложений нет</span>
+          <span className="attachment-empty">Фото не приложены</span>
         )}
       </div>
 
@@ -87,7 +91,15 @@ export function ResultDetailDrawer({
       <div className="drawer-actions">
         <button
           className="button ghost"
-          onClick={() => onNotify("Фото результата откроются после подключения файлов")}
+          disabled={!result.attachments?.length}
+          onClick={() => {
+            const firstAttachment = result.attachments?.[0];
+            if (firstAttachment) {
+              window.open(firstAttachment.downloadUrl, "_blank", "noreferrer");
+            } else {
+              onNotify("Фото не приложены");
+            }
+          }}
           type="button"
         >
           Открыть вложения
@@ -95,7 +107,7 @@ export function ResultDetailDrawer({
         <button className="button ghost" onClick={() => onNavigate("routes")} type="button">
           Перейти к маршруту
         </button>
-        <button className="button ghost" onClick={() => onCreateRequest(result.id)} type="button">
+        <button className="button ghost" disabled={!canCreateRequest} onClick={() => onCreateRequest(result.id)} type="button">
           Создать заявку
         </button>
         <button className="button primary" onClick={() => onOpenRequest(result.id)} type="button">
@@ -104,4 +116,16 @@ export function ResultDetailDrawer({
       </div>
     </aside>
   );
+}
+
+function formatAttachmentSize(sizeBytes: number) {
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+    return "размер неизвестен";
+  }
+
+  if (sizeBytes < 1024 * 1024) {
+    return `${Math.ceil(sizeBytes / 1024)} КБ`;
+  }
+
+  return `${(sizeBytes / 1024 / 1024).toFixed(1)} МБ`;
 }

@@ -9,19 +9,30 @@ interface EmployeeFormModalProps {
   onClose: () => void;
   onDelete?: (employeeId: string) => Promise<void> | void;
   onSubmit: (payload: EmployeeFormPayload) => Promise<void> | void;
+  referenceOptions?: {
+    departments: string[];
+    groups: string[];
+    positions: string[];
+  };
 }
 
-export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit }: EmployeeFormModalProps) {
+export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit, referenceOptions }: EmployeeFormModalProps) {
   const [draft, setDraft] = useState<EmployeeFormPayload>(() => ({
     fullName: employee?.fullName ?? "",
     personnelNo: employee?.personnelNo ?? "",
-    position: employee?.position ?? "Маршрутный обходчик",
-    department: employee?.department ?? "Промзона Север",
+    position: employee?.position ?? "",
+    department: employee?.department ?? "",
+    employeeGroup: employee?.employeeGroup ?? referenceOptions?.groups[0] ?? "Атом",
+    hiredAt: employee?.hiredAt ?? "",
+    birthDate: employee?.birthDate ?? "",
     status: (employee?.status ?? "Активен") as EmployeeDirectoryItem["status"],
     shift: employee?.shift ?? "День",
     hasMobileAccount: employee?.mobileStatus === "Привязан",
   }));
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const positions = referenceOptions?.positions ?? [];
+  const departments = referenceOptions?.departments ?? [];
+  const groups = referenceOptions?.groups ?? ["Атом", "Атом Экология"];
 
   async function submitForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -86,6 +97,7 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit 
           <label>
             Должность
             <input
+              list="employee-position-options"
               value={draft.position}
               onChange={(event) => setDraft({ ...draft, position: event.currentTarget.value })}
             />
@@ -93,8 +105,34 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit 
           <label>
             Участок
             <input
+              list="employee-department-options"
               value={draft.department}
               onChange={(event) => setDraft({ ...draft, department: event.currentTarget.value })}
+            />
+          </label>
+          <label>
+            Основная группа
+            <input
+              list="employee-group-options"
+              value={draft.employeeGroup}
+              onChange={(event) => setDraft({ ...draft, employeeGroup: event.currentTarget.value })}
+              placeholder="Атом или Атом Экология"
+            />
+          </label>
+          <label>
+            Дата приема на работу
+            <input
+              type="date"
+              value={draft.hiredAt}
+              onChange={(event) => setDraft({ ...draft, hiredAt: event.currentTarget.value })}
+            />
+          </label>
+          <label>
+            Дата рождения
+            <input
+              type="date"
+              value={draft.birthDate}
+              onChange={(event) => setDraft({ ...draft, birthDate: event.currentTarget.value })}
             />
           </label>
           <label>
@@ -119,6 +157,16 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit 
             </select>
           </label>
         </div>
+
+        <datalist id="employee-position-options">
+          {positions.map((item) => <option key={item} value={item} />)}
+        </datalist>
+        <datalist id="employee-department-options">
+          {departments.map((item) => <option key={item} value={item} />)}
+        </datalist>
+        <datalist id="employee-group-options">
+          {groups.map((item) => <option key={item} value={item} />)}
+        </datalist>
 
         <label className="toggle-filter">
           <input

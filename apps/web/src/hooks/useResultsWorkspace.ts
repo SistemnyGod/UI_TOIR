@@ -1,0 +1,128 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  createApiResultsRepository,
+  findPatrolResult,
+  patrolResultsFallback,
+  type ResultFilterOptions,
+} from "../repositories/resultsRepository";
+import type { DataSourceMode, DataSourceStatus, PatrolResult } from "../types";
+
+interface UseResultsWorkspaceOptions {
+  dataSourceMode: DataSourceMode;
+  selectedResultId: string;
+  filters?: ResultFilterOptions;
+  onSelectResult: (id: string) => void;
+  showToast: (message: string) => void;
+}
+
+export function useResultsWorkspace({
+  dataSourceMode,
+  filters = {},
+  selectedResultId,
+  onSelectResult,
+  showToast,
+}: UseResultsWorkspaceOptions) {
+  const apiResults = useMemo(() => createApiResultsRepository(), []);
+  const [results, setResults] = useState<PatrolResult[]>(dataSourceMode === "mock" ? patrolResultsFallback : []);
+  const [selectedDetail, setSelectedDetail] = useState<PatrolResult | undefined>();
+  const [listStatus, setListStatus] = useState<DataSourceStatus>(dataSourceMode === "mock" ? "ready" : "idle");
+  const [detailStatus, setDetailStatus] = useState<DataSourceStatus>("idle");
+  const [errorMessage, setErrorMessage] = useState<string | undefined>();
+
+  const selectedListItem = useMemo(() => findPatrolResult(results, selectedResultId), [results, selectedResultId]);
+  const selectedResult = selectedDetail ?? selectedListItem;
+
+  const refreshResults = useCallback(
+    async ({ signal }: { signal?: AbortSignal } = {}) => {
+      if (dataSourceMode !== "api") {
+        setResults(patrolResultsFallback);
+        setListStatus("ready");
+        setErrorMessage(undefined);
+        return;
+      }
+
+      setListStatus("loading");
+      setErrorMessage(undefined);
+
+      try {
+        const nextResults = await apiResults.getResults(filters, { signal });
+        if (signal?.aborted) return;
+        setResults(nextResults);
+        setListStatus(nextResults.length > 0 ? "ready" : "idle");
+      } catch (error) {
+        if (signal?.aborted) return;
+        const message = error instanceof Error ? error.message : "Не удалось загрузить результаты API";
+        setResults([]);
+        setListStatus("error");
+        setErrorMessage(message);
+        showToast(`Не удалось загрузить результаты API: ${message}`);
+      }
+    },
+    [apiResults, dataSourceMode, filters, showToast],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void refreshResults({ signal: controller.signal });
+
+    return () => controller.abort();
+  }, [refreshResults]);
+
+  useEffect(() => {
+    if (results.length === 0) {
+      if (selectedResultId) onSelectResult("");
+      return;
+    }
+
+    if (!selectedResultId || !results.some((result) => result.id === selectedResultId)) {
+      onSelectResult(results[0].id);
+    }
+  }, [onSelectResult, results, selectedResultId]);
+
+  useEffect(() => {
+    setSelectedDetail(undefined);
+
+    if (!selectedResultId || dataSourceMode !== "api") {
+      setDetailStatus("idle");
+      return;
+    }
+
+    const controller = new AbortController();
+    setDetailStatus("loading");
+
+    apiResults
+      .getResult(selectedResultId, { signal: controller.signal })
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        setSelectedDetail(result);
+        setDetailStatus("ready");
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        const message = error instanceof Error ? error.message : "Не удалось загрузить детали результата API";
+        setDetailStatus("error");
+        setErrorMessage(message);
+        showToast(`Не удалось загрузить детали результата API: ${message}`);
+      });
+
+    return () => controller.abort();
+  }, [apiResults, dataSourceMode, selectedResultId, showToast]);
+
+  const exportResults = useCallback(async () => {
+    if (dataSourceMode !== "api") {
+      return undefined;
+    }
+
+    return apiResults.exportResults(filters);
+  }, [apiResults, dataSourceMode, filters]);
+
+  return {
+    detailStatus,
+    errorMessage,
+    exportResults,
+    listStatus,
+    refreshResults,
+    results,
+    selectedResult,
+  };
+}

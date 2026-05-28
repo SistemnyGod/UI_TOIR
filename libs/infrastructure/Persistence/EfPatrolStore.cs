@@ -13,23 +13,46 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
     IEmployeeDirectoryService,
     IMobileAccountService,
     IPatrolRequestService,
+    IAssignmentService,
     IRouteCatalogService
 {
     private static readonly PasswordHasher<MobileAccountEntity> MobilePasswordHasher = new();
     private static readonly string[] EditableMobileAccountStatuses = ["Активен", "Не привязан", "Заблокирован"];
+    private static readonly string[] AllowedPatrolPhotoContentTypes = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+    private const int MaxPatrolPhotoSizeBytes = 10 * 1024 * 1024;
 
     public DashboardSummaryDto GetSummary()
     {
-        var activeStatuses = new[] { "В пути", "Ожидает", "Назначена" };
-        var delayedStatuses = new[] { "Просрочена", "Задержка" };
-        var totalPoints = dbContext.RoutePoints.Count();
-        var completedPoints = dbContext.Assignments.Sum(assignment => assignment.ProgressPercent) * Math.Max(1, totalPoints) / 100;
         var onlineThreshold = DateTimeOffset.UtcNow.AddMinutes(-15);
+        var localToday = DateOnly.FromDateTime(DateTime.Now);
+        var localStartDateTime = localToday.ToDateTime(TimeOnly.MinValue);
+        var localEndDateTime = localToday.AddDays(1).ToDateTime(TimeOnly.MinValue);
+        var todayStart = new DateTimeOffset(localStartDateTime, TimeZoneInfo.Local.GetUtcOffset(localStartDateTime)).ToUniversalTime();
+        var todayEnd = new DateTimeOffset(localEndDateTime, TimeZoneInfo.Local.GetUtcOffset(localEndDateTime)).ToUniversalTime();
+        var totalPoints = dbContext.RoutePoints.Count(point => point.Route != null && !point.Route.IsArchived);
+        var todayResults = dbContext.PatrolResults
+            .Where(result => result.ActualAt >= todayStart && result.ActualAt < todayEnd);
+        var completedPoints = todayResults.Count(result => result.RoutePointId != null);
+        if (completedPoints == 0)
+        {
+            completedPoints = todayResults.Count();
+        }
+        var completedToday = todayResults
+            .Where(result => result.AssignmentId != null)
+            .Select(result => result.AssignmentId!.Value)
+            .Distinct()
+            .Count()
+            + todayResults.Count(result => result.AssignmentId == null);
+        var issues = todayResults.Count(result =>
+            result.Status == "Замечание"
+            || result.Status == "Просрочено"
+            || result.IssueType != string.Empty && result.IssueType != "-");
 
         return new DashboardSummaryDto(
-            ActivePatrols: dbContext.Assignments.Count(assignment => activeStatuses.Contains(assignment.Status)),
-            DelayedPatrols: dbContext.Assignments.Count(assignment => delayedStatuses.Contains(assignment.Status)),
-            Issues: 0,
+            ActivePatrols: dbContext.Assignments.Count(assignment => AssignmentStatusValues.Active.Contains(assignment.Status)),
+            DelayedPatrols: dbContext.Assignments.Count(assignment => AssignmentStatusValues.Delayed.Contains(assignment.Status)),
+            Issues: issues,
+            CompletedToday: completedToday,
             ShiftCoveragePercent: CalculateShiftCoveragePercent(),
             CompletedPoints: completedPoints,
             TotalPoints: totalPoints,
@@ -38,28 +61,776 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
     }
 
     public IReadOnlyList<AssignmentDto> GetActiveAssignments() =>
+        GetAssignmentQuery()
+            .Where(assignment => assignment.Status != AssignmentStatusValues.Completed && assignment.Status != AssignmentStatusValues.Cancelled)
+            .OrderByDescending(assignment => assignment.PlannedAt)
+            .Take(50)
+            .AsEnumerable()
+            .Select(MapAssignment)
+            .ToList();
+
+    public IReadOnlyList<AssignmentDto> GetAssignments() =>
+        GetAssignmentQuery()
+            .OrderByDescending(assignment => assignment.PlannedAt)
+            .AsEnumerable()
+            .Select(MapAssignment)
+            .ToList();
+
+    public CreateAssignmentResult Create(CreateAssignmentDto request)
+    {
+        var patrolRequest = request.PatrolRequestId is null
+            ? null
+            : dbContext.PatrolRequests.FirstOrDefault(item => item.Id == request.PatrolRequestId.Value);
+        var employee = request.EmployeeId is null
+            ? null
+            : dbContext.Employees.FirstOrDefault(item => item.Id == request.EmployeeId.Value);
+        var route = request.RouteId is null
+            ? null
+            : dbContext.Routes.FirstOrDefault(item => item.Id == request.RouteId.Value && !item.IsArchived);
+        var existingAssignment = FindReusableAssignment(request, patrolRequest, employee, route);
+        if (existingAssignment is not null)
+        {
+            return new CreateAssignmentResult(MapAssignment(existingAssignment), new Dictionary<string, string[]>());
+        }
+
+        var errors = ValidateCreateAssignment(request, patrolRequest, employee, route);
+
+        if (errors.Count > 0)
+        {
+            return new CreateAssignmentResult(null, errors);
+        }
+
+        var confirmedPatrolRequest = patrolRequest!;
+        var confirmedEmployee = employee!;
+        var confirmedRoute = route!;
+        var plannedAt = request.PlannedAt!.Value.ToUniversalTime();
+        var shouldNotify = request.NotifyEmployee || confirmedPatrolRequest.NotifyEmployee;
+        var notificationText = NormalizeOptionalText(request.NotificationText, confirmedPatrolRequest.NotificationText);
+
+        confirmedPatrolRequest.Status = "Назначена";
+        confirmedPatrolRequest.NotifyEmployee = shouldNotify;
+        confirmedPatrolRequest.NotificationText = shouldNotify
+            ? NormalizeOptionalText(notificationText, BuildAssignmentNotificationText(confirmedEmployee.FullName, confirmedRoute.Name, plannedAt))
+            : string.Empty;
+        if (!string.IsNullOrWhiteSpace(request.Comment))
+        {
+            confirmedPatrolRequest.Description = NormalizeOptionalText(request.Comment);
+        }
+
+        var assignment = new AssignmentEntity
+        {
+            Id = Guid.NewGuid(),
+            PatrolRequestId = confirmedPatrolRequest.Id,
+            EmployeeId = confirmedEmployee.Id,
+            RouteId = confirmedRoute.Id,
+            Shift = string.IsNullOrWhiteSpace(request.Shift) ? confirmedEmployee.Shift : request.Shift!.Trim(),
+            Status = shouldNotify ? AssignmentStatusValues.Waiting : AssignmentStatusValues.Assigned,
+            PlannedAt = plannedAt,
+            ProgressPercent = 0,
+            LockVersion = 0
+        };
+
+        dbContext.Assignments.Add(assignment);
+        AddMobileNotificationForEmployee(
+                confirmedEmployee.Id,
+                "patrolRequest",
+                "Новая заявка на обход",
+                string.IsNullOrWhiteSpace(confirmedPatrolRequest.NotificationText)
+                    ? BuildAssignmentNotificationText(confirmedEmployee.FullName, confirmedRoute.Name, plannedAt)
+                    : confirmedPatrolRequest.NotificationText,
+                "patrolRequest",
+                confirmedPatrolRequest.Id.ToString(),
+                $"patrol-request:{confirmedPatrolRequest.Id}");
+        dbContext.SaveChanges();
+
+        assignment.PatrolRequest = confirmedPatrolRequest;
+        assignment.Employee = confirmedEmployee;
+        assignment.Route = confirmedRoute;
+
+        return new CreateAssignmentResult(MapAssignment(assignment), new Dictionary<string, string[]>());
+    }
+
+    public AssignmentCommandResult? Start(Guid id)
+    {
+        var assignment = FindAssignment(id);
+        if (assignment is null)
+        {
+            return null;
+        }
+
+        if (assignment.Status == AssignmentStatusValues.InProgress || assignment.Status == AssignmentStatusValues.Completed)
+        {
+            return new AssignmentCommandResult(MapAssignment(assignment), false, "Назначение уже запущено или завершено.");
+        }
+
+        if (assignment.Status == AssignmentStatusValues.Cancelled)
+        {
+            return new AssignmentCommandResult(MapAssignment(assignment), false, "Отмененное назначение не запускается.");
+        }
+
+        assignment.Status = AssignmentStatusValues.InProgress;
+        if (assignment.PatrolRequest is not null)
+        {
+            assignment.PatrolRequest.Status = "В работе";
+        }
+
+        assignment.StartedAt ??= DateTimeOffset.UtcNow;
+        assignment.ProgressPercent = Math.Max(assignment.ProgressPercent, 1);
+        assignment.LockVersion++;
+        dbContext.SaveChanges();
+
+        return new AssignmentCommandResult(MapAssignment(assignment), true, "Назначение запущено.");
+    }
+
+    public AssignmentCommandResult? Cancel(Guid id)
+    {
+        var assignment = FindAssignment(id);
+        if (assignment is null)
+        {
+            return null;
+        }
+
+        if (assignment.Status == AssignmentStatusValues.Cancelled || assignment.Status == AssignmentStatusValues.Completed)
+        {
+            return new AssignmentCommandResult(MapAssignment(assignment), false, "Назначение уже закрыто.");
+        }
+
+        assignment.Status = AssignmentStatusValues.Cancelled;
+        if (assignment.PatrolRequest is not null)
+        {
+            assignment.PatrolRequest.Status = "Закрыта";
+        }
+
+        assignment.LockVersion++;
+        dbContext.SaveChanges();
+
+        return new AssignmentCommandResult(MapAssignment(assignment), true, "Назначение отменено.");
+    }
+
+    public AssignmentCommandResult? Complete(Guid id, CompleteAssignmentDto? request = null)
+    {
+        var assignment = FindAssignment(id);
+        if (assignment is null)
+        {
+            return null;
+        }
+
+        if (assignment.Status == AssignmentStatusValues.Completed)
+        {
+            var hasResult = dbContext.PatrolResults.Any(result => result.AssignmentId == assignment.Id);
+            if (!hasResult && request is not null)
+            {
+                var backfillErrors = ValidateCompleteAssignment(request, assignment.Route?.Points);
+                if (backfillErrors.Count > 0)
+                {
+                    return new AssignmentCommandResult(MapAssignment(assignment), false, "Результат обхода не сохранен.", backfillErrors);
+                }
+
+                var backfillActualAt = request.ActualAt!.Value.ToUniversalTime();
+                assignment.FinishedAt ??= backfillActualAt;
+                if (assignment.PatrolRequest is not null)
+                {
+                    assignment.PatrolRequest.Status = "Закрыта";
+                }
+
+                UpsertPatrolResult(assignment, request, backfillActualAt, DateTimeOffset.UtcNow);
+                dbContext.SaveChanges();
+
+                return new AssignmentCommandResult(MapAssignment(assignment), true, "Результат завершенного назначения сохранен.");
+            }
+
+            return new AssignmentCommandResult(MapAssignment(assignment), false, "Назначение уже завершено.");
+        }
+
+        if (assignment.Status == AssignmentStatusValues.Cancelled)
+        {
+            return new AssignmentCommandResult(MapAssignment(assignment), false, "Отмененное назначение не завершается.");
+        }
+
+        var errors = ValidateCompleteAssignment(request, assignment.Route?.Points);
+        if (errors.Count > 0)
+        {
+            return new AssignmentCommandResult(MapAssignment(assignment), false, "Результат обхода не сохранен.", errors);
+        }
+
+        var actualAt = request!.ActualAt!.Value.ToUniversalTime();
+        assignment.Status = AssignmentStatusValues.Completed;
+        if (assignment.PatrolRequest is not null)
+        {
+            assignment.PatrolRequest.Status = "Закрыта";
+        }
+
+        assignment.StartedAt ??= assignment.PlannedAt <= actualAt ? assignment.PlannedAt : actualAt;
+        assignment.FinishedAt = actualAt;
+        assignment.ProgressPercent = 100;
+        assignment.LockVersion++;
+        UpsertPatrolResult(assignment, request, actualAt, DateTimeOffset.UtcNow);
+        dbContext.SaveChanges();
+
+        return new AssignmentCommandResult(MapAssignment(assignment), true, "Назначение завершено.");
+    }
+
+    private IQueryable<AssignmentEntity> GetAssignmentQuery() =>
         dbContext.Assignments
             .AsNoTracking()
             .Include(assignment => assignment.Employee)
             .Include(assignment => assignment.Route)
-            .OrderByDescending(assignment => assignment.PlannedAt)
-            .Take(50)
-            .AsEnumerable()
-            .Select(assignment => new AssignmentDto(
-                assignment.Id,
-                assignment.Employee!.FullName,
-                assignment.Route!.Name,
-                assignment.Shift,
-                assignment.Status,
-                assignment.ProgressPercent,
-                assignment.PlannedAt.ToLocalTime().ToString("HH:mm")))
-            .ToList();
+            .Include(assignment => assignment.PatrolRequest);
 
-    public IReadOnlyList<RouteDto> GetRoutes() =>
+    private AssignmentEntity? FindAssignment(Guid id) =>
+        dbContext.Assignments
+            .Include(assignment => assignment.Employee)
+            .Include(assignment => assignment.Route)
+            .ThenInclude(route => route!.Points)
+            .Include(assignment => assignment.PatrolRequest)
+            .FirstOrDefault(assignment => assignment.Id == id);
+
+    private AssignmentEntity? FindReusableAssignment(
+        CreateAssignmentDto request,
+        PatrolRequestEntity? patrolRequest,
+        EmployeeEntity? employee,
+        RouteEntity? route)
+    {
+        if (request.PatrolRequestId is null || patrolRequest is null || employee is null || route is null)
+        {
+            return null;
+        }
+
+        var assignment = dbContext.Assignments
+            .Include(item => item.Employee)
+            .Include(item => item.Route)
+            .Include(item => item.PatrolRequest)
+            .FirstOrDefault(item =>
+                item.PatrolRequestId == request.PatrolRequestId.Value
+                && item.Status != AssignmentStatusValues.Completed
+                && item.Status != AssignmentStatusValues.Cancelled);
+
+        if (assignment is null || assignment.EmployeeId != employee.Id || assignment.RouteId != route.Id)
+        {
+            return null;
+        }
+
+        return assignment;
+    }
+
+    private void UpsertPatrolResult(
+        AssignmentEntity assignment,
+        CompleteAssignmentDto request,
+        DateTimeOffset actualAt,
+        DateTimeOffset operationAt)
+    {
+        if (request.PointResults is { Count: > 0 })
+        {
+            UpsertPatrolPointResults(assignment, request, actualAt, operationAt);
+            return;
+        }
+
+        var status = NormalizeResultStatus(request.Status);
+        var selectedPoint = assignment.Route?.Points
+            .OrderBy(point => point.SequenceNo)
+            .FirstOrDefault(point => request.RoutePointId is not null && point.Id == request.RoutePointId.Value)
+            ?? assignment.Route?.Points.OrderBy(point => point.SequenceNo).FirstOrDefault();
+        var issueType = NormalizeOptionalText(request.IssueType, "-");
+        var severity = NormalizeOptionalText(request.Severity, status == "Замечание" ? "Средняя" : "-");
+        var result = dbContext.PatrolResults
+            .Include(item => item.Issues)
+            .Include(item => item.Attachments)
+            .FirstOrDefault(item => item.AssignmentId == assignment.Id);
+
+        if (result is null)
+        {
+            result = new PatrolResultEntity
+            {
+                Id = Guid.NewGuid(),
+                AssignmentId = assignment.Id,
+                CreatedAt = operationAt
+            };
+            dbContext.PatrolResults.Add(result);
+        }
+        else
+        {
+            dbContext.Set<PatrolResultIssueEntity>().RemoveRange(result.Issues);
+            dbContext.Set<PatrolResultAttachmentEntity>().RemoveRange(result.Attachments);
+        }
+
+        result.AssignmentId = assignment.Id;
+        result.EmployeeId = assignment.EmployeeId;
+        result.RouteId = assignment.RouteId;
+        result.RoutePointId = selectedPoint?.Id;
+        result.Status = status;
+        result.PointName = selectedPoint?.Name ?? assignment.Route?.Name ?? string.Empty;
+        result.EmployeeName = assignment.Employee?.FullName ?? assignment.PatrolRequest?.EmployeeName ?? string.Empty;
+        result.RouteName = assignment.Route?.Name ?? assignment.PatrolRequest?.RouteName ?? string.Empty;
+        result.Territory = assignment.Route?.Territory ?? string.Empty;
+        result.Shift = assignment.Shift;
+        result.PlannedAt = assignment.PlannedAt;
+        result.ActualAt = actualAt;
+        result.Deviation = FormatDeviation(assignment.PlannedAt, actualAt);
+        result.Comment = NormalizeOptionalText(request.Comment);
+        result.IssueType = issueType;
+        result.Severity = severity;
+        result.Photos = Math.Max(Math.Max(0, request.Photos), request.PhotoAttachments?.Count ?? 0);
+
+        if (status == "Замечание")
+        {
+            result.Issues.Add(new PatrolResultIssueEntity
+            {
+                Id = Guid.NewGuid(),
+                Type = issueType,
+                Severity = severity,
+                Message = NormalizeOptionalText(request.Comment),
+                CreatedAt = operationAt
+            });
+        }
+
+        AddPatrolResultAttachments(result, request.PhotoAttachments, operationAt);
+    }
+
+    private void UpsertPatrolPointResults(
+        AssignmentEntity assignment,
+        CompleteAssignmentDto request,
+        DateTimeOffset actualAt,
+        DateTimeOffset operationAt)
+    {
+        var existingResults = dbContext.PatrolResults
+            .Include(item => item.Issues)
+            .Where(item => item.AssignmentId == assignment.Id)
+            .ToList();
+        dbContext.Set<PatrolResultIssueEntity>().RemoveRange(existingResults.SelectMany(result => result.Issues));
+        dbContext.PatrolResults.RemoveRange(existingResults);
+
+        var routePoints = assignment.Route?.Points.OrderBy(point => point.SequenceNo).ToDictionary(point => point.Id) ?? [];
+        foreach (var pointResult in request.PointResults ?? [])
+        {
+            routePoints.TryGetValue(pointResult.RoutePointId, out var selectedPoint);
+            var status = NormalizeResultStatus(pointResult.Status);
+            var issueType = NormalizeOptionalText(pointResult.IssueType, "-");
+            var severity = NormalizeOptionalText(pointResult.Severity, status == "Замечание" ? "Средняя" : "-");
+            var comment = NormalizeOptionalText(pointResult.Comment, request.Comment ?? string.Empty);
+            var result = new PatrolResultEntity
+            {
+                Id = Guid.NewGuid(),
+                AssignmentId = assignment.Id,
+                CreatedAt = operationAt,
+                EmployeeId = assignment.EmployeeId,
+                RouteId = assignment.RouteId,
+                RoutePointId = selectedPoint?.Id,
+                Status = status,
+                PointName = selectedPoint?.Name ?? assignment.Route?.Name ?? string.Empty,
+                EmployeeName = assignment.Employee?.FullName ?? assignment.PatrolRequest?.EmployeeName ?? string.Empty,
+                RouteName = assignment.Route?.Name ?? assignment.PatrolRequest?.RouteName ?? string.Empty,
+                Territory = assignment.Route?.Territory ?? string.Empty,
+                Shift = assignment.Shift,
+                PlannedAt = assignment.PlannedAt,
+                ActualAt = actualAt,
+                Deviation = FormatDeviation(assignment.PlannedAt, actualAt),
+                Comment = comment,
+                IssueType = issueType,
+                Severity = severity,
+                Photos = Math.Max(Math.Max(0, pointResult.Photos), pointResult.PhotoAttachments?.Count ?? 0)
+            };
+
+            if (status == "Замечание")
+            {
+                result.Issues.Add(new PatrolResultIssueEntity
+                {
+                    Id = Guid.NewGuid(),
+                    Type = issueType,
+                    Severity = severity,
+                    Message = comment,
+                    CreatedAt = operationAt
+                });
+            }
+
+            AddPatrolResultAttachments(result, pointResult.PhotoAttachments, operationAt);
+            dbContext.PatrolResults.Add(result);
+        }
+    }
+
+    private static Dictionary<string, string[]> ValidateCompleteAssignment(
+        CompleteAssignmentDto? request,
+        IEnumerable<RoutePointEntity>? routePoints = null)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (request is null)
+        {
+            errors["result"] = ["Заполните результат обхода."];
+            return errors;
+        }
+
+        if (request.ActualAt is null || request.ActualAt == default)
+        {
+            errors["actualAt"] = ["Укажите фактическое время обхода."];
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Status))
+        {
+            errors["status"] = ["Выберите статус результата."];
+        }
+
+        var status = NormalizeResultStatus(request.Status);
+        if (string.IsNullOrWhiteSpace(request.Comment))
+        {
+            errors["comment"] = ["Заполните комментарий по результату обхода."];
+        }
+
+        if (status == "Замечание" && string.IsNullOrWhiteSpace(request.IssueType))
+        {
+            errors["issueType"] = ["Укажите тип замечания."];
+        }
+
+        var routePointList = routePoints?.OrderBy(point => point.SequenceNo).ToList() ?? [];
+        var requiredRoutePoints = routePointList.Where(point => point.IsRequired).ToList();
+        if (requiredRoutePoints.Count > 0 && request.PointResults is not { Count: > 0 })
+        {
+            errors["pointResults"] = ["Заполните чек-лист обязательных точек маршрута перед завершением обхода."];
+        }
+
+        if (request.PointResults is { Count: > 0 })
+        {
+            AddPhotoAttachmentErrors(errors, "photoAttachments", request.PhotoAttachments);
+
+            var knownPointIds = routePointList.Select(point => point.Id).ToHashSet();
+            var duplicatePointIds = request.PointResults
+                .GroupBy(point => point.RoutePointId)
+                .Where(group => group.Count() > 1)
+                .ToList();
+            if (duplicatePointIds.Count > 0)
+            {
+                errors["pointResults"] = ["Точки маршрута не должны дублироваться."];
+            }
+
+            var hasUnknownPoint = request.PointResults.Any(point => !knownPointIds.Contains(point.RoutePointId));
+            if (hasUnknownPoint)
+            {
+                errors["routePointId"] = ["В чек-листе есть точка не из этого маршрута."];
+            }
+
+            var submittedPointIds = request.PointResults.Select(point => point.RoutePointId).ToHashSet();
+            var missingRequired = routePointList
+                .Where(point => point.IsRequired && !submittedPointIds.Contains(point.Id))
+                .Select(point => point.Name)
+                .ToList();
+            if (missingRequired.Count > 0)
+            {
+                errors["pointResults"] = [$"Заполните все обязательные точки: {string.Join(", ", missingRequired)}."];
+            }
+
+            var missingRequiredPhotos = routePointList
+                .Where(point => point.RequiresPhoto)
+                .Join(request.PointResults, point => point.Id, pointResult => pointResult.RoutePointId, (point, pointResult) => new { point, pointResult })
+                .Where(item => item.pointResult.PhotoAttachments is not { Count: > 0 })
+                .Select(item => item.point.Name)
+                .ToList();
+            if (missingRequiredPhotos.Count > 0)
+            {
+                errors["photos"] = [$"Для точек с фотофиксацией прикрепите файлы фото: {string.Join(", ", missingRequiredPhotos)}."];
+            }
+
+            for (var index = 0; index < request.PointResults.Count; index += 1)
+            {
+                AddPhotoAttachmentErrors(errors, $"pointResults[{index}].photoAttachments", request.PointResults[index].PhotoAttachments);
+            }
+
+            var pointIssueWithoutType = request.PointResults
+                .Any(point => NormalizeResultStatus(point.Status) == "Замечание" && string.IsNullOrWhiteSpace(point.IssueType));
+            if (pointIssueWithoutType)
+            {
+                errors["issueType"] = ["Для замечаний по точкам укажите тип замечания."];
+            }
+        }
+
+        return errors;
+    }
+
+    private static void AddPhotoAttachmentErrors(
+        Dictionary<string, string[]> errors,
+        string field,
+        IReadOnlyList<CompleteAssignmentPhotoDto>? attachments)
+    {
+        if (attachments is null || attachments.Count == 0)
+        {
+            return;
+        }
+
+        if (attachments.Count > 20)
+        {
+            errors[field] = ["За один результат можно прикрепить не больше 20 фото."];
+            return;
+        }
+
+        for (var index = 0; index < attachments.Count; index += 1)
+        {
+            var attachment = attachments[index];
+            var itemField = $"{field}[{index}]";
+            if (string.IsNullOrWhiteSpace(attachment.FileName))
+            {
+                errors[itemField] = ["У файла фото должно быть имя."];
+                continue;
+            }
+
+            var contentType = NormalizePhotoContentType(attachment.ContentType);
+            if (!AllowedPatrolPhotoContentTypes.Contains(contentType, StringComparer.OrdinalIgnoreCase))
+            {
+                errors[itemField] = ["Разрешены только фото JPEG, PNG, WebP, HEIC или HEIF."];
+                continue;
+            }
+
+            if (!TryDecodePhotoBase64(attachment.DataBase64, out var bytes))
+            {
+                errors[itemField] = ["Фото должно быть передано как base64."];
+                continue;
+            }
+
+            if (bytes.Length == 0)
+            {
+                errors[itemField] = ["Фото не должно быть пустым."];
+                continue;
+            }
+
+            if (bytes.Length > MaxPatrolPhotoSizeBytes)
+            {
+                errors[itemField] = ["Размер одного фото не должен превышать 10 МБ."];
+            }
+        }
+    }
+
+    private void AddPatrolResultAttachments(
+        PatrolResultEntity result,
+        IReadOnlyList<CompleteAssignmentPhotoDto>? attachments,
+        DateTimeOffset operationAt)
+    {
+        if (attachments is null || attachments.Count == 0)
+        {
+            return;
+        }
+
+        var storageDirectory = Path.Combine(AppContext.BaseDirectory, "mobile-files");
+        Directory.CreateDirectory(storageDirectory);
+
+        foreach (var attachment in attachments)
+        {
+            if (!TryDecodePhotoBase64(attachment.DataBase64, out var bytes))
+            {
+                continue;
+            }
+
+            var fileName = SanitizeAttachmentFileName(attachment.FileName);
+            var storageFileName = $"desktop-{result.Id:N}-{Guid.NewGuid():N}-{fileName}";
+            File.WriteAllBytes(Path.Combine(storageDirectory, storageFileName), bytes);
+
+            result.Attachments.Add(new PatrolResultAttachmentEntity
+            {
+                Id = Guid.NewGuid(),
+                FileName = storageFileName,
+                ContentType = NormalizePhotoContentType(attachment.ContentType),
+                SizeBytes = bytes.LongLength,
+                CreatedAt = operationAt
+            });
+        }
+    }
+
+    private static bool TryDecodePhotoBase64(string? value, out byte[] bytes)
+    {
+        bytes = [];
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var payload = value.Trim();
+        var commaIndex = payload.IndexOf(',');
+        if (payload.StartsWith("data:", StringComparison.OrdinalIgnoreCase) && commaIndex >= 0)
+        {
+            payload = payload[(commaIndex + 1)..];
+        }
+
+        try
+        {
+            bytes = Convert.FromBase64String(payload);
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static string NormalizePhotoContentType(string? value)
+    {
+        var contentType = NormalizeOptionalText(value, "application/octet-stream").ToLowerInvariant();
+        return contentType == "image/jpg" ? "image/jpeg" : contentType;
+    }
+
+    private static string SanitizeAttachmentFileName(string value)
+    {
+        var fileName = Path.GetFileName(value);
+        foreach (var character in Path.GetInvalidFileNameChars())
+        {
+            fileName = fileName.Replace(character, '-');
+        }
+
+        return string.IsNullOrWhiteSpace(fileName) ? "photo.jpg" : fileName;
+    }
+
+    private static string NormalizeResultStatus(string? status)
+    {
+        var value = NormalizeOptionalText(status, "Подтверждено");
+        return value.Equals("ok", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("completed", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("success", StringComparison.OrdinalIgnoreCase)
+            ? "Подтверждено"
+            : value;
+    }
+
+    private static string FormatDeviation(DateTimeOffset plannedAt, DateTimeOffset actualAt)
+    {
+        var minutes = (int)Math.Round((actualAt - plannedAt).TotalMinutes);
+        if (minutes == 0)
+        {
+            return "0 мин";
+        }
+
+        var sign = minutes > 0 ? "+" : "-";
+        return $"{sign}{Math.Abs(minutes)} мин";
+    }
+
+    private Dictionary<string, string[]> ValidateCreateAssignment(
+        CreateAssignmentDto request,
+        PatrolRequestEntity? patrolRequest,
+        EmployeeEntity? employee,
+        RouteEntity? route)
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (request.PatrolRequestId is null || request.PatrolRequestId == Guid.Empty)
+        {
+            errors["patrolRequestId"] = ["Укажите заявку для назначения."];
+        }
+        else if (patrolRequest is null)
+        {
+            errors["patrolRequestId"] = ["Заявка не найдена."];
+        }
+        else if (IsClosedPatrolRequestStatus(patrolRequest.Status))
+        {
+            errors["patrolRequestId"] = ["Закрытую или отмененную заявку нельзя назначить повторно."];
+        }
+        else if (dbContext.Assignments.Any(assignment => assignment.PatrolRequestId == request.PatrolRequestId.Value))
+        {
+            errors["patrolRequestId"] = ["Для заявки уже есть назначение."];
+        }
+
+        if (request.EmployeeId is null || request.EmployeeId == Guid.Empty)
+        {
+            errors["employeeId"] = ["Выберите сотрудника."];
+        }
+        else if (employee is null)
+        {
+            errors["employeeId"] = ["Сотрудник не найден."];
+        }
+
+        if (request.RouteId is null || request.RouteId == Guid.Empty)
+        {
+            errors["routeId"] = ["Выберите маршрут."];
+        }
+        else if (route is null)
+        {
+            errors["routeId"] = ["Маршрут не найден или перенесен в архив."];
+        }
+        else if (!RouteHasActivePoints(route.Id))
+        {
+            errors["routeId"] = ["В маршруте нет активных точек обхода."];
+        }
+
+        if (request.PlannedAt is null || request.PlannedAt == default)
+        {
+            errors["plannedAt"] = ["Укажите дату и время старта."];
+        }
+        else if (request.PlannedEndAt is not null && request.PlannedEndAt <= request.PlannedAt)
+        {
+            errors["plannedEndAt"] = ["Крайний срок выполнения должен быть позже времени старта."];
+        }
+
+        if (request.Comment?.Length > 300)
+        {
+            errors["comment"] = ["Комментарий не должен превышать 300 символов."];
+        }
+
+        if (request.NotificationText?.Length > 1000)
+        {
+            errors["notificationText"] = ["Уведомление не должно превышать 1000 символов."];
+        }
+
+        var shift = string.IsNullOrWhiteSpace(request.Shift) ? employee?.Shift : request.Shift;
+        if (string.IsNullOrWhiteSpace(shift))
+        {
+            errors["shift"] = ["Укажите смену назначения."];
+        }
+
+        if (employee is not null && request.PlannedAt is not null && !string.IsNullOrWhiteSpace(shift))
+        {
+            AddEmployeeAssignmentConflictError(errors, "employeeId", employee.Id, request.PlannedAt.Value, shift);
+        }
+
+        return errors;
+    }
+
+    private void AddEmployeeAssignmentConflictError(
+        Dictionary<string, string[]> errors,
+        string fieldName,
+        Guid employeeId,
+        DateTimeOffset plannedAt,
+        string shift)
+    {
+        var plannedDateStart = new DateTimeOffset(plannedAt.Year, plannedAt.Month, plannedAt.Day, 0, 0, 0, plannedAt.Offset).ToUniversalTime();
+        var plannedDateEnd = plannedDateStart.AddDays(1);
+        var hasEmployeeConflict = dbContext.Assignments.Any(assignment =>
+            assignment.EmployeeId == employeeId
+            && assignment.Status != AssignmentStatusValues.Completed
+            && assignment.Status != AssignmentStatusValues.Cancelled
+            && assignment.Shift == shift
+            && assignment.PlannedAt >= plannedDateStart
+            && assignment.PlannedAt < plannedDateEnd);
+
+        if (hasEmployeeConflict)
+        {
+            errors[fieldName] = ["У сотрудника уже есть активное назначение на эту смену."];
+        }
+    }
+
+    private static bool IsClosedPatrolRequestStatus(string status)
+    {
+        var normalized = status.Trim();
+        return normalized == "Закрыта"
+            || normalized == "Закрыто"
+            || normalized == "Завершена"
+            || normalized == "Завершено"
+            || normalized == "Отменена"
+            || normalized == AssignmentStatusValues.Completed
+            || normalized == AssignmentStatusValues.Cancelled;
+    }
+
+    private static AssignmentDto MapAssignment(AssignmentEntity assignment) =>
+        new(
+            assignment.Id,
+            assignment.PatrolRequestId,
+            assignment.EmployeeId,
+            assignment.Employee?.FullName ?? assignment.PatrolRequest?.EmployeeName ?? string.Empty,
+            assignment.RouteId,
+            assignment.Route?.Name ?? assignment.PatrolRequest?.RouteName ?? string.Empty,
+            assignment.Shift,
+            assignment.Status,
+            assignment.PlannedAt,
+            assignment.StartedAt,
+            assignment.FinishedAt,
+            assignment.ProgressPercent,
+            assignment.PlannedAt.ToLocalTime().ToString("HH:mm"));
+
+    public IReadOnlyList<RouteDto> GetRoutes(bool includeArchived = false) =>
         dbContext.Routes
             .AsNoTracking()
             .Include(route => route.Points)
-            .Where(route => !route.IsArchived)
+            .Where(route => includeArchived || !route.IsArchived)
             .OrderBy(route => route.Name)
             .AsEnumerable()
             .Select(route => MapRoute(route))
@@ -88,7 +859,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             Id = Guid.NewGuid(),
             Name = request.Name.Trim(),
             Description = NormalizeOptionalText(request.Description),
-            Territory = NormalizeOptionalText(request.Territory, "Промзона Север"),
+            Territory = NormalizeOptionalText(request.Territory, "Без территории"),
             Status = NormalizeOptionalText(request.Status, "Активен"),
             Duration = NormalizeOptionalText(request.Duration, "00:30"),
             Distance = NormalizeOptionalText(request.Distance, "0 км"),
@@ -100,6 +871,64 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
 
         dbContext.Routes.Add(route);
         dbContext.SaveChanges();
+
+        return new CreateRouteResult(MapRoute(route), new Dictionary<string, string[]>());
+    }
+
+    public CreateRouteResult CreateRouteWithPoints(CreateRouteWithPointsDto request)
+    {
+        IReadOnlyList<CreateRoutePointDto> points = request.Points ?? [];
+        var errors = ValidateRoute(request.Route.Name);
+        AddRoutePointPayloadErrors(errors, points);
+        if (errors.Count > 0)
+        {
+            return new CreateRouteResult(null, errors);
+        }
+
+        using var transaction = dbContext.Database.BeginTransaction();
+        var route = new RouteEntity
+        {
+            Id = Guid.NewGuid(),
+            Name = request.Route.Name.Trim(),
+            Description = NormalizeOptionalText(request.Route.Description),
+            Territory = NormalizeOptionalText(request.Route.Territory, "Без территории"),
+            Status = NormalizeOptionalText(request.Route.Status, "Активен"),
+            Duration = NormalizeOptionalText(request.Route.Duration, "00:30"),
+            Distance = NormalizeOptionalText(request.Route.Distance, "0 км"),
+            Periodicity = NormalizeOptionalText(request.Route.Periodicity, "По заявке"),
+            VersionNo = 1,
+            IsArchived = IsArchivedStatus(request.Route.Status),
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        dbContext.Routes.Add(route);
+
+        var sequenceNo = 1;
+        foreach (var pointRequest in points)
+        {
+            var point = new RoutePointEntity
+            {
+                Id = Guid.NewGuid(),
+                RouteId = route.Id,
+                SequenceNo = sequenceNo++,
+                Name = pointRequest.Name.Trim(),
+                Zone = NormalizeOptionalText(pointRequest.Zone, route.Territory),
+                Type = NormalizeOptionalText(pointRequest.Type, "NFC"),
+                Tag = NormalizeOptionalText(pointRequest.Tag),
+                Interval = NormalizeOptionalText(pointRequest.Interval, "00:10"),
+                ExpectedTime = NormalizeOptionalText(pointRequest.ExpectedTime, "00:05"),
+                Status = NormalizeOptionalText(pointRequest.Status, "Активна"),
+                NfcCode = NormalizeOptionalText(pointRequest.Tag),
+                IsRequired = IsActivePointStatus(pointRequest.Status),
+                RequiresPhoto = pointRequest.RequiresPhoto
+            };
+
+            route.Points.Add(point);
+        }
+
+        route.VersionNo += points.Count;
+        dbContext.SaveChanges();
+        transaction.Commit();
 
         return new CreateRouteResult(MapRoute(route), new Dictionary<string, string[]>());
     }
@@ -120,7 +949,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
 
         route.Name = request.Name.Trim();
         route.Description = NormalizeOptionalText(request.Description);
-        route.Territory = NormalizeOptionalText(request.Territory, "Промзона Север");
+        route.Territory = NormalizeOptionalText(request.Territory, "Без территории");
         route.Status = NormalizeOptionalText(request.Status, "Активен");
         route.Duration = NormalizeOptionalText(request.Duration, "00:30");
         route.Distance = NormalizeOptionalText(request.Distance, "0 км");
@@ -158,6 +987,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
         }
 
         var errors = ValidateRoutePoint(request.Name);
+        AddRoutePointNfcUniquenessError(errors, routeId, request.Tag);
         if (errors.Count > 0)
         {
             return new CreateRoutePointResult(null, null, errors);
@@ -197,6 +1027,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
         }
 
         var errors = ValidateRoutePoint(request.Name);
+        AddRoutePointNfcUniquenessError(errors, routeId, request.Tag, pointId);
         if (errors.Count > 0)
         {
             return new UpdateRoutePointResult(null, null, errors);
@@ -288,6 +1119,9 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             PersonnelNo = request.PersonnelNo.Trim(),
             Position = NormalizeOptionalText(request.Position, "Маршрутный обходчик"),
             Department = NormalizeOptionalText(request.Department, "Территория"),
+            EmployeeGroup = NormalizeOptionalText(request.EmployeeGroup),
+            HiredAt = request.HiredAt,
+            BirthDate = request.BirthDate,
             Status = NormalizeOptionalText(request.Status, "Активен"),
             Shift = NormalizeOptionalText(request.Shift, "День"),
             HasMobileAccount = request.HasMobileAccount,
@@ -319,6 +1153,9 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
         employee.PersonnelNo = request.PersonnelNo.Trim();
         employee.Position = NormalizeOptionalText(request.Position, "Маршрутный обходчик");
         employee.Department = NormalizeOptionalText(request.Department, "Территория");
+        employee.EmployeeGroup = NormalizeOptionalText(request.EmployeeGroup);
+        employee.HiredAt = request.HiredAt;
+        employee.BirthDate = request.BirthDate;
         employee.Status = NormalizeOptionalText(request.Status, "Активен");
         employee.Shift = NormalizeOptionalText(request.Shift, "День");
         employee.HasMobileAccount = request.HasMobileAccount;
@@ -381,7 +1218,10 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
         }
 
         var shouldBind = employeeScope == "all" || (request.BindEmployee && boundEmployees.Length > 0);
-        var temporaryPassword = request.TemporaryPassword ? CreateTemporaryPassword() : null;
+        var explicitPassword = NormalizeOptionalText(request.Password);
+        var hasExplicitPassword = !string.IsNullOrWhiteSpace(explicitPassword);
+        var temporaryPassword = !hasExplicitPassword && request.TemporaryPassword ? CreateTemporaryPassword() : null;
+        var passwordForHash = hasExplicitPassword ? explicitPassword : temporaryPassword ?? CreateTemporaryPassword();
         var now = DateTimeOffset.UtcNow;
         var accountEntity = new MobileAccountEntity
         {
@@ -390,17 +1230,17 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             EmployeeScope = employeeScope,
             BoundEmployees = shouldBind ? boundEmployees : [],
             Role = NormalizeOptionalText(request.Role, "Маршрутный обходчик"),
-            Status = shouldBind ? "Активен" : "Не привязан",
+            Status = NormalizeCreateMobileAccountStatus(request.Status, shouldBind),
             Session = "-",
             LastSeenAt = null,
-            Device = request.RestrictToBoundDevice ? "Ожидает привязки" : "Любое устройство",
+            Device = (request.RestrictToLinkedDevices ?? request.RestrictToBoundDevice) ? "Ожидает привязки" : "Любое устройство",
             Version = "-",
             CreatedAt = now,
             PasswordHash = string.Empty,
-            PasswordResetRequired = true,
+            PasswordResetRequired = request.RequirePasswordChange ?? !hasExplicitPassword,
             LastPasswordResetAt = temporaryPassword is null ? null : now
         };
-        accountEntity.PasswordHash = MobilePasswordHasher.HashPassword(accountEntity, temporaryPassword ?? CreateTemporaryPassword());
+        accountEntity.PasswordHash = MobilePasswordHasher.HashPassword(accountEntity, passwordForHash);
         AddInitialMobileAccountBindings(accountEntity);
 
         dbContext.MobileAccounts.Add(accountEntity);
@@ -640,6 +1480,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
                 session.Id,
                 session.MobileAccountId,
                 session.Status,
+                session.DeviceId,
                 session.Device,
                 session.Platform,
                 session.AppVersion,
@@ -681,7 +1522,10 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
     {
         var employee = ResolveEmployee(request);
         var route = ResolveRoute(request);
-        var errors = ValidateCreateRequest(request, employee, route);
+        var sourceResultExists = request.SourceResultId is null
+            || dbContext.PatrolResults.Any(result => result.Id == request.SourceResultId.Value);
+        var plannedAt = ResolveRequestPlannedAt(request);
+        var errors = ValidateCreateRequest(request, employee, route, sourceResultExists, plannedAt);
 
         if (errors.Count > 0)
         {
@@ -697,11 +1541,12 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             EmployeeName = employee.FullName,
             RouteId = route!.Id,
             RouteName = route.Name,
+            SourceResultId = request.SourceResultId,
             ScheduledDate = request.ScheduledDate,
             ScheduledTime = request.ScheduledTime,
             NotifyEmployee = request.NotifyEmployee,
             NotificationText = NormalizeOptionalText(request.NotificationText),
-            Status = request.NotifyEmployee ? "Отправлена" : "Новая",
+            Status = "Назначена",
             CreatedAt = now,
             Description = NormalizeOptionalText(request.Description)
         };
@@ -714,12 +1559,23 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             PatrolRequestId = requestEntity.Id,
             EmployeeId = employee.Id,
             RouteId = route.Id,
-            Shift = employee.Shift,
-            Status = request.NotifyEmployee ? "Ожидает" : "Назначена",
-            PlannedAt = CombinePlannedAt(request.ScheduledDate, request.ScheduledTime),
+            Shift = NormalizeOptionalText(request.Shift, employee.Shift),
+            Status = request.NotifyEmployee ? AssignmentStatusValues.Waiting : AssignmentStatusValues.Assigned,
+            PlannedAt = plannedAt!.Value,
             ProgressPercent = 0,
             LockVersion = 0
         });
+
+        AddMobileNotificationForEmployee(
+                employee.Id,
+                "patrolRequest",
+                "Новая заявка на обход",
+                string.IsNullOrWhiteSpace(requestEntity.NotificationText)
+                    ? BuildAssignmentNotificationText(employee.FullName, route.Name, plannedAt.Value)
+                    : requestEntity.NotificationText,
+                "patrolRequest",
+                requestEntity.Id.ToString(),
+                $"patrol-request:{requestEntity.Id}");
 
         dbContext.SaveChanges();
 
@@ -729,14 +1585,18 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
     private int CalculateShiftCoveragePercent()
     {
         var employeesOnShift = dbContext.Employees.Count(employee => employee.Status == "На смене" || employee.Status == "Активен");
-        var totalEmployees = dbContext.Employees.Count();
-
-        if (totalEmployees == 0)
+        if (employeesOnShift == 0)
         {
             return 0;
         }
 
-        return (int)Math.Round(employeesOnShift / (double)totalEmployees * 100);
+        var assignedEmployees = dbContext.Assignments
+            .Where(assignment => AssignmentStatusValues.Active.Contains(assignment.Status))
+            .Select(assignment => assignment.EmployeeId)
+            .Distinct()
+            .Count();
+
+        return Math.Clamp((int)Math.Round(assignedEmployees / (double)employeesOnShift * 100), 0, 100);
     }
 
     private EmployeeEntity? ResolveEmployee(CreatePatrolRequestDto request)
@@ -768,7 +1628,9 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
     private Dictionary<string, string[]> ValidateCreateRequest(
         CreatePatrolRequestDto request,
         EmployeeEntity? employee,
-        RouteEntity? route)
+        RouteEntity? route,
+        bool sourceResultExists,
+        DateTimeOffset? plannedAt)
     {
         var errors = new Dictionary<string, string[]>();
 
@@ -789,14 +1651,44 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
         {
             errors["route"] = ["Маршрут не найден."];
         }
+        else if (!RouteHasActivePoints(route.Id))
+        {
+            errors["route"] = ["В маршруте нет активных точек обхода."];
+        }
+
+        if (!sourceResultExists)
+        {
+            errors["sourceResultId"] = ["Результат обхода не найден."];
+        }
 
         if (request.ScheduledDate == default)
         {
             errors["scheduledDate"] = ["Укажите дату обхода."];
         }
 
+        if (request.ScheduledTime is null && plannedAt is null)
+        {
+            errors["scheduledTime"] = ["Укажите время старта обхода."];
+        }
+
+        var shift = string.IsNullOrWhiteSpace(request.Shift) ? employee?.Shift : request.Shift;
+        if (string.IsNullOrWhiteSpace(shift))
+        {
+            errors["shift"] = ["Укажите смену назначения."];
+        }
+
+        if (employee is not null && plannedAt is not null && !string.IsNullOrWhiteSpace(shift))
+        {
+            AddEmployeeAssignmentConflictError(errors, "employee", employee.Id, plannedAt.Value, shift);
+        }
+
         return errors;
     }
+
+    private bool RouteHasActivePoints(Guid routeId) =>
+        dbContext.RoutePoints.Any(point =>
+            point.RouteId == routeId
+            && point.Status != "Черновик");
 
     private static Dictionary<string, string[]> ValidateRoute(string? name)
     {
@@ -818,6 +1710,57 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
         }
 
         return errors;
+    }
+
+    private static void AddRoutePointPayloadErrors(
+        Dictionary<string, string[]> errors,
+        IReadOnlyList<CreateRoutePointDto> points)
+    {
+        var seenNfc = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        for (var index = 0; index < points.Count; index += 1)
+        {
+            var point = points[index];
+            foreach (var error in ValidateRoutePoint(point.Name))
+            {
+                errors[$"points[{index}].{error.Key}"] = error.Value;
+            }
+
+            var nfcCode = NormalizeOptionalText(point.Tag);
+            if (string.IsNullOrWhiteSpace(nfcCode))
+            {
+                continue;
+            }
+
+            if (seenNfc.TryGetValue(nfcCode, out var firstIndex))
+            {
+                errors[$"points[{index}].tag"] =
+                    [$"NFC-метка уже указана в точке №{firstIndex + 1} этого маршрута."];
+            }
+            else
+            {
+                seenNfc[nfcCode] = index;
+            }
+        }
+    }
+
+    private void AddRoutePointNfcUniquenessError(Dictionary<string, string[]> errors, Guid routeId, string? tag, Guid? pointId = null)
+    {
+        var nfcCode = NormalizeOptionalText(tag);
+        if (string.IsNullOrWhiteSpace(nfcCode))
+        {
+            return;
+        }
+
+        var exists = dbContext.RoutePoints.Any(point =>
+            point.RouteId == routeId
+            && point.NfcCode == nfcCode
+            && (!pointId.HasValue || point.Id != pointId.Value));
+
+        if (exists)
+        {
+            errors["tag"] = ["NFC-метка уже используется в другой точке этого маршрута."];
+        }
     }
 
     private static Dictionary<string, string[]> ValidateEmployee(string? fullName, string? personnelNo)
@@ -856,12 +1799,54 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
     {
         var errors = new Dictionary<string, string[]>();
         var scope = NormalizeEmployeeScope(request.EmployeeScope);
+        var login = NormalizeLogin(request.Login);
+        var password = NormalizeOptionalText(request.Password);
+        var hasExplicitPassword = !string.IsNullOrWhiteSpace(password);
+
+        if (string.IsNullOrWhiteSpace(login))
+        {
+            errors["login"] = ["Введите логин"];
+        }
+
+        if (hasExplicitPassword && password.Length < 8)
+        {
+            errors["password"] = ["Пароль должен содержать минимум 8 символов"];
+        }
+
+        if (hasExplicitPassword && password != NormalizeOptionalText(request.ConfirmPassword))
+        {
+            errors["password"] = ["Пароли должны совпадать"];
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Status) && NormalizeCreateMobileAccountStatus(request.Status, shouldBind: true) == string.Empty)
+        {
+            errors["status"] = ["Некорректный статус аккаунта"];
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Language) && request.Language is not ("ru" or "en"))
+        {
+            errors["language"] = ["Некорректный язык интерфейса"];
+        }
+
         if (scope != "all" && request.BindEmployee && NormalizeEmployeeNames(request.Employee).Length == 0)
         {
             errors["employee"] = ["Укажите сотрудника для привязки или выберите доступ ко всем сотрудникам."];
         }
 
         return errors;
+    }
+
+    private static string NormalizeCreateMobileAccountStatus(string? status, bool shouldBind)
+    {
+        var normalized = NormalizeOptionalText(status).ToLowerInvariant();
+        return normalized switch
+        {
+            "" => shouldBind ? "Активен" : "Не привязан",
+            "active" or "активен" => "Активен",
+            "inactive" or "неактивен" or "не привязан" => "Не привязан",
+            "blocked" or "заблокирован" => "Заблокирован",
+            _ => string.Empty
+        };
     }
 
     private Dictionary<string, string[]> ValidateUpdateMobileAccount(Guid accountId, UpdateMobileAccountDto request)
@@ -1093,6 +2078,55 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
         });
     }
 
+    private void AddMobileNotificationForEmployee(
+        Guid employeeId,
+        string type,
+        string title,
+        string message,
+        string entityType,
+        string entityId,
+        string idempotencyKey)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var accounts = dbContext.MobileAccounts
+            .Include(account => account.EmployeeBindings)
+            .Include(account => account.Sessions)
+            .Where(account => account.Status != "Заблокирован")
+            .Where(account => account.EmployeeBindings.Any(binding => binding.EmployeeId == employeeId && binding.DetachedAt == null))
+            .ToList();
+
+        foreach (var account in accounts)
+        {
+            if (dbContext.MobileNotifications.Any(notification =>
+                notification.MobileAccountId == account.Id && notification.IdempotencyKey == idempotencyKey))
+            {
+                continue;
+            }
+
+            var pushToken = account.Sessions
+                .Where(session => session.RevokedAt == null && session.PushTokenRevokedAt == null)
+                .OrderByDescending(session => session.PushTokenRegisteredAt)
+                .Select(session => session.PushToken)
+                .FirstOrDefault(token => !string.IsNullOrWhiteSpace(token)) ?? string.Empty;
+
+            dbContext.MobileNotifications.Add(new MobileNotificationEntity
+            {
+                Id = Guid.NewGuid(),
+                MobileAccountId = account.Id,
+                EmployeeId = employeeId,
+                Type = NormalizeOptionalText(type, "patrolRequest"),
+                Title = NormalizeOptionalText(title, "Уведомление"),
+                Message = NormalizeOptionalText(message, "Появилась новая заявка."),
+                EntityType = NormalizeOptionalText(entityType),
+                EntityId = NormalizeOptionalText(entityId),
+                IdempotencyKey = NormalizeOptionalText(idempotencyKey),
+                PushStatus = string.IsNullOrWhiteSpace(pushToken) ? "waitingSync" : "queued",
+                PushTokenSnapshot = pushToken,
+                CreatedAt = now
+            });
+        }
+    }
+
     private static string CreateTemporaryPassword()
     {
         const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
@@ -1121,12 +2155,27 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
         return new DateTimeOffset(dateTime, TimeZoneInfo.Local.GetUtcOffset(dateTime)).ToUniversalTime();
     }
 
+    private static DateTimeOffset? ResolveRequestPlannedAt(CreatePatrolRequestDto request)
+    {
+        if (request.PlannedAt is not null && request.PlannedAt != default)
+        {
+            return request.PlannedAt.Value.ToUniversalTime();
+        }
+
+        if (request.ScheduledDate == default || request.ScheduledTime is null)
+        {
+            return null;
+        }
+
+        return CombinePlannedAt(request.ScheduledDate, request.ScheduledTime);
+    }
+
     private static RouteDto MapRoute(RouteEntity route) =>
         new(
             route.Id,
             route.Name,
             route.Description,
-            NormalizeOptionalText(route.Territory, "Промзона Север"),
+            NormalizeOptionalText(route.Territory, "Без территории"),
             NormalizeOptionalText(route.Status, route.IsArchived ? "Архив" : "Активен"),
             NormalizeOptionalText(route.Duration, "00:30"),
             NormalizeOptionalText(route.Distance, "0 км"),
@@ -1142,7 +2191,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             point.Id,
             point.SequenceNo,
             point.Name,
-            NormalizeOptionalText(point.Zone, "Контрольная зона"),
+            NormalizeOptionalText(point.Zone, "Без зоны"),
             NormalizeOptionalText(point.Type, point.NfcCode is null ? "Ручной контроль" : "NFC"),
             NormalizeOptionalText(point.Tag, point.NfcCode ?? string.Empty),
             NormalizeOptionalText(point.Interval, "00:10"),
@@ -1159,6 +2208,9 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             employee.PersonnelNo,
             employee.Position,
             employee.Department,
+            employee.EmployeeGroup,
+            employee.HiredAt,
+            employee.BirthDate,
             employee.Status,
             employee.Shift,
             employee.HasMobileAccount,
@@ -1172,6 +2224,7 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
             request.EmployeeName,
             request.RouteId,
             request.RouteName,
+            request.SourceResultId,
             request.ScheduledDate,
             request.ScheduledTime,
             request.NotifyEmployee,
@@ -1215,6 +2268,9 @@ internal sealed class EfPatrolStore(Patrol360DbContext dbContext) :
 
     private static string NormalizeOptionalText(string? value, string fallback) =>
         string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+
+    private static string BuildAssignmentNotificationText(string employeeName, string routeName, DateTimeOffset plannedAt) =>
+        $"{employeeName}, назначен обход \"{routeName}\" на {plannedAt.ToLocalTime():dd.MM.yyyy HH:mm}. Подтвердите получение задания в мобильном приложении.";
 
     private static bool IsArchivedStatus(string? status) =>
         string.Equals(NormalizeOptionalText(status), "Архив", StringComparison.OrdinalIgnoreCase);

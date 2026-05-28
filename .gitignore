@@ -12,7 +12,18 @@ TestResults/
 test-results/
 playwright-report/
 coverage/
+backups/
 *.user
 *.suo
 *.log
 *.binlog
+infra/docker/certs/*.crt
+infra/docker/certs/*.key
+infra/docker/certs/*.csr
+infra/docker/certs/*.srl
+infra/docker/certs/*.pfx
+infra/docker/secrets/
+Мобильное приложение/secrets/
+*firebase-adminsdk*.json
+firebase-service-account*.json
+google-services.json

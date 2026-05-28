@@ -1,4 +1,6 @@
 import { RouteDirectoryPanel } from "../components/routes/RouteDirectoryPanel";
+import { RouteCreateModal } from "../components/routes/RouteCreateModal";
+import { RouteEditModal } from "../components/routes/RouteEditModal";
 import { RoutePointDrawer } from "../components/routes/RoutePointDrawer";
 import { RouteWorkspacePanel } from "../components/routes/RouteWorkspacePanel";
 import { useRoutesEditor } from "../hooks/useRoutesEditor";
@@ -8,6 +10,8 @@ import type { RouteDirectoryItem, RouteFormPayload, RouteMode, RoutePointFormPay
 type MaybePromise<T> = T | Promise<T>;
 
 export function RoutesScreen({
+  canAssign = true,
+  canManage = true,
   selectedRouteId,
   selectedPointId,
   mode,
@@ -19,6 +23,7 @@ export function RoutesScreen({
   onSelectRoute,
   onSelectPoint,
   onCreateRoute,
+  onCreateRouteWithPoints,
   onUpdateRoute,
   onDeleteRoute,
   onCreateRoutePoint,
@@ -26,6 +31,8 @@ export function RoutesScreen({
   onDeleteRoutePoint,
   onMoveRoutePoint,
 }: {
+  canAssign?: boolean;
+  canManage?: boolean;
   selectedRouteId: string;
   selectedPointId: string;
   mode: RouteMode;
@@ -37,6 +44,7 @@ export function RoutesScreen({
   onSelectRoute: (id: string) => void;
   onSelectPoint: (id: string) => void;
   onCreateRoute: (payload: RouteFormPayload) => MaybePromise<string>;
+  onCreateRouteWithPoints: (routePayload: RouteFormPayload, pointPayloads: RoutePointFormPayload[]) => MaybePromise<string>;
   onUpdateRoute: (routeId: string, payload: RouteFormPayload) => MaybePromise<void>;
   onDeleteRoute: (routeId: string) => MaybePromise<void>;
   onCreateRoutePoint: (routeId: string, payload: RoutePointFormPayload) => MaybePromise<string>;
@@ -54,6 +62,7 @@ export function RoutesScreen({
     selectedPoint,
     selectedRoute,
   } = useRoutesEditor({
+    canManage,
     routeCreateIntent,
     routeDirectory,
     selectedPointId,
@@ -66,12 +75,14 @@ export function RoutesScreen({
     onSelectPoint,
     onSelectRoute,
     onUpdateRoute,
+    onCreateRouteWithPoints,
     onUpdateRoutePoint,
   });
 
   return (
     <div className="routes-screen">
       <RouteDirectoryPanel
+        canManage={canManage}
         routes={routeDirectory}
         selectedRouteId={selectedRoute?.id ?? ""}
         onCreateRoute={actions.startRouteCreate}
@@ -79,9 +90,11 @@ export function RoutesScreen({
       />
 
       <RouteWorkspacePanel
+        canAssign={canAssign}
+        canManage={canManage}
         mode={mode}
         routeDraft={routeDraft}
-        routeEditorMode={routeEditorMode}
+        routeEditorMode={null}
         routePoints={routePoints}
         selectedPointId={selectedPointId}
         selectedRoute={selectedRoute}
@@ -89,7 +102,14 @@ export function RoutesScreen({
         onChangeRouteDraft={actions.setRouteDraft}
         onDeleteRoute={actions.deleteSelectedRoute}
         onModeChange={onModeChange}
-        onMovePoint={onMoveRoutePoint}
+        onMovePoint={(routeId, pointId, direction) => {
+          if (!canManage) {
+            onNotify("Недостаточно прав для управления маршрутами.");
+            return;
+          }
+
+          return onMoveRoutePoint(routeId, pointId, direction);
+        }}
         onNavigate={onNavigate}
         onSelectPoint={actions.selectPointForEdit}
         onStartPointCreate={actions.startPointCreate}
@@ -98,7 +118,25 @@ export function RoutesScreen({
         onSubmitRoute={actions.submitRoute}
       />
 
+      <RouteCreateModal
+        draft={routeDraft}
+        isOpen={routeEditorMode === "create"}
+        onCancel={actions.cancelRouteEdit}
+        onChange={actions.setRouteDraft}
+        onSubmit={actions.submitRouteWithPoints}
+      />
+
+      <RouteEditModal
+        draft={routeDraft}
+        isOpen={routeEditorMode === "edit"}
+        onCancel={actions.cancelRouteEdit}
+        onChange={actions.setRouteDraft}
+        onDelete={actions.deleteSelectedRoute}
+        onSubmit={actions.submitRoute}
+      />
+
       <RoutePointDrawer
+        canManage={canManage}
         draft={pointDraft}
         editorMode={pointEditorMode}
         point={selectedPoint}

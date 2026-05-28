@@ -35,6 +35,10 @@ public sealed record CreateRouteDto(
     string? Distance,
     string? Periodicity);
 
+public sealed record CreateRouteWithPointsDto(
+    CreateRouteDto Route,
+    IReadOnlyList<CreateRoutePointDto> Points);
+
 public sealed record UpdateRouteDto(
     string Name,
     string? Description,

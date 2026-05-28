@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Patrol360.Api.Authorization;
 using Patrol360.Application;
 using Patrol360.Contracts;
 
@@ -9,9 +10,11 @@ namespace Patrol360.Api.Controllers;
 public sealed class PatrolRequestsController(IPatrolRequestService patrolRequestService) : ControllerBase
 {
     [HttpGet]
+    [RequirePermission("requests.read")]
     public ActionResult<IReadOnlyList<PatrolRequestDto>> List() => Ok(patrolRequestService.GetRequests());
 
     [HttpPost]
+    [RequirePermission("requests.write")]
     public ActionResult<PatrolRequestDto> Create(CreatePatrolRequestDto request)
     {
         var result = patrolRequestService.Create(request);

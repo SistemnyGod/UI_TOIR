@@ -1,11 +1,14 @@
 import { EmptyState, Panel } from "../ui";
-import type { ScheduleCell, ScheduleMode } from "../../types";
+import type { DataSourceStatus, ScheduleCell, ScheduleMode } from "../../types";
 
 interface ScheduleGridPanelProps {
+  errorMessage?: string;
   mode: ScheduleMode;
   scheduleCells: ScheduleCell[];
+  status: DataSourceStatus;
   weekDays: string[];
   selectedCellId: string;
+  onRetry: () => void | Promise<void>;
   onSelectCell: (id: string) => void;
   onNotify: (message: string) => void;
 }
@@ -47,10 +50,13 @@ function getStateLabel(state: ScheduleCell["state"]) {
 }
 
 export function ScheduleGridPanel({
+  errorMessage,
   mode,
   scheduleCells,
+  status,
   weekDays,
   selectedCellId,
+  onRetry,
   onSelectCell,
   onNotify,
 }: ScheduleGridPanelProps) {
@@ -59,7 +65,22 @@ export function ScheduleGridPanel({
   return (
     <Panel title="Плановый обход - расписание" note="Недельная сетка по сотрудникам, сменам и маршрутам">
       {mode === "week" ? (
-        scheduleCells.length > 0 ? (
+        status === "loading" ? (
+          <EmptyState
+            title="Расписание загружается"
+            description="Получаем сотрудников и маршруты из backend API."
+          />
+        ) : status === "error" && scheduleCells.length === 0 ? (
+          <EmptyState
+            title="Расписание не загружено"
+            description={errorMessage || "Backend API не вернул справочники для формирования плана."}
+            action={
+              <button className="button ghost" onClick={() => void onRetry()} type="button">
+                Повторить загрузку
+              </button>
+            }
+          />
+        ) : scheduleCells.length > 0 ? (
           <div className="schedule-grid" role="grid" aria-label="Недельный план обходов">
             <div className="schedule-header">Сотрудник</div>
             <div className="schedule-header">Смена</div>
@@ -82,15 +103,15 @@ export function ScheduleGridPanel({
           </div>
         ) : (
           <EmptyState
-            title="План обходов пуст"
-            description="После подключения данных здесь появится недельная сетка назначений по сотрудникам, маршрутам и сменам."
+            title="Нет данных для расписания"
+            description="Добавьте сотрудников и маршруты, затем создайте плановый обход через выбранную ячейку."
             action={
               <button
                 className="button ghost"
-                onClick={() => onNotify("Создание правила планового обхода будет доступно после справочников")}
+                onClick={() => onNotify("Для формирования плана нужны сотрудники и маршруты в backend-справочниках")}
                 type="button"
               >
-                Создать правило
+                Что нужно подключить
               </button>
             }
           />
@@ -98,10 +119,32 @@ export function ScheduleGridPanel({
       ) : null}
 
       {mode === "month" ? (
-        <EmptyState
-          title="Месячный план пуст"
-          description="Календарь будет строиться из правил планового обхода и исключений."
-        />
+        scheduleCells.length > 0 ? (
+          <div className="month-grid">
+            {weekDays.map((day) => {
+              const dayCells = scheduleCells.filter((cell) => cell.day === day);
+              const plannedCells = dayCells.filter((cell) => cell.state !== "empty");
+              const firstCell = plannedCells[0] ?? dayCells[0];
+              return (
+                <button
+                  className={`month-day ${plannedCells.length > 0 ? "planned" : "empty"}`}
+                  disabled={!firstCell}
+                  key={day}
+                  onClick={() => firstCell && onSelectCell(firstCell.id)}
+                  type="button"
+                >
+                  <strong>{day}</strong>
+                  <span>{plannedCells.length > 0 ? `${plannedCells.length} обходов` : "свободно"}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState
+            title="Месячный план не сформирован"
+            description="Сначала загрузите сотрудников и маршруты для недельной сетки."
+          />
+        )
       ) : null}
 
       {mode === "exceptions" ? (
@@ -131,7 +174,7 @@ function ScheduleGridRow({
     <>
       <div className="schedule-employee">
         <strong>{row.employee}</strong>
-        <span>ID: {row.employeeId}</span>
+        <span>ID: {row.employeeId.slice(0, 8)}</span>
       </div>
       <div className="schedule-shifts">{row.shift}</div>
       {weekDays.map((day) => {
@@ -154,8 +197,8 @@ function ScheduleGridRow({
             onClick={() => onSelectCell(cell.id)}
             type="button"
           >
-            <strong>{cell.route}</strong>
-            <span>{cell.zone}</span>
+            <strong>{cell.state === "empty" ? "Свободно" : cell.route}</strong>
+            <span>{cell.state === "empty" ? "Создать обход" : cell.zone}</span>
             <small>{getStateLabel(cell.state)}</small>
           </button>
         );

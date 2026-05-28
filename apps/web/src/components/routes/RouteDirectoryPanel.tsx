@@ -1,13 +1,15 @@
 import { useMemo, useState } from "react";
 import type { RouteDirectoryItem } from "../../types";
-import { Chip, EmptyState, Panel } from "../ui";
+import { EmptyState, Panel } from "../ui";
 
 export function RouteDirectoryPanel({
+  canManage = true,
   routes,
   selectedRouteId,
   onCreateRoute,
   onSelectRoute,
 }: {
+  canManage?: boolean;
   routes: RouteDirectoryItem[];
   selectedRouteId: string;
   onCreateRoute: () => void;
@@ -20,9 +22,7 @@ export function RouteDirectoryPanel({
     const visibleRoutes = showArchive ? routes : routes.filter((route) => route.status !== "Архив");
     if (!query) return visibleRoutes;
 
-    return visibleRoutes.filter((route) =>
-      [route.name, route.territory, route.status].some((value) => value.toLowerCase().includes(query)),
-    );
+    return visibleRoutes.filter((route) => [route.name, route.territory].some((value) => value.toLowerCase().includes(query)));
   }, [routes, search, showArchive]);
 
   return (
@@ -30,7 +30,7 @@ export function RouteDirectoryPanel({
       title="Маршруты"
       note="Локальный справочник маршрутов и архив"
       actions={
-        <button className="button primary compact-button" onClick={onCreateRoute} type="button">
+        <button className="button primary compact-button" disabled={!canManage} onClick={onCreateRoute} type="button">
           + Создать
         </button>
       }
@@ -39,7 +39,7 @@ export function RouteDirectoryPanel({
         Поиск маршрутов
         <input
           onChange={(event) => setSearch(event.currentTarget.value)}
-          placeholder="Название, территория, статус"
+          placeholder="Название или территория"
           value={search}
         />
       </label>
@@ -54,7 +54,6 @@ export function RouteDirectoryPanel({
             >
               <strong>{route.name}</strong>
               <span>{route.territory}</span>
-              <Chip>{route.status}</Chip>
               <em>{route.points.length} точек</em>
             </button>
           ))}
@@ -64,7 +63,7 @@ export function RouteDirectoryPanel({
           title="Маршрутов нет"
           description="Создайте первый маршрут, затем добавьте точки и NFC-метки."
           action={
-            <button className="button ghost" onClick={onCreateRoute} type="button">
+            <button className="button ghost" disabled={!canManage} onClick={onCreateRoute} type="button">
               Создать маршрут
             </button>
           }

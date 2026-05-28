@@ -18,6 +18,10 @@ RUN dotnet publish apps/api/Patrol360.Api.csproj --configuration Release --no-re
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 

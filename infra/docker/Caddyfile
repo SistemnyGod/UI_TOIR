@@ -1,0 +1,39 @@
+{
+	auto_https off
+}
+
+(patrol360_routes) {
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+
+	handle /health/* {
+		reverse_proxy api:8080
+	}
+
+	handle {
+		reverse_proxy web:80
+	}
+}
+
+:80 {
+	log {
+		output stdout
+		format json
+	}
+
+	import patrol360_routes
+}
+
+:443 {
+	log {
+		output stdout
+		format json
+	}
+
+	tls /etc/caddy/certs/patrol360.local.crt /etc/caddy/certs/patrol360.local.key
+
+	import patrol360_routes
+}

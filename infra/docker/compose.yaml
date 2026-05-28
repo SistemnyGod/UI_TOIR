@@ -1,18 +1,30 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   api:
     build:
       context: ../..
       dockerfile: apps/api/Dockerfile
     container_name: patrol360-api
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__Patrol360: Host=postgres;Port=5432;Database=patrol360;Username=patrol360;Password=patrol360_dev
-    ports:
-      - "5080:8080"
+      ConnectionStrings__Patrol360: Host=postgres;Port=5432;Database=${POSTGRES_DB:-patrol360};Username=${POSTGRES_USER:-patrol360};Password=${POSTGRES_PASSWORD:-patrol360_dev}
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; grep -q \"200 OK\" <&3'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging: *default-logging
     profiles:
       - app
 
@@ -23,20 +35,82 @@ services:
       args:
         VITE_API_BASE_URL: ""
     container_name: patrol360-web
+    restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/ >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    logging: *default-logging
+    profiles:
+      - app
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: apps/worker/Dockerfile
+    container_name: patrol360-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      DOTNET_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ConnectionStrings__Patrol360: Host=postgres;Port=5432;Database=${POSTGRES_DB:-patrol360};Username=${POSTGRES_USER:-patrol360};Password=${POSTGRES_PASSWORD:-patrol360_dev}
+      Firebase__ServiceAccountPath: /run/secrets/firebase-service-account.json
+    volumes:
+      - ./secrets/firebase-service-account.json:/run/secrets/firebase-service-account.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'Patrol360.Worker.dll' && test -s /run/secrets/firebase-service-account.json"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging: *default-logging
+    profiles:
+      - app
+
+  proxy:
+    image: caddy:2.8-alpine
+    container_name: patrol360-proxy
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
     ports:
+      - "80:80"
+      - "443:443"
       - "5173:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs/patrol360.local.crt:/etc/caddy/certs/patrol360.local.crt:ro
+      - ./certs/patrol360.local.key:/etc/caddy/certs/patrol360.local.key:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    logging: *default-logging
     profiles:
       - app
 
   postgres:
     image: postgres:17-alpine
     container_name: patrol360-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: patrol360
-      POSTGRES_USER: patrol360
-      POSTGRES_PASSWORD: patrol360_dev
+      POSTGRES_DB: ${POSTGRES_DB:-patrol360}
+      POSTGRES_USER: ${POSTGRES_USER:-patrol360}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-patrol360_dev}
     ports:
       - "5432:5432"
     volumes:
@@ -46,32 +120,56 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    logging: *default-logging
 
   redis:
     image: redis:7-alpine
     container_name: patrol360-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging: *default-logging
 
   rabbitmq:
     image: rabbitmq:3-management
     container_name: patrol360-rabbitmq
+    restart: unless-stopped
     ports:
       - "5672:5672"
       - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+    logging: *default-logging
 
   minio:
     image: minio/minio:latest
     container_name: patrol360-minio
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: patrol360
-      MINIO_ROOT_PASSWORD: patrol360_dev_password
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-patrol360}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-patrol360_dev_password}
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
       - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    logging: *default-logging
 
 volumes:
   postgres-data:

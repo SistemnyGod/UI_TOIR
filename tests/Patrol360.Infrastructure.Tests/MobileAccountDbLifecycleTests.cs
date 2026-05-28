@@ -101,6 +101,7 @@ public sealed class MobileAccountDbLifecycleTests
             .Build();
 
         services.AddPatrolInfrastructure(configuration);
+        services.AddSingleton<IConfiguration>(configuration);
 
         return services.BuildServiceProvider();
     }

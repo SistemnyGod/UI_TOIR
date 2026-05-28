@@ -37,6 +37,7 @@ describe("patrol requests repository", () => {
     expect(requests[0]).toMatchObject({
       id: "request-1",
       title: "REQ-001",
+      status: "Назначена",
       source: "API",
       route: "North route",
       employee: "Ivan Petrov",
@@ -44,6 +45,33 @@ describe("patrol requests repository", () => {
       scheduledTime: "09:30",
       notifyEmployee: true,
     });
+  });
+
+  it("maps closed patrol request statuses for dashboard filtering", async () => {
+    const repository = createApiPatrolRequestsRepository({
+      fetcher: async () =>
+        jsonResponse([
+          {
+            id: "request-closed",
+            number: "REQ-002",
+            employeeId: "employee-1",
+            employeeName: "Ivan Petrov",
+            routeId: "route-1",
+            routeName: "North route",
+            scheduledDate: "2026-05-18",
+            scheduledTime: "09:30",
+            notifyEmployee: false,
+            notificationText: "",
+            status: "Закрыта",
+            createdAt: "2026-05-18T08:00:00Z",
+            description: "",
+          },
+        ]),
+    });
+
+    const requests = await repository.getPatrolRequests();
+
+    expect(requests[0].status).toBe("Закрыта");
   });
 });
 

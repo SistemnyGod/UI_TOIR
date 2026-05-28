@@ -2,6 +2,7 @@ export interface DashboardSummaryDto {
   activePatrols: number;
   delayedPatrols: number;
   issues: number;
+  completedToday: number;
   shiftCoveragePercent: number;
   completedPoints: number;
   totalPoints: number;
@@ -9,14 +10,136 @@ export interface DashboardSummaryDto {
   totalEmployees: number;
 }
 
+export interface LoginRequestDto {
+  login: string;
+  password: string;
+  rememberMe?: boolean;
+}
+
+export interface SessionUserDto {
+  id: string;
+  login: string;
+  displayName: string;
+  roles: string[];
+  permissions: string[];
+}
+
+export interface AuthSessionDto {
+  user: SessionUserDto;
+  accessToken: string;
+  expiresAt: string;
+}
+
+export interface SystemNotificationDto {
+  id: string;
+  source: string;
+  title: string;
+  message: string;
+  tone: "info" | "success" | "warning" | "danger";
+  createdAt: string;
+  entityType: string | null;
+  entityId: string | null;
+  navigateTo: string | null;
+}
+
+export interface SiteUserDto {
+  id: string;
+  login: string;
+  displayName: string;
+  roles: string[];
+  status: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+  permissions: string[];
+}
+
+export interface RoleDto {
+  id: string;
+  code: string;
+  name: string;
+  permissions: string[];
+}
+
+export interface CreateSiteUserDto {
+  login: string;
+  displayName: string;
+  roleCodes: string[];
+  status: string;
+}
+
+export type UpdateSiteUserDto = CreateSiteUserDto;
+
+export interface SiteUserCreatedDto {
+  user: SiteUserDto;
+  temporaryPassword: string;
+}
+
+export interface ResetSiteUserPasswordDto {
+  temporaryPassword: string;
+  resetAt: string;
+}
+
 export interface AssignmentDto {
   id: string;
+  patrolRequestId: string;
+  employeeId: string;
   employeeName: string;
+  routeId: string;
   routeName: string;
   shift: string;
   status: string;
+  plannedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
   progressPercent: number;
   eta: string;
+}
+
+export interface CreateAssignmentDto {
+  patrolRequestId?: string;
+  employeeId?: string;
+  routeId?: string;
+  plannedAt?: string;
+  plannedEndAt?: string;
+  priority?: "high" | "medium" | "low";
+  shift?: string;
+  notifyEmployee?: boolean;
+  notificationText?: string;
+  comment?: string;
+}
+
+export interface CompleteAssignmentDto {
+  actualAt?: string;
+  status?: string;
+  routePointId?: string;
+  comment?: string;
+  issueType?: string;
+  severity?: string;
+  photos?: number;
+  pointResults?: CompleteAssignmentPointDto[];
+  photoAttachments?: CompleteAssignmentPhotoDto[];
+}
+
+export interface CompleteAssignmentPointDto {
+  routePointId: string;
+  status?: string;
+  comment?: string;
+  issueType?: string;
+  severity?: string;
+  photos?: number;
+  photoAttachments?: CompleteAssignmentPhotoDto[];
+}
+
+export interface CompleteAssignmentPhotoDto {
+  fileName: string;
+  contentType: string;
+  dataBase64: string;
+}
+
+export interface AssignmentCommandResultDto {
+  assignment: AssignmentDto;
+  changed: boolean;
+  message: string;
 }
 
 export interface RouteDto {
@@ -57,6 +180,11 @@ export interface CreateRouteDto {
   periodicity: string;
 }
 
+export interface CreateRouteWithPointsDto {
+  route: CreateRouteDto;
+  points: CreateRoutePointDto[];
+}
+
 export type UpdateRouteDto = CreateRouteDto;
 
 export interface CreateRoutePointDto {
@@ -82,6 +210,9 @@ export interface EmployeeDto {
   personnelNo: string;
   position: string;
   department: string;
+  employeeGroup: string;
+  hiredAt: string | null;
+  birthDate: string | null;
   status: string;
   shift: string;
   hasMobileAccount: boolean;
@@ -93,6 +224,9 @@ export interface CreateEmployeeDto {
   personnelNo: string;
   position: string;
   department: string;
+  employeeGroup: string;
+  hiredAt: string | null;
+  birthDate: string | null;
   status: string;
   shift: string;
   hasMobileAccount: boolean;
@@ -121,6 +255,23 @@ export interface MobileAccountCreatedDto {
   temporaryPassword: string | null;
 }
 
+export interface InventoryDbHealthIssueDto {
+  key: string;
+  severity: "critical" | "warning" | "info" | string;
+  entity: string;
+  count: number;
+  title: string;
+  description: string;
+}
+
+export interface InventoryDbHealthDto {
+  createdAt: string;
+  issueCount: number;
+  criticalCount: number;
+  warningCount: number;
+  issues: InventoryDbHealthIssueDto[];
+}
+
 export interface CreateMobileAccountDto {
   employee?: string;
   employeeScope: "selected" | "all";
@@ -129,11 +280,30 @@ export interface CreateMobileAccountDto {
   bindEmployee: boolean;
   restrictToBoundDevice: boolean;
   temporaryPassword: boolean;
+  password?: string;
+  confirmPassword?: string;
+  status?: string;
+  language?: string;
+  requirePasswordChange?: boolean;
+  restrictToLinkedDevices?: boolean;
 }
 
 export interface AttachMobileAccountEmployeeDto {
   employeeId?: string;
   employeeName?: string;
+}
+
+export interface AvailableEmployeeDto {
+  id: string;
+  fullName: string;
+  role: string;
+  department: string;
+  area: string;
+  avatarUrl: string | null;
+}
+
+export interface BindMobileAccountEmployeesDto {
+  employeeIds: string[];
 }
 
 export interface ResetMobileAccountPasswordDto {
@@ -151,6 +321,7 @@ export interface MobileAccountSessionDto {
   id: string;
   accountId: string;
   status: string;
+  deviceId: string;
   device: string;
   platform: string;
   appVersion: string;
@@ -174,6 +345,7 @@ export interface PatrolRequestDto {
   employeeName: string;
   routeId: string | null;
   routeName: string;
+  sourceResultId: string | null;
   scheduledDate: string;
   scheduledTime: string | null;
   notifyEmployee: boolean;
@@ -188,9 +360,895 @@ export interface CreatePatrolRequestDto {
   routeName?: string;
   employeeId?: string;
   routeId?: string;
+  sourceResultId?: string;
   scheduledDate: string;
   scheduledTime?: string | null;
+  plannedAt?: string | null;
+  shift?: string | null;
   notifyEmployee: boolean;
   notificationText?: string;
   description?: string;
+}
+
+export interface ResultListItemDto {
+  id: string;
+  assignmentId: string | null;
+  status: string;
+  pointId: string | null;
+  point: string;
+  employeeId: string | null;
+  employee: string;
+  routeId: string | null;
+  route: string;
+  territory: string;
+  shift: string;
+  plannedAt: string;
+  actualAt: string;
+  deviation: string;
+  comment: string;
+  photos: number;
+  issueType: string;
+  severity: string;
+}
+
+export interface IssueDto {
+  id: string;
+  type: string;
+  severity: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface AttachmentMetadataDto {
+  id: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export interface ResultDetailDto extends ResultListItemDto {
+  issues: IssueDto[];
+  attachments: AttachmentMetadataDto[];
+  chronology: string[];
+}
+
+export interface MobileSyncConflictListItemDto {
+  clientOperationId: string;
+  mobileAccountId: string;
+  accountLogin: string;
+  commandType: string;
+  entityType: string;
+  entityServerId?: string | null;
+  message: string;
+  payloadSnapshot?: unknown;
+  createdAtServer: string;
+  status: "open" | "accepted" | "rejected" | "repeatRequested" | string;
+}
+
+export interface MobileSyncConflictDetailDto extends MobileSyncConflictListItemDto {
+  entityLocalId?: string | null;
+  responseSnapshot?: unknown;
+  createdAtLocal: string;
+  attemptCount: number;
+  operationStatus: string;
+  resolutionComment?: string | null;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
+}
+
+export interface MobileSyncConflictResolutionRequestDto {
+  status: "accepted" | "rejected" | "repeatRequested";
+  comment?: string | null;
+}
+
+export interface MobileSyncConflictResolutionDto {
+  clientOperationId: string;
+  status: string;
+  comment?: string | null;
+  resolvedBy: string;
+  resolvedAt: string;
+}
+
+export interface InventoryOverviewDto {
+  employeesTotal: number;
+  itemsTotal: number;
+  categoriesTotal: number;
+  unitsTotal: number;
+  warehousesTotal: number;
+  criticalStockItems: number;
+  activeIssues: number;
+  activeCustodyRecords: number;
+  ppeCardsTotal: number;
+  reportsReady: number;
+  attention: InventoryAttentionDto[];
+}
+
+export interface InventoryAttentionDto {
+  id: string;
+  title: string;
+  description: string;
+  tone: string;
+  target: string;
+}
+
+export interface InventoryListResponseDto<T> {
+  rows: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+}
+
+export interface InventoryItemDto {
+  id: string;
+  name: string;
+  sku: string;
+  categoryId: string | null;
+  category: string;
+  unitId: string | null;
+  unit: string;
+  balance: number;
+  stockPhysical: number;
+  stockReserved: number;
+  stockAvailable: number;
+  stockStatus: string;
+  minStockQty: number | null;
+  itemKind: string;
+  normItemName: string;
+  actualItemName: string;
+  brandName: string;
+  modelName: string;
+  article: string;
+  protectionClass: string;
+  clothingSize: string;
+  heightSize: string;
+  shoeSize: string;
+  headSize: string;
+  gloveSize: string;
+  respiratorSize: string;
+  defaultLifeMonths: number | null;
+  defaultUnitPriceMinor: number | null;
+  trackingType: string;
+  comment: string;
+  isConsumable: boolean;
+  trackLife: boolean;
+  isActive: boolean;
+  status: string;
+}
+
+export interface InventoryFacetDto {
+  id: string;
+  name: string;
+  count: number;
+}
+
+export interface InventoryItemFacetsDto {
+  total: number;
+  active: number;
+  inactive: number;
+  categories: InventoryFacetDto[];
+  units: InventoryFacetDto[];
+  trackingTypes: InventoryFacetDto[];
+  itemKinds: InventoryFacetDto[];
+}
+
+export interface InventoryStockBalanceDto {
+  itemId: string;
+  itemName: string;
+  warehouseId: string;
+  warehouseName: string;
+  balance: number;
+  stockPhysical: number;
+  stockReserved: number;
+  stockAvailable: number;
+  unit: string;
+  status: string;
+}
+
+export interface InventoryDocumentDto {
+  id: string;
+  number: string;
+  type: string;
+  employeeName: string;
+  status: string;
+  createdAt: string;
+  itemName?: string;
+  warehouseName?: string;
+  quantity?: number;
+  unit?: string;
+  comment?: string;
+}
+
+export interface InventoryCustodyRecordDto {
+  id: string;
+  documentId: string;
+  employeeName: string;
+  itemName: string;
+  warehouseName: string;
+  quantity: number;
+  status: string;
+  issuedAt: string;
+  closedAt: string | null;
+  itemId: string;
+  warehouseId: string;
+  unit: string;
+  comment: string;
+}
+
+export interface InventoryCustodyDocumentDto {
+  id: string;
+  number: string;
+  employeeName: string;
+  status: string;
+  createdAt: string;
+  recordsCount: number;
+}
+
+export interface InventoryCustodyDocumentDetailDto {
+  id: string;
+  number: string;
+  employeeId: string;
+  employeeName: string;
+  employeePersonnelNo: string;
+  employeeDepartment: string;
+  status: string;
+  createdAt: string;
+  closedAt: string | null;
+  records: InventoryCustodyRecordDto[];
+  history: InventoryHistoryDto[];
+}
+
+
+export interface InventoryCustodyModuleOptionsDto {
+  employees: InventoryEmployeeDto[];
+  items: InventoryItemDto[];
+  warehouses: InventoryReferenceOptionDto[];
+  custodyCategories: InventoryReferenceOptionDto[];
+  documentStatuses: string[];
+  recordStatuses: string[];
+}
+
+export interface CreateInventoryCustodyRecordDto {
+  employeeId: string;
+  itemId: string;
+  warehouseId: string;
+  quantity: number;
+  comment?: string | null;
+  documentId?: string | null;
+}
+
+export interface UpdateInventoryStatusDto {
+  status: string;
+  comment?: string | null;
+}
+
+export interface InventoryPpeSummaryDto {
+  total: number;
+  active: number;
+  issued: number;
+  issuing: number;
+  notIssued: number;
+  partial: number;
+  problem: number;
+  returned: number;
+  writtenOff: number;
+  linesTotal: number;
+  issuedLines: number;
+  notIssuedLines: number;
+}
+
+export interface InventoryPpeCardsResponseDto extends InventoryListResponseDto<InventoryPpeCardDto> {
+  summary: InventoryPpeSummaryDto;
+  filteredSummary: InventoryPpeSummaryDto;
+}
+
+export interface InventoryPpeCardDto {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  position: string;
+  status: string;
+  linesCount: number;
+}
+
+export interface InventoryPpeCardDetailDto {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  employeePersonnelNo: string;
+  employeeDepartment: string;
+  position: string;
+  status: string;
+  createdAt: string;
+  comment?: string;
+  lines: InventoryPpeCardLineDto[];
+}
+
+export interface InventoryPpeCardLineDto {
+  id: string;
+  itemId: string;
+  itemName: string;
+  warehouseId: string | null;
+  warehouseName: string;
+  quantity: number;
+  unit: string;
+  unitPriceMinor?: number | null;
+  amountMinor?: number;
+  status: string;
+  issuedAt: string | null;
+  dueAt: string | null;
+  modelDescription: string;
+  normPoint: string;
+}
+
+export interface InventoryPpeMovementDto {
+  cardId: string;
+  lineId: string;
+  employeeId: string;
+  employeeName: string;
+  employeePersonnelNo: string;
+  employeeDepartment: string;
+  itemId: string;
+  itemName: string;
+  quantity: number;
+  unit: string;
+  unitPriceMinor?: number | null;
+  amountMinor: number;
+  status: string;
+  createdAt: string;
+  issuedAt: string | null;
+  returnedAt: string | null;
+  writtenOffAt: string | null;
+  dueAt: string | null;
+  comment: string;
+}
+
+export interface InventoryPpeModuleOptionsDto {
+  employees: InventoryEmployeeDto[];
+  items: InventoryItemDto[];
+  settings: InventorySettingsDto;
+  statuses: string[];
+}
+
+export interface CreateInventoryPpeCardDto {
+  employeeId: string;
+  comment?: string | null;
+}
+
+export interface UpsertInventoryPpeCardLineDto {
+  itemId: string;
+  warehouseId?: string | null;
+  quantity: number;
+  status?: string | null;
+  dueAt?: string | null;
+  comment?: string | null;
+}
+
+export interface InventoryReportDto {
+  id: string;
+  title: string;
+  description: string;
+  format: string;
+}
+
+export interface InventoryHistoryDto {
+  id: string;
+  entityType: string;
+  action: string;
+  description: string;
+  actor: string;
+  createdAt: string;
+}
+
+export interface InventoryExportJobDto {
+  id: string;
+  reportId: string;
+  format: string;
+  status: string;
+  createdAt: string;
+  downloadName: string;
+}
+
+export interface InventoryLegacyImportTableDto {
+  tableName: string;
+  sourceRows: number;
+  insertedRows: number;
+  updatedRows: number;
+  skippedRows: number;
+  status: string;
+  message: string;
+}
+
+export interface InventoryLegacyImportRunDto {
+  id: string;
+  dryRun: boolean;
+  status: string;
+  createdAt: string;
+  completedAt: string | null;
+  tablesScanned: number;
+  rowsRead: number;
+  rowsInserted: number;
+  rowsUpdated: number;
+  rowsSkipped: number;
+  error: string;
+  stockChecksum: string;
+  tables: InventoryLegacyImportTableDto[];
+}
+
+export interface InventoryEmployeeImportResultDto {
+  rowsRead: number;
+  insertedRows: number;
+  updatedRows: number;
+  skippedRows: number;
+  errors: string[];
+}
+
+export interface InventoryEmployeeImportPreviewDto {
+  rowsRead: number;
+  newRows: number;
+  updateRows: number;
+  skippedRows: number;
+  newPositions: string[];
+  newDepartments: string[];
+  newGroups: string[];
+  errors: string[];
+  rows: InventoryEmployeeImportPreviewRowDto[];
+  previewToken: string;
+}
+
+export interface InventoryEmployeeImportPreviewRowDto {
+  rowNumber: number;
+  fullName: string;
+  personnelNo: string;
+  position: string;
+  department: string;
+  employeeGroup: string;
+  hiredAt: string | null;
+  birthDate: string | null;
+  changeType: "create" | "update" | "error" | string;
+  error: string;
+}
+
+export interface InventoryEmployeeDto {
+  id: string;
+  fullName: string;
+  personnelNo: string;
+  position: string;
+  department: string;
+  status: string;
+  employeeGroup: string;
+  hiredAt: string | null;
+  birthDate: string | null;
+}
+
+export interface InventoryUserDto {
+  id: string;
+  login: string;
+  displayName: string;
+  status: string;
+  roles: string[];
+}
+
+export interface InventorySystemLogDto {
+  id: string;
+  entityType: string;
+  entityId: string | null;
+  action: string;
+  details: string;
+  actor: string;
+  createdAt: string;
+}
+
+export interface InventoryReferenceOptionDto {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+}
+
+export interface InventoryItemSetDto {
+  id: string;
+  name: string;
+  isActive: boolean;
+  itemsCount: number;
+}
+
+export interface InventoryItemSetDetailDto {
+  id: string;
+  name: string;
+  isActive: boolean;
+  items: InventoryItemSetItemDto[];
+}
+
+export interface InventoryItemSetItemDto {
+  id: string;
+  quantity: number;
+  item: InventoryItemDto;
+}
+
+export interface InventoryPositionNormDto {
+  id: string;
+  positionName: string;
+  itemId: string;
+  itemName: string;
+  quantity: number;
+  lifeMonths: number | null;
+}
+
+export interface CreateInventorySimpleReferenceDto {
+  name: string;
+}
+
+export interface UpdateInventorySimpleReferenceDto {
+  name: string;
+  isArchived: boolean;
+}
+
+export interface CreateInventoryItemSetDto {
+  name: string;
+}
+
+export interface UpdateInventoryItemSetDto {
+  name: string;
+  isArchived: boolean;
+}
+
+export interface UpsertInventoryItemSetItemsDto {
+  items: UpsertInventoryItemSetItemDto[];
+}
+
+export interface UpsertInventoryItemSetItemDto {
+  itemId: string;
+  quantity: number;
+}
+
+export interface UpsertInventoryPositionNormDto {
+  positionName: string;
+  itemId: string;
+  quantity: number;
+  lifeMonths?: number | null;
+}
+
+export interface CreateInventoryCategoryDto {
+  name: string;
+  parentId?: string | null;
+}
+
+export interface UpdateInventoryCategoryDto {
+  name: string;
+  parentId?: string | null;
+  isArchived: boolean;
+}
+
+export interface CreateInventoryUnitDto {
+  name: string;
+  symbol: string;
+}
+
+export interface UpdateInventoryUnitDto {
+  name: string;
+  symbol: string;
+}
+
+export interface CreateInventoryWarehouseDto {
+  name: string;
+  isDefault: boolean;
+}
+
+export interface UpdateInventoryWarehouseDto {
+  name: string;
+  isDefault: boolean;
+  isArchived: boolean;
+}
+
+export interface UpsertInventoryItemDto {
+  name: string;
+  sku?: string | null;
+  categoryId?: string | null;
+  unitId?: string | null;
+  itemKind?: string | null;
+  normItemName?: string | null;
+  actualItemName?: string | null;
+  brandName?: string | null;
+  modelName?: string | null;
+  article?: string | null;
+  protectionClass?: string | null;
+  clothingSize?: string | null;
+  heightSize?: string | null;
+  shoeSize?: string | null;
+  headSize?: string | null;
+  gloveSize?: string | null;
+  respiratorSize?: string | null;
+  defaultLifeMonths?: number | null;
+  defaultUnitPriceMinor?: number | null;
+  minStockQty?: number | null;
+  isConsumable: boolean;
+  trackLife: boolean;
+  trackingType?: string | null;
+  comment?: string | null;
+  isActive: boolean;
+}
+
+export interface InventoryInitialStockDto {
+  itemId: string;
+  warehouseId: string;
+  quantity: number;
+  movedAt?: string | null;
+  note?: string | null;
+}
+
+export interface CreateInventoryOperationDto {
+  type: string;
+  itemId: string;
+  warehouseId: string;
+  quantity: number;
+  employeeId?: string | null;
+  movedAt?: string | null;
+  comment?: string | null;
+}
+
+export interface InventoryOperationsModuleOptionsDto {
+  employees: InventoryEmployeeDto[];
+  items: InventoryItemDto[];
+  settings: InventorySettingsDto;
+  stock: InventoryStockBalanceDto[];
+  operationTypes: string[];
+}
+
+export interface InventorySettingsDto {
+  categories: InventoryReferenceOptionDto[];
+  units: InventoryReferenceOptionDto[];
+  warehouses: InventoryReferenceOptionDto[];
+  custodyCategories: InventoryReferenceOptionDto[];
+  returnReasons: InventoryReferenceOptionDto[];
+  writeOffReasons: InventoryReferenceOptionDto[];
+  itemSets: InventoryItemSetDto[];
+  positionNorms: InventoryPositionNormDto[];
+  employeePositions: InventoryReferenceOptionDto[];
+  employeeDepartments: InventoryReferenceOptionDto[];
+  employeeGroups: InventoryReferenceOptionDto[];
+}
+
+export interface EmuListResponseDto<T> {
+  rows: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+}
+
+export interface EmuReferenceDto {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface EmuSettingsDto {
+  sections: EmuReferenceDto[];
+  waitReasons: EmuReferenceDto[];
+  notCompletedReasons: EmuReferenceDto[];
+  workTemplates: EmuWorkTemplateDto[];
+  favoriteEmployees: EmuFavoriteEmployeeDto[];
+}
+
+export interface EmuWorkTemplateDto {
+  id: string;
+  name: string;
+  description: string;
+  sectionId: string | null;
+  sectionName: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface EmuFavoriteEmployeeDto {
+  id: string;
+  employeeId: string;
+  fullName: string;
+  personnelNo: string;
+  position: string;
+  department: string;
+  status: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface EmuMetricDto {
+  label: string;
+  value: string;
+  delta: string;
+  tone: string;
+  icon: string;
+}
+
+export interface EmuDashboardDto {
+  metrics: EmuMetricDto[];
+  activeWork: EmuWorkSessionDto[];
+  forgottenWork: EmuWorkSessionDto[];
+  recentEvents: EmuAuditEventDto[];
+  weekPlan: EmuPlanTaskDto[];
+}
+
+export interface EmuWorkSessionDto {
+  id: string;
+  workNumber: string;
+  workDate: string;
+  sectionId: string;
+  sectionName: string;
+  taskDescription: string;
+  status: string;
+  resultStatus: string;
+  resultComment: string;
+  arrivedAt: string;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  deleteReason: string;
+  workMinutes: number;
+  waitingMinutes: number;
+  otherWorkMinutes: number;
+  rowVersion: number;
+  isCarriedOver: boolean;
+  employees: EmuWorkSessionEmployeeDto[];
+}
+
+export interface EmuWorkSessionChangesDto {
+  serverTime: string;
+  changedSessions: EmuWorkSessionDto[];
+  deletedSessionIds: string[];
+}
+
+export interface EmuWorkSessionEmployeeDto {
+  id: string;
+  employeeId: string;
+  fullNameSnapshot: string;
+  positionSnapshot: string;
+  status: string;
+  arrivedAt: string;
+  finishedAt: string | null;
+  workMinutes: number;
+  waitingMinutes: number;
+  otherWorkMinutes: number;
+}
+
+export interface EmuAuditEventDto {
+  id: string;
+  workSessionId: string | null;
+  planTaskId: string | null;
+  eventType: string;
+  fromStatus: string;
+  toStatus: string;
+  comment: string;
+  actor: string;
+  createdAt: string;
+}
+
+export interface EmuCreateWorkSessionDto {
+  workDate: string;
+  sectionId: string;
+  arrivedAt?: string | null;
+  employeeIds: string[];
+  taskDescription: string;
+  planTaskId?: string | null;
+}
+
+export interface EmuUpdateWorkSessionDto {
+  sectionId: string;
+  taskDescription: string;
+  rowVersion: number;
+  comment: string;
+  workDate?: string | null;
+  arrivedAt?: string | null;
+  employeeIds?: string[] | null;
+}
+
+export interface EmuPauseWorkSessionDto {
+  employeeIds: string[];
+  waitReasonId: string;
+  startedAt?: string | null;
+  comment: string;
+  markAsOtherWork?: boolean;
+  rowVersion: number;
+}
+
+export interface EmuResumeWorkSessionDto {
+  employeeIds: string[];
+  resumedAt?: string | null;
+  comment: string;
+  rowVersion: number;
+}
+
+export interface EmuCompleteWorkSessionDto {
+  employeeIds?: string[] | null;
+  completedAt?: string | null;
+  resultStatus: string;
+  resultComment: string;
+  notCompletedReasonId?: string | null;
+  rowVersion: number;
+}
+
+export interface EmuDeleteWorkSessionDto {
+  reason: string;
+  rowVersion: number;
+}
+
+export interface EmuPlanTaskDto {
+  id: string;
+  title: string;
+  description: string;
+  plannedDate: string;
+  sectionId: string | null;
+  sectionName: string;
+  status: string;
+  approvalStatus: string;
+  priority: string;
+  isRecurring: boolean;
+  recurrenceRule: string;
+  createdAt: string;
+  updatedAt: string;
+  rowVersion: number;
+  employeeIds: string[];
+}
+
+export interface EmuPlanTaskChangesDto {
+  serverTime: string;
+  changedTasks: EmuPlanTaskDto[];
+  deletedTaskIds: string[];
+}
+
+export interface EmuUpsertPlanTaskDto {
+  title: string;
+  description: string;
+  plannedDate: string;
+  sectionId?: string | null;
+  employeeIds: string[];
+  priority: string;
+  isRecurring: boolean;
+  recurrenceRule: string;
+  rowVersion?: number;
+}
+
+export interface EmuApprovePlanTaskDto {
+  approved: boolean;
+  comment: string;
+  rowVersion: number;
+}
+
+export interface EmuApproveWeekDto {
+  weekStart: string;
+  comment: string;
+}
+
+export interface EmuCreateReferenceDto {
+  name: string;
+  sortOrder?: number;
+}
+
+export interface EmuUpdateReferenceDto {
+  name: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface EmuCreateWorkTemplateDto {
+  name: string;
+  description: string;
+  sectionId?: string | null;
+  sortOrder?: number;
+}
+
+export interface EmuUpdateWorkTemplateDto {
+  name: string;
+  description: string;
+  sectionId?: string | null;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface EmuAddFavoriteEmployeeDto {
+  employeeId: string;
 }
