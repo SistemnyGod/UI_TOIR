@@ -6,6 +6,7 @@ import type {
   InventoryEmployeeDto,
   InventoryItemDto,
   InventoryListResponseDto,
+  InventorySettingsDto,
 } from "../../api/contracts";
 import { CustodyState } from "./custody/custodyCommon";
 import { CustodyComposer } from "./custody/custodyComposer";
@@ -26,6 +27,7 @@ type InventoryCustodyScreenProps = {
   onNotify: (message: string) => void;
   onReload: () => Promise<void>;
   records?: InventoryListResponseDto<InventoryCustodyRecordDto>;
+  settings?: InventorySettingsDto;
 };
 
 export function InventoryCustodyScreen({
@@ -37,6 +39,7 @@ export function InventoryCustodyScreen({
   onNotify,
   onReload,
   records,
+  settings,
 }: InventoryCustodyScreenProps) {
   const inventoryRepository = useInventoryRepository();
   const documentRows = documents?.rows ?? [];
@@ -55,6 +58,7 @@ export function InventoryCustodyScreen({
     downloadFile,
     openDocument,
     openRecordHistory,
+    transferRecord,
     updateDocumentState,
     updateRecordStatus,
   } = useCustodyRepositoryActions({ onNotify, onReload, setDrawer });
@@ -95,7 +99,7 @@ export function InventoryCustodyScreen({
 
       {!loading && !error ? (
         <>
-          <CustodyComposer employees={employees} items={items} onNotify={onNotify} onReload={onReload} />
+          <CustodyComposer employees={employees} items={items} onNotify={onNotify} onReload={onReload} settings={settings} />
 
           {!documentRows.length && !recordRows.length ? (
             <CustodyState
@@ -105,7 +109,21 @@ export function InventoryCustodyScreen({
             />
           ) : (
             <>
-              <div className="inventory-custody-workspace">
+              <CustodyRecordsSection
+                busyAction={busyAction}
+                documents={documentRows}
+                employees={employees}
+                items={items}
+                onArchiveRecord={archiveRecord}
+                onOpenRecordHistory={openRecordHistory}
+                onSelectEmployee={setSelectedEmployeeId}
+                onTransferRecord={transferRecord}
+                onUpdateRecordStatus={updateRecordStatus}
+                records={recordRows}
+                selectedEmployeeId={selectedEmployeeId}
+              />
+
+              <div className="inventory-custody-workspace inventory-custody-workspace-secondary">
                 <CustodyJournal
                   busyAction={busyAction}
                   documents={documentRows}
@@ -118,18 +136,6 @@ export function InventoryCustodyScreen({
                 />
                 <CustodyInspector document={selectedDocument} onDownload={downloadFile} onOpenDocument={openDocument} />
               </div>
-
-              <CustodyRecordsSection
-                busyAction={busyAction}
-                documents={documentRows}
-                employees={employees}
-                onArchiveRecord={archiveRecord}
-                onOpenRecordHistory={openRecordHistory}
-                onSelectEmployee={setSelectedEmployeeId}
-                onUpdateRecordStatus={updateRecordStatus}
-                records={recordRows}
-                selectedEmployeeId={selectedEmployeeId}
-              />
             </>
           )}
         </>
@@ -138,10 +144,12 @@ export function InventoryCustodyScreen({
       <CustodyDetailDrawer
         busyAction={busyAction}
         drawer={drawer}
+        employees={employees}
         onArchiveRecord={archiveRecord}
         onClose={() => setDrawer(null)}
         onDownload={downloadFile}
         onOpenRecordHistory={openRecordHistory}
+        onTransferRecord={transferRecord}
         onUpdateDocumentState={updateDocumentState}
         onUpdateRecordStatus={updateRecordStatus}
       />

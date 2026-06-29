@@ -138,6 +138,30 @@ public sealed class InventoryControllerTests
         Assert.False(workflow.LastPpeCardsQuery.IncludeLines);
     }
 
+    [Fact]
+    public void TransferCustodyRecordForwardsRequestToWorkflow()
+    {
+        var recordId = Guid.NewGuid();
+        var employeeId = Guid.NewGuid();
+        var workflow = new InventoryWorkflowServiceFake();
+        var controller = CreateController(workflowService: workflow);
+        var request = new TransferInventoryCustodyRecordDto(
+            Guid.Empty,
+            DateTimeOffset.Parse("2026-06-29T09:30:00Z"),
+            "Передача сменщику",
+            ToEmployeeId: employeeId);
+
+        var result = controller.TransferCustodyRecord(recordId, request);
+
+        var record = AssertOk<InventoryCustodyRecordDto>(result.Result);
+        Assert.Equal(recordId, workflow.LastTransferRecordId);
+        Assert.Same(request, workflow.LastTransferRequest);
+        Assert.NotNull(workflow.LastTransferRequest);
+        Assert.Equal(employeeId, workflow.LastTransferRequest.ToEmployeeId);
+        Assert.Equal("Иванов Иван Иванович", record.EmployeeName);
+        Assert.Equal("in_use", record.Status);
+    }
+
     private static InventoryController CreateController(
         IInventoryCatalogQuery? catalogQuery = null,
         IInventoryWorkflowService? workflowService = null) =>
@@ -247,6 +271,8 @@ public sealed class InventoryControllerTests
         public Guid? LastCardId { get; private set; }
         public UpsertInventoryPpeCardLineDto? LastLineRequest { get; private set; }
         public InventoryListQuery? LastPpeCardsQuery { get; private set; }
+        public Guid? LastTransferRecordId { get; private set; }
+        public TransferInventoryCustodyRecordDto? LastTransferRequest { get; private set; }
 
         public override InventoryPpeCardsResponseDto GetPpeCards(InventoryListQuery query)
         {
@@ -279,6 +305,31 @@ public sealed class InventoryControllerTests
                     request.NormPoint ?? "",
                     request.PrintItemName ?? "",
                     request.IssuePeriodText ?? ""),
+                new Dictionary<string, string[]>());
+        }
+
+        public override InventoryCommandResult<InventoryCustodyRecordDto> TransferCustodyRecord(
+            Guid id,
+            TransferInventoryCustodyRecordDto request)
+        {
+            LastTransferRecordId = id;
+            LastTransferRequest = request;
+
+            return new InventoryCommandResult<InventoryCustodyRecordDto>(
+                new InventoryCustodyRecordDto(
+                    id,
+                    Guid.NewGuid(),
+                    "Иванов Иван Иванович",
+                    "Рация",
+                    "",
+                    1,
+                    "in_use",
+                    DateTime.UtcNow,
+                    null,
+                    Guid.NewGuid(),
+                    Guid.Empty,
+                    "шт.",
+                    request.Comment ?? ""),
                 new Dictionary<string, string[]>());
         }
     }
@@ -327,6 +378,7 @@ public sealed class InventoryControllerTests
         public InventoryListResponseDto<InventoryCustodyRecordDto> GetCustodyRecords(InventoryListQuery query) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryCustodyRecordDto> CreateCustodyRecord(CreateInventoryCustodyRecordDto request) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryCustodyRecordDto> UpdateCustodyRecordStatus(Guid id, UpdateInventoryStatusDto request) => throw new NotImplementedException();
+        public virtual InventoryCommandResult<InventoryCustodyRecordDto> TransferCustodyRecord(Guid id, TransferInventoryCustodyRecordDto request) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryCustodyRecordDto> ArchiveCustodyRecord(Guid id) => throw new NotImplementedException();
         public InventoryListResponseDto<InventoryCustodyDocumentDto> GetCustodyDocuments(InventoryListQuery query) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryCustodyDocumentDetailDto> GetCustodyDocument(Guid id) => throw new NotImplementedException();

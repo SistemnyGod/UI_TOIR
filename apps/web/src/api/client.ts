@@ -459,7 +459,7 @@ function normalizeBaseUrl(baseUrl: string) {
 }
 
 function buildUrl(baseUrl: string, path: string) {
-  if (!baseUrl || /^https?:\/\//i.test(path)) {
+  if (!baseUrl || /^(?:https?:|data:|blob:)/i.test(path)) {
     return path;
   }
 

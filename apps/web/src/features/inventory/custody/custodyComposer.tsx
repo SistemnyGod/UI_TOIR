@@ -4,6 +4,7 @@ import { Check, ClipboardCheck, PackageCheck, Plus, Search, ShieldCheck, UserRou
 import type {
   InventoryEmployeeDto,
   InventoryItemDto,
+  InventorySettingsDto,
 } from "../../../api/contracts";
 import { useInventoryRepository } from "../../../repositories/inventoryRepositoryContext";
 import { CUSTODY_ITEM_GROUPS, getCustodyItemGroup, parsePositiveQuantity } from "./custodyCommon";
@@ -21,11 +22,13 @@ export function CustodyComposer({
   items,
   onNotify,
   onReload,
+  settings,
 }: {
   employees: InventoryEmployeeDto[];
   items: InventoryItemDto[];
   onNotify: (message: string) => void;
   onReload: () => Promise<void>;
+  settings?: InventorySettingsDto;
 }) {
   const inventoryRepository = useInventoryRepository();
   const [form, setForm] = useState<RecordForm>(emptyRecordForm);
@@ -36,6 +39,30 @@ export function CustodyComposer({
   const [formError, setFormError] = useState("");
   const [group, setGroup] = useState("all");
   const [condition, setCondition] = useState(CONDITION_OPTIONS[0].value);
+  const [isAddItemOpen, setIsAddItemOpen] = useState(false);
+  const [itemForm, setItemForm] = useState<{
+    brandName: string;
+    comment: string;
+    group: string;
+    modelName: string;
+    name: string;
+    price: string;
+    quantity: string;
+    serialNumber: string;
+    sku: string;
+    unitId: string;
+  }>({
+    brandName: "",
+    comment: "",
+    group: CUSTODY_ITEM_GROUPS[0],
+    modelName: "",
+    name: "",
+    price: "",
+    quantity: "1",
+    serialNumber: "",
+    sku: "",
+    unitId: settings?.units[0]?.id ?? "",
+  });
 
   const activeEmployees = useMemo(
     () => employees.filter((employee) => employee.status !== "archived"),
@@ -124,6 +151,54 @@ export function CustodyComposer({
     }
   }
 
+  async function submitNewItem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const quantity = parsePositiveQuantity(itemForm.quantity);
+    if (!itemForm.name.trim() || !itemForm.sku.trim() || !quantity) {
+      onNotify("Укажите название, идентификатор и количество больше 0");
+      return;
+    }
+    try {
+      setSaving(true);
+      await inventoryRepository.createItem({
+        actualItemName: itemForm.name.trim(),
+        article: itemForm.serialNumber.trim() || itemForm.sku.trim(),
+        brandName: itemForm.brandName.trim() || null,
+        categoryId: null,
+        comment: [`Группа: ${itemForm.group}`, itemForm.serialNumber.trim() ? `Серийный номер: ${itemForm.serialNumber.trim()}` : "", itemForm.comment.trim()].filter(Boolean).join(". "),
+        defaultUnitPriceMinor: parseMoneyMinor(itemForm.price),
+        isActive: true,
+        isConsumable: false,
+        itemKind: itemForm.group,
+        modelName: itemForm.modelName.trim() || null,
+        name: itemForm.name.trim(),
+        sku: itemForm.sku.trim(),
+        trackingType: "custody",
+        trackLife: false,
+        unitId: itemForm.unitId || settings?.units[0]?.id || null,
+      });
+      setItemForm({
+        brandName: "",
+        comment: "",
+        group: CUSTODY_ITEM_GROUPS[0],
+        modelName: "",
+        name: "",
+        price: "",
+        quantity: "1",
+        serialNumber: "",
+        sku: "",
+        unitId: settings?.units[0]?.id ?? "",
+      });
+      setIsAddItemOpen(false);
+      onNotify("Предмет добавлен в учет");
+      await onReload();
+    } catch (error) {
+      onNotify(error instanceof Error ? error.message : "Не удалось добавить предмет");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <section className="inventory-custody-composer" aria-label="Выдача под запись">
       <div className="inventory-custody-step">
@@ -150,6 +225,15 @@ export function CustodyComposer({
       <button className="button primary inventory-custody-submit" type="button" onClick={() => { setFormError(""); setIsOpen(true); }}>
         <Plus size={16} />
         Новая выдача
+      </button>
+
+      <button className="button ghost inventory-custody-submit" type="button" onClick={() => setIsAddItemOpen(true)}>
+        <PackageCheck size={16} />
+        Добавить предмет
+      </button>
+      <button className="button ghost inventory-custody-submit" type="button" onClick={() => onNotify("Справочник списков сейчас работает как группы предметов. Пользовательские списки требуют отдельного backend/API этапа.")}>
+        <ClipboardCheck size={16} />
+        Справочник списков
       </button>
 
       {isOpen
@@ -313,8 +397,82 @@ export function CustodyComposer({
           document.body,
         )
         : null}
+      {isAddItemOpen
+        ? createPortal(
+          <div className="inventory-custody-modal-backdrop" role="presentation" onMouseDown={() => setIsAddItemOpen(false)}>
+            <form className="inventory-custody-modal inventory-custody-add-item-modal" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => void submitNewItem(event)}>
+              <div className="inventory-custody-modal-head">
+                <div>
+                  <span>Справочник предметов</span>
+                  <h2>Добавить предмет под запись</h2>
+                  <p>Предмет появится в выбранной группе со статусом «Свободен». Складской остаток не создается и не проверяется.</p>
+                </div>
+                <button className="button ghost" type="button" onClick={() => setIsAddItemOpen(false)} aria-label="Закрыть">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="inventory-custody-add-item-grid">
+                <label>
+                  Название предмета
+                  <input required value={itemForm.name} onChange={(event) => setItemForm((current) => ({ ...current, name: event.target.value }))} />
+                </label>
+                <label>
+                  Список / группа
+                  <select value={itemForm.group} onChange={(event) => setItemForm((current) => ({ ...current, group: event.target.value }))}>
+                    {CUSTODY_ITEM_GROUPS.map((row) => <option key={row} value={row}>{row}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Идентификатор / инвентарный номер
+                  <input required value={itemForm.sku} onChange={(event) => setItemForm((current) => ({ ...current, sku: event.target.value }))} />
+                </label>
+                <label>
+                  Серийный номер
+                  <input value={itemForm.serialNumber} onChange={(event) => setItemForm((current) => ({ ...current, serialNumber: event.target.value }))} />
+                </label>
+                <label>
+                  Модель / бренд
+                  <input value={itemForm.modelName} onChange={(event) => setItemForm((current) => ({ ...current, modelName: event.target.value }))} />
+                </label>
+                <label>
+                  Цена
+                  <input inputMode="decimal" placeholder="0,00" value={itemForm.price} onChange={(event) => setItemForm((current) => ({ ...current, price: event.target.value }))} />
+                </label>
+                <label>
+                  Количество
+                  <input inputMode="decimal" required value={itemForm.quantity} onChange={(event) => setItemForm((current) => ({ ...current, quantity: event.target.value }))} />
+                </label>
+                <label>
+                  Единица
+                  <select value={itemForm.unitId} onChange={(event) => setItemForm((current) => ({ ...current, unitId: event.target.value }))}>
+                    {(settings?.units ?? []).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+                  </select>
+                </label>
+                <label className="inventory-custody-add-item-wide">
+                  Комментарий
+                  <textarea value={itemForm.comment} onChange={(event) => setItemForm((current) => ({ ...current, comment: event.target.value }))} />
+                </label>
+              </div>
+              <div className="inventory-custody-modal-footer">
+                <button className="button ghost" type="button" onClick={() => setIsAddItemOpen(false)}>Отмена</button>
+                <button className="button primary" disabled={saving} type="submit">
+                  <Plus size={16} />
+                  Добавить предмет
+                </button>
+              </div>
+            </form>
+          </div>,
+          document.body,
+        )
+        : null}
     </section>
   );
+}
+
+function parseMoneyMinor(value: string) {
+  if (!value.trim()) return 0;
+  const amount = Number(value.trim().replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) : 0;
 }
 
 function getInitials(value: string) {

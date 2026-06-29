@@ -250,6 +250,7 @@ export function InventoryScreen({
             onNotify={onNotify}
             onReload={reload}
             records={state.custodyRecords}
+            settings={state.settings}
           />
         ) : null}
         </main>

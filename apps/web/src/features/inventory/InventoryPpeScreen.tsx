@@ -70,6 +70,7 @@ export function InventoryPpeScreen({
   const total = cardsView?.total ?? rows.length;
   const pageStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const pageEnd = total === 0 ? 0 : Math.min(total, pageStart + rows.length - 1);
+  const hasJournalFilters = Boolean(query.trim() || departmentFilter || statusFilter || priceFilter);
   const {
     addWizardLines,
     busyAction,
@@ -325,7 +326,11 @@ export function InventoryPpeScreen({
                 </button>
               </div>
               {!visibleRows.length ? (
-                <PpeState kind="empty" text="Карточки появятся после создания или импорта данных." title="Карточек СИЗ нет" />
+                <PpeState
+                  kind="empty"
+                  text={hasJournalFilters ? "Измените поиск, подразделение, статус или фильтр цены." : "Карточки появятся после создания или импорта данных."}
+                  title={hasJournalFilters ? "По фильтрам карточек нет" : "Карточек СИЗ нет"}
+                />
               ) : (
                 <CardJournalTable
                   busyAction={busyAction}

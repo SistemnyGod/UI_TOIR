@@ -226,11 +226,11 @@ function formatPointActualTime(actualAt?: string) {
   return parsed.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
 
-function isImageAttachment(attachment: PatrolResultAttachment) {
+export function isImageAttachment(attachment: PatrolResultAttachment) {
   return attachment.contentType?.startsWith("image/") || /\.(jpg|jpeg|png|webp|gif)$/i.test(attachment.fileName ?? "");
 }
 
-function isVideoAttachment(attachment: PatrolResultAttachment) {
+export function isVideoAttachment(attachment: PatrolResultAttachment) {
   return attachment.contentType?.startsWith("video/") || /\.(mp4|webm|mov|m4v)$/i.test(attachment.fileName ?? "");
 }
 

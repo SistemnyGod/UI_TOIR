@@ -677,3 +677,6 @@
   width: 136px;
 }
 
+.inventory-custody-action-backdrop {
+  z-index: 3000 !important;
+}

@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { Archive, History, Lock, Unlock, X } from "lucide-react";
-import type { InventoryCustodyRecordDto, InventoryHistoryDto } from "../../../api/contracts";
+import type { InventoryCustodyRecordDto, InventoryEmployeeDto, InventoryHistoryDto } from "../../../api/contracts";
 import { useInventoryRepository } from "../../../repositories/inventoryRepositoryContext";
 import {
   CustodyState,
@@ -18,19 +18,23 @@ import type { CustodyDocumentAction, CustodyDrawer } from "./custodyTypes";
 export function CustodyDetailDrawer({
   busyAction,
   drawer,
+  employees,
   onArchiveRecord,
   onClose,
   onDownload,
   onOpenRecordHistory,
+  onTransferRecord,
   onUpdateDocumentState,
   onUpdateRecordStatus,
 }: {
   busyAction: string;
   drawer: CustodyDrawer;
+  employees: InventoryEmployeeDto[];
   onArchiveRecord: (row: InventoryCustodyRecordDto, documentId?: string) => Promise<void>;
   onClose: () => void;
   onDownload: (action: () => Promise<{ blob: Blob; fileName: string }>) => Promise<void>;
   onOpenRecordHistory: (row: InventoryCustodyRecordDto) => Promise<void>;
+  onTransferRecord: (row: InventoryCustodyRecordDto, employeeId: string, documentId?: string, comment?: string) => Promise<void>;
   onUpdateDocumentState: (documentId: string, action: CustodyDocumentAction) => Promise<void>;
   onUpdateRecordStatus: (row: InventoryCustodyRecordDto, status: string, documentId?: string, comment?: string) => Promise<void>;
 }) {
@@ -102,8 +106,10 @@ export function CustodyDetailDrawer({
                     <CustodyRecordTable
                       busyAction={busyAction}
                       documentIdByRecordId={new Map(drawer.detail.records.map((row) => [row.id, drawer.detail.id]))}
+                      employees={employees}
                       onArchiveRecord={onArchiveRecord}
                       onOpenRecordHistory={onOpenRecordHistory}
+                      onTransferRecord={onTransferRecord}
                       onUpdateRecordStatus={onUpdateRecordStatus}
                       rows={drawer.detail.records}
                     />

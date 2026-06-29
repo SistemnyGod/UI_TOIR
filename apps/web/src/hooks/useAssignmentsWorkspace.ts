@@ -194,19 +194,11 @@ export function useAssignmentsWorkspace({
   async function runCommand(id: string, command: "start" | "cancel" | "complete", completePayload?: CompleteAssignmentPayload) {
     if (dataSourceMode !== "api") {
       setAssignments((current) =>
-        current.map((assignment) => {
-          if (assignment.id !== id) return assignment;
-
-          if (command === "start") {
-            return { ...assignment, currentPoint: "обход выполняется", progress: Math.max(assignment.progress, 1), status: "В пути" };
-          }
-
-          if (command === "complete") {
-            return { ...assignment, currentPoint: "обход завершен", progress: 100, status: "Завершает" };
-          }
-
-          return { ...assignment, currentPoint: "назначение отменено", status: "Ожидает" };
-        }),
+        current.map((assignment) =>
+          assignment.id === id
+            ? applyLocalAssignmentCommand(assignment, command, completePayload)
+            : assignment,
+        ),
       );
       showToast("Назначение обновлено");
       return;
@@ -305,6 +297,44 @@ export function useAssignmentsWorkspace({
   };
 }
 
+export function applyLocalAssignmentCommand(
+  assignment: ActivePatrol,
+  command: "start" | "cancel" | "complete",
+  completePayload?: CompleteAssignmentPayload,
+): ActivePatrol {
+  if (command === "start") {
+    const startedAtIso = new Date().toISOString();
+    return {
+      ...assignment,
+      currentPoint: "обход выполняется",
+      progress: Math.max(assignment.progress, 1),
+      startedAt: formatDateTime(startedAtIso),
+      startedAtIso,
+      status: "В пути",
+    };
+  }
+
+  if (command === "complete") {
+    const finishedAtIso = completePayload?.actualAt ?? new Date().toISOString();
+    return {
+      ...assignment,
+      currentPoint: "обход завершен",
+      deviation: "закрыто",
+      finishedAt: formatDateTime(finishedAtIso),
+      finishedAtIso,
+      progress: 100,
+      status: "Завершено",
+    };
+  }
+
+  return {
+    ...assignment,
+    currentPoint: "назначение отменено",
+    progress: 0,
+    status: "Отменено",
+  };
+}
+
 function createLocalAssignment(payload: CreateAssignmentPayload): ActivePatrol {
   const plannedAt = payload.plannedAt ? new Date(payload.plannedAt) : new Date();
 
@@ -329,5 +359,20 @@ function createLocalAssignment(payload: CreateAssignmentPayload): ActivePatrol {
           month: "2-digit",
         }).format(plannedAt),
     deviation: payload.priority === "high" ? "высокий приоритет" : "-",
+    plannedAt: Number.isNaN(plannedAt.getTime()) ? payload.plannedAt : formatDateTime(plannedAt.toISOString()),
+    plannedAtIso: Number.isNaN(plannedAt.getTime()) ? payload.plannedAt : plannedAt.toISOString(),
   };
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
 }

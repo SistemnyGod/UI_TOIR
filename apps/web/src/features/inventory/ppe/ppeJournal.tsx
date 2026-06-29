@@ -147,12 +147,16 @@ export function PpeInspector({
       <div className="inventory-ppe-meta-grid">
         <Meta label="Должность" value={card.position || "Не указана"} />
         <Meta label="Подразделение" value={employee?.department || "Не указано"} />
-        <Meta label="Табельный" value={employee?.personnelNo || "Не указан"} />
         <Meta label="Статус" value={statusLabel(card.status)} />
         <Meta label="Позиции" value={String(card.linesCount)} />
         <Meta label="Сумма" value={formatMoney((card.amountMinor ?? 0) / 100)} />
         {card.zeroPriceLines > 0 ? <Meta label="Проверить цену" value={String(card.zeroPriceLines)} /> : null}
       </div>
+      {card.zeroPriceLines > 0 ? (
+        <div className="inventory-ppe-inline-warning">
+          В карточке есть позиции без цены. Проверьте строки перед печатью и DOCX.
+        </div>
+      ) : null}
       <div className="inventory-ppe-inspector-actions">
         <button className="button primary" onClick={() => onOpen(card.id)} type="button">
           Открыть карточку
@@ -176,14 +180,6 @@ export function PpeInspector({
           История строк
         </button>
       </div>
-      <section className="inventory-ppe-print-preview">
-        <strong>Печатные формы</strong>
-        <span>Проверьте личную карточку и лист подписи перед DOCX или печатью.</span>
-        <div className="inventory-ppe-print-summary">
-          <span>{card.linesCount}</span>
-          <small>строк в карточке</small>
-        </div>
-      </section>
     </aside>
   );
 }

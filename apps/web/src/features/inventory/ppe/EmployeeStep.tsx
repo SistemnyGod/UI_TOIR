@@ -56,7 +56,7 @@ export function EmployeeStep({
           <EmployeeDetailInput label="СИЗ рук" placeholder="например 10" value={employeeDetails.handProtectionSize} onChange={(handProtectionSize) => onPatchEmployeeDetails({ handProtectionSize })} />
           <PpePrintValidationPanel
             errors={employeePrintErrors}
-            title="Перед печатью заполните поля личной карточки"
+            title="В личной карточке есть пустые поля"
           />
         </div>
       </div>

@@ -48,6 +48,7 @@ import type {
   UpdateInventorySimpleReferenceDto,
   UpdateInventoryItemSetDto,
   UpdateInventoryStatusDto,
+  TransferInventoryCustodyRecordDto,
   UpdateInventoryUnitDto,
   UpdateInventoryWarehouseDto,
   UpsertInventoryItemSetItemsDto,
@@ -152,6 +153,13 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
     updateCustodyRecordStatus(id: string, payload: UpdateInventoryStatusDto) {
       return client.patch<InventoryCustodyRecordDto, UpdateInventoryStatusDto>(
         `/api/v1/inventory/custody/records/${id}/status`,
+        payload,
+      );
+    },
+
+    transferCustodyRecord(id: string, payload: TransferInventoryCustodyRecordDto) {
+      return client.patch<InventoryCustodyRecordDto, TransferInventoryCustodyRecordDto>(
+        `/api/v1/inventory/custody/records/${id}/transfer`,
         payload,
       );
     },

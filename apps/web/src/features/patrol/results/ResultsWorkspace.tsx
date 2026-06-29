@@ -498,24 +498,24 @@ function buildMetrics(groups: ResultGroup[]) {
   return { averageDuration, clean, issues, total, withPhotos };
 }
 
-function buildCounters(groups: ResultGroup[]): Record<ResultMode, number> {
+export function buildCounters(groups: ResultGroup[]): Record<ResultMode, number> {
   return {
     all: groups.length,
     issues: groups.filter((group) => group.issuePoints > 0 || group.issues > 0).length,
-    late: groups.filter((group) => group.status === "late").length,
+    late: groups.filter(isLateGroup).length,
     photos: groups.filter((group) => group.photos > 0).length,
     noPhotos: groups.filter((group) => group.photos === 0).length,
   };
 }
 
-function filterGroups(groups: ResultGroup[], mode: ResultMode, query: string) {
+export function filterGroups(groups: ResultGroup[], mode: ResultMode, query: string) {
   const normalizedQuery = normalizeText(query);
 
   return groups.filter((group) => {
     const matchesMode =
       mode === "all" ||
       (mode === "issues" && (group.issuePoints > 0 || group.issues > 0)) ||
-      (mode === "late" && group.status === "late") ||
+      (mode === "late" && isLateGroup(group)) ||
       (mode === "photos" && group.photos > 0) ||
       (mode === "noPhotos" && group.photos === 0);
     const haystack = normalizeText([group.route, group.territory, group.employee, group.shift, group.comment].join(" "));
@@ -523,7 +523,7 @@ function filterGroups(groups: ResultGroup[], mode: ResultMode, query: string) {
   });
 }
 
-function buildResultGroups(results: PatrolResult[]): ResultGroup[] {
+export function buildResultGroups(results: PatrolResult[]): ResultGroup[] {
   const buckets = new Map<string, PatrolResult[]>();
 
   results.forEach((result) => {
@@ -539,6 +539,7 @@ function buildResultGroups(results: PatrolResult[]): ResultGroup[] {
       const first = sorted[0];
       const okPoints = sorted.filter((result) => !isIssueResult(result)).length;
       const issuePoints = sorted.length - okPoints;
+      const latePoints = sorted.filter(isLateResult).length;
       const photos = sorted.reduce((sum, result) => sum + getPhotoCount(result), 0);
       const firstScanAt = firstUseful(sorted[0]?.actualAt);
       const lastScanAt = firstUseful(sorted[sorted.length - 1]?.actualAt);
@@ -548,7 +549,7 @@ function buildResultGroups(results: PatrolResult[]): ResultGroup[] {
 
       return {
         id,
-        status: issuePoints > 0 ? "issue" : "ok",
+        status: issuePoints > 0 ? "issue" : latePoints > 0 ? "late" : "ok",
         route: first?.route || "Маршрут не указан",
         routeId: first?.routeId,
         territory: first?.territory || "Территория не указана",
@@ -570,10 +571,10 @@ function buildResultGroups(results: PatrolResult[]): ResultGroup[] {
         results: sorted,
       };
     })
-    .sort((left, right) => parseDate(right.lastScanAt ?? right.startedAt ?? "") - parseDate(left.lastScanAt ?? left.startedAt ?? ""));
+    .sort((left, right) => sortableTime(right) - sortableTime(left));
 }
 
-function summarizeDuration(start?: string, finish?: string): DurationSummary {
+export function summarizeDuration(start?: string, finish?: string): DurationSummary {
   const started = parseDate(start);
   const finished = parseDate(finish);
   const minutes = Number.isFinite(started) && Number.isFinite(finished) ? Math.max(0, Math.round((finished - started) / 60000)) : undefined;
@@ -617,6 +618,28 @@ function isIssueResult(result: PatrolResult): boolean {
   }
 
   return isUsefulText(issue);
+}
+
+function isLateResult(result: PatrolResult): boolean {
+  const status = normalizeText(result.status);
+  const deviation = Number.parseInt(result.deviation, 10);
+
+  return status.includes("late") || status.includes("проср") || Number.isFinite(deviation) && deviation > 0;
+}
+
+function isLateGroup(group: ResultGroup): boolean {
+  return group.status === "late" || group.results.some(isLateResult);
+}
+
+function sortableTime(group: ResultGroup): number {
+  const candidates = [group.lastScanAt, group.finishedAt, group.startedAt, group.plannedAt];
+
+  for (const value of candidates) {
+    const parsed = parseDate(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return 0;
 }
 
 function isUsefulText(value?: string | null): boolean {

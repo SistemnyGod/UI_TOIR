@@ -10,6 +10,8 @@ public interface IInventoryWorkflowService
 
     InventoryCommandResult<InventoryCustodyRecordDto> UpdateCustodyRecordStatus(Guid id, UpdateInventoryStatusDto request);
 
+    InventoryCommandResult<InventoryCustodyRecordDto> TransferCustodyRecord(Guid id, TransferInventoryCustodyRecordDto request);
+
     InventoryCommandResult<InventoryCustodyRecordDto> ArchiveCustodyRecord(Guid id);
 
     InventoryListResponseDto<InventoryCustodyDocumentDto> GetCustodyDocuments(InventoryListQuery query);

@@ -179,7 +179,7 @@ describe("mock Inventory repository", () => {
       comment: "Separate employee record",
       documentId: null,
       employeeId: "emp-2",
-      itemId: "item-wrench",
+      itemId: "item-helmet",
       quantity: 1,
       warehouseId: null,
     });
@@ -209,13 +209,13 @@ describe("mock Inventory repository", () => {
     });
     const writtenOff = await repository.createCustodyRecord({
       employeeId: "emp-1",
-      itemId: "item-wrench",
+      itemId: "item-helmet",
       quantity: 1,
       warehouseId: null,
     });
     const defective = await repository.createCustodyRecord({
       employeeId: "emp-1",
-      itemId: "item-wrench",
+      itemId: "item-gloves",
       quantity: 1,
       warehouseId: null,
     });
@@ -246,6 +246,65 @@ describe("mock Inventory repository", () => {
     expect(documentHistory.rows.every((row) => row.entityId === returned.documentId || row.entityId === returned.id)).toBe(true);
     expect(documentHistory.rows.some((row) => row.entityType === "custody_document" && row.entityId === returned.documentId)).toBe(true);
     expect(documentHistory.rows.some((row) => row.entityId === writtenOff.id || row.entityId === defective.id)).toBe(false);
+  });
+
+  it("blocks duplicate custody issue while an item is on hands", async () => {
+    const repository = createMockInventoryRepository();
+
+    await repository.createCustodyRecord({
+      employeeId: "emp-1",
+      itemId: "item-wrench",
+      quantity: 1,
+      warehouseId: null,
+    });
+
+    await expect(repository.createCustodyRecord({
+      employeeId: "emp-2",
+      itemId: "item-wrench",
+      quantity: 1,
+      warehouseId: null,
+    })).rejects.toThrow("Предмет уже на руках");
+  });
+
+  it("transfers custody item to another employee and writes scoped history", async () => {
+    const repository = createMockInventoryRepository();
+    const record = await repository.createCustodyRecord({
+      employeeId: "emp-1",
+      itemId: "item-wrench",
+      quantity: 1,
+      warehouseId: null,
+    });
+
+    const transferred = await repository.transferCustodyRecord(record.id, {
+      comment: "Shift handoff",
+      employeeId: "emp-2",
+    });
+
+    expect(transferred.status).toBe("in_use");
+    expect(transferred.employeeName).toContain("Петров");
+    expect(transferred.closedAt).toBeNull();
+
+    const history = await repository.getCustodyRecordHistory(record.id, { pageSize: 100 });
+    expect(history.rows[0]).toMatchObject({ action: "transferred", entityId: record.id });
+    expect(history.rows[0].description).toContain("Shift handoff");
+  });
+
+  it("blocks issuing written off custody item again", async () => {
+    const repository = createMockInventoryRepository();
+    const record = await repository.createCustodyRecord({
+      employeeId: "emp-1",
+      itemId: "item-wrench",
+      quantity: 1,
+      warehouseId: null,
+    });
+    await repository.updateCustodyRecordStatus(record.id, { comment: "Broken", status: "written_off" });
+
+    await expect(repository.createCustodyRecord({
+      employeeId: "emp-2",
+      itemId: "item-wrench",
+      quantity: 1,
+      warehouseId: null,
+    })).rejects.toThrow("Предмет заблокирован");
   });
 
   it("archives employees without deleting historical events", async () => {

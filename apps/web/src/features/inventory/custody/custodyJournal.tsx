@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, Archive, CalendarDays, FileText, History, RotateCcw, Search, Trash2, UserRound, Wrench, X } from "lucide-react";
+import { AlertTriangle, Archive, ArrowRightLeft, CalendarDays, FileText, History, RotateCcw, Search, Trash2, UserRound, Wrench, X } from "lucide-react";
 import type {
   InventoryCustodyDocumentDto,
   InventoryCustodyRecordDto,
   InventoryEmployeeDto,
+  InventoryItemDto,
 } from "../../../api/contracts";
 import { useInventoryRepository } from "../../../repositories/inventoryRepositoryContext";
 import { CustodyPrintPreview } from "./custodyPrint";
@@ -18,6 +19,7 @@ import {
   formatDate,
   formatQuantity,
   getCustodyRecordGroup,
+  getCustodyItemGroup,
   getDocumentIdByRecordId,
   getInitials,
   isActiveCustodyRecord,
@@ -151,9 +153,11 @@ export function CustodyRecordsSection({
   busyAction,
   documents,
   employees,
+  items,
   onArchiveRecord,
   onOpenRecordHistory,
   onSelectEmployee,
+  onTransferRecord,
   onUpdateRecordStatus,
   records,
   selectedEmployeeId,
@@ -161,9 +165,11 @@ export function CustodyRecordsSection({
   busyAction: string;
   documents: InventoryCustodyDocumentDto[];
   employees: InventoryEmployeeDto[];
+  items: InventoryItemDto[];
   onArchiveRecord: (row: InventoryCustodyRecordDto, documentId?: string) => Promise<void>;
   onOpenRecordHistory: (row: InventoryCustodyRecordDto) => Promise<void>;
   onSelectEmployee: (employeeId: string) => void;
+  onTransferRecord: (row: InventoryCustodyRecordDto, employeeId: string, documentId?: string, comment?: string) => Promise<void>;
   onUpdateRecordStatus: (row: InventoryCustodyRecordDto, status: string, documentId?: string, comment?: string) => Promise<void>;
   records: InventoryCustodyRecordDto[];
   selectedEmployeeId: string;
@@ -173,7 +179,9 @@ export function CustodyRecordsSection({
   const [groupFilter, setGroupFilter] = useState<"all" | string>("all");
   const [activeOnly, setActiveOnly] = useState(false);
   const [movementFilters, setMovementFilters] = useState<MovementFilters>(emptyMovementFilters);
+  const [selectedRecordId, setSelectedRecordId] = useState("");
   const documentIdByRecordId = useMemo(() => getDocumentIdByRecordId(documents, records), [documents, records]);
+  const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
   const selectedEmployee = employees.find((employee) => employee.id === selectedEmployeeId) ?? null;
   const employeeRecords = selectedEmployee
     ? records.filter((row) => samePerson(row.employeeName, selectedEmployee.fullName))
@@ -203,6 +211,33 @@ export function CustodyRecordsSection({
       written_off: baseFilteredRecords.filter((row) => row.status === "written_off").length,
     };
   }, [baseFilteredRecords]);
+  const activeRecordItemIds = useMemo(
+    () => new Set(records.filter(isActiveCustodyRecord).map((row) => row.itemId)),
+    [records],
+  );
+  const itemCounters = useMemo(() => {
+    const activeItems = items.filter((item) => item.isActive !== false);
+    return {
+      all: activeItems.length,
+      available: activeItems.filter((item) => !activeRecordItemIds.has(item.id)).length,
+      inUse: records.filter(isActiveCustodyRecord).length,
+      lost: records.filter((row) => row.status === "lost").length,
+      returned: records.filter((row) => row.status === "returned").length,
+      writtenOff: records.filter((row) => row.status === "written_off").length,
+    };
+  }, [activeRecordItemIds, items, records]);
+  const groupSummaries = useMemo(() => CUSTODY_ITEM_GROUPS.map((groupName) => {
+    const groupItems = items.filter((item) => item.isActive !== false && getCustodyItemGroup(item) === groupName);
+    const groupRecords = records.filter((row) => getCustodyRecordGroup(row) === groupName);
+    return {
+      available: groupItems.filter((item) => !activeRecordItemIds.has(item.id)).length,
+      inUse: groupRecords.filter(isActiveCustodyRecord).length,
+      name: groupName,
+      total: groupItems.length,
+    };
+  }), [activeRecordItemIds, items, records]);
+  const selectedRecord = visibleRecords.find((row) => row.id === selectedRecordId) ?? visibleRecords[0] ?? null;
+  const selectedItem = selectedRecord ? itemById.get(selectedRecord.itemId) ?? null : null;
 
   const movements = useMemo(() => buildMovements(records), [records]);
   const filteredMovements = useMemo(() => filterMovements(movements, movementFilters), [movementFilters, movements]);
@@ -215,6 +250,53 @@ export function CustodyRecordsSection({
           <h3>Движение предметов</h3>
           <span>Сначала выберите сотрудника, затем выполните возврат, списание или отметьте неисправность.</span>
         </div>
+      </div>
+
+      <div className="inventory-custody-item-kpis" aria-label="Сводка предметов под запись">
+        <Meta label="Всего предметов" value={formatQuantity(itemCounters.all)} />
+        <Meta label="На руках" value={formatQuantity(itemCounters.inUse)} />
+        <Meta label="Свободно" value={formatQuantity(itemCounters.available)} />
+        <Meta label="Возвращено" value={formatQuantity(itemCounters.returned)} />
+        <Meta label="Списано" value={formatQuantity(itemCounters.writtenOff)} />
+        <Meta label="Неисправно" value={formatQuantity(itemCounters.lost)} />
+      </div>
+
+      <div className="inventory-custody-item-workbench">
+        <aside className="inventory-custody-list-directory" aria-label="Справочник списков предметов">
+          {groupSummaries.map((row) => (
+            <button className={groupFilter === row.name ? "is-active" : ""} key={row.name} onClick={() => setGroupFilter(row.name)} type="button">
+              <strong>{row.name}</strong>
+              <span>{row.total} всего · {row.inUse} на руках · {row.available} свободно</span>
+            </button>
+          ))}
+          <button className={groupFilter === "all" ? "is-active" : ""} onClick={() => setGroupFilter("all")} type="button">
+            <strong>Все</strong>
+            <span>Показать все предметы под запись</span>
+          </button>
+        </aside>
+
+        <aside className="inventory-custody-selected-item" aria-label="Карточка выбранного предмета">
+          {selectedRecord ? (
+            <>
+              <div>
+                <span>Выбранный предмет</span>
+                <strong>{selectedRecord.itemName}</strong>
+                <small>{selectedItem?.sku || selectedItem?.article || "Идентификатор не указан"}</small>
+              </div>
+              <div className="inventory-custody-selected-item-grid">
+                <Meta label="Статус" value={recordStatusLabel(selectedRecord.status)} />
+                <Meta label="У кого" value={selectedRecord.employeeName || "Не указан"} />
+                <Meta label="Выдан" value={formatDate(selectedRecord.issuedAt)} />
+                <Meta label="Дней на руках" value={String(daysSince(selectedRecord.issuedAt))} />
+                <Meta label="Цена" value={formatMoneyMinor(selectedItem?.defaultUnitPriceMinor)} />
+                <Meta label="Группа" value={getCustodyRecordGroup(selectedRecord)} />
+              </div>
+              <p>{selectedRecord.comment || selectedItem?.comment || "Без комментария"}</p>
+            </>
+          ) : (
+            <CustodyState kind="empty" text="Выберите предмет в списке, чтобы увидеть карточку, текущего сотрудника и историю движений." title="Предмет не выбран" />
+          )}
+        </aside>
       </div>
 
       <div className="inventory-custody-employee-flow">
@@ -252,10 +334,14 @@ export function CustodyRecordsSection({
             <CustodyRecordTable
               busyAction={busyAction}
               documentIdByRecordId={documentIdByRecordId}
+              employees={employees}
               onArchiveRecord={onArchiveRecord}
               onOpenRecordHistory={onOpenRecordHistory}
+              onTransferRecord={onTransferRecord}
               onUpdateRecordStatus={onUpdateRecordStatus}
+              onSelectRecord={setSelectedRecordId}
               rows={onHandsRecords}
+              selectedRecordId={selectedRecordId}
             />
           )}
         </div>
@@ -297,10 +383,14 @@ export function CustodyRecordsSection({
           <CustodyRecordTable
             busyAction={busyAction}
             documentIdByRecordId={documentIdByRecordId}
+            employees={employees}
             onArchiveRecord={onArchiveRecord}
             onOpenRecordHistory={onOpenRecordHistory}
+            onTransferRecord={onTransferRecord}
             onUpdateRecordStatus={onUpdateRecordStatus}
+            onSelectRecord={setSelectedRecordId}
             rows={visibleRecords}
+            selectedRecordId={selectedRecordId}
           />
         </div>
       )}
@@ -458,38 +548,57 @@ export function CustodyInspector({
 export function CustodyRecordTable({
   busyAction,
   documentIdByRecordId,
+  employees,
   onArchiveRecord,
   onOpenRecordHistory,
+  onTransferRecord,
   onUpdateRecordStatus,
+  onSelectRecord,
   rows,
+  selectedRecordId,
 }: {
   busyAction: string;
   documentIdByRecordId: Map<string, string>;
+  employees: InventoryEmployeeDto[];
   onArchiveRecord: (row: InventoryCustodyRecordDto, documentId?: string) => Promise<void>;
   onOpenRecordHistory: (row: InventoryCustodyRecordDto) => Promise<void>;
+  onTransferRecord: (row: InventoryCustodyRecordDto, employeeId: string, documentId?: string, comment?: string) => Promise<void>;
   onUpdateRecordStatus: (row: InventoryCustodyRecordDto, status: string, documentId?: string, comment?: string) => Promise<void>;
+  onSelectRecord?: (recordId: string) => void;
   rows: InventoryCustodyRecordDto[];
+  selectedRecordId?: string;
 }) {
   const [pendingAction, setPendingAction] = useState<CustodyRecordAction | null>(null);
   const [actionComment, setActionComment] = useState("");
+  const [transferEmployeeId, setTransferEmployeeId] = useState("");
   const [actionError, setActionError] = useState("");
 
   function openAction(action: CustodyRecordAction) {
     setPendingAction(action);
     setActionComment("");
+    setTransferEmployeeId("");
     setActionError("");
   }
 
   async function submitAction() {
     if (!pendingAction) return;
+    if (pendingAction.kind === "transfer" && !transferEmployeeId) {
+      setActionError("Выберите нового сотрудника");
+      return;
+    }
     if (pendingAction.commentRequired && actionComment.trim().length === 0) {
       setActionError("Укажите причину или комментарий");
       return;
     }
 
-    await onUpdateRecordStatus(pendingAction.row, pendingAction.status, pendingAction.documentId, actionComment);
+    if (pendingAction.kind === "transfer") {
+      await onTransferRecord(pendingAction.row, transferEmployeeId, pendingAction.documentId, actionComment);
+    } else {
+      await onUpdateRecordStatus(pendingAction.row, pendingAction.status, pendingAction.documentId, actionComment);
+    }
     setPendingAction(null);
     setActionComment("");
+    setTransferEmployeeId("");
     setActionError("");
   }
 
@@ -500,7 +609,11 @@ export function CustodyRecordTable({
         const rowIsActive = isActiveCustodyRecord(row);
         const canWriteOff = rowIsActive || row.status === "returned" || row.status === "lost";
         return (
-          <article className="inventory-custody-record-row" key={row.id}>
+          <article
+            className={`inventory-custody-record-row${selectedRecordId === row.id ? " is-selected" : ""}`}
+            key={row.id}
+            onClick={() => onSelectRecord?.(row.id)}
+          >
             <div className="inventory-custody-record-main">
               <strong>{row.itemName}</strong>
               <span>{row.comment || "Без комментария"}</span>
@@ -528,6 +641,18 @@ export function CustodyRecordTable({
               <button className="button ghost" disabled={busyAction === `history-${row.id}`} onClick={() => void onOpenRecordHistory(row)} type="button">
                 <History size={15} />
                 История
+              </button>
+              <button className="button ghost" disabled={!rowIsActive || busyAction === `transfer-${row.id}`} onClick={() => openAction({
+                commentLabel: "Комментарий к передаче",
+                confirmLabel: "Передать предмет",
+                documentId,
+                kind: "transfer",
+                row,
+                status: "in_use",
+                title: "Передать другому сотруднику",
+              })} type="button">
+                <ArrowRightLeft size={15} />
+                Передать
               </button>
               <button className="button ghost" disabled={!rowIsActive || busyAction === `returned-${row.id}`} onClick={() => openAction({
                 commentLabel: "Комментарий к возврату",
@@ -574,7 +699,7 @@ export function CustodyRecordTable({
       })}
       {pendingAction
         ? createPortal(
-          <div className="inventory-custody-action-backdrop" role="presentation" onMouseDown={() => setPendingAction(null)}>
+          <div className="inventory-custody-action-backdrop" role="presentation" style={{ zIndex: 3000 }} onMouseDown={() => setPendingAction(null)}>
             <div className="inventory-custody-action-modal" role="dialog" aria-modal="true" aria-label={pendingAction.title} onMouseDown={(event) => event.stopPropagation()}>
               <header>
                 <div>
@@ -603,10 +728,32 @@ export function CustodyRecordTable({
                   <strong>{recordStatusLabel(pendingAction.row.status)}</strong>
                 </div>
               </div>
+              {pendingAction.kind === "transfer" ? (
+                <label className="inventory-custody-action-comment">
+                  Новый сотрудник
+                  <select
+                    autoFocus
+                    onChange={(event) => {
+                      setTransferEmployeeId(event.target.value);
+                      if (actionError) setActionError("");
+                    }}
+                    value={transferEmployeeId}
+                  >
+                    <option value="">Выберите сотрудника</option>
+                    {employees
+                      .filter((employee) => employee.fullName !== pendingAction.row.employeeName && employee.status !== "archived")
+                      .map((employee) => (
+                        <option key={employee.id} value={employee.id}>
+                          {[employee.fullName, employee.personnelNo].filter(Boolean).join(" · ")}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              ) : null}
               <label className="inventory-custody-action-comment">
                 {pendingAction.commentLabel}
                 <textarea
-                  autoFocus
+                  autoFocus={pendingAction.kind !== "transfer"}
                   onChange={(event) => {
                     setActionComment(event.target.value);
                     if (actionError) setActionError("");
@@ -618,7 +765,7 @@ export function CustodyRecordTable({
               {actionError ? <p className="inventory-custody-action-error">{actionError}</p> : null}
               <footer>
                 <button className="button ghost" onClick={() => setPendingAction(null)} type="button">Отмена</button>
-                <button className="button primary" disabled={busyAction === `${pendingAction.status}-${pendingAction.row.id}`} onClick={() => void submitAction()} type="button">
+                <button className="button primary" disabled={busyAction === `${pendingAction.kind === "transfer" ? "transfer" : pendingAction.status}-${pendingAction.row.id}`} onClick={() => void submitAction()} type="button">
                   {pendingAction.confirmLabel}
                 </button>
               </footer>
@@ -636,10 +783,22 @@ type CustodyRecordAction = {
   commentRequired?: boolean;
   confirmLabel: string;
   documentId?: string;
+  kind?: "status" | "transfer";
   row: InventoryCustodyRecordDto;
-  status: "returned" | "written_off" | "lost";
+  status: "in_use" | "returned" | "written_off" | "lost";
   title: string;
 };
+
+function daysSince(value?: string | null) {
+  if (!value) return 0;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 0;
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86_400_000));
+}
+
+function formatMoneyMinor(value?: number | null) {
+  return new Intl.NumberFormat("ru-RU", { currency: "RUB", style: "currency" }).format((value ?? 0) / 100);
+}
 
 function buildMovements(records: InventoryCustodyRecordDto[]): CustodyMovement[] {
   return records.flatMap((row) => {

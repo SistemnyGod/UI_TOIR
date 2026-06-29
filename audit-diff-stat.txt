@@ -1,4 +1,4 @@
-﻿ .dockerignore                                      |     2 +
+ .dockerignore                                      |     2 +
  .gitignore                                         |     4 +
  apps/api/Controllers/EmuController.cs              |   454 +-
  apps/api/Controllers/InventoryController.cs        |     3 +-

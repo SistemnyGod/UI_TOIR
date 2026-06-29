@@ -46,6 +46,7 @@ import type {
   UpdateInventoryItemSetDto,
   UpdateInventorySimpleReferenceDto,
   UpdateInventoryStatusDto,
+  TransferInventoryCustodyRecordDto,
   UpdateInventoryUnitDto,
   UpdateInventoryWarehouseDto,
   UpsertInventoryItemDto,
@@ -188,6 +189,13 @@ export function createMockInventoryRepository(): InventoryRepository {
       const store = readStore();
       const employee = required(store.employees.find((row) => row.id === payload.employeeId), "Сотрудник не найден");
       const item = required(store.items.find((row) => row.id === payload.itemId), "Позиция не найдена");
+      const latestRecord = latestCustodyRecordForItem(store, item.id);
+      if (latestRecord && ["in_use", "issued"].includes(latestRecord.status)) {
+        throw new Error("Предмет уже на руках. Используйте передачу.");
+      }
+      if (latestRecord && ["written_off", "lost", "archived"].includes(latestRecord.status)) {
+        throw new Error("Предмет заблокирован текущим статусом.");
+      }
       const warehouse = payload.warehouseId
         ? store.settings.warehouses.find((row) => row.id === payload.warehouseId)
         : null;
@@ -235,6 +243,43 @@ export function createMockInventoryRepository(): InventoryRepository {
       record.comment = payload.comment ?? record.comment;
       if (["returned", "written_off", "lost"].includes(payload.status)) record.closedAt = new Date().toISOString();
       addHistory(store, "custody_record", payload.status, `Статус строки: ${payload.status}`, "Mock", record.id);
+      writeStore(store);
+      return record;
+    },
+
+    async transferCustodyRecord(recordId, payload: TransferInventoryCustodyRecordDto) {
+      const store = readStore();
+      const record = required(store.custodyRecords.find((row) => row.id === recordId), "Строка под запись не найдена");
+      const targetEmployeeId = payload.toEmployeeId ?? payload.employeeId;
+      const employee = required(store.employees.find((row) => row.id === targetEmployeeId), "Сотрудник не найден");
+      if (!["in_use", "issued"].includes(record.status)) {
+        throw new Error("Передача доступна только для предмета на руках");
+      }
+      if (record.employeeName === employee.fullName) {
+        throw new Error("Предмет уже закреплен за этим сотрудником");
+      }
+
+      const previousEmployee = record.employeeName;
+      const comment = payload.comment?.trim();
+      record.employeeName = employee.fullName;
+      record.status = "in_use";
+      record.closedAt = null;
+      record.comment = [
+        record.comment,
+        comment
+          ? `Передача: ${previousEmployee} -> ${employee.fullName}. ${comment}`
+          : `Передача: ${previousEmployee} -> ${employee.fullName}`,
+      ].filter(Boolean).join("\n");
+      addHistory(
+        store,
+        "custody_record",
+        "transferred",
+        comment
+          ? `Передано от ${previousEmployee} к ${employee.fullName}: ${comment}`
+          : `Передано от ${previousEmployee} к ${employee.fullName}`,
+        "Mock",
+        record.id,
+      );
       writeStore(store);
       return record;
     },
@@ -1377,6 +1422,12 @@ function activeEmployees(store: InventoryMockStore) {
 
 function activeItems(store: InventoryMockStore) {
   return store.items.filter((row) => row.isActive);
+}
+
+function latestCustodyRecordForItem(store: InventoryMockStore, itemId: string) {
+  return store.custodyRecords
+    .filter((row) => row.itemId === itemId)
+    .sort((left, right) => new Date(right.issuedAt).getTime() - new Date(left.issuedAt).getTime())[0] ?? null;
 }
 
 function required<T>(value: T | undefined | null, message: string): T {

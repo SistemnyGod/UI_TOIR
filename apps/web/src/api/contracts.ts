@@ -645,6 +645,13 @@ export interface InventoryCustodyRecordDto {
   warehouseId: string;
   unit: string;
   comment: string;
+  employeeId?: string | null;
+  currentEmployeeId?: string | null;
+  currentEmployeeName?: string;
+  inventoryNumber?: string;
+  serialNumber?: string;
+  itemPriceMinor?: number | null;
+  groupName?: string;
 }
 
 export interface InventoryCustodyDocumentDto {
@@ -692,6 +699,15 @@ export interface CreateInventoryCustodyRecordDto {
 export interface UpdateInventoryStatusDto {
   status: string;
   comment?: string | null;
+}
+
+export interface TransferInventoryCustodyRecordDto {
+  toEmployeeId?: string | null;
+  employeeId?: string | null;
+  transferredAt?: string | null;
+  comment?: string | null;
+  fromEmployeeId?: string | null;
+  documentId?: string | null;
 }
 
 export interface InventoryPpeSummaryDto {

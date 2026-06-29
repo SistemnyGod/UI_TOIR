@@ -75,6 +75,23 @@ export function useCustodyRepositoryActions({
     }
   }
 
+  async function transferRecord(row: InventoryCustodyRecordDto, employeeId: string, documentId?: string, comment?: string) {
+    try {
+      setBusyAction(`transfer-${row.id}`);
+      await inventoryRepository.transferCustodyRecord(row.id, {
+        comment: comment?.trim() ? comment.trim() : null,
+        toEmployeeId: employeeId,
+      });
+      onNotify("Передача предмета зафиксирована");
+      await onReload();
+      if (documentId) setDrawer(null);
+    } catch (transferError) {
+      onNotify(transferError instanceof Error ? transferError.message : "Не удалось передать предмет");
+    } finally {
+      setBusyAction("");
+    }
+  }
+
   async function archiveRecord(row: InventoryCustodyRecordDto, documentId?: string) {
     try {
       setBusyAction(`archive-${row.id}`);
@@ -122,8 +139,8 @@ export function useCustodyRepositoryActions({
     downloadFile,
     openDocument,
     openRecordHistory,
+    transferRecord,
     updateDocumentState,
     updateRecordStatus,
   };
 }
-

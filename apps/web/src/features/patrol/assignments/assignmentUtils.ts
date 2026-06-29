@@ -2,11 +2,11 @@ import type { ActivePatrol, DataSourceMode, ServiceRequest } from "../../../type
 
 export function assignmentStatusText(value: string) {
   const normalized = value.trim().toLowerCase();
-  if (normalized.includes("отмен")) return "Отменено";
-  if (normalized.includes("завершено")) return "Завершено";
-  if (normalized.includes("зад") || value === "Задержка") return "Просрочено";
+  if (normalized.includes("отмен") || normalized.includes("cancel")) return "Отменено";
+  if (normalized.includes("завершено") || normalized.includes("completed") || normalized.includes("finished")) return "Завершено";
+  if (normalized.includes("зад") || normalized.includes("проср") || normalized.includes("late") || normalized.includes("overdue") || value === "Задержка") return "Просрочено";
   if (normalized.includes("завершает")) return "Проверка";
-  if (normalized.includes("ож") || normalized.includes("назнач") || normalized.includes("заплан")) return "Ожидает начала";
+  if (normalized.includes("ож") || normalized.includes("назнач") || normalized.includes("заплан") || normalized.includes("planned") || normalized.includes("waiting")) return "Ожидает начала";
   return "Выполняется";
 }
 
@@ -18,8 +18,8 @@ export function assignmentStatusTone(value: string) {
 }
 
 export function isAssignmentCurrent(assignment: ActivePatrol) {
-  const status = assignment.status.toLowerCase();
-  return !status.includes("заверш") && !status.includes("отмен") && !status.includes("закры");
+  const text = assignmentStatusText(assignment.status);
+  return text !== "Завершено" && text !== "Отменено";
 }
 
 export function isRequestCurrent(request: ServiceRequest) {
@@ -46,4 +46,3 @@ export function shouldCreateAssignmentAfterRequest({
 }) {
   return dataSourceMode !== "api" || hasSelectedRequest;
 }
-

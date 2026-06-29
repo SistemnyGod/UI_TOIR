@@ -84,9 +84,8 @@ export function PpeWizard({
   ];
   const employeeDetails = wizard.employeeDetails ?? {};
   const employeePrintErrors = validatePpeEmployeePrintDetails(employeeDetails);
-  const isPrintBlockedByEmployeeDetails = employeePrintErrors.length > 0;
-  const printBlockTitle = isPrintBlockedByEmployeeDetails
-    ? "Заполните поля личной карточки сотрудника перед печатью."
+  const printWarningTitle = employeePrintErrors.length
+    ? "В данных сотрудника есть незаполненные поля. Печать доступна с пустыми строками в бланке."
     : undefined;
 
   function patchEmployeeDetails(patch: Partial<PpeEmployeeCardDetails>) {
@@ -107,31 +106,31 @@ export function PpeWizard({
           <p>{currentStep.title} · {currentStep.description}</p>
         </div>
         <div className="inventory-ppe-command-actions">
-          <button className="button ghost" disabled={isPrintBlockedByEmployeeDetails} onClick={() => onPreview("card")} title={printBlockTitle} type="button">
+          <button className="button ghost" onClick={() => onPreview("card")} title={printWarningTitle} type="button">
             Предпросмотр
           </button>
           <button
             className="button ghost"
-            disabled={!wizard.cardId || isPrintBlockedByEmployeeDetails}
+            disabled={!wizard.cardId}
             onClick={() =>
               wizard.cardId
                 ? void onDownload(() => inventoryRepository.printPpeCard(wizard.cardId!, "card", "docx"))
                 : undefined
             }
-            title={printBlockTitle}
+            title={printWarningTitle}
             type="button"
           >
             Карточка DOCX
           </button>
           <button
             className="button ghost"
-            disabled={!wizard.cardId || isPrintBlockedByEmployeeDetails}
+            disabled={!wizard.cardId}
             onClick={() =>
               wizard.cardId
                 ? void onDownload(() => inventoryRepository.printPpeCard(wizard.cardId!, "sheet", "docx"))
                 : undefined
             }
-            title={printBlockTitle}
+            title={printWarningTitle}
             type="button"
           >
             Лист DOCX

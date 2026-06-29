@@ -128,24 +128,27 @@ export function printDataFromWizard(wizard: PpeWizardState, employee: InventoryE
     employee,
     employeeDetails: wizard.employeeDetails,
     employeeName: employee?.fullName ?? "Сотрудник не выбран",
-    lines: sortPpePrintLines(wizard.lines.map((line) => ({
+    lines: sortPpePrintLines(wizard.lines.map((line) => {
+      const printItemName = line.printItemName || line.item.normItemName || line.item.name;
+      return {
       amount: (parsePositiveQuantity(line.quantityText) ?? 1) * parsePrice(line.priceText),
       brandModelArticle: line.brandModelArticle || itemModelDescription(line.item),
       catalogName: line.catalogName || line.item.name,
       dueAt: line.dueAt || null,
       issuePeriodText: line.issuePeriodText || getDefaultIssuePeriodText(line.item.defaultLifeMonths),
       issuedAt: isPpeSignatureLineStatus(line.status) ? line.issuedAt || new Date().toISOString() : null,
-      isSectionTitle: line.isSectionTitle,
+      isSectionTitle: Boolean(line.isSectionTitle || isPrintSectionLine(printItemName, line.item.name)),
       itemName: line.item.name,
       model: line.brandModelArticle || itemModelDescription(line.item),
       modelOptions: itemModelOptions(line.item, wizard.lines.map((wizardLine) => wizardLine.item)),
       normPoint: line.normPoint,
-      printItemName: line.printItemName || line.item.normItemName || line.item.name,
+      printItemName,
       quantity: parsePositiveQuantity(line.quantityText) ?? 1,
       status: line.status,
       unit: line.item.unit || "шт.",
       unitPrice: parsePrice(line.priceText),
-    }))),
+      };
+    })),
     position: employee?.position ?? "",
   };
 }
@@ -169,23 +172,27 @@ export function printDataFromDetail(detail: InventoryPpeCardDetailDto, items: In
     },
     employeeDetails: detail.employeeDetails ?? {},
     employeeName: detail.employeeName,
-    lines: sortPpePrintLines(detail.lines.map((line) => ({
+    lines: sortPpePrintLines(detail.lines.map((line) => {
+      const printItemName = line.printItemName || itemsById.get(line.itemId)?.normItemName || line.itemName;
+      return {
       brandModelArticle: line.brandModelArticle || line.modelDescription || itemModelDescriptionFromOptional(itemsById.get(line.itemId)),
       catalogName: line.itemName,
       dueAt: line.dueAt,
       issuePeriodText: line.issuePeriodText || "",
       issuedAt: line.issuedAt,
+      isSectionTitle: isPrintSectionLine(printItemName, line.itemName),
       itemName: line.itemName,
       model: line.brandModelArticle || line.modelDescription || itemModelDescriptionFromOptional(itemsById.get(line.itemId)),
       modelOptions: itemModelOptions(itemsById.get(line.itemId), items),
       normPoint: line.normPoint || "",
-      printItemName: line.printItemName || itemsById.get(line.itemId)?.normItemName || line.itemName,
+      printItemName,
       quantity: line.quantity,
       status: line.status,
       unit: line.unit || "шт.",
       unitPrice: (line.unitPriceMinor ?? 0) / 100,
       amount: (line.amountMinor ?? 0) / 100,
-    }))),
+      };
+    })),
     position: detail.position,
   };
 }
@@ -210,6 +217,11 @@ function itemModelOptions(item: InventoryItemDto | null | undefined, items: Inve
 function parsePrice(value: string) {
   const parsed = Number(value.trim().replace(/\s/g, "").replace(",", "."));
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function isPrintSectionLine(printItemName: string, itemName: string) {
+  const value = (printItemName || itemName).trim();
+  return Boolean(value && value.endsWith(":"));
 }
 
 function sortPpePrintLines(lines: PrintLine[]) {

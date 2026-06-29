@@ -143,6 +143,11 @@ public sealed class InventoryController(
     public ActionResult<InventoryCustodyRecordDto> UpdateCustodyRecordStatus(Guid id, UpdateInventoryStatusDto request) =>
         ToActionResult(inventoryWorkflowService.UpdateCustodyRecordStatus(id, request));
 
+    [HttpPatch("custody/records/{id:guid}/transfer")]
+    [RequirePermission("inventory.custody.manage")]
+    public ActionResult<InventoryCustodyRecordDto> TransferCustodyRecord(Guid id, TransferInventoryCustodyRecordDto request) =>
+        ToActionResult(inventoryWorkflowService.TransferCustodyRecord(id, request));
+
     [HttpPatch("custody/records/{id:guid}/archive")]
     [RequirePermission("inventory.custody.manage")]
     public ActionResult<InventoryCustodyRecordDto> ArchiveCustodyRecord(Guid id) =>

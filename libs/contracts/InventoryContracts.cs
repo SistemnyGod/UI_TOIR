@@ -277,7 +277,14 @@ public sealed record InventoryCustodyRecordDto(
     Guid ItemId,
     Guid WarehouseId,
     string Unit,
-    string Comment);
+    string Comment,
+    Guid? EmployeeId = null,
+    Guid? CurrentEmployeeId = null,
+    string CurrentEmployeeName = "",
+    string InventoryNumber = "",
+    string SerialNumber = "",
+    long? ItemPriceMinor = null,
+    string GroupName = "");
 
 public sealed record InventoryCustodyDocumentDto(
     Guid Id,
@@ -319,6 +326,14 @@ public sealed record CreateInventoryCustodyRecordDto(
 public sealed record UpdateInventoryStatusDto(
     string Status,
     string? Comment = null);
+
+public sealed record TransferInventoryCustodyRecordDto(
+    Guid EmployeeId,
+    DateTimeOffset? TransferredAt = null,
+    string? Comment = null,
+    Guid? ToEmployeeId = null,
+    Guid? FromEmployeeId = null,
+    Guid? DocumentId = null);
 
 public sealed record InventoryPpeSummaryDto(
     int Total,

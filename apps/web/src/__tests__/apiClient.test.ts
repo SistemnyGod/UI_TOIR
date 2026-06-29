@@ -38,6 +38,21 @@ describe("ApiClient", () => {
     await expect(client.delete("/api/v1/routes/1")).resolves.toBeUndefined();
   });
 
+  it("downloads inline data urls without prefixing the API base url", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response("file", { status: 200 }));
+    const client = new ApiClient({
+      baseUrl: "https://api.example.test",
+      fetcher,
+    });
+
+    await client.download("data:image/png;base64,AA==");
+
+    expect(fetcher).toHaveBeenCalledWith(
+      "data:image/png;base64,AA==",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
   it("binds default browser fetch to the global object", async () => {
     const originalFetch = globalThis.fetch;
     const fetcher = vi.fn(function (this: typeof globalThis) {

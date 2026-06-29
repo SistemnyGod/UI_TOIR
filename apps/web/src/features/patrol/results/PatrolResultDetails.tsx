@@ -37,6 +37,7 @@ export function PatrolResultDetails({
   const [pointQuery, setPointQuery] = useState("");
   const issueResults = group.results.filter(hasResultIssue);
   const mediaResults = group.results.filter((result) => getAttachmentCount(result) > 0);
+  const plannedAt = group.plannedAt ?? "нет данных";
   const startedAt = group.startedAt ?? group.firstScanAt ?? "нет данных";
   const finishedAt = group.finishedAt ?? group.lastScanAt ?? "нет данных";
   const hasAttention = group.issuePoints > 0 || issueResults.length > 0;
@@ -89,6 +90,7 @@ export function PatrolResultDetails({
 
         <div className="results-review-modal-kpis">
           <ModalKpi icon={<Timer size={18} />} label="Итог времени" value={group.duration.label} />
+          <ModalKpi icon={<ScanLine size={18} />} label="План обхода" value={plannedAt} />
           <ModalKpi icon={<ScanLine size={18} />} label="Начало обхода" value={startedAt} />
           <ModalKpi icon={<ScanLine size={18} />} label="Окончание обхода" value={finishedAt} />
           <ModalKpi icon={<MapPinned size={18} />} label="Точек" value={`${group.points} / ${group.points}`} />
@@ -158,6 +160,10 @@ export function PatrolResultDetails({
                 <div>
                   <dt>Смена</dt>
                   <dd>{group.shift}</dd>
+                </div>
+                <div>
+                  <dt>План обхода</dt>
+                  <dd>{plannedAt}</dd>
                 </div>
                 <div>
                   <dt>Начало обхода</dt>

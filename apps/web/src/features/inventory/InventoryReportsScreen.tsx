@@ -1,7 +1,21 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BarChart3, Download, FileText, Search } from "lucide-react";
-import type { InventoryListResponseDto, InventoryReportDto } from "../../api/contracts";
+import type {
+  InventoryCustodyRecordDto,
+  InventoryDocumentDto,
+  InventoryHistoryDto,
+  InventoryItemDto,
+  InventoryListResponseDto,
+  InventoryReportDto,
+} from "../../api/contracts";
 import { useInventoryRepository } from "../../repositories/inventoryRepositoryContext";
+import {
+  buildInventoryMovementJournal,
+  buildInventoryMovementReport,
+  filterInventoryMovements,
+  formatMovementQuantity,
+  movementActionLabel,
+} from "./history/inventoryMovementJournal";
 import "./inventoryWeb.css";
 
 type InventoryReportsScreenProps = {
@@ -13,11 +27,60 @@ type InventoryReportsScreenProps = {
 
 type ExportFormat = "xlsx" | "pdf" | "docx";
 
+type MovementState = {
+  custodyRecords: InventoryCustodyRecordDto[];
+  documents: InventoryDocumentDto[];
+  history: InventoryHistoryDto[];
+  items: InventoryItemDto[];
+};
+
+const emptyMovementState: MovementState = {
+  custodyRecords: [],
+  documents: [],
+  history: [],
+  items: [],
+};
+
 export function InventoryReportsScreen({ error, loading = false, onNotify, reports }: InventoryReportsScreenProps) {
   const inventoryRepository = useInventoryRepository();
   const [query, setQuery] = useState("");
   const [busyKey, setBusyKey] = useState("");
+  const [rowsState, setRowsState] = useState<MovementState>(emptyMovementState);
+  const [movementError, setMovementError] = useState("");
+  const [movementsLoading, setMovementsLoading] = useState(loading);
   const rows = reports?.rows ?? [];
+
+  useEffect(() => {
+    let mounted = true;
+    setMovementsLoading(true);
+    setMovementError("");
+
+    Promise.all([
+      inventoryRepository.getDocuments({ pageSize: 500 }),
+      inventoryRepository.getCustodyRecords({ pageSize: 500 }),
+      inventoryRepository.getHistory({ pageSize: 1000 }),
+      inventoryRepository.getItems({ pageSize: 500 }),
+    ])
+      .then(([documents, custodyRecords, historyRows, items]) => {
+        if (!mounted) return;
+        setRowsState({
+          custodyRecords: custodyRecords.rows,
+          documents: documents.rows,
+          history: historyRows.rows,
+          items: items.rows,
+        });
+      })
+      .catch((loadError) => {
+        if (mounted) setMovementError(loadError instanceof Error ? loadError.message : "Не удалось загрузить сводку движений");
+      })
+      .finally(() => {
+        if (mounted) setMovementsLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [inventoryRepository]);
 
   const visibleReports = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -29,13 +92,19 @@ export function InventoryReportsScreen({ error, loading = false, onNotify, repor
         .includes(normalized),
     );
   }, [query, rows]);
+  const movements = useMemo(() => buildInventoryMovementJournal(rowsState), [rowsState]);
+  const report = useMemo(() => buildInventoryMovementReport(movements), [movements]);
+  const last30DaysReport = useMemo(
+    () => buildInventoryMovementReport(filterInventoryMovements(movements, { period: "30d" })),
+    [movements],
+  );
 
-  async function exportReport(report: InventoryReportDto, format: ExportFormat) {
-    const key = `${report.id}:${format}`;
+  async function exportReport(reportRow: InventoryReportDto, format: ExportFormat) {
+    const key = `${reportRow.id}:${format}`;
     try {
       setBusyKey(key);
-      saveApiFile(await inventoryRepository.exportReport(report.id, format));
-      onNotify(`Отчет "${displayReportTitle(report)}" сформирован`);
+      saveApiFile(await inventoryRepository.exportReport(reportRow.id, format));
+      onNotify(`Отчет "${displayReportTitle(reportRow)}" сформирован`);
     } catch (downloadError) {
       onNotify(downloadError instanceof Error ? downloadError.message : "Не удалось сформировать отчет");
     } finally {
@@ -51,21 +120,61 @@ export function InventoryReportsScreen({ error, loading = false, onNotify, repor
           <div>
             <p>Бухгалтерия</p>
             <h1>Отчеты</h1>
-            <span>Выгрузки по выдачам, возвратам, списаниям, СИЗ, актам под запись, сотрудникам и истории операций.</span>
+            <span>Сводки по выдаче, под запись, сотрудникам, группам и экспортируемым формам.</span>
           </div>
         </div>
       </header>
 
       {error ? <ReportState kind="error" title="API отчетов не ответил" text={error} /> : null}
-      {loading ? <ReportState kind="loading" title="Загрузка отчетов" text="Получаем список доступных печатных и табличных форм." /> : null}
+      {movementError ? <ReportState kind="error" title="Сводка движений не загрузилась" text={movementError} /> : null}
+      {loading || movementsLoading ? <ReportState kind="loading" title="Загрузка отчетов" text="Получаем движения и список доступных форм." /> : null}
 
-      {!loading && !error ? (
+      {!loading && !movementsLoading && !error && !movementError ? (
         <>
-          <section className="inventory-reports-kpis" aria-label="Сводка отчетов">
-            <ReportKpi label="Всего отчетов" value={rows.length} />
-            <ReportKpi label="В выборке" tone="blue" value={visibleReports.length} />
-            <ReportKpi label="Доступных форматов" tone="green" value={countFormats(rows)} />
+          <section className="inventory-reports-kpis" aria-label="Сводка по движениям">
+            <ReportKpi label="Всего выдано" tone="blue" value={report.totals.issued} />
+            <ReportKpi label="На руках" tone="green" value={report.totals.inUse} />
+            <ReportKpi label="Возвращено" value={report.totals.returned} />
+            <ReportKpi label="Списано" value={report.totals.writtenOff} />
+            <ReportKpi label="Неисправно" tone="red" value={report.totals.lost} />
           </section>
+
+          {!movements.length ? (
+            <ReportState kind="empty" title="Отчеты по движениям недоступны" text="Сводки появятся после выдачи, возврата, списания или операции под запись." />
+          ) : (
+            <section className="inventory-reports-summary-grid">
+              <ReportTable
+                columns={["Сотрудник", "На руках", "Возвращено", "Списано", "Неисправно"]}
+                rows={report.byEmployee.map((row) => [
+                  row.employeeName,
+                  formatMovementQuantity(row.inUse),
+                  formatMovementQuantity(row.returned),
+                  formatMovementQuantity(row.writtenOff),
+                  formatMovementQuantity(row.lost),
+                ])}
+                title="Сводка по сотрудникам"
+              />
+              <ReportTable
+                columns={["Группа", "Движений", "На руках", "Списано", "Неисправно"]}
+                rows={report.byGroup.map((row) => [
+                  row.group,
+                  formatMovementQuantity(row.movements),
+                  formatMovementQuantity(row.inUse),
+                  formatMovementQuantity(row.writtenOff),
+                  formatMovementQuantity(row.lost),
+                ])}
+                title="Сводка по группам"
+              />
+              <ReportTable
+                columns={["Действие", "Количество"]}
+                rows={(["issued", "returned", "written_off", "lost", "archived"] as const).map((action) => [
+                  movementActionLabel(action),
+                  formatMovementQuantity(last30DaysReport.byAction[action]),
+                ])}
+                title="Итоги за 30 дней"
+              />
+            </section>
+          )}
 
           <section className="inventory-reports-filters">
             <label className="inventory-reports-search">
@@ -75,29 +184,30 @@ export function InventoryReportsScreen({ error, loading = false, onNotify, repor
           </section>
 
           {!rows.length ? (
-            <ReportState kind="empty" title="Отчеты не настроены" text="Backend пока не вернул список отчетов для бухгалтерии." />
+            <ReportState kind="empty" title="Экспорт недоступен" text="Backend пока не вернул список отчетов для выгрузки." />
           ) : !visibleReports.length ? (
             <ReportState kind="empty" title="Отчеты не найдены" text="Измените поисковый запрос." />
           ) : (
             <section className="inventory-reports-grid">
-              {visibleReports.map((report) => {
-                const formats = reportFormats(report);
+              {visibleReports.map((reportRow) => {
+                const formats = reportFormats(reportRow);
                 return (
-                  <article className="inventory-reports-card" key={report.id}>
+                  <article className="inventory-reports-card" key={reportRow.id}>
                     <span className="inventory-reports-card-icon"><FileText size={20} /></span>
                     <div>
-                      <h2>{displayReportTitle(report)}</h2>
-                      <p>{displayReportDescription(report)}</p>
+                      <h2>{displayReportTitle(reportRow)}</h2>
+                      <p>{displayReportDescription(reportRow)}</p>
+                      <small>Экспортирует выбранный отчет целиком.</small>
                     </div>
                     <div className="inventory-reports-formats">
                       {formats.map((format) => {
-                        const key = `${report.id}:${format}`;
+                        const key = `${reportRow.id}:${format}`;
                         return (
                           <button
                             className={format === "xlsx" ? "button primary" : "button ghost"}
                             disabled={Boolean(busyKey)}
                             key={format}
-                            onClick={() => void exportReport(report, format)}
+                            onClick={() => void exportReport(reportRow, format)}
                             type="button"
                           >
                             <Download size={15} />
@@ -121,7 +231,31 @@ function ReportKpi({ label, tone = "slate", value }: { label: string; tone?: "bl
   return (
     <article className={`inventory-reports-kpi tone-${tone}`}>
       <span>{label}</span>
-      <strong>{formatQuantity(value)}</strong>
+      <strong>{formatMovementQuantity(value)}</strong>
+    </article>
+  );
+}
+
+function ReportTable({ columns, rows, title }: { columns: string[]; rows: string[][]; title: string }) {
+  return (
+    <article className="inventory-reports-summary-card">
+      <h2>{title}</h2>
+      {!rows.length ? (
+        <p>Нет данных для сводки.</p>
+      ) : (
+        <div className="inventory-reports-table-wrap">
+          <table className="inventory-reports-table">
+            <thead>
+              <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.join(":")}>{row.map((cell, index) => <td key={`${cell}-${index}`}>{cell}</td>)}</tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </article>
   );
 }
@@ -144,10 +278,6 @@ function reportFormats(report: InventoryReportDto): ExportFormat[] {
   return allowed.length ? allowed : ["xlsx"];
 }
 
-function countFormats(rows: InventoryReportDto[]) {
-  return new Set(rows.flatMap(reportFormats)).size;
-}
-
 function displayReportTitle(report: InventoryReportDto) {
   const title = report.title.trim();
   if (/остат/i.test(title)) return "Учет предметов";
@@ -164,10 +294,6 @@ function displayReportDescription(report: InventoryReportDto) {
     .replace(/склад[а-яё]*/gi, "учетным")
     .replace(/\s{2,}/g, " ")
     .trim();
-}
-
-function formatQuantity(value: number) {
-  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 3 }).format(value);
 }
 
 function saveApiFile(file: { blob: Blob; fileName: string }) {

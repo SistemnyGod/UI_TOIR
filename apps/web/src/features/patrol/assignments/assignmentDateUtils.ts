@@ -19,6 +19,7 @@ export interface CalendarDay {
 
 export function createAssignmentHistoryEvents(assignment: ActivePatrol): AssignmentHistoryEvent[] {
   const events: AssignmentHistoryEvent[] = [];
+  const statusText = assignmentStatusText(assignment.status);
   const startedAt = assignment.startedAt || assignment.startedAtIso
     ? formatAssignmentEventTime(assignment.startedAt, assignment.startedAtIso)
     : undefined;
@@ -27,7 +28,20 @@ export function createAssignmentHistoryEvents(assignment: ActivePatrol): Assignm
     ? formatAssignmentEventTime(assignment.finishedAt, assignment.finishedAtIso)
     : undefined;
 
-  if (finishedAt) {
+  if (statusText === "Отменено") {
+    events.push({
+      id: `assignment-${assignment.id}-cancelled`,
+      meta: `План: ${plannedAt}`,
+      route: assignment.route,
+      sortAt: parseAssignmentEventTime(assignment.finishedAtIso, assignment.finishedAt)
+        || parseAssignmentEventTime(assignment.startedAtIso, assignment.startedAt)
+        || parseAssignmentEventTime(assignment.plannedAtIso, assignment.plannedAt ?? assignment.eta),
+      status: "Отменено",
+      title: "Назначение отменено",
+    });
+  }
+
+  if (statusText !== "Отменено" && finishedAt) {
     const plannedTimestamp = parseAssignmentEventTime(assignment.plannedAtIso, assignment.plannedAt ?? assignment.eta);
     const finishedTimestamp = parseAssignmentEventTime(assignment.finishedAtIso, assignment.finishedAt);
     const canUsePlannedAsFallback = plannedTimestamp > 0 && finishedTimestamp > 0 && plannedTimestamp <= finishedTimestamp;
@@ -59,7 +73,7 @@ export function createAssignmentHistoryEvents(assignment: ActivePatrol): Assignm
       meta: `План: ${plannedAt}`,
       route: assignment.route,
       sortAt: parseAssignmentEventTime(assignment.plannedAtIso, assignment.plannedAt ?? assignment.eta),
-      status: assignmentStatusText(assignment.status),
+      status: statusText,
       title: "Назначение создано",
     });
   }

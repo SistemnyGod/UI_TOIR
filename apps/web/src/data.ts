@@ -257,9 +257,153 @@ export const screens: ScreenConfig[] = [
   },
 ];
 
+const patrolRouteSeed: RouteDirectoryItem = {
+  id: "route-smoke-perimeter",
+  name: "Периметр северный",
+  territory: "Северный участок",
+  status: "Активен",
+  description: "Контроль КПП и склада ГСМ для mock/dev проверки обходов.",
+  duration: "45 мин",
+  distance: "1.8 км",
+  periodicity: "Каждая смена",
+  points: [
+    {
+      id: "point-smoke-gate",
+      expectedTime: "08:10",
+      interval: "10 мин",
+      name: "КПП-1",
+      order: 1,
+      requiresPhoto: true,
+      status: "Активна",
+      tag: "NFC-GATE-01",
+      type: "NFC",
+      zone: "Въезд",
+    },
+    {
+      id: "point-smoke-fuel",
+      expectedTime: "08:25",
+      interval: "15 мин",
+      name: "Склад ГСМ",
+      order: 2,
+      requiresPhoto: true,
+      status: "Активна",
+      tag: "QR-FUEL-02",
+      type: "QR-код",
+      zone: "Склад",
+    },
+  ],
+};
+
+const patrolMediaImage =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+
+const patrolMediaVideo = "data:video/mp4;base64,";
+
 export const dashboardMetrics: Metric[] = [];
-export const activePatrols: ActivePatrol[] = [];
-export const patrolResults: PatrolResult[] = [];
+export const activePatrols: ActivePatrol[] = [
+  {
+    id: "assignment-smoke-active",
+    currentPoint: "КПП-1",
+    deviation: "-",
+    employee: "Иванов Иван Иванович",
+    employeeId: "emp-1",
+    eta: "29.06.2026, 08:00",
+    plannedAt: "29.06.2026, 08:00",
+    plannedAtIso: "2026-06-29T08:00:00Z",
+    progress: 0,
+    route: patrolRouteSeed.name,
+    routeId: patrolRouteSeed.id,
+    shift: "День",
+    status: "Ожидает",
+    zone: patrolRouteSeed.territory,
+  },
+  {
+    id: "assignment-smoke-started",
+    currentPoint: "Склад ГСМ",
+    deviation: "+5 мин",
+    employee: "Петров Петр Петрович",
+    employeeId: "emp-2",
+    eta: "29.06.2026, 08:15",
+    plannedAt: "29.06.2026, 08:15",
+    plannedAtIso: "2026-06-29T08:15:00Z",
+    progress: 45,
+    route: patrolRouteSeed.name,
+    routeId: patrolRouteSeed.id,
+    shift: "День",
+    startedAt: "29.06.2026, 08:21",
+    startedAtIso: "2026-06-29T08:21:00Z",
+    status: "В пути",
+    zone: patrolRouteSeed.territory,
+  },
+];
+export const patrolResults: PatrolResult[] = [
+  {
+    id: "result-smoke-photo",
+    actualAt: "29.06.2026, 08:12",
+    assignmentId: "assignment-smoke-completed",
+    attachments: [
+      {
+        id: "attachment-smoke-photo",
+        contentType: "image/png",
+        createdAt: "29.06.2026, 08:12",
+        downloadUrl: patrolMediaImage,
+        fileName: "kpp-photo.png",
+        sizeBytes: 1024,
+      },
+      {
+        id: "attachment-smoke-video",
+        contentType: "video/mp4",
+        createdAt: "29.06.2026, 08:13",
+        downloadUrl: patrolMediaVideo,
+        fileName: "kpp-video.mp4",
+        sizeBytes: 2048,
+      },
+    ],
+    chronology: ["План: 29.06.2026, 08:00", "Начато: 29.06.2026, 08:05", "Факт: 29.06.2026, 08:12"],
+    comment: "без комментария",
+    deviation: "-3 мин",
+    employee: "Иванов Иван Иванович",
+    employeeId: "emp-1",
+    finishedAt: "29.06.2026, 08:40",
+    issueType: "нет",
+    photos: 2,
+    plannedAt: "29.06.2026, 08:15",
+    point: "КПП-1",
+    pointId: "point-smoke-gate",
+    route: patrolRouteSeed.name,
+    routeId: patrolRouteSeed.id,
+    severity: "-",
+    shift: "День",
+    source: "mobile",
+    startedAt: "29.06.2026, 08:05",
+    status: "Подтверждено",
+    territory: patrolRouteSeed.territory,
+  },
+  {
+    id: "result-smoke-late",
+    actualAt: "29.06.2026, 08:38",
+    assignmentId: "assignment-smoke-completed",
+    chronology: ["План: 29.06.2026, 08:25", "Факт: 29.06.2026, 08:38", "Замечание: поврежден замок"],
+    comment: "Поврежден замок, нужна заявка на ремонт",
+    deviation: "+13 мин",
+    employee: "Иванов Иван Иванович",
+    employeeId: "emp-1",
+    finishedAt: "29.06.2026, 08:40",
+    issueType: "Повреждение",
+    photos: 0,
+    plannedAt: "29.06.2026, 08:25",
+    point: "Склад ГСМ",
+    pointId: "point-smoke-fuel",
+    route: patrolRouteSeed.name,
+    routeId: patrolRouteSeed.id,
+    severity: "Средняя",
+    shift: "День",
+    source: "mobile",
+    startedAt: "29.06.2026, 08:05",
+    status: "Просрочено",
+    territory: patrolRouteSeed.territory,
+  },
+];
 export const serviceRequests: ServiceRequest[] = [];
 export const employees: Employee[] = [];
 export const employeeDirectory: EmployeeDirectoryItem[] = accountingEmployeesSeed.map((employee) => ({
@@ -290,9 +434,22 @@ export const employeeDirectory: EmployeeDirectoryItem[] = accountingEmployeesSee
   email: "",
 }));
 export const siteUsers: SiteUser[] = [];
-export const assignableRoutes: RouteOption[] = [];
+export const assignableRoutes: RouteOption[] = [
+  {
+    id: patrolRouteSeed.id,
+    controlPoints: patrolRouteSeed.points.filter((point) => point.requiresPhoto).length,
+    distance: patrolRouteSeed.distance,
+    duration: patrolRouteSeed.duration,
+    loadedEmployees: 1,
+    name: patrolRouteSeed.name,
+    points: patrolRouteSeed.points.length,
+    priority: "Обычный",
+    requiredEmployees: 2,
+    zone: patrolRouteSeed.territory,
+  },
+];
 export const initialAccounts: MobileAccount[] = [];
-export const routeDirectory: RouteDirectoryItem[] = [];
+export const routeDirectory: RouteDirectoryItem[] = [patrolRouteSeed];
 export const scheduleCells: ScheduleCell[] = [];
 export const securityEvents: string[][] = [];
 

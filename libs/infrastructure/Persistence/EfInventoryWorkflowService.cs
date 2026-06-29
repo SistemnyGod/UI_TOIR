@@ -93,6 +93,23 @@ internal sealed partial class EfInventoryWorkflowService(Patrol360DbContext dbCo
             return Failure<InventoryCustodyRecordDto>("itemId", "Item not found");
         }
 
+        var latestRecord = dbContext.InventoryCustodyRecords
+            .Where(row => row.ItemId == item.Id)
+            .OrderByDescending(row => row.IssuedAt)
+            .FirstOrDefault();
+        if (latestRecord is not null)
+        {
+            if (latestRecord.Status is "in_use" or "issued")
+            {
+                return Failure<InventoryCustodyRecordDto>("itemId", "Item is already in custody. Use transfer instead.");
+            }
+
+            if (latestRecord.Status is "written_off" or "lost" or "archived")
+            {
+                return Failure<InventoryCustodyRecordDto>("itemId", "Item cannot be issued because its custody status is final.");
+            }
+        }
+
         var warehouse = request.WarehouseId is not null
             ? dbContext.InventoryWarehouses.FirstOrDefault(row => row.Id == request.WarehouseId.Value && !row.IsArchived)
             : EnsureAccountingMovementWarehouse();
@@ -183,6 +200,74 @@ internal sealed partial class EfInventoryWorkflowService(Patrol360DbContext dbCo
         return Success(MapCustodyRecord(LoadCustodyRecord(record.Id)));
     }
 
+    public InventoryCommandResult<InventoryCustodyRecordDto> TransferCustodyRecord(Guid id, TransferInventoryCustodyRecordDto request)
+    {
+        var record = dbContext.InventoryCustodyRecords
+            .Include(row => row.Employee)
+            .FirstOrDefault(row => row.Id == id && row.ArchivedAt == null);
+        if (record is null)
+        {
+            return Failure<InventoryCustodyRecordDto>("id", "Custody record not found");
+        }
+
+        if (record.Status is not "in_use" and not "issued")
+        {
+            return Failure<InventoryCustodyRecordDto>("status", "Transfer is available only for active custody records");
+        }
+
+        var targetEmployeeId = request.ToEmployeeId ?? request.EmployeeId;
+        if (targetEmployeeId == Guid.Empty)
+        {
+            return Failure<InventoryCustodyRecordDto>("toEmployeeId", "Target employee is required");
+        }
+
+        if (request.FromEmployeeId is not null && record.EmployeeId != request.FromEmployeeId.Value)
+        {
+            return Failure<InventoryCustodyRecordDto>("fromEmployeeId", "Custody record is assigned to another employee");
+        }
+
+        var employee = dbContext.Employees.FirstOrDefault(row => row.Id == targetEmployeeId);
+        if (employee is null)
+        {
+            return Failure<InventoryCustodyRecordDto>("toEmployeeId", "Employee not found");
+        }
+
+        if (record.EmployeeId == employee.Id)
+        {
+            return Failure<InventoryCustodyRecordDto>("toEmployeeId", "Item is already assigned to this employee");
+        }
+
+        var previousEmployeeName = record.Employee.FullName;
+        var now = request.TransferredAt?.ToUniversalTime() ?? DateTimeOffset.UtcNow;
+        var normalizedComment = NormalizeOptional(request.Comment);
+        var transferDetails = $"{previousEmployeeName} -> {employee.FullName}";
+        record.EmployeeId = employee.Id;
+        record.Status = "in_use";
+        record.ClosedAt = null;
+        record.Comment = string.Join(
+            Environment.NewLine,
+            new[]
+            {
+                record.Comment,
+                string.IsNullOrWhiteSpace(normalizedComment)
+                    ? $"Передача: {transferDetails}"
+                    : $"Передача: {transferDetails}. {normalizedComment}"
+            }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+        AddCustodyEvent(record.Id, "transferred", previousEmployeeName, employee.FullName, normalizedComment, now);
+        AddSystemLog(
+            "custody_record",
+            record.Id,
+            "transferred",
+            string.IsNullOrWhiteSpace(normalizedComment)
+                ? transferDetails
+                : $"{transferDetails}; {normalizedComment}",
+            now);
+        dbContext.SaveChanges();
+
+        return Success(MapCustodyRecord(LoadCustodyRecord(record.Id)));
+    }
+
     public InventoryCommandResult<InventoryCustodyRecordDto> ArchiveCustodyRecord(Guid id)
     {
         var record = dbContext.InventoryCustodyRecords.FirstOrDefault(row => row.Id == id && row.ArchivedAt == null);
@@ -192,6 +277,9 @@ internal sealed partial class EfInventoryWorkflowService(Patrol360DbContext dbCo
         }
 
         record.ArchivedAt = DateTimeOffset.UtcNow;
+        record.ClosedAt = record.ArchivedAt;
+        record.Status = "archived";
+        AddCustodyEvent(record.Id, "archived", string.Empty, "archived", "Custody record archived", record.ArchivedAt.Value);
         AddSystemLog("custody_record", record.Id, "archived", "Custody record archived", record.ArchivedAt.Value);
         dbContext.SaveChanges();
 
@@ -228,6 +316,7 @@ internal sealed partial class EfInventoryWorkflowService(Patrol360DbContext dbCo
                 .ThenInclude(record => record.Employee)
             .Include(row => row.Records)
                 .ThenInclude(record => record.Item)
+                    .ThenInclude(item => item.Category)
             .Include(row => row.Records)
                 .ThenInclude(record => record.Warehouse)
             .FirstOrDefault(row => row.Id == id);
@@ -771,6 +860,7 @@ internal sealed partial class EfInventoryWorkflowService(Patrol360DbContext dbCo
             .Include(record => record.Document)
             .Include(record => record.Employee)
             .Include(record => record.Item)
+                .ThenInclude(item => item.Category)
             .Include(record => record.Warehouse)
             .First(record => record.Id == id);
 
@@ -808,7 +898,14 @@ internal sealed partial class EfInventoryWorkflowService(Patrol360DbContext dbCo
             record.ItemId,
             record.WarehouseId,
             record.Item.Unit?.Symbol ?? record.Item.Unit?.Name ?? string.Empty,
-            record.Comment ?? string.Empty);
+            record.Comment ?? string.Empty,
+            record.EmployeeId,
+            record.EmployeeId,
+            record.Employee.FullName,
+            record.Item.Sku,
+            record.Item.Article,
+            record.Item.DefaultUnitPriceMinor,
+            record.Item.Category?.Name ?? record.Item.ItemKind);
 
     private static InventoryCustodyDocumentDto MapCustodyDocument(InventoryCustodyDocumentEntity document) =>
         new(
@@ -1183,7 +1280,7 @@ internal sealed partial class EfInventoryWorkflowService(Patrol360DbContext dbCo
     private static string NormalizeCustodyStatus(string? status)
     {
         var value = NormalizeStatus(status);
-        return value is "in_use" or "returned" or "written_off" or "lost"
+        return value is "in_use" or "returned" or "written_off" or "lost" or "archived"
             ? value
             : value == "write_off"
                 ? "written_off"

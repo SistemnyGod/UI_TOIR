@@ -16,6 +16,10 @@ interface RuntimeProcess {
       VITE_DATA_SOURCE_MODE?: string;
     };
   };
+  __PATROL360_RUNTIME_ENV__?: {
+    VITE_ENABLE_MOCK_MODE?: string;
+    VITE_DATA_SOURCE_MODE?: string;
+  };
 }
 
 export function isDataSourceMode(value: unknown): value is DataSourceMode {
@@ -50,9 +54,11 @@ function canUseMockDataSource() {
 
 function getRuntimeEnv() {
   const viteEnv = (import.meta as ViteImportMeta).env;
-  const processEnv = (globalThis as typeof globalThis & RuntimeProcess).process?.env;
+  const runtime = globalThis as typeof globalThis & RuntimeProcess;
+  const explicitRuntimeEnv = runtime.__PATROL360_RUNTIME_ENV__;
+  const processEnv = runtime.process?.env;
   return {
-    VITE_DATA_SOURCE_MODE: viteEnv?.VITE_DATA_SOURCE_MODE ?? processEnv?.VITE_DATA_SOURCE_MODE,
-    VITE_ENABLE_MOCK_MODE: viteEnv?.VITE_ENABLE_MOCK_MODE ?? processEnv?.VITE_ENABLE_MOCK_MODE,
+    VITE_DATA_SOURCE_MODE: explicitRuntimeEnv?.VITE_DATA_SOURCE_MODE ?? processEnv?.VITE_DATA_SOURCE_MODE ?? viteEnv?.VITE_DATA_SOURCE_MODE,
+    VITE_ENABLE_MOCK_MODE: explicitRuntimeEnv?.VITE_ENABLE_MOCK_MODE ?? processEnv?.VITE_ENABLE_MOCK_MODE ?? viteEnv?.VITE_ENABLE_MOCK_MODE,
   };
 }

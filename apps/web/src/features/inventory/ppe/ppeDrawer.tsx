@@ -36,9 +36,8 @@ export function PpeDrawerPanel({
   if (!drawer) return null;
   const cardPrintData = drawer.type === "card" ? printDataFromDetail(drawer.detail, items) : null;
   const employeePrintErrors = cardPrintData ? validatePpeEmployeePrintDetails(cardPrintData.employeeDetails) : [];
-  const isPrintBlockedByEmployeeDetails = employeePrintErrors.length > 0;
-  const printBlockTitle = isPrintBlockedByEmployeeDetails
-    ? "Заполните поля личной карточки сотрудника перед печатью."
+  const printWarningTitle = employeePrintErrors.length
+    ? "В данных сотрудника есть незаполненные поля. Печать доступна с пустыми строками в бланке."
     : undefined;
 
   return createPortal(
@@ -56,16 +55,16 @@ export function PpeDrawerPanel({
               </button>
             </header>
             <div className="inventory-ppe-drawer-toolbar">
-              <button className="button ghost" disabled={isPrintBlockedByEmployeeDetails} onClick={() => onPreview(cardPrintData!, "card")} title={printBlockTitle} type="button">Предпросмотр карточки</button>
-              <button className="button ghost" disabled={isPrintBlockedByEmployeeDetails} onClick={() => onPreview(cardPrintData!, "sheet")} title={printBlockTitle} type="button">Предпросмотр листа</button>
-              <button className="button ghost" disabled={isPrintBlockedByEmployeeDetails} onClick={() => onPrint(cardPrintData!, "card")} title={printBlockTitle} type="button">Печать карточки</button>
-              <button className="button ghost" disabled={isPrintBlockedByEmployeeDetails} onClick={() => onPrint(cardPrintData!, "sheet")} title={printBlockTitle} type="button">Печать листа</button>
-              <button className="button ghost" disabled={isPrintBlockedByEmployeeDetails} onClick={() => void onDownload(() => inventoryRepository.printPpeCard(drawer.detail.id, "card", "docx"))} title={printBlockTitle} type="button">Карточка DOCX</button>
-              <button className="button ghost" disabled={isPrintBlockedByEmployeeDetails} onClick={() => void onDownload(() => inventoryRepository.printPpeCard(drawer.detail.id, "sheet", "docx"))} title={printBlockTitle} type="button">Лист DOCX</button>
+              <button className="button ghost" onClick={() => onPreview(cardPrintData!, "card")} title={printWarningTitle} type="button">Предпросмотр карточки</button>
+              <button className="button ghost" onClick={() => onPreview(cardPrintData!, "sheet")} title={printWarningTitle} type="button">Предпросмотр листа</button>
+              <button className="button ghost" onClick={() => onPrint(cardPrintData!, "card")} title={printWarningTitle} type="button">Печать карточки</button>
+              <button className="button ghost" onClick={() => onPrint(cardPrintData!, "sheet")} title={printWarningTitle} type="button">Печать листа</button>
+              <button className="button ghost" onClick={() => void onDownload(() => inventoryRepository.printPpeCard(drawer.detail.id, "card", "docx"))} title={printWarningTitle} type="button">Карточка DOCX</button>
+              <button className="button ghost" onClick={() => void onDownload(() => inventoryRepository.printPpeCard(drawer.detail.id, "sheet", "docx"))} title={printWarningTitle} type="button">Лист DOCX</button>
             </div>            <div className="inventory-ppe-drawer-body">
               {employeePrintErrors.length ? (
                 <div className="inventory-ppe-inline-warning inventory-ppe-print-validation" role="alert">
-                  <strong>Перед печатью заполните поля личной карточки</strong>
+                  <strong>В личной карточке есть пустые поля</strong>
                   <ul>
                     {employeePrintErrors.map((error) => (
                       <li key={error}>{error}</li>
@@ -127,4 +126,3 @@ export function PpeDrawerPanel({
     document.body,
   );
 }
-

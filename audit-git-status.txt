@@ -1,4 +1,4 @@
-﻿ M .dockerignore
+ M .dockerignore
 MM .gitignore
 D  .tmp/apk-check/patrol360-mobile-release.apk
 D  .tmp/publish-api/Microsoft.EntityFrameworkCore.Abstractions.dll

@@ -468,6 +468,128 @@
   margin-top: 3px;
 }
 
+.inventory-custody-screen .inventory-custody-item-kpis {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.inventory-custody-screen .inventory-custody-item-workbench {
+  align-items: stretch;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(260px, 0.34fr) minmax(0, 1fr);
+  margin-bottom: 12px;
+}
+
+.inventory-custody-screen .inventory-custody-list-directory,
+.inventory-custody-screen .inventory-custody-selected-item {
+  background: var(--custody-soft);
+  border: 1px solid var(--custody-border);
+  border-radius: 12px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.inventory-custody-screen .inventory-custody-list-directory {
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-custody-screen .inventory-custody-list-directory button {
+  background: #fff;
+  border: 1px solid var(--custody-border);
+  border-radius: 10px;
+  color: var(--custody-text);
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.inventory-custody-screen .inventory-custody-list-directory button.is-active {
+  border-color: #1d6df2;
+  box-shadow: inset 3px 0 0 #1d6df2;
+}
+
+.inventory-custody-screen .inventory-custody-list-directory strong,
+.inventory-custody-screen .inventory-custody-selected-item strong {
+  color: var(--custody-text);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.inventory-custody-screen .inventory-custody-list-directory span,
+.inventory-custody-screen .inventory-custody-selected-item span,
+.inventory-custody-screen .inventory-custody-selected-item small,
+.inventory-custody-screen .inventory-custody-selected-item p {
+  color: var(--custody-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.inventory-custody-screen .inventory-custody-selected-item {
+  display: grid;
+  gap: 10px;
+}
+
+.inventory-custody-screen .inventory-custody-selected-item-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inventory-custody-screen .inventory-custody-record-row {
+  cursor: pointer;
+}
+
+.inventory-custody-screen .inventory-custody-record-row.is-selected {
+  border-color: #1d6df2;
+  box-shadow: inset 3px 0 0 #1d6df2;
+}
+
+.inventory-custody-screen .inventory-custody-workspace-secondary {
+  opacity: 0.96;
+}
+
+.inventory-custody-add-item-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 16px;
+}
+
+.inventory-custody-add-item-grid label {
+  color: #607292;
+  display: grid;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 6px;
+}
+
+.inventory-custody-add-item-grid input,
+.inventory-custody-add-item-grid select,
+.inventory-custody-add-item-grid textarea,
+.inventory-custody-action-comment select {
+  border: 1px solid #b9cbed;
+  border-radius: 10px;
+  color: #0b1f3d;
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+.inventory-custody-add-item-grid textarea {
+  min-height: 84px;
+  padding: 10px;
+  resize: vertical;
+}
+
+.inventory-custody-add-item-wide {
+  grid-column: 1 / -1;
+}
+
 .inventory-custody-screen .inventory-custody-employee-flow {
   display: grid;
   gap: 12px;
@@ -722,7 +844,7 @@
   justify-content: center;
   padding: 18px;
   position: fixed;
-  z-index: 1100;
+  z-index: 2600;
 }
 
 .inventory-custody-action-modal {
@@ -875,8 +997,14 @@
   }
 
   .inventory-custody-screen .inventory-custody-movement-kpis,
+  .inventory-custody-screen .inventory-custody-item-kpis,
   .inventory-custody-screen .inventory-custody-movement-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventory-custody-screen .inventory-custody-item-workbench,
+  .inventory-custody-screen .inventory-custody-selected-item-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -895,9 +1023,13 @@
   .inventory-custody-screen .inventory-custody-inspector-actions,
   .inventory-custody-screen .inventory-custody-composer-summary,
   .inventory-custody-screen .inventory-custody-onhands-stats,
+  .inventory-custody-screen .inventory-custody-item-kpis,
+  .inventory-custody-screen .inventory-custody-item-workbench,
+  .inventory-custody-screen .inventory-custody-selected-item-grid,
   .inventory-custody-screen .inventory-custody-record-row,
   .inventory-custody-screen .inventory-custody-movement-kpis,
-  .inventory-custody-screen .inventory-custody-movement-filters {
+  .inventory-custody-screen .inventory-custody-movement-filters,
+  .inventory-custody-add-item-grid {
     grid-template-columns: 1fr;
   }
 
