@@ -22,7 +22,7 @@ import { patrolResultsFallback } from "../repositories/resultsRepository";
 import { routesFallback } from "../repositories/routesRepository";
 import { screenRegistry } from "../repositories/navigationRepository";
 import { useHashScreen } from "../hooks/useHashScreen";
-import { getDefaultDataSourceMode, isDataSourceMode } from "../api/dataSource";
+import { getConfiguredDataSourceMode, getDefaultDataSourceMode, isDataSourceMode } from "../api/dataSource";
 import { useMobileAccountsWorkspace, type TemporaryPasswordNotice } from "../hooks/useMobileAccountsWorkspace";
 import { usePatrolDataSource } from "../hooks/usePatrolDataSource";
 import { usePatrolWorkspaceData } from "../hooks/usePatrolWorkspaceData";
@@ -51,9 +51,12 @@ export function App() {
   const [selectedUserId, setSelectedUserId] = useState("");
   const [requestModal, setRequestModal] = useState<RequestModalState>(null);
   const { toast, showToast } = useToast();
-  const [dataSourceMode, setDataSourceMode] = useStoredState<DataSourceMode>("patrol360.dataSourceMode", getDefaultDataSourceMode(), {
+  const configuredDataSourceMode = getConfiguredDataSourceMode();
+  const [storedDataSourceMode, setStoredDataSourceMode] = useStoredState<DataSourceMode>("patrol360.dataSourceMode", getDefaultDataSourceMode(), {
+    ignoreStoredValue: configuredDataSourceMode !== null,
     validate: isDataSourceMode,
   });
+  const dataSourceMode = configuredDataSourceMode ?? storedDataSourceMode;
   const session = useSession(dataSourceMode);
   const hasApiSession =
     dataSourceMode === "api" &&
@@ -360,6 +363,10 @@ export function App() {
   async function handleLogout() {
     await session.logout();
     setDataSourceMode("api");
+  }
+
+  function setDataSourceMode(nextMode: DataSourceMode) {
+    setStoredDataSourceMode(configuredDataSourceMode ?? nextMode);
   }
 
   if (dataSourceMode === "api" && !hasApiSession) {

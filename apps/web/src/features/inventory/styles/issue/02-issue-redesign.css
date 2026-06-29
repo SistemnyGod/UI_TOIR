@@ -228,14 +228,14 @@
 .inventory-issue-filters,
 .inventory-issue-table-toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(170px, 220px);
-  gap: 14px;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 200px);
+  gap: 10px;
   align-items: end;
   margin-bottom: 16px;
 }
 
 .inventory-issue-table-toolbar {
-  grid-template-columns: minmax(260px, 1fr) 170px 170px 220px auto;
+  grid-template-columns: minmax(240px, 1fr) minmax(136px, 160px) minmax(136px, 160px) auto;
   margin-bottom: 18px;
 }
 
@@ -256,8 +256,8 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
-  height: 44px;
-  padding: 0 14px;
+  height: 40px;
+  padding: 0 12px;
   border: 1px solid #cfe0f6;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.92);
@@ -331,7 +331,7 @@
 
 .inventory-issue-item-grid article {
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr) auto;
+  grid-template-columns: 58px minmax(0, 1fr);
   gap: 14px;
   align-items: center;
   min-width: 0;
@@ -339,6 +339,7 @@
   border: 1px solid #dbe7f7;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.96);
+  cursor: pointer;
 }
 
 .inventory-issue-item-grid article.is-selected {
@@ -495,8 +496,8 @@
 
 .inventory-issue-line-summary {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 108px 42px 94px 98px 36px 36px;
-  gap: 8px;
+  grid-template-columns: minmax(180px, 1fr) minmax(360px, max-content) minmax(80px, max-content);
+  gap: 10px;
   align-items: center;
   min-width: 0;
 }
@@ -566,7 +567,7 @@
 .inventory-issue-draft-total,
 .inventory-issue-history-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -619,7 +620,7 @@
 
 .inventory-issue-table {
   width: 100%;
-  min-width: 940px;
+  min-width: 1120px;
   border-collapse: collapse;
   color: #102244;
   font-size: 13px;
@@ -804,4 +805,3 @@
     text-align: left;
   }
 }
-

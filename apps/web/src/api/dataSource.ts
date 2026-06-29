@@ -9,6 +9,15 @@ interface ViteImportMeta {
   };
 }
 
+interface RuntimeProcess {
+  process?: {
+    env?: {
+      VITE_ENABLE_MOCK_MODE?: string;
+      VITE_DATA_SOURCE_MODE?: string;
+    };
+  };
+}
+
 export function isDataSourceMode(value: unknown): value is DataSourceMode {
   if (value === "api") return true;
   if (value === "mock") return canUseMockDataSource();
@@ -16,8 +25,12 @@ export function isDataSourceMode(value: unknown): value is DataSourceMode {
 }
 
 export function getDefaultDataSourceMode(): DataSourceMode {
-  const configuredMode = (import.meta as ViteImportMeta).env?.VITE_DATA_SOURCE_MODE;
-  return isDataSourceMode(configuredMode) ? configuredMode : "api";
+  return getConfiguredDataSourceMode() ?? "api";
+}
+
+export function getConfiguredDataSourceMode(): DataSourceMode | null {
+  const configuredMode = getRuntimeEnv().VITE_DATA_SOURCE_MODE;
+  return isDataSourceMode(configuredMode) ? configuredMode : null;
 }
 
 export function getDataSourceLabel(mode: DataSourceMode) {
@@ -25,7 +38,7 @@ export function getDataSourceLabel(mode: DataSourceMode) {
 }
 
 function canUseMockDataSource() {
-  const env = (import.meta as ViteImportMeta).env;
+  const env = getRuntimeEnv();
   const mockEnabled = env?.VITE_ENABLE_MOCK_MODE === "true" || env?.VITE_ENABLE_MOCK_MODE === "1";
   if (!mockEnabled) return false;
 
@@ -33,4 +46,13 @@ function canUseMockDataSource() {
 
   const host = window.location.hostname.toLowerCase();
   return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
+function getRuntimeEnv() {
+  const viteEnv = (import.meta as ViteImportMeta).env;
+  const processEnv = (globalThis as typeof globalThis & RuntimeProcess).process?.env;
+  return {
+    VITE_DATA_SOURCE_MODE: viteEnv?.VITE_DATA_SOURCE_MODE ?? processEnv?.VITE_DATA_SOURCE_MODE,
+    VITE_ENABLE_MOCK_MODE: viteEnv?.VITE_ENABLE_MOCK_MODE ?? processEnv?.VITE_ENABLE_MOCK_MODE,
+  };
 }

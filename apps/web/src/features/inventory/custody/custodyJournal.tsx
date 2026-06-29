@@ -20,7 +20,7 @@ import {
   getCustodyRecordGroup,
   getDocumentIdByRecordId,
   getInitials,
-  isProblemCustodyRecord,
+  isActiveCustodyRecord,
   recordStatusLabel,
   type CustodyMovementAction,
 } from "./custodyCommon";
@@ -155,7 +155,6 @@ export function CustodyRecordsSection({
   onOpenRecordHistory,
   onSelectEmployee,
   onUpdateRecordStatus,
-  query,
   records,
   selectedEmployeeId,
 }: {
@@ -166,36 +165,44 @@ export function CustodyRecordsSection({
   onOpenRecordHistory: (row: InventoryCustodyRecordDto) => Promise<void>;
   onSelectEmployee: (employeeId: string) => void;
   onUpdateRecordStatus: (row: InventoryCustodyRecordDto, status: string, documentId?: string, comment?: string) => Promise<void>;
-  query: string;
   records: InventoryCustodyRecordDto[];
   selectedEmployeeId: string;
 }) {
-  const [statusFilter, setStatusFilter] = useState<"all" | "in_use" | "returned" | "written_off" | "problem">("all");
+  const [recordQuery, setRecordQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "in_use" | "returned" | "written_off" | "lost" | "archived">("all");
+  const [groupFilter, setGroupFilter] = useState<"all" | string>("all");
+  const [activeOnly, setActiveOnly] = useState(false);
   const [movementFilters, setMovementFilters] = useState<MovementFilters>(emptyMovementFilters);
   const documentIdByRecordId = useMemo(() => getDocumentIdByRecordId(documents, records), [documents, records]);
   const selectedEmployee = employees.find((employee) => employee.id === selectedEmployeeId) ?? null;
   const employeeRecords = selectedEmployee
     ? records.filter((row) => samePerson(row.employeeName, selectedEmployee.fullName))
     : [];
-  const onHandsRecords = employeeRecords.filter((row) => row.status === "in_use");
+  const onHandsRecords = employeeRecords.filter(isActiveCustodyRecord);
+
+  const baseFilteredRecords = useMemo(() => {
+    const rows = filterRecords(records, recordQuery);
+    if (groupFilter === "all") return rows;
+    return rows.filter((row) => getCustodyRecordGroup(row) === groupFilter);
+  }, [groupFilter, recordQuery, records]);
 
   const visibleRecords = useMemo(() => {
-    const rows = filterRecords(records, query);
-    if (statusFilter === "all") return rows;
-    if (statusFilter === "problem") return rows.filter(isProblemCustodyRecord);
-    return rows.filter((row) => row.status === statusFilter);
-  }, [query, records, statusFilter]);
+    if (activeOnly) return baseFilteredRecords.filter(isActiveCustodyRecord);
+    if (statusFilter === "all") return baseFilteredRecords;
+    if (statusFilter === "in_use") return baseFilteredRecords.filter(isActiveCustodyRecord);
+    return baseFilteredRecords.filter((row) => row.status === statusFilter);
+  }, [activeOnly, baseFilteredRecords, statusFilter]);
 
   const counters = useMemo(() => {
-    const rows = filterRecords(records, query);
     return {
-      all: rows.length,
-      in_use: rows.filter((row) => row.status === "in_use").length,
-      problem: rows.filter(isProblemCustodyRecord).length,
-      returned: rows.filter((row) => row.status === "returned").length,
-      written_off: rows.filter((row) => row.status === "written_off").length,
+      all: baseFilteredRecords.length,
+      archived: baseFilteredRecords.filter((row) => row.status === "archived").length,
+      in_use: baseFilteredRecords.filter(isActiveCustodyRecord).length,
+      lost: baseFilteredRecords.filter((row) => row.status === "lost").length,
+      returned: baseFilteredRecords.filter((row) => row.status === "returned").length,
+      written_off: baseFilteredRecords.filter((row) => row.status === "written_off").length,
     };
-  }, [query, records]);
+  }, [baseFilteredRecords]);
 
   const movements = useMemo(() => buildMovements(records), [records]);
   const filteredMovements = useMemo(() => filterMovements(movements, movementFilters), [movementFilters, movements]);
@@ -254,16 +261,37 @@ export function CustodyRecordsSection({
         </div>
       </div>
 
-      <div className="inventory-custody-record-filters" aria-label="Фильтр строк под запись">
+      <div className="inventory-custody-record-toolbar" aria-label="Фильтры строк под запись">
+        <label className="inventory-custody-record-search">
+          <Search size={15} />
+          <input
+            onChange={(event) => setRecordQuery(event.target.value)}
+            placeholder="Сотрудник, предмет, комментарий"
+            type="search"
+            value={recordQuery}
+          />
+        </label>
+        <select aria-label="Группа предметов" onChange={(event) => setGroupFilter(event.target.value)} value={groupFilter}>
+          <option value="all">Все группы</option>
+          {CUSTODY_ITEM_GROUPS.map((group) => <option key={group} value={group}>{group}</option>)}
+        </select>
+        <label className="inventory-custody-record-toggle">
+          <input checked={activeOnly} onChange={(event) => setActiveOnly(event.target.checked)} type="checkbox" />
+          <span>Только на руках</span>
+        </label>
+      </div>
+
+      <div className="inventory-custody-record-filters" aria-label="Фильтр статуса строк под запись">
         <button className={statusFilter === "all" ? "is-active" : ""} onClick={() => setStatusFilter("all")} type="button">Все <span>{counters.all}</span></button>
         <button className={statusFilter === "in_use" ? "is-active" : ""} onClick={() => setStatusFilter("in_use")} type="button">На руках <span>{counters.in_use}</span></button>
         <button className={statusFilter === "returned" ? "is-active" : ""} onClick={() => setStatusFilter("returned")} type="button">Возвращено <span>{counters.returned}</span></button>
         <button className={statusFilter === "written_off" ? "is-active" : ""} onClick={() => setStatusFilter("written_off")} type="button">Списано <span>{counters.written_off}</span></button>
-        <button className={statusFilter === "problem" ? "is-active" : ""} onClick={() => setStatusFilter("problem")} type="button"><AlertTriangle size={14} /> Проблемные <span>{counters.problem}</span></button>
+        <button className={statusFilter === "lost" ? "is-active" : ""} onClick={() => setStatusFilter("lost")} type="button"><AlertTriangle size={14} /> Неисправно <span>{counters.lost}</span></button>
+        <button className={statusFilter === "archived" ? "is-active" : ""} onClick={() => setStatusFilter("archived")} type="button">Архив <span>{counters.archived}</span></button>
       </div>
 
       {!visibleRecords.length ? (
-        <CustodyState kind="empty" text="Записи появятся после выдачи под запись или импорта актов." title="Строк по текущему фильтру нет" />
+        <CustodyState kind="empty" text={records.length ? "Измените поиск, группу или статус, чтобы увидеть строки." : "Записи появятся после выдачи под запись или импорта актов."} title={records.length ? "По текущим фильтрам строк нет" : "Строк под запись пока нет"} />
       ) : (
         <div className="inventory-custody-lines-wrap">
           <CustodyRecordTable
@@ -469,6 +497,8 @@ export function CustodyRecordTable({
     <div className="inventory-custody-record-list">
       {rows.map((row) => {
         const documentId = documentIdByRecordId.get(row.id);
+        const rowIsActive = isActiveCustodyRecord(row);
+        const canWriteOff = rowIsActive || row.status === "returned" || row.status === "lost";
         return (
           <article className="inventory-custody-record-row" key={row.id}>
             <div className="inventory-custody-record-main">
@@ -499,7 +529,7 @@ export function CustodyRecordTable({
                 <History size={15} />
                 История
               </button>
-              <button className="button ghost" disabled={row.status !== "in_use" || busyAction === `returned-${row.id}`} onClick={() => openAction({
+              <button className="button ghost" disabled={!rowIsActive || busyAction === `returned-${row.id}`} onClick={() => openAction({
                 commentLabel: "Комментарий к возврату",
                 confirmLabel: "Провести возврат",
                 documentId,
@@ -510,7 +540,7 @@ export function CustodyRecordTable({
                 <RotateCcw size={15} />
                 Вернуть
               </button>
-              <button className="button ghost" disabled={row.status !== "in_use" || busyAction === `lost-${row.id}`} onClick={() => openAction({
+              <button className="button ghost" disabled={!rowIsActive || busyAction === `lost-${row.id}`} onClick={() => openAction({
                 commentLabel: "Что неисправно или требует проверки",
                 commentRequired: true,
                 confirmLabel: "Зафиксировать неисправность",
@@ -522,7 +552,7 @@ export function CustodyRecordTable({
                 <Wrench size={15} />
                 Поломка
               </button>
-              <button className="button ghost danger" disabled={!["in_use", "returned", "lost"].includes(row.status) || busyAction === `written_off-${row.id}`} onClick={() => openAction({
+              <button className="button ghost danger" disabled={!canWriteOff || busyAction === `written_off-${row.id}`} onClick={() => openAction({
                 commentLabel: "Причина списания, номер акта или документа",
                 commentRequired: true,
                 confirmLabel: "Провести списание",
@@ -654,7 +684,7 @@ function buildMovements(records: InventoryCustodyRecordDto[]): CustodyMovement[]
 function buildMovementTotals(records: InventoryCustodyRecordDto[]) {
   return records.reduce((acc, row) => {
     acc.issued += row.quantity;
-    if (row.status === "in_use") acc.inUse += row.quantity;
+    if (isActiveCustodyRecord(row)) acc.inUse += row.quantity;
     if (row.status === "returned") acc.returned += row.quantity;
     if (row.status === "written_off") acc.writtenOff += row.quantity;
     if (row.status === "lost") acc.lost += row.quantity;

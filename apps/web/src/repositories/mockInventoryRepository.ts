@@ -138,7 +138,7 @@ export function createMockInventoryRepository(): InventoryRepository {
 
     async getDocuments(params = {}) {
       const store = readStore();
-      let rows = store.documents;
+      let rows = sortDocuments(store.documents);
       if (params.type) rows = rows.filter((row) => row.type === params.type);
       rows = filterByQuery(rows, params.query, (row) => [row.number, row.itemName ?? "", row.employeeName, row.warehouseName ?? ""]);
       return pageRows(rows, params);
@@ -179,7 +179,7 @@ export function createMockInventoryRepository(): InventoryRepository {
         documentStatuses: ["open", "closed", "archived"],
         employees: activeEmployees(store),
         items: activeItems(store),
-        recordStatuses: ["issued", "returned", "written_off", "archived"],
+        recordStatuses: ["in_use", "returned", "written_off", "lost", "archived"],
         warehouses: activeReferences(store.settings.warehouses),
       };
     },
@@ -212,7 +212,7 @@ export function createMockInventoryRepository(): InventoryRepository {
         itemId: item.id,
         itemName: item.name,
         quantity: payload.quantity,
-        status: "issued",
+        status: "in_use",
         unit: item.unit,
         warehouseId: warehouse?.id ?? "",
         warehouseName: warehouse?.name ?? "",
@@ -220,7 +220,7 @@ export function createMockInventoryRepository(): InventoryRepository {
       if (!existingDocument) store.custodyDocuments.unshift(document);
       store.custodyRecords.unshift(record);
       document.recordsCount = store.custodyRecords.filter((row) => row.documentId === documentId).length;
-      addHistory(store, "custody_record", "created", `Выдано под запись: ${item.name}`, "Mock");
+      addHistory(store, "custody_record", "created", `Выдано под запись: ${item.name}`, "Mock", record.id);
       if (warehouse) {
         adjustStock(store, item.id, warehouse.id, -payload.quantity);
       }
@@ -233,8 +233,8 @@ export function createMockInventoryRepository(): InventoryRepository {
       const record = required(store.custodyRecords.find((row) => row.id === recordId), "Строка под запись не найдена");
       record.status = payload.status;
       record.comment = payload.comment ?? record.comment;
-      if (payload.status === "returned" || payload.status === "written_off") record.closedAt = new Date().toISOString();
-      addHistory(store, "custody_record", "status_changed", `Статус строки: ${payload.status}`, "Mock");
+      if (["returned", "written_off", "lost"].includes(payload.status)) record.closedAt = new Date().toISOString();
+      addHistory(store, "custody_record", payload.status, `Статус строки: ${payload.status}`, "Mock", record.id);
       writeStore(store);
       return record;
     },
@@ -244,7 +244,7 @@ export function createMockInventoryRepository(): InventoryRepository {
       const record = required(store.custodyRecords.find((row) => row.id === recordId), "Строка под запись не найдена");
       record.status = "archived";
       record.closedAt = new Date().toISOString();
-      addHistory(store, "custody_record", "archived", `Строка перенесена в архив: ${record.itemName}`, "Mock");
+      addHistory(store, "custody_record", "archived", `Строка перенесена в архив: ${record.itemName}`, "Mock", record.id);
       writeStore(store);
       return record;
     },
@@ -265,7 +265,10 @@ export function createMockInventoryRepository(): InventoryRepository {
         employeeId: employee?.id ?? "",
         employeeName: document.employeeName,
         employeePersonnelNo: employee?.personnelNo ?? "",
-        history: store.history.filter((row) => row.entityType === "custody_record" || row.entityType === "custody_document"),
+        history: store.history.filter((row) =>
+          (row.entityType === "custody_document" && row.entityId === document.id)
+          || (row.entityType === "custody_record" && store.custodyRecords.some((record) => record.id === row.entityId && record.documentId === document.id)),
+        ),
         id: document.id,
         number: document.number,
         records: store.custodyRecords.filter((row) => row.documentId === document.id),
@@ -285,12 +288,20 @@ export function createMockInventoryRepository(): InventoryRepository {
       return updateCustodyDocument(documentId, "archived");
     },
 
-    async getCustodyRecordHistory() {
-      return pageRows(readStore().history.filter((row) => row.entityType === "custody_record"), {});
+    async getCustodyRecordHistory(recordId, params = {}) {
+      return pageRows(readStore().history.filter((row) => row.entityType === "custody_record" && row.entityId === recordId), params);
     },
 
-    async getCustodyDocumentHistory() {
-      return pageRows(readStore().history.filter((row) => row.entityType === "custody_document" || row.entityType === "custody_record"), {});
+    async getCustodyDocumentHistory(documentId, params = {}) {
+      const store = readStore();
+      const documentRecordIds = new Set(store.custodyRecords.filter((row) => row.documentId === documentId).map((row) => row.id));
+      return pageRows(
+        store.history.filter((row) =>
+          (row.entityType === "custody_document" && row.entityId === documentId)
+          || (row.entityType === "custody_record" && documentRecordIds.has(row.entityId ?? "")),
+        ),
+        params,
+      );
     },
 
     async getPpeCards(params = {}) {
@@ -909,10 +920,12 @@ export function createMockInventoryRepository(): InventoryRepository {
     async createOperation(payload) {
       const store = readStore();
       const item = required(store.items.find((row) => row.id === payload.itemId), "Позиция не найдена");
-      const warehouse = required(store.settings.warehouses.find((row) => row.id === payload.warehouseId), "Склад не найден");
+      const warehouse = payload.warehouseId
+        ? required(store.settings.warehouses.find((row) => row.id === payload.warehouseId), "Склад не найден")
+        : null;
       const employee = payload.employeeId ? store.employees.find((row) => row.id === payload.employeeId) : null;
       const quantity = payload.quantity;
-      const signed = payload.type === "issue" || payload.type === "write_off" ? -quantity : quantity;
+      const signed = isNegativeMovement(payload.type) ? -quantity : quantity;
       if (warehouse) {
         adjustStock(store, item.id, warehouse.id, signed);
       }
@@ -1081,7 +1094,7 @@ function createSeedStore(): InventoryMockStore {
 
 function buildOverview(store: InventoryMockStore): InventoryOverviewDto {
   return {
-    activeCustodyRecords: store.custodyRecords.filter((row) => row.status === "issued").length,
+    activeCustodyRecords: store.custodyRecords.filter((row) => row.status === "in_use").length,
     activeIssues: store.documents.filter((row) => row.type === "issue").length,
     attention: store.stock
       .filter((row) => row.stockAvailable <= 2)
@@ -1210,7 +1223,7 @@ function updateCustodyDocument(documentId: string, status: string) {
   const store = readStore();
   const document = required(store.custodyDocuments.find((row) => row.id === documentId), "Акт под запись не найден");
   document.status = status;
-  addHistory(store, "custody_document", "status_changed", `Статус акта: ${status}`, "Mock");
+  addHistory(store, "custody_document", "status_changed", `Статус акта: ${status}`, "Mock", document.id);
   writeStore(store);
   return Promise.resolve(document);
 }
@@ -1334,6 +1347,20 @@ function pageRows<T>(rows: T[], params: InventoryListParams): InventoryListRespo
   };
 }
 
+function sortDocuments(rows: InventoryDocumentDto[]) {
+  return [...rows].sort((left, right) => parseDateTime(right.createdAt) - parseDateTime(left.createdAt));
+}
+
+function parseDateTime(value?: string | null) {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function isNegativeMovement(type: string) {
+  return ["issue", "write_off", "defective", "lost", "broken", "failure", "ppe_write_off", "ppe_defective"].includes(type);
+}
+
 function filterByQuery<T>(rows: T[], query: string | undefined, fields: (row: T) => string[]) {
   const normalized = normalize(query ?? "");
   if (!normalized) return rows;
@@ -1437,12 +1464,12 @@ function stockRow(itemRow: InventoryItemDto, warehouse: InventoryReferenceOption
   };
 }
 
-function history(idValue: string, entityType: string, action: string, description: string, actor: string, createdAt: string): InventoryHistoryDto {
-  return { action, actor, createdAt, description, entityType, id: idValue };
+function history(idValue: string, entityType: string, action: string, description: string, actor: string, createdAt: string, entityId?: string | null): InventoryHistoryDto {
+  return { action, actor, createdAt, description, entityId: entityId ?? null, entityType, id: idValue };
 }
 
-function addHistory(store: InventoryMockStore, entityType: string, action: string, description: string, actor: string) {
-  store.history.unshift(history(id("history"), entityType, action, description, actor, new Date().toISOString()));
+function addHistory(store: InventoryMockStore, entityType: string, action: string, description: string, actor: string, entityId?: string | null) {
+  store.history.unshift(history(id("history"), entityType, action, description, actor, new Date().toISOString(), entityId));
 }
 
 function addSystemLog(store: InventoryMockStore, entityType: string, action: string, details: string) {

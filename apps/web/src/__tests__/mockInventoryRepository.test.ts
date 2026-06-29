@@ -93,6 +93,161 @@ describe("mock Inventory repository", () => {
     expect(history.rows.some((row) => row.action === "issue" && row.entityType === "stock_move")).toBe(true);
   });
 
+  it("posts issue operations without warehouse as accounting movements", async () => {
+    const repository = createMockInventoryRepository();
+    const before = await repository.getStock({ pageSize: 100 });
+    const stockBefore = before.rows.find((row) => row.itemId === "item-helmet" && row.warehouseId === "wh-ppe");
+
+    const document = await repository.createOperation({
+      comment: "No warehouse issue",
+      employeeId: "emp-1",
+      itemId: "item-helmet",
+      quantity: 2,
+      type: "issue",
+      warehouseId: null,
+    });
+
+    expect(document.quantity).toBe(-2);
+    expect(document.comment).toBe("No warehouse issue");
+    expect(document.type).toBe("issue");
+    expect(document.warehouseName).toBe("");
+
+    const after = await repository.getStock({ pageSize: 100 });
+    const stockAfter = after.rows.find((row) => row.itemId === "item-helmet" && row.warehouseId === "wh-ppe");
+    expect(stockAfter?.stockAvailable).toBe(stockBefore?.stockAvailable);
+
+    const documents = await repository.getDocuments({ pageSize: 100 });
+    expect(documents.rows.some((row) => row.id === document.id && row.type === "issue")).toBe(true);
+
+    const history = await repository.getHistory({ pageSize: 100 });
+    expect(history.rows.some((row) => row.action === "issue" && row.entityType === "stock_move")).toBe(true);
+  });
+
+  it("returns movement documents sorted, filtered, and without reload duplicates", async () => {
+    const repository = createMockInventoryRepository();
+
+    const issue = await repository.createOperation({
+      employeeId: "emp-1",
+      itemId: "item-helmet",
+      movedAt: "2026-01-10T10:00:00.000Z",
+      quantity: 1,
+      type: "issue",
+      warehouseId: null,
+    });
+    const returned = await repository.createOperation({
+      employeeId: "emp-1",
+      itemId: "item-helmet",
+      movedAt: "2026-01-12T10:00:00.000Z",
+      quantity: 1,
+      type: "return",
+      warehouseId: null,
+    });
+    const defective = await repository.createOperation({
+      comment: "Broken latch",
+      employeeId: "emp-1",
+      itemId: "item-helmet",
+      movedAt: "2026-01-11T10:00:00.000Z",
+      quantity: 1,
+      type: "defective",
+      warehouseId: null,
+    });
+
+    const documents = await repository.getDocuments({ pageSize: 100 });
+    expect(documents.rows.map((row) => row.id).slice(0, 3)).toEqual([returned.id, defective.id, issue.id]);
+    expect(new Set(documents.rows.map((row) => row.id)).size).toBe(documents.rows.length);
+
+    const issueDocuments = await repository.getDocuments({ pageSize: 100, type: "issue" });
+    expect(issueDocuments.rows).toHaveLength(1);
+    expect(issueDocuments.rows[0].id).toBe(issue.id);
+
+    const reloaded = await repository.getDocuments({ pageSize: 100 });
+    expect(reloaded.rows.map((row) => row.id)).toEqual(documents.rows.map((row) => row.id));
+  });
+
+  it("creates custody records as active in-use items and writes scoped history", async () => {
+    const repository = createMockInventoryRepository();
+
+    const first = await repository.createCustodyRecord({
+      comment: "Issued to shift",
+      documentId: null,
+      employeeId: "emp-1",
+      itemId: "item-wrench",
+      quantity: 1,
+      warehouseId: null,
+    });
+    const second = await repository.createCustodyRecord({
+      comment: "Separate employee record",
+      documentId: null,
+      employeeId: "emp-2",
+      itemId: "item-wrench",
+      quantity: 1,
+      warehouseId: null,
+    });
+
+    expect(first.status).toBe("in_use");
+
+    const active = await repository.getCustodyRecords({ pageSize: 100, status: "in_use" });
+    expect(active.rows.some((row) => row.id === first.id)).toBe(true);
+
+    const recordHistory = await repository.getCustodyRecordHistory(first.id, { pageSize: 100 });
+    expect(recordHistory.rows).toHaveLength(1);
+    expect(recordHistory.rows.every((row) => row.entityId === first.id)).toBe(true);
+    expect(recordHistory.rows.some((row) => row.action === "created")).toBe(true);
+
+    const secondRecordHistory = await repository.getCustodyRecordHistory(second.id, { pageSize: 100 });
+    expect(secondRecordHistory.rows.every((row) => row.entityId === second.id)).toBe(true);
+    expect(secondRecordHistory.rows.some((row) => row.entityId === first.id)).toBe(false);
+  });
+
+  it("updates custody lifecycle statuses and records each movement history event", async () => {
+    const repository = createMockInventoryRepository();
+    const returned = await repository.createCustodyRecord({
+      employeeId: "emp-1",
+      itemId: "item-wrench",
+      quantity: 1,
+      warehouseId: null,
+    });
+    const writtenOff = await repository.createCustodyRecord({
+      employeeId: "emp-1",
+      itemId: "item-wrench",
+      quantity: 1,
+      warehouseId: null,
+    });
+    const defective = await repository.createCustodyRecord({
+      employeeId: "emp-1",
+      itemId: "item-wrench",
+      quantity: 1,
+      warehouseId: null,
+    });
+
+    const returnedResult = await repository.updateCustodyRecordStatus(returned.id, { comment: "Returned clean", status: "returned" });
+    const writeOffResult = await repository.updateCustodyRecordStatus(writtenOff.id, { comment: "Broken handle", status: "written_off" });
+    const defectiveResult = await repository.updateCustodyRecordStatus(defective.id, { comment: "Needs repair", status: "lost" });
+
+    expect(returnedResult.status).toBe("returned");
+    expect(returnedResult.closedAt).toBeTruthy();
+    expect(writeOffResult.status).toBe("written_off");
+    expect(writeOffResult.comment).toBe("Broken handle");
+    expect(defectiveResult.status).toBe("lost");
+    expect(defectiveResult.comment).toBe("Needs repair");
+
+    await repository.closeCustodyDocument(returned.documentId);
+
+    const returnedHistory = await repository.getCustodyRecordHistory(returned.id, { pageSize: 100 });
+    expect(returnedHistory.rows.map((row) => row.action)).toEqual(["returned", "created"]);
+
+    const writtenOffHistory = await repository.getCustodyRecordHistory(writtenOff.id, { pageSize: 100 });
+    expect(writtenOffHistory.rows.some((row) => row.action === "written_off" && row.entityId === writtenOff.id)).toBe(true);
+
+    const defectiveHistory = await repository.getCustodyRecordHistory(defective.id, { pageSize: 100 });
+    expect(defectiveHistory.rows.some((row) => row.action === "lost" && row.entityId === defective.id)).toBe(true);
+
+    const documentHistory = await repository.getCustodyDocumentHistory(returned.documentId, { pageSize: 100 });
+    expect(documentHistory.rows.every((row) => row.entityId === returned.documentId || row.entityId === returned.id)).toBe(true);
+    expect(documentHistory.rows.some((row) => row.entityType === "custody_document" && row.entityId === returned.documentId)).toBe(true);
+    expect(documentHistory.rows.some((row) => row.entityId === writtenOff.id || row.entityId === defective.id)).toBe(false);
+  });
+
   it("archives employees without deleting historical events", async () => {
     const repository = createMockInventoryRepository();
 

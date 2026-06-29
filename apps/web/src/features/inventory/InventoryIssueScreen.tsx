@@ -45,6 +45,7 @@ type InventoryIssueScreenProps = {
 };
 
 type IssueTab = "issue" | "drafts" | "history";
+type HistoryActionFilter = "all" | "issue" | "return" | "write_off" | "defective";
 
 type IssueDraftLine = {
   itemId: string;
@@ -721,32 +722,49 @@ function EmployeePpeMovementDialog({ employee, onClose }: { employee: InventoryE
 }
 
 function HistoryTab({ onReload, rows }: { onReload: () => void; rows: InventoryDocumentDto[] }) {
-  const issuedQuantity = sumMovementQuantity(rows, ["issue", "ppe_issue"]);
-  const returnedQuantity = sumMovementQuantity(rows, ["return", "ppe_return"]);
-  const writtenOffQuantity = sumMovementQuantity(rows, ["write_off", "ppe_write_off"]);
+  const [historyQuery, setHistoryQuery] = useState("");
+  const [periodPreset, setPeriodPreset] = useState<"all" | "today" | "week" | "month">("all");
+  const [actionFilter, setActionFilter] = useState<HistoryActionFilter>("all");
+  const sortedRows = useMemo(() => sortDocumentsByDate(dedupeDocuments(rows)), [rows]);
+  const filteredRows = useMemo(
+    () => filterHistoryRows(sortedRows, { actionFilter, periodPreset, query: historyQuery }),
+    [actionFilter, historyQuery, periodPreset, sortedRows],
+  );
+  const hasActiveFilters = Boolean(historyQuery.trim() || periodPreset !== "all" || actionFilter !== "all");
+  const issuedQuantity = sumMovementQuantity(filteredRows, ["issue", "ppe_issue"]);
+  const returnedQuantity = sumMovementQuantity(filteredRows, ["return", "ppe_return"]);
+  const writtenOffQuantity = sumMovementQuantity(filteredRows, ["write_off", "ppe_write_off"]);
+  const defectiveQuantity = sumMovementQuantity(filteredRows, ["defective", "lost", "broken", "failure", "ppe_defective"]);
 
   return (
     <section className="inventory-issue-table-card inventory-issue-journal">
       <div className="inventory-issue-table-toolbar inventory-issue-history-toolbar">
         <label className="inventory-issue-search inventory-issue-toolbar-search">
           <Search size={17} />
-          <input placeholder="Поиск по ФИО, предмету или № документа" type="search" />
+          <input
+            onChange={(event) => setHistoryQuery(event.target.value)}
+            placeholder="Поиск по ФИО, предмету или № документа"
+            type="search"
+            value={historyQuery}
+          />
         </label>
         <label className="inventory-issue-filter-field inventory-issue-period-select">
           Период
-          <select defaultValue="today">
+          <select onChange={(event) => setPeriodPreset(event.target.value as "all" | "today" | "week" | "month")} value={periodPreset}>
+            <option value="all">Вся история</option>
             <option value="today">Сегодня</option>
             <option value="week">7 дней</option>
             <option value="month">30 дней</option>
-            <option value="all">Вся история</option>
           </select>
         </label>
         <label className="inventory-issue-filter-field">
-          Статус
-          <select defaultValue="all">
-            <option value="all">Все статусы</option>
-            <option value="issued">Выдан</option>
-            <option value="cancelled">Отменен</option>
+          Действие
+          <select onChange={(event) => setActionFilter(event.target.value as HistoryActionFilter)} value={actionFilter}>
+            <option value="all">Все действия</option>
+            <option value="issue">Выдано</option>
+            <option value="return">Возвращено</option>
+            <option value="write_off">Списано</option>
+            <option value="defective">Неисправно</option>
           </select>
         </label>
         <button className="button ghost" onClick={onReload} type="button">
@@ -759,16 +777,19 @@ function HistoryTab({ onReload, rows }: { onReload: () => void; rows: InventoryD
         <IssueTotal label="Выдано" value={formatQuantity(issuedQuantity)} />
         <IssueTotal label="Возвращено" value={formatQuantity(returnedQuantity)} />
         <IssueTotal label="Списано" value={formatQuantity(writtenOffQuantity)} />
+        <IssueTotal label="Неисправно" value={formatQuantity(defectiveQuantity)} />
       </div>
 
-      <IssueDocumentsTable rows={rows} />
+      <IssueDocumentsTable filtered={hasActiveFilters} rows={filteredRows} />
     </section>
   );
 }
 
-function IssueDocumentsTable({ rows }: { rows: InventoryDocumentDto[] }) {
+function IssueDocumentsTable({ filtered, rows }: { filtered?: boolean; rows: InventoryDocumentDto[] }) {
   if (!rows.length) {
-    return <IssueState kind="empty" title="Журнал выдач пуст" text="Проведенные выдачи появятся здесь после создания операций." />;
+    return filtered
+      ? <IssueState kind="empty" title="Фильтр ничего не нашел" text="Измените период, действие или поисковый запрос." />
+      : <IssueState kind="empty" title="Журнал движений пуст" text="Проведенные движения появятся здесь после создания операций." />;
   }
 
   return (
@@ -777,11 +798,13 @@ function IssueDocumentsTable({ rows }: { rows: InventoryDocumentDto[] }) {
         <thead>
           <tr>
             <th>№ документа</th>
-            <th>Дата выдачи</th>
+            <th>Дата</th>
             <th>Сотрудник</th>
             <th>Номенклатура / предмет</th>
+            <th>Действие</th>
             <th>Кол-во</th>
             <th>Статус</th>
+            <th>Кто сделал</th>
             <th>Действия</th>
           </tr>
         </thead>
@@ -792,8 +815,10 @@ function IssueDocumentsTable({ rows }: { rows: InventoryDocumentDto[] }) {
               <td>{formatDate(row.createdAt)}</td>
               <td>{row.employeeName || "Не указан"}</td>
               <td><strong>{row.itemName || "Позиция не указана"}</strong><span>{row.comment || "Без примечания"}</span></td>
+              <td>{operationTypeLabel(row.type || row.status)}</td>
               <td>{formatQuantity(Math.abs(row.quantity ?? 0))} {row.unit ?? ""}</td>
-              <td><StatusBadge tone={operationTone(row.type || row.status)}>{operationTypeLabel(row.type || row.status)}</StatusBadge></td>
+              <td><StatusBadge tone={operationTone(row.type || row.status)}>{operationStatusLabel(row.status || row.type)}</StatusBadge></td>
+              <td>Система</td>
               <td>
                 <div className="inventory-issue-row-actions">
                   <button className="button ghost icon-only" type="button" aria-label="Открыть документ">
@@ -871,6 +896,65 @@ function formatMoneyMinor(value: number) {
   }).format(value / 100);
 }
 
+function dedupeDocuments(rows: InventoryDocumentDto[]) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    if (seen.has(row.id)) return false;
+    seen.add(row.id);
+    return true;
+  });
+}
+
+function sortDocumentsByDate(rows: InventoryDocumentDto[]) {
+  return [...rows].sort((left, right) => parseDateTime(right.createdAt) - parseDateTime(left.createdAt));
+}
+
+function filterHistoryRows(
+  rows: InventoryDocumentDto[],
+  filters: { actionFilter: HistoryActionFilter; periodPreset: "all" | "today" | "week" | "month"; query: string },
+) {
+  const normalizedQuery = normalizeSearch(filters.query);
+  const periodStart = periodStartDate(filters.periodPreset);
+
+  return rows.filter((row) => {
+    const rowAction = normalizeHistoryAction(row.type || row.status);
+    const matchesAction = filters.actionFilter === "all" || rowAction === filters.actionFilter;
+    const matchesPeriod = !periodStart || parseDateTime(row.createdAt) >= periodStart.getTime();
+    const matchesQuery =
+      !normalizedQuery ||
+      normalizeSearch([row.number, row.employeeName, row.itemName ?? "", row.comment ?? "", row.status, row.type].join(" ")).includes(normalizedQuery);
+
+    return matchesAction && matchesPeriod && matchesQuery;
+  });
+}
+
+function normalizeSearch(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function periodStartDate(preset: "all" | "today" | "week" | "month") {
+  if (preset === "all") return null;
+
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+
+  if (preset === "week") {
+    date.setDate(date.getDate() - 6);
+  }
+
+  if (preset === "month") {
+    date.setDate(date.getDate() - 29);
+  }
+
+  return date;
+}
+
+function parseDateTime(value?: string | null) {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
 function sumMovementQuantity(rows: InventoryDocumentDto[], types: string[]) {
   const allowed = new Set(types);
   return rows
@@ -890,20 +974,42 @@ function getInitials(value: string) {
 
 function operationTypeLabel(type: string) {
   const labels: Record<string, string> = {
+    broken: "Поломка",
     cancelled: "Отменен",
-    issue: "Выдан",
+    defective: "Неисправно",
+    failure: "Поломка",
+    issue: "Выдано",
+    lost: "Неисправно",
+    ppe_defective: "Неисправно СИЗ",
     ppe_issue: "Выдано СИЗ",
     ppe_return: "Возврат СИЗ",
     ppe_write_off: "Списание СИЗ",
-    posted: "Выдан",
-    return: "Возврат",
-    write_off: "Списание",
+    posted: "Проведено",
+    return: "Возвращено",
+    write_off: "Списано",
   };
   return labels[type] ?? type;
 }
 
+function operationStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    broken: "Поломка",
+    cancelled: "Отменено",
+    defective: "Неисправно",
+    failure: "Поломка",
+    issue: "Выдано",
+    lost: "Неисправно",
+    posted: "Проведено",
+    return: "Возвращено",
+    returned: "Возвращено",
+    write_off: "Списано",
+    written_off: "Списано",
+  };
+  return labels[status] ?? operationTypeLabel(status);
+}
+
 function operationTone(type: string): "blue" | "green" | "red" | "slate" {
-  if (type === "write_off" || type === "ppe_write_off" || type === "cancelled") {
+  if (["write_off", "ppe_write_off", "cancelled", "defective", "lost", "broken", "failure", "ppe_defective"].includes(type)) {
     return "red";
   }
 
@@ -912,6 +1018,13 @@ function operationTone(type: string): "blue" | "green" | "red" | "slate" {
   }
 
   return "green";
+}
+
+function normalizeHistoryAction(type: string): HistoryActionFilter {
+  if (["return", "returned", "ppe_return"].includes(type)) return "return";
+  if (["write_off", "written_off", "ppe_write_off"].includes(type)) return "write_off";
+  if (["defective", "lost", "broken", "failure", "ppe_defective"].includes(type)) return "defective";
+  return "issue";
 }
 
 function createEmptySettings(): InventorySettingsDto {

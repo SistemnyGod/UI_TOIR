@@ -183,6 +183,7 @@ export function DashboardScreen({
           resultListErrorMessage={resultListErrorMessage}
           resultListStatus={resultListStatus}
           patrolResults={patrolResults}
+          onNavigate={onNavigate}
           onRefreshResults={refreshResults}
           onSelectResult={onSelectResult}
           remaining={remaining}
@@ -250,6 +251,7 @@ function KpiCard({ card }: { card: DashboardKpi }) {
 
 function OperationalSummary({
   completed,
+  onNavigate,
   onRefreshResults,
   onSelectResult,
   patrolResults,
@@ -260,6 +262,7 @@ function OperationalSummary({
   resultListStatus,
 }: {
   completed: number;
+  onNavigate: (screen: ScreenId) => void;
   onRefreshResults: () => void | Promise<void>;
   onSelectResult: (id: string) => void;
   patrolResults: PatrolResult[];
@@ -327,6 +330,7 @@ function OperationalSummary({
 
         <LatestResultsPreview
           errorMessage={resultListErrorMessage}
+          onNavigate={onNavigate}
           onRefresh={onRefreshResults}
           onSelectResult={onSelectResult}
           results={patrolResults}
@@ -339,12 +343,14 @@ function OperationalSummary({
 
 function LatestResultsPreview({
   errorMessage,
+  onNavigate,
   onRefresh,
   onSelectResult,
   results,
   status,
 }: {
   errorMessage?: string;
+  onNavigate: (screen: ScreenId) => void;
   onRefresh: () => void | Promise<void>;
   onSelectResult: (id: string) => void;
   results: PatrolResult[];
@@ -359,7 +365,7 @@ function LatestResultsPreview({
   const isRefreshing = status === "loading" && latestResults.length > 0;
 
   function openResult(result: PatrolResult) {
-    setOpenedResultId((current) => (current === result.id ? null : result.id));
+    setOpenedResultId(result.id);
     onSelectResult(result.id);
   }
 
@@ -383,35 +389,103 @@ function LatestResultsPreview({
       ) : (
         <div className="dashboard-am-latest-list">
           {latestResults.map((result) => (
-            <div className={`dashboard-am-latest-row ${openedResult?.id === result.id ? "active" : ""}`} key={result.id}>
+            <button className={`dashboard-am-latest-row ${openedResult?.id === result.id ? "active" : ""}`} key={result.id} onClick={() => openResult(result)} type="button">
               <span className={`dashboard-am-status-dot ${isIssueResult(result.status) ? "orange" : "green"}`} />
               <div>
                 <strong>{result.route || "Маршрут не указан"}</strong>
                 <span>{formatShortName(result.employee)} · {formatResultStatus(result.status)}</span>
               </div>
               <time>{formatResultTime(result)}</time>
-              <button onClick={() => openResult(result)} type="button">
-                {openedResult?.id === result.id ? "Скрыть" : "Открыть"}
-              </button>
-            </div>
+            </button>
           ))}
         </div>
       )}
 
       {openedResult ? (
-        <div className="dashboard-am-result-detail">
-          <div>
-            <span>Результат</span>
-            <strong>{formatResultStatus(openedResult.status)}</strong>
-          </div>
-          <p>{openedResult.comment || "Комментарий по результату не заполнен."}</p>
-          <dl>
-            <div><dt>Точка</dt><dd>{openedResult.point || "-"}</dd></div>
-            <div><dt>Время</dt><dd>{formatResultTime(openedResult)}</dd></div>
-            <div><dt>Фото</dt><dd>{openedResult.photos}</dd></div>
-          </dl>
-        </div>
+        <DashboardResultModal
+          onClose={() => setOpenedResultId(null)}
+          onOpenJournal={() => {
+            onSelectResult(openedResult.id);
+            onNavigate("results");
+          }}
+          result={openedResult}
+        />
       ) : null}
+    </div>
+  );
+}
+
+function DashboardResultModal({
+  onClose,
+  onOpenJournal,
+  result,
+}: {
+  onClose: () => void;
+  onOpenJournal: () => void;
+  result: PatrolResult;
+}) {
+  return (
+    <div className="dashboard-am-result-modal-backdrop" onMouseDown={onClose} role="presentation">
+      <section aria-modal="true" className="dashboard-am-result-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog">
+        <header className="dashboard-am-result-modal-head">
+          <div>
+            <span>Результат обхода</span>
+            <h2>{result.route || "Маршрут не указан"}</h2>
+            <p>{formatShortName(result.employee)} · {formatResultTime(result)}</p>
+          </div>
+          <button aria-label="Закрыть" className="dashboard-am-result-modal-close" onClick={onClose} type="button">
+            ×
+          </button>
+        </header>
+
+        <div className="dashboard-am-result-modal-kpis">
+          <div>
+            <span>Статус</span>
+            <strong>{formatResultStatus(result.status)}</strong>
+          </div>
+          <div>
+            <span>Точка</span>
+            <strong>{result.point || "-"}</strong>
+          </div>
+          <div>
+            <span>Фото/видео</span>
+            <strong>{result.photos}</strong>
+          </div>
+        </div>
+
+        <div className="dashboard-am-result-modal-grid">
+          <section>
+            <h3>Комментарий</h3>
+            <p>{result.comment || "Комментарий по результату не заполнен."}</p>
+          </section>
+          <section>
+            <h3>Контекст</h3>
+            <dl>
+              <div><dt>Территория</dt><dd>{result.territory || "-"}</dd></div>
+              <div><dt>Смена</dt><dd>{result.shift || "-"}</dd></div>
+              <div><dt>Отклонение</dt><dd>{result.deviation || "-"}</dd></div>
+            </dl>
+          </section>
+        </div>
+
+        <section className="dashboard-am-result-modal-history">
+          <h3>Хронология</h3>
+          <ul>
+            {getResultChronology(result).map((event) => (
+              <li key={event}>{event}</li>
+            ))}
+          </ul>
+        </section>
+
+        <footer className="dashboard-am-result-modal-actions">
+          <button className="button ghost" onClick={onClose} type="button">
+            Закрыть
+          </button>
+          <button className="button primary" onClick={onOpenJournal} type="button">
+            Открыть в журнале
+          </button>
+        </footer>
+      </section>
     </div>
   );
 }
@@ -516,17 +590,21 @@ function IncidentsList({ incidents, onNavigate }: { incidents: PatrolResult[]; o
       {incidents.length === 0 ? (
         <CompactEmptyState title="Замечаний нет" text="Журнал заполнится после результатов обходов с проблемами." />
       ) : (
-        incidents.slice(0, 4).map((incident) => (
-          <div className="dashboard-am-list-row incident" key={incident.id}>
-            <span className="dashboard-am-alert-icon">
-              <DashboardIcon name="alert" />
-            </span>
-            <strong>{incident.issueType || incident.point || "Замечание"}</strong>
-            <span>{incident.route}</span>
-            <time>{formatResultTime(incident)}</time>
-            <em>{formatIncidentStatus(incident.status)}</em>
-          </div>
-        ))
+        [...incidents]
+          .sort((left, right) => getResultTimestamp(right) - getResultTimestamp(left))
+          .slice(0, 4)
+          .map((incident) => (
+            <div className="dashboard-am-list-row incident" key={incident.id}>
+              <span className="dashboard-am-alert-icon">
+                <DashboardIcon name="alert" />
+              </span>
+              <div className="dashboard-am-incident-copy">
+                <strong>{incident.route || "Маршрут не указан"}</strong>
+                <span>{incident.point || incident.comment || "Есть замечание"}</span>
+              </div>
+              <time>{formatResultTime(incident)}</time>
+            </div>
+          ))
       )}
       <button className="dashboard-am-card-link" onClick={() => onNavigate("results")} type="button">
         Открыть журнал
@@ -738,7 +816,26 @@ function getPercent(value: number, total: number) {
 }
 
 function getResultTimestamp(result: PatrolResult) {
-  const timestamp = Date.parse(result.actualAt || result.plannedAt);
+  const candidates = [result.actualAt, result.finishedAt, result.startedAt, result.plannedAt];
+  for (const candidate of candidates) {
+    const timestamp = parsePatrolDate(candidate);
+    if (timestamp > 0) return timestamp;
+  }
+  return 0;
+}
+
+function parsePatrolDate(value?: string) {
+  const source = value?.trim();
+  if (!source) return 0;
+
+  const isoTimestamp = Date.parse(source);
+  if (!Number.isNaN(isoTimestamp)) return isoTimestamp;
+
+  const match = source.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:,?\s+(\d{1,2}):(\d{2}))?/);
+  if (!match) return 0;
+
+  const [, day, month, year, hour = "0", minute = "0"] = match;
+  const timestamp = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)).getTime();
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
@@ -752,6 +849,18 @@ function formatShortName(name: string) {
 
 function formatResultTime(result: PatrolResult) {
   return result.actualAt || result.plannedAt || "-";
+}
+
+function getResultChronology(result: PatrolResult) {
+  const entries = [
+    result.startedAt ? `Начало обхода: ${result.startedAt}` : "",
+    result.actualAt ? `Фиксация результата: ${result.actualAt}` : "",
+    result.finishedAt ? `Окончание обхода: ${result.finishedAt}` : "",
+    result.plannedAt && !result.actualAt ? `Плановое время: ${result.plannedAt}` : "",
+    ...result.chronology,
+  ].filter(Boolean);
+
+  return entries.length > 0 ? entries.slice(0, 4) : ["Событий по результату нет."];
 }
 
 function formatResultStatus(status: string) {
@@ -790,12 +899,6 @@ function formatRequestDate(request: ServiceRequest) {
   const date = request.scheduledDate || "Сегодня";
   const time = request.scheduledTime || request.dueAt || "-";
   return `${date}, ${time}`;
-}
-
-function formatIncidentStatus(status: string) {
-  if (matchesAny(status, ["Подтверж", "confirmed"])) return "Закрыт";
-  if (matchesAny(status, ["Замеч", "issue"])) return "В работе";
-  return "Новый";
 }
 
 function matchesAny(value: string, needles: string[]) {

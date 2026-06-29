@@ -253,6 +253,34 @@
   cursor: pointer;
 }
 
+.inventory-custody-picker-empty {
+  display: grid;
+  gap: 4px;
+  min-height: 74px;
+  align-content: center;
+  padding: 12px;
+  border: 1px dashed var(--inventory-border);
+  border-radius: 8px;
+  background: #f8fbff;
+  color: var(--inventory-muted);
+}
+
+.inventory-custody-picker-empty strong,
+.inventory-custody-picker-empty span {
+  display: block;
+}
+
+.inventory-custody-picker-empty strong {
+  color: var(--inventory-text);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.inventory-custody-picker-empty span {
+  font-size: 12px;
+  font-weight: 750;
+}
+
 .inventory-custody-picker-list button:hover,
 .inventory-custody-picker-list button.is-selected {
   border-color: var(--inventory-blue);
@@ -343,6 +371,82 @@
   color: var(--inventory-muted);
   font-size: 11px;
   font-weight: 950;
+}
+
+.inventory-custody-form-state {
+  padding: 10px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.inventory-custody-form-state.is-error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.inventory-custody-record-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.32fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 10px;
+}
+
+.inventory-custody-record-search,
+.inventory-custody-record-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--inventory-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--inventory-muted);
+}
+
+.inventory-custody-record-search input,
+.inventory-custody-record-toolbar select {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  border: 1px solid var(--inventory-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--inventory-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  outline: none;
+}
+
+.inventory-custody-record-search input {
+  height: 34px;
+  border: 0;
+}
+
+.inventory-custody-record-toolbar select {
+  padding: 0 10px;
+}
+
+.inventory-custody-record-toggle {
+  justify-content: center;
+  color: var(--inventory-text);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.inventory-custody-record-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--inventory-blue);
 }
 
 .inventory-custody-record-filters {
@@ -479,6 +583,14 @@
     overflow: auto;
   }
 
+  .inventory-custody-record-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(140px, 0.4fr);
+  }
+
+  .inventory-custody-record-toggle {
+    justify-content: flex-start;
+  }
+
   .inventory-custody-picker-panel,
   .inventory-custody-details-panel {
     min-height: 280px;
@@ -497,7 +609,8 @@
 
   .inventory-custody-screen .inventory-custody-composer,
   .inventory-custody-screen .inventory-custody-composer-summary,
-  .inventory-custody-modal-filters {
+  .inventory-custody-modal-filters,
+  .inventory-custody-record-toolbar {
     grid-template-columns: 1fr;
   }
 

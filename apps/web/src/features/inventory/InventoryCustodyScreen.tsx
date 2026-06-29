@@ -127,7 +127,6 @@ export function InventoryCustodyScreen({
                 onOpenRecordHistory={openRecordHistory}
                 onSelectEmployee={setSelectedEmployeeId}
                 onUpdateRecordStatus={updateRecordStatus}
-                query={query}
                 records={recordRows}
                 selectedEmployeeId={selectedEmployeeId}
               />

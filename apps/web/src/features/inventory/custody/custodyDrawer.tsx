@@ -153,7 +153,7 @@ function CustodyHistoryTable({ rows }: { rows: InventoryHistoryDto[] }) {
         <thead>
           <tr>
             <th>Дата</th>
-            <th>Описание</th>
+            <th>Сущность</th>
             <th>Действие</th>
             <th>Описание</th>
             <th>Пользователь</th>
@@ -174,4 +174,3 @@ function CustodyHistoryTable({ rows }: { rows: InventoryHistoryDto[] }) {
     </div>
   );
 }
-

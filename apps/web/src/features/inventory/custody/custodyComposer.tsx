@@ -33,6 +33,7 @@ export function CustodyComposer({
   const [isOpen, setIsOpen] = useState(false);
   const [employeeQuery, setEmployeeQuery] = useState("");
   const [itemQuery, setItemQuery] = useState("");
+  const [formError, setFormError] = useState("");
   const [group, setGroup] = useState("all");
   const [condition, setCondition] = useState(CONDITION_OPTIONS[0].value);
 
@@ -75,12 +76,16 @@ export function CustodyComposer({
 
   const selectedEmployee = activeEmployees.find((employee) => employee.id === form.employeeId) ?? null;
   const selectedItem = activeItems.find((item) => item.id === form.itemId) ?? null;
+  const parsedQuantity = parsePositiveQuantity(form.quantityText);
+  const canSubmit = Boolean(form.employeeId && form.itemId && parsedQuantity);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const quantity = parsePositiveQuantity(form.quantityText);
     if (!form.employeeId || !form.itemId || !quantity) {
-      onNotify("Выберите сотрудника, предмет и количество");
+      const message = "Выберите сотрудника, предмет и положительное количество";
+      setFormError(message);
+      onNotify(message);
       return;
     }
 
@@ -106,11 +111,14 @@ export function CustodyComposer({
         quantityText: "1",
       }));
       setCondition(CONDITION_OPTIONS[0].value);
+      setFormError("");
       onNotify("Запись под ответственность создана");
       setIsOpen(false);
       await onReload();
     } catch (createError) {
-      onNotify(createError instanceof Error ? createError.message : "Не удалось создать запись под ответственность");
+      const message = createError instanceof Error ? createError.message : "Не удалось создать запись под ответственность";
+      setFormError(message);
+      onNotify(message);
     } finally {
       setSaving(false);
     }
@@ -139,7 +147,7 @@ export function CustodyComposer({
           <strong>{CUSTODY_ITEM_GROUPS.length}</strong>
         </div>
       </div>
-      <button className="button primary inventory-custody-submit" type="button" onClick={() => setIsOpen(true)}>
+      <button className="button primary inventory-custody-submit" type="button" onClick={() => { setFormError(""); setIsOpen(true); }}>
         <Plus size={16} />
         Новая выдача
       </button>
@@ -182,7 +190,7 @@ export function CustodyComposer({
                       <button
                         className={employee.id === form.employeeId ? "is-selected" : ""}
                         key={employee.id}
-                        onClick={() => setForm((current) => ({ ...current, employeeId: employee.id }))}
+                        onClick={() => { setFormError(""); setForm((current) => ({ ...current, employeeId: employee.id })); }}
                         type="button"
                       >
                         <span>{getInitials(employee.fullName)}</span>
@@ -193,6 +201,12 @@ export function CustodyComposer({
                         {employee.id === form.employeeId ? <Check size={16} /> : null}
                       </button>
                     ))}
+                    {!filteredEmployees.length ? (
+                      <div className="inventory-custody-picker-empty">
+                        <strong>Сотрудник не найден</strong>
+                        <span>Измените ФИО, табельный номер или подразделение.</span>
+                      </div>
+                    ) : null}
                   </div>
                 </section>
 
@@ -226,7 +240,7 @@ export function CustodyComposer({
                       <button
                         className={item.id === form.itemId ? "is-selected" : ""}
                         key={item.id}
-                        onClick={() => setForm((current) => ({ ...current, itemId: item.id }))}
+                        onClick={() => { setFormError(""); setForm((current) => ({ ...current, itemId: item.id })); }}
                         type="button"
                       >
                         <span><PackageCheck size={16} /></span>
@@ -237,6 +251,12 @@ export function CustodyComposer({
                         {item.id === form.itemId ? <Check size={16} /> : null}
                       </button>
                     ))}
+                    {!filteredItems.length ? (
+                      <div className="inventory-custody-picker-empty">
+                        <strong>Предмет не найден</strong>
+                        <span>Проверьте название, артикул или выбранную группу.</span>
+                      </div>
+                    ) : null}
                   </div>
                 </section>
 
@@ -251,7 +271,7 @@ export function CustodyComposer({
                   </div>
                   <label>
                     Количество
-                    <input required value={form.quantityText} onChange={(event) => setForm((current) => ({ ...current, quantityText: event.target.value }))} />
+                    <input required value={form.quantityText} onChange={(event) => { setFormError(""); setForm((current) => ({ ...current, quantityText: event.target.value })); }} />
                   </label>
                   <label>
                     Состояние предмета
@@ -273,14 +293,19 @@ export function CustodyComposer({
                     <ShieldCheck size={16} />
                     <span>После сохранения запись появится в истории сотрудника. Возврат, списание и неисправность фиксируются отдельным действием по строке.</span>
                   </div>
+                  {formError || !canSubmit ? (
+                    <div className={`inventory-custody-form-state ${formError ? "is-error" : ""}`}>
+                      {formError || "Выберите сотрудника, предмет и количество, чтобы провести выдачу."}
+                    </div>
+                  ) : null}
                 </section>
               </div>
 
               <div className="inventory-custody-modal-footer">
                 <button className="button ghost" type="button" onClick={() => setIsOpen(false)}>Отмена</button>
-                <button className="button primary" disabled={saving} type="submit">
+                <button className="button primary" disabled={saving || !canSubmit} type="submit">
                   <Plus size={16} />
-                  {saving ? "Создание..." : "Создать запись"}
+                  {saving ? "Проводим..." : "Выдать под запись"}
                 </button>
               </div>
             </form>

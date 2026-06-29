@@ -8,6 +8,7 @@ export const documentStatusLabels: Record<string, string> = {
 
 export const recordStatusLabels: Record<string, string> = {
   archived: "Архив",
+  issued: "На руках",
   in_use: "На руках",
   lost: "Неисправно",
   returned: "Возвращено",
@@ -64,6 +65,7 @@ export function actionLabel(value: string) {
 
 export function statusDescription(value: string) {
   return value
+    .replaceAll("issued", "На руках")
     .replaceAll("in_use", "На руках")
     .replaceAll("returned", "Возвращено")
     .replaceAll("written_off", "Списано")
@@ -96,6 +98,10 @@ export function isProblemCustodyRecord(row: InventoryCustodyRecordDto) {
   return row.status === "lost"
     || row.status === "written_off"
     || /полом|неисправ|провер/i.test(row.comment ?? "");
+}
+
+export function isActiveCustodyRecord(row: InventoryCustodyRecordDto) {
+  return row.status === "in_use" || row.status === "issued";
 }
 
 export function formatDate(value?: string | null) {

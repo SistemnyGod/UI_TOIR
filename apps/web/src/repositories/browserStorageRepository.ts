@@ -4,6 +4,7 @@ export interface StoredStateEnvelope<T> {
 }
 
 export interface StoredStateOptions<T> {
+  ignoreStoredValue?: boolean;
   validate?: (value: unknown) => value is T;
   version?: number;
 }
@@ -19,6 +20,7 @@ export function canUseStorage() {
 }
 
 export function readStoredState<T>(key: string, fallback: T, options: StoredStateOptions<T>): T {
+  if (options.ignoreStoredValue) return fallback;
   if (!canUseStorage()) return fallback;
 
   try {

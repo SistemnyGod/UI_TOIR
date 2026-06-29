@@ -828,6 +828,7 @@ export interface InventoryReportDto {
 
 export interface InventoryHistoryDto {
   id: string;
+  entityId?: string | null;
   entityType: string;
   action: string;
   description: string;
