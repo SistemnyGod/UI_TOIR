@@ -4,6 +4,12 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const appRoot = dirname(fileURLToPath(import.meta.url));
+const devServerPort = parsePort(process.env.PATROL360_WEB_DEV_PORT, 5174);
+
+function parsePort(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 export default defineConfig({
   root: appRoot,
@@ -60,8 +66,9 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    host: "0.0.0.0",
-    port: 5173,
+    host: "127.0.0.1",
+    port: devServerPort,
+    strictPort: true,
     allowedHosts: ["localhost", "127.0.0.1", "192.168.2.194"],
     proxy: {
       "/api": "http://localhost:5080",

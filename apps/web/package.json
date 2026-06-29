@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite --configLoader runner",
+    "dev:lan": "vite --configLoader runner --host 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && vite build --configLoader runner",
-    "preview": "vite preview",
+    "preview": "vite preview --host 127.0.0.1 --port 5176 --strictPort --configLoader runner",
     "verify": "npm run build",
     "test": "vitest --configLoader runner",
     "test:unit": "vitest run --configLoader runner",
