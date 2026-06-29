@@ -1,18 +1,22 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { listPointFiles } from "@/db/repositories/filesRepository";
-import { deferPoint, getPointForFill, PointForFill, savePointIssue, savePointOk } from "@/db/repositories/patrolRepository";
+import { deferPoint, getPointForFill, PointForFill, savePointIssue, savePointOk, skipPoint } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
-import { attachPointPhotoFromCamera, attachPointPhotoFromGallery } from "@/services/mediaAttachmentService";
+import {
+  attachPointPhotoFromCamera,
+  attachPointPhotoFromGallery,
+  attachPointVideoFromCamera,
+  attachPointVideoFromGallery
+} from "@/services/mediaAttachmentService";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
-
-type SelectedStatus = "ok" | "issue";
-type FillPhase = "status" | "details";
+import type { FillPhase, PointAttachment, SelectedStatus } from "./pointFillTypes";
 
 export function PointFillScreen() {
   const router = useRouter();
@@ -23,9 +27,9 @@ export function PointFillScreen() {
   const [selectedStatus, setSelectedStatus] = useState<SelectedStatus | null>(null);
   const [comment, setComment] = useState("");
   const [issueTypeId, setIssueTypeId] = useState("Неисправность");
-  const [photos, setPhotos] = useState<{ clientFileId: string; localPath: string; status: string }[]>([]);
+  const [attachments, setAttachments] = useState<PointAttachment[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isPhotoBusy, setIsPhotoBusy] = useState(false);
+  const [isMediaBusy, setIsMediaBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
@@ -33,10 +37,13 @@ export function PointFillScreen() {
     setPoint(loaded);
     setComment(loaded?.comment ?? "");
     setIssueTypeId(loaded?.issueTypeId ?? "Неисправность");
-    setPhotos(files.map((file) => ({ clientFileId: file.clientFileId, localPath: file.localPath, status: file.status })));
+    setAttachments(files.map(toPointAttachment));
 
-    if (loaded?.status === "ok" || loaded?.status === "issue") {
+    if (loaded?.status === "ok" || loaded?.status === "issue" || loaded?.status === "skipped") {
       setSelectedStatus(loaded.status);
+      setPhase("details");
+    } else if (loaded?.status === "deferred") {
+      setSelectedStatus(loaded.issueTypeId ? "issue" : "ok");
       setPhase("details");
     } else {
       setSelectedStatus(null);
@@ -66,6 +73,41 @@ export function PointFillScreen() {
     setPhase("details");
   }
 
+  function handleSkipTag() {
+    Alert.alert(
+      "Метка недоступна",
+      "Подтвердите, что физическую метку нельзя просканировать. В отчете будет видно, что точка закрыта вручную как недоступная.",
+      [
+        { text: "Отмена", style: "cancel" },
+        {
+          text: "Подтвердить",
+          style: "destructive",
+          onPress: () => {
+            void confirmSkipTag();
+          }
+        }
+      ]
+    );
+  }
+
+  async function confirmSkipTag() {
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await skipPoint(assignmentId, pointId, {
+        comment: comment.trim(),
+        photoClientFileIds: attachments.map((attachment) => attachment.clientFileId)
+      });
+      setSelectedStatus("skipped");
+      setPhase("details");
+      await reload();
+    } catch {
+      setError("Не удалось отметить метку как недоступную.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   async function handleSave() {
     setError(null);
     if (!selectedStatus) {
@@ -82,10 +124,15 @@ export function PointFillScreen() {
     try {
       if (selectedStatus === "issue") {
         await savePointIssue(assignmentId, pointId, comment.trim(), issueTypeId.trim() || "Неисправность");
+      } else if (selectedStatus === "skipped") {
+        await skipPoint(assignmentId, pointId, {
+          comment: comment.trim(),
+          photoClientFileIds: attachments.map((attachment) => attachment.clientFileId)
+        });
       } else {
         await savePointOk(assignmentId, pointId, comment.trim());
       }
-      router.replace(`/patrol/assignment/${assignmentId}/all-points`);
+      router.replace(`/patrol/assignment/${assignmentId}`);
     } catch {
       setError("Не удалось сохранить метку.");
     } finally {
@@ -97,8 +144,13 @@ export function PointFillScreen() {
     setError(null);
     setIsSubmitting(true);
     try {
-      await deferPoint(assignmentId, pointId);
-      router.replace(`/patrol/assignment/${assignmentId}/all-points`);
+      await deferPoint(assignmentId, pointId, {
+        selectedStatus: selectedStatus === "skipped" ? null : selectedStatus,
+        comment: comment.trim(),
+        issueTypeId: issueTypeId.trim() || "Неисправность",
+        photoClientFileIds: attachments.map((attachment) => attachment.clientFileId)
+      });
+      router.replace(`/patrol/assignment/${assignmentId}`);
     } catch {
       setError("Не удалось отложить метку.");
     } finally {
@@ -108,26 +160,52 @@ export function PointFillScreen() {
 
   async function handleAddPhoto(source: "camera" | "gallery") {
     setError(null);
-    setIsPhotoBusy(true);
+    setIsMediaBusy(true);
     try {
       const result = source === "camera"
         ? await attachPointPhotoFromCamera(assignmentId, pointId)
         : await attachPointPhotoFromGallery(assignmentId, pointId);
 
       if (result === "attached") {
-        const files = await listPointFiles(assignmentId, pointId);
-        setPhotos(files.map((file) => ({ clientFileId: file.clientFileId, localPath: file.localPath, status: file.status })));
+        await reloadPointAndAttachments();
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Не удалось добавить фото.");
     } finally {
-      setIsPhotoBusy(false);
+      setIsMediaBusy(false);
     }
+  }
+
+  async function handleAddVideo(source: "camera" | "gallery") {
+    setError(null);
+    setIsMediaBusy(true);
+    try {
+      const result = source === "camera"
+        ? await attachPointVideoFromCamera(assignmentId, pointId)
+        : await attachPointVideoFromGallery(assignmentId, pointId);
+
+      if (result === "attached") {
+        await reloadPointAndAttachments();
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Не удалось добавить видео.");
+    } finally {
+      setIsMediaBusy(false);
+    }
+  }
+
+  async function reloadPointAndAttachments() {
+    const [updatedPoint, files] = await Promise.all([
+      getPointForFill(assignmentId, pointId),
+      listPointFiles(assignmentId, pointId)
+    ]);
+    setPoint(updatedPoint);
+    setAttachments(files.map(toPointAttachment));
   }
 
   if (!point) {
     return (
-      <Screen title="Заполнение метки" subtitle="Статус, комментарий и фотофиксация точки.">
+      <Screen title="Заполнение метки" subtitle="Статус, комментарий и вложения точки.">
         <Card>
           <Text style={[styles.text, { color: colors.mutedText }]}>Точка не найдена на телефоне.</Text>
         </Card>
@@ -145,34 +223,57 @@ export function PointFillScreen() {
             </Text>
             <StatusPill label={confirmationLabel(point)} tone={point.confirmationType === "nfc" ? "success" : "neutral"} />
           </View>
-          <Text style={[styles.text, { color: colors.mutedText }]}>
-            {point.required ? "Обязательная метка" : "Дополнительная метка"}
-          </Text>
         </Card>
 
         <View style={styles.statusGrid}>
           <StatusButton label="Исправно" description="Объект в нормальном состоянии" tone="success" onPress={() => selectStatus("ok")} />
-          <StatusButton label="Неисправно" description="Обнаружена неисправность или отклонение" tone="danger" onPress={() => selectStatus("issue")} />
+          <StatusButton label="Неисправно" description="Найдена неисправность или отклонение" tone="danger" onPress={() => selectStatus("issue")} />
         </View>
 
-        <Card style={styles.infoCard}>
-          <Text style={styles.infoText}>Далее можно добавить комментарий и прикрепить фото.</Text>
-        </Card>
+        <Pressable
+          accessibilityLabel="Отметить метку как недоступную"
+          accessibilityRole="button"
+          disabled={isSubmitting}
+          onPress={handleSkipTag}
+          style={({ pressed }) => [
+            styles.skipButton,
+            pressed && !isSubmitting ? styles.skipButtonPressed : null,
+            isSubmitting ? styles.skipButtonDisabled : null
+          ]}
+        >
+          <View style={styles.skipIcon}>
+            <Ionicons color="#b45309" name="alert-circle-outline" size={18} />
+          </View>
+          <View style={styles.skipTextBlock}>
+            <Text style={styles.skipTitle}>Метка недоступна</Text>
+            <Text style={styles.skipDescription}>Нет NFC/QR или метка утеряна</Text>
+          </View>
+          <Ionicons color="#b45309" name="chevron-forward" size={18} />
+        </Pressable>
         <PrimaryButton label="Все метки" onPress={() => router.replace(`/patrol/assignment/${assignmentId}/all-points`)} variant="secondary" />
       </Screen>
     );
   }
 
   return (
-    <Screen title="Комментарий и фото" subtitle="Фото необязательное, но его можно сделать камерой телефона или выбрать из галереи.">
+    <Screen title="Комментарий и вложения" subtitle="Фото и видео не обязательны, но помогают подтвердить состояние точки.">
       <Card>
         <View style={styles.row}>
           <Text style={[styles.title, { color: colors.text }]}>
             {point.orderIndex}. {point.name}
           </Text>
-          <StatusPill label={selectedStatus === "issue" ? "Неисправно" : "Исправно"} tone={selectedStatus === "issue" ? "danger" : "success"} />
+          <StatusPill label={statusLabel(selectedStatus)} tone={statusTone(selectedStatus)} />
         </View>
       </Card>
+
+      {selectedStatus === "skipped" ? (
+        <Card style={styles.skipInfoCard}>
+          <Text style={[styles.label, { color: colors.text }]}>Аварийное закрытие точки</Text>
+          <Text style={[styles.text, { color: colors.mutedText }]}>
+            В web-отчете будет указано: метка недоступна, точка закрыта вручную без сканирования.
+          </Text>
+        </Card>
+      ) : null}
 
       {selectedStatus === "issue" ? (
         <Card>
@@ -187,7 +288,7 @@ export function PointFillScreen() {
           editable={!isSubmitting}
           multiline
           onChangeText={setComment}
-          placeholder={selectedStatus === "issue" ? "Опишите неисправность" : "Что заметили во время обхода?"}
+          placeholder={commentPlaceholder(selectedStatus)}
           placeholderTextColor="#9ca3af"
           style={[styles.input, styles.textArea]}
           textAlignVertical="top"
@@ -197,36 +298,44 @@ export function PointFillScreen() {
 
       <Card>
         <View style={styles.photoHeader}>
-          <Text style={[styles.label, { color: colors.text }]}>Фото</Text>
+          <Text style={[styles.label, { color: colors.text }]}>Фото и видео</Text>
           <Text style={styles.photoNote}>Необязательно</Text>
         </View>
-        {photos.length > 0 ? (
+        {attachments.length > 0 ? (
           <View style={styles.photoGrid}>
-            {photos.map((photo) => (
-              <View key={photo.clientFileId} style={styles.photoTile}>
-                <Image source={{ uri: photo.localPath }} style={styles.photo} />
-                <Text style={styles.photoStatus}>{photoStatusLabel(photo.status)}</Text>
+            {attachments.map((attachment) => (
+              <View key={attachment.clientFileId} style={styles.photoTile}>
+                {attachment.mediaKind === "video" ? (
+                  <View style={styles.videoTile}>
+                    <Ionicons color="#2563eb" name="videocam-outline" size={24} />
+                    <Text style={styles.videoLabel}>Видео</Text>
+                  </View>
+                ) : (
+                  <Image source={{ uri: attachment.localPath }} style={styles.photo} />
+                )}
+                <Text style={styles.photoStatus}>{fileStatusLabel(attachment.status)}</Text>
               </View>
             ))}
           </View>
         ) : (
           <View style={styles.emptyPhotoBox}>
-            <Text style={styles.photoNote}>Фото пока не добавлено</Text>
+            <Text style={styles.photoNote}>Вложения пока не добавлены</Text>
           </View>
         )}
-        {isPhotoBusy ? <ActivityIndicator /> : null}
+        {isMediaBusy ? <ActivityIndicator /> : null}
         <View style={styles.photoActions}>
-          <PrimaryButton disabled={isSubmitting || isPhotoBusy} label="Сделать фото" onPress={() => handleAddPhoto("camera")} variant="secondary" />
-          <PrimaryButton disabled={isSubmitting || isPhotoBusy} label="Из галереи" onPress={() => handleAddPhoto("gallery")} variant="secondary" />
+          <PrimaryButton disabled={isSubmitting || isMediaBusy} icon="camera-outline" label="Сделать фото" onPress={() => handleAddPhoto("camera")} variant="secondary" />
+          <PrimaryButton disabled={isSubmitting || isMediaBusy} icon="images-outline" label="Фото из галереи" onPress={() => handleAddPhoto("gallery")} variant="secondary" />
+          <PrimaryButton disabled={isSubmitting || isMediaBusy} icon="videocam-outline" label="Снять видео" onPress={() => handleAddVideo("camera")} variant="secondary" />
+          <PrimaryButton disabled={isSubmitting || isMediaBusy} icon="film-outline" label="Видео из галереи" onPress={() => handleAddVideo("gallery")} variant="secondary" />
         </View>
       </Card>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {isSubmitting ? <ActivityIndicator /> : null}
       <View style={styles.bottomActions}>
-        <PrimaryButton disabled={isSubmitting || isPhotoBusy} label="Отложить" onPress={handleDefer} variant="danger" />
-        <PrimaryButton disabled={isSubmitting || isPhotoBusy} label="Сохранить" onPress={handleSave} variant="secondary" />
-        <PrimaryButton disabled={isSubmitting || isPhotoBusy} label="Продолжить маршрут" onPress={handleSave} />
+        <PrimaryButton disabled={isSubmitting || isMediaBusy} icon="time-outline" label="Отложить" onPress={handleDefer} variant="danger" />
+        <PrimaryButton disabled={isSubmitting || isMediaBusy} icon="save-outline" label="Сохранить" onPress={handleSave} />
       </View>
     </Screen>
   );
@@ -250,7 +359,7 @@ function StatusButton({
       style={[styles.statusButton, tone === "success" ? styles.statusButtonSuccess : styles.statusButtonDanger]}
     >
       <View style={[styles.statusIcon, tone === "success" ? styles.statusIconSuccess : styles.statusIconDanger]}>
-        <Text style={styles.statusIconText}>{tone === "success" ? "✓" : "!"}</Text>
+        <Ionicons color="#ffffff" name={tone === "success" ? "checkmark" : "alert"} size={30} />
       </View>
       <Text style={[styles.statusText, tone === "success" ? styles.statusTextSuccess : styles.statusTextDanger]}>{label}</Text>
       <Text style={styles.statusDescription}>{description}</Text>
@@ -271,10 +380,50 @@ function confirmationLabel(point: PointForFill) {
     return "Отложена";
   }
 
+  if (point.status === "skipped") {
+    return "Метка недоступна";
+  }
+
   return "Ручное заполнение";
 }
 
-function photoStatusLabel(status: string) {
+function statusLabel(status: SelectedStatus | null) {
+  if (status === "issue") {
+    return "Неисправно";
+  }
+
+  if (status === "skipped") {
+    return "Метка недоступна";
+  }
+
+  return "Исправно";
+}
+
+function statusTone(status: SelectedStatus | null) {
+  if (status === "issue") {
+    return "danger";
+  }
+
+  if (status === "skipped") {
+    return "warning";
+  }
+
+  return "success";
+}
+
+function commentPlaceholder(status: SelectedStatus | null) {
+  if (status === "issue") {
+    return "Опишите неисправность";
+  }
+
+  if (status === "skipped") {
+    return "Можно уточнить, почему метка недоступна";
+  }
+
+  return "Что заметили во время обхода?";
+}
+
+function fileStatusLabel(status: string) {
   switch (status) {
     case "uploaded":
     case "linked":
@@ -287,6 +436,15 @@ function photoStatusLabel(status: string) {
     default:
       return "На телефоне";
   }
+}
+
+function toPointAttachment(file: { clientFileId: string; localPath: string; status: string; mediaKind?: "photo" | "video" | null }) {
+  return {
+    clientFileId: file.clientFileId,
+    localPath: file.localPath,
+    status: file.status,
+    mediaKind: file.mediaKind ?? "photo"
+  } satisfies PointAttachment;
 }
 
 const styles = StyleSheet.create({
@@ -331,9 +489,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     flex: 1,
-    minHeight: 190,
+    minHeight: 174,
     justifyContent: "center",
-    padding: 14
+    padding: 12
   },
   statusButtonSuccess: {
     backgroundColor: "#f1fcf6",
@@ -346,10 +504,10 @@ const styles = StyleSheet.create({
   statusIcon: {
     alignItems: "center",
     borderRadius: 999,
-    height: 54,
+    height: 50,
     justifyContent: "center",
     marginBottom: 14,
-    width: 54
+    width: 50
   },
   statusIconSuccess: {
     backgroundColor: "#22c55e"
@@ -357,13 +515,8 @@ const styles = StyleSheet.create({
   statusIconDanger: {
     backgroundColor: "#ef4444"
   },
-  statusIconText: {
-    color: "#ffffff",
-    fontSize: 28,
-    fontWeight: "900"
-  },
   statusText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "800",
     marginBottom: 8
   },
@@ -375,20 +528,56 @@ const styles = StyleSheet.create({
   },
   statusDescription: {
     color: "#4b5563",
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 17,
     textAlign: "center"
   },
-  infoCard: {
-    backgroundColor: "#eef4ff",
-    borderColor: "#b9cdfd"
+  skipButton: {
+    alignItems: "center",
+    backgroundColor: "#fffbeb",
+    borderColor: "#f59e0b",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 50,
+    paddingHorizontal: 12,
+    paddingVertical: 8
   },
-  infoText: {
-    color: "#1e5bff",
+  skipButtonPressed: {
+    backgroundColor: "#fef3c7"
+  },
+  skipButtonDisabled: {
+    opacity: 0.62
+  },
+  skipIcon: {
+    alignItems: "center",
+    backgroundColor: "#fef3c7",
+    borderColor: "#fbbf24",
+    borderWidth: 1,
+    borderRadius: 999,
+    height: 32,
+    justifyContent: "center",
+    width: 32
+  },
+  skipTextBlock: {
+    flex: 1,
+    gap: 1
+  },
+  skipTitle: {
+    color: "#78350f",
     fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 18
+  },
+  skipDescription: {
+    color: "#92400e",
+    fontSize: 11,
     fontWeight: "600",
-    lineHeight: 20,
-    textAlign: "center"
+    lineHeight: 14
+  },
+  skipInfoCard: {
+    borderColor: "#fbbf24"
   },
   photoNote: {
     color: "#6b7280",
@@ -429,8 +618,24 @@ const styles = StyleSheet.create({
     fontSize: 11
   },
   photoActions: {
-    flexDirection: "row",
+    flexDirection: "column",
     gap: 10
+  },
+  videoTile: {
+    alignItems: "center",
+    aspectRatio: 1,
+    backgroundColor: "#eff6ff",
+    borderColor: "#bfdbfe",
+    borderRadius: 8,
+    borderWidth: 1,
+    justifyContent: "center",
+    width: "100%"
+  },
+  videoLabel: {
+    color: "#1d4ed8",
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 4
   },
   bottomActions: {
     gap: 10

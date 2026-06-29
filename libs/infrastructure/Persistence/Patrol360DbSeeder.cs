@@ -44,6 +44,7 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
     private static readonly Guid ManagerRoleId = Guid.Parse("bbbbbbbb-6666-6666-6666-666666666666");
     private static readonly Guid InventoryAccountantRoleId = Guid.Parse("bbbbbbbb-5555-5555-5555-555555555555");
     private static readonly Guid InventoryWarehouseOperatorRoleId = Guid.Parse("bbbbbbbb-4444-4444-4444-444444444444");
+    private static readonly Guid EmuOperatorRoleId = Guid.Parse("bbbbbbbb-3333-3333-3333-333333333333");
 
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
@@ -88,6 +89,7 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
         await EnsureAccountingEmployeeSeedDataAsync(now, cancellationToken);
         await EnsureEmuSeedDataAsync(now, cancellationToken);
         await EnsureInventorySeedDataAsync(now, cancellationToken);
+        await EnsurePercoSeedDataAsync(cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -135,7 +137,8 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
             [AdminRoleId] = "Администратор",
             [OperatorRoleId] = "Оператор",
             [AuditorRoleId] = "Аудитор",
-            [ManagerRoleId] = "Руководитель"
+            [ManagerRoleId] = "Руководитель",
+            [EmuOperatorRoleId] = "Оператор ЭМУ"
         };
 
         foreach (var (id, name) in roleNames)
@@ -392,6 +395,9 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        await EnsureRoleExistsAsync(EmuOperatorRoleId, "emu_operator", "Оператор ЭМУ", now, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
         var permissions = await dbContext.Permissions.ToListAsync(cancellationToken);
         await EnsureRolePermissionsAsync(AdminRoleId, permissions.Select(permission => permission.Code).ToArray(), cancellationToken);
         await EnsureRolePermissionsAsync(ManagerRoleId, [
@@ -400,11 +406,15 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
             "requests.read",
             "assignments.read",
             "emu.view",
+            "emu.work-accounting.view",
+            "emu.dashboard.view",
+            "emu.history.view",
             "emu.work.create",
             "emu.work.update",
             "emu.work.pause",
             "emu.work.complete",
             "emu.work.delete",
+            "emu.completed.delete",
             "emu.directories.manage",
             "emu.favorite-employees.manage",
             "emu.plan.view",
@@ -413,8 +423,11 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
             "emu.plan.override-approval",
             "emu.plan.recurrence.manage",
             "emu.reports.view",
+            "emu.reports.export",
             "emu.time.override",
-            "emu.audit.view"
+            "emu.audit.view",
+            "emu.shift.adjust",
+            "emu.decision.resolve"
         ], cancellationToken);
         await EnsureRolePermissionsAsync(OperatorRoleId, [
             "routes.read",
@@ -422,6 +435,8 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
             "requests.read",
             "assignments.read",
             "emu.view",
+            "emu.work-accounting.view",
+            "emu.dashboard.view",
             "emu.work.create",
             "emu.work.update",
             "emu.work.pause",
@@ -431,7 +446,9 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
             "emu.plan.manage",
             "emu.plan.recurrence.manage",
             "emu.time.override",
-            "emu.audit.view"
+            "emu.audit.view",
+            "emu.shift.adjust",
+            "emu.decision.resolve"
         ], cancellationToken);
         await EnsureRolePermissionsAsync(AuditorRoleId, [
             "routes.read",
@@ -439,8 +456,22 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
             "requests.read",
             "assignments.read",
             "emu.view",
+            "emu.work-accounting.view",
+            "emu.history.view",
             "emu.reports.view",
+            "emu.reports.export",
             "emu.audit.view"
+        ], cancellationToken);
+        await EnsureRolePermissionsAsync(EmuOperatorRoleId, [
+            "emu.view",
+            "emu.work-accounting.view",
+            "emu.work.create",
+            "emu.work.update",
+            "emu.work.pause",
+            "emu.work.complete",
+            "emu.favorite-employees.manage",
+            "emu.shift.adjust",
+            "emu.decision.resolve"
         ], cancellationToken);
 
         if (!await dbContext.EmuWorkSections.AnyAsync(row => row.Code == "prochee", cancellationToken))
@@ -470,7 +501,9 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
         AddNotCompletedReasonIfMissing("pereneseno", "Перенесено", 60, now);
         AddNotCompletedReasonIfMissing("polomka", "Поломка", 70, now);
         AddNotCompletedReasonIfMissing("prochee", "Прочее", 80, now);
+        SeedEmuShiftTemplates(now);
     }
+
 
     private async Task EnsureInventorySeedDataAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -544,6 +577,26 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
         });
     }
 
+    private async Task EnsurePercoSeedDataAsync(CancellationToken cancellationToken)
+    {
+        var expectedPermissions = CreatePercoPermissions();
+        var existingPermissionCodes = await dbContext.Permissions
+            .Select(permission => permission.Code)
+            .ToListAsync(cancellationToken);
+
+        foreach (var permission in expectedPermissions.Where(permission => !existingPermissionCodes.Contains(permission.Code, StringComparer.OrdinalIgnoreCase)))
+        {
+            dbContext.Permissions.Add(permission);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var allPermissionCodes = await dbContext.Permissions
+            .Select(permission => permission.Code)
+            .ToListAsync(cancellationToken);
+        await EnsureRolePermissionsAsync(AdminRoleId, allPermissionCodes, cancellationToken);
+    }
+
     private async Task EnsureRolePermissionsAsync(Guid roleId, IReadOnlyList<string> permissionCodes, CancellationToken cancellationToken)
     {
         var role = await dbContext.Roles.FirstOrDefaultAsync(row => row.Id == roleId, cancellationToken)
@@ -579,6 +632,7 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
         : roleId == ManagerRoleId ? "manager"
         : roleId == InventoryAccountantRoleId ? "inventory_accountant"
         : roleId == InventoryWarehouseOperatorRoleId ? "inventory_warehouse_operator"
+        : roleId == EmuOperatorRoleId ? "emu_operator"
         : string.Empty;
 
     private void AddWaitReasonIfMissing(string code, string name, int sortOrder, DateTimeOffset now)
@@ -610,6 +664,46 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
             Id = Guid.NewGuid(),
             Name = name,
             Code = code,
+            SortOrder = sortOrder,
+            CreatedAt = now
+        });
+    }
+
+    private void SeedEmuShiftTemplates(DateTimeOffset now)
+    {
+        AddShiftTemplateIfMissing("day", "Day shift", "day", "08:00", "17:00", "12:00", "13:00", false, 10, now);
+        AddShiftTemplateIfMissing("day11", "11-hour shift", "day11", "08:00", "20:00", "12:00", "13:00", false, 20, now);
+        AddShiftTemplateIfMissing("night", "Night shift", "night", "20:00", "08:00", "00:00", "01:00", true, 30, now);
+    }
+
+    private void AddShiftTemplateIfMissing(
+        string code,
+        string name,
+        string shiftType,
+        string start,
+        string end,
+        string lunchStart,
+        string lunchEnd,
+        bool crossesMidnight,
+        int sortOrder,
+        DateTimeOffset now)
+    {
+        if (dbContext.EmuShiftTemplates.Local.Any(row => row.Code == code) || dbContext.EmuShiftTemplates.Any(row => row.Code == code))
+        {
+            return;
+        }
+
+        dbContext.EmuShiftTemplates.Add(new EmuShiftTemplateEntity
+        {
+            Id = Guid.NewGuid(),
+            Code = code,
+            Name = name,
+            ShiftType = shiftType,
+            StartTime = TimeOnly.Parse(start),
+            EndTime = TimeOnly.Parse(end),
+            LunchStartTime = TimeOnly.Parse(lunchStart),
+            LunchEndTime = TimeOnly.Parse(lunchEnd),
+            CrossesMidnight = crossesMidnight,
             SortOrder = sortOrder,
             CreatedAt = now
         });
@@ -802,7 +896,15 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
         CreatePermission("11111111-9999-9999-9999-999999999932", "emu.plan.recurrence.manage", "ЭМУ: повторяющиеся задачи"),
         CreatePermission("11111111-9999-9999-9999-999999999933", "emu.reports.view", "ЭМУ: отчеты и история"),
         CreatePermission("11111111-9999-9999-9999-999999999934", "emu.time.override", "ЭМУ: ручное изменение времени"),
-        CreatePermission("11111111-9999-9999-9999-999999999935", "emu.audit.view", "ЭМУ: просмотр аудита")
+        CreatePermission("11111111-9999-9999-9999-999999999935", "emu.audit.view", "ЭМУ: просмотр аудита"),
+        CreatePermission("11111111-9999-9999-9999-999999999936", "emu.work-accounting.view", "ЭМУ: доступ к учету работ"),
+        CreatePermission("11111111-9999-9999-9999-999999999937", "emu.dashboard.view", "ЭМУ: доступ к дашборду"),
+        CreatePermission("11111111-9999-9999-9999-999999999938", "emu.history.view", "ЭМУ: доступ к истории выполненных работ"),
+        CreatePermission("11111111-9999-9999-9999-999999999939", "emu.completed.delete", "ЭМУ: удаление выполненных работ"),
+        CreatePermission("11111111-9999-9999-9999-999999999940", "emu.reports.export", "ЭМУ: экспорт истории и отчетов"),
+        CreatePermission("11111111-9999-9999-9999-999999999941", "emu.shift.adjust", "EMU: shift adjust"),
+        CreatePermission("11111111-9999-9999-9999-999999999942", "emu.decision.resolve", "EMU: resolve decisions"),
+        CreatePermission("11111111-9999-9999-9999-999999999943", "emu.scope.all", "ЭМУ: доступ ко всем участкам")
     ];
 
     private static PermissionEntity[] CreateInventoryPermissions() =>
@@ -819,6 +921,15 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
         CreatePermission("11111111-9999-9999-9999-999999999958", "inventory.import", "Inventory: импорт данных"),
         CreatePermission("11111111-9999-9999-9999-999999999959", "inventory.audit.view", "Inventory: аудит и история"),
         CreatePermission("11111111-9999-9999-9999-999999999960", "inventory.users.manage", "Inventory: управление правами")
+    ];
+
+    private static PermissionEntity[] CreatePercoPermissions() =>
+    [
+        CreatePermission("11111111-9999-9999-9999-999999999970", "integrations.perco.view", "PERCo-Web: просмотр"),
+        CreatePermission("11111111-9999-9999-9999-999999999971", "integrations.perco.manage", "PERCo-Web: настройки подключения"),
+        CreatePermission("11111111-9999-9999-9999-999999999972", "integrations.perco.sync", "PERCo-Web: синхронизация"),
+        CreatePermission("11111111-9999-9999-9999-999999999973", "integrations.perco.match", "PERCo-Web: сопоставление сотрудников"),
+        CreatePermission("11111111-9999-9999-9999-999999999974", "integrations.perco.logs.view", "PERCo-Web: журнал ошибок")
     ];
 
     private static PermissionEntity CreatePermission(string id, string code, string name) =>

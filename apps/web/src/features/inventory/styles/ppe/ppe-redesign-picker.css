@@ -1,0 +1,552 @@
+.inventory-ppe-redesign .inventory-ppe-picker-backdrop {
+  padding: 28px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker {
+  width: min(1160px, calc(100vw - 56px));
+  max-height: min(760px, calc(100vh - 56px));
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  overflow: hidden;
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker-head {
+  padding: 18px;
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker-tabs {
+  padding: 0 18px 12px;
+  border-bottom: 1px solid var(--ppe-line);
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker-tabs button {
+  min-height: 34px;
+  border-radius: 8px;
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 280px);
+  gap: 14px;
+  min-height: 0;
+  padding: 14px 18px;
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker-main {
+  min-height: 0;
+  overflow: auto;
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker .inventory-ppe-picker-filters {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(180px, 240px);
+  gap: 10px;
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker .inventory-ppe-search {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker .inventory-ppe-search svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #7590b8;
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker .inventory-ppe-search input {
+  display: block;
+  width: 100%;
+  height: 38px;
+  padding: 0 12px 0 38px;
+  border: 1px solid var(--ppe-line-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ppe-ink);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker .inventory-ppe-search input::placeholder {
+  color: #93a4bd;
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker-grid button {
+  min-height: 62px;
+  border-color: var(--ppe-line);
+  border-radius: 10px;
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker-grid button.is-selected {
+  border-color: #8cb3ff;
+  background: #edf4ff;
+}
+
+.inventory-ppe-redesign .inventory-ppe-reference-card {
+  border: 1px solid var(--ppe-line);
+  border-left: 4px solid var(--ppe-brand);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker-summary > div {
+  border-color: #a9c7f7;
+  background: #edf4ff;
+}
+
+.inventory-ppe-redesign .inventory-ppe-picker-selected {
+  max-height: 170px;
+  overflow: auto;
+}
+
+.inventory-ppe-movements-panel {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #d6e3f5;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.inventory-ppe-movements-panel header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.inventory-ppe-movements-panel h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 850;
+  color: #0b2245;
+}
+
+.inventory-ppe-movements-panel p {
+  margin: 2px 0 0;
+  color: #5f7598;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inventory-ppe-movements-table-wrap {
+  overflow: auto;
+  border: 1px solid #dbe7f7;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.inventory-ppe-movements-table {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.inventory-ppe-movements-table th,
+.inventory-ppe-movements-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #e7eef9;
+  text-align: left;
+  vertical-align: top;
+}
+
+.inventory-ppe-movements-table th {
+  color: #50698e;
+  font-weight: 850;
+  background: #f3f7fd;
+}
+
+.inventory-ppe-movements-table strong,
+.inventory-ppe-movements-table span {
+  display: block;
+}
+
+.inventory-ppe-movements-table span {
+  margin-top: 2px;
+  color: #6c7f9f;
+  font-size: 11px;
+}
+
+.inventory-ppe-movement-warning {
+  color: #a15c00;
+  font-weight: 850;
+}
+
+.inventory-ppe-movement-status {
+  display: inline-flex !important;
+  width: fit-content;
+  min-width: 84px;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #1b57b8 !important;
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.inventory-ppe-movement-status.is-issued {
+  background: #dcfce7;
+  color: #166534 !important;
+}
+
+.inventory-ppe-movement-status.is-issuing,
+.inventory-ppe-movement-status.is-not_issued {
+  background: #fff7db;
+  color: #8a5a00 !important;
+}
+
+.inventory-ppe-movement-status.is-returned {
+  background: #e0f2fe;
+  color: #075985 !important;
+}
+
+.inventory-ppe-movement-status.is-written_off,
+.inventory-ppe-movement-status.is-lost,
+.inventory-ppe-movement-status.is-warning {
+  background: #fee2e2;
+  color: #991b1b !important;
+}
+
+.inventory-ppe-movements-state {
+  padding: 14px;
+  border: 1px dashed #bed0ea;
+  border-radius: 8px;
+  color: #566d91;
+  font-weight: 750;
+  text-align: center;
+}
+
+.inventory-ppe-movements-state.is-error {
+  border-color: #f1b8b8;
+  color: #a63131;
+  background: #fff6f6;
+}
+
+.inventory-ppe-picker-backdrop:has(.inventory-ppe-picker:not(.inventory-ppe-print-modal)) {
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.46);
+  backdrop-filter: blur(6px);
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) {
+  width: min(1080px, calc(100vw - 40px));
+  max-height: min(720px, calc(100vh - 40px));
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  border: 1px solid #d8e5f7;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 28px 90px rgba(12, 30, 56, 0.28);
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-head {
+  padding: 20px 22px 12px;
+  border-bottom: 1px solid #edf3fb;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-head h2 {
+  font-size: 22px;
+  letter-spacing: 0;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-head p {
+  margin-top: 5px;
+  color: #5c7294;
+  font-size: 13px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-tabs {
+  gap: 6px;
+  padding: 12px 22px;
+  border-bottom: 1px solid #edf3fb;
+  background: #fbfdff;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-tabs button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #5b6f8d;
+  cursor: pointer;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-tabs button:hover {
+  background: #eef5ff;
+  color: #124fbd;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-tabs button.is-active {
+  border-color: #b8cff5;
+  background: #e9f2ff;
+  color: #0f56d9;
+  box-shadow: inset 0 -2px 0 #2563eb;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-layout {
+  grid-template-columns: minmax(0, 1fr) 230px;
+  gap: 16px;
+  min-height: 0;
+  padding: 16px 22px 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-filters {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(180px, 220px);
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-search {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-search svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  color: #7890ad;
+  transform: translateY(-50%);
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-search input,
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-filters select {
+  width: 100%;
+  height: 42px;
+  border: 1px solid #c9daf1;
+  border-radius: 9px;
+  background: #fff;
+  color: #10233f;
+  font-size: 13px;
+  font-weight: 800;
+  outline: none;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-search input {
+  padding: 0 12px 0 38px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-search input::placeholder {
+  color: #8296b4;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-search input:focus,
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-filters select:focus {
+  border-color: #78a7ff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.11);
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 0;
+  max-height: 430px;
+  overflow: auto;
+  padding: 2px 4px 4px 2px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-grid button {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 70px;
+  padding: 12px;
+  border: 1px solid #dbe7f7;
+  border-radius: 10px;
+  background: #fff;
+  color: #10233f;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(15, 37, 68, 0.04);
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-grid button:hover {
+  border-color: #9fc1fb;
+  background: #f6faff;
+  transform: translateY(-1px);
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-grid button.is-selected {
+  border-color: #4f8bf7;
+  background: #eef5ff;
+  box-shadow: inset 3px 0 0 #2563eb, 0 10px 20px rgba(37, 99, 235, 0.1);
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-check {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid #b9cbe4;
+  border-radius: 8px;
+  background: #fff;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) button.is-selected .inventory-ppe-picker-check {
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.inventory-ppe-picker-item-main {
+  display: block;
+  min-width: 0;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-grid strong,
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-grid small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-grid strong {
+  color: #10233f;
+  font-size: 14px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-grid small {
+  margin-top: 5px;
+  color: #657a99;
+  font-size: 12px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-grid em {
+  align-self: start;
+  justify-self: end;
+  min-width: 58px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #eef5ff;
+  color: #0f56d9;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+  text-align: right;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-summary {
+  position: sticky;
+  top: 0;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-summary > div {
+  padding: 14px;
+  border: 1px solid #d4e3f7;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 37, 68, 0.06);
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-summary span,
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-summary small {
+  color: #607792;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-summary strong {
+  margin-top: 8px;
+  color: #0f56d9;
+  font-size: 28px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected {
+  min-height: 0;
+  max-height: 118px;
+  overflow: auto;
+  border-top: 1px solid #edf3fb;
+  background: #ffffff;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected .inventory-ppe-state {
+  min-height: 76px;
+  padding: 14px;
+  border: 0;
+  background: #fff;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected .inventory-ppe-state span {
+  width: 30px;
+  height: 30px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected-table {
+  border: 0;
+  border-radius: 0;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected-table table {
+  min-width: 920px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f4f8fd;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected-table td {
+  padding: 8px 10px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected-table input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border: 1px solid #c9daf1;
+  border-radius: 8px;
+  background: #fff;
+  color: #10233f;
+  font-size: 12px;
+  font-weight: 850;
+  outline: none;
+  padding: 0 9px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected-table input:focus {
+  border-color: #78a7ff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-actions {
+  padding: 12px 22px 16px;
+  border-top: 1px solid #edf3fb;
+  background: #fbfdff;
+}
+

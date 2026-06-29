@@ -1,19 +1,27 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ListRenderItem, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { listRequestBoard, RequestBoardItem } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { refreshMobileData } from "@/services/mobileDataRefreshService";
 import { Card } from "@/ui/Card";
+import { MetricCard } from "@/ui/MetricCard";
 import { PrimaryButton } from "@/ui/PrimaryButton";
-import { Screen } from "@/ui/Screen";
+import { ScreenList } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
+
+type RequestTab = "available" | "mine" | "unsent" | "history";
+
+const activeStatuses = new Set(["accepted", "inProgress", "paused"]);
+const unsentStatuses = new Set(["completedLocal", "syncing", "syncError", "authRequired", "needsDispatcherDecision", "cancelledServer"]);
+const historyStatuses = new Set(["completed", "completedServer", "cancelled", "cancelledServer"]);
 
 export function RequestBoardScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const [items, setItems] = useState<RequestBoardItem[]>([]);
+  const [activeTab, setActiveTab] = useState<RequestTab>("available");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -24,13 +32,11 @@ export function RequestBoardScreen() {
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-
       void listRequestBoard().then((rows) => {
         if (isMounted) {
           setItems(rows);
         }
       });
-
       return () => {
         isMounted = false;
       };
@@ -40,11 +46,10 @@ export function RequestBoardScreen() {
   async function handleRefresh() {
     setIsRefreshing(true);
     setMessage(null);
-
     try {
       const updated = await refreshMobileData();
       await loadLocal();
-      setMessage(updated ? "Заявки обновлены." : "Нет сети. Показаны заявки, сохраненные на телефоне.");
+      setMessage(updated ? "Заявки обновлены." : "Нет связи. Показаны заявки, сохраненные на телефоне.");
     } catch (error) {
       await loadLocal();
       setMessage(error instanceof Error ? error.message : "Не удалось обновить заявки. Показаны локальные данные.");
@@ -55,107 +60,207 @@ export function RequestBoardScreen() {
 
   const summary = useMemo(
     () => ({
-      available: items.filter((item) => item.status === "available").length,
-      inProgress: items.filter((item) => item.status === "inProgress").length,
-      assigned: items.filter((item) => item.status !== "available" && item.status !== "inProgress").length,
-      total: items.length
+      available: items.filter((item) => item.status === "available" || item.status === "assigned").length,
+      mine: items.filter((item) => activeStatuses.has(item.status)).length,
+      unsent: items.filter((item) => unsentStatuses.has(item.status)).length,
+      history: items.filter((item) => historyStatuses.has(item.status)).length
     }),
     [items]
   );
 
+  const filteredItems = useMemo(() => {
+    switch (activeTab) {
+      case "mine":
+        return items.filter((item) => activeStatuses.has(item.status));
+      case "unsent":
+        return items.filter((item) => unsentStatuses.has(item.status));
+      case "history":
+        return items.filter((item) => historyStatuses.has(item.status));
+      default:
+        return items.filter((item) => item.status === "available" || item.status === "assigned");
+    }
+  }, [activeTab, items]);
+
+  const renderItem: ListRenderItem<RequestBoardItem> = ({ item }) => (
+    <RequestCard item={item} onPress={() => router.push(`/patrol/request/${item.requestId}`)} />
+  );
+
   return (
-    <Screen title="Выбор заявки" subtitle="Выберите обход, который нужно взять в работу.">
-      <View style={styles.summaryGrid}>
-        <Metric label="Доступно" value={summary.available} tone="success" />
-        <Metric label="В работе" value={summary.inProgress} tone={summary.inProgress > 0 ? "warning" : "neutral"} />
-        <Metric label="Назначено" value={summary.assigned} />
-        <Metric label="Всего" value={summary.total} />
-      </View>
-
-      <PrimaryButton disabled={isRefreshing} label={isRefreshing ? "Обновляем..." : "Обновить заявки"} onPress={handleRefresh} variant="secondary" />
-      {message ? <Text style={[styles.message, { color: colors.mutedText }]}>{message}</Text> : null}
-
-      {items.length === 0 ? (
+    <ScreenList
+      data={filteredItems}
+      keyExtractor={(item) => item.requestId}
+      ListEmptyComponent={
         <Card>
-          <Text style={[styles.title, { color: colors.text }]}>Нет доступных заявок</Text>
-          <Text style={[styles.text, { color: colors.mutedText }]}>
-            Когда оператор назначит обход, заявка появится здесь после автоматического обновления. Уже загруженные заявки можно открыть без интернета.
-          </Text>
+          <Text style={[styles.title, { color: colors.text }]}>В этой вкладке пока пусто</Text>
+          <Text style={[styles.text, { color: colors.mutedText }]}>Обновите список или выберите другую вкладку. Локальные заявки и неотправленные отчеты не удаляются при потере связи.</Text>
         </Card>
-      ) : null}
-
-      {items.map((item) => (
-        <Pressable
-          accessibilityHint={`Открыть заявку ${item.routeName}`}
-          accessibilityRole="button"
-          key={item.requestId}
-          onPress={() => router.push(`/patrol/request/${item.requestId}`)}
-          style={({ pressed }) => [pressed ? { opacity: 0.88 } : null]}
-        >
-          <Card style={[styles.requestCard, item.status === "inProgress" ? styles.activeCard : null]}>
-            <View style={[styles.statusLine, statusLineStyle(item.status)]} />
-            <View style={styles.requestContent}>
-              <View style={styles.row}>
-                <View style={styles.titleBox}>
-                  <Text style={[styles.title, { color: colors.text }]}>{item.routeName}</Text>
-                  <Text style={[styles.text, { color: colors.mutedText }]}>
-                    Для: {item.assignedFullName ?? "можно взять свободную заявку"}
-                  </Text>
-                </View>
-                <StatusPill label={statusLabel(item.status)} tone={statusTone(item.status)} />
-              </View>
-              <View style={styles.metaRow}>
-                <Text style={[styles.meta, { color: colors.mutedText }]}>Начало: {formatDateTime(item.plannedStartAt)}</Text>
-                <Text style={[styles.meta, { color: colors.mutedText }]}>Версия: {item.revision}</Text>
-              </View>
-              <Text style={[styles.openHint, { color: colors.mutedText }]}>Открыть ›</Text>
-            </View>
+      }
+      renderItem={renderItem}
+      title="Заявки на обход"
+      subtitle="Выберите заявку, проверьте детали и только потом подтвердите принятие."
+      headerContent={
+        <>
+          <Card style={styles.guideCard}>
+            <Text style={[styles.guideTitle, { color: colors.text }]}>Как начать обход</Text>
+            <Text style={[styles.text, { color: colors.mutedText }]}>
+              1. Откройте заявку из списка. 2. Проверьте маршрут и время. 3. Нажмите «Принять заявку», затем «Начать обход».
+            </Text>
           </Card>
-        </Pressable>
-      ))}
-    </Screen>
+
+          <View style={styles.summaryGrid}>
+            <MetricCard label="Доступные" style={styles.metricCompact} value={summary.available} tone="success" />
+            <MetricCard label="Мои" style={styles.metricCompact} value={summary.mine} tone={summary.mine > 0 ? "warning" : "neutral"} />
+            <MetricCard label="Не отправлено" style={styles.metricCompact} value={summary.unsent} tone={summary.unsent > 0 ? "danger" : "neutral"} />
+            <MetricCard label="История" style={styles.metricCompact} value={summary.history} />
+          </View>
+
+          <View style={styles.tabBar}>
+            <RequestTabButton active={activeTab === "available"} count={summary.available} label="Доступные" onPress={() => setActiveTab("available")} />
+            <RequestTabButton active={activeTab === "mine"} count={summary.mine} label="Мои" onPress={() => setActiveTab("mine")} />
+            <RequestTabButton active={activeTab === "unsent"} count={summary.unsent} label="Не отправлено" onPress={() => setActiveTab("unsent")} />
+            <RequestTabButton active={activeTab === "history"} count={summary.history} label="История" onPress={() => setActiveTab("history")} />
+          </View>
+
+          <PrimaryButton disabled={isRefreshing} icon="refresh-outline" label={isRefreshing ? "Обновляем..." : "Обновить заявки"} onPress={handleRefresh} variant="secondary" />
+          <Text style={[styles.tabHint, { color: colors.mutedText }]}>{tabHint(activeTab)}</Text>
+          {message ? <Text style={[styles.message, { color: colors.mutedText }]}>{message}</Text> : null}
+        </>
+      }
+    />
   );
 }
 
-function Metric({ label, value, tone = "neutral" }: { label: string; value: number; tone?: "neutral" | "success" | "warning" }) {
+function RequestCard({ item, onPress }: { item: RequestBoardItem; onPress: () => void }) {
   const { colors } = useAppTheme();
 
   return (
-    <View style={[styles.metric, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <Text style={[styles.metricValue, { color: colors.text }, tone === "success" ? styles.success : null, tone === "warning" ? styles.warning : null]}>
-        {value}
-      </Text>
-      <Text style={[styles.metricLabel, { color: colors.mutedText }]}>{label}</Text>
-    </View>
+    <Pressable accessibilityHint={`Открыть заявку ${item.routeName}`} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [pressed ? { opacity: 0.88 } : null]}>
+      <Card style={styles.requestCard}>
+        <View style={[styles.statusLine, statusLineStyle(item.status)]} />
+        <View style={styles.requestContent}>
+          <View style={styles.row}>
+            <View style={styles.titleBox}>
+              <Text style={[styles.displayNumber, { color: colors.mutedText }]}>{item.displayNumber ?? shortRequestId(item.requestId)}</Text>
+              <Text numberOfLines={2} style={[styles.title, { color: colors.text }]}>{item.routeName}</Text>
+            </View>
+            <StatusPill label={statusLabel(item.status)} tone={statusTone(item.status)} />
+          </View>
+          <Text style={[styles.text, { color: colors.mutedText }]}>{item.assignedFullName ?? "Свободная заявка"}</Text>
+          <View style={styles.metaRow}>
+            <Text style={[styles.meta, { color: colors.mutedText }]}>План: {formatDateTime(item.plannedStartAt)}</Text>
+            <Text style={[styles.meta, { color: colors.mutedText }]}>{nextStepLabel(item.status)}</Text>
+          </View>
+          <Text style={[styles.openHint, { color: colors.mutedText }]}>Нажмите, чтобы открыть карточку. Принятие будет на следующем экране.</Text>
+        </View>
+      </Card>
+    </Pressable>
+  );
+}
+
+function RequestTabButton({ active, count, label, onPress }: { active: boolean; count: number; label: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={[styles.tabButton, active ? styles.tabButtonActive : null]}>
+      <Text style={[styles.tabLabel, active ? styles.tabLabelActive : null]}>{label}</Text>
+      <Text style={[styles.tabCount, active ? styles.tabCountActive : null]}>{count}</Text>
+    </Pressable>
   );
 }
 
 function statusLabel(status: string) {
-  if (status === "inProgress") {
-    return "В работе";
+  switch (status) {
+    case "available":
+      return "Доступна";
+    case "assigned":
+      return "Назначена";
+    case "accepted":
+      return "Принята";
+    case "inProgress":
+      return "В работе";
+    case "paused":
+      return "Пауза";
+    case "completedLocal":
+    case "syncing":
+      return "Ждет отправки";
+    case "syncError":
+      return "Ошибка";
+    case "authRequired":
+      return "Нужен вход";
+    case "needsDispatcherDecision":
+      return "Решение";
+    case "cancelledServer":
+    case "cancelled":
+      return "Отменена";
+    default:
+      return "История";
   }
-
-  if (status === "available") {
-    return "Доступно";
-  }
-
-  return "Назначено";
 }
 
 function statusTone(status: string) {
-  if (status === "inProgress") {
+  if (status === "available" || status === "assigned") {
+    return "success";
+  }
+  if (status === "syncError" || status === "authRequired" || status === "cancelledServer" || status === "cancelled") {
+    return "danger";
+  }
+  if (status === "completedLocal" || status === "syncing" || status === "paused" || status === "needsDispatcherDecision") {
     return "warning";
   }
-
-  return status === "available" ? "success" : "neutral";
+  return "neutral";
 }
 
 function statusLineStyle(status: string) {
-  if (status === "inProgress") {
+  if (status === "available" || status === "assigned") {
+    return styles.statusLineSuccess;
+  }
+  if (status === "syncError" || status === "authRequired" || status === "cancelledServer" || status === "cancelled") {
+    return styles.statusLineDanger;
+  }
+  if (status === "completedLocal" || status === "syncing" || status === "paused" || status === "needsDispatcherDecision") {
     return styles.statusLineWarning;
   }
+  return styles.statusLineNeutral;
+}
 
-  return status === "available" ? styles.statusLineSuccess : styles.statusLineNeutral;
+function shortRequestId(requestId: string) {
+  return `#${requestId.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+}
+
+function tabHint(tab: RequestTab) {
+  switch (tab) {
+    case "mine":
+      return "Здесь ваши принятые и начатые обходы. Откройте карточку, чтобы продолжить.";
+    case "unsent":
+      return "Здесь отчеты и команды, которые сохранены на телефоне и ждут отправки.";
+    case "history":
+      return "Здесь завершенные и отмененные заявки. Они не мешают текущей работе.";
+    default:
+      return "Доступные заявки не принимаются одним касанием: сначала откройте и проверьте маршрут.";
+  }
+}
+
+function nextStepLabel(status: string) {
+  switch (status) {
+    case "accepted":
+      return "Следующий шаг: начать обход";
+    case "inProgress":
+      return "Следующий шаг: продолжить";
+    case "paused":
+      return "Следующий шаг: продолжить с паузы";
+    case "completedLocal":
+    case "syncing":
+      return "Ждет отправки";
+    case "syncError":
+      return "Нужно повторить отправку";
+    case "authRequired":
+      return "Нужно войти снова";
+    case "needsDispatcherDecision":
+      return "Ждет решения диспетчера";
+    case "cancelledServer":
+    case "cancelled":
+      return "Отменена диспетчером";
+    default:
+      return "Следующий шаг: открыть и принять";
+  }
 }
 
 function formatDateTime(value: string) {
@@ -171,51 +276,76 @@ const styles = StyleSheet.create({
   summaryGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10
+    gap: 8
   },
-  metric: {
-    borderRadius: 12,
+  metricCompact: {
+    flexBasis: "22%",
+    flexGrow: 1
+  },
+  tabBar: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  tabButton: {
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderColor: "#dbe5f2",
+    borderRadius: 999,
     borderWidth: 1,
-    minWidth: "47%",
+    flexDirection: "row",
+    gap: 6,
+    minHeight: 38,
     paddingHorizontal: 12,
-    paddingVertical: 12
+    paddingVertical: 8
   },
-  metricValue: {
-    fontSize: 24,
+  tabButtonActive: {
+    backgroundColor: "#1e5bff",
+    borderColor: "#1e5bff"
+  },
+  tabLabel: {
+    color: "#344563",
+    fontSize: 12,
     fontWeight: "800"
   },
-  metricLabel: {
+  tabLabelActive: {
+    color: "#ffffff"
+  },
+  tabCount: {
+    color: "#1e5bff",
     fontSize: 12,
-    fontWeight: "700"
+    fontWeight: "900"
+  },
+  tabCountActive: {
+    color: "#ffffff"
   },
   requestCard: {
     overflow: "hidden",
     padding: 0
   },
-  activeCard: {
-    backgroundColor: "#fffaf2",
-    borderColor: "#f59e0b"
+  requestContent: {
+    gap: 8,
+    padding: 14,
+    paddingLeft: 18
   },
   statusLine: {
     bottom: 0,
     left: 0,
     position: "absolute",
     top: 0,
-    width: 3
+    width: 5
   },
   statusLineSuccess: {
-    backgroundColor: "#22c55e"
+    backgroundColor: "#16a34a"
   },
   statusLineWarning: {
     backgroundColor: "#f59e0b"
   },
-  statusLineNeutral: {
-    backgroundColor: "#94a3b8"
+  statusLineDanger: {
+    backgroundColor: "#ef4444"
   },
-  requestContent: {
-    gap: 10,
-    padding: 14,
-    paddingLeft: 17
+  statusLineNeutral: {
+    backgroundColor: "#64748b"
   },
   row: {
     alignItems: "flex-start",
@@ -225,42 +355,48 @@ const styles = StyleSheet.create({
   },
   titleBox: {
     flex: 1,
-    gap: 4
+    gap: 3
+  },
+  displayNumber: {
+    fontSize: 12,
+    fontWeight: "900"
   },
   title: {
-    flex: 1,
     fontSize: 18,
     fontWeight: "800",
-    lineHeight: 24
+    lineHeight: 23
   },
   text: {
-    fontSize: 15,
-    lineHeight: 21
+    fontSize: 14,
+    lineHeight: 19
   },
   metaRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
-    justifyContent: "space-between"
+    gap: 12
   },
   meta: {
-    fontSize: 13,
-    fontWeight: "700"
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  openHint: {
+    fontSize: 12,
+    fontWeight: "900"
   },
   message: {
     fontSize: 13,
-    lineHeight: 18,
-    textAlign: "center"
+    lineHeight: 18
   },
-  openHint: {
+  guideCard: {
+    gap: 6
+  },
+  guideTitle: {
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  tabHint: {
     fontSize: 13,
-    fontWeight: "800",
-    textAlign: "right"
-  },
-  success: {
-    color: "#22c55e"
-  },
-  warning: {
-    color: "#f59e0b"
+    fontWeight: "700",
+    lineHeight: 18
   }
 });

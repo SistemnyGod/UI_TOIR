@@ -14,6 +14,11 @@ public sealed class MobileSyncController(IMobileSyncAdminService syncAdminServic
     public ActionResult<IReadOnlyList<MobileSyncConflictListItemDto>> Conflicts() =>
         Ok(syncAdminService.GetConflicts());
 
+    [HttpGet("device-health")]
+    [RequirePermission("results.read")]
+    public ActionResult<IReadOnlyList<MobileDeviceHealthDto>> DeviceHealth() =>
+        Ok(syncAdminService.GetDeviceHealth());
+
     [HttpGet("conflicts/{clientOperationId}")]
     [RequirePermission("results.read")]
     public ActionResult<MobileSyncConflictDetailDto> Conflict(string clientOperationId)

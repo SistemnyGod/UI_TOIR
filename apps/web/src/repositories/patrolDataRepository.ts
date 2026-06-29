@@ -123,10 +123,11 @@ export function mapRoute(route: RouteDto): RouteDirectoryItem {
       name: point.name,
       zone: point.zone,
       type: point.type as RoutePoint["type"],
-      tag: point.tag || point.nfcCode || "—",
+      tag: point.tag || point.nfcCode || "-",
       interval: point.interval,
       expectedTime: point.expectedTime,
       status: point.status as RoutePoint["status"],
+      nfcCode: point.nfcCode ?? undefined,
       requiresPhoto: point.requiresPhoto,
     })),
   };

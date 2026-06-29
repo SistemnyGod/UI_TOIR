@@ -6,11 +6,25 @@ var failures = new List<string>();
 RequireDirectory("apps");
 RequireDirectory("apps/api");
 RequireDirectory("apps/web");
+RequireDirectory("apps/web/src/app");
+RequireDirectory("apps/web/src/features");
+RequireDirectory("apps/web/src/features/dashboard");
+RequireDirectory("apps/web/src/features/emu");
+RequireDirectory("apps/web/src/features/inventory");
+RequireDirectory("apps/web/src/features/mobileAccounts");
+RequireDirectory("apps/web/src/features/patrol");
+RequireDirectory("apps/web/src/features/perco");
+RequireDirectory("apps/web/src/features/users");
+RequireDirectory("apps/web/src/shared");
+RequireDirectory("apps/web/src/shared/api");
+RequireDirectory("apps/web/src/shared/styles");
+RequireDirectory("apps/web/src/shared/ui");
 RequireDirectory("apps/worker");
 RequireDirectory("libs/domain");
 RequireDirectory("libs/application");
 RequireDirectory("libs/contracts");
 RequireDirectory("libs/infrastructure");
+RequireDirectory("libs/infrastructure/Persistence/Configurations");
 RequireDirectory(".github/workflows");
 RequireDirectory("docs/adr");
 RequireDirectory("docs/runbooks");
@@ -38,6 +52,7 @@ RequireFile(".github/pull_request_template.md");
 RequireFile("docs/adr/0001-monorepo-modular-monolith.md");
 RequireFile("docs/adr/0002-layer-dependency-rules.md");
 RequireFile("docs/adr/0003-frontend-data-source-boundaries.md");
+RequireFile("docs/refactor-structure-plan.md");
 RequireFile("docs/structure-remaining-work.md");
 RequireFile("docs/runbooks/ci-contract.md");
 RequireFile("docs/runbooks/branch-review-policy.md");
@@ -56,6 +71,62 @@ RequireFile("tools/Check-Structure.ps1");
 RequireFile("tools/Set-GitHubBranchProtection.ps1");
 RequireFile("tests/web/unit/run-unit-tests.mjs");
 RequireFile("tests/web/e2e/README.md");
+RequireFile("apps/web/src/shared/ui/index.ts");
+RequireFile("apps/web/src/features/README.md");
+RequireFile("libs/infrastructure/Persistence/Configurations/README.md");
+RequireFile("libs/README.md");
+RequireFile("apps/web/src/features/inventory/styles/inventory-ppe-industrial-calm.css");
+RequireFile("apps/web/src/features/inventory/ppe/EmployeeStep.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/CardParamsStep.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/IssueChecklistStep.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/PrintPreviewStep.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/PpeIssueLineEditor.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/PpePrintValidationPanel.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/WizardLinesTable.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/PpeManualNormForm.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/PpePickerCatalogGrid.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/PpePickerSelectedItems.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/PpePickerReferenceList.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/PpePickerSummary.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/PpePickerTabs.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/PpePositionNormList.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/PpeDrawerTables.tsx");
+RequireFile("apps/web/src/features/inventory/ppe/ppeFormatters.ts");
+RequireFile("apps/web/src/features/inventory/ppe/ppePrintMapping.ts");
+RequireFile("apps/web/src/features/inventory/ppe/ppeWizardDomain.ts");
+RequireFile("apps/web/src/features/patrol/assignments/AssignmentIcons.tsx");
+RequireFile("apps/web/src/features/patrol/assignments/assignmentDateUtils.ts");
+RequireFile("apps/web/src/features/patrol/assignments/assignmentStorage.ts");
+RequireFile("libs/infrastructure/Persistence/Inventory/EfInventoryExportService.Print.cs");
+RequireFile("libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.Issue.cs");
+RequireFile("libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.ReturnWriteOff.cs");
+RequireFile("libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.History.cs");
+RequireFile("libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.Validation.cs");
+AssertFileContains("apps/web/src/features/inventory/ppe/ppeWizard.tsx", "from \"./EmployeeStep\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/ppeWizard.tsx", "from \"./CardParamsStep\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/ppeWizard.tsx", "from \"./IssueChecklistStep\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/ppeWizard.tsx", "from \"./PrintPreviewStep\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/ppeWizard.tsx", "from \"./WizardLinesTable\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/ppeWizard.tsx", "from \"./ppeWizardDomain\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/ppeWizard.tsx", "export { PpeItemPickerModal } from \"./PpeItemPickerModal\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/WizardLinesTable.tsx", "from \"./PpeIssueLineEditor\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./ppeWizardDomain\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./PpePickerSelectedItems\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./PpePickerReferenceList\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./PpeManualNormForm\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./PpePickerCatalogGrid\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./PpePickerSummary\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./PpePickerTabs\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/PpeItemPickerModal.tsx", "from \"./PpePositionNormList\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/ppeDrawer.tsx", "from \"./PpeDrawerTables\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/ppeCommon.tsx", "from \"./ppeFormatters\"");
+AssertFileContains("apps/web/src/features/inventory/ppe/ppeCommon.tsx", "from \"./ppePrintMapping\"");
+AssertFileContains("apps/web/src/features/patrol/AssignmentScreen.tsx", "from \"./assignments/AssignmentIcons\"");
+AssertFileContains("apps/web/src/features/patrol/AssignmentScreen.tsx", "from \"./assignments/assignmentDateUtils\"");
+AssertFileContains("apps/web/src/features/patrol/AssignmentScreen.tsx", "from \"./assignments/assignmentStorage\"");
+AssertFileContains("libs/infrastructure/Persistence/EfInventoryExportService.cs", "internal sealed partial class EfInventoryExportService");
+AssertFileContains("libs/infrastructure/Persistence/EfInventoryWorkflowService.cs", "internal sealed partial class EfInventoryWorkflowService");
 
 AssertReferences("libs/domain/Patrol360.Domain.csproj");
 AssertReferences("libs/contracts/Patrol360.Contracts.csproj");
@@ -100,6 +171,9 @@ AssertGitIgnoreContains("bin/");
 AssertGitIgnoreContains("obj/");
 AssertGitIgnoreContains("node_modules/");
 AssertGitIgnoreContains("dist/");
+AssertGitIgnoreContains(".tmp/");
+AssertGitIgnoreContains("apk-check/");
+AssertGitIgnoreContains("artifacts/");
 AssertGitIgnoreContains("output/");
 AssertGitIgnoreContains("TestResults/");
 AssertGitIgnoreContains("coverage/");
@@ -132,6 +206,9 @@ AssertFileContains("docs/runbooks/ci-contract.md", "actions/upload-artifact");
 AssertFileContains("docs/structure-remaining-work.md", "DB-backed integration tests");
 AssertFileContains("docs/structure-remaining-work.md", "Set-GitHubBranchProtection.ps1");
 AssertFileContains("docs/structure-remaining-work.md", "CODEOWNERS");
+AssertFileContains("docs/refactor-structure-plan.md", "modular monolith");
+AssertFileContains("docs/refactor-structure-plan.md", "Do not mix mechanical moves with behavioral fixes.");
+AssertFileContains("docs/refactor-structure-plan.md", "src/features/emu");
 AssertFileContains("docs/runbooks/branch-review-policy.md", "require status check `CI / verify`");
 AssertFileContains("docs/runbooks/branch-review-policy.md", "squash merge");
 AssertFileContains("docs/runbooks/branch-review-policy.md", "Set-GitHubBranchProtection.ps1");
@@ -173,6 +250,13 @@ AssertDirectoryDoesNotContain("libs/contracts", [
 AssertDirectoryDoesNotContain("apps/api/Controllers", [
     "Persistence.Entities",
     "Patrol360DbContext"
+]);
+AssertNoMojibakeMarkers([
+    "apps/api",
+    "apps/worker",
+    "apps/web/src",
+    "docs",
+    "libs"
 ]);
 
 if (Directory.Exists(Path.Combine(repoRoot, "territory-patrol-panel")))
@@ -306,6 +390,90 @@ void AssertDirectoryDoesNotContain(string relativePath, string[] forbiddenTexts)
             }
         }
     }
+}
+
+void AssertNoMojibakeMarkers(string[] relativeRoots)
+{
+    var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ".cs",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".css",
+        ".html",
+        ".json",
+        ".md"
+    };
+
+    foreach (var relativeRoot in relativeRoots)
+    {
+        var rootPath = Path.Combine(repoRoot, NormalizePath(relativeRoot));
+        if (!Directory.Exists(rootPath))
+        {
+            failures.Add($"Cannot inspect missing directory for mojibake: {relativeRoot}");
+            continue;
+        }
+
+        foreach (var filePath in Directory.EnumerateFiles(rootPath, "*.*", SearchOption.AllDirectories))
+        {
+            if (!extensions.Contains(Path.GetExtension(filePath)) || IsGeneratedOrVendorPath(filePath))
+            {
+                continue;
+            }
+
+            var lines = File.ReadAllLines(filePath);
+            for (var index = 0; index < lines.Length; index++)
+            {
+                if (!ContainsLikelyMojibake(lines[index]))
+                {
+                    continue;
+                }
+
+                var displayPath = Path.GetRelativePath(repoRoot, filePath).Replace('\\', '/');
+                failures.Add($"{displayPath}:{index + 1} contains likely mojibake text. Decode it or move it to an explicit test fixture.");
+            }
+        }
+    }
+}
+
+bool IsGeneratedOrVendorPath(string filePath)
+{
+    var relativePath = Path.GetRelativePath(repoRoot, filePath).Replace('\\', '/');
+    return relativePath.Contains("/bin/", StringComparison.OrdinalIgnoreCase) ||
+           relativePath.Contains("/obj/", StringComparison.OrdinalIgnoreCase) ||
+           relativePath.Contains("/node_modules/", StringComparison.OrdinalIgnoreCase) ||
+           relativePath.Contains("/dist/", StringComparison.OrdinalIgnoreCase) ||
+           relativePath.Contains("/coverage/", StringComparison.OrdinalIgnoreCase);
+}
+
+bool ContainsLikelyMojibake(string line)
+{
+    if (line.Contains("mojibake", StringComparison.OrdinalIgnoreCase))
+    {
+        return false;
+    }
+
+    for (var index = 0; index < line.Length - 1; index++)
+    {
+        var current = line[index];
+        if ((current == 'Р' || current == 'С') && IsMojibakeTrail(line[index + 1]))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool IsMojibakeTrail(char character)
+{
+    return character is >= '\u0080' and <= '\u00BF' ||
+           character is >= '\u0402' and <= '\u040F' ||
+           character is >= '\u0452' and <= '\u045F' ||
+           character is '\u2013' or '\u2014' or '\u2018' or '\u2019' or '\u201A' or '\u201C' or '\u201D' ||
+           character is '\u2020' or '\u2021' or '\u2026' or '\u20AC' or '\u2116';
 }
 
 void AssertGitIgnoreContains(string pattern)

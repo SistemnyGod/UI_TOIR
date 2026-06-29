@@ -107,6 +107,10 @@ export function LoginScreen() {
   }
 
   async function handleSubmit() {
+    if (isSubmitting) {
+      return;
+    }
+
     const normalizedLogin = login.trim();
 
     if (!normalizedLogin) {
@@ -138,6 +142,10 @@ export function LoginScreen() {
   }
 
   async function handleUseLocalServer() {
+    if (isSubmitting) {
+      return;
+    }
+
     setError(null);
     setServerStatus("Проверяем локальный сервер...");
 
@@ -166,6 +174,10 @@ export function LoginScreen() {
   }
 
   async function handleBiometricLogin() {
+    if (isSubmitting) {
+      return;
+    }
+
     if (!biometricAvailable) {
       Alert.alert("Вход по отпечатку", "На устройстве не настроена биометрия.");
       return;
@@ -212,11 +224,7 @@ export function LoginScreen() {
       <View style={styles.overlay}>
         <SafeAreaView style={styles.safe}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.keyboard}>
-            <ScrollView
-              contentContainerStyle={styles.scrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
+            <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <View style={styles.logoBlock}>
                 <Text style={styles.logoText}>AM</Text>
                 <Text style={styles.logoSubText}>ATOM MINERALS</Text>
@@ -353,7 +361,7 @@ export function LoginScreen() {
                 </Pressable>
               </View>
 
-              <Text style={styles.footer}>Поддержка сотрудников • Atom Minerals</Text>
+              <Text style={styles.footer}>Поддержка сотрудников - Atom Minerals</Text>
             </ScrollView>
           </KeyboardAvoidingView>
         </SafeAreaView>

@@ -1,0 +1,1017 @@
+.emu-dashboard-page {
+  gap: 16px;
+}
+
+.emu-dashboard-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.emu-dashboard-header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 30px;
+  line-height: 1.12;
+}
+
+.emu-dashboard-header p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.emu-dashboard-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.emu-dashboard-header-actions .emu-secondary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.emu-shift-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 250px;
+  min-height: 42px;
+  border: 1px solid #d8e3f2;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+  font: 800 13px/1.2 inherit;
+  padding: 0 12px;
+}
+
+.emu-dashboard-top-grid,
+.emu-dashboard-middle-grid,
+.emu-dashboard-bottom-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.emu-dashboard-top-grid {
+  grid-template-columns: repeat(5, minmax(145px, 1fr)) 260px;
+}
+
+.emu-dashboard-middle-grid {
+  grid-template-columns: minmax(300px, 0.9fr) minmax(360px, 1.15fr) 300px;
+}
+
+.emu-dashboard-bottom-grid {
+  grid-template-columns: minmax(280px, 1fr) minmax(240px, 0.82fr) minmax(240px, 0.82fr) minmax(230px, 0.74fr);
+}
+
+.emu-dashboard-top-grid > *,
+.emu-dashboard-middle-grid > *,
+.emu-dashboard-bottom-grid > * {
+  min-width: 0;
+}
+
+.emu-dashboard-metric,
+.emu-dashboard-shift,
+.emu-dashboard-card {
+  overflow: hidden;
+  border: 1px solid #dce6f5;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 10px 24px rgba(30, 64, 119, 0.07);
+}
+
+.emu-dashboard-metric {
+  display: grid;
+  align-content: space-between;
+  min-height: 142px;
+  padding: 15px;
+}
+
+.emu-dashboard-metric-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.emu-dashboard-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  line-height: 0;
+  overflow: hidden;
+}
+
+.emu-dashboard-icon svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+  stroke-width: 2.35;
+}
+
+.emu-dashboard-metric span,
+.emu-dashboard-metric em {
+  display: block;
+}
+
+.emu-dashboard-metric .emu-dashboard-icon {
+  display: grid;
+}
+
+.emu-dashboard-metric span {
+  color: #64748b;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.emu-dashboard-metric strong {
+  display: block;
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.emu-dashboard-metric em {
+  margin-top: 5px;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.emu-dashboard-metric em.is-positive {
+  color: #059669;
+}
+
+.emu-dashboard-metric em.is-negative {
+  color: #ef4444;
+}
+
+.emu-dashboard-tone-blue .emu-dashboard-icon { background: #e8f1ff; color: #0b63f6; }
+.emu-dashboard-tone-green .emu-dashboard-icon { background: #e8f8ef; color: #10b981; }
+.emu-dashboard-tone-orange .emu-dashboard-icon { background: #fff1e4; color: #f97316; }
+.emu-dashboard-tone-red .emu-dashboard-icon { background: #feecec; color: #ef4444; }
+
+.emu-dashboard-sparkline {
+  width: 100%;
+  height: 42px;
+  margin-top: 8px;
+}
+
+.emu-dashboard-sparkline polyline {
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.emu-dashboard-sparkline .tone-blue { stroke: #0b63f6; }
+.emu-dashboard-sparkline .tone-green { stroke: #10b981; }
+.emu-dashboard-sparkline .tone-orange { stroke: #f97316; }
+.emu-dashboard-sparkline .tone-red { stroke: #ef4444; }
+
+.emu-dashboard-sparkline-empty {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  margin-top: 8px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.emu-dashboard-shift {
+  padding: 14px;
+}
+
+.emu-dashboard-card-title,
+.emu-dashboard-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.emu-dashboard-card-title h3,
+.emu-dashboard-card > header h3 {
+  margin: 0;
+  color: #17213a;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.emu-dashboard-card-title span {
+  border-radius: 7px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 5px 10px;
+}
+
+.emu-dashboard-card-title span.is-active {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.emu-dashboard-shift-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.emu-dashboard-shift-main b,
+.emu-dashboard-shift-main span,
+.emu-dashboard-shift-times span,
+.emu-dashboard-shift-times b {
+  display: block;
+}
+
+.emu-dashboard-shift-main b {
+  color: #17213a;
+  font-size: 14px;
+}
+
+.emu-dashboard-shift-main span,
+.emu-dashboard-shift-times span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.emu-dashboard-donut {
+  position: relative;
+  flex: 0 0 auto;
+  width: 92px;
+  height: 92px;
+}
+
+.emu-dashboard-donut svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.emu-dashboard-donut > strong {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #0f172a;
+  font-size: 20px;
+}
+
+.emu-dashboard-donut > span {
+  position: absolute;
+  right: 0;
+  bottom: 22px;
+  left: 0;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.emu-dashboard-shift-times {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.emu-dashboard-shift-times b {
+  margin-top: 3px;
+  color: #17213a;
+  font-size: 15px;
+}
+
+.emu-dashboard-card > header {
+  min-height: 54px;
+  border-bottom: 1px solid #edf2f7;
+  padding: 0 16px;
+}
+
+.emu-dashboard-card > header button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: #0b63f6;
+  cursor: pointer;
+  font: 800 13px/1.2 inherit;
+  white-space: nowrap;
+}
+
+.emu-area-summary {
+  display: grid;
+  gap: 13px;
+  padding: 18px;
+}
+
+.emu-area-summary > div {
+  display: grid;
+  grid-template-columns: minmax(110px, 150px) minmax(0, 1fr) 32px 42px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.emu-area-summary span {
+  color: #475569;
+  font-weight: 700;
+}
+
+.emu-area-summary > div > div {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eef2f7;
+}
+
+.emu-area-summary i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #0b63f6;
+}
+
+.emu-area-summary b {
+  color: #17213a;
+}
+
+.emu-area-summary em {
+  color: #64748b;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.emu-area-summary p {
+  display: flex;
+  justify-content: space-between;
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.emu-area-bars {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.emu-area-bars button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e1ebf7;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: inherit;
+  cursor: pointer;
+  padding: 10px;
+  text-align: left;
+}
+
+.emu-area-bars button:hover,
+.emu-dashboard-occupancy-list button:hover,
+.emu-dashboard-section-risks button:hover {
+  border-color: #9cc3ff;
+  background: #eef6ff;
+}
+
+.emu-area-bars span {
+  color: #17213a;
+  font-size: 13px;
+  font-weight: 900;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emu-area-bars b {
+  color: #0b63f6;
+  font-size: 18px;
+  text-align: right;
+}
+
+.emu-area-bars i {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  height: 8px;
+  border-radius: 999px;
+  background: #e8f1ff;
+}
+
+.emu-area-bars em {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #0b63f6;
+}
+
+.emu-trend-chart {
+  padding: 18px;
+}
+
+.emu-trend-chart svg {
+  display: block;
+  width: 100%;
+  height: 205px;
+}
+
+.emu-trend-chart > span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.emu-dashboard-bars {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+  min-height: 170px;
+  padding: 18px 18px 16px;
+}
+
+.emu-dashboard-bars > div {
+  display: grid;
+  align-items: end;
+  gap: 7px;
+  min-width: 0;
+  height: 132px;
+}
+
+.emu-dashboard-bars i {
+  display: block;
+  align-self: end;
+  min-height: 8px;
+  border-radius: 8px 8px 3px 3px;
+  background: linear-gradient(180deg, #60a5fa, #0b63f6);
+  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.16);
+}
+
+.emu-dashboard-bars span,
+.emu-dashboard-bars b {
+  display: block;
+  color: #61718d;
+  font-size: 11px;
+  font-weight: 850;
+  text-align: center;
+}
+
+.emu-dashboard-bars b {
+  color: #0f2447;
+}
+
+.emu-quick-actions {
+  display: grid;
+  gap: 9px;
+  padding: 16px;
+}
+
+.emu-quick-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid #d8e3f2;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+  font: 900 13px/1.2 inherit;
+}
+
+.emu-quick-actions button.primary {
+  border-color: #0b63f6;
+  background: #0b63f6;
+  color: #fff;
+}
+
+.emu-dashboard-actions {
+  align-content: start;
+}
+
+.emu-dashboard-occupancy {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.emu-dashboard-occupancy-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.emu-dashboard-occupancy-grid article {
+  border: 1px solid #e1ebf7;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 10px;
+}
+
+.emu-dashboard-occupancy-grid span,
+.emu-dashboard-occupancy-list span,
+.emu-dashboard-section-risks span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.emu-dashboard-occupancy-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: #0b63f6;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.emu-dashboard-occupancy-bar {
+  overflow: hidden;
+  height: 8px;
+  border-radius: 999px;
+  background: #e8f1ff;
+}
+
+.emu-dashboard-occupancy-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #0b63f6;
+}
+
+.emu-dashboard-occupancy-list,
+.emu-dashboard-section-risks {
+  display: grid;
+}
+
+.emu-dashboard-occupancy-list button,
+.emu-dashboard-section-risks button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 0;
+  border-top: 1px solid #edf2f7;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 10px 0;
+  text-align: left;
+}
+
+.emu-dashboard-occupancy-list strong,
+.emu-dashboard-section-risks strong {
+  color: #17213a;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.emu-dashboard-section-risks {
+  padding: 10px 16px 16px;
+}
+
+.emu-dashboard-section-risks button {
+  grid-template-columns: minmax(0, 1fr) 110px;
+  align-items: center;
+  gap: 12px;
+}
+
+.emu-dashboard-section-risks button > div:last-child {
+  text-align: right;
+}
+
+.emu-dashboard-section-risks b {
+  display: block;
+  color: #f97316;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.emu-active-work-list,
+.emu-event-list,
+.emu-incident-list {
+  display: grid;
+}
+
+.emu-active-work-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px;
+  gap: 12px;
+  border-left: 4px solid #0b63f6;
+  border-bottom: 1px solid #edf2f7;
+  padding: 14px 16px;
+}
+
+.emu-active-work-list article.status-paused {
+  border-left-color: #f97316;
+}
+
+.emu-active-work-list article.status-attention {
+  border-left-color: #ef4444;
+}
+
+.emu-active-work-list small,
+.emu-event-list small,
+.emu-incident-list small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.emu-active-work-list strong,
+.emu-event-list strong,
+.emu-incident-list strong {
+  display: block;
+  color: #17213a;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.emu-active-work-list span,
+.emu-event-list time {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.emu-active-work-list article > div:last-child {
+  text-align: right;
+}
+
+.emu-active-work-list b {
+  display: block;
+  margin-top: 8px;
+  color: #17213a;
+}
+
+.emu-dashboard-status,
+.emu-dashboard-severity {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 900;
+  min-height: 24px;
+  padding: 0 9px;
+  white-space: nowrap;
+}
+
+.emu-dashboard-status.status-inWork { background: #dbeafe; color: #1d4ed8; }
+.emu-dashboard-status.status-paused { background: #ffedd5; color: #c2410c; }
+.emu-dashboard-status.status-completed { background: #dcfce7; color: #15803d; }
+.emu-dashboard-status.status-attention { background: #fee2e2; color: #dc2626; }
+
+.emu-event-list article {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 42px;
+  gap: 9px;
+  align-items: start;
+  border-bottom: 1px solid #edf2f7;
+  padding: 10px 12px;
+}
+
+.emu-event-list article > span,
+.emu-event-list article > svg {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #e8f1ff;
+  color: #0b63f6;
+}
+
+.emu-event-list article > span svg,
+.emu-event-list article > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.emu-event-list strong,
+.emu-event-list small {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.emu-event-list strong {
+  -webkit-line-clamp: 1;
+}
+
+.emu-event-list small {
+  margin-top: 3px;
+  -webkit-line-clamp: 2;
+}
+
+.emu-event-list time {
+  text-align: right;
+}
+
+.emu-incident-list {
+  gap: 8px;
+  padding: 14px;
+}
+
+.emu-incident-list article {
+  display: grid;
+  gap: 5px;
+  border-left: 4px solid #f97316;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 11px 12px;
+}
+
+.emu-incident-list article.severity-high {
+  border-left-color: #ef4444;
+}
+
+.emu-incident-list article.severity-low {
+  border-left-color: #10b981;
+}
+
+.emu-dashboard-severity {
+  width: fit-content;
+}
+
+.emu-dashboard-severity.severity-high { background: #fee2e2; color: #dc2626; }
+.emu-dashboard-severity.severity-medium { background: #ffedd5; color: #c2410c; }
+.emu-dashboard-severity.severity-low { background: #dcfce7; color: #15803d; }
+
+.emu-key-indicators {
+  padding: 18px;
+}
+
+.emu-key-indicators-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  gap: 12px;
+}
+
+.emu-key-indicators span {
+  display: block;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.emu-key-indicators strong {
+  display: block;
+  margin: 4px 0 12px;
+  color: #17213a;
+  font-size: 26px;
+}
+
+.emu-key-indicators .emu-dashboard-donut {
+  width: 110px;
+  height: 110px;
+}
+
+.emu-key-indicators .emu-dashboard-donut > strong {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  transform: translateY(-8px);
+  color: #0f172a;
+  font-size: 22px;
+  line-height: 1;
+  text-align: center;
+}
+
+.emu-key-indicators .emu-dashboard-donut > span {
+  bottom: 29px;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1;
+  text-align: center;
+}
+
+.emu-key-indicators-foot {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  border-top: 1px solid #edf2f7;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.emu-key-indicators-foot b {
+  margin-top: 5px;
+  color: #0b63f6;
+  font-size: 24px;
+}
+
+.emu-key-indicators-foot span:first-child b {
+  color: #ef4444;
+}
+
+.emu-dashboard-link-footer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  border: 0;
+  border-top: 1px solid #edf2f7;
+  background: #fff;
+  color: #0b63f6;
+  cursor: pointer;
+  font: 900 13px/1.2 inherit;
+  min-height: 42px;
+}
+
+.emu-dashboard-drilldown {
+  width: min(1080px, calc(100vw - 48px));
+}
+
+.emu-dashboard-drilldown-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.emu-dashboard-drilldown-title > span {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: #e8f1ff;
+  color: #0b63f6;
+  font-size: 18px;
+  font-weight: 1000;
+}
+
+.emu-dashboard-drilldown-title p,
+.emu-dashboard-drilldown-title small {
+  display: block;
+  margin: 0;
+}
+
+.emu-dashboard-drilldown-title p {
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 1000;
+}
+
+.emu-dashboard-drilldown-title small {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.emu-dashboard-drilldown-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.emu-dashboard-drilldown-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.emu-dashboard-drilldown-kpis article {
+  border: 1px solid #dfe9f6;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 14px;
+}
+
+.emu-dashboard-drilldown-kpis span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.emu-dashboard-drilldown-kpis strong {
+  display: block;
+  margin-top: 5px;
+  color: #0b63f6;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.emu-dashboard-drilldown-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
+  gap: 16px;
+}
+
+.emu-dashboard-drilldown-grid > article {
+  border: 1px solid #dfe9f6;
+  border-radius: 10px;
+  background: #fff;
+  padding: 14px;
+}
+
+.emu-dashboard-drilldown-grid h4 {
+  margin: 0 0 12px;
+  color: #17213a;
+  font-size: 15px;
+}
+
+.emu-dashboard-drilldown-list {
+  display: grid;
+}
+
+.emu-dashboard-drilldown-list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px 78px;
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid #edf2f7;
+  padding: 10px 0;
+}
+
+.emu-dashboard-drilldown-list strong,
+.emu-dashboard-drilldown-people strong {
+  display: block;
+  color: #17213a;
+  font-weight: 1000;
+}
+
+.emu-dashboard-drilldown-list span,
+.emu-dashboard-drilldown-list p,
+.emu-dashboard-drilldown-people span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.emu-dashboard-drilldown-list p {
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emu-dashboard-drilldown-list b {
+  color: #0f172a;
+  font-size: 13px;
+  text-align: right;
+}
+
+.emu-dashboard-drilldown-tags,
+.emu-dashboard-drilldown-people {
+  display: grid;
+  gap: 8px;
+}
+
+.emu-dashboard-drilldown-tags span {
+  width: fit-content;
+  border-radius: 999px;
+  background: #e8f1ff;
+  color: #0b63f6;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 7px 10px;
+}
+
+.emu-dashboard-drilldown-people > div {
+  border: 1px solid #e1ebf7;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 10px;
+}
+
+.emu-dashboard-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #dce6f5;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  padding-top: 12px;
+}
+
+.emu-dashboard-footer span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+

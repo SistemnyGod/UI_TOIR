@@ -9,9 +9,12 @@ using Patrol360.Infrastructure.Persistence.Entities;
 
 namespace Patrol360.Infrastructure.Persistence;
 
-internal sealed class EfInventoryWorkflowService(Patrol360DbContext dbContext) : IInventoryWorkflowService
+internal sealed partial class EfInventoryWorkflowService(Patrol360DbContext dbContext) : IInventoryWorkflowService
 {
     private const string Actor = "system";
+    private const string DefaultPpeNormPoint = "п. 1645 Приложения № 1";
+
+    private const string AccountingMovementWarehouseName = "Системный учет движения";
 
     private static readonly IReadOnlyList<InventoryReportDto> ReportDefinitions =
     [
@@ -90,15 +93,12 @@ internal sealed class EfInventoryWorkflowService(Patrol360DbContext dbContext) :
             return Failure<InventoryCustodyRecordDto>("itemId", "Item not found");
         }
 
-        var warehouse = dbContext.InventoryWarehouses.FirstOrDefault(row => row.Id == request.WarehouseId && !row.IsArchived);
+        var warehouse = request.WarehouseId is not null
+            ? dbContext.InventoryWarehouses.FirstOrDefault(row => row.Id == request.WarehouseId.Value && !row.IsArchived)
+            : EnsureAccountingMovementWarehouse();
         if (warehouse is null)
         {
             return Failure<InventoryCustodyRecordDto>("warehouseId", "Warehouse not found");
-        }
-
-        if (GetAvailableStock(item.Id, warehouse.Id) < request.Quantity)
-        {
-            return Failure<InventoryCustodyRecordDto>("quantity", "Not enough stock in warehouse");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -130,19 +130,6 @@ internal sealed class EfInventoryWorkflowService(Patrol360DbContext dbContext) :
         };
 
         dbContext.InventoryCustodyRecords.Add(record);
-        dbContext.InventoryStockMoves.Add(new InventoryStockMoveEntity
-        {
-            Id = Guid.NewGuid(),
-            ItemId = item.Id,
-            WarehouseId = warehouse.Id,
-            EmployeeId = employee.Id,
-            QuantityDelta = -request.Quantity,
-            MovedAt = now,
-            MoveType = "custody_issue",
-            ReferenceType = "custody",
-            ReferenceId = document.Id,
-            CustodyRecordId = record.Id
-        });
         AddCustodyEvent(record.Id, "created", string.Empty, "in_use", record.Comment, now);
         AddSystemLog("custody_record", record.Id, "created", $"{employee.FullName}: {item.Name} x {request.Quantity}", now);
         dbContext.SaveChanges();
@@ -178,27 +165,19 @@ internal sealed class EfInventoryWorkflowService(Patrol360DbContext dbContext) :
         }
 
         var now = DateTimeOffset.UtcNow;
+        var normalizedComment = NormalizeOptional(request.Comment);
         record.Status = nextStatus;
         record.ClosedAt = nextStatus == "in_use" ? null : now;
-        if (oldStatus == "in_use" && nextStatus == "returned")
+        if (!string.IsNullOrWhiteSpace(normalizedComment))
         {
-            dbContext.InventoryStockMoves.Add(new InventoryStockMoveEntity
-            {
-                Id = Guid.NewGuid(),
-                ItemId = record.ItemId,
-                WarehouseId = record.WarehouseId,
-                EmployeeId = record.EmployeeId,
-                QuantityDelta = record.Quantity,
-                MovedAt = now,
-                MoveType = "custody_return",
-                ReferenceType = "custody",
-                ReferenceId = record.DocumentId,
-                CustodyRecordId = record.Id
-            });
+            record.Comment = normalizedComment;
         }
 
-        AddCustodyEvent(record.Id, "status_changed", oldStatus, nextStatus, request.Comment, now);
-        AddSystemLog("custody_record", record.Id, "status_changed", $"{oldStatus} -> {nextStatus}", now);
+        AddCustodyEvent(record.Id, "status_changed", oldStatus, nextStatus, normalizedComment, now);
+        var logDetails = string.IsNullOrWhiteSpace(normalizedComment)
+            ? $"{oldStatus} -> {nextStatus}"
+            : $"{oldStatus} -> {nextStatus}; {normalizedComment}";
+        AddSystemLog("custody_record", record.Id, "status_changed", logDetails, now);
         dbContext.SaveChanges();
 
         return Success(MapCustodyRecord(LoadCustodyRecord(record.Id)));
@@ -264,7 +243,13 @@ internal sealed class EfInventoryWorkflowService(Patrol360DbContext dbContext) :
             .OrderByDescending(row => row.CreatedAt)
             .ToList();
         var history = historyRows
-            .Select(row => new InventoryHistoryDto(row.Id, "custody_record", row.EventType, $"{row.FromStatus} -> {row.ToStatus}", row.Actor, row.CreatedAt.UtcDateTime))
+            .Select(row => new InventoryHistoryDto(
+                row.Id,
+                "custody_record",
+                ToCustodyHistoryAction(row),
+                BuildCustodyEventDescription(row),
+                row.Actor,
+                row.CreatedAt.UtcDateTime))
             .ToList();
 
         return Success(new InventoryCustodyDocumentDetailDto(
@@ -319,353 +304,6 @@ internal sealed class EfInventoryWorkflowService(Patrol360DbContext dbContext) :
         dbContext.SaveChanges();
 
         return Success(MapCustodyDocument(document));
-    }
-
-    public InventoryPpeCardsResponseDto GetPpeCards(InventoryListQuery query)
-    {
-        var paging = NormalizePaging(query);
-        var baseQuery = dbContext.InventoryPpeCards
-            .AsNoTracking()
-            .Where(card => card.ArchivedAt == null);
-
-        var rowsQuery = ApplyPpeCardFilters(baseQuery, query);
-        var total = rowsQuery.Count();
-        var rows = ApplyPpeCardSort(rowsQuery, query)
-            .Skip((paging.Page - 1) * paging.PageSize)
-            .Take(paging.PageSize)
-            .Select(card => new InventoryPpeCardDto(
-                card.Id,
-                card.EmployeeId,
-                card.Employee.FullName,
-                card.Position,
-                card.Status,
-                card.Lines.Count(line => line.Status != "archived")))
-            .ToList();
-
-        return new InventoryPpeCardsResponseDto(
-            rows,
-            total,
-            paging.Page,
-            paging.PageSize,
-            total == 0 ? 0 : (int)Math.Ceiling(total / (double)paging.PageSize),
-            BuildPpeSummary(baseQuery),
-            BuildPpeSummary(rowsQuery));
-    }
-
-    public InventoryCommandResult<InventoryPpeCardDetailDto> GetPpeCard(Guid id)
-    {
-        var card = LoadPpeCard(id);
-        return card is null
-            ? Failure<InventoryPpeCardDetailDto>("id", "PPE card not found")
-            : Success(MapPpeCardDetail(card));
-    }
-
-    public InventoryCommandResult<InventoryPpeCardDetailDto> CreatePpeCard(CreateInventoryPpeCardDto request)
-    {
-        var employee = dbContext.Employees.FirstOrDefault(row => row.Id == request.EmployeeId);
-        if (employee is null)
-        {
-            return Failure<InventoryPpeCardDetailDto>("employeeId", "Employee not found");
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        var card = new InventoryPpeCardEntity
-        {
-            Id = Guid.NewGuid(),
-            EmployeeId = employee.Id,
-            Position = employee.Position,
-            Status = "active",
-            Comment = NormalizeOptional(request.Comment),
-            CreatedAt = now
-        };
-
-        dbContext.InventoryPpeCards.Add(card);
-        AddSystemLog("ppe_card", card.Id, "created", employee.FullName, now);
-        dbContext.SaveChanges();
-
-        return Success(MapPpeCardDetail(LoadPpeCard(card.Id)!));
-    }
-
-    public InventoryCommandResult<InventoryPpeCardDetailDto> UpdatePpeCard(Guid id, CreateInventoryPpeCardDto request)
-    {
-        var card = dbContext.InventoryPpeCards.FirstOrDefault(row => row.Id == id && row.ArchivedAt == null);
-        if (card is null)
-        {
-            return Failure<InventoryPpeCardDetailDto>("id", "PPE card not found");
-        }
-
-        var employee = dbContext.Employees.FirstOrDefault(row => row.Id == request.EmployeeId);
-        if (employee is null)
-        {
-            return Failure<InventoryPpeCardDetailDto>("employeeId", "Employee not found");
-        }
-
-        card.EmployeeId = employee.Id;
-        card.Position = employee.Position;
-        card.Comment = NormalizeOptional(request.Comment);
-        AddSystemLog("ppe_card", card.Id, "updated", employee.FullName, DateTimeOffset.UtcNow);
-        dbContext.SaveChanges();
-
-        return Success(MapPpeCardDetail(LoadPpeCard(card.Id)!));
-    }
-
-    public InventoryCommandResult<InventoryPpeCardDetailDto> ArchivePpeCard(Guid id)
-    {
-        var card = dbContext.InventoryPpeCards.FirstOrDefault(row => row.Id == id && row.ArchivedAt == null);
-        if (card is null)
-        {
-            return Failure<InventoryPpeCardDetailDto>("id", "PPE card not found");
-        }
-
-        card.ArchivedAt = DateTimeOffset.UtcNow;
-        card.Status = "archived";
-        AddSystemLog("ppe_card", card.Id, "archived", "PPE card archived", card.ArchivedAt.Value);
-        dbContext.SaveChanges();
-
-        return Success(MapPpeCardDetail(LoadPpeCard(card.Id)!));
-    }
-
-    public InventoryCommandResult<InventoryPpeCardLineDto> AddPpeCardLine(Guid cardId, UpsertInventoryPpeCardLineDto request)
-    {
-        var card = dbContext.InventoryPpeCards.FirstOrDefault(row => row.Id == cardId && row.ArchivedAt == null);
-        if (card is null)
-        {
-            return Failure<InventoryPpeCardLineDto>("cardId", "PPE card not found");
-        }
-
-        var validation = ValidatePpeLine(request);
-        if (validation is not null)
-        {
-            return validation;
-        }
-
-        var line = new InventoryPpeCardLineEntity
-        {
-            Id = Guid.NewGuid(),
-            CardId = card.Id,
-            ItemId = request.ItemId,
-            WarehouseId = null,
-            Quantity = request.Quantity,
-            Status = NormalizePpeStatus(request.Status) is { Length: > 0 } status ? status : "not_issued",
-            DueAt = request.DueAt,
-            Comment = NormalizeOptional(request.Comment)
-        };
-
-        dbContext.InventoryPpeCardLines.Add(line);
-        AddPpeEvent(line.Id, "created", string.Empty, line.Status, line.Comment, DateTimeOffset.UtcNow);
-        AddSystemLog("ppe_card_line", line.Id, "created", $"Card {card.Id}", DateTimeOffset.UtcNow);
-        dbContext.SaveChanges();
-
-        return Success(MapPpeCardLine(LoadPpeLine(line.Id)!));
-    }
-
-    public InventoryCommandResult<InventoryPpeCardLineDto> UpdatePpeCardLine(Guid cardId, Guid lineId, UpsertInventoryPpeCardLineDto request)
-    {
-        var line = dbContext.InventoryPpeCardLines.FirstOrDefault(row => row.Id == lineId && row.CardId == cardId && row.Status != "archived");
-        if (line is null)
-        {
-            return Failure<InventoryPpeCardLineDto>("lineId", "PPE card line not found");
-        }
-
-        var validation = ValidatePpeLine(request);
-        if (validation is not null)
-        {
-            return validation;
-        }
-
-        if (line.Status is not "not_issued" and not "issuing"
-            && (line.ItemId != request.ItemId
-                || line.Quantity != request.Quantity))
-        {
-            return Failure<InventoryPpeCardLineDto>(
-                "status",
-                "Issued PPE line cannot change item or quantity. Archive or create a new line instead.");
-        }
-
-        line.ItemId = request.ItemId;
-        line.WarehouseId = null;
-        line.Quantity = request.Quantity;
-        line.DueAt = request.DueAt;
-        line.Comment = NormalizeOptional(request.Comment);
-        AddSystemLog("ppe_card_line", line.Id, "updated", line.Comment, DateTimeOffset.UtcNow);
-        dbContext.SaveChanges();
-
-        return Success(MapPpeCardLine(LoadPpeLine(line.Id)!));
-    }
-
-    public InventoryCommandResult<InventoryPpeCardLineDto> UpdatePpeCardLineStatus(Guid cardId, Guid lineId, UpdateInventoryStatusDto request)
-    {
-        var line = dbContext.InventoryPpeCardLines
-            .Include(row => row.Card)
-            .FirstOrDefault(row => row.Id == lineId && row.CardId == cardId && row.Status != "archived");
-        if (line is null)
-        {
-            return Failure<InventoryPpeCardLineDto>("lineId", "PPE card line not found");
-        }
-
-        var nextStatus = NormalizePpeStatus(request.Status);
-        if (nextStatus.Length == 0)
-        {
-            return Failure<InventoryPpeCardLineDto>("status", "Unsupported PPE status");
-        }
-
-        var oldStatus = line.Status;
-        if (oldStatus == nextStatus)
-        {
-            return Success(MapPpeCardLine(LoadPpeLine(line.Id)!));
-        }
-
-        if (!IsAllowedPpeLineStatusTransition(oldStatus, nextStatus))
-        {
-            return Failure<InventoryPpeCardLineDto>(
-                "status",
-                $"Unsupported PPE line status transition: {oldStatus} -> {nextStatus}");
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        if (nextStatus == "issued" && oldStatus != "issued")
-        {
-            line.IssuedAt = now;
-        }
-
-        line.Status = nextStatus;
-        AddPpeEvent(line.Id, "status_changed", oldStatus, nextStatus, request.Comment, now);
-        AddSystemLog("ppe_card_line", line.Id, "status_changed", $"{oldStatus} -> {nextStatus}", now);
-        dbContext.SaveChanges();
-
-        return Success(MapPpeCardLine(LoadPpeLine(line.Id)!));
-    }
-
-    public InventoryCommandResult<InventoryPpeCardLineDto> ArchivePpeCardLine(Guid cardId, Guid lineId)
-    {
-        var line = dbContext.InventoryPpeCardLines
-            .Include(row => row.StockMoves)
-            .FirstOrDefault(row => row.Id == lineId && row.CardId == cardId && row.Status != "archived");
-        if (line is null)
-        {
-            return Failure<InventoryPpeCardLineDto>("lineId", "PPE card line not found");
-        }
-
-        if (line.Status == "issued")
-        {
-            return Failure<InventoryPpeCardLineDto>(
-                "status",
-                "Issued PPE line cannot be archived. Return or write off the line first.");
-        }
-
-        var oldStatus = line.Status;
-        var now = DateTimeOffset.UtcNow;
-        line.Status = "archived";
-        AddPpeEvent(line.Id, "archived", oldStatus, "archived", "PPE card line archived", now);
-        AddSystemLog("ppe_card_line", line.Id, "archived", $"Card {cardId}", now);
-        dbContext.SaveChanges();
-
-        return Success(MapPpeCardLine(LoadPpeLine(line.Id)!));
-    }
-
-    public InventoryListResponseDto<InventoryHistoryDto> GetPpeCardHistory(Guid cardId, InventoryListQuery query)
-    {
-        var lineIds = dbContext.InventoryPpeCardLines
-            .Where(line => line.CardId == cardId)
-            .Select(line => line.Id)
-            .ToArray();
-
-        return GetHistoryFromEvents(query, eventQuery => eventQuery.Where(row => lineIds.Contains(row.LineId)));
-    }
-
-    public InventoryListResponseDto<InventoryHistoryDto> GetPpeCardLinesHistory(Guid cardId, InventoryListQuery query) =>
-        GetPpeCardHistory(cardId, query);
-
-    public InventoryListResponseDto<InventoryHistoryDto> GetPpeCardLineHistory(Guid cardId, Guid lineId, InventoryListQuery query) =>
-        GetHistoryFromEvents(query, eventQuery => eventQuery.Where(row => row.LineId == lineId && row.Line.CardId == cardId));
-
-    public InventoryListResponseDto<InventoryPpeMovementDto> GetPpeMovements(InventoryListQuery query, Guid? employeeId = null, Guid? itemId = null)
-    {
-        var paging = NormalizePaging(query);
-        var rowsQuery = dbContext.InventoryPpeCardLines
-            .AsNoTracking()
-            .Include(line => line.Card)
-                .ThenInclude(card => card.Employee)
-            .Include(line => line.Item)
-                .ThenInclude(item => item.Unit)
-            .Where(line => line.Status != "archived" && line.Card.ArchivedAt == null);
-
-        if (employeeId is not null)
-        {
-            rowsQuery = rowsQuery.Where(line => line.Card.EmployeeId == employeeId.Value);
-        }
-
-        if (itemId is not null)
-        {
-            rowsQuery = rowsQuery.Where(line => line.ItemId == itemId.Value);
-        }
-
-        var status = NormalizePpeStatus(query.Status);
-        if (status.Length > 0)
-        {
-            rowsQuery = rowsQuery.Where(line => line.Status == status);
-        }
-
-        if (query.DateFrom is not null)
-        {
-            rowsQuery = rowsQuery.Where(line =>
-                line.IssuedAt >= query.DateFrom.Value ||
-                (line.IssuedAt == null && line.Card.CreatedAt >= query.DateFrom.Value));
-        }
-
-        if (query.DateTo is not null)
-        {
-            rowsQuery = rowsQuery.Where(line =>
-                line.IssuedAt <= query.DateTo.Value ||
-                (line.IssuedAt == null && line.Card.CreatedAt <= query.DateTo.Value));
-        }
-
-        var total = rowsQuery.Count();
-        var lineEntities = rowsQuery
-            .OrderByDescending(line => line.IssuedAt ?? line.Card.CreatedAt)
-            .ThenBy(line => line.Item.Name)
-            .Skip((paging.Page - 1) * paging.PageSize)
-            .Take(paging.PageSize)
-            .ToList();
-
-        var lineIds = lineEntities.Select(line => line.Id).ToArray();
-        var closingEvents = dbContext.InventoryPpeCardLineEvents
-            .AsNoTracking()
-            .Where(ev => lineIds.Contains(ev.LineId) && (ev.ToStatus == "returned" || ev.ToStatus == "written_off"))
-            .GroupBy(ev => new { ev.LineId, ev.ToStatus })
-            .Select(group => new { group.Key.LineId, group.Key.ToStatus, ClosedAt = group.Max(ev => ev.CreatedAt) })
-            .ToList();
-        var returnedAt = closingEvents
-            .Where(ev => ev.ToStatus == "returned")
-            .ToDictionary(ev => ev.LineId, ev => (DateTime?)ev.ClosedAt.UtcDateTime);
-        var writtenOffAt = closingEvents
-            .Where(ev => ev.ToStatus == "written_off")
-            .ToDictionary(ev => ev.LineId, ev => (DateTime?)ev.ClosedAt.UtcDateTime);
-
-        var rows = lineEntities
-            .Select(line => MapPpeMovement(line, returnedAt, writtenOffAt))
-            .ToList();
-
-        return ToListResponse(rows, total, paging);
-    }
-
-    public InventoryListResponseDto<InventoryHistoryDto> GetHistory(InventoryListQuery query)
-    {
-        var paging = NormalizePaging(query);
-        var rowsQuery = dbContext.InventorySystemLogs.AsNoTracking().AsQueryable();
-        rowsQuery = ApplySystemLogFilters(rowsQuery, query);
-
-        var total = rowsQuery.Count();
-        var rowEntities = rowsQuery
-            .OrderByDescending(row => row.CreatedAt)
-            .Skip((paging.Page - 1) * paging.PageSize)
-            .Take(paging.PageSize)
-            .ToList();
-        var rows = rowEntities
-            .Select(row => new InventoryHistoryDto(row.Id, row.EntityType, row.Action, row.Details, row.Actor, row.CreatedAt.UtcDateTime))
-            .ToList();
-
-        return ToListResponse(rows, total, paging);
     }
 
     public InventoryListResponseDto<InventoryReportDto> GetReports(InventoryListQuery query)
@@ -727,32 +365,6 @@ internal sealed class EfInventoryWorkflowService(Patrol360DbContext dbContext) :
         return export is null
             ? Failure<InventoryExportJobDto>("exportId", "Export job not found")
             : Success(MapExport(export));
-    }
-
-    public InventoryListResponseDto<InventorySystemLogDto> GetSystemLog(InventoryListQuery query)
-    {
-        var paging = NormalizePaging(query);
-        var rowsQuery = dbContext.InventorySystemLogs.AsNoTracking().AsQueryable();
-        rowsQuery = ApplySystemLogFilters(rowsQuery, query);
-
-        var total = rowsQuery.Count();
-        var rowEntities = rowsQuery
-            .OrderByDescending(row => row.CreatedAt)
-            .Skip((paging.Page - 1) * paging.PageSize)
-            .Take(paging.PageSize)
-            .ToList();
-        var rows = rowEntities
-            .Select(row => new InventorySystemLogDto(
-                row.Id,
-                row.EntityType,
-                row.EntityId,
-                row.Action,
-                row.Details,
-                row.Actor,
-                row.CreatedAt.UtcDateTime))
-            .ToList();
-
-        return ToListResponse(rows, total, paging);
     }
 
     public InventoryListResponseDto<InventoryEmployeeDto> GetEmployees(InventoryListQuery query)
@@ -892,6 +504,22 @@ internal sealed class EfInventoryWorkflowService(Patrol360DbContext dbContext) :
         if (employee is null)
         {
             return Failure<InventoryEmployeeDto>("id", "Employee not found");
+        }
+
+        var hasActiveResponsibility =
+            dbContext.InventoryPpeCards.Any(card =>
+                card.EmployeeId == employee.Id &&
+                card.ArchivedAt == null &&
+                card.Lines.Any(line => line.Status == "issued" || line.Status == "issuing" || line.Status == "partial")) ||
+            dbContext.InventoryCustodyRecords.Any(record =>
+                record.EmployeeId == employee.Id &&
+                record.ArchivedAt == null &&
+                record.Status == "in_use");
+        if (hasActiveResponsibility)
+        {
+            return Failure<InventoryEmployeeDto>(
+                "id",
+                "Employee has active PPE or custody records. Return or close them before archive.");
         }
 
         employee.Status = "archived";
@@ -1137,43 +765,6 @@ internal sealed class EfInventoryWorkflowService(Patrol360DbContext dbContext) :
         return document;
     }
 
-    private InventoryCommandResult<InventoryPpeCardLineDto>? ValidatePpeLine(UpsertInventoryPpeCardLineDto request)
-    {
-        if (request.Quantity <= 0)
-        {
-            return Failure<InventoryPpeCardLineDto>("quantity", "Quantity must be greater than zero");
-        }
-
-        if (!dbContext.InventoryItems.Any(row => row.Id == request.ItemId))
-        {
-            return Failure<InventoryPpeCardLineDto>("itemId", "Item not found");
-        }
-
-        return null;
-    }
-
-    private decimal GetAvailableStock(Guid itemId, Guid warehouseId)
-    {
-        var physical = 0m;
-        var reserved = 0m;
-
-        foreach (var move in dbContext.InventoryStockMoves
-            .Where(row => row.ItemId == itemId && row.WarehouseId == warehouseId)
-            .Select(row => new { row.MoveType, row.QuantityDelta }))
-        {
-            if (ReservationMoveTypes.Contains(move.MoveType))
-            {
-                reserved += move.QuantityDelta < 0 ? -move.QuantityDelta : move.QuantityDelta;
-            }
-            else
-            {
-                physical += move.QuantityDelta;
-            }
-        }
-
-        return Math.Max(0m, physical - reserved);
-    }
-
     private InventoryCustodyRecordEntity LoadCustodyRecord(Guid id) =>
         dbContext.InventoryCustodyRecords
             .AsNoTracking()
@@ -1183,24 +774,25 @@ internal sealed class EfInventoryWorkflowService(Patrol360DbContext dbContext) :
             .Include(record => record.Warehouse)
             .First(record => record.Id == id);
 
-    private InventoryPpeCardEntity? LoadPpeCard(Guid id) =>
-        dbContext.InventoryPpeCards
-            .AsNoTracking()
-            .Include(card => card.Employee)
-            .Include(card => card.Lines)
-                .ThenInclude(line => line.Item)
-                    .ThenInclude(item => item.Unit)
-            .Include(card => card.Lines)
-                .ThenInclude(line => line.Warehouse)
-            .FirstOrDefault(card => card.Id == id && card.ArchivedAt == null);
+    private InventoryWarehouseEntity EnsureAccountingMovementWarehouse()
+    {
+        var warehouse = dbContext.InventoryWarehouses
+            .FirstOrDefault(row => row.Name == AccountingMovementWarehouseName);
+        if (warehouse is not null)
+        {
+            return warehouse;
+        }
 
-    private InventoryPpeCardLineEntity? LoadPpeLine(Guid id) =>
-        dbContext.InventoryPpeCardLines
-            .AsNoTracking()
-            .Include(line => line.Item)
-                .ThenInclude(item => item.Unit)
-            .Include(line => line.Warehouse)
-            .FirstOrDefault(line => line.Id == id);
+        warehouse = new InventoryWarehouseEntity
+        {
+            Id = Guid.NewGuid(),
+            Name = AccountingMovementWarehouseName,
+            IsDefault = false,
+            IsArchived = true
+        };
+        dbContext.InventoryWarehouses.Add(warehouse);
+        return warehouse;
+    }
 
     private static InventoryCustodyRecordDto MapCustodyRecord(InventoryCustodyRecordEntity record) =>
         new(
@@ -1208,7 +800,7 @@ internal sealed class EfInventoryWorkflowService(Patrol360DbContext dbContext) :
             record.DocumentId,
             record.Employee.FullName,
             record.Item.Name,
-            record.Warehouse.Name,
+            record.Warehouse.Name == AccountingMovementWarehouseName ? string.Empty : record.Warehouse.Name,
             record.Quantity,
             record.Status,
             record.IssuedAt.UtcDateTime,
@@ -1227,186 +819,6 @@ internal sealed class EfInventoryWorkflowService(Patrol360DbContext dbContext) :
             document.CreatedAt.UtcDateTime,
             document.Records.Count(record => record.ArchivedAt == null));
 
-    private static InventoryPpeCardDto MapPpeCard(InventoryPpeCardEntity card) =>
-        new(card.Id, card.EmployeeId, card.Employee.FullName, card.Position, card.Status, card.Lines.Count);
-    private static IQueryable<InventoryPpeCardEntity> ApplyPpeCardFilters(
-        IQueryable<InventoryPpeCardEntity> query,
-        InventoryListQuery filters)
-    {
-        var search = NormalizeQuery(filters.Query);
-        if (search.Length > 0)
-        {
-            query = query.Where(card =>
-                card.Employee.FullName.ToLower().Contains(search) ||
-                card.Employee.PersonnelNo.ToLower().Contains(search) ||
-                card.Position.ToLower().Contains(search) ||
-                card.Employee.Department.ToLower().Contains(search) ||
-                card.Status.ToLower().Contains(search) ||
-                card.Lines.Any(line => line.Status != "archived" && line.Item.Name.ToLower().Contains(search)));
-        }
-
-        var status = NormalizeStatus(filters.Status);
-        if (status.Length > 0 && status != "all")
-        {
-            if (status == "problem")
-            {
-                var now = DateTimeOffset.UtcNow;
-                query = query.Where(card =>
-                    card.Status == "warning" ||
-                    card.Status == "overdue" ||
-                    card.Status == "lost" ||
-                    card.Lines.Any(line => line.Status != "archived" && (line.Status == "lost" || (line.Status == "issued" && line.DueAt != null && line.DueAt < now))));
-            }
-            else
-            {
-                query = query.Where(card => card.Status == status || card.Lines.Any(line => line.Status != "archived" && line.Status == status));
-            }
-        }
-
-        var department = NormalizeQuery(filters.Department);
-        if (department.Length > 0 && department != "all")
-        {
-            query = query.Where(card => card.Employee.Department.ToLower().Contains(department));
-        }
-
-        var position = NormalizeQuery(filters.Position);
-        if (position.Length > 0 && position != "all")
-        {
-            query = query.Where(card => card.Position.ToLower().Contains(position));
-        }
-
-        var item = NormalizeQuery(filters.Item);
-        if (item.Length > 0 && item != "all")
-        {
-            query = query.Where(card => card.Lines.Any(line => line.Status != "archived" && (
-                line.Item.Name.ToLower().Contains(item) ||
-                line.Item.Article.ToLower().Contains(item) ||
-                line.Item.Sku.ToLower().Contains(item))));
-        }
-
-        var cardNo = NormalizeQuery(filters.CardNo).Replace("сиз-", string.Empty).Replace("ppe-", string.Empty);
-        if (cardNo.Length > 0)
-        {
-            if (Guid.TryParse(cardNo, out var cardId))
-            {
-                query = query.Where(card => card.Id == cardId);
-            }
-            else if (int.TryParse(cardNo, out var legacyId))
-            {
-                query = query.Where(card => card.LegacyId == legacyId);
-            }
-            else
-            {
-                query = query.Where(card => false);
-            }
-        }
-
-        if (filters.DateFrom is not null)
-        {
-            query = query.Where(card => card.CreatedAt >= filters.DateFrom.Value);
-        }
-
-        if (filters.DateTo is not null)
-        {
-            query = query.Where(card => card.CreatedAt <= filters.DateTo.Value);
-        }
-
-        return query;
-    }
-
-    private static IQueryable<InventoryPpeCardEntity> ApplyPpeCardSort(
-        IQueryable<InventoryPpeCardEntity> query,
-        InventoryListQuery filters)
-    {
-        var descending = string.Equals(filters.Direction, "desc", StringComparison.OrdinalIgnoreCase);
-        return NormalizeStatus(filters.Sort) switch
-        {
-            "date" => descending ? query.OrderByDescending(card => card.CreatedAt) : query.OrderBy(card => card.CreatedAt),
-            "employee" => descending ? query.OrderByDescending(card => card.Employee.FullName) : query.OrderBy(card => card.Employee.FullName),
-            "position" => descending ? query.OrderByDescending(card => card.Position) : query.OrderBy(card => card.Position),
-            "status" => descending ? query.OrderByDescending(card => card.Status) : query.OrderBy(card => card.Status),
-            "lines" => descending ? query.OrderByDescending(card => card.Lines.Count(line => line.Status != "archived")) : query.OrderBy(card => card.Lines.Count(line => line.Status != "archived")),
-            _ => query.OrderBy(card => card.Employee.FullName).ThenByDescending(card => card.CreatedAt)
-        };
-    }
-
-    private static InventoryPpeSummaryDto BuildPpeSummary(IQueryable<InventoryPpeCardEntity> query)
-    {
-        var now = DateTimeOffset.UtcNow;
-        return new InventoryPpeSummaryDto(
-            query.Count(),
-            query.Count(card => card.Status == "active"),
-            query.Count(card => card.Status == "issued" || card.Lines.Any(line => line.Status != "archived" && line.Status == "issued")),
-            query.Count(card => card.Status == "issuing" || card.Lines.Any(line => line.Status != "archived" && line.Status == "issuing")),
-            query.Count(card => card.Status == "not_issued" || card.Lines.Any(line => line.Status != "archived" && line.Status == "not_issued")),
-            query.Count(card => card.Status == "partial" || card.Lines.Any(line => line.Status != "archived" && line.Status == "partial")),
-            query.Count(card =>
-                card.Status == "warning" ||
-                card.Status == "overdue" ||
-                card.Status == "lost" ||
-                card.Lines.Any(line => line.Status != "archived" && (line.Status == "lost" || (line.Status == "issued" && line.DueAt != null && line.DueAt < now)))),
-            query.Count(card => card.Status == "returned" || card.Lines.Any(line => line.Status != "archived" && line.Status == "returned")),
-            query.Count(card => card.Status == "written_off" || card.Lines.Any(line => line.Status != "archived" && line.Status == "written_off")),
-            query.SelectMany(card => card.Lines).Count(line => line.Status != "archived"),
-            query.SelectMany(card => card.Lines).Count(line => line.Status != "archived" && line.Status == "issued"),
-            query.SelectMany(card => card.Lines).Count(line => line.Status != "archived" && line.Status == "not_issued"));
-    }
-
-
-    private static InventoryPpeCardDetailDto MapPpeCardDetail(InventoryPpeCardEntity card) =>
-        new(
-            card.Id,
-            card.EmployeeId,
-            card.Employee.FullName,
-            card.Employee.PersonnelNo,
-            card.Employee.Department,
-            card.Position,
-            card.Status,
-            card.CreatedAt.UtcDateTime,
-            card.Comment,
-            card.Lines.Where(line => line.Status != "archived").OrderBy(line => line.Item.Name).Select(MapPpeCardLine).ToList());
-
-    private static InventoryPpeCardLineDto MapPpeCardLine(InventoryPpeCardLineEntity line) =>
-        new(
-            line.Id,
-            line.ItemId,
-            line.Item.Name,
-            line.WarehouseId,
-            line.Warehouse?.Name ?? string.Empty,
-            line.Quantity,
-            line.Item.Unit?.Symbol ?? line.Item.Unit?.Name ?? string.Empty,
-            line.Item.DefaultUnitPriceMinor,
-            (line.Item.DefaultUnitPriceMinor ?? 0) * line.Quantity,
-            line.Status,
-            line.IssuedAt?.UtcDateTime,
-            line.DueAt?.UtcDateTime,
-            string.Join(" / ", new[] { line.Item.BrandName, line.Item.ModelName, line.Item.Article, line.Item.ProtectionClass }.Where(part => !string.IsNullOrWhiteSpace(part))),
-            line.Item.NormItemName ?? string.Empty);
-
-    private static InventoryPpeMovementDto MapPpeMovement(
-        InventoryPpeCardLineEntity line,
-        IReadOnlyDictionary<Guid, DateTime?> returnedAt,
-        IReadOnlyDictionary<Guid, DateTime?> writtenOffAt) =>
-        new(
-            line.CardId,
-            line.Id,
-            line.Card.EmployeeId,
-            line.Card.Employee.FullName,
-            line.Card.Employee.PersonnelNo,
-            line.Card.Employee.Department,
-            line.ItemId,
-            line.Item.Name,
-            line.Quantity,
-            line.Item.Unit?.Symbol ?? line.Item.Unit?.Name ?? string.Empty,
-            line.Item.DefaultUnitPriceMinor,
-            (line.Item.DefaultUnitPriceMinor ?? 0) * line.Quantity,
-            line.Status,
-            line.Card.CreatedAt.UtcDateTime,
-            line.IssuedAt?.UtcDateTime,
-            returnedAt.GetValueOrDefault(line.Id),
-            writtenOffAt.GetValueOrDefault(line.Id),
-            line.DueAt?.UtcDateTime,
-            line.Comment);
 
     private static InventoryEmployeeDto MapEmployee(EmployeeEntity employee) =>
         new(
@@ -1422,127 +834,6 @@ internal sealed class EfInventoryWorkflowService(Patrol360DbContext dbContext) :
 
     private static InventoryExportJobDto MapExport(InventoryExportJobEntity export) =>
         new(export.Id, export.ReportId, export.Format, export.Status, export.CreatedAt.UtcDateTime, export.DownloadName);
-
-    private InventoryListResponseDto<InventoryHistoryDto> GetHistoryFromEvents(
-        InventoryListQuery query,
-        Func<IQueryable<InventoryPpeCardLineEventEntity>, IQueryable<InventoryPpeCardLineEventEntity>> filter)
-    {
-        var paging = NormalizePaging(query);
-        var rowsQuery = filter(dbContext.InventoryPpeCardLineEvents.AsNoTracking());
-        var total = rowsQuery.Count();
-        var rowEntities = rowsQuery
-            .OrderByDescending(row => row.CreatedAt)
-            .Skip((paging.Page - 1) * paging.PageSize)
-            .Take(paging.PageSize)
-            .ToList();
-        var rows = rowEntities
-            .Select(row => new InventoryHistoryDto(row.Id, "ppe_card_line", row.EventType, $"{row.FromStatus} -> {row.ToStatus}", row.Actor, row.CreatedAt.UtcDateTime))
-            .ToList();
-
-        return ToListResponse(rows, total, paging);
-    }
-
-    private InventoryListResponseDto<InventoryHistoryDto> GetCustodyHistoryFromEvents(
-        InventoryListQuery query,
-        Func<IQueryable<InventoryCustodyRecordEventEntity>, IQueryable<InventoryCustodyRecordEventEntity>> filter)
-    {
-        var paging = NormalizePaging(query);
-        var rowsQuery = filter(dbContext.InventoryCustodyRecordEvents.AsNoTracking());
-        var total = rowsQuery.Count();
-        var rowEntities = rowsQuery
-            .OrderByDescending(row => row.CreatedAt)
-            .Skip((paging.Page - 1) * paging.PageSize)
-            .Take(paging.PageSize)
-            .ToList();
-        var rows = rowEntities
-            .Select(row => new InventoryHistoryDto(row.Id, "custody_record", row.EventType, $"{row.FromStatus} -> {row.ToStatus}", row.Actor, row.CreatedAt.UtcDateTime))
-            .ToList();
-
-        return ToListResponse(rows, total, paging);
-    }
-
-    private void AddCustodyEvent(Guid recordId, string eventType, string fromStatus, string toStatus, string? comment, DateTimeOffset now) =>
-        dbContext.InventoryCustodyRecordEvents.Add(new InventoryCustodyRecordEventEntity
-        {
-            Id = Guid.NewGuid(),
-            RecordId = recordId,
-            EventType = eventType,
-            FromStatus = fromStatus,
-            ToStatus = toStatus,
-            Comment = NormalizeOptional(comment),
-            Actor = Actor,
-            CreatedAt = now
-        });
-
-    private void AddPpeEvent(Guid lineId, string eventType, string fromStatus, string toStatus, string? comment, DateTimeOffset now) =>
-        dbContext.InventoryPpeCardLineEvents.Add(new InventoryPpeCardLineEventEntity
-        {
-            Id = Guid.NewGuid(),
-            LineId = lineId,
-            EventType = eventType,
-            FromStatus = fromStatus,
-            ToStatus = toStatus,
-            Comment = NormalizeOptional(comment),
-            Actor = Actor,
-            CreatedAt = now
-        });
-
-    private void AddSystemLog(string entityType, Guid entityId, string action, string details, DateTimeOffset now) =>
-        dbContext.InventorySystemLogs.Add(new InventorySystemLogEntity
-        {
-            Id = Guid.NewGuid(),
-            EntityType = entityType,
-            EntityId = entityId,
-            Action = action,
-            Details = details,
-            Actor = Actor,
-            CreatedAt = now
-        });
-
-    private static IQueryable<InventorySystemLogEntity> ApplySystemLogFilters(
-        IQueryable<InventorySystemLogEntity> rowsQuery,
-        InventoryListQuery query)
-    {
-        var search = NormalizeQuery(query.Query);
-        if (search.Length > 0)
-        {
-            rowsQuery = rowsQuery.Where(row =>
-                row.EntityType.ToLower().Contains(search) ||
-                row.Action.ToLower().Contains(search) ||
-                row.Details.ToLower().Contains(search) ||
-                row.Actor.ToLower().Contains(search));
-        }
-
-        var entityType = NormalizeOptional(query.EntityType).ToLowerInvariant();
-        if (entityType.Length > 0 && entityType != "all")
-        {
-            rowsQuery = rowsQuery.Where(row => row.EntityType.ToLower() == entityType);
-        }
-
-        var action = NormalizeOptional(query.Action).ToLowerInvariant();
-        if (action.Length > 0 && action != "all")
-        {
-            rowsQuery = rowsQuery.Where(row => row.Action.ToLower() == action);
-        }
-
-        var actor = NormalizeOptional(query.Actor).ToLowerInvariant();
-        if (actor.Length > 0 && actor != "all")
-        {
-            rowsQuery = rowsQuery.Where(row => row.Actor.ToLower().Contains(actor));
-        }
-
-        if (query.DateFrom.HasValue)
-        {
-            rowsQuery = rowsQuery.Where(row => row.CreatedAt >= query.DateFrom.Value);
-        }
-
-        if (query.DateTo.HasValue)
-        {
-            rowsQuery = rowsQuery.Where(row => row.CreatedAt <= query.DateTo.Value);
-        }
-
-        return rowsQuery;
-    }
 
     private static InventoryListResponseDto<T> ToListResponse<T>(IReadOnlyList<T> rows, int total, InventoryPaging paging) =>
         new(rows, total, paging.Page, paging.PageSize, total == 0 ? 0 : (int)Math.Ceiling(total / (double)paging.PageSize));
@@ -1898,25 +1189,6 @@ internal sealed class EfInventoryWorkflowService(Patrol360DbContext dbContext) :
                 ? "written_off"
                 : string.Empty;
     }
-
-    private static string NormalizePpeStatus(string? status)
-    {
-        var value = NormalizeStatus(status);
-        return value is "not_issued" or "issuing" or "issued" or "partial" or "returned" or "reissued" or "lost" or "written_off"
-            ? value
-            : value == "write_off"
-                ? "written_off"
-                : string.Empty;
-    }
-
-    private static bool IsAllowedPpeLineStatusTransition(string oldStatus, string nextStatus) =>
-        oldStatus switch
-        {
-            "not_issued" or "issuing" or "partial" => nextStatus is "not_issued" or "issuing" or "partial" or "issued",
-            "issued" => nextStatus is "returned" or "written_off" or "lost",
-            "returned" or "written_off" or "lost" or "archived" => false,
-            _ => nextStatus is "not_issued" or "issuing" or "issued" or "partial"
-        };
 
     private static InventoryCommandResult<T> Success<T>(T value) => new(value, EmptyErrors);
 

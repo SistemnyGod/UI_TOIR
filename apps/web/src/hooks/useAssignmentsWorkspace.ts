@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError } from "../api/client";
+import type { AssignmentSettingsDto, UpdateAssignmentSettingsDto } from "../api/contracts";
 import {
   assignableEmployeesFallback,
   assignableRoutesFallback,
@@ -35,6 +36,7 @@ export function useAssignmentsWorkspace({
   const [isCreating, setIsCreating] = useState(false);
   const [assignableEmployees, setAssignableEmployees] = useState<Employee[]>([]);
   const [assignableRoutes, setAssignableRoutes] = useState<RouteOption[]>([]);
+  const [assignmentSettings, setAssignmentSettings] = useState<AssignmentSettingsDto | null>(null);
   const [referenceStatus, setReferenceStatus] = useState<DataSourceStatus>("loading");
   const [referenceErrorMessage, setReferenceErrorMessage] = useState<string | undefined>();
 
@@ -51,9 +53,10 @@ export function useAssignmentsWorkspace({
       }
 
       try {
-        const [employeesResult, routesResult] = await Promise.allSettled([
+        const [employeesResult, routesResult, settingsResult] = await Promise.allSettled([
           apiAssignments.getEmployees({ signal }),
           apiAssignments.getRoutes({ signal }),
+          apiAssignments.getSettings({ signal }),
         ]);
         if (signal?.aborted) return;
 
@@ -78,6 +81,16 @@ export function useAssignmentsWorkspace({
             routesResult.reason instanceof Error
               ? routesResult.reason.message
               : "Не удалось загрузить маршруты API",
+          );
+        }
+
+        if (settingsResult.status === "fulfilled") {
+          setAssignmentSettings(settingsResult.value);
+        } else {
+          messages.push(
+            settingsResult.reason instanceof Error
+              ? settingsResult.reason.message
+              : "Не удалось загрузить настройки назначений API",
           );
         }
 
@@ -233,6 +246,28 @@ export function useAssignmentsWorkspace({
     }
   }
 
+  async function updateAssignmentSettings(payload: UpdateAssignmentSettingsDto) {
+    if (dataSourceMode !== "api") {
+      setAssignmentSettings((current) => ({
+        favoriteEmployeeIds: payload.favoriteEmployeeIds ?? current?.favoriteEmployeeIds ?? [],
+        shiftSettings: payload.shiftSettings ?? current?.shiftSettings ?? {
+          dayEnd: "20:00",
+          dayStart: "08:00",
+          nightEnd: "08:00",
+          nightStart: "20:00",
+        },
+      }));
+      return;
+    }
+
+    try {
+      const next = await apiAssignments.updateSettings(payload);
+      setAssignmentSettings(next);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Не удалось сохранить настройки назначений");
+    }
+  }
+
   function handleMutationError(error: unknown) {
     if (error instanceof ApiError) {
       setFieldErrors(error.errors ?? {});
@@ -254,6 +289,7 @@ export function useAssignmentsWorkspace({
     assignableEmployeesFallback: assignableEmployeesFallback as Employee[],
     assignableRoutes,
     assignableRoutesFallback: assignableRoutesFallback as RouteOption[],
+    assignmentSettings,
     createAssignment,
     errorMessage,
     fieldErrors,
@@ -265,6 +301,7 @@ export function useAssignmentsWorkspace({
     refreshReferenceData,
     runCommand,
     savingAssignmentId,
+    updateAssignmentSettings,
   };
 }
 

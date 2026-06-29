@@ -1,34 +1,9 @@
 import { patrolResults } from "../data";
 import { ApiClient, buildApiUrl, type ApiRequestOptions } from "../api/client";
 import type { ResultDetailDto, ResultListItemDto } from "../api/contracts";
-import type { PatrolResult, ResultMode } from "../types";
+import type { PatrolResult, PatrolResultAttachment } from "../types";
 
 export const patrolResultsFallback = patrolResults;
-
-export interface ResultMetrics {
-  total: number;
-  issues: number;
-  late: number;
-  withoutPhotos: number;
-}
-
-export function filterPatrolResults(results: PatrolResult[], mode: ResultMode) {
-  return results.filter((result) => {
-    if (mode === "issues") return result.status === "Замечание" || result.status === "Не подтверждено";
-    if (mode === "late") return result.status === "Просрочено";
-    if (mode === "photos") return result.photos > 0;
-    return true;
-  });
-}
-
-export function getResultMetrics(results: PatrolResult[]): ResultMetrics {
-  return {
-    total: results.length,
-    issues: results.filter((item) => item.status === "Замечание").length,
-    late: results.filter((item) => item.status === "Просрочено").length,
-    withoutPhotos: results.filter((item) => item.photos === 0).length,
-  };
-}
 
 export function findPatrolResult(results: PatrolResult[], resultId: string) {
   return results.find((result) => result.id === resultId) ?? results[0];
@@ -69,6 +44,11 @@ export function createApiResultsRepository({
   };
 }
 
+export async function downloadResultAttachment(attachment: PatrolResultAttachment) {
+  const client = new ApiClient();
+  return client.download(attachment.downloadUrl);
+}
+
 function buildResultQuery(filters: ResultFilterOptions) {
   const query = new URLSearchParams();
 
@@ -83,10 +63,16 @@ function buildResultQuery(filters: ResultFilterOptions) {
 }
 
 function mapResult(result: ResultListItemDto | ResultDetailDto): PatrolResult {
+  const plannedAt = formatDateTime(result.plannedAt);
+  const actualAt = formatDateTime(result.actualAt);
+  const startedAt = result.startedAt ? formatDateTime(result.startedAt) : undefined;
+  const finishedAt = result.finishedAt ? formatDateTime(result.finishedAt) : undefined;
+  const comment = normalizeComment(result.comment);
+
   return {
     id: result.id,
     assignmentId: result.assignmentId ?? undefined,
-    status: normalizeStatus(result.status),
+    status: normalizeStatus(result.status) as PatrolResult["status"],
     point: result.point,
     pointId: result.pointId ?? "",
     employee: result.employee,
@@ -94,14 +80,16 @@ function mapResult(result: ResultListItemDto | ResultDetailDto): PatrolResult {
     routeId: result.routeId ?? undefined,
     route: result.route,
     territory: result.territory,
-    shift: normalizeShift(result.shift),
-    plannedAt: formatDateTime(result.plannedAt),
-    actualAt: formatDateTime(result.actualAt),
+    shift: normalizeShift(result.shift) as PatrolResult["shift"],
+    plannedAt,
+    actualAt,
+    startedAt,
+    finishedAt,
     deviation: result.deviation,
-    comment: result.comment,
+    comment,
     photos: Math.max(result.photos, "attachments" in result ? result.attachments.length : 0),
-    issueType: result.issueType,
-    severity: normalizeSeverity(result.severity),
+    issueType: normalizeIssueType(result.issueType),
+    severity: normalizeSeverity(result.severity) as PatrolResult["severity"],
     source: "mobile",
     attachments:
       "attachments" in result
@@ -117,28 +105,60 @@ function mapResult(result: ResultListItemDto | ResultDetailDto): PatrolResult {
     chronology:
       "chronology" in result && result.chronology.length > 0
         ? result.chronology
-        : [`План: ${formatDateTime(result.plannedAt)}`, `Факт: ${formatDateTime(result.actualAt)}`, result.comment],
+        : [`План: ${plannedAt}`, `Факт: ${actualAt}`, comment],
   };
 }
 
-function normalizeStatus(status: string): PatrolResult["status"] {
-  if (status === "Замечание" || status === "Просрочено" || status === "Не подтверждено") {
-    return status;
-  }
+function normalizeStatus(status: string) {
+  const key = statusKey(status);
+
+  if (key === "issue") return "Замечание";
+  if (key === "late") return "Просрочено";
+  if (key === "unconfirmed") return "Не подтверждено";
 
   return "Подтверждено";
 }
 
-function normalizeShift(shift: string): PatrolResult["shift"] {
-  return shift === "Ночь" ? "Ночь" : "День";
+function normalizeShift(shift: string) {
+  const value = normalizeText(shift);
+  if (value.includes("ноч") || value.includes("night")) return "Ночь";
+
+  return "День";
 }
 
-function normalizeSeverity(severity: string): PatrolResult["severity"] {
-  if (severity === "Низкая" || severity === "Средняя" || severity === "Высокая") {
-    return severity;
-  }
+function normalizeSeverity(severity: string) {
+  const value = normalizeText(severity);
+
+  if (!value || value === "-") return "-";
+  if (value.includes("выс") || value.includes("high")) return "Высокая";
+  if (value.includes("сред") || value.includes("medium")) return "Средняя";
+  if (value.includes("низ") || value.includes("low")) return "Низкая";
 
   return "-";
+}
+
+function normalizeIssueType(issueType: string) {
+  const value = issueType.trim();
+  return value && value !== "-" ? value : "нет";
+}
+
+function normalizeComment(comment: string) {
+  const value = comment.trim();
+  return value && value !== "-" ? value : "без комментария";
+}
+
+function statusKey(status: string) {
+  const value = normalizeText(status);
+
+  if (value.includes("замеч") || value.includes("issue") || value.includes("problem")) return "issue";
+  if (value.includes("проср") || value.includes("late") || value.includes("overdue")) return "late";
+  if (value.includes("не подтверж") || value.includes("unconfirmed")) return "unconfirmed";
+
+  return "confirmed";
+}
+
+function normalizeText(value: string | undefined | null) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 function formatDateTime(value: string) {

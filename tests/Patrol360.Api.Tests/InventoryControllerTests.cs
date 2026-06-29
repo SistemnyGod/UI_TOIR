@@ -59,11 +59,92 @@ public sealed class InventoryControllerTests
         AssertValidationProblem(result.Result, "previewToken");
     }
 
-    private static InventoryController CreateController() =>
+    [Fact]
+    public void PpeItemsReturnsOnlyPpeVisibleItems()
+    {
+        var ppeCategoryId = Guid.NewGuid();
+        var catalog = new InventoryCatalogQueryFake([
+            CreateItem("Каска защитная", "ppe", "СИЗ", ppeCategoryId),
+            CreateItem("Перчатки утепленные", "", "PPE", ppeCategoryId),
+            CreateItem("Куртка зимняя", "", "Спецодежда", ppeCategoryId),
+            CreateItem("Дрель Makita", "", "Инструмент", Guid.NewGuid()),
+            CreateItem("Архивная каска", "ppe", "СИЗ", ppeCategoryId, isActive: false),
+        ]);
+        var controller = CreateController(catalogQuery: catalog);
+
+        var result = controller.PpeItems(page: 1, pageSize: 10);
+
+        var response = AssertOk<InventoryListResponseDto<InventoryItemDto>>(result.Result);
+        Assert.Equal(3, response.Total);
+        Assert.All(response.Rows, row => Assert.True(row.IsActive));
+        Assert.DoesNotContain(response.Rows, row => row.Name.Contains("Дрель", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(response.Rows, row => row.Name.Contains("Архивная", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(response.Rows, row => row.Name == "Каска защитная");
+        Assert.Contains(response.Rows, row => row.Name == "Перчатки утепленные");
+        Assert.Contains(response.Rows, row => row.Name == "Куртка зимняя");
+    }
+
+    [Fact]
+    public void AddPpeCardLineAllowsNoWarehouseAndKeepsLinePrice()
+    {
+        var cardId = Guid.NewGuid();
+        var itemId = Guid.NewGuid();
+        var workflow = new InventoryWorkflowServiceFake();
+        var controller = CreateController(workflowService: workflow);
+        var request = new UpsertInventoryPpeCardLineDto(
+            itemId,
+            WarehouseId: null,
+            Quantity: 2,
+            UnitPriceMinor: 12_345,
+            Status: "issued",
+            DueAt: DateTimeOffset.Parse("2026-12-31T00:00:00Z"),
+            Comment: "п. 1645");
+
+        var result = controller.AddPpeCardLine(cardId, request);
+
+        var line = AssertOk<InventoryPpeCardLineDto>(result.Result);
+        Assert.Equal(cardId, workflow.LastCardId);
+        Assert.Same(request, workflow.LastLineRequest);
+        Assert.Null(line.WarehouseId);
+        Assert.Equal(12_345, line.UnitPriceMinor);
+        Assert.Equal(24_690, line.AmountMinor);
+        Assert.Equal("issued", line.Status);
+    }
+
+    [Fact]
+    public void PpeCardsForwardsServerSideAccountingFilters()
+    {
+        var workflow = new InventoryWorkflowServiceFake();
+        var controller = CreateController(workflowService: workflow);
+
+        var result = controller.PpeCards(
+            page: 2,
+            pageSize: 50,
+            query: "авдеев",
+            status: "issued",
+            department: "Энерго",
+            priceState: "missing",
+            includeLines: false);
+
+        var response = AssertOk<InventoryPpeCardsResponseDto>(result.Result);
+        Assert.Empty(response.Rows);
+        Assert.NotNull(workflow.LastPpeCardsQuery);
+        Assert.Equal(2, workflow.LastPpeCardsQuery.Page);
+        Assert.Equal(50, workflow.LastPpeCardsQuery.PageSize);
+        Assert.Equal("авдеев", workflow.LastPpeCardsQuery.Query);
+        Assert.Equal("issued", workflow.LastPpeCardsQuery.Status);
+        Assert.Equal("Энерго", workflow.LastPpeCardsQuery.Department);
+        Assert.Equal("missing", workflow.LastPpeCardsQuery.PriceState);
+        Assert.False(workflow.LastPpeCardsQuery.IncludeLines);
+    }
+
+    private static InventoryController CreateController(
+        IInventoryCatalogQuery? catalogQuery = null,
+        IInventoryWorkflowService? workflowService = null) =>
         new(
-            new ThrowingInventoryCatalogQuery(),
+            catalogQuery ?? new ThrowingInventoryCatalogQuery(),
             new ThrowingInventoryCatalogCommandService(),
-            new ThrowingInventoryWorkflowService(),
+            workflowService ?? new ThrowingInventoryWorkflowService(),
             new ThrowingInventoryExportService(),
             new ThrowingInventoryLegacyImportService(),
             new ThrowingAuthSessionService());
@@ -77,6 +158,129 @@ public sealed class InventoryControllerTests
         Assert.Equal(StatusCodes.Status400BadRequest, objectResult.StatusCode);
         var problem = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
         Assert.Contains(expectedKey, problem.Errors.Keys);
+    }
+
+    private static T AssertOk<T>(IActionResult? result)
+    {
+        var ok = Assert.IsType<OkObjectResult>(result);
+        return Assert.IsType<T>(ok.Value);
+    }
+
+    private static InventoryItemDto CreateItem(
+        string name,
+        string itemKind,
+        string category,
+        Guid categoryId,
+        bool isActive = true) =>
+        new(
+            Guid.NewGuid(),
+            name,
+            Sku: "",
+            CategoryId: categoryId,
+            Category: category,
+            UnitId: null,
+            Unit: "шт.",
+            Balance: 0,
+            StockPhysical: 0,
+            StockReserved: 0,
+            StockAvailable: 0,
+            StockStatus: "normal",
+            MinStockQty: null,
+            ItemKind: itemKind,
+            NormItemName: name,
+            ActualItemName: name,
+            BrandName: "",
+            ModelName: "",
+            Article: "",
+            ProtectionClass: "",
+            ClothingSize: "",
+            HeightSize: "",
+            ShoeSize: "",
+            HeadSize: "",
+            GloveSize: "",
+            RespiratorSize: "",
+            DefaultLifeMonths: 12,
+            DefaultUnitPriceMinor: 0,
+            TrackingType: itemKind.Equals("ppe", StringComparison.OrdinalIgnoreCase) ? "ppe" : "",
+            Comment: "",
+            IsConsumable: false,
+            TrackLife: itemKind.Equals("ppe", StringComparison.OrdinalIgnoreCase),
+            IsActive: isActive,
+            Status: isActive ? "active" : "archived");
+
+    private sealed class InventoryCatalogQueryFake(IReadOnlyList<InventoryItemDto> items) : IInventoryCatalogQuery
+    {
+        public InventoryOverviewDto GetOverview() => throw new NotImplementedException();
+        public InventoryListResponseDto<InventoryItemDto> GetItems(InventoryListQuery query)
+        {
+            var rows = items
+                .Where(item => query.Status is null || item.Status.Equals(query.Status, StringComparison.OrdinalIgnoreCase))
+                .Where(item => query.CategoryId is null || item.CategoryId == query.CategoryId)
+                .Where(item =>
+                    string.IsNullOrWhiteSpace(query.Query)
+                    || item.Name.Contains(query.Query, StringComparison.OrdinalIgnoreCase)
+                    || item.Category.Contains(query.Query, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var pageRows = rows
+                .Skip((query.Page - 1) * query.PageSize)
+                .Take(query.PageSize)
+                .ToList();
+
+            return new InventoryListResponseDto<InventoryItemDto>(
+                pageRows,
+                rows.Count,
+                query.Page,
+                query.PageSize,
+                Math.Max(1, (int)Math.Ceiling(rows.Count / (double)query.PageSize)));
+        }
+        public InventoryItemFacetsDto GetItemFacets() => throw new NotImplementedException();
+        public InventoryListResponseDto<InventoryStockBalanceDto> GetStock(InventoryListQuery query) => throw new NotImplementedException();
+        public InventoryListResponseDto<InventoryDocumentDto> GetDocuments(InventoryListQuery query) => throw new NotImplementedException();
+        public InventorySettingsDto GetSettings() => throw new NotImplementedException();
+        public InventoryCommandResult<InventoryItemSetDetailDto> GetItemSet(Guid id) => throw new NotImplementedException();
+        public InventoryCommandResult<IReadOnlyList<InventoryItemSetItemDto>> GetItemSetItems(Guid id) => throw new NotImplementedException();
+        public InventoryDbHealthDto GetDbHealth() => throw new NotImplementedException();
+    }
+
+    private sealed class InventoryWorkflowServiceFake : ThrowingInventoryWorkflowService
+    {
+        public Guid? LastCardId { get; private set; }
+        public UpsertInventoryPpeCardLineDto? LastLineRequest { get; private set; }
+        public InventoryListQuery? LastPpeCardsQuery { get; private set; }
+
+        public override InventoryPpeCardsResponseDto GetPpeCards(InventoryListQuery query)
+        {
+            LastPpeCardsQuery = query;
+            var emptySummary = new InventoryPpeSummaryDto(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            return new InventoryPpeCardsResponseDto([], 0, query.Page, query.PageSize, 0, emptySummary, emptySummary);
+        }
+
+        public override InventoryCommandResult<InventoryPpeCardLineDto> AddPpeCardLine(Guid cardId, UpsertInventoryPpeCardLineDto request)
+        {
+            LastCardId = cardId;
+            LastLineRequest = request;
+
+            return new InventoryCommandResult<InventoryPpeCardLineDto>(
+                new InventoryPpeCardLineDto(
+                    Guid.NewGuid(),
+                    request.ItemId,
+                    "Каска защитная",
+                    request.WarehouseId,
+                    "",
+                    request.Quantity,
+                    "шт.",
+                    request.UnitPriceMinor,
+                    request.Quantity * (request.UnitPriceMinor ?? 0),
+                    request.Status ?? "not_issued",
+                    request.Status == "issued" ? DateTime.UtcNow : null,
+                    request.DueAt?.UtcDateTime,
+                    "",
+                    request.BrandModelArticle ?? "",
+                    request.NormPoint ?? "",
+                    request.PrintItemName ?? "",
+                    request.IssuePeriodText ?? ""),
+                new Dictionary<string, string[]>());
+        }
     }
 
     private sealed class ThrowingInventoryCatalogQuery : IInventoryCatalogQuery
@@ -118,7 +322,7 @@ public sealed class InventoryControllerTests
         public InventoryCommandResult<InventoryDocumentDto> CreateOperation(CreateInventoryOperationDto request) => throw new NotImplementedException();
     }
 
-    private sealed class ThrowingInventoryWorkflowService : IInventoryWorkflowService
+    private class ThrowingInventoryWorkflowService : IInventoryWorkflowService
     {
         public InventoryListResponseDto<InventoryCustodyRecordDto> GetCustodyRecords(InventoryListQuery query) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryCustodyRecordDto> CreateCustodyRecord(CreateInventoryCustodyRecordDto request) => throw new NotImplementedException();
@@ -131,12 +335,12 @@ public sealed class InventoryControllerTests
         public InventoryCommandResult<InventoryCustodyDocumentDto> CloseCustodyDocument(Guid id) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryCustodyDocumentDto> OpenCustodyDocument(Guid id) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryCustodyDocumentDto> ArchiveCustodyDocument(Guid id) => throw new NotImplementedException();
-        public InventoryPpeCardsResponseDto GetPpeCards(InventoryListQuery query) => throw new NotImplementedException();
+        public virtual InventoryPpeCardsResponseDto GetPpeCards(InventoryListQuery query) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryPpeCardDetailDto> GetPpeCard(Guid id) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryPpeCardDetailDto> CreatePpeCard(CreateInventoryPpeCardDto request) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryPpeCardDetailDto> UpdatePpeCard(Guid id, CreateInventoryPpeCardDto request) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryPpeCardDetailDto> ArchivePpeCard(Guid id) => throw new NotImplementedException();
-        public InventoryCommandResult<InventoryPpeCardLineDto> AddPpeCardLine(Guid cardId, UpsertInventoryPpeCardLineDto request) => throw new NotImplementedException();
+        public virtual InventoryCommandResult<InventoryPpeCardLineDto> AddPpeCardLine(Guid cardId, UpsertInventoryPpeCardLineDto request) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryPpeCardLineDto> UpdatePpeCardLine(Guid cardId, Guid lineId, UpsertInventoryPpeCardLineDto request) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryPpeCardLineDto> UpdatePpeCardLineStatus(Guid cardId, Guid lineId, UpdateInventoryStatusDto request) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryPpeCardLineDto> ArchivePpeCardLine(Guid cardId, Guid lineId) => throw new NotImplementedException();

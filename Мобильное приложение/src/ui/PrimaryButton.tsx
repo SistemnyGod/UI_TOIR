@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAppTheme } from "@/features/settings/themePreference";
 
@@ -6,13 +7,16 @@ type PrimaryButtonProps = {
   label: string;
   onPress?: () => void;
   disabled?: boolean;
+  icon?: keyof typeof Ionicons.glyphMap;
+  size?: "normal" | "large";
   variant?: "primary" | "secondary" | "danger" | "ghost";
 };
 
-export function PrimaryButton({ label, onPress, disabled, variant = "primary" }: PrimaryButtonProps) {
+export function PrimaryButton({ label, onPress, disabled, icon, size = "normal", variant = "primary" }: PrimaryButtonProps) {
   const { colors } = useAppTheme();
   const isPrimary = variant === "primary";
   const isDanger = variant === "danger";
+  const labelColor = isPrimary ? "#ffffff" : isDanger ? "#ef4444" : colors.primary;
 
   return (
     <Pressable
@@ -21,6 +25,7 @@ export function PrimaryButton({ label, onPress, disabled, variant = "primary" }:
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
+        size === "large" ? styles.largeButton : null,
         isPrimary ? { backgroundColor: colors.primary, borderColor: colors.primary } : null,
         variant === "secondary" ? { backgroundColor: "transparent", borderColor: colors.primary } : null,
         variant === "ghost" ? { backgroundColor: "transparent", borderColor: colors.border } : null,
@@ -30,17 +35,21 @@ export function PrimaryButton({ label, onPress, disabled, variant = "primary" }:
         pressed && !disabled && !isPrimary ? styles.outlinePressed : null
       ]}
     >
-      <Text
-        style={[
-          styles.label,
-          isPrimary ? styles.primaryLabel : null,
-          variant === "secondary" || variant === "ghost" ? { color: colors.primary } : null,
-          isDanger ? styles.dangerLabel : null,
-          disabled ? styles.disabledLabel : null
-        ]}
-      >
-        {label}
-      </Text>
+      <View style={styles.content}>
+        {icon ? <Ionicons color={disabled ? "#ffffff" : labelColor} name={icon} size={size === "large" ? 22 : 18} /> : null}
+        <Text
+          ellipsizeMode="tail"
+          numberOfLines={2}
+          style={[
+            styles.label,
+            size === "large" ? styles.largeLabel : null,
+            { color: labelColor },
+            disabled ? styles.disabledLabel : null
+          ]}
+        >
+          {label}
+        </Text>
+      </View>
     </Pressable>
   );
 }
@@ -49,12 +58,29 @@ const styles = StyleSheet.create({
   button: {
     alignItems: "center",
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: "#1e5bff",
+    minWidth: 0,
     minHeight: 48,
     justifyContent: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: 15,
     paddingVertical: 12
+  },
+  content: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    maxWidth: "100%"
+  },
+  largeButton: {
+    minHeight: 64,
+    paddingHorizontal: 18,
+    paddingVertical: 16
+  },
+  largeLabel: {
+    fontSize: 17,
+    lineHeight: 21
   },
   disabled: {
     backgroundColor: "#d8dee8",
@@ -67,14 +93,11 @@ const styles = StyleSheet.create({
     opacity: 0.72
   },
   label: {
-    fontSize: 16,
-    fontWeight: "700"
-  },
-  primaryLabel: {
-    color: "#ffffff",
-  },
-  dangerLabel: {
-    color: "#ef4444"
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 18,
+    textAlign: "center"
   },
   disabledLabel: {
     color: "#ffffff"

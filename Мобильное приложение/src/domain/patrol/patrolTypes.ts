@@ -13,21 +13,64 @@ export type MobileDeviceDto = {
   blockedAt: string | null;
 };
 
+export type MobileEmployeeDto = {
+  employeeId: string;
+  fullName: string;
+  position: string | null;
+  department: string | null;
+};
+
+export type MobileEmuSectionDto = {
+  sectionId: string;
+  name: string;
+  sortOrder: number;
+};
+
 export type PatrolRequestBoardItemDto = {
   requestId: string;
+  displayNumber: string | null;
   routeId: string;
   routeName: string;
   plannedStartAt: string;
   assignedFullName: string | null;
-  status: "available" | "assigned" | "accepted" | "inProgress" | "completed" | "cancelled";
+  status: PatrolRequestStatus;
   revision: number;
 };
+
+export type PatrolRequestStatus =
+  | "available"
+  | "assigned"
+  | "accepted"
+  | "inProgress"
+  | "paused"
+  | "completed"
+  | "completedServer"
+  | "cancelled"
+  | "cancelledServer"
+  | "completedLocal"
+  | "syncing"
+  | "syncError"
+  | "authRequired"
+  | "needsDispatcherDecision";
+
+export type PatrolAssignmentStatus =
+  | "accepted"
+  | "inProgress"
+  | "paused"
+  | "completedLocal"
+  | "syncing"
+  | "completedServer"
+  | "conflict"
+  | "cancelledServer"
+  | "syncError"
+  | "authRequired"
+  | "needsDispatcherDecision";
 
 export type PatrolAssignmentDto = {
   assignmentId: string;
   requestId: string;
   routeId: string;
-  status: "accepted" | "inProgress" | "completedLocal" | "syncing" | "completedServer" | "conflict";
+  status: PatrolAssignmentStatus;
   startedAtLocal: string | null;
   completedAtLocal: string | null;
   revision: number;
@@ -70,6 +113,8 @@ export type PatrolPointResultDto = {
 export type BootstrapDto = {
   user: MobileUserDto;
   device: MobileDeviceDto;
+  boundEmployees: MobileEmployeeDto[];
+  emuSections: MobileEmuSectionDto[];
   requestBoard: PatrolRequestBoardItemDto[];
   assignments: PatrolAssignmentDto[];
   routes: PatrolRouteDto[];

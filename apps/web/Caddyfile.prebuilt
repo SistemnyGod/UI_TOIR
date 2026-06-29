@@ -1,0 +1,13 @@
+:80 {
+	encode zstd gzip
+	root * /srv
+
+	respond /health/live "live\n" 200
+
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+	header /index.html Cache-Control "no-store"
+	header Cache-Control "no-store"
+
+	try_files {path} /index.html
+	file_server
+}

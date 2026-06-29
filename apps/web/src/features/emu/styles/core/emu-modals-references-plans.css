@@ -1,0 +1,711 @@
+.emu-modal-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(14, 24, 45, 0.22);
+  padding: clamp(12px, 3vh, 28px);
+}
+
+.emu-modal {
+  width: min(760px, 96vw);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border: 1px solid rgba(151, 180, 224, 0.82);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(247, 251, 255, 0.96), #fff 28%),
+    #fff;
+  box-shadow: 0 28px 72px rgba(15, 31, 61, 0.26);
+  padding: 0 18px 18px;
+}
+
+.emu-modal-wide {
+  width: min(1120px, calc(100vw - 48px));
+}
+
+.emu-modal header {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid #e4edf8;
+  margin: 0 -18px 14px;
+  padding: 14px 18px 13px;
+  background: linear-gradient(180deg, #fff, rgba(248, 251, 255, 0.96));
+}
+
+.emu-modal header h3 {
+  margin: 0;
+  color: #13213d;
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.emu-modal header p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.emu-modal header button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #d8e5f7;
+  border-radius: 10px;
+  background: #fff;
+  color: #334766;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.emu-modal header button:hover {
+  border-color: #9bbcff;
+  color: #0d5de8;
+  box-shadow: 0 8px 18px rgba(30, 64, 119, 0.1);
+}
+
+.emu-picker-shell {
+  border: 1px solid #e1ebf8;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f8fbff, #f3f8ff);
+  margin: 12px 0;
+  padding: 10px;
+}
+
+.emu-modal-wide .emu-form-grid {
+  align-items: end;
+  gap: 10px;
+}
+
+.emu-modal-wide .emu-form-grid label,
+.emu-modal-wide .emu-textarea-label {
+  display: grid;
+  gap: 6px;
+}
+
+.emu-modal-wide .emu-form-grid input,
+.emu-modal-wide .emu-form-grid select,
+.emu-modal-wide .emu-form-grid .emu-input-action {
+  min-height: 40px;
+}
+
+.emu-modal-wide .emu-input-action input {
+  min-width: 0;
+}
+
+.emu-modal-wide .emu-picker-shell {
+  max-height: min(260px, 34vh);
+  overflow: auto;
+  border-radius: 12px;
+  margin: 10px 0 12px;
+  padding: 12px;
+}
+
+.emu-picker-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.emu-picker-toolbar > div {
+  display: grid;
+  gap: 2px;
+}
+
+.emu-picker-toolbar strong {
+  color: #172747;
+  font-size: 13px;
+}
+
+.emu-picker-toolbar button {
+  border: 1px solid #cdddf4;
+  border-radius: 8px;
+  background: #fff;
+  color: #1e3a64;
+  cursor: pointer;
+  font: 700 12px/1.2 inherit;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.emu-selected-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.emu-selected-strip span {
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #fff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 8px;
+}
+
+.emu-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+  gap: 6px;
+}
+
+.emu-modal-wide .emu-picker {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 7px;
+}
+
+.emu-picker button {
+  border: 1px solid #dfe8f6;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  min-height: 50px;
+  text-align: left;
+  padding: 6px 7px;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.emu-modal-wide .emu-picker button {
+  min-height: 44px;
+  padding: 7px 8px;
+}
+
+.emu-picker button:hover {
+  border-color: #a9c8f7;
+  box-shadow: 0 8px 18px rgba(30, 64, 119, 0.09);
+  transform: translateY(-1px);
+}
+
+.emu-picker button:disabled,
+.emu-reference-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.emu-picker button.selected {
+  border-color: #1d6fff;
+  background: linear-gradient(180deg, #eef6ff, #fff);
+  box-shadow: inset 0 0 0 1px rgba(29, 111, 255, 0.18), 0 8px 18px rgba(29, 111, 255, 0.12);
+}
+
+.emu-picker strong,
+.emu-picker small,
+.emu-picker em {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.emu-picker strong {
+  color: #142747;
+  font-size: 11.5px;
+  line-height: 1.2;
+}
+
+.emu-picker small {
+  color: #63758e;
+  font-size: 10px;
+  line-height: 1.25;
+  margin-top: 2px;
+}
+
+.emu-picker em {
+  width: fit-content;
+  margin-top: 4px;
+}
+
+.emu-textarea-label {
+  display: grid;
+  gap: 6px;
+}
+
+.emu-textarea-label textarea {
+  min-height: 96px;
+  padding-top: 10px;
+  resize: vertical;
+}
+
+.emu-modal-wide .emu-textarea-label textarea {
+  min-height: 84px;
+}
+
+.emu-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.emu-modal > .emu-modal-actions {
+  position: sticky;
+  z-index: 2;
+  bottom: -18px;
+  margin-right: -18px;
+  margin-left: -18px;
+  padding: 12px 18px 8px;
+  border-top: 1px solid #e4edf8;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), #fff 36%);
+  box-shadow: 0 -10px 24px rgba(30, 64, 119, 0.06);
+}
+
+.emu-modal-wide > .emu-modal-actions {
+  align-items: center;
+  min-height: 62px;
+}
+
+.emu-create-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 900;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.emu-create-actions button span {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.emu-action-clear {
+  border: 1px solid #cdddf4;
+  background: #f8fbff;
+  color: #264464;
+}
+
+.emu-action-clear:hover {
+  border-color: #9bbcff;
+  background: #edf5ff;
+  color: #0d5de8;
+}
+
+.emu-action-cancel {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+}
+
+.emu-action-cancel:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #1e293b;
+}
+
+.emu-action-submit {
+  min-width: 190px;
+}
+
+.emu-work-summary {
+  display: grid;
+  gap: 5px;
+  border: 1px solid #dce7f5;
+  border-radius: 8px;
+  background: #f8fbff;
+  margin-bottom: 14px;
+  padding: 12px;
+}
+
+.emu-check-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.emu-check-list.compact {
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+}
+
+.emu-check-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e4edf8;
+  border-radius: 8px;
+  background: #fff;
+  min-height: 36px;
+  padding: 0 10px;
+}
+
+.emu-check-list input {
+  accent-color: #1d6fff;
+  width: 16px;
+  min-height: 16px;
+}
+
+.emu-plan-create {
+  display: grid;
+  grid-template-columns: minmax(230px, 1fr) 150px 190px 140px auto;
+  margin-bottom: 12px;
+}
+
+.emu-plan-options {
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+.emu-kanban {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(190px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.emu-kanban section {
+  border: 1px solid #e4edf8;
+  border-radius: 8px;
+  background: #f8fbff;
+  min-height: 220px;
+  padding: 12px;
+}
+
+.emu-kanban h4 {
+  margin: 0 0 10px;
+}
+
+.emu-kanban article {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 8px;
+  border-left: 4px solid #d8e3f2;
+}
+
+.emu-plan-card.priority-высокий {
+  border-left-color: #f97316;
+}
+
+.emu-plan-card.priority-срочно {
+  border-left-color: #ef4444;
+}
+
+.emu-plan-card.priority-низкий {
+  border-left-color: #22c55e;
+}
+
+.emu-plan-card-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.emu-kanban button {
+  border: 1px solid #bdd3f4;
+  border-radius: 8px;
+  background: #fff;
+  color: #1d4ed8;
+  min-height: 30px;
+}
+
+.emu-kanban button:disabled,
+.emu-reference-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.emu-alert,
+.emu-empty-state {
+  border: 1px dashed #c8d7ec;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 251, 255, 0.92));
+  color: #52627d;
+  padding: 16px;
+  text-align: center;
+}
+
+.emu-card-warning {
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff7ed, #fff);
+  color: #c2410c;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+}
+
+.emu-card-warning.compact {
+  font-size: 12px;
+  margin: 2px 0 0;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.emu-nested-confirm {
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff7f7;
+  margin-top: 14px;
+  padding: 12px;
+}
+
+.emu-nested-confirm p {
+  color: #52627d;
+  font-size: 13px;
+  margin: 8px 0 0;
+}
+
+.emu-attention-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.emu-attention-item {
+  border: 1px solid #e4edf8;
+  border-left: 4px solid #1d6fff;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.emu-attention-item.tone-red {
+  border-left-color: #ef4444;
+}
+
+.emu-attention-item.tone-orange {
+  border-left-color: #f97316;
+}
+
+.emu-attention-item strong,
+.emu-attention-item span {
+  display: block;
+}
+
+.emu-attention-item span {
+  color: #6b7891;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.emu-timeline .audit-manual {
+  border-left-color: #f97316;
+  background: #fff7ed;
+}
+
+.emu-timeline .audit-danger {
+  border-left-color: #ef4444;
+  background: #fff7f7;
+}
+
+.emu-reference-grid,
+.emu-favorite-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.emu-reference-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.emu-favorite-grid {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+.emu-favorite-grid .emu-reference-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.emu-favorite-grid .emu-reference-row span,
+.emu-favorite-grid .emu-reference-row em {
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.emu-favorite-grid .emu-reference-row em {
+  grid-column: 1;
+}
+
+.emu-favorite-grid .emu-reference-row button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-width: 96px;
+  white-space: nowrap;
+}
+
+.emu-reference-block {
+  border: 1px solid #e4edf8;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 14px;
+}
+
+.emu-reference-block h4 {
+  margin: 0;
+  color: #172747;
+}
+
+.emu-reference-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.emu-reference-heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.emu-reference-heading > em {
+  display: inline-grid;
+  place-items: center;
+  min-width: 34px;
+  min-height: 28px;
+  border-radius: 999px;
+  background: #e8f1ff;
+  color: #1d6fff;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.emu-reference-search {
+  margin-top: 10px;
+}
+
+.emu-reference-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.emu-reference-toolbar input,
+.emu-reference-toolbar select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d8e3f2;
+  border-radius: 8px;
+  background: #fff;
+  color: #172747;
+  font: 700 13px/1.2 inherit;
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.emu-reference-toolbar label {
+  display: grid;
+  gap: 4px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.emu-reference-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.emu-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid #e4edf8;
+  margin-top: 12px;
+  padding-top: 10px;
+}
+
+.emu-pagination > span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.emu-pagination > div {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.emu-pagination button {
+  border: 1px solid #cdddf4;
+  border-radius: 8px;
+  background: #fff;
+  color: #1e3a64;
+  cursor: pointer;
+  font: 800 12px/1.2 inherit;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.emu-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.emu-pagination strong {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  min-height: 30px;
+  border-radius: 8px;
+  background: #e8f1ff;
+  color: #0d5de8;
+  font-size: 12px;
+}
+
+.emu-reference-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(150px, auto);
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e3ebf7;
+  border-radius: 8px;
+  background: #fff;
+  min-height: 44px;
+  padding: 7px 8px;
+}
+
+.emu-reference-row span,
+.emu-reference-row em,
+.emu-reference-row input {
+  overflow-wrap: anywhere;
+}
+
+.emu-reference-row em {
+  color: #6b7891;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.emu-reference-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.emu-template-block {
+  grid-column: span 2;
+}
+

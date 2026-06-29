@@ -1,0 +1,804 @@
+@media (max-width: 1320px) {
+  .inventory-items-workspace {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .inventory-ppe-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-issue-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-operations-workspace,
+  .inventory-return-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-issue-draft {
+    position: static;
+  }
+
+  .inventory-operations-composer,
+  .inventory-return-employees,
+  .inventory-return-action {
+    position: static;
+  }
+
+  .inventory-ppe-wizard-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-wizard-preview {
+    position: static;
+  }
+
+  .inventory-ppe-picker-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-custody-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-inspector {
+    position: static;
+  }
+
+  .inventory-custody-inspector {
+    position: static;
+  }
+
+  .inventory-ppe-inspector-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .inventory-custody-inspector-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .inventory-item-inspector {
+    position: static;
+    grid-column: 1 / -1;
+  }
+
+  .inventory-inspector-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .inventory-web-shell,
+  .inventory-web-shell.is-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-web-sidebar {
+    position: relative;
+    height: auto;
+  }
+
+  .inventory-web-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventory-web-workspace {
+    padding: 16px;
+  }
+
+  .inventory-items-commandbar,
+  .inventory-overview-commandbar,
+  .inventory-issue-commandbar,
+  .inventory-operations-commandbar,
+  .inventory-history-commandbar,
+  .inventory-reports-commandbar,
+  .inventory-employees-commandbar,
+  .inventory-users-commandbar,
+  .inventory-system-log-commandbar,
+  .inventory-ppe-commandbar,
+  .inventory-ppe-wizard-head,
+  .inventory-ppe-wizard-actions,
+  .inventory-custody-commandbar,
+  .inventory-items-actions,
+  .inventory-items-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-items-kpis,
+  .inventory-overview-kpis,
+  .inventory-issue-kpis,
+  .inventory-operations-kpis,
+  .inventory-history-kpis,
+  .inventory-reports-kpis,
+  .inventory-employees-kpis,
+  .inventory-users-kpis,
+  .inventory-system-log-kpis,
+  .inventory-ppe-kpis,
+  .inventory-custody-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventory-items-filters,
+  .inventory-items-workspace,
+  .inventory-issue-filters,
+  .inventory-operations-filters,
+  .inventory-operations-workspace,
+  .inventory-return-layout,
+  .inventory-operations-type-grid,
+  .inventory-operations-summary,
+  .inventory-history-filters,
+  .inventory-employees-filters,
+  .inventory-users-filters,
+  .inventory-system-log-filters,
+  .inventory-reports-grid,
+  .inventory-overview-workspace,
+  .inventory-ppe-composer,
+  .inventory-ppe-quick-form,
+  .inventory-ppe-line-form,
+  .inventory-ppe-workspace,
+  .inventory-issue-workspace,
+  .inventory-ppe-meta-grid,
+  .inventory-ppe-drawer-meta,
+  .inventory-ppe-wizard-layout,
+  .inventory-ppe-form-grid,
+  .inventory-ppe-wizard-summary,
+  .inventory-ppe-picker-layout,
+  .inventory-ppe-picker-filters,
+  .inventory-custody-composer,
+  .inventory-custody-workspace,
+  .inventory-custody-meta-grid,
+  .inventory-custody-drawer-meta,
+  .inventory-form-grid,
+  .inventory-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-ppe-journal .inventory-ppe-picker-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-ppe-command-actions,
+  .inventory-operations-command-actions,
+  .inventory-ppe-inspector-actions,
+  .inventory-ppe-row-actions,
+  .inventory-ppe-line-actions,
+  .inventory-ppe-drawer-actions,
+  .inventory-ppe-panel-actions,
+  .inventory-ppe-wizard-actions > div,
+  .inventory-ppe-picker-actions {
+    justify-content: stretch;
+  }
+
+  .inventory-custody-command-actions,
+  .inventory-custody-inspector-actions,
+  .inventory-custody-row-actions,
+  .inventory-custody-line-actions,
+  .inventory-custody-drawer-actions {
+    justify-content: stretch;
+  }
+
+  .inventory-ppe-command-actions .button,
+  .inventory-operations-command-actions .button,
+  .inventory-operations-composer .button,
+  .inventory-ppe-inspector-actions .button,
+  .inventory-ppe-row-actions .button,
+  .inventory-ppe-line-actions .button,
+  .inventory-ppe-drawer-actions .button,
+  .inventory-ppe-panel-actions .button,
+  .inventory-ppe-wizard-actions .button,
+  .inventory-ppe-picker-actions .button,
+  .inventory-ppe-quick-form .button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .inventory-custody-command-actions .button,
+  .inventory-custody-inspector-actions .button,
+  .inventory-custody-row-actions .button,
+  .inventory-custody-line-actions .button,
+  .inventory-custody-drawer-actions .button,
+  .inventory-custody-composer .button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .inventory-ppe-table-wrap,
+  .inventory-overview-table-wrap,
+  .inventory-operations-table-wrap,
+  .inventory-history-table-wrap,
+  .inventory-employees-table-wrap,
+  .inventory-users-table-wrap,
+  .inventory-system-log-table-wrap,
+  .inventory-ppe-lines-wrap,
+  .inventory-ppe-history-wrap,
+  .inventory-ppe-picker-layout,
+  .inventory-custody-table-wrap,
+  .inventory-custody-lines-wrap,
+  .inventory-custody-history-wrap {
+    overflow-x: visible;
+  }
+
+  .inventory-ppe-table,
+  .inventory-overview-table,
+  .inventory-operations-table,
+  .inventory-history-table,
+  .inventory-employees-table,
+  .inventory-users-table,
+  .inventory-system-log-table,
+  .inventory-ppe-lines-table,
+  .inventory-ppe-history-table,
+  .inventory-custody-table,
+  .inventory-custody-lines-table,
+  .inventory-custody-history-table {
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .inventory-ppe-table th,
+  .inventory-ppe-table td,
+  .inventory-overview-table th,
+  .inventory-overview-table td,
+  .inventory-operations-table th,
+  .inventory-operations-table td,
+  .inventory-history-table th,
+  .inventory-history-table td,
+  .inventory-employees-table th,
+  .inventory-employees-table td,
+  .inventory-users-table th,
+  .inventory-users-table td,
+  .inventory-system-log-table th,
+  .inventory-system-log-table td,
+  .inventory-ppe-lines-table th,
+  .inventory-ppe-lines-table td,
+  .inventory-ppe-history-table th,
+  .inventory-ppe-history-table td,
+  .inventory-custody-table th,
+  .inventory-custody-table td,
+  .inventory-custody-lines-table th,
+  .inventory-custody-lines-table td,
+  .inventory-custody-history-table th,
+  .inventory-custody-history-table td {
+    padding: 9px 8px;
+    overflow-wrap: anywhere;
+  }
+
+  .inventory-ppe-table th:nth-child(3),
+  .inventory-ppe-table td:nth-child(3),
+  .inventory-ppe-table th:nth-child(4),
+  .inventory-ppe-table td:nth-child(4),
+  .inventory-ppe-lines-table th:nth-child(2),
+  .inventory-ppe-lines-table td:nth-child(2),
+  .inventory-ppe-lines-table th:nth-child(4),
+  .inventory-ppe-lines-table td:nth-child(4),
+  .inventory-ppe-lines-table th:nth-child(5),
+  .inventory-ppe-lines-table td:nth-child(5),
+  .inventory-ppe-history-table th:nth-child(2),
+  .inventory-ppe-history-table td:nth-child(2),
+  .inventory-ppe-history-table th:nth-child(5),
+  .inventory-ppe-history-table td:nth-child(5) {
+    display: none;
+  }
+
+  .inventory-operations-table-wrap {
+    overflow-x: auto;
+  }
+
+  .inventory-operations-table {
+    min-width: 620px;
+    table-layout: fixed;
+  }
+
+  .inventory-operations-table th:nth-child(4),
+  .inventory-operations-table td:nth-child(4),
+  .inventory-operations-table th:nth-child(5),
+  .inventory-operations-table td:nth-child(5) {
+    display: none;
+  }
+
+  .inventory-history-table th:nth-child(2),
+  .inventory-history-table td:nth-child(2),
+  .inventory-history-table th:nth-child(5),
+  .inventory-history-table td:nth-child(5) {
+    display: none;
+  }
+
+  .inventory-overview-table th:nth-child(2),
+  .inventory-overview-table td:nth-child(2),
+  .inventory-overview-table th:nth-child(5),
+  .inventory-overview-table td:nth-child(5) {
+    display: none;
+  }
+
+  .inventory-employees-table th:nth-child(4),
+  .inventory-employees-table td:nth-child(4),
+  .inventory-users-table th:nth-child(4),
+  .inventory-users-table td:nth-child(4),
+  .inventory-system-log-table th:nth-child(2),
+  .inventory-system-log-table td:nth-child(2),
+  .inventory-system-log-table th:nth-child(5),
+  .inventory-system-log-table td:nth-child(5) {
+    display: none;
+  }
+
+  .inventory-custody-table th:nth-child(2),
+  .inventory-custody-table td:nth-child(2),
+  .inventory-custody-table th:nth-child(5),
+  .inventory-custody-table td:nth-child(5),
+  .inventory-custody-lines-table th:nth-child(2),
+  .inventory-custody-lines-table td:nth-child(2),
+  .inventory-custody-lines-table th:nth-child(4),
+  .inventory-custody-lines-table td:nth-child(4),
+  .inventory-custody-history-table th:nth-child(2),
+  .inventory-custody-history-table td:nth-child(2),
+  .inventory-custody-history-table th:nth-child(5),
+  .inventory-custody-history-table td:nth-child(5) {
+    display: none;
+  }
+
+  .inventory-ppe-drawer {
+    width: 100vw;
+    border-left: 0;
+  }
+
+  .inventory-ppe-wizard-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventory-ppe-picker {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .inventory-ppe-picker-grid {
+    grid-template-columns: 1fr;
+    max-height: 280px;
+  }
+
+  .inventory-custody-drawer {
+    width: 100vw;
+    border-left: 0;
+  }
+
+  .inventory-items-rail {
+    max-height: none;
+    min-height: 0;
+  }
+
+  .inventory-items-table-wrap {
+    overflow-x: visible;
+  }
+
+  .inventory-items-table {
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .inventory-items-table th,
+  .inventory-items-table td {
+    padding: 9px 8px;
+    overflow-wrap: anywhere;
+  }
+
+  .inventory-items-table th:nth-child(4),
+  .inventory-items-table td:nth-child(4),
+  .inventory-items-table th:nth-child(5),
+  .inventory-items-table td:nth-child(5),
+  .inventory-items-table th:nth-child(6),
+  .inventory-items-table td:nth-child(6),
+  .inventory-items-table th:nth-child(8),
+  .inventory-items-table td:nth-child(8) {
+    display: none;
+  }
+
+  .inventory-items-table th:nth-child(1),
+  .inventory-items-table td:nth-child(1) {
+    width: 34%;
+  }
+
+  .inventory-items-table th:nth-child(2),
+  .inventory-items-table td:nth-child(2) {
+    width: 14%;
+  }
+
+  .inventory-items-table th:nth-child(3),
+  .inventory-items-table td:nth-child(3) {
+    width: 18%;
+  }
+
+  .inventory-items-table th:nth-child(7),
+  .inventory-items-table td:nth-child(7) {
+    width: 16%;
+  }
+
+  .inventory-items-table th:nth-child(9),
+  .inventory-items-table td:nth-child(9) {
+    width: 10%;
+  }
+
+  .inventory-items-table th:nth-child(10),
+  .inventory-items-table td:nth-child(10) {
+    width: 92px;
+  }
+
+  .inventory-table-main-cell {
+    gap: 8px;
+  }
+
+  .inventory-table-main-cell strong,
+  .inventory-table-main-cell small {
+    max-width: none;
+    white-space: normal;
+  }
+
+  .inventory-item-thumb {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+  }
+
+  .inventory-row-actions {
+    justify-content: flex-end;
+    gap: 5px;
+  }
+
+  .inventory-row-actions .inventory-icon-btn {
+    width: 28px;
+    height: 28px;
+    min-height: 28px;
+    border-radius: 7px;
+  }
+
+  .inventory-size-grid,
+  .inventory-inspector-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .inventory-web-workspace {
+    padding: 10px;
+  }
+
+  .inventory-items-commandbar,
+  .inventory-overview-commandbar,
+  .inventory-overview-main,
+  .inventory-overview-side,
+  .inventory-overview-history,
+  .inventory-overview-kpi,
+  .inventory-issue-commandbar,
+  .inventory-operations-commandbar,
+  .inventory-operations-catalog,
+  .inventory-operations-composer,
+  .inventory-operations-journal,
+  .inventory-operations-kpi,
+  .inventory-history-commandbar,
+  .inventory-history-filters,
+  .inventory-history-journal,
+  .inventory-history-kpi,
+  .inventory-reports-commandbar,
+  .inventory-reports-filters,
+  .inventory-reports-card,
+  .inventory-reports-kpi,
+  .inventory-employees-commandbar,
+  .inventory-employees-filters,
+  .inventory-employees-table-card,
+  .inventory-employees-kpi,
+  .inventory-users-commandbar,
+  .inventory-users-filters,
+  .inventory-users-table-card,
+  .inventory-users-kpi,
+  .inventory-system-log-commandbar,
+  .inventory-system-log-filters,
+  .inventory-system-log-card,
+  .inventory-system-log-kpi,
+  .inventory-settings-commandbar,
+  .inventory-settings-card,
+  .inventory-settings-table-card,
+  .inventory-settings-kpi,
+  .inventory-issue-catalog,
+  .inventory-issue-draft,
+  .inventory-issue-journal,
+  .inventory-issue-kpi,
+  .inventory-ppe-commandbar,
+  .inventory-ppe-composer,
+  .inventory-ppe-kpi,
+  .inventory-ppe-journal,
+  .inventory-ppe-inspector,
+  .inventory-ppe-card-section,
+  .inventory-custody-commandbar,
+  .inventory-custody-composer,
+  .inventory-custody-kpi,
+  .inventory-custody-journal,
+  .inventory-custody-inspector,
+  .inventory-custody-card-section,
+  .inventory-items-kpi,
+  .inventory-items-filters,
+  .inventory-table-head,
+  .inventory-item-inspector {
+    padding: 12px;
+  }
+
+  .inventory-items-kpis,
+  .inventory-overview-kpis,
+  .inventory-issue-kpis,
+  .inventory-operations-kpis,
+  .inventory-history-kpis,
+  .inventory-reports-kpis,
+  .inventory-employees-kpis,
+  .inventory-users-kpis,
+  .inventory-system-log-kpis,
+  .inventory-settings-kpis,
+  .inventory-settings-tabs,
+  .inventory-settings-reference-grid,
+  .inventory-ppe-kpis,
+  .inventory-ppe-wizard-steps,
+  .inventory-custody-kpis,
+  .inventory-web-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-items-title-block h1,
+  .inventory-overview-title h1,
+  .inventory-issue-title h1,
+  .inventory-operations-title h1,
+  .inventory-history-title h1,
+  .inventory-reports-title h1,
+  .inventory-employees-title h1,
+  .inventory-users-title h1,
+  .inventory-system-log-title h1,
+  .inventory-settings-title h1,
+  .inventory-ppe-title h1,
+  .inventory-custody-title h1 {
+    font-size: 24px;
+  }
+
+  .inventory-issue-command-actions,
+  .inventory-overview-actions,
+  .inventory-overview-panel-head,
+  .inventory-operations-command-actions,
+  .inventory-operations-panel-head,
+  .inventory-issue-panel-head,
+  .inventory-issue-stock-line,
+  .inventory-settings-commandbar,
+  .inventory-settings-panel-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-issue-item-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-operations-item-list button {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-overview-attention-list button {
+    grid-template-columns: 34px minmax(0, 1fr) 20px;
+  }
+
+  .inventory-overview-attention-list small {
+    display: none;
+  }
+
+  .inventory-operations-table {
+    min-width: 540px;
+  }
+
+  .inventory-operations-dialog-backdrop {
+    padding: 10px;
+  }
+
+  .inventory-operations-dialog dl div {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .inventory-issue-draft-lines article {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-ppe-drawer-backdrop {
+    padding: 0;
+  }
+
+  .inventory-ppe-picker-backdrop {
+    padding: 0;
+  }
+
+  .inventory-ppe-picker {
+    width: 100vw;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  .inventory-ppe-print-paper {
+    min-height: 360px;
+    padding: 22px 16px;
+  }
+
+  .inventory-custody-drawer-backdrop {
+    padding: 0;
+  }
+
+  .inventory-ppe-drawer {
+    width: 100vw;
+    border-left: 0;
+  }
+
+  .inventory-custody-drawer {
+    width: 100vw;
+    border-left: 0;
+  }
+
+  .inventory-ppe-drawer-header,
+  .inventory-ppe-drawer-actions,
+  .inventory-custody-drawer-header,
+  .inventory-custody-drawer-actions {
+    padding-inline: 14px;
+  }
+
+  .inventory-ppe-drawer-body,
+  .inventory-custody-drawer-body {
+    padding: 14px;
+  }
+
+  .inventory-dialog-backdrop {
+    padding: 10px;
+  }
+
+  .inventory-settings-modal-backdrop {
+    padding: 10px;
+  }
+
+  .inventory-settings-set-row,
+  .inventory-settings-modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-settings-card li {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-settings-row-actions {
+    justify-content: stretch;
+  }
+}
+
+
+.inventory-history-filters input[type="date"],
+.inventory-history-filters select,
+.inventory-system-log-filters input[type="date"],
+.inventory-system-log-filters select {
+  min-width: 0;
+  width: 100%;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid #cdddf1;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--inventory-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+}
+
+.inventory-history-pager,
+.inventory-system-log-pager {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--inventory-muted);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.inventory-history-pager .button,
+.inventory-system-log-pager .button {
+  height: 34px;
+  padding: 0 10px;
+}
+
+.inventory-history-table,
+.inventory-system-log-table {
+  table-layout: fixed;
+}
+
+.inventory-history-table th,
+.inventory-history-table td,
+.inventory-system-log-table th,
+.inventory-system-log-table td {
+  overflow-wrap: anywhere;
+}
+
+
+.inventory-employees-pager,
+.inventory-users-pager {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--inventory-muted);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.inventory-employees-pager .button,
+.inventory-users-pager .button {
+  height: 34px;
+  padding: 0 10px;
+}
+
+.inventory-employees-filters select,
+.inventory-users-filters select {
+  min-width: 0;
+  width: 100%;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid #cdddf1;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--inventory-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+}
+
+.inventory-employees-table,
+.inventory-users-table {
+  table-layout: fixed;
+}
+
+.inventory-employees-table th,
+.inventory-employees-table td,
+.inventory-users-table th,
+.inventory-users-table td {
+  overflow-wrap: anywhere;
+}
+.inventory-web-panel {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 16px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+  padding: 24px;
+}
+
+.inventory-web-empty {
+  display: grid;
+  gap: 10px;
+  margin: 24px auto;
+  max-width: 720px;
+  text-align: left;
+}
+
+.inventory-web-empty h2 {
+  color: #13213a;
+  font-size: 24px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.inventory-web-empty p {
+  color: #526079;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.inventory-web-eyebrow {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+

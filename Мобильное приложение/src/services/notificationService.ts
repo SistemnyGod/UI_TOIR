@@ -86,8 +86,9 @@ async function getDevicePushTokenSafe({ requestPermission }: { requestPermission
   try {
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("patrol360", {
-        importance: Notifications.AndroidImportance.DEFAULT,
-        name: "Patrol360"
+        importance: Notifications.AndroidImportance.HIGH,
+        name: "Patrol360",
+        vibrationPattern: [0, 250, 250, 250]
       });
     }
 

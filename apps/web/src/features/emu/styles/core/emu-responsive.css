@@ -1,0 +1,176 @@
+@media (max-width: 1180px) {
+  .emu-work-layout,
+  .emu-history-layout,
+  .emu-dashboard-grid,
+  .emu-catalog-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .emu-history-aside {
+    order: -1;
+  }
+
+  .emu-dashboard-top-grid,
+  .emu-dashboard-middle-grid,
+  .emu-dashboard-bottom-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .emu-dashboard-shift,
+  .emu-dashboard-middle-grid .emu-dashboard-card:nth-child(2),
+  .emu-dashboard-bottom-grid .emu-dashboard-card:first-child {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .emu-modal-backdrop {
+    padding: 10px;
+  }
+
+  .emu-modal,
+  .emu-modal-wide {
+    width: min(100%, calc(100vw - 20px));
+    max-height: calc(100vh - 20px);
+  }
+
+  .emu-page {
+    padding-inline: 4px;
+  }
+
+  .emu-panel {
+    padding: 16px;
+  }
+
+  .emu-work-main {
+    min-height: 320px;
+  }
+
+  .emu-page-heading,
+  .emu-panel-header,
+  .emu-dashboard-header,
+  .emu-dashboard-header-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .emu-heading-actions,
+  .emu-panel-actions,
+  .emu-input-action,
+  .emu-inline-form,
+  .emu-plan-options,
+  .emu-modal-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .emu-work-filters {
+    align-items: stretch;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .emu-live-status {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .emu-work-filters button {
+    flex: 1 1 calc(50% - 6px);
+    justify-content: center;
+  }
+
+  .emu-attention-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .emu-kpi-row,
+  .emu-catalog-summary-items,
+  .emu-form-grid,
+  .emu-filter-panel,
+  .emu-history-stats,
+  .emu-plan-create,
+  .emu-kanban,
+  .emu-reference-grid,
+  .emu-favorite-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .emu-dashboard-top-grid,
+  .emu-dashboard-middle-grid,
+  .emu-dashboard-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .emu-dashboard-shift,
+  .emu-dashboard-middle-grid .emu-dashboard-card:nth-child(2),
+  .emu-dashboard-bottom-grid .emu-dashboard-card:first-child {
+    grid-column: auto;
+  }
+
+  .emu-dashboard-header h2 {
+    font-size: 26px;
+  }
+
+  .emu-shift-select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .emu-dashboard-metric {
+    min-height: 124px;
+  }
+
+  .emu-dashboard-shift-main,
+  .emu-dashboard-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .emu-area-summary > div,
+  .emu-active-work-list article,
+  .emu-event-list article,
+  .emu-key-indicators-main {
+    grid-template-columns: 1fr;
+  }
+
+  .emu-active-work-list article > div:last-child,
+  .emu-event-list time {
+    text-align: left;
+  }
+
+  .emu-trend-chart svg {
+    min-width: 0;
+  }
+
+  .emu-template-block {
+    grid-column: auto;
+  }
+
+  .emu-reference-row {
+    grid-template-columns: 1fr;
+  }
+
+  .emu-favorite-grid .emu-reference-row {
+    grid-template-columns: 1fr;
+  }
+
+  .emu-favorite-grid .emu-reference-row em,
+  .emu-favorite-grid .emu-reference-row button {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .emu-reference-actions {
+    justify-content: stretch;
+  }
+
+  .emu-reference-actions button {
+    flex: 1;
+  }
+
+  .emu-shell::before {
+    opacity: 0.035;
+  }
+}
+

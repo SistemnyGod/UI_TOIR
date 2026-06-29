@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Патруль 360">
+  <rect width="64" height="64" rx="14" fill="#0f6fff"/>
+  <path d="M18 45V17h11c6.5 0 10.5 3.5 10.5 9.2 0 5.9-4 9.4-10.5 9.4h-5.1V45H18Zm5.9-14.4h4.6c3.2 0 5-1.6 5-4.4 0-2.7-1.8-4.2-5-4.2h-4.6v8.6Z" fill="#fff"/>
+  <path d="M43.5 45V17H49v28h-5.5Z" fill="#bfe0ff"/>
+</svg>

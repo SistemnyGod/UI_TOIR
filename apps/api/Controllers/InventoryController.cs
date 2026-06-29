@@ -86,12 +86,11 @@ public sealed class InventoryController(
         var employees = LoadAllPages(page => inventoryWorkflowService.GetEmployees(new InventoryListQuery(Page: page, PageSize: 100)));
         var items = LoadAllPages(page => inventoryCatalogQuery.GetItems(new InventoryListQuery(Page: page, PageSize: 100, Status: "active")));
         var settings = inventoryCatalogQuery.GetSettings();
-        var stock = LoadAllPages(page => inventoryCatalogQuery.GetStock(new InventoryListQuery(Page: page, PageSize: 100)));
         return Ok(new InventoryOperationsModuleOptionsDto(
             employees,
             items,
             settings,
-            stock,
+            [],
             ["issue"]));
     }
 
@@ -202,6 +201,7 @@ public sealed class InventoryController(
         [FromQuery] string? position = null,
         [FromQuery] string? item = null,
         [FromQuery] string? cardNo = null,
+        [FromQuery] string? priceState = null,
         [FromQuery] DateTimeOffset? dateFrom = null,
         [FromQuery] DateTimeOffset? dateTo = null,
         [FromQuery] string? sort = null,
@@ -220,6 +220,7 @@ public sealed class InventoryController(
             Item: item,
             Sort: sort,
             Direction: direction,
+            PriceState: priceState,
             IncludeLines: includeLines)));
 
     [HttpGet("ppe/cards/{id:guid}")]
@@ -230,11 +231,10 @@ public sealed class InventoryController(
     public ActionResult<InventoryPpeModuleOptionsDto> PpeOptions()
     {
         var employees = LoadAllPages(page => inventoryWorkflowService.GetEmployees(new InventoryListQuery(Page: page, PageSize: 100)));
-        var items = LoadAllPages(page => inventoryCatalogQuery.GetItems(new InventoryListQuery(Page: page, PageSize: 100, Status: "active")))
-            .Where(IsPpeItem)
-            .ToList();
+        var allPpeItems = LoadPpeItems(query: null, categoryId: null);
+        var items = allPpeItems.Take(50).ToList();
         var itemIds = items.Select(item => item.Id).ToHashSet();
-        var categoryIds = items
+        var categoryIds = allPpeItems
             .Where(item => item.CategoryId is not null)
             .Select(item => item.CategoryId!.Value)
             .ToHashSet();
@@ -264,6 +264,28 @@ public sealed class InventoryController(
                 "warning",
                 "written_off"
             ]));
+    }
+
+    [HttpGet("ppe/items")]
+    public ActionResult<InventoryListResponseDto<InventoryItemDto>> PpeItems(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? query = null,
+        [FromQuery] Guid? categoryId = null)
+    {
+        var paging = NormalizeControllerPaging(page, pageSize);
+        var rows = LoadPpeItems(query, categoryId);
+        var pageRows = rows
+            .Skip((paging.Page - 1) * paging.PageSize)
+            .Take(paging.PageSize)
+            .ToList();
+
+        return Ok(new InventoryListResponseDto<InventoryItemDto>(
+            pageRows,
+            rows.Count,
+            paging.Page,
+            paging.PageSize,
+            Math.Max(1, (int)Math.Ceiling(rows.Count / (double)paging.PageSize))));
     }
 
     [HttpPost("ppe/cards")]
@@ -739,8 +761,51 @@ public sealed class InventoryController(
         return rows;
     }
 
-    private static bool IsPpeItem(InventoryItemDto item) =>
-        item.IsActive;
+    private List<InventoryItemDto> LoadPpeItems(string? query, Guid? categoryId) =>
+        LoadAllPages(page => inventoryCatalogQuery.GetItems(new InventoryListQuery(
+                Page: page,
+                PageSize: 100,
+                Query: query,
+                Status: "active",
+                CategoryId: categoryId)))
+            .Where(IsPpeItem)
+            .OrderBy(item => item.Category)
+            .ThenBy(item => item.Name)
+            .ToList();
+
+    private static bool IsPpeItem(InventoryItemDto item)
+    {
+        if (!item.IsActive)
+        {
+            return false;
+        }
+
+        var kind = item.ItemKind.Trim();
+        if (kind.Contains("СИЗ", StringComparison.OrdinalIgnoreCase)
+            || kind.Contains("спец", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        if (kind.Equals("ppe", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("siz", StringComparison.OrdinalIgnoreCase)
+            || kind.Contains("glove", StringComparison.OrdinalIgnoreCase)
+            || kind.Contains("СИЗ", StringComparison.OrdinalIgnoreCase)
+            || kind.Contains("спец", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var category = item.Category.Trim();
+        if (category.Contains("СИЗ", StringComparison.OrdinalIgnoreCase)
+            || category.Contains("спецодеж", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return category.Contains("СИЗ", StringComparison.OrdinalIgnoreCase)
+            || category.Contains("спецодеж", StringComparison.OrdinalIgnoreCase)
+            || category.Contains("ppe", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string CreateEmployeeImportPreviewToken(IFormFile file)
     {

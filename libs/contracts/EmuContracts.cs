@@ -68,8 +68,10 @@ public sealed record EmuWorkSessionDto(
     DateOnly WorkDate,
     Guid SectionId,
     string SectionName,
+    Guid? PlanTaskId,
     string TaskDescription,
     string Status,
+    string OperationalStatus,
     string ResultStatus,
     string ResultComment,
     DateTimeOffset ArrivedAt,
@@ -100,7 +102,25 @@ public sealed record EmuWorkSessionEmployeeDto(
     DateTimeOffset? FinishedAt,
     int WorkMinutes,
     int WaitingMinutes,
-    int OtherWorkMinutes);
+    int OtherWorkMinutes,
+    string ParticipationStatus,
+    DateTimeOffset? ActiveIntervalStartedAt,
+    int PersonalWorkMinutes,
+    int PersonalPauseMinutes,
+    string CurrentPauseReason,
+    IReadOnlyList<EmuWorkParticipationIntervalDto> Intervals);
+
+public sealed record EmuWorkParticipationIntervalDto(
+    Guid Id,
+    Guid WorkSessionId,
+    Guid WorkSessionEmployeeId,
+    Guid EmployeeId,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? EndedAt,
+    string Status,
+    string Reason,
+    string CreatedByName,
+    DateTimeOffset CreatedAt);
 
 public sealed record EmuAuditEventDto(
     Guid Id,
@@ -113,13 +133,135 @@ public sealed record EmuAuditEventDto(
     string Actor,
     DateTimeOffset CreatedAt);
 
+public sealed record EmuShiftTemplateDto(
+    Guid Id,
+    string Code,
+    string Name,
+    string ShiftType,
+    TimeOnly StartTime,
+    TimeOnly EndTime,
+    TimeOnly LunchStartTime,
+    TimeOnly LunchEndTime,
+    bool CrossesMidnight,
+    bool IsActive,
+    int SortOrder);
+
+public sealed record EmuEmployeeShiftDto(
+    Guid Id,
+    Guid EmployeeId,
+    string EmployeeName,
+    DateOnly ShiftDate,
+    Guid? TemplateId,
+    string ShiftType,
+    string ShiftName,
+    DateTimeOffset PlannedStartAt,
+    DateTimeOffset PlannedEndAt,
+    DateTimeOffset ActualStartAt,
+    DateTimeOffset ActualEndAt,
+    DateTimeOffset LunchStartAt,
+    DateTimeOffset LunchEndAt,
+    bool LunchTaken,
+    bool LunchOverridden,
+    string Source,
+    string Comment,
+    string Reason,
+    Guid? AdjustedByUserId,
+    string AdjustedByName,
+    DateTimeOffset? AdjustedAt,
+    int RowVersion);
+
+public sealed record EmuEmployeeShiftIntervalDto(
+    string Type,
+    DateTimeOffset StartedAt,
+    DateTimeOffset EndedAt,
+    int Minutes,
+    string Label,
+    Guid? WorkSessionId,
+    string WorkNumber,
+    string Reason);
+
+public sealed record EmuEmployeeShiftSummaryDto(
+    EmuEmployeeShiftDto Shift,
+    int WorkMinutes,
+    int PauseMinutes,
+    int FreeMinutes,
+    int BeforeShiftWorkMinutes,
+    int OvertimeMinutes,
+    int QuestionableOvertimeMinutes,
+    IReadOnlyList<EmuEmployeeShiftIntervalDto> Intervals,
+    IReadOnlyList<EmuDecisionDto> Decisions);
+
+public sealed record EmuEmployeeMonthSummaryDto(
+    Guid EmployeeId,
+    string EmployeeName,
+    string Month,
+    int ShiftCount,
+    int PlannedMinutes,
+    int PresenceMinutes,
+    int WorkMinutes,
+    int PauseMinutes,
+    int FreeMinutes,
+    int BeforeShiftWorkMinutes,
+    int OvertimeMinutes,
+    int QuestionableOvertimeMinutes,
+    int UndertimeMinutes,
+    IReadOnlyList<EmuEmployeeShiftSummaryDto> Shifts);
+
+public sealed record EmuDecisionDto(
+    Guid Id,
+    string DecisionType,
+    string Severity,
+    string Status,
+    Guid EmployeeId,
+    string EmployeeName,
+    Guid? WorkSessionId,
+    string WorkNumber,
+    string SectionName,
+    DateOnly ShiftDate,
+    DateTimeOffset DetectedAt,
+    DateTimeOffset? ResolvedAt,
+    Guid? ResolvedByUserId,
+    string ResolvedByName,
+    string DedupeKey,
+    string Resolution,
+    string Comment,
+    int RowVersion,
+    int OverlapMinutes,
+    DateTimeOffset? LunchStartAt,
+    DateTimeOffset? LunchEndAt);
+
+public sealed record EmuDecisionQueryDto(
+    string? Status,
+    DateOnly? Date,
+    Guid? EmployeeId);
+
+public sealed record EmuResolveDecisionDto(
+    string Resolution,
+    string Comment,
+    int RowVersion);
+
+public sealed record EmuUpdateEmployeeShiftDto(
+    Guid EmployeeId,
+    DateOnly ShiftDate,
+    string ShiftType,
+    DateTimeOffset? ActualStartAt,
+    DateTimeOffset? ActualEndAt,
+    DateTimeOffset? LunchStartAt,
+    DateTimeOffset? LunchEndAt,
+    bool LunchTaken,
+    bool LunchOverridden,
+    string Comment,
+    string Reason,
+    int RowVersion);
+
 public sealed record EmuCreateWorkSessionDto(
     DateOnly WorkDate,
     Guid SectionId,
     DateTimeOffset? ArrivedAt,
     IReadOnlyList<Guid> EmployeeIds,
     string TaskDescription,
-    Guid? PlanTaskId = null);
+    Guid? PlanTaskId = null,
+    Guid? ClientWorkSessionId = null);
 
 public sealed record EmuUpdateWorkSessionDto(
     Guid SectionId,
@@ -129,6 +271,22 @@ public sealed record EmuUpdateWorkSessionDto(
     DateOnly? WorkDate = null,
     DateTimeOffset? ArrivedAt = null,
     IReadOnlyList<Guid>? EmployeeIds = null);
+
+public sealed record EmuAddWorkSessionEmployeeDto(
+    Guid EmployeeId,
+    DateTimeOffset? StartedAt,
+    string Comment,
+    int RowVersion);
+
+public sealed record EmuFinishWorkSessionEmployeeDto(
+    DateTimeOffset? FinishedAt,
+    string ParticipationStatus,
+    string Comment,
+    int RowVersion);
+
+public sealed record EmuMarkMistakenWorkSessionEmployeeDto(
+    string Comment,
+    int RowVersion);
 
 public sealed record EmuPauseWorkSessionDto(
     IReadOnlyList<Guid> EmployeeIds,
@@ -156,15 +314,94 @@ public sealed record EmuDeleteWorkSessionDto(
     string Reason,
     int RowVersion);
 
+public sealed record EmuCarryOverWorkSessionDto(
+    DateOnly ToDate,
+    string Comment,
+    int RowVersion);
+
 public sealed record EmuWorkSessionQueryDto(
     DateOnly? DateFrom = null,
     DateOnly? DateTo = null,
     Guid? EmployeeId = null,
     Guid? SectionId = null,
+    Guid? WaitReasonId = null,
+    Guid? NotCompletedReasonId = null,
+    string? OperationalStatus = null,
+    string? ResultStatus = null,
     string? Status = null,
+    bool ProblemOnly = false,
+    bool ManualCorrectionsOnly = false,
     bool IncludeDeleted = false,
     int Page = 1,
-    int PageSize = 100);
+    int PageSize = 100,
+    string? SortBy = null,
+    string? ShiftType = null,
+    string? EmployeeSearch = null,
+    IReadOnlyList<Guid>? AllowedSectionIds = null);
+
+public sealed record EmuWorkHistoryReportDto(
+    EmuWorkSessionQueryDto AppliedQuery,
+    DateTimeOffset GeneratedAt,
+    EmuWorkHistoryTotalsDto Totals,
+    IReadOnlyList<EmuEmployeeWorkReportDto> Employees,
+    IReadOnlyList<EmuSectionWorkReportDto> Sections,
+    IReadOnlyList<EmuWorkHistoryExceptionDto> Exceptions);
+
+public sealed record EmuEmployeeWorkHistoryReportDto(
+    EmuWorkSessionQueryDto AppliedQuery,
+    DateTimeOffset GeneratedAt,
+    EmuEmployeeWorkReportDto Employee,
+    IReadOnlyList<EmuSectionWorkReportDto> Sections,
+    EmuListResponseDto<EmuWorkSessionDto> Works);
+
+public sealed record EmuWorkHistoryTotalsDto(
+    int TotalWorks,
+    int CompletedWorks,
+    int ProblemWorks,
+    int DeletedWorks,
+    int EmployeeCount,
+    int SectionCount,
+    int WorkMinutes,
+    int WaitingMinutes,
+    int OtherWorkMinutes,
+    int TotalMinutes,
+    int AverageWorkMinutes);
+
+public sealed record EmuEmployeeWorkReportDto(
+    Guid EmployeeId,
+    string EmployeeName,
+    string PersonnelNo,
+    string Position,
+    string Department,
+    int WorkCount,
+    int WorkMinutes,
+    int WaitingMinutes,
+    int OtherWorkMinutes,
+    int TotalMinutes,
+    int SectionCount);
+
+public sealed record EmuSectionWorkReportDto(
+    Guid SectionId,
+    string SectionName,
+    int WorkCount,
+    int EmployeeCount,
+    int WorkMinutes,
+    int WaitingMinutes,
+    int OtherWorkMinutes,
+    int TotalMinutes,
+    int ProblemWorks);
+
+public sealed record EmuWorkHistoryExceptionDto(
+    Guid WorkSessionId,
+    string WorkNumber,
+    DateOnly WorkDate,
+    Guid SectionId,
+    string SectionName,
+    string Reason,
+    string Severity,
+    int WorkMinutes,
+    int WaitingMinutes,
+    int OtherWorkMinutes);
 
 public sealed record EmuPlanTaskDto(
     Guid Id,
@@ -201,6 +438,11 @@ public sealed record EmuUpsertPlanTaskDto(
 
 public sealed record EmuApprovePlanTaskDto(
     bool Approved,
+    string Comment,
+    int RowVersion);
+
+public sealed record EmuReschedulePlanTaskDto(
+    DateOnly NewPlannedDate,
     string Comment,
     int RowVersion);
 

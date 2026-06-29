@@ -1,10 +1,12 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import {
   attachPointPhotoFromCamera,
   attachPointPhotoFromGallery,
+  attachPointVideoFromCamera,
+  attachPointVideoFromGallery,
   attachRemarkPhotoFromCamera,
   attachRemarkPhotoFromGallery,
   attachRemarkVideoFromCamera,
@@ -16,48 +18,63 @@ import { Screen } from "@/ui/Screen";
 
 export function CameraCaptureScreen() {
   const router = useRouter();
-  const { assignmentId, pointId, remarkId, mediaKind } = useLocalSearchParams<{
+  const { assignmentId, pointId, remarkId, mediaKind, source } = useLocalSearchParams<{
     assignmentId?: string;
     pointId?: string;
     remarkId?: string;
     mediaKind?: "photo" | "video";
+    source?: "camera" | "gallery";
   }>();
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const captureKind = mediaKind === "video" ? "video" : "photo";
   const isRemarkMedia = Boolean(remarkId);
+  const autoStarted = useRef(false);
 
-  async function handleAttach(source: "camera" | "gallery") {
+  const handleAttach = useCallback(async (selectedSource: "camera" | "gallery") => {
     setError(null);
     setIsBusy(true);
 
     try {
       if (isRemarkMedia && remarkId) {
         if (captureKind === "video") {
-          await (source === "camera" ? attachRemarkVideoFromCamera(remarkId) : attachRemarkVideoFromGallery(remarkId));
+          await (selectedSource === "camera" ? attachRemarkVideoFromCamera(remarkId) : attachRemarkVideoFromGallery(remarkId));
         } else {
-          await (source === "camera" ? attachRemarkPhotoFromCamera(remarkId) : attachRemarkPhotoFromGallery(remarkId));
+          await (selectedSource === "camera" ? attachRemarkPhotoFromCamera(remarkId) : attachRemarkPhotoFromGallery(remarkId));
         }
         router.replace("/(tabs)/work-accounting");
         return;
       }
 
       if (!assignmentId || !pointId) {
-        setError("Не найдена точка обхода для привязки фото.");
+        setError("Не найдена точка обхода для привязки файла.");
         return;
       }
 
-      await (source === "camera"
-        ? attachPointPhotoFromCamera(assignmentId, pointId)
-        : attachPointPhotoFromGallery(assignmentId, pointId));
+      if (captureKind === "video") {
+        await (selectedSource === "camera"
+          ? attachPointVideoFromCamera(assignmentId, pointId)
+          : attachPointVideoFromGallery(assignmentId, pointId));
+      } else {
+        await (selectedSource === "camera"
+          ? attachPointPhotoFromCamera(assignmentId, pointId)
+          : attachPointPhotoFromGallery(assignmentId, pointId));
+      }
       router.replace(`/patrol/assignment/${assignmentId}/point/${pointId}/fill`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Не удалось сохранить файл.");
     } finally {
       setIsBusy(false);
     }
-  }
+  }, [assignmentId, captureKind, isRemarkMedia, pointId, remarkId, router]);
+
+  useEffect(() => {
+    if ((source === "camera" || source === "gallery") && !autoStarted.current) {
+      autoStarted.current = true;
+      void handleAttach(source);
+    }
+  }, [handleAttach, source]);
 
   function goBack() {
     if (isRemarkMedia) {
@@ -71,21 +88,26 @@ export function CameraCaptureScreen() {
   return (
     <Screen
       title={captureKind === "video" ? "Видео замечания" : "Фото"}
-      subtitle="Используется штатная камера Android или галерея телефона."
+      subtitle="Файл сохранится локально и отправится на сервер при синхронизации."
     >
       <Card>
         <Text style={styles.title}>{captureKind === "video" ? "Добавить видео" : "Добавить фото"}</Text>
         <Text style={styles.text}>
-          Файл сохранится локально и отправится на сервер при синхронизации. Для фото обхода можно выбрать камеру или галерею.
+          Используйте камеру Android или выберите файл из галереи. Видео ограничено по размеру, чтобы отчет можно было стабильно отправить через мобильную сеть.
         </Text>
       </Card>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {isBusy ? <ActivityIndicator /> : null}
       <View style={styles.actions}>
-        <PrimaryButton disabled={isBusy} label={captureKind === "video" ? "Записать видео" : "Сделать фото"} onPress={() => handleAttach("camera")} />
-        <PrimaryButton disabled={isBusy} label="Выбрать из галереи" onPress={() => handleAttach("gallery")} variant="secondary" />
-        <PrimaryButton disabled={isBusy} label="Назад" onPress={goBack} variant="ghost" />
+        <PrimaryButton
+          disabled={isBusy}
+          icon={captureKind === "video" ? "videocam-outline" : "camera-outline"}
+          label={captureKind === "video" ? "Записать видео" : "Сделать фото"}
+          onPress={() => handleAttach("camera")}
+        />
+        <PrimaryButton disabled={isBusy} icon="images-outline" label="Выбрать из галереи" onPress={() => handleAttach("gallery")} variant="secondary" />
+        <PrimaryButton disabled={isBusy} icon="arrow-back-outline" label="Назад" onPress={goBack} variant="ghost" />
       </View>
     </Screen>
   );

@@ -7,6 +7,7 @@ namespace Patrol360.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/mobile-accounts")]
+[RequireAnyPermission("mobile_accounts.read", "mobile_accounts.write")]
 public sealed class MobileAccountsController(
     IMobileAccountService mobileAccountService,
     IEmployeeDirectoryQuery employeeDirectoryQuery) : ControllerBase
@@ -117,13 +118,17 @@ public sealed class MobileAccountsController(
         return Ok(result.Account);
     }
 
-    [HttpGet("{id:guid}/sessions")]
-    public ActionResult<IReadOnlyList<MobileAccountSessionDto>> Sessions(Guid id) =>
-        Ok(mobileAccountService.GetSessions(id));
+    [HttpGet("{id}/sessions")]
+    public ActionResult<IReadOnlyList<MobileAccountSessionDto>> Sessions(string id) =>
+        Guid.TryParse(id, out var accountId)
+            ? Ok(mobileAccountService.GetSessions(accountId))
+            : Ok(Array.Empty<MobileAccountSessionDto>());
 
-    [HttpGet("{id:guid}/security-events")]
-    public ActionResult<IReadOnlyList<MobileAccountSecurityEventDto>> SecurityEvents(Guid id) =>
-        Ok(mobileAccountService.GetSecurityEvents(id));
+    [HttpGet("{id}/security-events")]
+    public ActionResult<IReadOnlyList<MobileAccountSecurityEventDto>> SecurityEvents(string id) =>
+        Guid.TryParse(id, out var accountId)
+            ? Ok(mobileAccountService.GetSecurityEvents(accountId))
+            : Ok(Array.Empty<MobileAccountSecurityEventDto>());
 
     [HttpGet("{id:guid}/binding")]
     public ActionResult<EmployeeBindingDataDto> Binding(Guid id)

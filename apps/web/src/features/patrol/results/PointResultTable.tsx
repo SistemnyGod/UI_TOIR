@@ -45,12 +45,12 @@ export function PointResultTable({ group, results, onOpenAttachment, photoLoadin
               <div className="results-review-point-status">
                 <PointStatusPill result={result} />
               </div>
-              <div className="results-review-point-cell">
+              <div className="results-review-point-cell is-time">
                 <span>Время фиксации</span>
                 <strong>{formatPointActualTime(result.actualAt)}</strong>
                 <small>{getPointDurationLabel(result)}</small>
               </div>
-              <div className="results-review-point-cell">
+              <div className="results-review-point-cell is-comment">
                 <span>Комментарий</span>
                 <strong>{getPointComment(result)}</strong>
               </div>

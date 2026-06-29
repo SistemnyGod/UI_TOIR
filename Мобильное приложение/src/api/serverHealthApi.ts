@@ -1,4 +1,3 @@
-import { getAccessToken } from "@/auth/tokenStorage";
 import { fetchWithTimeout, serverHealthTimeoutMs, serverUnavailableMessage } from "@/api/networkTimeout";
 import { getServerBaseUrl, getServerCandidateBaseUrls, normalizeServerBaseUrl, setServerBaseUrl } from "@/core/serverSettings";
 
@@ -24,46 +23,39 @@ export async function checkServerConnection(rawServerBaseUrl?: string): Promise<
 
   const checkedUrls: string[] = [];
   let lastStatus: number | undefined;
+  let lastProblem: string | null = null;
 
   for (const serverBaseUrl of serverBaseUrls) {
     checkedUrls.push(serverBaseUrl);
 
     try {
-      const token = await getAccessToken();
       const healthUrl = `${serverBaseUrl}/api/v1/mobile/health`;
-      const bootstrapUrl = `${serverBaseUrl}/api/v1/mobile/bootstrap`;
-      const response = token
-        ? await fetchWithTimeout(
-            bootstrapUrl,
-            {
-              headers: {
-                Accept: "application/json",
-                Authorization: `Bearer ${token}`,
-                "X-Mobile-Sync-Protocol": "1.0",
-                "X-Patrol360-Client": "mobile-app"
-              }
-            },
-            serverHealthTimeoutMs
-          )
-        : await fetchWithTimeout(
-            healthUrl,
-            {
-              headers: {
-                Accept: "application/json",
-                "X-Mobile-Sync-Protocol": "1.0",
-                "X-Patrol360-Client": "mobile-app"
-              }
-            },
-            serverHealthTimeoutMs
-          );
+      const response = await fetchWithTimeout(
+        healthUrl,
+        {
+          headers: {
+            Accept: "application/json",
+            "X-Mobile-Sync-Protocol": "1.0",
+            "X-Patrol360-Client": "mobile-app"
+          }
+        },
+        serverHealthTimeoutMs
+      );
 
       if (response.ok) {
+        const isMobileHealth = await isMobileHealthResponse(response);
+        if (!isMobileHealth) {
+          lastStatus = response.status;
+          lastProblem = "Адрес отвечает, но это не mobile API Patrol360.";
+          continue;
+        }
+
         await setServerBaseUrl(serverBaseUrl).catch(() => undefined);
         return {
           ok: true,
           message: `Сервер доступен: ${serverBaseUrl}`,
           status: response.status,
-          url: token ? bootstrapUrl : healthUrl
+          url: healthUrl
         };
       }
 
@@ -73,11 +65,12 @@ export async function checkServerConnection(rawServerBaseUrl?: string): Promise<
           ok: true,
           message: `Сервер доступен, требуется повторный вход: ${serverBaseUrl}`,
           status: response.status,
-          url: token ? bootstrapUrl : healthUrl
+          url: healthUrl
         };
       }
 
       lastStatus = response.status;
+      lastProblem = null;
     } catch {
       // Try the next configured local endpoint before reporting a connection failure.
     }
@@ -85,10 +78,30 @@ export async function checkServerConnection(rawServerBaseUrl?: string): Promise<
 
   return {
     ok: false,
-    message: lastStatus
-      ? `Сервер ответил с ошибкой ${lastStatus}. Проверенные адреса: ${checkedUrls.join(", ")}`
-      : `${serverUnavailableMessage} Проверенные адреса: ${checkedUrls.join(", ")}`,
+    message: lastProblem
+      ? `${lastProblem} Проверенные адреса: ${checkedUrls.join(", ")}`
+      : lastStatus
+        ? `Сервер ответил с ошибкой ${lastStatus}. Проверенные адреса: ${checkedUrls.join(", ")}`
+        : `${serverUnavailableMessage} Проверенные адреса: ${checkedUrls.join(", ")}`,
     status: lastStatus,
     url: checkedUrls.map((value) => `${value}/api/v1/mobile/health`).join(", ")
   };
+}
+
+async function isMobileHealthResponse(response: Response) {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    return false;
+  }
+
+  try {
+    const body = (await response.json()) as {
+      status?: string;
+      syncProtocolVersion?: string;
+    };
+
+    return body.status === "ok" && body.syncProtocolVersion === "1.0";
+  } catch {
+    return false;
+  }
 }

@@ -1,11 +1,12 @@
 import { ApiClient, type ApiRequestOptions } from "../api/client";
 import type {
+  MobileDeviceHealthDto,
   MobileSyncConflictDetailDto,
   MobileSyncConflictListItemDto,
   MobileSyncConflictResolutionDto,
   MobileSyncConflictResolutionRequestDto,
 } from "../api/contracts";
-import type { MobileSyncConflict } from "../types";
+import type { MobileDeviceHealth, MobileSyncConflict } from "../types";
 
 export function createApiMobileSyncRepository({
   baseUrl,
@@ -20,6 +21,11 @@ export function createApiMobileSyncRepository({
     async getConflicts(options: ApiRequestOptions = {}) {
       const rows = await client.get<MobileSyncConflictListItemDto[]>("/api/v1/mobile-sync/conflicts", options);
       return rows.map(mapConflict);
+    },
+
+    async getDeviceHealth(options: ApiRequestOptions = {}) {
+      const rows = await client.get<MobileDeviceHealthDto[]>("/api/v1/mobile-sync/device-health", options);
+      return rows.map(mapDeviceHealth);
     },
 
     async getConflict(clientOperationId: string, options: ApiRequestOptions = {}) {
@@ -38,6 +44,21 @@ export function createApiMobileSyncRepository({
         options,
       );
     },
+  };
+}
+
+function mapDeviceHealth(row: MobileDeviceHealthDto): MobileDeviceHealth {
+  return {
+    mobileAccountId: row.mobileAccountId,
+    login: row.login,
+    deviceId: row.deviceId,
+    deviceName: row.deviceName,
+    appVersion: row.appVersion,
+    lastSeenAt: row.lastSeenAt ? formatDateTime(row.lastSeenAt) : null,
+    pushStatus: row.pushStatus,
+    pendingOutboxCount: row.pendingOutboxCount,
+    staleOutboxCount: row.staleOutboxCount,
+    lastError: row.lastError,
   };
 }
 

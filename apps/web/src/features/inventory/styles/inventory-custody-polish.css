@@ -1,0 +1,515 @@
+.inventory-custody-screen .inventory-custody-composer {
+  grid-template-columns: minmax(260px, 1fr) minmax(260px, 0.8fr) auto;
+  align-items: center;
+  padding: 14px;
+}
+
+.inventory-custody-screen .inventory-custody-composer-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inventory-custody-screen .inventory-custody-composer-summary > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--inventory-border);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.inventory-custody-screen .inventory-custody-composer-summary span {
+  color: var(--inventory-muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.inventory-custody-screen .inventory-custody-composer-summary strong {
+  color: var(--inventory-text);
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.inventory-custody-screen .inventory-custody-submit {
+  justify-self: end;
+}
+
+.inventory-custody-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3200;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(15, 23, 42, 0.36);
+  backdrop-filter: blur(7px);
+}
+
+.inventory-custody-modal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(1280px, calc(100vw - 44px));
+  max-height: min(820px, calc(100vh - 44px));
+  overflow: hidden;
+  border: 1px solid var(--inventory-border);
+  border-radius: 8px;
+  background: #f8fbff;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
+}
+
+.inventory-custody-modal-head,
+.inventory-custody-modal-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+}
+
+.inventory-custody-modal-head {
+  border-bottom: 1px solid var(--inventory-border);
+}
+
+.inventory-custody-modal-footer {
+  align-items: center;
+  justify-content: flex-end;
+  border-top: 1px solid var(--inventory-border);
+}
+
+.inventory-custody-modal-head span,
+.inventory-custody-modal-head h2,
+.inventory-custody-modal-head p {
+  margin: 0;
+}
+
+.inventory-custody-modal-head span {
+  color: var(--inventory-blue);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.inventory-custody-modal-head h2 {
+  margin-top: 4px;
+  color: var(--inventory-text);
+  font-size: 22px;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.inventory-custody-modal-head p {
+  max-width: 720px;
+  margin-top: 6px;
+  color: var(--inventory-muted);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.inventory-custody-modal-body {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.95fr) minmax(290px, 1.15fr) minmax(260px, 0.8fr);
+  gap: 12px;
+  min-height: 0;
+  padding: 14px;
+  overflow: hidden;
+}
+
+.inventory-custody-picker-panel,
+.inventory-custody-details-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid var(--inventory-border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.inventory-custody-details-panel {
+  grid-template-rows: auto auto auto minmax(126px, auto) auto;
+}
+
+.inventory-custody-picker-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.inventory-custody-picker-title > svg {
+  flex: 0 0 auto;
+  color: var(--inventory-blue);
+}
+
+.inventory-custody-picker-title strong,
+.inventory-custody-picker-title span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-custody-picker-title strong {
+  color: var(--inventory-text);
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.inventory-custody-picker-title span {
+  margin-top: 2px;
+  color: var(--inventory-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.inventory-custody-modal-search,
+.inventory-custody-modal-filters {
+  min-width: 0;
+}
+
+.inventory-custody-modal-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 0.45fr);
+  gap: 8px;
+}
+
+.inventory-custody-modal-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--inventory-border);
+  border-radius: 8px;
+  background: #f8fbff;
+  color: var(--inventory-muted);
+}
+
+.inventory-custody-modal-search input,
+.inventory-custody-modal-filters select,
+.inventory-custody-details-panel input,
+.inventory-custody-details-panel select,
+.inventory-custody-details-panel textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--inventory-border);
+  border-radius: 8px;
+  color: var(--inventory-text);
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  outline: none;
+}
+
+.inventory-custody-modal-search input {
+  height: 38px;
+  border: 0;
+  background: transparent;
+}
+
+.inventory-custody-modal-filters select,
+.inventory-custody-details-panel input,
+.inventory-custody-details-panel select {
+  height: 40px;
+  padding: 0 10px;
+}
+
+.inventory-custody-details-panel textarea {
+  min-height: 118px;
+  resize: vertical;
+  padding: 10px;
+}
+
+.inventory-custody-picker-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.inventory-custody-picker-list button {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 9px;
+  border: 1px solid var(--inventory-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--inventory-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.inventory-custody-picker-list button:hover,
+.inventory-custody-picker-list button.is-selected {
+  border-color: var(--inventory-blue);
+  background: #eef6ff;
+}
+
+.inventory-custody-picker-list button > span:first-child {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: var(--inventory-blue);
+  background: var(--inventory-blue-soft);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.inventory-custody-picker-list strong,
+.inventory-custody-picker-list small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-custody-picker-list strong {
+  color: var(--inventory-text);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.inventory-custody-picker-list small {
+  margin-top: 2px;
+  color: var(--inventory-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.inventory-custody-selected-card,
+.inventory-custody-modal-note {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #eef6ff;
+}
+
+.inventory-custody-selected-card > svg,
+.inventory-custody-modal-note > svg {
+  flex: 0 0 auto;
+  color: var(--inventory-blue);
+}
+
+.inventory-custody-selected-card span,
+.inventory-custody-selected-card strong,
+.inventory-custody-selected-card small,
+.inventory-custody-modal-note span {
+  display: block;
+  margin: 0;
+}
+
+.inventory-custody-selected-card span {
+  color: var(--inventory-muted);
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.inventory-custody-selected-card strong {
+  color: var(--inventory-text);
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.inventory-custody-selected-card small,
+.inventory-custody-modal-note span {
+  margin-top: 2px;
+  color: var(--inventory-muted);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.inventory-custody-details-panel label {
+  display: grid;
+  gap: 6px;
+  color: var(--inventory-muted);
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.inventory-custody-record-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.inventory-custody-record-filters button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--inventory-border);
+  border-radius: 8px;
+  color: var(--inventory-text);
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.inventory-custody-record-filters button.is-active {
+  border-color: var(--inventory-blue);
+  color: var(--inventory-blue);
+  background: #eef6ff;
+}
+
+.inventory-custody-record-filters span {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: var(--inventory-text);
+  font-size: 11px;
+}
+
+.inventory-custody-record-list {
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-custody-record-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) minmax(170px, 1fr) 110px 136px auto minmax(320px, auto);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--inventory-border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.inventory-custody-record-main,
+.inventory-custody-record-meta {
+  min-width: 0;
+}
+
+.inventory-custody-record-main strong,
+.inventory-custody-record-main span,
+.inventory-custody-record-meta span,
+.inventory-custody-record-meta strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-custody-record-main strong,
+.inventory-custody-record-meta strong {
+  color: var(--inventory-text);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.inventory-custody-record-main span,
+.inventory-custody-record-meta span {
+  margin-top: 3px;
+  color: var(--inventory-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.inventory-custody-record-status {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.inventory-custody-record-row .inventory-custody-line-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: none;
+}
+
+.inventory-custody-record-row .inventory-custody-line-actions .button {
+  min-height: 32px;
+  padding-inline: 9px;
+}
+
+@media (max-width: 1280px) {
+  .inventory-custody-screen .inventory-custody-composer {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .inventory-custody-screen .inventory-custody-composer-summary {
+    grid-column: 1 / -1;
+  }
+
+  .inventory-custody-record-row {
+    grid-template-columns: minmax(220px, 1fr) minmax(160px, 0.8fr) 100px auto;
+  }
+
+  .inventory-custody-record-meta:nth-of-type(4) {
+    display: none;
+  }
+
+  .inventory-custody-record-row .inventory-custody-line-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 1040px) {
+  .inventory-custody-modal-body {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .inventory-custody-picker-panel,
+  .inventory-custody-details-panel {
+    min-height: 280px;
+  }
+}
+
+@media (max-width: 760px) {
+  .inventory-custody-modal-backdrop {
+    padding: 10px;
+  }
+
+  .inventory-custody-modal {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+  }
+
+  .inventory-custody-screen .inventory-custody-composer,
+  .inventory-custody-screen .inventory-custody-composer-summary,
+  .inventory-custody-modal-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-custody-screen .inventory-custody-submit {
+    justify-self: stretch;
+  }
+
+  .inventory-custody-record-row {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-custody-record-row .inventory-custody-line-actions {
+    flex-wrap: wrap;
+  }
+}

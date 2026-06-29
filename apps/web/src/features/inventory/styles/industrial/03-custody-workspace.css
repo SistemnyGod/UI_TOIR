@@ -1,0 +1,1114 @@
+/* Custody workspace: acts under responsibility. */
+
+.inventory-custody-screen {
+  color: var(--issue-text);
+  gap: 16px;
+  max-width: 100%;
+}
+
+.inventory-custody-commandbar {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--issue-border);
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 0 0 14px;
+}
+
+.inventory-custody-title {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.inventory-custody-title-icon {
+  align-items: center;
+  background: var(--issue-blue);
+  border-radius: 8px;
+  box-shadow: none;
+  color: #ffffff;
+  display: inline-flex;
+  flex: 0 0 44px;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.inventory-custody-title p,
+.inventory-custody-title h1,
+.inventory-custody-title span {
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.inventory-custody-title p {
+  color: var(--issue-blue-dark);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.inventory-custody-title h1 {
+  color: var(--issue-text);
+  font-size: 28px;
+  line-height: 1.05;
+}
+
+.inventory-custody-title span {
+  color: var(--issue-muted);
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 4px;
+  max-width: 760px;
+}
+
+.inventory-custody-command-actions,
+.inventory-custody-row-actions,
+.inventory-custody-line-actions,
+.inventory-custody-drawer-actions,
+.inventory-custody-inspector-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inventory-custody-command-actions .button,
+.inventory-custody-inspector-actions .button,
+.inventory-custody-row-actions .button,
+.inventory-custody-line-actions .button,
+.inventory-custody-drawer-actions .button,
+.inventory-custody-composer .button {
+  border-radius: 8px;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  min-height: 38px;
+}
+
+.inventory-custody-composer,
+.inventory-custody-journal,
+.inventory-custody-inspector,
+.inventory-custody-card-section,
+.inventory-custody-kpi,
+.inventory-custody-state {
+  background: var(--issue-panel-solid);
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.inventory-custody-composer {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(240px, 1.2fr) minmax(180px, 0.9fr) minmax(180px, 0.9fr) minmax(92px, 0.45fr) minmax(220px, 1fr) auto;
+  padding: 14px;
+}
+
+.inventory-custody-step {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.inventory-custody-step > span {
+  align-items: center;
+  background: var(--issue-blue);
+  border-radius: 8px;
+  color: #ffffff;
+  display: inline-flex;
+  flex: 0 0 30px;
+  font-size: 13px;
+  font-weight: 950;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.inventory-custody-step strong,
+.inventory-custody-step small {
+  display: block;
+  letter-spacing: 0;
+}
+
+.inventory-custody-step strong {
+  color: var(--issue-text);
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.inventory-custody-step small {
+  color: var(--issue-muted);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+  margin-top: 3px;
+}
+
+.inventory-custody-composer label {
+  color: var(--issue-muted);
+  display: grid;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 6px;
+  letter-spacing: 0;
+  min-width: 0;
+}
+
+.inventory-custody-composer input,
+.inventory-custody-composer select,
+.inventory-custody-search input {
+  background: #ffffff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  color: var(--issue-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  height: 40px;
+  min-width: 0;
+  outline: 0;
+  padding: 0 10px;
+  width: 100%;
+}
+
+.inventory-custody-kpis {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.inventory-custody-kpi {
+  display: grid;
+  gap: 8px;
+  min-height: 76px;
+  padding: 14px;
+}
+
+.inventory-custody-kpi span,
+.inventory-custody-kpi strong {
+  letter-spacing: 0;
+}
+
+.inventory-custody-kpi span {
+  color: var(--issue-muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.inventory-custody-kpi strong {
+  color: var(--issue-text);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.inventory-custody-kpi.tone-blue strong {
+  color: var(--issue-blue-dark);
+}
+
+.inventory-custody-kpi.tone-green strong {
+  color: var(--issue-success);
+}
+
+.inventory-custody-kpi.tone-red strong {
+  color: var(--issue-danger);
+}
+
+.inventory-custody-workspace {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+}
+
+.inventory-custody-inspector {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  position: sticky;
+  top: 12px;
+}
+
+.inventory-custody-panel-head {
+  align-items: center;
+  border-bottom: 1px solid var(--issue-border);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.inventory-custody-panel-head h2,
+.inventory-custody-panel-head p {
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.inventory-custody-panel-head h2 {
+  color: var(--issue-text);
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.inventory-custody-panel-head p {
+  color: var(--issue-muted);
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 3px;
+}
+
+.inventory-custody-search {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  color: var(--issue-muted);
+  display: flex;
+  gap: 8px;
+  min-height: 40px;
+  min-width: min(320px, 100%);
+  padding: 0 10px;
+}
+
+.inventory-custody-search input {
+  border: 0;
+  padding: 0;
+}
+
+.inventory-custody-table-wrap,
+.inventory-custody-lines-wrap,
+.inventory-custody-history-wrap {
+  overflow: auto;
+}
+
+.inventory-custody-table,
+.inventory-custody-lines-table,
+.inventory-custody-history-table {
+  border-collapse: collapse;
+  color: var(--issue-text);
+  font-size: 12px;
+  min-width: 820px;
+  width: 100%;
+}
+
+.inventory-custody-table th,
+.inventory-custody-table td,
+.inventory-custody-lines-table th,
+.inventory-custody-lines-table td,
+.inventory-custody-history-table th,
+.inventory-custody-history-table td {
+  border-bottom: 1px solid var(--issue-border);
+  color: var(--issue-text);
+  letter-spacing: 0;
+  padding: 11px 12px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.inventory-custody-table th,
+.inventory-custody-lines-table th,
+.inventory-custody-history-table th {
+  background: #f3f7fc;
+  color: var(--issue-muted);
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.inventory-custody-table td strong,
+.inventory-custody-table td span,
+.inventory-custody-lines-table td strong,
+.inventory-custody-lines-table td span {
+  display: block;
+  letter-spacing: 0;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-custody-table td span,
+.inventory-custody-lines-table td span {
+  color: var(--issue-muted);
+  font-size: 11px;
+  font-weight: 750;
+  margin-top: 3px;
+}
+
+.inventory-custody-table tbody tr {
+  cursor: pointer;
+}
+
+.inventory-custody-table tbody tr:hover,
+.inventory-custody-table tbody tr.is-selected {
+  background: var(--issue-blue-soft);
+}
+
+.inventory-custody-table tbody tr.is-selected {
+  box-shadow: inset 3px 0 0 var(--issue-blue);
+}
+
+.inventory-custody-line-actions {
+  justify-content: flex-start;
+  max-width: 380px;
+}
+
+.inventory-custody-profile {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.inventory-custody-profile > span {
+  align-items: center;
+  background: #edf5ff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  color: var(--issue-blue);
+  display: inline-flex;
+  flex: 0 0 44px;
+  font-size: 13px;
+  font-weight: 950;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.inventory-custody-profile strong,
+.inventory-custody-profile small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.inventory-custody-profile strong {
+  color: var(--issue-text);
+  font-size: 15px;
+}
+
+.inventory-custody-profile small {
+  color: var(--issue-muted);
+  font-size: 12px;
+  font-weight: 750;
+  margin-top: 2px;
+}
+
+.inventory-custody-meta-grid,
+.inventory-custody-drawer-meta {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inventory-custody-meta {
+  background: #f7fbff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  padding: 9px;
+}
+
+.inventory-custody-meta span,
+.inventory-custody-meta strong {
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.inventory-custody-meta span {
+  color: var(--issue-muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.inventory-custody-meta strong {
+  color: var(--issue-text);
+  font-size: 13px;
+}
+
+.inventory-custody-print-preview {
+  background: #fbfdff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.inventory-custody-status {
+  border-radius: 999px;
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 900;
+  min-height: 24px;
+  padding: 4px 9px;
+}
+
+.inventory-custody-status.open,
+.inventory-custody-status.in_use {
+  background: var(--issue-success-soft);
+  color: var(--issue-success);
+}
+
+.inventory-custody-status.closed,
+.inventory-custody-status.returned {
+  background: var(--issue-blue-soft);
+  color: var(--issue-blue-dark);
+}
+
+.inventory-custody-status.written_off,
+.inventory-custody-status.lost,
+.inventory-custody-status.archived {
+  background: var(--issue-danger-soft);
+  color: var(--issue-danger);
+}
+
+.inventory-custody-state {
+  min-height: 136px;
+  padding: 18px;
+}
+
+.inventory-custody-state > span {
+  background: #edf5ff;
+  border-radius: 8px;
+  color: var(--issue-blue);
+}
+
+.inventory-custody-drawer-backdrop {
+  background: rgba(15, 35, 66, 0.34);
+  z-index: 2200;
+}
+
+.inventory-custody-drawer {
+  background: #f7fbff;
+  border-left: 1px solid var(--issue-border);
+  box-shadow: -18px 0 42px rgba(15, 35, 66, 0.16);
+}
+
+.inventory-custody-drawer-header,
+.inventory-custody-drawer-actions {
+  background: rgba(247, 251, 255, 0.96);
+  border-color: var(--issue-border);
+}
+
+.inventory-custody-icon-button {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+@media (max-width: 1380px) {
+  .inventory-custody-composer {
+    grid-template-columns: minmax(0, 1fr) minmax(170px, 0.8fr) minmax(170px, 0.8fr);
+  }
+
+  .inventory-custody-composer .button {
+    grid-column: 1 / -1;
+  }
+
+  .inventory-custody-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-custody-inspector {
+    position: static;
+  }
+}
+
+@media (max-width: 860px) {
+  .inventory-custody-commandbar,
+  .inventory-custody-panel-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .inventory-custody-command-actions,
+  .inventory-custody-row-actions,
+  .inventory-custody-line-actions,
+  .inventory-custody-drawer-actions,
+  .inventory-custody-inspector-actions {
+    width: 100%;
+  }
+
+  .inventory-custody-command-actions .button,
+  .inventory-custody-row-actions .button,
+  .inventory-custody-line-actions .button,
+  .inventory-custody-drawer-actions .button,
+  .inventory-custody-inspector-actions .button {
+    flex: 1 1 128px;
+  }
+
+  .inventory-custody-composer,
+  .inventory-custody-kpis,
+  .inventory-custody-meta-grid,
+  .inventory-custody-drawer-meta {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-custody-search {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+/* Custody workspace final polish: compact, single-purpose screen without KPI clutter. */
+
+.inventory-custody-screen {
+  color: var(--issue-text);
+  gap: 14px;
+}
+
+.inventory-custody-screen .inventory-custody-commandbar {
+  align-items: center;
+  background: var(--issue-panel);
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.inventory-custody-screen .inventory-custody-title {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 44px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.inventory-custody-screen .inventory-custody-title-icon {
+  align-items: center;
+  background: var(--issue-blue);
+  border-radius: 8px;
+  box-shadow: none;
+  color: #ffffff;
+  display: inline-flex;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.inventory-custody-screen .inventory-custody-title p,
+.inventory-custody-screen .inventory-custody-title h1,
+.inventory-custody-screen .inventory-custody-title span {
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.inventory-custody-screen .inventory-custody-title p {
+  color: var(--issue-blue-dark);
+  font-size: 11px;
+  line-height: 1.1;
+}
+
+.inventory-custody-screen .inventory-custody-title h1 {
+  color: var(--issue-text);
+  font-size: 28px;
+  line-height: 1.05;
+}
+
+.inventory-custody-screen .inventory-custody-title span {
+  color: var(--issue-muted);
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 4px;
+}
+
+.inventory-custody-screen .inventory-custody-command-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.inventory-custody-screen .inventory-custody-composer {
+  align-items: stretch;
+  background: var(--issue-panel);
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 14px;
+}
+
+.inventory-custody-screen .inventory-custody-step {
+  align-items: center;
+  background: #f8fbff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.inventory-custody-screen .inventory-custody-step > span {
+  align-items: center;
+  background: var(--issue-blue);
+  border-radius: 8px;
+  color: #ffffff;
+  display: inline-flex;
+  flex: 0 0 30px;
+  font-size: 13px;
+  font-weight: 950;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.inventory-custody-screen .inventory-custody-step strong {
+  color: var(--issue-text);
+  display: block;
+  font-size: 14px;
+  line-height: 1.15;
+}
+
+.inventory-custody-screen .inventory-custody-step small {
+  color: var(--issue-muted);
+  display: block;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.3;
+  margin-top: 3px;
+}
+
+.inventory-custody-screen .inventory-custody-composer-fields {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(220px, 1.2fr) minmax(86px, 0.36fr) minmax(220px, 1fr) auto;
+}
+
+.inventory-custody-screen .inventory-custody-composer label {
+  color: var(--issue-muted);
+  display: grid;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 5px;
+  letter-spacing: 0;
+  min-width: 0;
+}
+
+.inventory-custody-screen .inventory-custody-composer input,
+.inventory-custody-screen .inventory-custody-composer select {
+  background: #ffffff;
+  border: 1px solid var(--issue-border-strong);
+  border-radius: 8px;
+  box-shadow: none;
+  color: var(--issue-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  height: 40px;
+  min-width: 0;
+  outline: 0;
+  padding: 0 10px;
+  width: 100%;
+}
+
+.inventory-custody-screen .inventory-custody-quantity-field {
+  min-width: 84px;
+}
+
+.inventory-custody-screen .inventory-custody-submit {
+  min-width: 148px;
+  white-space: nowrap;
+}
+
+.inventory-custody-screen .inventory-custody-composer input:focus,
+.inventory-custody-screen .inventory-custody-composer select:focus,
+.inventory-custody-screen .inventory-custody-search input:focus {
+  border-color: var(--issue-blue);
+  box-shadow: 0 0 0 3px rgba(18, 103, 239, 0.12);
+}
+
+.inventory-custody-screen .inventory-custody-kpis {
+  display: none;
+}
+
+.inventory-custody-screen .inventory-custody-workspace {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(276px, 304px);
+}
+
+.inventory-custody-screen .inventory-custody-journal,
+.inventory-custody-screen .inventory-custody-inspector,
+.inventory-custody-screen .inventory-custody-card-section {
+  background: var(--issue-panel);
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.inventory-custody-screen .inventory-custody-panel-head,
+.inventory-custody-screen .inventory-custody-section-head {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid var(--issue-border);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.inventory-custody-screen .inventory-custody-panel-head h2,
+.inventory-custody-screen .inventory-custody-section-head h3 {
+  color: var(--issue-text);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.inventory-custody-screen .inventory-custody-panel-head p,
+.inventory-custody-screen .inventory-custody-section-head span {
+  color: var(--issue-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.inventory-custody-screen .inventory-custody-search {
+  background: #ffffff;
+  border: 1px solid var(--issue-border-strong);
+  border-radius: 8px;
+  min-height: 38px;
+  min-width: min(300px, 100%);
+}
+
+.inventory-custody-screen .inventory-custody-search input {
+  border: 0;
+  color: var(--issue-text);
+  font-size: 12px;
+  font-weight: 800;
+  height: 36px;
+}
+
+.inventory-custody-screen .inventory-custody-table-wrap,
+.inventory-custody-screen .inventory-custody-lines-wrap {
+  background: transparent;
+  padding: 8px;
+}
+
+.inventory-custody-screen .inventory-custody-act-list {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.inventory-custody-screen .inventory-custody-act-row {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(128px, 0.72fr) minmax(180px, 1fr) minmax(124px, 0.58fr) minmax(194px, auto);
+  min-height: 70px;
+  padding: 10px 12px;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.inventory-custody-screen .inventory-custody-act-row:hover {
+  background: #f8fbff;
+  border-color: var(--issue-border-strong);
+  transform: translateY(-1px);
+}
+
+.inventory-custody-screen .inventory-custody-act-row:focus-visible {
+  border-color: var(--issue-blue);
+  box-shadow: 0 0 0 3px rgba(18, 103, 239, 0.14);
+  outline: 0;
+}
+
+.inventory-custody-screen .inventory-custody-act-row.is-selected {
+  background: linear-gradient(90deg, rgba(18, 103, 239, 0.1), #ffffff 54%);
+  border-color: var(--issue-blue);
+  box-shadow: inset 3px 0 0 var(--issue-blue);
+}
+
+.inventory-custody-screen .inventory-custody-act-main,
+.inventory-custody-screen .inventory-custody-act-person,
+.inventory-custody-screen .inventory-custody-act-status {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.inventory-custody-screen .inventory-custody-act-main strong,
+.inventory-custody-screen .inventory-custody-act-person strong {
+  color: var(--issue-text);
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-custody-screen .inventory-custody-act-main span,
+.inventory-custody-screen .inventory-custody-act-person span,
+.inventory-custody-screen .inventory-custody-act-status span {
+  color: var(--issue-muted);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-custody-screen .inventory-custody-table,
+.inventory-custody-screen .inventory-custody-lines-table {
+  border-collapse: separate;
+  border-spacing: 0 8px;
+  min-width: 840px;
+  table-layout: fixed;
+}
+
+.inventory-custody-screen .inventory-custody-table th,
+.inventory-custody-screen .inventory-custody-lines-table th {
+  background: transparent;
+  border: 0;
+  color: var(--issue-muted);
+  font-size: 10px;
+  letter-spacing: 0;
+  padding: 0 9px 4px;
+  text-transform: uppercase;
+}
+
+.inventory-custody-screen .inventory-custody-table td,
+.inventory-custody-screen .inventory-custody-lines-table td {
+  background: #ffffff;
+  border-bottom: 1px solid var(--issue-border);
+  border-top: 1px solid var(--issue-border);
+  color: var(--issue-text);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+  padding: 12px 9px;
+  vertical-align: middle;
+}
+
+.inventory-custody-screen .inventory-custody-table td:first-child,
+.inventory-custody-screen .inventory-custody-lines-table td:first-child {
+  border-left: 1px solid var(--issue-border);
+  border-radius: 8px 0 0 8px;
+}
+
+.inventory-custody-screen .inventory-custody-table td:last-child,
+.inventory-custody-screen .inventory-custody-lines-table td:last-child {
+  border-radius: 0 8px 8px 0;
+  border-right: 1px solid var(--issue-border);
+}
+
+.inventory-custody-screen .inventory-custody-table tbody tr:hover td,
+.inventory-custody-screen .inventory-custody-lines-table tbody tr:hover td {
+  background: #f8fbff;
+  border-color: var(--issue-border-strong);
+}
+
+.inventory-custody-screen .inventory-custody-table tbody tr.is-selected {
+  box-shadow: none;
+}
+
+.inventory-custody-screen .inventory-custody-table tbody tr.is-selected td {
+  background: var(--issue-blue-soft);
+  border-color: var(--issue-blue);
+}
+
+.inventory-custody-screen .inventory-custody-table tbody tr.is-selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--issue-blue);
+}
+
+.inventory-custody-screen .inventory-custody-table td strong,
+.inventory-custody-screen .inventory-custody-table td span,
+.inventory-custody-screen .inventory-custody-lines-table td strong,
+.inventory-custody-screen .inventory-custody-lines-table td span {
+  display: block;
+  letter-spacing: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-custody-screen .inventory-custody-row-actions,
+.inventory-custody-screen .inventory-custody-line-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.inventory-custody-screen .inventory-custody-row-actions .button,
+.inventory-custody-screen .inventory-custody-line-actions .button {
+  font-size: 11px;
+  min-height: 31px;
+  padding: 0 8px;
+}
+
+.inventory-custody-screen .inventory-custody-inspector {
+  align-self: start;
+  display: grid;
+  gap: 12px;
+  max-height: calc(100vh - 114px);
+  overflow: auto;
+  padding: 12px;
+  position: sticky;
+  top: 12px;
+}
+
+.inventory-custody-screen .inventory-custody-inspector .inventory-state {
+  min-height: 210px;
+}
+
+.inventory-custody-screen .inventory-custody-profile {
+  background: #f8fbff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  padding: 10px;
+}
+
+.inventory-custody-screen .inventory-custody-profile > span {
+  background: var(--issue-blue);
+  border-radius: 8px;
+  box-shadow: none;
+  height: 42px;
+  width: 42px;
+}
+
+.inventory-custody-screen .inventory-custody-profile strong,
+.inventory-custody-screen .inventory-custody-profile small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-custody-screen .inventory-custody-meta-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inventory-custody-screen .inventory-custody-meta {
+  background: #ffffff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  min-height: 54px;
+  padding: 8px;
+}
+
+.inventory-custody-screen .inventory-custody-inspector-actions {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inventory-custody-screen .inventory-custody-inspector-actions .button {
+  min-height: 34px;
+  padding: 0 8px;
+  width: 100%;
+}
+
+.inventory-custody-screen .inventory-custody-inspector-actions .button.primary {
+  grid-column: 1 / -1;
+}
+
+.inventory-custody-screen .inventory-custody-print-preview {
+  background: #f8fbff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 10px;
+}
+
+@media (max-width: 1380px) {
+  .inventory-custody-screen .inventory-custody-composer-fields {
+    grid-template-columns: minmax(0, 1fr) minmax(170px, 0.8fr) minmax(86px, 0.36fr);
+  }
+
+  .inventory-custody-screen .inventory-custody-composer-fields label:last-of-type {
+    grid-column: 1 / -1;
+  }
+
+  .inventory-custody-screen .inventory-custody-submit {
+    grid-column: 1 / -1;
+  }
+
+  .inventory-custody-screen .inventory-custody-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-custody-screen .inventory-custody-inspector {
+    max-height: none;
+    position: static;
+  }
+
+  .inventory-custody-screen .inventory-custody-act-row {
+    grid-template-columns: minmax(128px, 0.8fr) minmax(160px, 1fr) minmax(118px, 0.64fr) minmax(178px, auto);
+  }
+}
+
+@media (max-width: 860px) {
+  .inventory-custody-screen .inventory-custody-commandbar,
+  .inventory-custody-screen .inventory-custody-panel-head,
+  .inventory-custody-screen .inventory-custody-section-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .inventory-custody-screen .inventory-custody-command-actions,
+  .inventory-custody-screen .inventory-custody-search {
+    width: 100%;
+  }
+
+  .inventory-custody-screen .inventory-custody-command-actions .button {
+    flex: 1 1 128px;
+  }
+
+  .inventory-custody-screen .inventory-custody-composer-fields,
+  .inventory-custody-screen .inventory-custody-meta-grid,
+  .inventory-custody-screen .inventory-custody-inspector-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-custody-screen .inventory-custody-act-row {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .inventory-custody-screen .inventory-custody-act-person,
+  .inventory-custody-screen .inventory-custody-act-status {
+    grid-column: 1 / -1;
+  }
+
+  .inventory-custody-screen .inventory-custody-row-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+

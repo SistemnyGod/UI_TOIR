@@ -1,8 +1,9 @@
-export const serverUnavailableMessage = "Сервер недоступен. Проверьте Wi-Fi и адрес сервера.";
+export const serverUnavailableMessage = "Сервер недоступен. Проверьте Wi-Fi, мобильную сеть и адрес сервера.";
 
 export const mobileRequestTimeoutMs = 10_000;
 export const serverHealthTimeoutMs = 8_000;
 export const photoUploadTimeoutMs = 60_000;
+export const videoUploadTimeoutMs = 180_000;
 
 export async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = mobileRequestTimeoutMs) {
   const controller = new AbortController();

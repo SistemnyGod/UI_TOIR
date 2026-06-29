@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+const mojibakePattern = new RegExp("\\u0420[\\u0402\\u040e\\u045c\\u045f\\u0098\\u201d]|\\u0421\\u0453|\\u0412\\u00b7");
+
 const adminUser = {
   id: "admin-1",
   login: "admin",
@@ -101,7 +103,7 @@ test("inventory employees and users use server filters and actions", async ({ pa
   await expect.poll(() => actionUrls.some((url) => url.includes("/employees/") && url.includes("/archive"))).toBeTruthy();
 
   const employeesText = await page.locator(".inventory-employees-screen").innerText();
-  expect(employeesText).not.toMatch(/Рџ|РЎ|Рќ|Рђ|Р”|Р|СЃ|В·/);
+  expect(employeesText).not.toMatch(mojibakePattern);
 
   await page.goto("/#inventory-users");
   await expect(page.getByRole("heading", { name: "Пользователи Inventory" })).toBeVisible();
@@ -112,7 +114,7 @@ test("inventory employees and users use server filters and actions", async ({ pa
   await expect.poll(() => actionUrls.some((url) => url.includes("/users/") && url.includes("/disable"))).toBeTruthy();
 
   const usersText = await page.locator(".inventory-users-screen").innerText();
-  expect(usersText).not.toMatch(/Рџ|РЎ|Рќ|Рђ|Р”|Р|СЃ|В·/);
+  expect(usersText).not.toMatch(mojibakePattern);
 });
 
 test("inventory users screen shows permission error without users.manage", async ({ page }) => {

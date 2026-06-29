@@ -52,17 +52,36 @@ public sealed record MobileNotificationDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset? ReadAt);
 
+public sealed record MobileEmployeeDto(
+    Guid EmployeeId,
+    string FullName,
+    string? Position,
+    string? Department);
+
+public sealed record MobileEmuSectionDto(
+    Guid SectionId,
+    string Name,
+    int SortOrder);
+
 public sealed record MobileWorkTaskDto(
     Guid TaskId,
     string Title,
     string Status,
     DateTimeOffset? PlannedAt,
     long Revision,
-    DateTimeOffset? CompletedAtLocal);
+    DateTimeOffset? CompletedAtLocal,
+    Guid? SectionId,
+    string? SectionName,
+    Guid? EmployeeId,
+    string? EmployeeName,
+    DateTimeOffset CreatedAtLocal,
+    string SyncStatus);
 
 public sealed record MobileBootstrapDto(
     MobileUserDto User,
     MobileDeviceDto Device,
+    IReadOnlyList<MobileEmployeeDto> BoundEmployees,
+    IReadOnlyList<MobileEmuSectionDto> EmuSections,
     IReadOnlyList<MobilePatrolRequestBoardItemDto> RequestBoard,
     IReadOnlyList<MobilePatrolAssignmentDto> Assignments,
     IReadOnlyList<MobilePatrolRouteDto> Routes,
@@ -72,6 +91,7 @@ public sealed record MobileBootstrapDto(
 
 public sealed record MobilePatrolRequestBoardItemDto(
     Guid RequestId,
+    string? DisplayNumber,
     Guid RouteId,
     string RouteName,
     DateTimeOffset PlannedStartAt,
@@ -177,6 +197,18 @@ public sealed record MobileSyncConflictResolutionDto(
     string? Comment,
     string ResolvedBy,
     DateTimeOffset ResolvedAt);
+
+public sealed record MobileDeviceHealthDto(
+    Guid MobileAccountId,
+    string Login,
+    string? DeviceId,
+    string? DeviceName,
+    string? AppVersion,
+    DateTimeOffset? LastSeenAt,
+    string PushStatus,
+    int PendingOutboxCount,
+    int StaleOutboxCount,
+    string? LastError);
 
 public sealed record MobileAuthResult(
     MobileAuthSessionDto? Session,

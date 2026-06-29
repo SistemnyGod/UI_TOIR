@@ -1,28 +1,21 @@
+import * as SQLite from "expo-sqlite";
+
 import { getDatabase } from "@/db/database";
+import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { BootstrapDto } from "@/domain/patrol/patrolTypes";
 import { deletePatrolPhotoDirectory } from "@/services/fileStorageService";
 
+type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "getFirstAsync" | "runAsync">;
+
 export async function clearLocalUserData() {
   const db = await getDatabase();
-  await deletePatrolPhotoDirectory();
+  await withSqliteBusyRetry(() =>
+    db.withExclusiveTransactionAsync(async (tx) => {
+      await clearLocalUserTablesInTransaction(tx);
+    })
+  );
 
-  await db.execAsync(`
-    DELETE FROM sync_conflicts;
-    DELETE FROM outbox_commands;
-    DELETE FROM files;
-    DELETE FROM point_results;
-    DELETE FROM assignment_route_points;
-    DELETE FROM patrol_assignments;
-    DELETE FROM patrol_request_board;
-    DELETE FROM route_points;
-    DELETE FROM routes;
-    DELETE FROM devices;
-    DELETE FROM users;
-    DELETE FROM sync_cursors;
-    DELETE FROM work_tasks;
-    DELETE FROM mobile_notifications;
-    DELETE FROM shift_remarks;
-  `);
+  await deletePatrolPhotoDirectory();
 }
 
 export async function hasLocalUserData() {
@@ -37,11 +30,44 @@ export async function hasLocalUserData() {
         (SELECT COUNT(*) FROM outbox_commands) +
         (SELECT COUNT(*) FROM work_tasks) +
         (SELECT COUNT(*) FROM mobile_notifications) +
-        (SELECT COUNT(*) FROM shift_remarks)
+        (SELECT COUNT(*) FROM shift_remarks) +
+        (SELECT COUNT(*) FROM mobile_action_log)
       ) AS count
   `);
 
   return (row?.count ?? 0) > 0;
+}
+
+export async function countBlockingLocalUserData() {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ count: number }>(`
+    SELECT
+      (
+        (SELECT COUNT(*) FROM patrol_assignments
+          WHERE status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')) +
+        (SELECT COUNT(*) FROM point_results
+          WHERE sync_status <> 'synced'
+            AND EXISTS (
+              SELECT 1
+              FROM patrol_assignments assignment
+              WHERE assignment.assignment_id = point_results.assignment_id
+                AND assignment.status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
+            )) +
+        (SELECT COUNT(*) FROM files
+          WHERE status NOT IN ('uploaded', 'linked')) +
+        (SELECT COUNT(*) FROM outbox_commands
+          WHERE status IN ('pending', 'sending', 'retryLater')) +
+        (SELECT COUNT(*) FROM sync_conflicts
+          WHERE status NOT IN ('resolved', 'dismissed')) +
+        (SELECT COUNT(*) FROM work_tasks
+          WHERE status IN ('inProgress', 'paused', 'completedLocal', 'syncError')
+             OR sync_status <> 'synced') +
+        (SELECT COUNT(*) FROM shift_remarks
+          WHERE sync_status <> 'synced')
+      ) AS count
+  `);
+
+  return row?.count ?? 0;
 }
 
 export async function getLocalUserProfile(ownerUserId: string) {
@@ -70,6 +96,47 @@ export async function getLocalUserProfile(ownerUserId: string) {
 
 export async function saveBootstrap(bootstrap: BootstrapDto) {
   const db = await getDatabase();
+  await withSqliteBusyRetry(() =>
+    db.withExclusiveTransactionAsync(async (tx) => {
+      await saveBootstrapInTransaction(tx, bootstrap);
+    })
+  );
+}
+
+export async function replaceLocalUserDataWithBootstrap(bootstrap: BootstrapDto) {
+  const db = await getDatabase();
+  await withSqliteBusyRetry(() =>
+    db.withExclusiveTransactionAsync(async (tx) => {
+      await clearLocalUserTablesInTransaction(tx);
+      await saveBootstrapInTransaction(tx, bootstrap);
+    })
+  );
+
+  await deletePatrolPhotoDirectory();
+}
+
+async function clearLocalUserTablesInTransaction(executor: SqlExecutor) {
+  await executor.runAsync("DELETE FROM sync_conflicts");
+  await executor.runAsync("DELETE FROM outbox_commands");
+  await executor.runAsync("DELETE FROM files");
+  await executor.runAsync("DELETE FROM point_results");
+  await executor.runAsync("DELETE FROM assignment_route_points");
+  await executor.runAsync("DELETE FROM patrol_assignments");
+  await executor.runAsync("DELETE FROM patrol_request_board");
+  await executor.runAsync("DELETE FROM route_points");
+  await executor.runAsync("DELETE FROM routes");
+  await executor.runAsync("DELETE FROM devices");
+  await executor.runAsync("DELETE FROM users");
+  await executor.runAsync("DELETE FROM sync_cursors");
+  await executor.runAsync("DELETE FROM mobile_employees");
+  await executor.runAsync("DELETE FROM emu_sections");
+  await executor.runAsync("DELETE FROM work_tasks");
+  await executor.runAsync("DELETE FROM mobile_notifications");
+  await executor.runAsync("DELETE FROM shift_remarks");
+  await executor.runAsync("DELETE FROM mobile_action_log");
+}
+
+async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapDto) {
   const ownerUserId = bootstrap.user.serverUserId;
   const serverRouteIds = bootstrap.routes.map((route) => route.routeId);
   const serverPointIdsByRoute = new Map<string, string[]>();
@@ -78,8 +145,6 @@ export async function saveBootstrap(bootstrap: BootstrapDto) {
     existing.push(point.pointId);
     serverPointIdsByRoute.set(point.routeId, existing);
   }
-
-  await db.withExclusiveTransactionAsync(async (tx) => {
     await tx.runAsync(
       `
         INSERT INTO users (
@@ -127,6 +192,46 @@ export async function saveBootstrap(bootstrap: BootstrapDto) {
       ]
     );
 
+    await tx.runAsync("DELETE FROM mobile_employees WHERE owner_user_id = ?", [ownerUserId]);
+    for (const employee of bootstrap.boundEmployees ?? []) {
+      await tx.runAsync(
+        `
+          INSERT INTO mobile_employees (
+            employee_id,
+            owner_user_id,
+            full_name,
+            position,
+            department
+          )
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(employee_id) DO UPDATE SET
+            owner_user_id = excluded.owner_user_id,
+            full_name = excluded.full_name,
+            position = excluded.position,
+            department = excluded.department
+        `,
+        [employee.employeeId, ownerUserId, employee.fullName, employee.position, employee.department]
+      );
+    }
+
+    await tx.runAsync("DELETE FROM emu_sections");
+    for (const section of bootstrap.emuSections ?? []) {
+      await tx.runAsync(
+        `
+          INSERT INTO emu_sections (
+            section_id,
+            name,
+            sort_order
+          )
+          VALUES (?, ?, ?)
+          ON CONFLICT(section_id) DO UPDATE SET
+            name = excluded.name,
+            sort_order = excluded.sort_order
+        `,
+        [section.sectionId, section.name, section.sortOrder]
+      );
+    }
+
     const serverRequestIds = bootstrap.requestBoard.map((item) => item.requestId);
     if (serverRequestIds.length > 0) {
       const placeholders = serverRequestIds.map(() => "?").join(", ");
@@ -139,7 +244,7 @@ export async function saveBootstrap(bootstrap: BootstrapDto) {
               SELECT 1
               FROM patrol_assignments assignment
               WHERE assignment.request_id = patrol_request_board.request_id
-                AND assignment.status IN ('inProgress', 'completedLocal')
+                AND assignment.status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision', 'cancelledServer')
             )
         `,
         [ownerUserId, ...serverRequestIds]
@@ -153,7 +258,7 @@ export async function saveBootstrap(bootstrap: BootstrapDto) {
               SELECT 1
               FROM patrol_assignments assignment
               WHERE assignment.request_id = patrol_request_board.request_id
-                AND assignment.status IN ('inProgress', 'completedLocal')
+                AND assignment.status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision', 'cancelledServer')
             )
         `,
         [ownerUserId]
@@ -165,6 +270,7 @@ export async function saveBootstrap(bootstrap: BootstrapDto) {
         `
           INSERT INTO patrol_request_board (
             request_id,
+            display_number,
             owner_user_id,
             route_id,
             route_name,
@@ -173,21 +279,33 @@ export async function saveBootstrap(bootstrap: BootstrapDto) {
             status,
             revision
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(request_id) DO UPDATE SET
+            display_number = excluded.display_number,
             owner_user_id = excluded.owner_user_id,
             route_id = excluded.route_id,
             route_name = excluded.route_name,
             planned_start_at = excluded.planned_start_at,
             assigned_full_name = excluded.assigned_full_name,
             status = CASE
-              WHEN patrol_request_board.status = 'inProgress' THEN patrol_request_board.status
+              WHEN EXISTS (
+                SELECT 1
+                FROM patrol_assignments assignment
+                WHERE assignment.owner_user_id = patrol_request_board.owner_user_id
+                  AND assignment.request_id = patrol_request_board.request_id
+                  AND assignment.status IN ('completed', 'completedServer', 'cancelled')
+              ) THEN 'completed'
+              WHEN excluded.status IN ('cancelled', 'cancelledServer')
+                AND patrol_request_board.status NOT IN ('completedLocal', 'syncing') THEN 'cancelledServer'
+              WHEN patrol_request_board.status IN ('completed', 'cancelled', 'cancelledServer') THEN patrol_request_board.status
+              WHEN patrol_request_board.status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_request_board.status
               ELSE excluded.status
             END,
             revision = excluded.revision
         `,
         [
           item.requestId,
+          item.displayNumber,
           ownerUserId,
           item.routeId,
           item.routeName,
@@ -198,6 +316,55 @@ export async function saveBootstrap(bootstrap: BootstrapDto) {
         ]
       );
     }
+
+    await tx.runAsync(
+      `
+        UPDATE patrol_request_board
+        SET status = 'completed'
+        WHERE owner_user_id = ?
+          AND EXISTS (
+            SELECT 1
+            FROM patrol_assignments assignment
+            WHERE assignment.owner_user_id = patrol_request_board.owner_user_id
+              AND assignment.request_id = patrol_request_board.request_id
+              AND assignment.status IN ('completed', 'completedServer', 'cancelled')
+          )
+      `,
+      [ownerUserId]
+    );
+
+    await tx.runAsync(
+      `
+        UPDATE patrol_assignments
+        SET status = 'cancelledServer'
+        WHERE owner_user_id = ?
+          AND status IN ('accepted', 'inProgress', 'paused')
+          AND EXISTS (
+            SELECT 1
+            FROM patrol_request_board request
+            WHERE request.owner_user_id = patrol_assignments.owner_user_id
+              AND request.request_id = patrol_assignments.request_id
+              AND request.status IN ('cancelled', 'cancelledServer')
+          )
+      `,
+      [ownerUserId]
+    );
+
+    await tx.runAsync(
+      `
+        UPDATE patrol_request_board
+        SET status = 'cancelledServer'
+        WHERE owner_user_id = ?
+          AND EXISTS (
+            SELECT 1
+            FROM patrol_assignments assignment
+            WHERE assignment.owner_user_id = patrol_request_board.owner_user_id
+              AND assignment.request_id = patrol_request_board.request_id
+              AND assignment.status = 'cancelledServer'
+          )
+      `,
+      [ownerUserId]
+    );
 
     for (const assignment of bootstrap.assignments) {
       await tx.runAsync(
@@ -218,7 +385,9 @@ export async function saveBootstrap(bootstrap: BootstrapDto) {
             request_id = excluded.request_id,
             route_id = excluded.route_id,
             status = CASE
-              WHEN patrol_assignments.status IN ('inProgress', 'completedLocal') THEN patrol_assignments.status
+              WHEN excluded.status IN ('cancelled', 'cancelledServer')
+                AND patrol_assignments.status NOT IN ('completedLocal', 'syncing') THEN 'cancelledServer'
+              WHEN patrol_assignments.status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision', 'cancelledServer') THEN patrol_assignments.status
               ELSE excluded.status
             END,
             started_at_local = COALESCE(patrol_assignments.started_at_local, excluded.started_at_local),
@@ -447,5 +616,4 @@ export async function saveBootstrap(bootstrap: BootstrapDto) {
       `,
       [bootstrap.syncCursor, bootstrap.serverTime]
     );
-  });
 }

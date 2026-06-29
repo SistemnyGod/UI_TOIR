@@ -6,6 +6,10 @@ public interface IAssignmentService
 {
     IReadOnlyList<AssignmentDto> GetAssignments();
 
+    AssignmentSettingsDto GetSettings();
+
+    AssignmentSettingsDto UpdateSettings(UpdateAssignmentSettingsDto request);
+
     CreateAssignmentResult Create(CreateAssignmentDto request);
 
     AssignmentCommandResult? Start(Guid id);

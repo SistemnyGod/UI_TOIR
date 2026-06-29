@@ -24,10 +24,32 @@ flowchart LR
     WORKER["apps/worker .NET Worker"] --> APP
     WORKER --> INFRA
     INFRA --> PG[("PostgreSQL")]
-    INFRA --> REDIS[("Redis")]
-    INFRA --> MQ[("RabbitMQ")]
-    INFRA --> MINIO[("MinIO")]
+    INFRA --> FILES["local files / templates"]
+    INFRA --> FCM["Firebase Cloud Messaging"]
 ```
+
+## Зависимости runtime
+
+### Active dependencies
+
+На текущем этапе приложение фактически опирается на:
+
+- PostgreSQL через EF Core;
+- локальный/volume-контур файлов для мобильных вложений и шаблонов;
+- Firebase Cloud Messaging для push-уведомлений, если настроены ключи;
+- in-process `IMemoryCache` для короткоживущих web/API сводок.
+
+### Target/planned dependencies
+
+Следующие сервисы могут подниматься локальным Docker Compose, но не должны считаться обязательными application dependencies, пока код явно не переведен на них:
+
+- Redis - distributed cache, session/cache coordination, multi-instance readiness;
+- RabbitMQ - event-driven pipeline, outbox delivery, тяжелые асинхронные процессы;
+- MinIO/S3 - production-ready storage для фото, вложений, отчетов и versioning;
+- Hangfire - расписания, retries, операторские фоновые задачи и отчеты;
+- SignalR - realtime web dashboards.
+
+Перед включением planned dependencies в production-контур нужно зафиксировать NFR, health checks, retry/idempotency rules и fallback-поведение.
 
 ## Принципы слоев
 
@@ -35,7 +57,7 @@ flowchart LR
 
 `libs/application` описывает сценарии и порты. Здесь должны жить команды, запросы, политики приложения и orchestration.
 
-`libs/infrastructure` реализует порты application слоя через PostgreSQL, Redis, MinIO, RabbitMQ, FCM и внешние сервисы.
+`libs/infrastructure` реализует порты application слоя через PostgreSQL, локальный файловый контур, FCM и внешние сервисы. Redis, MinIO и RabbitMQ остаются planned dependencies до отдельного подключения.
 
 `apps/api` отвечает за HTTP, authentication/authorization, request validation, API versioning, OpenAPI и mapping request/response.
 

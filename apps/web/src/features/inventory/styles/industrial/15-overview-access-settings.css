@@ -1,0 +1,264 @@
+/* Overview, access and settings final pass */
+.inventory-overview-screen,
+.inventory-users-screen,
+.inventory-settings-screen {
+  gap: 10px;
+}
+
+.inventory-overview-commandbar,
+.inventory-users-commandbar,
+.inventory-settings-commandbar {
+  align-items: center;
+  border-radius: 8px;
+  min-height: 74px;
+  padding: 12px 14px;
+}
+
+.inventory-overview-title,
+.inventory-users-title,
+.inventory-settings-title {
+  min-width: 0;
+}
+
+.inventory-overview-title-icon,
+.inventory-users-title-icon,
+.inventory-settings-title-icon {
+  border-radius: 8px;
+  flex: 0 0 42px;
+  height: 42px;
+  width: 42px;
+}
+
+.inventory-overview-title h1,
+.inventory-users-title h1,
+.inventory-settings-title h1 {
+  font-size: 28px;
+  line-height: 1.05;
+}
+
+.inventory-overview-title span,
+.inventory-users-title span,
+.inventory-settings-title span {
+  max-width: 840px;
+}
+
+.inventory-overview-actions,
+.inventory-settings-actions {
+  gap: 8px;
+}
+
+.inventory-overview-actions .button,
+.inventory-settings-actions .button {
+  min-height: 38px;
+  padding: 0 12px;
+}
+
+.inventory-overview-kpis,
+.inventory-users-kpis,
+.inventory-settings-kpis {
+  gap: 8px;
+}
+
+.inventory-overview-kpis {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.inventory-users-kpis,
+.inventory-settings-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.inventory-overview-kpi,
+.inventory-users-kpi,
+.inventory-settings-kpi {
+  border-color: var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  min-height: 58px;
+  padding: 10px 12px;
+}
+
+.inventory-overview-kpi span,
+.inventory-settings-kpi span {
+  border-radius: 8px;
+  height: 34px;
+  width: 34px;
+}
+
+.inventory-overview-kpi strong,
+.inventory-users-kpi strong,
+.inventory-settings-kpi strong {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.inventory-overview-kpi p,
+.inventory-users-kpi span,
+.inventory-settings-kpi span {
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.inventory-overview-workspace {
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 284px;
+}
+
+.inventory-overview-main,
+.inventory-overview-side,
+.inventory-overview-history,
+.inventory-users-table-card,
+.inventory-settings-card,
+.inventory-settings-reference-grid,
+.inventory-settings-tabs {
+  border-color: var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.inventory-overview-panel-head,
+.inventory-users-panel-head {
+  align-items: center;
+  border-bottom-color: var(--issue-border);
+  padding: 10px 12px;
+}
+
+.inventory-overview-panel-head h2,
+.inventory-users-panel-head h2 {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.inventory-overview-side {
+  padding: 12px;
+}
+
+.inventory-overview-side h2 {
+  font-size: 17px;
+  line-height: 1.2;
+  margin-bottom: 10px;
+}
+
+.inventory-overview-shortcut {
+  border-radius: 8px;
+  min-height: 38px;
+}
+
+.inventory-overview-state,
+.inventory-users-state,
+.inventory-settings-state {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.inventory-overview-table-wrap,
+.inventory-users-table-wrap {
+  border-radius: 8px;
+}
+
+.inventory-overview-table,
+.inventory-users-table {
+  min-width: 900px;
+}
+
+.inventory-overview-table th,
+.inventory-users-table th {
+  background: #f5f8fc;
+  color: var(--issue-muted);
+  font-size: 10px;
+  letter-spacing: 0;
+  padding: 10px 12px;
+}
+
+.inventory-overview-table td,
+.inventory-users-table td {
+  color: var(--issue-text);
+  font-size: 12px;
+  padding: 11px 12px;
+}
+
+.inventory-users-filters,
+.inventory-settings-tabs {
+  border-radius: 8px;
+  box-shadow: none;
+  gap: 8px;
+  padding: 10px;
+}
+
+.inventory-users-filters {
+  grid-template-columns: minmax(260px, 1fr) minmax(160px, 0.34fr) minmax(160px, 0.34fr) auto;
+}
+
+.inventory-users-search,
+.inventory-users-filters select {
+  border-color: var(--issue-border-strong);
+  border-radius: 8px;
+  height: 40px;
+}
+
+.inventory-users-search input,
+.inventory-users-filters select {
+  font-size: 12px;
+}
+
+.inventory-settings-tabs {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.inventory-settings-tabs button {
+  border-radius: 8px;
+  min-height: 36px;
+}
+
+.inventory-settings-reference-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inventory-settings-card {
+  padding: 12px;
+}
+
+.inventory-settings-card h2 {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.inventory-settings-row-actions {
+  gap: 6px;
+}
+
+@media (max-width: 1360px) {
+  .inventory-overview-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .inventory-overview-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-users-filters {
+    grid-template-columns: minmax(240px, 1fr) repeat(2, minmax(140px, 0.5fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .inventory-overview-commandbar,
+  .inventory-users-commandbar,
+  .inventory-settings-commandbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-overview-kpis,
+  .inventory-users-kpis,
+  .inventory-settings-kpis,
+  .inventory-users-filters,
+  .inventory-settings-reference-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

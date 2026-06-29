@@ -1,0 +1,150 @@
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-inspector {
+  align-self: start;
+  background: #ffffff;
+  display: grid;
+  gap: 12px;
+  max-height: calc(100vh - 114px);
+  overflow: auto;
+  padding: 12px;
+  position: sticky;
+  top: 12px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-profile {
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  padding: 10px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-profile > span {
+  background: var(--issue-blue);
+  border-radius: 8px;
+  box-shadow: none;
+  height: 42px;
+  width: 42px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-profile strong,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-profile small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-profile strong {
+  color: var(--issue-text);
+  font-size: 14px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-meta-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-meta-grid .inventory-ppe-meta {
+  background: #ffffff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  min-height: 54px;
+  padding: 8px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-meta span,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-meta strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-meta span {
+  color: var(--issue-muted);
+  font-size: 9px;
+  line-height: 1.15;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-meta strong {
+  color: var(--issue-text);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-inspector-actions {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-inspector-actions .button {
+  min-height: 34px;
+  padding: 0 8px;
+  width: 100%;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-print-preview {
+  background: #f8fbff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  max-height: none;
+  padding: 12px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-print-preview strong,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-print-preview span,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-print-preview small {
+  letter-spacing: 0;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-print-preview strong {
+  color: var(--issue-text);
+  font-size: 14px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-print-preview > span {
+  color: var(--issue-muted);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-print-summary {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 8px 10px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-print-summary span {
+  color: var(--issue-blue);
+  font-size: 20px;
+  font-weight: 950;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-print-summary small {
+  color: var(--issue-muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-pagination {
+  align-items: center;
+  background: #ffffff;
+  border-top: 1px solid var(--issue-border);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+

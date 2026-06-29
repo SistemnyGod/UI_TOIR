@@ -1,0 +1,982 @@
+/* PPE parity layer: visual alignment with the original Web Inventory PPE module. */
+.inventory-ppe-screen {
+  --ppe-surface: rgba(255, 255, 255, 0.94);
+  --ppe-surface-soft: rgba(248, 251, 255, 0.96);
+  --ppe-border: #d7e4f6;
+  --ppe-border-strong: #b9cff2;
+  --ppe-text: #081f45;
+  --ppe-muted: #5b7194;
+  --ppe-blue: #2563eb;
+  --ppe-blue-soft: #edf4ff;
+  --ppe-green-soft: #dcfce7;
+  --ppe-yellow-soft: #fff2bf;
+  --ppe-red-soft: #fee2e2;
+  color: var(--ppe-text);
+}
+
+.inventory-ppe-commandbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid var(--ppe-border);
+  border-radius: 10px;
+  background: var(--ppe-surface);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+}
+
+.inventory-ppe-commandbar > div:first-child {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.inventory-ppe-commandbar h1 {
+  margin: 0;
+  color: var(--ppe-text);
+  font-size: 28px;
+  line-height: 1.05;
+  font-weight: 900;
+}
+
+.inventory-ppe-commandbar p {
+  margin: 4px 0 0;
+  color: var(--ppe-muted);
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 800;
+}
+
+.inventory-ppe-command-actions,
+.inventory-ppe-commandbar > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.inventory-ppe-command-actions .button,
+.inventory-ppe-commandbar > div:last-child .button {
+  min-height: 38px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.inventory-ppe-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(136px, 1fr));
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.inventory-ppe-kpi {
+  min-height: 76px;
+  padding: 12px 14px;
+  border: 1px solid var(--ppe-border);
+  border-radius: 9px;
+  background: var(--ppe-surface);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.inventory-ppe-kpi span {
+  display: block;
+  min-width: 0;
+  color: var(--ppe-muted);
+  font-size: 11px;
+  line-height: 1.25;
+  font-weight: 900;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.inventory-ppe-kpi strong {
+  color: var(--ppe-blue);
+  font-size: 28px;
+  line-height: 1.05;
+  font-weight: 900;
+}
+
+.inventory-ppe-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(350px, 390px);
+  gap: 14px;
+  align-items: start;
+}
+
+.inventory-ppe-journal,
+.inventory-ppe-inspector {
+  border: 1px solid var(--ppe-border);
+  border-radius: 10px;
+  background: var(--ppe-surface);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+}
+
+.inventory-ppe-journal {
+  overflow: hidden;
+}
+
+.inventory-ppe-journal > header,
+.inventory-ppe-inspector > header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--ppe-border);
+}
+
+.inventory-ppe-journal h2,
+.inventory-ppe-inspector h2 {
+  margin: 0;
+  color: var(--ppe-text);
+  font-size: 19px;
+  line-height: 1.15;
+  font-weight: 900;
+}
+
+.inventory-ppe-journal small,
+.inventory-ppe-inspector small {
+  color: var(--ppe-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.inventory-ppe-search {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ppe-border);
+  background: #fff;
+}
+
+.inventory-ppe-search input {
+  width: 100%;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ppe-text);
+  font-weight: 800;
+}
+
+.inventory-ppe-search input:focus {
+  box-shadow: none;
+}
+
+.inventory-ppe-journal .inventory-ppe-picker-filters {
+  display: grid;
+  grid-template-columns: minmax(210px, 1.3fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr);
+  gap: 9px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ppe-border);
+  background: var(--ppe-surface-soft);
+}
+
+.inventory-ppe-journal .inventory-ppe-picker-filters input,
+.inventory-ppe-journal .inventory-ppe-picker-filters select {
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--ppe-border-strong);
+  border-radius: 8px;
+  background-color: #fff;
+  color: var(--ppe-text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.inventory-ppe-table-wrap {
+  overflow-x: auto;
+}
+
+.inventory-ppe-table {
+  width: 100%;
+  min-width: 780px;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.inventory-ppe-table th {
+  padding: 11px 10px;
+  background: #f6f9fe;
+  color: var(--ppe-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.inventory-ppe-table td {
+  padding: 12px 10px;
+  border-top: 1px solid #edf2f9;
+  color: var(--ppe-text);
+  font-size: 13px;
+  line-height: 1.3;
+  font-weight: 750;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.inventory-ppe-table tbody tr {
+  cursor: pointer;
+}
+
+.inventory-ppe-table tbody tr:hover {
+  background: #f8fbff;
+}
+
+.inventory-ppe-table tbody tr.is-selected {
+  background: var(--ppe-blue-soft);
+  box-shadow: inset 3px 0 0 var(--ppe-blue);
+}
+
+.inventory-ppe-status {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--ppe-yellow-soft);
+  color: #8a4a00;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.inventory-ppe-status.is-success,
+.inventory-ppe-status[data-status='issued'] {
+  background: var(--ppe-green-soft);
+  color: #047857;
+}
+
+.inventory-ppe-status.is-danger,
+.inventory-ppe-status[data-status='problem'] {
+  background: var(--ppe-red-soft);
+  color: #dc2626;
+}
+
+.inventory-ppe-row-menu-button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--ppe-border-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ppe-text);
+}
+
+.inventory-ppe-journal > .inventory-ppe-picker-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--ppe-border);
+  background: #fff;
+}
+
+.inventory-ppe-journal > .inventory-ppe-picker-actions .button {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.inventory-ppe-inspector {
+  position: sticky;
+  top: 14px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.inventory-ppe-inspector > header {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 0 0 12px;
+}
+
+.inventory-ppe-inspector .inventory-ppe-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+}
+
+.inventory-ppe-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inventory-ppe-meta > div,
+.inventory-ppe-meta article {
+  min-height: 62px;
+  padding: 10px;
+  border: 1px solid var(--ppe-border);
+  border-radius: 9px;
+  background: var(--ppe-surface-soft);
+}
+
+.inventory-ppe-meta span {
+  color: var(--ppe-muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.inventory-ppe-meta strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--ppe-text);
+  font-size: 13px;
+  line-height: 1.25;
+  font-weight: 900;
+}
+
+.inventory-ppe-inspector-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inventory-ppe-inspector-actions .button {
+  min-height: 38px;
+  padding: 0 10px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.inventory-ppe-inspector-actions .button.is-wide {
+  grid-column: 1 / -1;
+}
+
+.inventory-ppe-print-preview {
+  max-width: 100%;
+  max-height: 520px;
+  overflow: auto;
+  border: 1px dashed var(--ppe-border-strong);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.inventory-ppe-wizard {
+  display: grid;
+  gap: 12px;
+}
+
+.inventory-ppe-wizard-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid var(--ppe-border);
+  border-radius: 10px;
+  background: var(--ppe-surface);
+}
+
+.inventory-ppe-wizard-head h2 {
+  margin: 0;
+  color: var(--ppe-text);
+  font-size: 26px;
+  line-height: 1.05;
+  font-weight: 900;
+}
+
+.inventory-ppe-wizard-head p {
+  margin: 4px 0 0;
+  color: var(--ppe-blue);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.inventory-ppe-wizard-head > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.inventory-ppe-wizard-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inventory-ppe-wizard-steps button {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1px solid var(--ppe-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ppe-muted);
+  font-size: 13px;
+  font-weight: 900;
+  text-align: left;
+}
+
+.inventory-ppe-wizard-steps button.is-active {
+  border-color: #8fb4ff;
+  background: var(--ppe-blue-soft);
+  color: var(--ppe-blue);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.14);
+}
+
+.inventory-ppe-wizard-steps span {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #eaf2ff;
+  color: var(--ppe-blue);
+  font-weight: 900;
+}
+
+.inventory-ppe-wizard-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(350px, 390px);
+  gap: 14px;
+  align-items: start;
+}
+
+.inventory-ppe-wizard-main {
+  display: grid;
+  gap: 12px;
+}
+
+.inventory-ppe-wizard-panel,
+.inventory-ppe-wizard-preview {
+  border: 1px solid var(--ppe-border);
+  border-radius: 10px;
+  background: var(--ppe-surface);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+}
+
+.inventory-ppe-wizard-panel {
+  padding: 18px;
+}
+
+.inventory-ppe-wizard-panel h3 {
+  margin: 0 0 16px;
+  color: var(--ppe-text);
+  font-size: 20px;
+  line-height: 1.15;
+  font-weight: 900;
+}
+
+.inventory-ppe-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.inventory-ppe-field,
+.inventory-ppe-combobox {
+  display: grid;
+  gap: 6px;
+}
+
+.inventory-ppe-field > span,
+.inventory-ppe-combobox > span {
+  color: var(--ppe-muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.inventory-ppe-combobox-input {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 28px;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 8px;
+  border: 1px solid var(--ppe-border);
+  border-radius: 9px;
+  background: #fff;
+}
+
+.inventory-ppe-combobox-input input {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ppe-text);
+  font-weight: 850;
+}
+
+.inventory-ppe-combobox-input input:focus {
+  box-shadow: none;
+}
+
+.inventory-ppe-combobox-clear {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: #eaf2ff;
+  color: var(--ppe-muted);
+}
+
+.inventory-ppe-combobox-list {
+  z-index: 10;
+  margin-top: 4px;
+  border: 1px solid var(--ppe-border);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+}
+
+.inventory-ppe-combobox-list button {
+  min-height: 46px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+}
+
+.inventory-ppe-combobox-list button:hover,
+.inventory-ppe-combobox-list button.is-active {
+  background: var(--ppe-blue-soft);
+  color: var(--ppe-blue);
+}
+
+.inventory-ppe-wizard-employee {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #9fc0ff;
+  border-radius: 10px;
+  background: #edf4ff;
+}
+
+.inventory-ppe-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.inventory-ppe-panel-actions .button {
+  min-height: 38px;
+  padding: 0 14px;
+}
+
+.inventory-ppe-panel-actions .button.primary {
+  min-width: 156px;
+}
+
+.inventory-ppe-wizard-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.inventory-ppe-wizard-summary > div,
+.inventory-ppe-wizard-summary article {
+  min-height: 62px;
+  padding: 10px;
+  border: 1px solid var(--ppe-border);
+  border-radius: 9px;
+  background: var(--ppe-surface-soft);
+}
+
+.inventory-ppe-wizard-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--ppe-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 -10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.inventory-ppe-wizard-actions > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.inventory-ppe-wizard-actions .button {
+  min-height: 38px;
+  padding: 0 14px;
+}
+
+.inventory-ppe-wizard-preview {
+  position: sticky;
+  top: 14px;
+  max-height: calc(100vh - 112px);
+  overflow: auto;
+  padding: 14px;
+}
+
+.inventory-ppe-preview-head {
+  margin-bottom: 10px;
+}
+
+.inventory-ppe-preview-head h3 {
+  margin: 0 0 4px;
+  color: var(--ppe-text);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.inventory-ppe-preview-head p {
+  margin: 0;
+  color: var(--ppe-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 800;
+}
+
+.inventory-ppe-wizard-preview .inventory-ppe-print-paper {
+  width: min(100%, 720px);
+  min-width: 0;
+  transform-origin: top left;
+}
+
+.inventory-ppe-picker-backdrop {
+  padding: 28px;
+  background: rgba(15, 23, 42, 0.38);
+  backdrop-filter: blur(3px);
+}
+
+.inventory-ppe-picker {
+  width: min(1160px, calc(100vw - 56px));
+  max-height: min(760px, calc(100vh - 56px));
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid var(--ppe-border);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.2);
+}
+
+.inventory-ppe-picker-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 12px;
+  align-items: start;
+  padding: 18px;
+}
+
+.inventory-ppe-picker-head h2 {
+  margin: 0;
+  color: var(--ppe-text);
+  font-size: 24px;
+  line-height: 1.1;
+  font-weight: 900;
+}
+
+.inventory-ppe-picker-head p {
+  margin: 4px 0 0;
+  color: var(--ppe-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.inventory-ppe-picker-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 18px 12px;
+  border-bottom: 1px solid var(--ppe-border);
+}
+
+.inventory-ppe-picker-tabs button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--ppe-border-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ppe-muted);
+  font-weight: 900;
+}
+
+.inventory-ppe-picker-tabs button.is-active {
+  border-color: #8fb4ff;
+  background: var(--ppe-blue-soft);
+  color: var(--ppe-blue);
+}
+
+.inventory-ppe-picker-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 280px);
+  gap: 14px;
+  min-height: 0;
+  padding: 14px 18px;
+}
+
+.inventory-ppe-picker-main {
+  min-height: 0;
+  overflow: auto;
+}
+
+.inventory-ppe-picker .inventory-ppe-picker-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(160px, 240px);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.inventory-ppe-picker .inventory-ppe-picker-filters input,
+.inventory-ppe-picker .inventory-ppe-picker-filters select {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--ppe-border-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ppe-text);
+  font-weight: 800;
+}
+
+.inventory-ppe-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.inventory-ppe-picker-grid button {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 58px;
+  padding: 10px;
+  border: 1px solid var(--ppe-border);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ppe-text);
+  text-align: left;
+}
+
+.inventory-ppe-picker-grid button:hover {
+  border-color: #8fb4ff;
+  background: #f8fbff;
+}
+
+.inventory-ppe-picker-grid button.is-selected {
+  border-color: #8fb4ff;
+  background: var(--ppe-blue-soft);
+  box-shadow: inset 3px 0 0 var(--ppe-blue);
+}
+
+.inventory-ppe-picker-check {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--ppe-border-strong);
+  border-radius: 7px;
+  background: #fff;
+}
+
+.inventory-ppe-picker-grid button.is-selected .inventory-ppe-picker-check {
+  border-color: var(--ppe-blue);
+  background: var(--ppe-blue);
+}
+
+.inventory-ppe-picker-grid strong {
+  display: block;
+  color: var(--ppe-text);
+  font-size: 14px;
+  line-height: 1.2;
+  font-weight: 900;
+}
+
+.inventory-ppe-picker-grid small,
+.inventory-ppe-picker-grid em {
+  display: block;
+  margin-top: 3px;
+  color: var(--ppe-muted);
+  font-size: 12px;
+  line-height: 1.25;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.inventory-ppe-picker-summary {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.inventory-ppe-picker-summary > div {
+  padding: 14px;
+  border: 1px solid var(--ppe-border-strong);
+  border-radius: 10px;
+  background: #edf4ff;
+}
+
+.inventory-ppe-picker-summary span,
+.inventory-ppe-picker-summary small {
+  color: var(--ppe-muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.inventory-ppe-picker-summary strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--ppe-text);
+  font-size: 26px;
+  line-height: 1.05;
+  font-weight: 900;
+}
+
+.inventory-ppe-picker-selected {
+  min-height: 130px;
+  max-height: 190px;
+  overflow: auto;
+  border-top: 1px solid var(--ppe-border);
+  background: #fff;
+}
+
+.inventory-ppe-picker-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px 14px;
+  border-top: 1px solid var(--ppe-border);
+  background: #fff;
+}
+
+.inventory-ppe-reference-list {
+  display: grid;
+  gap: 10px;
+}
+
+.inventory-ppe-reference-list article,
+.inventory-ppe-reference-card {
+  border: 1px solid var(--ppe-border);
+  border-left: 4px solid var(--ppe-blue);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+}
+
+.inventory-ppe-reference-list article {
+  padding: 12px;
+}
+
+.inventory-ppe-reference-card {
+  padding: 14px;
+}
+
+.inventory-ppe-reference-card-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.inventory-ppe-reference-card strong,
+.inventory-ppe-reference-list strong {
+  display: block;
+  color: var(--ppe-text);
+  font-size: 15px;
+  line-height: 1.25;
+  font-weight: 900;
+}
+
+.inventory-ppe-reference-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.inventory-ppe-reference-chip {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #edf4ff;
+  color: var(--ppe-blue);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.inventory-ppe-reference-card .button,
+.inventory-ppe-reference-list .button {
+  min-height: 34px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1440px) {
+  .inventory-ppe-workspace,
+  .inventory-ppe-wizard-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
+  }
+
+  .inventory-ppe-journal .inventory-ppe-picker-filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1120px) {
+  .inventory-ppe-commandbar,
+  .inventory-ppe-wizard-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-workspace,
+  .inventory-ppe-wizard-layout,
+  .inventory-ppe-picker-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-inspector,
+  .inventory-ppe-wizard-preview {
+    position: static;
+    max-height: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .inventory-ppe-commandbar > div:first-child {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-kpis,
+  .inventory-ppe-wizard-summary,
+  .inventory-ppe-meta,
+  .inventory-ppe-form-grid,
+  .inventory-employees-form-grid,
+  .inventory-ppe-picker-grid,
+  .inventory-ppe-journal .inventory-ppe-picker-filters,
+  .inventory-ppe-picker .inventory-ppe-picker-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-wizard-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventory-ppe-picker-backdrop {
+    padding: 10px;
+  }
+
+  .inventory-ppe-picker {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+  }
+}
+

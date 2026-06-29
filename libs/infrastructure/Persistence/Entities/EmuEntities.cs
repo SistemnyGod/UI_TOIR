@@ -52,6 +52,49 @@ internal sealed class EmuFavoriteEmployeeEntity
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+internal sealed class EmuShiftTemplateEntity
+{
+    public Guid Id { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string ShiftType { get; set; } = string.Empty;
+    public TimeOnly StartTime { get; set; }
+    public TimeOnly EndTime { get; set; }
+    public TimeOnly LunchStartTime { get; set; }
+    public TimeOnly LunchEndTime { get; set; }
+    public bool CrossesMidnight { get; set; }
+    public bool IsActive { get; set; } = true;
+    public int SortOrder { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+internal sealed class EmuEmployeeShiftEntity
+{
+    public Guid Id { get; set; }
+    public Guid EmployeeId { get; set; }
+    public EmployeeEntity Employee { get; set; } = null!;
+    public DateOnly ShiftDate { get; set; }
+    public Guid? TemplateId { get; set; }
+    public EmuShiftTemplateEntity? Template { get; set; }
+    public string ShiftType { get; set; } = string.Empty;
+    public DateTimeOffset PlannedStartAt { get; set; }
+    public DateTimeOffset PlannedEndAt { get; set; }
+    public DateTimeOffset ActualStartAt { get; set; }
+    public DateTimeOffset ActualEndAt { get; set; }
+    public DateTimeOffset LunchStartAt { get; set; }
+    public DateTimeOffset LunchEndAt { get; set; }
+    public bool LunchTaken { get; set; } = true;
+    public bool LunchOverridden { get; set; }
+    public string Source { get; set; } = "default";
+    public string Comment { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public Guid? AdjustedByUserId { get; set; }
+    public SiteUserEntity? AdjustedByUser { get; set; }
+    public string AdjustedByName { get; set; } = string.Empty;
+    public DateTimeOffset? AdjustedAt { get; set; }
+    public int RowVersion { get; set; } = 1;
+}
+
 internal sealed class EmuWorkPlanTaskEntity
 {
     public Guid Id { get; set; }
@@ -133,6 +176,25 @@ internal sealed class EmuWorkSessionEmployeeEntity
     public int WorkMinutes { get; set; }
     public int WaitingMinutes { get; set; }
     public int OtherWorkMinutes { get; set; }
+    public List<EmuWorkParticipationIntervalEntity> ParticipationIntervals { get; set; } = [];
+}
+
+internal sealed class EmuWorkParticipationIntervalEntity
+{
+    public Guid Id { get; set; }
+    public Guid WorkSessionId { get; set; }
+    public EmuWorkSessionEntity WorkSession { get; set; } = null!;
+    public Guid WorkSessionEmployeeId { get; set; }
+    public EmuWorkSessionEmployeeEntity WorkSessionEmployee { get; set; } = null!;
+    public Guid EmployeeId { get; set; }
+    public DateTimeOffset StartedAt { get; set; }
+    public DateTimeOffset? EndedAt { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public Guid? CreatedByUserId { get; set; }
+    public SiteUserEntity? CreatedByUser { get; set; }
+    public string CreatedByName { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
 }
 
 internal sealed class EmuWorkPauseEntity
@@ -185,6 +247,29 @@ internal sealed class EmuWorkAuditEventEntity
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+internal sealed class EmuDecisionEntity
+{
+    public Guid Id { get; set; }
+    public string DecisionType { get; set; } = string.Empty;
+    public string Severity { get; set; } = "warning";
+    public string Status { get; set; } = "new";
+    public Guid EmployeeId { get; set; }
+    public EmployeeEntity Employee { get; set; } = null!;
+    public Guid? WorkSessionId { get; set; }
+    public EmuWorkSessionEntity? WorkSession { get; set; }
+    public DateOnly ShiftDate { get; set; }
+    public DateTimeOffset DetectedAt { get; set; }
+    public DateTimeOffset? ResolvedAt { get; set; }
+    public Guid? ResolvedByUserId { get; set; }
+    public SiteUserEntity? ResolvedByUser { get; set; }
+    public string ResolvedByName { get; set; } = string.Empty;
+    public string DedupeKey { get; set; } = string.Empty;
+    public string PayloadJson { get; set; } = "{}";
+    public string Resolution { get; set; } = string.Empty;
+    public string Comment { get; set; } = string.Empty;
+    public int RowVersion { get; set; } = 1;
+}
+
 internal sealed class EmuNotificationEntity
 {
     public Guid Id { get; set; }
@@ -196,6 +281,10 @@ internal sealed class EmuNotificationEntity
     public EmuWorkPlanTaskEntity? PlanTask { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
+    public string NotificationType { get; set; } = string.Empty;
+    public string Severity { get; set; } = "warning";
+    public string DedupeKey { get; set; } = string.Empty;
     public string Status { get; set; } = "new";
     public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? ResolvedAt { get; set; }
 }

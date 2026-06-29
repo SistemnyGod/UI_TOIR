@@ -1,0 +1,18 @@
+/* Inventory industrial visual layer entrypoint. Ordered imports preserve the previous cascade. */
+@import "./industrial/01-issue-workspace.css";
+@import "./industrial/02-operations-workspace.css";
+@import "./industrial/03-custody-workspace.css";
+@import "./industrial/04-issue-filters.css";
+@import "./industrial/05-ppe-journal.css";
+@import "./industrial/06-issue-final.css";
+@import "./industrial/07-custody-final.css";
+@import "./industrial/08-custody-modal.css";
+@import "./industrial/09-ppe-cards-inspector.css";
+@import "./industrial/10-accounting-history.css";
+@import "./industrial/11-operations-final.css";
+@import "./industrial/12-accounting-reports.css";
+@import "./industrial/13-system-log.css";
+@import "./industrial/14-employees-nomenclature.css";
+@import "./industrial/15-overview-access-settings.css";
+@import "./industrial/16-operations-unified.css";
+@import "./industrial/17-custody-unified.css";

@@ -9,4 +9,6 @@ internal sealed class PermissionEntity
     public string Name { get; set; } = string.Empty;
 
     public List<RolePermissionEntity> Roles { get; set; } = [];
+
+    public List<SiteUserPermissionEntity> Users { get; set; } = [];
 }

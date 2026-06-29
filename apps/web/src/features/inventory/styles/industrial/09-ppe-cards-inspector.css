@@ -1,0 +1,257 @@
+/* PPE cards and inspector final unification pass */
+.inventory-ppe-screen.inventory-ppe-redesign {
+  gap: 10px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-commandbar {
+  align-items: center;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  min-height: 72px;
+  padding: 12px 14px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-title {
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-title-icon {
+  border-radius: 8px;
+  flex: 0 0 42px;
+  height: 42px;
+  width: 42px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-title h1 {
+  font-size: 28px;
+  line-height: 1.05;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-title span {
+  max-width: 720px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-kpis,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-summary-row {
+  display: none !important;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-workspace {
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(268px, 300px);
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-journal,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-inspector {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-panel-head {
+  align-items: center;
+  min-height: 58px;
+  padding: 12px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-panel-head h2 {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-journal-filters {
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 180px) minmax(140px, 160px) minmax(130px, 150px) auto;
+  padding: 10px 12px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-list {
+  background: #f8fbff;
+  border-top: 1px solid var(--issue-border);
+  max-height: calc(100vh - 344px);
+  overflow: auto;
+  padding: 8px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--issue-border);
+  border-left: 3px solid transparent;
+  border-radius: 8px;
+  box-shadow: none;
+  display: grid;
+  gap: 10px;
+  grid-template-columns:
+    minmax(112px, 0.76fr)
+    minmax(150px, 1fr)
+    minmax(148px, 1fr)
+    minmax(104px, 0.58fr)
+    minmax(88px, 0.46fr)
+    minmax(126px, auto);
+  min-height: 62px;
+  padding: 9px 10px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row:hover {
+  background: #fbfdff;
+  border-color: var(--issue-border-strong);
+  transform: none;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row.is-selected {
+  background: #f6fbff;
+  border-color: var(--issue-blue);
+  border-left-color: var(--issue-blue);
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-id,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-person,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-work,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-status,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-total {
+  min-width: 0;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-id strong,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-person strong,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-work strong,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-total strong {
+  font-size: 12px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-id span,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-person span,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-work span,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-total span {
+  font-size: 10px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row .inventory-ppe-row-actions-compact {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-row-actions-compact .button {
+  min-height: 28px;
+  padding: 0 8px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-more-button {
+  height: 28px;
+  width: 28px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-inspector {
+  gap: 10px;
+  max-height: calc(100vh - 112px);
+  overflow: auto;
+  padding: 10px;
+  position: sticky;
+  top: 86px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-profile {
+  background: #f8fbff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  grid-template-columns: 38px minmax(0, 1fr);
+  padding: 9px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-meta-grid {
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-inspector-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-inspector-actions .button {
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-inspector-actions .button.is-wide {
+  grid-column: 1 / -1;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-print-preview {
+  border-radius: 8px;
+}
+
+@media (max-width: 1360px) {
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-workspace {
+    grid-template-columns: minmax(0, 1fr) minmax(250px, 276px);
+  }
+
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-journal-filters {
+    grid-template-columns: minmax(220px, 1fr) minmax(140px, 170px) minmax(130px, 150px);
+  }
+
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-journal-filters .button {
+    justify-self: start;
+  }
+
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row {
+    grid-template-columns: minmax(112px, 0.8fr) minmax(150px, 1fr) minmax(142px, 1fr) minmax(96px, 0.55fr);
+  }
+
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-total,
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row .inventory-ppe-row-actions-compact {
+    grid-column: span 2;
+  }
+
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row .inventory-ppe-row-actions-compact {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 1120px) {
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-commandbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-command-actions {
+    justify-content: flex-start;
+  }
+
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-inspector {
+    max-height: none;
+    position: static;
+  }
+}
+
+@media (max-width: 780px) {
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-journal-filters,
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row,
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-meta-grid,
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-inspector-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-total,
+  .inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row .inventory-ppe-row-actions-compact {
+    grid-column: auto;
+  }
+}
+

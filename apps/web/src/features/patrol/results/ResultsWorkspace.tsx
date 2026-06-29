@@ -43,6 +43,7 @@ const FILTERS: Array<{ id: ResultMode; label: string }> = [
 ];
 
 const emptyResultFilters = {};
+const showResultInspector = false;
 const MAX_VALID_PATROL_DURATION_MINUTES = 24 * 60;
 
 export function ResultsWorkspace({
@@ -270,7 +271,7 @@ export function ResultsWorkspace({
           )}
         </main>
 
-        <aside className="results-review-panel results-review-inspector">
+        {showResultInspector ? <aside className="results-review-panel results-review-inspector">
           {selectedGroup ? (
             <ResultInspector
               group={selectedGroup}
@@ -285,7 +286,7 @@ export function ResultsWorkspace({
               <p>Выберите обход в журнале, чтобы увидеть сотрудника, маршрут, точки и медиа.</p>
             </section>
           )}
-        </aside>
+        </aside> : null}
       </section>
 
       {modalGroup ? (

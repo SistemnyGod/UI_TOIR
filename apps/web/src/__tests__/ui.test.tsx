@@ -1,14 +1,25 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MobileAccountCreateDrawer, MobileAccountLinkPanel } from "../components/accounts/MobileAccountCreateDrawer";
 import { MobileAccountListPanel } from "../components/accounts/MobileAccountListPanel";
 import { MobileAccountSecurityPanels } from "../components/accounts/MobileAccountSecurityPanels";
 import { DashboardRequestsPanel } from "../components/dashboard/DashboardRequestsPanel";
 import { RequestCreateModal } from "../components/requests/RequestCreateModal";
 import { SiteUserFormPanel } from "../components/site-users/SiteUserFormPanel";
+import { SiteUserAccessPanel } from "../components/site-users/SiteUserAccessPanel";
+import { SiteUsersTablePanel } from "../components/site-users/SiteUsersTablePanel";
 import { Chip, EmptyState, ProgressBar } from "../components/ui";
+import { InventoryRepositoryProvider } from "../repositories/inventoryRepositoryContext";
+import { createMockInventoryRepository } from "../repositories/mockInventoryRepository";
+import { InventoryPpeScreen } from "../screens/inventory/InventoryPpeScreen";
+import { CompactTable, KpiStrip, PaginationBar } from "../shared/ui";
 import { LoginScreen } from "../screens/LoginScreen";
+import type { SiteUser } from "../types";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("shared UI primitives", () => {
   it("submits login credentials from the auth screen", async () => {
@@ -44,17 +55,225 @@ describe("shared UI primitives", () => {
     expect(screen.getByText("Create first record")).toBeInTheDocument();
   });
 
-  it("does not generate fixed site user password in the UI", async () => {
+  it("renders shared operational primitives", async () => {
+    const user = userEvent.setup();
+    const onPageChange = vi.fn();
+    const onPageSizeChange = vi.fn();
+
+    render(
+      <>
+        <KpiStrip items={[{ id: "active", label: "Active", value: 7, hint: "today", tone: "green" }]} />
+        <PaginationBar
+          page={2}
+          pageSize={25}
+          total={80}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+        />
+        <CompactTable
+          columns={[{ key: "name", header: "Name", render: (row: { id: string; name: string }) => row.name }]}
+          getRowKey={(row) => row.id}
+          rows={[{ id: "row-1", name: "Row one" }]}
+        />
+      </>,
+    );
+
+    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(screen.getByText("Показано 26-50 из 80")).toBeInTheDocument();
+    expect(screen.getByText("Row one")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Вперед" }));
+    await user.selectOptions(screen.getByRole("combobox"), "50");
+
+    expect(onPageChange).toHaveBeenCalledWith(3);
+    expect(onPageSizeChange).toHaveBeenCalledWith(50);
+  });
+
+  it("requires matching initial password when creating a site user", async () => {
     const user = userEvent.setup();
     const onNotify = vi.fn();
+    const onCreateUser = vi.fn();
 
-    render(<SiteUserFormPanel onNotify={onNotify} />);
+    render(<SiteUserFormPanel onCreateUser={onCreateUser} onNotify={onNotify} />);
 
-    await user.click(screen.getByText("\u0417\u0430\u043f\u0440\u043e\u0441\u0438\u0442\u044c \u0441\u0431\u0440\u043e\u0441 \u043f\u0430\u0440\u043e\u043b\u044f"));
+    await user.type(screen.getByLabelText("Логин"), "operator");
+    await user.type(screen.getByLabelText("ФИО"), "Оператор");
+    await user.type(screen.getByLabelText("Временный пароль"), "Password1");
+    await user.type(screen.getByLabelText("Подтвердите пароль"), "Password2");
 
-    expect(screen.queryByText("tmp-Patrol-360")).not.toBeInTheDocument();
-    expect(screen.getByText("\u041f\u0430\u0440\u043e\u043b\u044c \u043d\u0435 \u0433\u0435\u043d\u0435\u0440\u0438\u0440\u0443\u0435\u0442\u0441\u044f \u0432 UI")).toBeInTheDocument();
-    expect(onNotify).toHaveBeenCalledWith("\u0421\u0431\u0440\u043e\u0441 \u043f\u0430\u0440\u043e\u043b\u044f \u0431\u0443\u0434\u0435\u0442 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d \u0447\u0435\u0440\u0435\u0437 backend");
+    expect(screen.getByRole("button", { name: "Создать пользователя" })).toBeDisabled();
+    expect(onCreateUser).not.toHaveBeenCalled();
+    expect(onNotify).not.toHaveBeenCalled();
+  });
+
+  it("submits initial password when creating a site user", async () => {
+    const user = userEvent.setup();
+    const onCreateUser = vi.fn();
+
+    render(<SiteUserFormPanel onCreateUser={onCreateUser} onNotify={vi.fn()} />);
+
+    await user.type(screen.getByLabelText("Логин"), "operator");
+    await user.type(screen.getByLabelText("ФИО"), "Оператор");
+    await user.type(screen.getByLabelText("Временный пароль"), "Password1");
+    await user.type(screen.getByLabelText("Подтвердите пароль"), "Password1");
+    await user.click(screen.getByRole("button", { name: "Создать пользователя" }));
+
+    expect(onCreateUser).toHaveBeenCalledWith(expect.objectContaining({
+      confirmPassword: "Password1",
+      fullName: "Оператор",
+      initialPassword: "Password1",
+      login: "operator",
+    }));
+  });
+
+  it("filters site users by role and status", async () => {
+    const user = userEvent.setup();
+    const users: SiteUser[] = [
+      {
+        id: "user-1",
+        login: "admin",
+        fullName: "Администратор",
+        role: "Администратор",
+        status: "Активен",
+        lastLogin: "01.06.2026",
+        createdAt: "01.06.2026",
+        access: ["site_users.write"],
+        directPermissions: [],
+        recentSessions: [],
+      },
+      {
+        id: "user-2",
+        login: "emu-operator",
+        fullName: "Оператор ЭМУ",
+        role: "Оператор ЭМУ",
+        status: "Заблокирован",
+        lastLogin: "—",
+        createdAt: "01.06.2026",
+        access: ["emu.work-accounting.view"],
+        directPermissions: ["emu.work.create"],
+        recentSessions: [],
+      },
+    ];
+
+    render(
+      <SiteUsersTablePanel
+        users={users}
+        selectedUserId="user-1"
+        onOpenCreate={vi.fn()}
+        onSelectUser={vi.fn()}
+      />,
+    );
+
+    await user.selectOptions(screen.getByLabelText("Роль"), "Оператор ЭМУ");
+    await user.selectOptions(screen.getByLabelText("Статус"), "Заблокирован");
+
+    expect(screen.getByText("emu-operator")).toBeInTheDocument();
+    expect(screen.queryByText("admin")).not.toBeInTheDocument();
+  });
+
+  it("saves EMU section scopes with backend scope type", async () => {
+    const user = userEvent.setup();
+    const onSaveScopes = vi.fn().mockResolvedValue({
+      directPermissions: [],
+      effectivePermissions: ["emu.view", "emu.work-accounting.view"],
+      roles: ["emu_operator"],
+      scopes: [{ id: "scope-1", moduleKey: "emu", scopeType: "emu_section", scopeId: "section-1", scopeName: "Цех 1" }],
+      userId: "user-1",
+    });
+    const siteUser: SiteUser = {
+      id: "user-1",
+      login: "emu",
+      fullName: "Оператор ЭМУ",
+      role: "Оператор ЭМУ",
+      status: "Активен",
+      lastLogin: "нет данных",
+      createdAt: "01.06.2026",
+      access: ["emu.view", "emu.work-accounting.view"],
+      directPermissions: [],
+      recentSessions: [],
+    };
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify([
+      { id: "section-1", name: "Цех 1", isActive: true },
+    ]), { headers: { "content-type": "application/json" }, status: 200 })));
+    const loadAccess = vi.fn().mockResolvedValue({
+      directPermissions: [],
+      effectivePermissions: ["emu.view", "emu.work-accounting.view"],
+      roles: ["emu_operator"],
+      scopes: [],
+      userId: "user-1",
+    });
+
+    render(
+      <SiteUserAccessPanel
+        canManage
+        loadAccess={loadAccess}
+        onNotify={vi.fn()}
+        onOpenProfile={vi.fn()}
+        onSavePermissions={vi.fn()}
+        onSaveScopes={onSaveScopes}
+        user={siteUser}
+      />,
+    );
+
+    await user.click(screen.getByRole("tab", { name: "Участки" }));
+    await waitFor(() => expect(loadAccess).toHaveBeenCalledWith("user-1"));
+    await user.click(screen.getByRole("button", { name: "Выбрать все" }));
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(onSaveScopes).toHaveBeenCalledWith("user-1", [
+      { moduleKey: "emu", scopeType: "emu_section", scopeId: "section-1" },
+    ]);
+  });
+
+  it("queries PPE journal with server pagination and filters", async () => {
+    const user = userEvent.setup();
+    const storage = new Map<string, string>();
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        clear: () => storage.clear(),
+        getItem: (key: string) => storage.get(key) ?? null,
+        removeItem: (key: string) => storage.delete(key),
+        setItem: (key: string, value: string) => storage.set(key, value),
+      },
+    });
+    const repository = createMockInventoryRepository();
+    const getPpeCards = vi.spyOn(repository, "getPpeCards");
+    const [cards, options] = await Promise.all([
+      repository.getPpeCards({ includeLines: false, page: 1, pageSize: 25 }),
+      repository.getPpeOptions(),
+    ]);
+
+    render(
+      <InventoryRepositoryProvider value={repository}>
+        <InventoryPpeScreen
+          cards={cards}
+          onNotify={vi.fn()}
+          onReload={vi.fn().mockResolvedValue(undefined)}
+          options={options}
+        />
+      </InventoryRepositoryProvider>,
+    );
+
+    await waitFor(() => expect(getPpeCards).toHaveBeenCalledWith(expect.objectContaining({
+      includeLines: false,
+      page: 1,
+      pageSize: 25,
+    })));
+
+    await user.click(screen.getByRole("button", { name: "50" }));
+    await waitFor(() => expect(getPpeCards).toHaveBeenLastCalledWith(expect.objectContaining({
+      page: 1,
+      pageSize: 50,
+    })));
+
+    await user.selectOptions(screen.getAllByRole("combobox")[2], "missing");
+    await waitFor(() => expect(getPpeCards).toHaveBeenLastCalledWith(expect.objectContaining({
+      page: 1,
+      pageSize: 50,
+      priceState: "missing",
+    })));
   });
 
   it("renders request list loading state", () => {

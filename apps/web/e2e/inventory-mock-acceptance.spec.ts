@@ -68,7 +68,7 @@ test("inventory mock acceptance runs without Inventory API requests", async ({ p
   await page.goto("/#inventory-ppe");
   await expect(page.getByRole("heading", { name: "СИЗ", exact: true })).toBeVisible();
   await expect(page.getByText("Журнал карточек СИЗ")).toBeVisible();
-  await expect(page.getByText("Иванов Иван Иванович").first()).toBeVisible();
+  await expect(page.locator(".inventory-ppe-table tbody tr").filter({ hasText: "Иванов Иван Иванович" }).first()).toBeVisible();
 
   await page.goto("/#inventory-custody");
   await expect(page.getByRole("heading", { name: "Под запись" })).toBeVisible();

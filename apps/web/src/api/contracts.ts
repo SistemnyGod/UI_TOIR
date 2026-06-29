@@ -51,6 +51,37 @@ export interface SiteUserDto {
   createdAt: string;
   lastLoginAt: string | null;
   permissions: string[];
+  directPermissions: string[];
+}
+
+export interface SiteUserAccessScopeDto {
+  id: string;
+  moduleKey: string;
+  scopeType: string;
+  scopeId: string;
+  scopeName: string;
+}
+
+export interface SiteUserAccessDto {
+  userId: string;
+  roles: string[];
+  directPermissions: string[];
+  effectivePermissions: string[];
+  scopes: SiteUserAccessScopeDto[];
+}
+
+export interface UpdateSiteUserPermissionsDto {
+  permissionCodes: string[];
+}
+
+export interface SiteUserAccessScopeUpsertDto {
+  moduleKey: string;
+  scopeType: string;
+  scopeId: string;
+}
+
+export interface UpdateSiteUserScopesDto {
+  scopes: SiteUserAccessScopeUpsertDto[];
 }
 
 export interface RoleDto {
@@ -65,9 +96,17 @@ export interface CreateSiteUserDto {
   displayName: string;
   roleCodes: string[];
   status: string;
+  initialPassword?: string;
+  permissionCodes?: string[];
 }
 
-export type UpdateSiteUserDto = CreateSiteUserDto;
+export interface UpdateSiteUserDto {
+  login: string;
+  displayName: string;
+  roleCodes: string[];
+  status: string;
+  permissionCodes?: string[];
+}
 
 export interface SiteUserCreatedDto {
   user: SiteUserDto;
@@ -93,6 +132,23 @@ export interface AssignmentDto {
   finishedAt: string | null;
   progressPercent: number;
   eta: string;
+}
+
+export interface AssignmentShiftSettingsDto {
+  dayStart: string;
+  dayEnd: string;
+  nightStart: string;
+  nightEnd: string;
+}
+
+export interface AssignmentSettingsDto {
+  favoriteEmployeeIds: string[];
+  shiftSettings: AssignmentShiftSettingsDto;
+}
+
+export interface UpdateAssignmentSettingsDto {
+  favoriteEmployeeIds?: string[];
+  shiftSettings?: AssignmentShiftSettingsDto;
 }
 
 export interface CreateAssignmentDto {
@@ -384,6 +440,8 @@ export interface ResultListItemDto {
   shift: string;
   plannedAt: string;
   actualAt: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
   deviation: string;
   comment: string;
   photos: number;
@@ -448,6 +506,19 @@ export interface MobileSyncConflictResolutionDto {
   comment?: string | null;
   resolvedBy: string;
   resolvedAt: string;
+}
+
+export interface MobileDeviceHealthDto {
+  mobileAccountId: string;
+  login: string;
+  deviceId?: string | null;
+  deviceName?: string | null;
+  appVersion?: string | null;
+  lastSeenAt?: string | null;
+  pushStatus: string;
+  pendingOutboxCount: number;
+  staleOutboxCount: number;
+  lastError?: string | null;
 }
 
 export interface InventoryOverviewDto {
@@ -612,7 +683,7 @@ export interface InventoryCustodyModuleOptionsDto {
 export interface CreateInventoryCustodyRecordDto {
   employeeId: string;
   itemId: string;
-  warehouseId: string;
+  warehouseId?: string | null;
   quantity: number;
   comment?: string | null;
   documentId?: string | null;
@@ -650,6 +721,8 @@ export interface InventoryPpeCardDto {
   position: string;
   status: string;
   linesCount: number;
+  amountMinor: number;
+  zeroPriceLines: number;
 }
 
 export interface InventoryPpeCardDetailDto {
@@ -662,7 +735,18 @@ export interface InventoryPpeCardDetailDto {
   status: string;
   createdAt: string;
   comment?: string;
+  employeeDetails: InventoryPpeEmployeeDetailsDto;
   lines: InventoryPpeCardLineDto[];
+}
+
+export interface InventoryPpeEmployeeDetailsDto {
+  gender: string;
+  height: string;
+  clothingSize: string;
+  shoeSize: string;
+  headSize: string;
+  respiratorSize: string;
+  handProtectionSize: string;
 }
 
 export interface InventoryPpeCardLineDto {
@@ -679,7 +763,10 @@ export interface InventoryPpeCardLineDto {
   issuedAt: string | null;
   dueAt: string | null;
   modelDescription: string;
+  brandModelArticle: string;
   normPoint: string;
+  printItemName?: string;
+  issuePeriodText?: string;
 }
 
 export interface InventoryPpeMovementDto {
@@ -714,15 +801,22 @@ export interface InventoryPpeModuleOptionsDto {
 export interface CreateInventoryPpeCardDto {
   employeeId: string;
   comment?: string | null;
+  employeeDetails?: InventoryPpeEmployeeDetailsDto | null;
 }
 
 export interface UpsertInventoryPpeCardLineDto {
   itemId: string;
   warehouseId?: string | null;
   quantity: number;
+  unitPriceMinor?: number | null;
   status?: string | null;
   dueAt?: string | null;
+  issuedAt?: string | null;
   comment?: string | null;
+  printItemName?: string | null;
+  normPoint?: string | null;
+  issuePeriodText?: string | null;
+  brandModelArticle?: string | null;
 }
 
 export interface InventoryReportDto {
@@ -739,6 +833,8 @@ export interface InventoryHistoryDto {
   description: string;
   actor: string;
   createdAt: string;
+  employeeName?: string;
+  itemName?: string;
 }
 
 export interface InventoryExportJobDto {
@@ -874,6 +970,10 @@ export interface InventoryPositionNormDto {
   itemName: string;
   quantity: number;
   lifeMonths: number | null;
+  normItemName?: string;
+  normPoint?: string;
+  issuePeriodText?: string;
+  quantityText?: string;
 }
 
 export interface CreateInventorySimpleReferenceDto {
@@ -908,6 +1008,10 @@ export interface UpsertInventoryPositionNormDto {
   itemId: string;
   quantity: number;
   lifeMonths?: number | null;
+  normItemName?: string | null;
+  normPoint?: string | null;
+  issuePeriodText?: string | null;
+  quantityText?: string | null;
 }
 
 export interface CreateInventoryCategoryDto {
@@ -981,7 +1085,7 @@ export interface InventoryInitialStockDto {
 export interface CreateInventoryOperationDto {
   type: string;
   itemId: string;
-  warehouseId: string;
+  warehouseId?: string | null;
   quantity: number;
   employeeId?: string | null;
   movedAt?: string | null;
@@ -1078,8 +1182,10 @@ export interface EmuWorkSessionDto {
   workDate: string;
   sectionId: string;
   sectionName: string;
+  planTaskId: string | null;
   taskDescription: string;
   status: string;
+  operationalStatus: string;
   resultStatus: string;
   resultComment: string;
   arrivedAt: string;
@@ -1113,6 +1219,141 @@ export interface EmuWorkSessionEmployeeDto {
   workMinutes: number;
   waitingMinutes: number;
   otherWorkMinutes: number;
+  participationStatus?: string;
+  activeIntervalStartedAt?: string | null;
+  personalWorkMinutes?: number;
+  personalPauseMinutes?: number;
+  currentPauseReason?: string;
+  intervals?: EmuWorkParticipationIntervalDto[];
+}
+
+export interface EmuWorkParticipationIntervalDto {
+  id: string;
+  workSessionId: string;
+  workSessionEmployeeId: string;
+  employeeId: string;
+  startedAt: string;
+  endedAt: string | null;
+  status: string;
+  reason: string;
+  createdByName: string;
+  createdAt: string;
+}
+
+export interface EmuShiftTemplateDto {
+  id: string;
+  code: string;
+  name: string;
+  shiftType: string;
+  startTime: string;
+  endTime: string;
+  lunchStartTime: string;
+  lunchEndTime: string;
+  crossesMidnight: boolean;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface EmuEmployeeShiftDto {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  shiftDate: string;
+  shiftType: string;
+  shiftTypeName: string;
+  templateId: string | null;
+  plannedStartAt: string;
+  plannedEndAt: string;
+  actualStartAt: string;
+  actualEndAt: string;
+  lunchStartAt: string;
+  lunchEndAt: string;
+  lunchTaken: boolean;
+  lunchOverridden: boolean;
+  source: string;
+  reason: string;
+  comment: string;
+  adjustedByName: string;
+  adjustedAt: string | null;
+  rowVersion: number;
+}
+
+export interface EmuEmployeeShiftIntervalDto {
+  type: string;
+  label: string;
+  startedAt: string;
+  endedAt: string;
+  minutes: number;
+  workSessionId: string | null;
+  workNumber: string;
+  reason: string;
+}
+
+export interface EmuEmployeeShiftSummaryDto {
+  shift: EmuEmployeeShiftDto;
+  workMinutes: number;
+  pauseMinutes: number;
+  freeMinutes: number;
+  beforeShiftWorkMinutes: number;
+  overtimeMinutes: number;
+  questionableOvertimeMinutes: number;
+  intervals: EmuEmployeeShiftIntervalDto[];
+  decisions: EmuDecisionDto[];
+}
+
+export interface EmuEmployeeMonthSummaryDto {
+  employeeId: string;
+  employeeName: string;
+  month: string;
+  shiftCount: number;
+  plannedMinutes: number;
+  presenceMinutes: number;
+  workMinutes: number;
+  pauseMinutes: number;
+  freeMinutes: number;
+  beforeShiftWorkMinutes: number;
+  overtimeMinutes: number;
+  questionableOvertimeMinutes: number;
+  undertimeMinutes: number;
+  shifts: EmuEmployeeShiftSummaryDto[];
+}
+
+export interface EmuDecisionDto {
+  id: string;
+  decisionType: string;
+  severity: string;
+  status: string;
+  employeeId: string;
+  employeeName: string;
+  workSessionId: string | null;
+  workNumber: string;
+  sectionName: string;
+  shiftDate: string;
+  detectedAt: string;
+  resolvedAt: string | null;
+  resolvedByUserId: string | null;
+  resolvedByName: string;
+  dedupeKey: string;
+  resolution: string;
+  comment: string;
+  rowVersion: number;
+  overlapMinutes: number;
+  lunchStartAt: string | null;
+  lunchEndAt: string | null;
+}
+
+export interface EmuResolveDecisionDto {
+  resolution:
+    | "worked_through_lunch"
+    | "exclude_lunch"
+    | "confirmed_parallel_work"
+    | "fixed_manually"
+    | "handled_manually"
+    | "false_alarm"
+    | "confirmed_overtime"
+    | "exclude_overtime";
+  comment: string;
+  rowVersion: number;
 }
 
 export interface EmuAuditEventDto {
@@ -1127,6 +1368,97 @@ export interface EmuAuditEventDto {
   createdAt: string;
 }
 
+export interface EmuWorkSessionQueryDto {
+  dateFrom: string | null;
+  dateTo: string | null;
+  employeeId: string | null;
+  sectionId: string | null;
+  waitReasonId: string | null;
+  notCompletedReasonId: string | null;
+  operationalStatus: string | null;
+  resultStatus: string | null;
+  status: string | null;
+  problemOnly: boolean;
+  manualCorrectionsOnly: boolean;
+  includeDeleted: boolean;
+  page: number;
+  pageSize: number;
+  sortBy: string | null;
+  shiftType: string | null;
+  employeeSearch: string | null;
+  allowedSectionIds: string[] | null;
+}
+
+export interface EmuWorkHistoryReportDto {
+  appliedQuery: EmuWorkSessionQueryDto;
+  generatedAt: string;
+  totals: EmuWorkHistoryTotalsDto;
+  employees: EmuEmployeeWorkReportDto[];
+  sections: EmuSectionWorkReportDto[];
+  exceptions: EmuWorkHistoryExceptionDto[];
+}
+
+export interface EmuEmployeeWorkHistoryReportDto {
+  appliedQuery: EmuWorkSessionQueryDto;
+  generatedAt: string;
+  employee: EmuEmployeeWorkReportDto;
+  sections: EmuSectionWorkReportDto[];
+  works: EmuListResponseDto<EmuWorkSessionDto>;
+}
+
+export interface EmuWorkHistoryTotalsDto {
+  totalWorks: number;
+  completedWorks: number;
+  problemWorks: number;
+  deletedWorks: number;
+  employeeCount: number;
+  sectionCount: number;
+  workMinutes: number;
+  waitingMinutes: number;
+  otherWorkMinutes: number;
+  totalMinutes: number;
+  averageWorkMinutes: number;
+}
+
+export interface EmuEmployeeWorkReportDto {
+  employeeId: string;
+  employeeName: string;
+  personnelNo: string;
+  position: string;
+  department: string;
+  workCount: number;
+  workMinutes: number;
+  waitingMinutes: number;
+  otherWorkMinutes: number;
+  totalMinutes: number;
+  sectionCount: number;
+}
+
+export interface EmuSectionWorkReportDto {
+  sectionId: string;
+  sectionName: string;
+  workCount: number;
+  employeeCount: number;
+  workMinutes: number;
+  waitingMinutes: number;
+  otherWorkMinutes: number;
+  totalMinutes: number;
+  problemWorks: number;
+}
+
+export interface EmuWorkHistoryExceptionDto {
+  workSessionId: string;
+  workNumber: string;
+  workDate: string;
+  sectionId: string;
+  sectionName: string;
+  reason: string;
+  severity: string;
+  workMinutes: number;
+  waitingMinutes: number;
+  otherWorkMinutes: number;
+}
+
 export interface EmuCreateWorkSessionDto {
   workDate: string;
   sectionId: string;
@@ -1134,6 +1466,25 @@ export interface EmuCreateWorkSessionDto {
   employeeIds: string[];
   taskDescription: string;
   planTaskId?: string | null;
+}
+
+export interface EmuAddWorkSessionEmployeeDto {
+  employeeId: string;
+  startedAt?: string | null;
+  comment: string;
+  rowVersion: number;
+}
+
+export interface EmuFinishWorkSessionEmployeeDto {
+  finishedAt?: string | null;
+  participationStatus: string;
+  comment: string;
+  rowVersion: number;
+}
+
+export interface EmuMarkMistakenWorkSessionEmployeeDto {
+  comment: string;
+  rowVersion: number;
 }
 
 export interface EmuUpdateWorkSessionDto {
@@ -1173,6 +1524,29 @@ export interface EmuCompleteWorkSessionDto {
 
 export interface EmuDeleteWorkSessionDto {
   reason: string;
+  rowVersion: number;
+}
+
+export interface EmuCarryOverWorkSessionDto {
+  toDate: string;
+  comment: string;
+  rowVersion: number;
+}
+
+export interface EmuUpdateEmployeeShiftDto {
+  shiftDate: string;
+  shiftType: string;
+  templateId?: string | null;
+  plannedStartAt?: string | null;
+  plannedEndAt?: string | null;
+  actualStartAt?: string | null;
+  actualEndAt?: string | null;
+  lunchStartAt?: string | null;
+  lunchEndAt?: string | null;
+  lunchTaken: boolean;
+  lunchOverridden: boolean;
+  reason: string;
+  comment?: string | null;
   rowVersion: number;
 }
 
@@ -1218,6 +1592,12 @@ export interface EmuApprovePlanTaskDto {
   rowVersion: number;
 }
 
+export interface EmuReschedulePlanTaskDto {
+  newPlannedDate: string;
+  comment: string;
+  rowVersion: number;
+}
+
 export interface EmuApproveWeekDto {
   weekStart: string;
   comment: string;
@@ -1251,4 +1631,158 @@ export interface EmuUpdateWorkTemplateDto {
 
 export interface EmuAddFavoriteEmployeeDto {
   employeeId: string;
+}
+
+export interface PercoIntegrationSettingsDto {
+  isEnabled: boolean;
+  authMode: "LoginPassword" | "Token";
+  baseUrl: string;
+  username: string | null;
+  hasPassword: boolean;
+  hasToken: boolean;
+  timezone: string;
+  employeesSyncMinutes: number;
+  eventsSyncMinutes: number;
+  shiftStartToleranceMinutes: number;
+  shiftEndToleranceMinutes: number;
+  devPath: string;
+  employeesEndpoint: string;
+  eventsEndpoint: string;
+  lastDiscoverySummary: string;
+  lastConnectionCheckAt: string | null;
+  lastConnectionStatus: string | null;
+  lastConnectionError: string | null;
+  secretStatus: PercoSecretStatusDto;
+}
+
+export interface UpdatePercoIntegrationSettingsDto {
+  isEnabled: boolean;
+  authMode?: "LoginPassword" | "Token" | null;
+  baseUrl: string;
+  username?: string | null;
+  password?: string | null;
+  token?: string | null;
+  timezone: string;
+  employeesSyncMinutes: number;
+  eventsSyncMinutes: number;
+  shiftStartToleranceMinutes: number;
+  shiftEndToleranceMinutes: number;
+  devPath?: string | null;
+  employeesEndpoint?: string | null;
+  eventsEndpoint?: string | null;
+}
+
+export interface PercoSecretStatusDto {
+  apiStatus: string;
+  apiCheckedAt: string | null;
+  apiError: string | null;
+  workerStatus: string;
+  workerCheckedAt: string | null;
+  workerError: string | null;
+}
+
+export interface PercoDiscoveredEndpointDto {
+  kind: string;
+  url: string;
+  status: string;
+}
+
+export interface PercoConnectionTestResultDto {
+  success: boolean;
+  message: string;
+  devPageAvailable: boolean;
+  authAvailable: boolean;
+  discoveredEndpoints: PercoDiscoveredEndpointDto[];
+  checkedAt: string;
+}
+
+export interface PercoSyncResultDto {
+  success: boolean;
+  status: string;
+  message: string;
+  loaded: number;
+  created: number;
+  updated: number;
+  inserted: number;
+  duplicates: number;
+  unmatched: number;
+  errors: number;
+  lastSyncAt: string | null;
+}
+
+export interface PercoIntegrationLogDto {
+  id: string;
+  operation: string;
+  status: string;
+  message: string;
+  details: string;
+  startedAt: string;
+  finishedAt: string | null;
+  createdByUserId: string | null;
+}
+
+export interface PercoUnmatchedEmployeeDto {
+  percoEmployeeId: string;
+  fullName: string;
+  personnelNo: string;
+  cardNumber: string;
+  department: string;
+  suggestedEmployeeId: string | null;
+  suggestedEmployeeName: string;
+}
+
+export interface MatchPercoEmployeeDto {
+  percoEmployeeId: string;
+  employeeId?: string | null;
+  action: "match" | "ignore";
+}
+
+export interface PercoAccessEventDiagnosticsDto {
+  id: string;
+  percoEventId: string;
+  percoEmployeeId: string;
+  employeeId: string | null;
+  employeeName: string;
+  personnelNo: string;
+  deviceName: string;
+  direction: "IN" | "OUT" | "UNKNOWN";
+  directionLabel: string;
+  zoneTransition: string;
+  shiftMarker: string;
+  eventAt: string;
+}
+
+export interface PercoPresenceIntervalDiagnosticsDto {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  personnelNo: string;
+  startedAt: string;
+  endedAt: string | null;
+  durationMinutes: number;
+  source: string;
+  state: string;
+  stateCode?: "inside" | "outside" | "lunch_break" | "stale" | "old_open" | string;
+  needsReview?: boolean;
+  analysisReason?: string;
+  suggestedAction?: string;
+  analysisConfidence?: number;
+}
+
+export interface ClosePercoPresenceIntervalDto {
+  endedAt: string;
+  comment: string;
+}
+
+export interface PercoDiagnosticsDto {
+    generatedAt: string;
+    windowStart: string;
+    windowEnd: string;
+    recentEventsCount: number;
+    openPresenceCount: number;
+  closedPresenceCount: number;
+  oldOpenPresenceCount: number;
+  unmatchedEventsCount: number;
+  recentEvents: PercoAccessEventDiagnosticsDto[];
+  presenceIntervals: PercoPresenceIntervalDiagnosticsDto[];
 }

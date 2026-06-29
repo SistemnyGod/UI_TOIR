@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { emptyPointDraft, pointToDraft } from "../components/routes/PointEditorForm";
-import { emptyRouteDraft, routeToDraft } from "../components/routes/RouteEditorForm";
+import { emptyPointDraft, pointToDraft } from "../features/patrol/components/routes/PointEditorForm";
+import { emptyRouteDraft, routeToDraft } from "../features/patrol/components/routes/RouteEditorForm";
 import type { RouteDirectoryItem, RouteFormPayload, RoutePointFormPayload } from "../types";
 
 type MaybePromise<T> = T | Promise<T>;
@@ -42,6 +42,7 @@ export function useRoutesEditor({
 }: UseRoutesEditorParams) {
   const [routeEditorMode, setRouteEditorMode] = useState<"create" | "edit" | null>(null);
   const [routeDraft, setRouteDraft] = useState<RouteFormPayload>(emptyRouteDraft);
+  const [pointEditorOpen, setPointEditorOpen] = useState(false);
   const [pointEditorMode, setPointEditorMode] = useState<"create" | "edit">("edit");
   const [pointDraft, setPointDraft] = useState<RoutePointFormPayload>(emptyPointDraft);
   const selectedRoute = routeDirectory.find((route) => route.id === selectedRouteId);
@@ -139,12 +140,14 @@ export function useRoutesEditor({
 
     if (pointEditorMode === "edit" && selectedPoint) {
       await onUpdateRoutePoint(selectedRoute.id, selectedPoint.id, pointDraft);
+      setPointEditorOpen(false);
       return;
     }
 
     const pointId = await onCreateRoutePoint(selectedRoute.id, pointDraft);
     if (pointId) onSelectPoint(pointId);
     setPointEditorMode("edit");
+    setPointEditorOpen(false);
   }
 
   function startRouteCreate() {
@@ -163,12 +166,18 @@ export function useRoutesEditor({
       return;
     }
 
+    if (!selectedRoute) {
+      onNotify("Сначала выберите маршрут.");
+      return;
+    }
+
     setPointDraft({
       ...emptyPointDraft,
       zone: selectedRoute?.territory ?? "",
       tag: "",
     });
     setPointEditorMode("create");
+    setPointEditorOpen(true);
   }
 
   async function deleteSelectedRoute() {
@@ -191,11 +200,13 @@ export function useRoutesEditor({
     if (!selectedRoute || !selectedPoint) return;
     await onDeleteRoutePoint(selectedRoute.id, selectedPoint.id);
     setPointEditorMode("edit");
+    setPointEditorOpen(false);
   }
 
   function selectPointForEdit(pointId: string) {
     onSelectPoint(pointId);
     setPointEditorMode("edit");
+    setPointEditorOpen(true);
   }
 
   function cancelRouteEdit() {
@@ -204,10 +215,12 @@ export function useRoutesEditor({
 
   function cancelPointEdit() {
     setPointEditorMode("edit");
+    setPointEditorOpen(false);
   }
 
   return {
     pointDraft,
+    pointEditorOpen,
     pointEditorMode,
     routeDraft,
     routeEditorMode,

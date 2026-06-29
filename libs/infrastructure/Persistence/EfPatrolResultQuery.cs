@@ -28,6 +28,8 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
                 result.Shift,
                 result.PlannedAt,
                 result.ActualAt,
+                result.Assignment != null ? result.Assignment.StartedAt : null,
+                result.Assignment != null ? result.Assignment.FinishedAt : null,
                 result.Deviation,
                 result.Comment,
                 result.Photos,
@@ -42,6 +44,7 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
             .AsNoTracking()
             .Include(item => item.Issues)
             .Include(item => item.Attachments)
+            .Include(item => item.Assignment)
             .FirstOrDefault(item => item.Id == id);
 
         return result is null ? null : MapDetail(result);
@@ -49,27 +52,41 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
 
     public ResultExportFileDto ExportResults(ResultFilterDto filter)
     {
-        var rows = GetResults(filter);
+        var rows = ApplyFilter(dbContext.PatrolResults.AsNoTracking(), filter)
+            .Include(result => result.RoutePoint)
+            .Include(result => result.Attachments)
+            .OrderByDescending(result => result.ActualAt)
+            .ToList();
         var builder = new StringBuilder();
-        builder.AppendLine("AssignmentId;Status;Point;Employee;Route;Territory;Shift;PlannedAt;ActualAt;Deviation;Photos;IssueType;Severity;Comment");
+        builder.AppendLine("AssignmentId;Status;Point;Employee;Route;Territory;Shift;PlannedAt;ActualAt;Deviation;Photos;IssueType;Severity;Comment;RoutePointId;RoutePointSequence;RoutePointType;NfcCode;RequiresPhoto;PhotoStatus;AttachmentCount");
 
         foreach (var row in rows)
         {
+            var attachmentCount = row.Attachments.Count;
+            var photoCount = Math.Max(row.Photos, attachmentCount);
+            var requiresPhoto = row.RoutePoint?.RequiresPhoto ?? false;
             builder.AppendLine(string.Join(';', [
                 EscapeCsv(row.AssignmentId?.ToString() ?? string.Empty),
                 EscapeCsv(row.Status),
-                EscapeCsv(row.Point),
-                EscapeCsv(row.Employee),
-                EscapeCsv(row.Route),
+                EscapeCsv(row.PointName),
+                EscapeCsv(row.EmployeeName),
+                EscapeCsv(row.RouteName),
                 EscapeCsv(row.Territory),
                 EscapeCsv(row.Shift),
                 EscapeCsv(row.PlannedAt.ToString("O")),
                 EscapeCsv(row.ActualAt.ToString("O")),
                 EscapeCsv(row.Deviation),
-                row.Photos.ToString(),
+                photoCount.ToString(),
                 EscapeCsv(row.IssueType),
                 EscapeCsv(row.Severity),
-                EscapeCsv(row.Comment)
+                EscapeCsv(row.Comment),
+                EscapeCsv(row.RoutePointId?.ToString() ?? string.Empty),
+                row.RoutePoint?.SequenceNo.ToString() ?? string.Empty,
+                EscapeCsv(row.RoutePoint?.Type ?? string.Empty),
+                EscapeCsv(row.RoutePoint?.NfcCode ?? row.RoutePoint?.Tag ?? string.Empty),
+                requiresPhoto ? "true" : "false",
+                EscapeCsv(GetPhotoStatus(requiresPhoto, photoCount)),
+                attachmentCount.ToString()
             ]));
         }
 
@@ -182,6 +199,8 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
             result.Shift,
             result.PlannedAt,
             result.ActualAt,
+            result.Assignment?.StartedAt,
+            result.Assignment?.FinishedAt,
             result.Deviation,
             result.Comment,
             Math.Max(result.Photos, attachments.Count),
@@ -194,4 +213,14 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
 
     private static string EscapeCsv(string value) =>
         $"\"{value.Replace("\"", "\"\"")}\"";
+
+    private static string GetPhotoStatus(bool requiresPhoto, int photoCount)
+    {
+        if (photoCount > 0)
+        {
+            return requiresPhoto ? "provided" : "attached";
+        }
+
+        return requiresPhoto ? "missing" : "not_required";
+    }
 }

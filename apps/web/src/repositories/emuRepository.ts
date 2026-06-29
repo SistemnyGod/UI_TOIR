@@ -1,40 +1,69 @@
 import { ApiClient } from "../api/client";
 import type {
   EmuAddFavoriteEmployeeDto,
+  EmuAddWorkSessionEmployeeDto,
   EmuApprovePlanTaskDto,
   EmuApproveWeekDto,
   EmuAuditEventDto,
   EmuCompleteWorkSessionDto,
+  EmuCarryOverWorkSessionDto,
   EmuCreateReferenceDto,
   EmuCreateWorkSessionDto,
   EmuCreateWorkTemplateDto,
   EmuDashboardDto,
+  EmuDecisionDto,
   EmuDeleteWorkSessionDto,
   EmuFavoriteEmployeeDto,
+  EmuFinishWorkSessionEmployeeDto,
+  EmuEmployeeShiftDto,
+  EmuEmployeeMonthSummaryDto,
+  EmuEmployeeShiftSummaryDto,
+  EmuEmployeeWorkHistoryReportDto,
   EmuListResponseDto,
+  EmuMarkMistakenWorkSessionEmployeeDto,
   EmuPauseWorkSessionDto,
   EmuPlanTaskChangesDto,
   EmuPlanTaskDto,
   EmuReferenceDto,
+  EmuResolveDecisionDto,
+  EmuReschedulePlanTaskDto,
   EmuResumeWorkSessionDto,
   EmuSettingsDto,
+  EmuShiftTemplateDto,
+  EmuUpdateEmployeeShiftDto,
   EmuUpdateReferenceDto,
   EmuUpdateWorkSessionDto,
   EmuUpdateWorkTemplateDto,
   EmuUpsertPlanTaskDto,
   EmuWorkSessionChangesDto,
   EmuWorkSessionDto,
+  EmuWorkHistoryReportDto,
   EmuWorkTemplateDto,
 } from "../api/contracts";
 
 export type EmuWorkSessionParams = {
   dateFrom?: string;
   dateTo?: string;
+  employeeSearch?: string;
   employeeId?: string;
   includeDeleted?: boolean;
+  manualCorrectionsOnly?: boolean;
+  notCompletedReasonId?: string;
+  operationalStatus?: string;
   page?: number;
   pageSize?: number;
+  problemOnly?: boolean;
+  resultStatus?: string;
   sectionId?: string;
+  shiftType?: "day" | "night" | "";
+  sortBy?: string;
+  status?: string;
+  waitReasonId?: string;
+};
+
+export type EmuDecisionParams = {
+  date?: string;
+  employeeId?: string;
   status?: string;
 };
 
@@ -86,6 +115,34 @@ export function createEmuRepository({ baseUrl }: { baseUrl?: string } = {}) {
       return client.get<EmuFavoriteEmployeeDto[]>("/api/v1/emu/favorite-employees");
     },
 
+    getShiftTemplates() {
+      return client.get<EmuShiftTemplateDto[]>("/api/v1/emu/shift-templates");
+    },
+
+    getEmployeeShifts(params: { date: string; employeeId?: string }) {
+      return client.get<EmuEmployeeShiftDto[]>(`/api/v1/emu/employee-shifts${toQueryString(params)}`);
+    },
+
+    getEmployeeShiftSummary(employeeId: string, date: string) {
+      return client.get<EmuEmployeeShiftSummaryDto>(`/api/v1/emu/employees/${employeeId}/shift-summary${toQueryString({ date })}`);
+    },
+
+    getEmployeeMonthSummary(employeeId: string, month: string) {
+      return client.get<EmuEmployeeMonthSummaryDto>(`/api/v1/emu/employees/${employeeId}/month-summary${toQueryString({ month })}`);
+    },
+
+    updateEmployeeShift(id: string, payload: EmuUpdateEmployeeShiftDto) {
+      return client.patch<EmuEmployeeShiftDto, EmuUpdateEmployeeShiftDto>(`/api/v1/emu/employee-shifts/${id}`, payload);
+    },
+
+    getDecisions(params: EmuDecisionParams = {}) {
+      return client.get<EmuDecisionDto[]>(`/api/v1/emu/decisions${toQueryString(params)}`);
+    },
+
+    resolveDecision(id: string, payload: EmuResolveDecisionDto) {
+      return client.post<EmuDecisionDto, EmuResolveDecisionDto>(`/api/v1/emu/decisions/${id}/resolve`, payload);
+    },
+
     addFavoriteEmployee(payload: EmuAddFavoriteEmployeeDto) {
       return client.post<EmuFavoriteEmployeeDto, EmuAddFavoriteEmployeeDto>("/api/v1/emu/favorite-employees", payload);
     },
@@ -96,6 +153,18 @@ export function createEmuRepository({ baseUrl }: { baseUrl?: string } = {}) {
 
     getWorkSessions(params: EmuWorkSessionParams = {}) {
       return client.get<EmuListResponseDto<EmuWorkSessionDto>>(`/api/v1/emu/work-sessions${toQueryString(params)}`);
+    },
+
+    getWorkHistoryReport(params: EmuWorkSessionParams = {}) {
+      return client.get<EmuWorkHistoryReportDto>(`/api/v1/emu/reports/work-history${toQueryString(params)}`);
+    },
+
+    getEmployeeWorkHistoryReport(employeeId: string, params: EmuWorkSessionParams = {}) {
+      return client.get<EmuEmployeeWorkHistoryReportDto>(`/api/v1/emu/reports/work-history/employees/${employeeId}${toQueryString(params)}`);
+    },
+
+    exportWorkSessions(params: EmuWorkSessionParams = {}) {
+      return client.download(`/api/v1/emu/work-sessions/export${toQueryString(params)}`);
     },
 
     getWorkSessionChanges(since: string) {
@@ -114,6 +183,10 @@ export function createEmuRepository({ baseUrl }: { baseUrl?: string } = {}) {
       return client.patch<EmuWorkSessionDto, EmuUpdateWorkSessionDto>(`/api/v1/emu/work-sessions/${id}`, payload);
     },
 
+    addWorkSessionEmployee(id: string, payload: EmuAddWorkSessionEmployeeDto) {
+      return client.post<EmuWorkSessionDto, EmuAddWorkSessionEmployeeDto>(`/api/v1/emu/work-sessions/${id}/employees`, payload);
+    },
+
     deleteWorkSession(id: string, payload: EmuDeleteWorkSessionDto) {
       return client.delete<EmuWorkSessionDto, EmuDeleteWorkSessionDto>(`/api/v1/emu/work-sessions/${id}`, payload);
     },
@@ -128,6 +201,18 @@ export function createEmuRepository({ baseUrl }: { baseUrl?: string } = {}) {
 
     completeWorkSession(id: string, payload: EmuCompleteWorkSessionDto) {
       return client.post<EmuWorkSessionDto, EmuCompleteWorkSessionDto>(`/api/v1/emu/work-sessions/${id}/complete`, payload);
+    },
+
+    carryOverWorkSession(id: string, payload: EmuCarryOverWorkSessionDto) {
+      return client.post<EmuWorkSessionDto, EmuCarryOverWorkSessionDto>(`/api/v1/emu/work-sessions/${id}/carry-over`, payload);
+    },
+
+    finishWorkSessionEmployee(id: string, employeeId: string, payload: EmuFinishWorkSessionEmployeeDto) {
+      return client.post<EmuWorkSessionDto, EmuFinishWorkSessionEmployeeDto>(`/api/v1/emu/work-sessions/${id}/employees/${employeeId}/finish`, payload);
+    },
+
+    markWorkSessionEmployeeMistaken(id: string, employeeId: string, payload: EmuMarkMistakenWorkSessionEmployeeDto) {
+      return client.post<EmuWorkSessionDto, EmuMarkMistakenWorkSessionEmployeeDto>(`/api/v1/emu/work-sessions/${id}/employees/${employeeId}/mark-mistaken`, payload);
     },
 
     getWorkSessionAudit(id: string, params: { page?: number; pageSize?: number } = {}) {
@@ -148,6 +233,10 @@ export function createEmuRepository({ baseUrl }: { baseUrl?: string } = {}) {
 
     updatePlanTask(id: string, payload: EmuUpsertPlanTaskDto) {
       return client.patch<EmuPlanTaskDto, EmuUpsertPlanTaskDto>(`/api/v1/emu/plan-tasks/${id}`, payload);
+    },
+
+    reschedulePlanTask(id: string, payload: EmuReschedulePlanTaskDto) {
+      return client.post<EmuPlanTaskDto, EmuReschedulePlanTaskDto>(`/api/v1/emu/plan-tasks/${id}/reschedule`, payload);
     },
 
     approvePlanTask(id: string, payload: EmuApprovePlanTaskDto) {

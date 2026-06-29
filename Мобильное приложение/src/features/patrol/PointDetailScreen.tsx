@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
@@ -16,7 +17,7 @@ export function PointDetailScreen() {
   const { assignmentId, pointId } = useLocalSearchParams<{ assignmentId: string; pointId: string }>();
   const { colors } = useAppTheme();
   const [point, setPoint] = useState<PointForFill | null>(null);
-  const [photos, setPhotos] = useState<LocalMobileFile[]>([]);
+  const [attachments, setAttachments] = useState<LocalMobileFile[]>([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -24,7 +25,7 @@ export function PointDetailScreen() {
       void Promise.all([getPointForFill(assignmentId, pointId), listPointFiles(assignmentId, pointId)]).then(([loadedPoint, files]) => {
         if (isMounted) {
           setPoint(loadedPoint);
-          setPhotos(files);
+          setAttachments(files);
         }
       });
 
@@ -45,14 +46,13 @@ export function PointDetailScreen() {
   }
 
   return (
-    <Screen title="Точка маршрута" subtitle="Проверьте состояние точки, фото и подтверждение метки.">
+    <Screen title="Точка маршрута" subtitle="Проверьте состояние точки, вложения и подтверждение метки.">
       <Card>
         <View style={styles.headerRow}>
           <View style={styles.titleBox}>
             <Text style={[styles.title, { color: colors.text }]}>
               {point.orderIndex}. {point.name}
             </Text>
-            <Text style={[styles.text, { color: colors.mutedText }]}>{point.required ? "Обязательная метка" : "Дополнительная метка"}</Text>
           </View>
           <StatusPill label={pointStatusLabel(point.status)} tone={pointStatusTone(point.status)} />
         </View>
@@ -79,28 +79,38 @@ export function PointDetailScreen() {
 
       <Card>
         <View style={styles.headerRow}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Фото</Text>
-          <StatusPill label={photos.length > 0 ? `${photos.length}` : "Не приложены"} tone={photos.length > 0 ? "success" : "neutral"} />
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Вложения</Text>
+          <StatusPill label={attachments.length > 0 ? `${attachments.length}` : "Нет"} tone={attachments.length > 0 ? "success" : "neutral"} />
         </View>
-        {photos.length > 0 ? (
+        {attachments.length > 0 ? (
           <View style={styles.photoGrid}>
-            {photos.map((photo) => (
-              <View key={photo.clientFileId} style={styles.photoTile}>
-                <Image source={{ uri: photo.localPath }} style={styles.photo} />
-                <Text style={[styles.photoStatus, { color: colors.mutedText }]}>{fileStatusLabel(photo.status)}</Text>
+            {attachments.map((attachment) => (
+              <View key={attachment.clientFileId} style={styles.photoTile}>
+                {attachment.mediaKind === "video" ? (
+                  <View style={styles.videoTile}>
+                    <Ionicons color="#2563eb" name="videocam-outline" size={24} />
+                    <Text style={styles.videoLabel}>Видео</Text>
+                  </View>
+                ) : (
+                  <Image source={{ uri: attachment.localPath }} style={styles.photo} />
+                )}
+                <Text style={[styles.photoStatus, { color: colors.mutedText }]}>{fileStatusLabel(attachment.status)}</Text>
               </View>
             ))}
           </View>
         ) : (
-          <Text style={[styles.text, { color: colors.mutedText }]}>Фото необязательное. Его можно добавить при исправности и неисправности.</Text>
+          <Text style={[styles.text, { color: colors.mutedText }]}>Вложения не обязательны. Их можно добавить при исправности, неисправности или недоступной метке.</Text>
         )}
       </Card>
 
-      <PrimaryButton label={point.status === "pending" ? "Заполнить метку" : "Изменить результат"} onPress={() => router.push(`/patrol/assignment/${assignmentId}/point/${pointId}/fill`)} />
-      <PrimaryButton label="Добавить фото" onPress={() => router.push(`/camera/capture?assignmentId=${assignmentId}&pointId=${pointId}`)} />
+      <PrimaryButton
+        icon="create-outline"
+        label={point.status === "pending" ? "Заполнить метку" : "Изменить результат"}
+        onPress={() => router.push(`/patrol/assignment/${assignmentId}/point/${pointId}/fill`)}
+      />
       <View style={styles.actionRow}>
-        <SecondaryAction label="NFC" onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-nfc`)} />
-        <SecondaryAction label="QR" onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-qr`)} />
+        <SecondaryAction label="Сканировать NFC" onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-nfc`)} />
+        <SecondaryAction label="QR резерв" onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-qr`)} />
         <SecondaryAction label="Все метки" onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} />
       </View>
     </Screen>
@@ -133,6 +143,7 @@ function SecondaryAction({ label, onPress }: { label: string; onPress: () => voi
       <Text style={[styles.secondaryActionText, { color: colors.text }]}>{label}</Text>
     </Pressable>
   );
+
 }
 
 function pointStatusLabel(status: PointListItem["status"]) {
@@ -146,7 +157,7 @@ function pointStatusLabel(status: PointListItem["status"]) {
     case "scanned":
       return "Сканирована";
     case "skipped":
-      return "Пропущена";
+      return "Метка недоступна";
     default:
       return "Не заполнено";
   }
@@ -161,7 +172,7 @@ function pointStatusTone(status: PointListItem["status"]) {
     return "danger";
   }
 
-  if (status === "deferred") {
+  if (status === "deferred" || status === "skipped") {
     return "warning";
   }
 
@@ -169,6 +180,10 @@ function pointStatusTone(status: PointListItem["status"]) {
 }
 
 function confirmationLabel(point: PointForFill) {
+  if (point.status === "skipped") {
+    return "Метка недоступна";
+  }
+
   if (point.confirmationType === "nfc") {
     return "NFC подтвержден";
   }
@@ -212,6 +227,7 @@ function formatDateTime(value: string) {
 const styles = StyleSheet.create({
   actionRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8
   },
   headerRow: {
@@ -251,6 +267,22 @@ const styles = StyleSheet.create({
     gap: 6,
     width: 96
   },
+  videoTile: {
+    alignItems: "center",
+    aspectRatio: 1,
+    backgroundColor: "#eff6ff",
+    borderColor: "#bfdbfe",
+    borderRadius: 8,
+    borderWidth: 1,
+    justifyContent: "center",
+    width: "100%"
+  },
+  videoLabel: {
+    color: "#1d4ed8",
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 4
+  },
   pills: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -260,7 +292,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 8,
     borderWidth: 1,
-    flex: 1,
+    flexBasis: "30%",
+    flexGrow: 1,
     paddingHorizontal: 10,
     paddingVertical: 12
   },

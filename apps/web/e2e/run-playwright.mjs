@@ -1,13 +1,18 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const serverUrl = "http://127.0.0.1:5176";
+const port = await resolveE2ePort();
+const serverUrl = `http://127.0.0.1:${port}`;
 const e2eEnv = { ...process.env };
+if (!e2eEnv.VITE_ENABLE_MOCK_MODE) {
+  e2eEnv.VITE_ENABLE_MOCK_MODE = "true";
+}
 if (!e2eEnv.VITE_DATA_SOURCE_MODE && (e2eEnv.VITE_ENABLE_MOCK_MODE === "true" || e2eEnv.VITE_ENABLE_MOCK_MODE === "1")) {
   e2eEnv.VITE_DATA_SOURCE_MODE = "mock";
 }
@@ -22,7 +27,7 @@ const server = spawn(
     "--host",
     "127.0.0.1",
     "--port",
-    "5176",
+    String(port),
     "--strictPort",
     "--configLoader",
     "runner",
@@ -103,6 +108,7 @@ async function runPlaywright(args) {
     env: {
       ...e2eEnv,
       PATROL360_E2E_EXTERNAL_SERVER: "true",
+      PLAYWRIGHT_BASE_URL: serverUrl,
     },
     stdio: "inherit",
     windowsHide: true,
@@ -142,3 +148,36 @@ process.on("SIGINT", () => {
 process.on("SIGTERM", () => {
   void stopServer().then(() => process.exit(143));
 });
+
+async function resolveE2ePort() {
+  const requested = Number(process.env.PATROL360_E2E_PORT ?? 5176);
+  if (Number.isInteger(requested) && requested > 0 && await canBindPort(requested)) {
+    return requested;
+  }
+
+  return getFreePort();
+}
+
+function canBindPort(port) {
+  return new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.once("error", () => resolve(false));
+    probe.once("listening", () => {
+      probe.close(() => resolve(true));
+    });
+    probe.listen(port, "127.0.0.1");
+  });
+}
+
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once("error", reject);
+    probe.once("listening", () => {
+      const address = probe.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      probe.close(() => resolve(port));
+    });
+    probe.listen(0, "127.0.0.1");
+  });
+}

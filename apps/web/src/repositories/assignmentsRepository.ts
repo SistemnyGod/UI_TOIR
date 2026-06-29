@@ -3,10 +3,12 @@ import { ApiClient, type ApiRequestOptions } from "../api/client";
 import type {
   AssignmentCommandResultDto,
   AssignmentDto,
+  AssignmentSettingsDto,
   CompleteAssignmentDto,
   CreateAssignmentDto,
   EmployeeDto,
   RouteDto,
+  UpdateAssignmentSettingsDto,
 } from "../api/contracts";
 import type {
   ActivePatrol,
@@ -40,6 +42,14 @@ export function createApiAssignmentsRepository({
     async getAssignments(options: ApiRequestOptions = {}) {
       const assignments = await client.get<AssignmentDto[]>("/api/v1/assignments", options);
       return assignments.map(mapAssignment);
+    },
+
+    async getSettings(options: ApiRequestOptions = {}) {
+      return client.get<AssignmentSettingsDto>("/api/v1/assignments/settings", options);
+    },
+
+    async updateSettings(payload: UpdateAssignmentSettingsDto) {
+      return client.put<AssignmentSettingsDto, UpdateAssignmentSettingsDto>("/api/v1/assignments/settings", payload);
     },
 
     async getEmployees(options: ApiRequestOptions = {}) {
@@ -121,7 +131,12 @@ export function mapAssignment(assignment: AssignmentDto): ActivePatrol {
     progress: assignment.progressPercent,
     eta: assignment.eta || formatDateTime(assignment.plannedAt),
     deviation: assignment.finishedAt ? "закрыто" : "-",
+    plannedAt: assignment.plannedAt ? formatDateTime(assignment.plannedAt) : undefined,
+    plannedAtIso: assignment.plannedAt || undefined,
     startedAt: assignment.startedAt ? formatDateTime(assignment.startedAt) : undefined,
+    startedAtIso: assignment.startedAt || undefined,
+    finishedAt: assignment.finishedAt ? formatDateTime(assignment.finishedAt) : undefined,
+    finishedAtIso: assignment.finishedAt || undefined,
   };
 }
 
@@ -207,7 +222,8 @@ function normalizeAssignmentStatus(status: string): ActivePatrol["status"] {
   if (status === "Нет связи") return "Нет связи";
   if (status === "Завершает") return "Завершает";
   if (status === "Запланирован") return "Запланирован";
-  if (status === "Завершено") return "Завершает";
+  if (status === "Завершено") return "Завершено";
+  if (status === "Отменено") return "Отменено";
 
   return "Ожидает";
 }

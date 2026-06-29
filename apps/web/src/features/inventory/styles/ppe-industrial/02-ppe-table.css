@@ -1,0 +1,102 @@
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table-wrap {
+  background: transparent;
+  padding: 8px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table {
+  border-collapse: separate;
+  border-spacing: 0 8px;
+  min-width: 950px;
+  table-layout: fixed;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table th:nth-child(1),
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table td:nth-child(1) {
+  width: 108px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table th:nth-child(2),
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table td:nth-child(2) {
+  width: 164px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table th:nth-child(3),
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table td:nth-child(3) {
+  width: 118px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table th:nth-child(4),
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table td:nth-child(4) {
+  width: 126px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table th:nth-child(5),
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table td:nth-child(5) {
+  width: 106px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table th:nth-child(6),
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table td:nth-child(6) {
+  width: 62px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table th:nth-child(7),
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table td:nth-child(7) {
+  width: 110px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table th:nth-child(8),
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table td:nth-child(8) {
+  width: 154px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table th {
+  background: transparent;
+  border: 0;
+  color: var(--issue-muted);
+  font-size: 10px;
+  letter-spacing: 0;
+  padding: 0 9px 4px;
+  text-transform: uppercase;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table td {
+  background: #ffffff;
+  border-bottom: 1px solid var(--issue-border);
+  border-top: 1px solid var(--issue-border);
+  color: var(--issue-text);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+  padding: 10px 9px;
+  vertical-align: middle;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table td:first-child {
+  border-left: 1px solid var(--issue-border);
+  border-radius: 8px 0 0 8px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table td:last-child {
+  border-radius: 0 8px 8px 0;
+  border-right: 1px solid var(--issue-border);
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table tbody tr:hover td {
+  background: #fbfdff;
+  border-color: var(--issue-border-strong);
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table tbody tr.is-selected {
+  box-shadow: none;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table tbody tr.is-selected td {
+  background: #f4f9ff;
+  border-color: var(--issue-blue);
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table tbody tr.is-selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--issue-blue);
+}
+

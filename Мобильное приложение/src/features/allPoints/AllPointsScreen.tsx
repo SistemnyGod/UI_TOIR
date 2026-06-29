@@ -1,14 +1,15 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ListRenderItem, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getActiveAssignment, listAssignmentPoints, PointListItem } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { Card } from "@/ui/Card";
-import { Screen } from "@/ui/Screen";
+import { PrimaryButton } from "@/ui/PrimaryButton";
+import { ScreenList } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
 
-type Filter = "all" | "pending" | "completed" | "deferred" | "issue" | "scanned";
+type Filter = "all" | "pending" | "deferred" | "issue" | "skipped";
 
 export function AllPointsScreen() {
   const router = useRouter();
@@ -49,70 +50,69 @@ export function AllPointsScreen() {
       return points;
     }
 
-    if (filter === "completed") {
-      return points.filter((point) => point.status === "ok" || point.status === "issue");
-    }
-
     return points.filter((point) => point.status === filter);
   }, [filter, points]);
 
+  const renderItem: ListRenderItem<PointListItem> = ({ item }) => (
+    <PointRow
+      assignmentId={assignmentId ?? ""}
+      onPress={() => assignmentId && router.push(`/patrol/assignment/${assignmentId}/point/${item.pointId}`)}
+      point={item}
+    />
+  );
+
   return (
-    <Screen title="Метки" subtitle="Обзор точек активного маршрута.">
-      {!assignmentId ? (
-        <Card>
-          <Text style={[styles.title, { color: colors.text }]}>Активный обход не выбран</Text>
-          <Text style={[styles.text, { color: colors.mutedText }]}>Возьмите заявку на вкладке Обход, чтобы увидеть метки маршрута.</Text>
-        </Card>
-      ) : null}
-
-      {assignmentId ? (
-        <>
+    <ScreenList
+      data={assignmentId ? visiblePoints : []}
+      keyExtractor={(point) => point.pointId}
+      ListEmptyComponent={
+        !assignmentId ? (
           <Card>
-            <View style={styles.progressHeader}>
-              <Text style={[styles.title, { color: colors.text }]}>Прогресс маршрута</Text>
-              <Text style={[styles.meta, { color: colors.mutedText }]}>
-                {summary.completed} из {summary.total}
-              </Text>
-            </View>
-            <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
-              <View style={[styles.progressFill, { width: `${percent}%` }]} />
-            </View>
-            <Text style={[styles.meta, { color: colors.mutedText }]}>{percent}%</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Активный обход не выбран</Text>
+            <Text style={[styles.text, { color: colors.mutedText }]}>Возьмите заявку на вкладке Обход, чтобы увидеть метки маршрута.</Text>
           </Card>
-
-          <View style={styles.summaryGrid}>
-            <Metric label="Всего" value={summary.total} />
-            <Metric label="Выполнено" value={summary.completed} tone="success" />
-            <Metric label="Отложено" value={summary.deferred} tone={summary.deferred > 0 ? "warning" : "neutral"} />
-            <Metric label="Проблемы" value={summary.issue} tone={summary.issue > 0 ? "danger" : "neutral"} />
-          </View>
-
-          <View style={styles.filters}>
-            <FilterChip count={summary.total} label="Все" selected={filter === "all"} onPress={() => setFilter("all")} />
-            <FilterChip count={summary.pending} label="Не заполнено" selected={filter === "pending"} onPress={() => setFilter("pending")} />
-            <FilterChip count={summary.completed} label="Заполнено" selected={filter === "completed"} onPress={() => setFilter("completed")} />
-            <FilterChip count={summary.deferred} label="Отложено" selected={filter === "deferred"} onPress={() => setFilter("deferred")} />
-            <FilterChip count={summary.issue} label="Неисправно" selected={filter === "issue"} onPress={() => setFilter("issue")} />
-            <FilterChip count={summary.scanned} label="Сканировано" selected={filter === "scanned"} onPress={() => setFilter("scanned")} />
-          </View>
-
-          {visiblePoints.length === 0 ? (
+        ) : (
+          <Card>
+            <Text style={[styles.text, { color: colors.mutedText }]}>По выбранному фильтру меток нет.</Text>
+          </Card>
+        )
+      }
+      renderItem={renderItem}
+      title="Метки"
+      subtitle="Обзор точек активного маршрута."
+      headerContent={
+        assignmentId ? (
+          <>
             <Card>
-              <Text style={[styles.text, { color: colors.mutedText }]}>По выбранному фильтру меток нет.</Text>
+              <View style={styles.progressHeader}>
+                <Text style={[styles.title, { color: colors.text }]}>Прогресс маршрута</Text>
+                <Text style={[styles.meta, { color: colors.mutedText }]}>
+                  {summary.completed} из {summary.total}
+                </Text>
+              </View>
+              <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+                <View style={[styles.progressFill, { width: `${percent}%` }]} />
+              </View>
+              <Text style={[styles.meta, { color: colors.mutedText }]}>{percent}%</Text>
             </Card>
-          ) : null}
 
-          {visiblePoints.map((point) => (
-            <PointRow
-              assignmentId={assignmentId}
-              key={point.pointId}
-              onPress={() => router.push(`/patrol/assignment/${assignmentId}/point/${point.pointId}`)}
-              point={point}
+            <PrimaryButton
+              icon="scan-outline"
+              label="Сканировать NFC"
+              onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-nfc`)}
             />
-          ))}
-        </>
-      ) : null}
-    </Screen>
+
+            <View style={styles.filters}>
+              <FilterChip count={summary.total} label="Все" selected={filter === "all"} onPress={() => setFilter("all")} />
+              <FilterChip count={summary.pending} label="Не заполнено" selected={filter === "pending"} onPress={() => setFilter("pending")} />
+              <FilterChip count={summary.issue} label="Проблемы" selected={filter === "issue"} onPress={() => setFilter("issue")} />
+              <FilterChip count={summary.skipped} label="Метка недоступна" selected={filter === "skipped"} onPress={() => setFilter("skipped")} />
+              <FilterChip count={summary.deferred} label="Отложено" selected={filter === "deferred"} onPress={() => setFilter("deferred")} />
+            </View>
+          </>
+        ) : null
+      }
+    />
   );
 }
 
@@ -133,10 +133,6 @@ function PointRow({ assignmentId, point, onPress }: { assignmentId: string; poin
           </View>
           <View style={styles.pointTitleBox}>
             <Text style={[styles.pointTitle, { color: colors.text }]} numberOfLines={2}>{point.name}</Text>
-            <Text style={[styles.text, { color: colors.mutedText }]}>{point.required ? "Обязательная метка" : "Дополнительная метка"}</Text>
-            {point.comment ? (
-              <Text style={[styles.meta, { color: colors.mutedText }]} numberOfLines={2}>{point.comment}</Text>
-            ) : null}
           </View>
           <View style={styles.pointStatusBox}>
             <StatusPill label={pointStatusLabel(point.status)} tone={pointStatusTone(point.status)} />
@@ -145,17 +141,6 @@ function PointRow({ assignmentId, point, onPress }: { assignmentId: string; poin
         </View>
       </Card>
     </Pressable>
-  );
-}
-
-function Metric({ label, value, tone = "neutral" }: { label: string; value: number; tone?: "neutral" | "success" | "warning" | "danger" }) {
-  const { colors } = useAppTheme();
-
-  return (
-    <View style={[styles.metric, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <Text style={[styles.metricValue, { color: colors.text }, metricToneStyle(tone)]}>{value}</Text>
-      <Text style={[styles.metricLabel, { color: colors.mutedText }]}>{label}</Text>
-    </View>
   );
 }
 
@@ -181,9 +166,9 @@ function buildSummary(points: PointListItem[]) {
   return {
     total: points.length,
     pending: points.filter((point) => point.status === "pending").length,
-    scanned: points.filter((point) => point.status === "scanned").length,
-    completed: points.filter((point) => point.status === "ok" || point.status === "issue").length,
+    completed: points.filter((point) => point.status === "ok" || point.status === "issue" || point.status === "skipped").length,
     deferred: points.filter((point) => point.status === "deferred").length,
+    skipped: points.filter((point) => point.status === "skipped").length,
     issue: points.filter((point) => point.status === "issue").length
   };
 }
@@ -203,7 +188,7 @@ function pointStatusLabel(status: PointListItem["status"]) {
     case "scanned":
       return "Сканирована";
     case "skipped":
-      return "Пропущена";
+      return "Метка недоступна";
     default:
       return "Не заполнено";
   }
@@ -218,24 +203,11 @@ function pointStatusTone(status: PointListItem["status"]) {
     return "danger";
   }
 
-  if (status === "deferred") {
+  if (status === "deferred" || status === "skipped") {
     return "warning";
   }
 
   return "neutral";
-}
-
-function metricToneStyle(tone: "neutral" | "success" | "warning" | "danger") {
-  switch (tone) {
-    case "success":
-      return styles.success;
-    case "warning":
-      return styles.warning;
-    case "danger":
-      return styles.danger;
-    default:
-      return null;
-  }
 }
 
 const styles = StyleSheet.create({
@@ -254,46 +226,26 @@ const styles = StyleSheet.create({
     backgroundColor: "#1e5bff",
     height: 9
   },
-  summaryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10
-  },
-  metric: {
-    borderRadius: 12,
-    borderWidth: 1,
-    minWidth: "47%",
-    paddingHorizontal: 12,
-    paddingVertical: 12
-  },
-  metricValue: {
-    fontSize: 24,
-    fontWeight: "800"
-  },
-  metricLabel: {
-    fontSize: 12,
-    fontWeight: "700"
-  },
   filters: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8
+    gap: 7
   },
   chip: {
     alignItems: "center",
     borderRadius: 999,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7
   },
   chipText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700"
   },
   chipCount: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700"
   },
   pointCard: {
@@ -328,7 +280,9 @@ const styles = StyleSheet.create({
   },
   pointStatusBox: {
     alignItems: "flex-end",
-    gap: 6
+    flexShrink: 1,
+    gap: 6,
+    maxWidth: 132
   },
   title: {
     flex: 1,
@@ -346,14 +300,5 @@ const styles = StyleSheet.create({
   chevron: {
     fontSize: 24,
     fontWeight: "600"
-  },
-  success: {
-    color: "#22c55e"
-  },
-  warning: {
-    color: "#f59e0b"
-  },
-  danger: {
-    color: "#ef4444"
   }
 });

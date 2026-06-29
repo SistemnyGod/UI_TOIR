@@ -72,7 +72,9 @@ public sealed class ResultsDbIntegrationTests
         Assert.Equal("text/csv; charset=utf-8", export.ContentType);
         Assert.StartsWith("patrol-results-", export.FileName);
         var csv = Encoding.UTF8.GetString(export.Content);
-        Assert.Contains("AssignmentId;Status;Point;Employee;Route;Territory;Shift;PlannedAt;ActualAt;Deviation;Photos;IssueType;Severity;Comment", csv);
+        Assert.Contains("AssignmentId;Status;Point;Employee;Route;Territory;Shift;PlannedAt;ActualAt;Deviation;Photos;IssueType;Severity;Comment;RoutePointId;RoutePointSequence;RoutePointType;NfcCode;RequiresPhoto;PhotoStatus;AttachmentCount", csv);
+        Assert.Contains("PhotoStatus", csv);
+        Assert.Contains("AttachmentCount", csv);
         Assert.Contains(sourceResult.Route, csv);
         Assert.Contains(sourceResult.Employee, csv);
     }

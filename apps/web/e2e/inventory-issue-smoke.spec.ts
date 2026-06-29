@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
 
+const mojibakePattern = new RegExp(
+  "(?:\\uFFFD|\\u0420[\\u0400-\\u040F\\u0450-\\u045F\\u0490-\\u0491\\u00A0-\\u00BF\\u2010-\\u203A\\u20AC\\u2116\\u2122]|\\u0421[\\u0400-\\u040F\\u0450-\\u045F\\u0490-\\u0491\\u00A0-\\u00BF\\u2010-\\u203A\\u20AC\\u2116\\u2122])",
+);
+
 test("inventory issue screen uses dedicated options and posts issue documents", async ({ page }) => {
   const sessionUser = {
     id: "admin-1",
@@ -74,7 +78,7 @@ test("inventory issue screen uses dedicated options and posts issue documents", 
   const stockRow = {
     itemId,
     itemName: item.name,
-    warehouseId,
+    warehouseId: null,
     warehouseName: "Основной склад",
     balance: 8,
     stockPhysical: 8,
@@ -131,8 +135,12 @@ test("inventory issue screen uses dedicated options and posts issue documents", 
     }
     return route.fulfill({ contentType: "application/json", body: JSON.stringify(documents) });
   });
-  await page.route("**/api/v1/inventory/documents", async (route) => {
+  await page.route("**/api/v1/inventory/documents**", async (route) => {
     requests.push(route.request().url());
+    if (route.request().method() === "GET") {
+      return route.fulfill({ contentType: "application/json", body: JSON.stringify(documents) });
+    }
+
     postedPayload = await route.request().postDataJSON();
     return route.fulfill({
       contentType: "application/json",
@@ -149,9 +157,11 @@ test("inventory issue screen uses dedicated options and posts issue documents", 
   await page.goto("/#inventory-issue");
 
   await expect(page.getByRole("heading", { name: "Выдача" })).toBeVisible();
-  await expect(page.locator(".inventory-issue-kpis")).toContainText("1");
+  await expect(page.locator(".inventory-issue-tabs")).toContainText("Список черновиков");
   await expect(page.locator(".inventory-issue-item-grid").getByText("Каска для issue smoke")).toBeVisible();
-  await expect(page.getByText("INV-ISSUE-001")).toBeVisible();
+  await page.getByRole("button", { name: "История выдачи" }).click();
+  await expect(page.locator(".inventory-issue-journal")).toContainText("INV-ISSUE-001");
+  await page.getByRole("button", { name: "Выдача", exact: true }).click();
   expect(requests.some((url) => url.includes("/inventory/employees"))).toBeFalsy();
   expect(requests.some((url) => url.includes("/inventory/items?"))).toBeFalsy();
   expect(requests.some((url) => url.includes("/inventory/settings"))).toBeFalsy();
@@ -163,14 +173,14 @@ test("inventory issue screen uses dedicated options and posts issue documents", 
   await page.getByRole("button", { name: "Провести выдачу" }).last().click();
 
   await expect.poll(() => postedPayload).toMatchObject({
-    comment: "Smoke issue",
+    comment: "Smoke issue · Инв. номер: ISSUE-001",
     employeeId,
     itemId,
     quantity: 2,
     type: "issue",
-    warehouseId,
+    warehouseId: null,
   });
 
   const screenText = await page.locator(".inventory-issue-screen").innerText();
-  expect(screenText).not.toMatch(/Рџ|РЎ|Рќ|Рђ|Р”|Р|СЃ|пїЅ/);
+  expect(screenText).not.toMatch(mojibakePattern);
 });

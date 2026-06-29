@@ -4,6 +4,8 @@
 **/obj
 **/node_modules
 **/dist
+!apps/web/dist
+!apps/web/dist/**
 **/test-results
 **/playwright-report
 TestResults

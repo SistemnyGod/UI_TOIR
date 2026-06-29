@@ -244,6 +244,188 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.ToTable("emu_favorite_employees", (string)null);
                 });
 
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuShiftTemplateEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("CrossesMidnight")
+                        .HasColumnType("boolean")
+                        .HasColumnName("crosses_midnight");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("end_time");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<TimeOnly>("LunchEndTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("lunch_end_time");
+
+                    b.Property<TimeOnly>("LunchStartTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("lunch_start_time");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("ShiftType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("shift_type");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("start_time");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("ix_emu_shift_templates_active");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ux_emu_shift_templates_code");
+
+                    b.ToTable("emu_shift_templates", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuEmployeeShiftEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("AdjustedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("adjusted_at");
+
+                    b.Property<string>("AdjustedByName")
+                        .IsRequired()
+                        .HasMaxLength(220)
+                        .HasColumnType("character varying(220)")
+                        .HasColumnName("adjusted_by_name");
+
+                    b.Property<Guid?>("AdjustedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("adjusted_by_user_id");
+
+                    b.Property<DateTimeOffset>("ActualEndAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actual_end_at");
+
+                    b.Property<DateTimeOffset>("ActualStartAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actual_start_at");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(1400)
+                        .HasColumnType("character varying(1400)")
+                        .HasColumnName("comment");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<DateTimeOffset>("LunchEndAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lunch_end_at");
+
+                    b.Property<bool>("LunchOverridden")
+                        .HasColumnType("boolean")
+                        .HasColumnName("lunch_overridden");
+
+                    b.Property<DateTimeOffset>("LunchStartAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lunch_start_at");
+
+                    b.Property<bool>("LunchTaken")
+                        .HasColumnType("boolean")
+                        .HasColumnName("lunch_taken");
+
+                    b.Property<DateTimeOffset>("PlannedEndAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("planned_end_at");
+
+                    b.Property<DateTimeOffset>("PlannedStartAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("planned_start_at");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1400)
+                        .HasColumnType("character varying(1400)")
+                        .HasColumnName("reason");
+
+                    b.Property<int>("RowVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("row_version");
+
+                    b.Property<DateOnly>("ShiftDate")
+                        .HasColumnType("date")
+                        .HasColumnName("shift_date");
+
+                    b.Property<string>("ShiftType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("shift_type");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("source");
+
+                    b.Property<Guid?>("TemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdjustedByUserId")
+                        .HasDatabaseName("ix_emu_employee_shifts_adjusted_by_user_id");
+
+                    b.HasIndex("ShiftDate")
+                        .HasDatabaseName("ix_emu_employee_shifts_date");
+
+                    b.HasIndex("Source")
+                        .HasDatabaseName("ix_emu_employee_shifts_source");
+
+                    b.HasIndex("TemplateId");
+
+                    b.HasIndex("EmployeeId", "ShiftDate")
+                        .IsUnique()
+                        .HasDatabaseName("ux_emu_employee_shifts_employee_date");
+
+                    b.ToTable("emu_employee_shifts", (string)null);
+                });
+
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuNotCompletedReasonEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1051,6 +1233,48 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("employee_id");
 
+                    b.Property<string>("Gender")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("gender");
+
+                    b.Property<string>("Height")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("height");
+
+                    b.Property<string>("ClothingSize")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("clothing_size");
+
+                    b.Property<string>("ShoeSize")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("shoe_size");
+
+                    b.Property<string>("HeadSize")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("head_size");
+
+                    b.Property<string>("RespiratorSize")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("respirator_size");
+
+                    b.Property<string>("HandProtectionSize")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("hand_protection_size");
+
                     b.Property<int?>("LegacyId")
                         .HasColumnType("integer")
                         .HasColumnName("legacy_id");
@@ -1123,10 +1347,38 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("legacy_id");
 
+                    b.Property<string>("BrandModelArticle")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)")
+                        .HasColumnName("brand_model_article");
+
+                    b.Property<string>("PrintItemName")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)")
+                        .HasColumnName("print_item_name");
+
+                    b.Property<string>("NormPoint")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)")
+                        .HasColumnName("norm_point");
+
+                    b.Property<string>("IssuePeriodText")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("issue_period_text");
+
                     b.Property<decimal>("Quantity")
                         .HasPrecision(12, 3)
                         .HasColumnType("numeric(12,3)")
                         .HasColumnName("quantity");
+
+                    b.Property<long?>("UnitPriceMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("unit_price_minor");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1995,6 +2247,9 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ItemId", "MovedAt")
                         .HasDatabaseName("ix_inventory_stock_moves_item_moved");
+
+                    b.HasIndex("ItemId", "WarehouseId", "MoveType")
+                        .HasDatabaseName("ix_inventory_stock_moves_item_warehouse_type");
 
                     b.HasIndex("WarehouseId", "MovedAt")
                         .HasDatabaseName("ix_inventory_stock_moves_warehouse_moved");
@@ -3370,6 +3625,53 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.ToTable("site_users", (string)null);
                 });
 
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.SiteUserAccessScopeEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("ModuleKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("module_key");
+
+                    b.Property<Guid>("ScopeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scope_id");
+
+                    b.Property<string>("ScopeType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("scope_type");
+
+                    b.Property<Guid>("SiteUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModuleKey", "ScopeType", "ScopeId")
+                        .HasDatabaseName("ix_site_user_access_scopes_scope");
+
+                    b.HasIndex("SiteUserId", "ModuleKey", "ScopeType", "ScopeId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_site_user_access_scopes_user_scope");
+
+                    b.ToTable("site_user_access_scopes", (string)null);
+                });
+
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.SiteUserRoleEntity", b =>
                 {
                     b.Property<Guid>("SiteUserId")
@@ -3464,6 +3766,31 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Employee");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuEmployeeShiftEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmuShiftTemplateEntity", "Template")
+                        .WithMany()
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", "AdjustedByUser")
+                        .WithMany()
+                        .HasForeignKey("AdjustedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AdjustedByUser");
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("Template");
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.EmuNotificationEntity", b =>
@@ -4118,6 +4445,17 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Navigation("SiteUser");
                 });
 
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.SiteUserAccessScopeEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", "SiteUser")
+                        .WithMany("AccessScopes")
+                        .HasForeignKey("SiteUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SiteUser");
+                });
+
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.SiteUserSessionEntity", b =>
                 {
                     b.HasOne("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", "SiteUser")
@@ -4244,6 +4582,8 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", b =>
                 {
+                    b.Navigation("AccessScopes");
+
                     b.Navigation("Roles");
 
                     b.Navigation("Sessions");

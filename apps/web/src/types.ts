@@ -13,9 +13,10 @@ export type InventoryScreenId =
   | "inventory-settings"
   | "inventory-system-log";
 export type EmuScreenId = "emu-dashboard" | "emu-work-accounting" | "emu-completed-work-history";
-export type ScreenId = PatrolScreenId | InventoryScreenId | EmuScreenId | "users";
+export type IntegrationScreenId = "perco-integration";
+export type ScreenId = PatrolScreenId | InventoryScreenId | EmuScreenId | IntegrationScreenId | "users";
 
-export type ResultMode = "all" | "issues" | "late" | "photos";
+export type ResultMode = "all" | "issues" | "late" | "photos" | "noPhotos";
 export type ScheduleMode = "week" | "month" | "exceptions";
 export type AccountMode = "accounts" | "sessions" | "bindings";
 export type RouteMode = "points" | "scheme" | "stats" | "history";
@@ -64,11 +65,16 @@ export interface ActivePatrol {
   zone: string;
   shift: "День" | "Ночь";
   currentPoint: string;
-  status: "В пути" | "Задержка" | "Нет связи" | "Завершает" | "Ожидает" | "Запланирован";
+  status: "В пути" | "Задержка" | "Нет связи" | "Завершает" | "Ожидает" | "Запланирован" | "Завершено" | "Отменено";
   progress: number;
   eta: string;
   deviation: string;
+  plannedAt?: string;
+  plannedAtIso?: string;
   startedAt?: string;
+  startedAtIso?: string;
+  finishedAt?: string;
+  finishedAtIso?: string;
   totalTime?: string;
   checkpoints?: PatrolCheckpointProgress[];
   media?: PatrolMediaAttachment[];
@@ -120,6 +126,8 @@ export interface PatrolResult {
   shift: "День" | "Ночь";
   plannedAt: string;
   actualAt: string;
+  startedAt?: string;
+  finishedAt?: string;
   deviation: string;
   comment: string;
   photos: number;
@@ -257,11 +265,12 @@ export interface SiteUser {
   id: string;
   login: string;
   fullName: string;
-  role: "Администратор" | "Оператор" | "Руководитель" | "Аудитор";
+  role: "Администратор" | "Оператор" | "Оператор ЭМУ" | "Руководитель" | "Аудитор";
   status: "Активен" | "Неактивен" | "Заблокирован";
   lastLogin: string;
   createdAt: string;
   access: string[];
+  directPermissions?: string[];
   recentSessions: string[];
 }
 
@@ -356,6 +365,19 @@ export interface MobileSyncConflict {
   resolvedAt?: string | null;
 }
 
+export interface MobileDeviceHealth {
+  mobileAccountId: string;
+  login: string;
+  deviceId?: string | null;
+  deviceName?: string | null;
+  appVersion?: string | null;
+  lastSeenAt?: string | null;
+  pushStatus: string;
+  pendingOutboxCount: number;
+  staleOutboxCount: number;
+  lastError?: string | null;
+}
+
 export interface RoutePoint {
   id: string;
   order: number;
@@ -366,6 +388,7 @@ export interface RoutePoint {
   interval: string;
   expectedTime: string;
   status: "Активна" | "Повтор метки" | "Черновик";
+  nfcCode?: string;
   requiresPhoto: boolean;
 }
 

@@ -29,11 +29,11 @@ type ThemeContextValue = {
 const themePreferenceKey = "patrol360.themePreference";
 
 const lightColors: ThemeColors = {
-  background: "#f5f7fa",
-  backgroundAccent: "#eaf2ff",
-  border: "#e5e7eb",
+  background: "#f4f7fb",
+  backgroundAccent: "#e8f1ff",
+  border: "#dbe5f2",
   card: "#ffffff",
-  mutedText: "#6b7280",
+  mutedText: "#607089",
   navBackground: "#ffffff",
   navBorder: "#dbe5f2",
   primary: "#1e5bff",

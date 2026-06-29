@@ -20,5 +20,9 @@ internal sealed class SiteUserEntity
 
     public List<SiteUserRoleEntity> Roles { get; set; } = [];
 
+    public List<SiteUserPermissionEntity> Permissions { get; set; } = [];
+
+    public List<SiteUserAccessScopeEntity> AccessScopes { get; set; } = [];
+
     public List<SiteUserSessionEntity> Sessions { get; set; } = [];
 }

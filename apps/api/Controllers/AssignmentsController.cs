@@ -14,6 +14,15 @@ public sealed class AssignmentsController(IAssignmentService assignmentService) 
     [RequirePermission("assignments.read")]
     public ActionResult<IReadOnlyList<AssignmentDto>> List() => Ok(assignmentService.GetAssignments());
 
+    [HttpGet("settings")]
+    [RequirePermission("assignments.read")]
+    public ActionResult<AssignmentSettingsDto> Settings() => Ok(assignmentService.GetSettings());
+
+    [HttpPut("settings")]
+    [RequirePermission("assignments.write")]
+    public ActionResult<AssignmentSettingsDto> UpdateSettings(UpdateAssignmentSettingsDto request) =>
+        Ok(assignmentService.UpdateSettings(request));
+
     [HttpPost]
     [RequirePermission("assignments.write")]
     public ActionResult<AssignmentDto> Create(CreateAssignmentDto request)

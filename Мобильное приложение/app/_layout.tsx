@@ -10,8 +10,9 @@ import { ActivityIndicator, AppState, View } from "react-native";
 
 import { bootstrapApplication } from "@/core/bootstrap";
 import { ThemeProvider, useAppTheme } from "@/features/settings/themePreference";
-import { refreshPushRegistrationIfAllowed, subscribeToMobilePushEvents } from "@/services/notificationService";
-import { subscribeToNetworkSync, triggerForegroundSyncWithRetry, triggerMobileDataRefresh } from "@/sync/syncTriggers";
+import { registerPushNotifications, refreshPushRegistrationIfAllowed, syncMobileNotifications, subscribeToMobilePushEvents } from "@/services/notificationService";
+import { registerBackgroundSyncTask } from "@/sync/backgroundSyncTask";
+import { requestMobileDataRefresh, subscribeToNetworkSync, triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 
 export default function RootLayout() {
   const queryClient = useMemo(() => new QueryClient(), []);
@@ -27,18 +28,31 @@ export default function RootLayout() {
     }
 
     const unsubscribeNetworkSync = subscribeToNetworkSync();
+    void registerBackgroundSyncTask().catch(() => undefined);
     const unsubscribePushEvents = subscribeToMobilePushEvents({
       onNotification: () => {
-        triggerMobileDataRefresh();
+        void syncMobileNotifications().catch(() => []);
+        requestMobileDataRefresh("push", { force: true });
+        triggerForegroundSyncWithRetry();
       },
       onNotificationResponse: (response) => {
-        triggerMobileDataRefresh();
+        void syncMobileNotifications().catch(() => []);
+        requestMobileDataRefresh("notificationResponse", { force: true });
+        triggerForegroundSyncWithRetry();
         openNotificationTarget(response);
       }
     });
+
+    void registerPushNotifications()
+      .then(() => syncMobileNotifications())
+      .then(() => {
+        requestMobileDataRefresh("appActive", { force: true });
+      })
+      .catch(() => undefined);
+
     const appStateSubscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        triggerMobileDataRefresh();
+        requestMobileDataRefresh("appActive");
         triggerForegroundSyncWithRetry();
         void refreshPushRegistrationIfAllowed().catch(() => undefined);
       }

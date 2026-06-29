@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <None Include="Persistence\SeedData\accounting-employees.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Persistence\Templates\Inventory\*.docx" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup>

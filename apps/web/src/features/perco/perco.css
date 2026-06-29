@@ -1,0 +1,1732 @@
+.perco-shell {
+  display: grid;
+  gap: 16px;
+  min-height: 100%;
+  padding: 24px;
+}
+
+.perco-toolbar,
+.perco-card,
+.perco-empty {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.08);
+}
+
+.perco-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 18px;
+}
+
+.perco-toolbar-main {
+  display: grid;
+  gap: 2px;
+  min-width: 260px;
+}
+
+.perco-toolbar-main strong {
+  color: #061433;
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.perco-toolbar-main span:last-child,
+.perco-toolbar-routes span {
+  color: #526581;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.perco-toolbar-routes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(170px, 1fr));
+  gap: 8px;
+  flex: 1;
+  max-width: 520px;
+}
+
+.perco-toolbar-routes span {
+  border: 1px solid #d9e6f7;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 8px 10px;
+}
+
+.perco-toolbar-routes b {
+  display: block;
+  color: #0b63f6;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.perco-eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.perco-card h2 {
+  margin: 0;
+  color: #061433;
+  font-weight: 900;
+}
+
+.perco-card header span,
+.perco-empty span,
+.perco-empty-block span {
+  color: #526581;
+  font-weight: 700;
+}
+
+.perco-hero-actions,
+.perco-actions,
+.perco-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.perco-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.perco-tabs button,
+.perco-button {
+  min-height: 38px;
+  border: 1px solid #bfd3ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #17345f;
+  font-weight: 900;
+}
+
+.perco-tabs button {
+  padding: 0 14px;
+}
+
+.perco-tabs button.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #0b63f6;
+}
+
+.perco-button {
+  padding: 0 16px;
+  cursor: pointer;
+}
+
+.perco-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.perco-button-primary {
+  border-color: #0b63f6;
+  background: #0b63f6;
+  color: white;
+}
+
+.perco-button-secondary:hover,
+.perco-tabs button:hover {
+  background: #f8fbff;
+}
+
+.perco-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+}
+
+.perco-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.perco-form-heading {
+  align-items: flex-start;
+}
+
+.perco-form-heading > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.perco-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.perco-form-grid.compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.perco-field {
+  display: grid;
+  gap: 6px;
+}
+
+.perco-field span,
+.perco-switch {
+  color: #415777;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.perco-field input,
+.perco-field select,
+.perco-field textarea {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #bfd3ef;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 12px;
+  color: #10264b;
+  font-weight: 800;
+  outline: none;
+}
+
+.perco-field textarea {
+  padding: 10px 12px;
+}
+
+.perco-field input:focus,
+.perco-field select:focus,
+.perco-field textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.perco-switch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid #d9e6f7;
+  border-radius: 999px;
+  background: #f8fbff;
+  padding: 0 12px 0 10px;
+  white-space: nowrap;
+}
+
+.perco-switch input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  min-width: 16px;
+  flex: 0 0 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: #0b63f6;
+}
+
+.perco-status-card dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.perco-status-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid #e7effa;
+  padding-bottom: 8px;
+}
+
+.perco-status-card dt {
+  color: #526581;
+  font-weight: 800;
+}
+
+.perco-status-card dd {
+  margin: 0;
+  color: #061433;
+  font-weight: 900;
+  text-align: right;
+}
+
+.perco-status-pill {
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.perco-status-pill.success,
+.perco-alert-success {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.perco-status-pill.error,
+.perco-alert-error {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.perco-status-pill.idle,
+.perco-alert-info {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.perco-alert {
+  border-radius: 9px;
+  padding: 12px 14px;
+  font-weight: 800;
+}
+
+.perco-alert strong,
+.perco-alert span {
+  display: block;
+}
+
+.perco-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.perco-empty,
+.perco-empty-block {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 180px;
+  padding: 24px;
+  text-align: center;
+}
+
+.perco-empty-block {
+  border: 1px dashed #bfd3ef;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.perco-table,
+.perco-log-list,
+.perco-endpoint-list {
+  display: grid;
+  gap: 8px;
+}
+
+.perco-match-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.perco-match-toolbar input,
+.perco-match-actions select {
+  min-height: 38px;
+  border: 1px solid #bfd3ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #10264b;
+  font-weight: 800;
+  outline: none;
+}
+
+.perco-match-toolbar input {
+  width: 100%;
+  padding: 0 12px;
+}
+
+.perco-match-toolbar span {
+  color: #526581;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.perco-table article,
+.perco-log-list article,
+.perco-endpoint-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #d9e6f7;
+  border-radius: 9px;
+  padding: 12px;
+}
+
+.perco-table strong,
+.perco-log-list strong,
+.perco-endpoint-list strong {
+  display: block;
+  color: #061433;
+  font-weight: 900;
+}
+
+.perco-table span,
+.perco-log-list span,
+.perco-log-list small,
+.perco-endpoint-list span {
+  display: block;
+  margin-top: 3px;
+  color: #526581;
+  font-weight: 700;
+}
+
+.perco-table small {
+  display: block;
+  margin-top: 3px;
+  color: #2563eb;
+  font-weight: 800;
+}
+
+.perco-match-actions {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto auto;
+  gap: 8px;
+  min-width: min(100%, 620px);
+}
+
+.perco-match-actions select {
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.perco-sync-result {
+  display: grid;
+  gap: 12px;
+  border-radius: 10px;
+  padding: 14px;
+  font-weight: 850;
+}
+
+.perco-sync-result.success {
+  background: #dcfce7;
+  color: #075985;
+}
+
+.perco-sync-result.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.perco-sync-result div {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.perco-sync-result span {
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 8px;
+}
+
+.perco-diagnostics-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.perco-diagnostics-summary-wide {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.perco-diagnostics-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(190px, 230px) minmax(360px, auto);
+  align-items: end;
+  gap: 10px;
+}
+
+.perco-diagnostics-controls label {
+  display: grid;
+  gap: 5px;
+}
+
+.perco-diagnostics-controls label span {
+  color: #526581;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.perco-diagnostics-controls input,
+.perco-diagnostics-controls select {
+  min-height: 38px;
+  border: 1px solid #bfd3ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #10264b;
+  font-weight: 850;
+  outline: none;
+  padding: 0 10px;
+}
+
+.perco-presence-rollup {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.perco-presence-rollup span {
+  display: grid;
+  gap: 2px;
+  min-height: 38px;
+  border: 1px solid #d9e6f7;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #526581;
+  font-size: 11px;
+  font-weight: 850;
+  padding: 6px 8px;
+}
+
+.perco-presence-rollup b {
+  color: #0b63f6;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.perco-diagnostics-summary article {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #d9e6f7;
+  border-radius: 9px;
+  background: #f8fbff;
+  padding: 12px;
+}
+
+.perco-diagnostics-summary span {
+  color: #526581;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.perco-diagnostics-summary strong {
+  color: #0b63f6;
+  font-size: 22px;
+  font-weight: 950;
+}
+
+.perco-diagnostics-summary small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.perco-metric-card.tone-success strong {
+  color: #047857;
+}
+
+.perco-metric-card.tone-warning strong {
+  color: #c2410c;
+}
+
+.perco-metric-card.tone-danger strong {
+  color: #b91c1c;
+}
+
+.perco-dashboard {
+  display: grid;
+  gap: 14px;
+}
+
+.perco-dashboard-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.perco-dashboard-head h2 {
+  margin: 0;
+  color: #061433;
+  font-size: 24px;
+  font-weight: 950;
+}
+
+.perco-dashboard-head p {
+  margin: 4px 0 0;
+  color: #526581;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.perco-dashboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.perco-dashboard-empty {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.perco-dashboard-empty h2 {
+  margin: 0;
+  color: #061433;
+}
+
+.perco-dashboard-empty span {
+  display: block;
+  margin-top: 4px;
+  color: #526581;
+  font-weight: 800;
+}
+
+.perco-dashboard-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.perco-dashboard-kpis .perco-metric-card {
+  min-height: 96px;
+}
+
+.perco-scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.perco-scenario-card {
+  display: grid;
+  gap: 6px;
+  min-height: 82px;
+  border: 1px solid #d9e6f7;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #10264b;
+  cursor: pointer;
+  padding: 13px 14px;
+  text-align: left;
+  transition: 0.16s ease;
+}
+
+.perco-scenario-card:hover {
+  border-color: #0b63f6;
+  background: #f8fbff;
+  box-shadow: 0 14px 30px rgba(11, 99, 246, 0.11);
+  transform: translateY(-1px);
+}
+
+.perco-scenario-card b {
+  color: #061433;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.perco-scenario-card span {
+  color: #526581;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.perco-dashboard-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.88fr) minmax(320px, 0.88fr);
+  gap: 14px;
+}
+
+.perco-dashboard-employee-list,
+.perco-dashboard-attention-list,
+.perco-dashboard-event-list {
+  display: grid;
+  gap: 8px;
+}
+
+.perco-dashboard-employee-list article,
+.perco-dashboard-attention-list article,
+.perco-dashboard-event-list article {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #d9e6f7;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+}
+
+.perco-dashboard-employee-list article {
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+}
+
+.perco-dashboard-attention-list article {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.perco-dashboard-attention-list article.is-archive,
+.perco-diagnostics-list article.is-archive {
+  border-color: #fed7aa;
+  background: linear-gradient(135deg, #fff7ed 0%, #ffffff 72%);
+}
+
+.perco-dashboard-event-list article {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.perco-dashboard-employee-list strong,
+.perco-dashboard-attention-list strong,
+.perco-dashboard-event-list strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: #061433;
+  font-size: 13px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.perco-dashboard-employee-list small,
+.perco-dashboard-attention-list span,
+.perco-dashboard-event-list span {
+  display: block;
+  margin-top: 3px;
+  color: #526581;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.perco-dashboard-employee-list b {
+  color: #0b63f6;
+  font-size: 13px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.perco-dashboard-event-list b {
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 950;
+  padding: 5px 8px;
+}
+
+.perco-dashboard-event-list b.in {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.perco-dashboard-event-list b.out {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.perco-live-analytics-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.25fr) minmax(230px, 0.75fr) minmax(230px, 0.75fr) minmax(230px, 0.75fr);
+  gap: 12px;
+}
+
+.perco-analytics-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid #d9e6f7;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 251, 255, 0.96));
+  padding: 14px;
+}
+
+.perco-flow-panel {
+  min-height: 220px;
+}
+
+.perco-analytics-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.perco-analytics-head h3 {
+  margin: 0;
+  color: #061433;
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.perco-analytics-head span {
+  display: block;
+  margin-top: 3px;
+  color: #526581;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.perco-analytics-head b {
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #0b63f6;
+  font-size: 12px;
+  font-weight: 950;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.perco-flow-chart {
+  display: grid;
+  gap: 10px;
+  min-height: 150px;
+}
+
+.perco-flow-bars {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(22px, 1fr));
+  align-items: end;
+  gap: 8px;
+  min-height: 126px;
+  border-radius: 12px;
+  background:
+    repeating-linear-gradient(to top, transparent 0 31px, rgba(191, 211, 239, 0.45) 32px),
+    linear-gradient(180deg, #fff, #f8fbff);
+  padding: 12px 10px 8px;
+}
+
+.perco-flow-hour {
+  display: grid;
+  align-items: end;
+  gap: 7px;
+  min-width: 0;
+}
+
+.perco-flow-stack {
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  gap: 3px;
+  height: 92px;
+}
+
+.perco-flow-stack span {
+  width: 8px;
+  min-height: 4px;
+  border-radius: 999px 999px 2px 2px;
+}
+
+.perco-flow-stack .in,
+.perco-chart-legend .in {
+  background: #0b63f6;
+}
+
+.perco-flow-stack .out,
+.perco-chart-legend .out {
+  background: #10b981;
+}
+
+.perco-flow-hour small {
+  color: #526581;
+  font-size: 10px;
+  font-weight: 850;
+  text-align: center;
+}
+
+.perco-chart-legend {
+  display: flex;
+  gap: 14px;
+  color: #526581;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.perco-chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.perco-chart-legend i {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.perco-presence-ratio {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.perco-presence-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 112px;
+  height: 112px;
+  border-radius: 999px;
+}
+
+.perco-presence-ring::after {
+  content: "";
+  position: absolute;
+  inset: 13px;
+  border-radius: inherit;
+  background: #fff;
+}
+
+.perco-presence-ring span,
+.perco-presence-ring small {
+  position: relative;
+  z-index: 1;
+}
+
+.perco-presence-ring span {
+  color: #061433;
+  font-size: 28px;
+  font-weight: 950;
+}
+
+.perco-presence-ring small {
+  margin-top: 30px;
+  color: #526581;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.perco-presence-ratio dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.perco-presence-ratio dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid #edf4ff;
+  padding-bottom: 7px;
+}
+
+.perco-presence-ratio dt,
+.perco-presence-ratio dd {
+  margin: 0;
+  color: #526581;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.perco-presence-ratio dd {
+  color: #061433;
+  font-weight: 950;
+}
+
+.perco-duration-bars {
+  display: grid;
+  gap: 12px;
+}
+
+.perco-duration-bars div {
+  position: relative;
+  display: grid;
+  grid-template-columns: 54px 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  color: #526581;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.perco-duration-bars b {
+  color: #061433;
+}
+
+.perco-duration-bars i {
+  display: block;
+  height: 9px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0b63f6, #7dd3fc);
+}
+
+.perco-quality-list {
+  display: grid;
+  gap: 9px;
+}
+
+.perco-quality-list article {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #d9e6f7;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 10px;
+}
+
+.perco-quality-list strong {
+  color: #0b63f6;
+  font-size: 20px;
+  font-weight: 950;
+}
+
+.perco-quality-list span {
+  color: #526581;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.perco-quality-list .tone-warning strong {
+  color: #c2410c;
+}
+
+.perco-quality-list .tone-danger strong {
+  color: #b91c1c;
+}
+
+.perco-quality-list .tone-success strong {
+  color: #047857;
+}
+
+.perco-presence-analytics {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr);
+  gap: 14px;
+}
+
+.perco-presence-split {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.perco-section-counter {
+  display: inline-grid;
+  min-width: 34px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #0b63f6;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.perco-card-flat {
+  box-shadow: none;
+}
+
+.perco-presence-list {
+  display: grid;
+  gap: 10px;
+}
+
+.perco-presence-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 14px;
+  align-items: center;
+  border: 1px solid #d9e6f7;
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px;
+}
+
+.perco-presence-list article.is-active-shift {
+  border-left: 4px solid #16a34a;
+  background: linear-gradient(135deg, rgba(236, 253, 245, 0.82), #fff 64%);
+}
+
+.perco-presence-list article.is-completed-shift {
+  border-left: 4px solid #64748b;
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.92), #fff 66%);
+}
+
+.perco-presence-person {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.perco-presence-person strong,
+.perco-presence-person small {
+  display: block;
+  min-width: 0;
+}
+
+.perco-presence-person strong {
+  color: #061433;
+  font-size: 14px;
+  font-weight: 950;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.perco-presence-person small {
+  margin-top: 3px;
+  color: #526581;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.perco-presence-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #94a3b8;
+  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16);
+}
+
+.perco-presence-dot.inside {
+  background: #16a34a;
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.16);
+}
+
+.perco-presence-dot.stale {
+  background: #f97316;
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.16);
+}
+
+.perco-presence-dot.outside {
+  background: #64748b;
+  box-shadow: 0 0 0 4px rgba(100, 116, 139, 0.16);
+}
+
+.perco-presence-metrics {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+}
+
+.perco-presence-metrics span {
+  color: #0b63f6;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.perco-presence-metrics b {
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 950;
+  padding: 4px 8px;
+}
+
+.is-active-shift .perco-presence-metrics b {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.is-completed-shift .perco-presence-metrics b {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.perco-presence-timeline {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 12px;
+}
+
+.perco-presence-timeline span {
+  display: block;
+  height: 7px;
+  min-width: 14px;
+  border-radius: 999px;
+  background: #bfdbfe;
+}
+
+.perco-presence-timeline span.open {
+  background: #86efac;
+}
+
+.perco-presence-timeline span.stale {
+  background: #fdba74;
+}
+
+.perco-shift-rules {
+  display: grid;
+  gap: 10px;
+}
+
+.perco-shift-rules article {
+  border: 1px solid #d9e6f7;
+  border-left: 4px solid #0b63f6;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 12px;
+}
+
+.perco-shift-rules strong,
+.perco-shift-rules span {
+  display: block;
+}
+
+.perco-shift-rules strong {
+  color: #061433;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.perco-shift-rules span {
+  margin-top: 4px;
+  color: #526581;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.perco-diagnostics-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.perco-diagnostics-panel {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.perco-diagnostics-panel h3 {
+  margin: 0;
+  color: #061433;
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.perco-diagnostics-list {
+  display: grid;
+  gap: 8px;
+}
+
+.perco-diagnostics-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #d9e6f7;
+  border-radius: 9px;
+  padding: 10px 12px;
+}
+
+.perco-diagnostics-list strong,
+.perco-diagnostics-list span,
+.perco-diagnostics-list small {
+  display: block;
+}
+
+.perco-diagnostics-list strong {
+  color: #061433;
+  font-weight: 950;
+}
+
+.perco-diagnostics-list span {
+  margin-top: 3px;
+  color: #17345f;
+  font-weight: 800;
+}
+
+.perco-diagnostics-list small {
+  margin-top: 3px;
+  color: #526581;
+  font-weight: 700;
+}
+
+.perco-diagnostics-list .perco-analysis-note {
+  margin-top: 8px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  line-height: 1.35;
+}
+
+.perco-diagnostics-list .perco-analysis-action {
+  margin-top: 5px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  line-height: 1.35;
+}
+
+.perco-diagnostics-list aside {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+
+.perco-diagnostics-list b {
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 950;
+  min-width: 72px;
+  text-align: center;
+}
+
+.perco-diagnostics-list b.in {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.perco-diagnostics-list b.out {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.perco-diagnostics-list b.stale {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.perco-diagnostics-list b.lunch {
+  background: #e0f2fe;
+  color: #0369a1;
+  min-width: 160px;
+}
+
+.perco-diagnostics-list time {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.perco-link-button {
+  border: 0;
+  background: transparent;
+  color: #0b63f6;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 0;
+  text-align: right;
+}
+
+.perco-link-button:hover {
+  text-decoration: underline;
+}
+
+.perco-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.perco-modal {
+  display: grid;
+  gap: 14px;
+  width: min(560px, 100%);
+  border: 1px solid #d6e4f5;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 22px 70px rgba(15, 23, 42, 0.24);
+  padding: 18px;
+}
+
+.perco-modal header,
+.perco-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.perco-modal h2 {
+  margin: 0;
+  color: #061433;
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.perco-modal header span,
+.perco-warning-text {
+  color: #526581;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.perco-warning-text {
+  margin: 0;
+}
+
+.perco-warning-text.is-danger {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #b91c1c;
+}
+
+.perco-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #d8e5f7;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #17345f;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.perco-modal textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+
+.perco-log-list aside {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+
+.perco-log-list b {
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+}
+
+.perco-log-list b.success {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.perco-log-list b.error {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.perco-log-list b.warning {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.perco-log-list time {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+@media (max-width: 1100px) {
+  .perco-grid,
+  .perco-form-grid,
+  .perco-form-grid.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .perco-match-toolbar,
+  .perco-match-actions,
+  .perco-table article {
+    grid-template-columns: 1fr;
+  }
+
+  .perco-toolbar,
+  .perco-card header,
+  .perco-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .perco-toolbar-routes {
+    grid-template-columns: 1fr;
+    max-width: none;
+  }
+
+  .perco-sync-result div {
+    grid-template-columns: 1fr;
+  }
+
+  .perco-diagnostics-summary,
+  .perco-diagnostics-summary-wide,
+  .perco-diagnostics-grid,
+  .perco-dashboard-kpis,
+  .perco-scenario-grid,
+  .perco-dashboard-main-grid,
+  .perco-live-analytics-grid,
+  .perco-presence-analytics,
+  .perco-diagnostics-list article {
+    grid-template-columns: 1fr;
+  }
+
+  .perco-dashboard-head,
+  .perco-dashboard-empty {
+    grid-template-columns: 1fr;
+  }
+
+  .perco-dashboard-actions {
+    justify-content: stretch;
+  }
+
+  .perco-dashboard-actions .perco-button {
+    width: 100%;
+  }
+
+  .perco-flow-bars {
+    grid-template-columns: repeat(12, minmax(34px, 1fr));
+    overflow-x: auto;
+  }
+
+  .perco-presence-ratio {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .perco-presence-list article {
+    grid-template-columns: 1fr;
+  }
+
+  .perco-presence-metrics {
+    justify-items: start;
+  }
+}
+
+/* Layout hardening: keeps PERCo dense and contained inside the app shell. */
+.perco-shell,
+.perco-shell * {
+  box-sizing: border-box;
+}
+
+.perco-shell {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
+  padding: 18px;
+}
+
+.perco-card,
+.perco-toolbar,
+.perco-toolbar-main,
+.perco-toolbar-routes,
+.perco-grid,
+.perco-dashboard,
+.perco-dashboard-head,
+.perco-dashboard-main-grid,
+.perco-live-analytics-grid,
+.perco-presence-analytics,
+.perco-presence-split,
+.perco-diagnostics-grid,
+.perco-diagnostics-panel,
+.perco-analytics-panel,
+.perco-status-card,
+.perco-table,
+.perco-log-list,
+.perco-endpoint-list {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.perco-shell :where(h2, h3, p, span, small, strong, b, dt, dd, label) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.perco-toolbar {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  padding: 12px 14px;
+}
+
+.perco-toolbar-main {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.perco-toolbar-routes {
+  flex: 2 1 360px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  max-width: none;
+}
+
+.perco-hero-actions,
+.perco-actions,
+.perco-card header,
+.perco-form-heading,
+.perco-dashboard-actions,
+.perco-analytics-head,
+.perco-modal header,
+.perco-modal-actions {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.perco-card {
+  gap: 12px;
+  padding: 14px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+.perco-button {
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+}
+
+.perco-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+}
+
+.perco-form-grid.compact,
+.perco-action-grid,
+.perco-dashboard-kpis,
+.perco-scenario-grid,
+.perco-diagnostics-summary,
+.perco-diagnostics-summary-wide,
+.perco-presence-rollup {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.perco-live-analytics-grid,
+.perco-dashboard-main-grid,
+.perco-presence-analytics,
+.perco-diagnostics-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.perco-diagnostics-controls {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.perco-match-toolbar {
+  grid-template-columns: minmax(0, 1fr) minmax(160px, auto);
+}
+
+.perco-match-actions {
+  min-width: 0;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+}
+
+.perco-table article,
+.perco-log-list article,
+.perco-endpoint-list article,
+.perco-dashboard-employee-list article,
+.perco-dashboard-attention-list article,
+.perco-dashboard-event-list article,
+.perco-presence-list article,
+.perco-diagnostics-list article {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.perco-table article > *,
+.perco-log-list article > *,
+.perco-endpoint-list article > *,
+.perco-dashboard-employee-list article > *,
+.perco-dashboard-attention-list article > *,
+.perco-dashboard-event-list article > *,
+.perco-presence-list article > *,
+.perco-diagnostics-list article > * {
+  min-width: 0;
+}
+
+.perco-status-card dl div,
+.perco-presence-ratio dl div {
+  align-items: flex-start;
+}
+
+.perco-status-card dd,
+.perco-presence-ratio dd {
+  text-align: right;
+}
+
+.perco-diagnostics-list aside,
+.perco-log-list aside,
+.perco-presence-metrics {
+  min-width: 0;
+}
+
+.perco-diagnostics-list b,
+.perco-log-list b,
+.perco-dashboard-event-list b,
+.perco-presence-metrics b {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.perco-modal-backdrop {
+  padding: 16px;
+}
+
+.perco-modal {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+
+@media (max-width: 900px) {
+  .perco-shell {
+    padding: 12px;
+  }
+
+  .perco-toolbar,
+  .perco-card header,
+  .perco-actions,
+  .perco-form-heading,
+  .perco-dashboard-head,
+  .perco-dashboard-empty {
+    align-items: stretch;
+  }
+
+  .perco-grid,
+  .perco-form-grid,
+  .perco-form-grid.compact,
+  .perco-match-toolbar,
+  .perco-match-actions,
+  .perco-sync-result div,
+  .perco-live-analytics-grid,
+  .perco-dashboard-main-grid,
+  .perco-presence-analytics,
+  .perco-presence-split,
+  .perco-diagnostics-grid,
+  .perco-diagnostics-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .perco-toolbar-routes {
+    grid-template-columns: 1fr;
+  }
+
+  .perco-button,
+  .perco-dashboard-actions .perco-button {
+    width: 100%;
+  }
+
+  .perco-presence-list article,
+  .perco-diagnostics-list article,
+  .perco-table article,
+  .perco-log-list article,
+  .perco-endpoint-list article {
+    grid-template-columns: 1fr;
+  }
+
+  .perco-status-card dd,
+  .perco-presence-ratio dd,
+  .perco-diagnostics-list aside,
+  .perco-log-list aside,
+  .perco-presence-metrics {
+    justify-items: start;
+    text-align: left;
+  }
+}

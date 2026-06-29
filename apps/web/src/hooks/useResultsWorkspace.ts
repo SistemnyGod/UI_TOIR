@@ -15,9 +15,11 @@ interface UseResultsWorkspaceOptions {
   showToast: (message: string) => void;
 }
 
+const emptyResultFilters: ResultFilterOptions = {};
+
 export function useResultsWorkspace({
   dataSourceMode,
-  filters = {},
+  filters = emptyResultFilters,
   selectedResultId,
   onSelectResult,
   showToast,

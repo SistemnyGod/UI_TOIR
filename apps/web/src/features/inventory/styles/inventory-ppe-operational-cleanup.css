@@ -1,0 +1,510 @@
+/* PPE operational cleanup: compact drawers, wizard and picker modals. */
+.inventory-ppe-drawer-backdrop,
+.inventory-ppe-picker-backdrop {
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(13, 26, 45, 0.46);
+  backdrop-filter: blur(4px);
+}
+
+.inventory-ppe-drawer {
+  width: min(980px, calc(100vw - 40px));
+  max-width: min(980px, calc(100vw - 40px));
+  height: auto;
+  max-height: calc(100dvh - 40px);
+  border: 1px solid #c9dcf4;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 24px 64px rgba(24, 51, 88, 0.24);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.inventory-ppe-drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid #dbe8f7;
+  background: #fff;
+}
+
+.inventory-ppe-drawer-header p,
+.inventory-ppe-drawer-header h2 {
+  margin: 0;
+}
+
+.inventory-ppe-drawer-header p {
+  color: #466386;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.inventory-ppe-drawer-header h2 {
+  margin-top: 3px;
+  color: var(--inventory-text);
+  font-size: 19px;
+  font-weight: 900;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+
+.inventory-ppe-drawer-toolbar {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #dbe8f7;
+  background: #f8fbff;
+}
+
+.inventory-ppe-drawer-toolbar .button,
+.inventory-ppe-drawer .button,
+.inventory-ppe-picker .button,
+.inventory-ppe-wizard .button {
+  min-height: 30px;
+  border-radius: 7px;
+  font-size: 12px;
+  line-height: 1.15;
+  white-space: normal;
+}
+
+.inventory-ppe-drawer-body {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  padding: 12px 16px 16px;
+  overflow: auto;
+}
+
+.inventory-ppe-drawer-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inventory-ppe-card-section {
+  min-width: 0;
+  border: 1px solid #d7e6f8;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.inventory-ppe-card-section.is-secondary {
+  background: #f8fbff;
+}
+
+.inventory-ppe-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #dbe8f7;
+}
+
+.inventory-ppe-section-head h3 {
+  margin: 0;
+  color: var(--inventory-text);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.inventory-ppe-section-head span {
+  color: #466386;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-wrap,
+.inventory-ppe-drawer .inventory-ppe-history-wrap {
+  max-width: 100%;
+  max-height: min(42dvh, 360px);
+  border: 0;
+  border-radius: 0;
+  overflow: auto;
+}
+
+.inventory-ppe-drawer .inventory-ppe-history-wrap {
+  max-height: min(28dvh, 260px);
+}
+
+.inventory-ppe-lines-table,
+.inventory-ppe-history-table {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table th,
+.inventory-ppe-drawer .inventory-ppe-lines-table td,
+.inventory-ppe-drawer .inventory-ppe-history-table th,
+.inventory-ppe-drawer .inventory-ppe-history-table td {
+  padding: 8px 10px;
+  vertical-align: middle;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f5f9ff;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table td:first-child {
+  max-width: 260px;
+}
+
+.inventory-ppe-lines-table td strong,
+.inventory-ppe-lines-table td span {
+  overflow-wrap: anywhere;
+}
+
+.inventory-ppe-line-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  min-width: 128px;
+}
+
+.inventory-ppe-line-actions .button {
+  width: 100%;
+  min-height: 26px;
+  padding: 0 7px;
+  justify-content: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.inventory-ppe-line-actions .button:hover,
+.inventory-ppe-drawer-toolbar .button:hover,
+.inventory-ppe-picker-actions .button.ghost:hover,
+.inventory-ppe-wizard-actions .button.ghost:hover {
+  border-color: #2f6df6;
+  color: #0f4bd8;
+  background: #f2f7ff;
+  box-shadow: 0 0 0 2px rgba(47, 109, 246, 0.12);
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) {
+  width: min(1080px, calc(100vw - 40px));
+  max-width: min(1080px, calc(100vw - 40px));
+  max-height: calc(100dvh - 40px);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-head {
+  padding: 14px 18px 10px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-head h2 {
+  font-size: 20px;
+  line-height: 1.18;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-tabs {
+  padding: 8px 18px;
+  gap: 6px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 12px;
+  min-height: 0;
+  padding: 12px 18px;
+  overflow: hidden;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-main {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, 220px);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-search,
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-filters select {
+  min-height: 36px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: min(42dvh, 380px);
+  padding-right: 4px;
+  overflow: auto;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-grid button {
+  min-height: 58px;
+  padding: 10px;
+  align-items: center;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-summary {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-summary > div {
+  min-height: 86px;
+  padding: 12px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected {
+  flex: 0 0 auto;
+  max-height: min(22dvh, 190px);
+  border-top: 1px solid #dbe8f7;
+  background: #f8fbff;
+  overflow: auto;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected .inventory-ppe-state {
+  min-height: 64px;
+  padding: 10px 14px;
+  gap: 4px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected .inventory-ppe-state span {
+  width: 28px;
+  height: 28px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected-table {
+  max-height: 180px;
+  border: 0;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected-table table {
+  min-width: 760px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected-table th,
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected-table td {
+  padding: 7px 8px;
+  font-size: 12px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected-table input {
+  min-height: 30px;
+  padding: 5px 8px;
+}
+
+.inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 18px;
+}
+
+.inventory-ppe-wizard {
+  display: grid;
+  gap: 10px;
+}
+
+.inventory-ppe-wizard-head {
+  padding: 14px 16px;
+  align-items: center;
+}
+
+.inventory-ppe-wizard-head h2 {
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.inventory-ppe-wizard-steps {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inventory-ppe-wizard-steps button {
+  min-height: 44px;
+  padding: 9px 12px;
+  border-radius: 8px;
+}
+
+.inventory-ppe-wizard-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  gap: 12px;
+  align-items: start;
+}
+
+.inventory-ppe-wizard-main,
+.inventory-ppe-wizard-panel {
+  min-width: 0;
+  overflow: visible;
+}
+
+.inventory-ppe-wizard-panel {
+  padding: 16px;
+}
+
+.inventory-ppe-wizard-panel h3 {
+  margin-bottom: 12px;
+  font-size: 18px;
+}
+
+.inventory-ppe-form-grid {
+  gap: 10px;
+}
+
+.inventory-ppe-combobox {
+  position: relative;
+  z-index: 10;
+}
+
+.inventory-ppe-combobox-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 260px);
+  gap: 8px;
+  align-items: start;
+}
+
+.inventory-ppe-combobox-input,
+.inventory-ppe-combobox-department {
+  min-height: 38px;
+  border-radius: 8px;
+}
+
+.inventory-ppe-combobox-list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 50;
+  max-height: 260px;
+  border: 1px solid #bdd4f4;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 18px 36px rgba(24, 51, 88, 0.16);
+  overflow: auto;
+}
+
+.inventory-ppe-combobox-list button {
+  min-height: 44px;
+  padding: 9px 12px;
+}
+
+.inventory-ppe-wizard-employee {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 9px;
+}
+
+.inventory-ppe-wizard-preview {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100dvh - 110px);
+  padding: 14px;
+  overflow: auto;
+}
+
+.inventory-ppe-wizard-preview .inventory-ppe-print-paper {
+  transform-origin: top left;
+}
+
+.inventory-ppe-wizard-actions {
+  position: sticky;
+  bottom: 10px;
+  z-index: 8;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #d7e6f8;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 28px rgba(44, 72, 113, 0.08);
+}
+
+.inventory-ppe-wizard-actions > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 1280px) {
+  .inventory-ppe-drawer-toolbar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .inventory-ppe-wizard-layout {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+}
+
+@media (max-width: 980px) {
+  .inventory-ppe-drawer-backdrop,
+  .inventory-ppe-picker-backdrop {
+    padding: 10px;
+  }
+
+  .inventory-ppe-drawer,
+  .inventory-ppe-picker:not(.inventory-ppe-print-modal) {
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+  }
+
+  .inventory-ppe-drawer-toolbar,
+  .inventory-ppe-drawer-meta,
+  .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-layout,
+  .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-grid,
+  .inventory-ppe-wizard-layout,
+  .inventory-ppe-combobox-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-wizard-preview {
+    position: static;
+    max-height: none;
+  }
+
+  .inventory-ppe-wizard-actions {
+    position: static;
+    display: grid;
+  }
+}
+
+@media (max-width: 640px) {
+  .inventory-ppe-drawer-header,
+  .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-head,
+  .inventory-ppe-wizard-head {
+    padding: 12px;
+  }
+
+  .inventory-ppe-drawer-body,
+  .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-layout,
+  .inventory-ppe-wizard-panel {
+    padding: 10px;
+  }
+
+  .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-filters,
+  .inventory-ppe-wizard-steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-line-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+

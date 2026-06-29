@@ -5,6 +5,8 @@ import { moveRoutePoint } from "../domain/routes";
 import { createApiAssignmentsRepository } from "../repositories/assignmentsRepository";
 import { createApiPatrolRequestsRepository, resolveServiceRequests } from "../repositories/patrolRequestsRepository";
 import { createApiResultsRepository } from "../repositories/resultsRepository";
+import { getPrimaryActionPermission } from "../security/permissions";
+import { shouldCreateAssignmentAfterRequest } from "../screens/AssignmentScreen";
 import type { ServiceRequest } from "../types";
 import type { RoutePoint } from "../types";
 
@@ -50,6 +52,10 @@ describe("domain workflows", () => {
 
     expect(resolveServiceRequests({ apiRequests, dataSourceMode: "api", localRequests })).toEqual(apiRequests);
     expect(resolveServiceRequests({ apiRequests, dataSourceMode: "mock", localRequests })).toEqual(localRequests);
+  });
+
+  it("allows view-only users to open PERCo integration screen", () => {
+    expect(getPrimaryActionPermission("perco-integration")).toBe("integrations.perco.view");
   });
 
   it("maps API result DTOs without reading fallback results", async () => {
@@ -221,6 +227,12 @@ describe("domain workflows", () => {
     });
 
     expect(metrics.find((metric) => metric.label === "Заявки на обход")?.value).toBe("1");
+  });
+
+  it("does not create a second assignment after creating a new API request", () => {
+    expect(shouldCreateAssignmentAfterRequest({ dataSourceMode: "api", hasSelectedRequest: false })).toBe(false);
+    expect(shouldCreateAssignmentAfterRequest({ dataSourceMode: "api", hasSelectedRequest: true })).toBe(true);
+    expect(shouldCreateAssignmentAfterRequest({ dataSourceMode: "mock", hasSelectedRequest: false })).toBe(true);
   });
 });
 

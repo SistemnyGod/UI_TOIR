@@ -187,6 +187,79 @@ public sealed class AssignmentsDbIntegrationTests
     }
 
     [DbIntegrationFact]
+    public async Task CancelAssignmentCreatesMobileNotificationForBoundEmployee()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+
+        await provider.InitializePatrolDatabaseAsync();
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var account = UseMobileAccounts(provider, mobileAccounts => mobileAccounts.CreateAccount(new CreateMobileAccountDto(
+            "Assignment cancel notification",
+            "selected",
+            $"cancel_{suffix}",
+            "Оператор",
+            BindEmployee: false,
+            RestrictToBoundDevice: false,
+            TemporaryPassword: true)));
+        Assert.True(account.Succeeded);
+        Assert.NotNull(account.Account);
+
+        var attached = UseMobileAccounts(provider, mobileAccounts => mobileAccounts.AttachEmployee(
+            account.Account!.Id,
+            new AttachMobileAccountEmployeeDto(SidorovEmployeeId, null)));
+        Assert.True(attached.Succeeded);
+
+        var created = UseAssignments(provider, assignments => assignments.Create(new CreateAssignmentDto(
+            FreePatrolRequestId,
+            SidorovEmployeeId,
+            FuelDepotRouteId,
+            DateTimeOffset.UtcNow.AddDays(1),
+            "Day")));
+        Assert.True(created.Succeeded);
+        Assert.NotNull(created.Assignment);
+
+        var cancelled = UseAssignments(provider, assignments => assignments.Cancel(created.Assignment!.Id));
+        Assert.NotNull(cancelled);
+        Assert.True(cancelled!.Changed);
+
+        var notification = await ReadMobileNotificationAsync(database.ConnectionString, account.Account!.Id, $"patrol-assignment-cancelled:{created.Assignment!.Id}");
+        Assert.NotNull(notification);
+        Assert.Equal("patrolAssignmentCancelled", notification!.Type);
+        Assert.Equal("Маршрут отменен", notification.Title);
+        Assert.Equal("assignment", notification.EntityType);
+        Assert.Equal(created.Assignment.Id.ToString(), notification.EntityId);
+    }
+
+    [DbIntegrationFact]
+    public async Task ExpiredUnstartedAssignmentIsNotReturnedAsActive()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+
+        await provider.InitializePatrolDatabaseAsync();
+
+        var created = UseAssignments(provider, assignments => assignments.Create(new CreateAssignmentDto(
+            FreePatrolRequestId,
+            SidorovEmployeeId,
+            FuelDepotRouteId,
+            DateTimeOffset.UtcNow.AddDays(-3),
+            "День")));
+        Assert.True(created.Succeeded);
+        Assert.NotNull(created.Assignment);
+
+        var allAssignments = UseAssignments(provider, assignments => assignments.GetAssignments());
+        Assert.Contains(allAssignments, assignment => assignment.Id == created.Assignment!.Id);
+
+        var activeAssignments = UseDashboard(provider, query => query.GetActiveAssignments());
+        Assert.DoesNotContain(activeAssignments, assignment => assignment.Id == created.Assignment!.Id);
+
+        var dashboard = UseDashboard(provider, query => query.GetSummary());
+        Assert.Equal(0, dashboard.ActivePatrols);
+    }
+
+    [DbIntegrationFact]
     public async Task DashboardShiftCoverageIsZeroWithoutActiveAssignments()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
@@ -344,6 +417,30 @@ public sealed class AssignmentsDbIntegrationTests
     }
 
     [DbIntegrationFact]
+    public async Task AssignmentSettingsPersistFavoritesAndShiftTimes()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+
+        await provider.InitializePatrolDatabaseAsync();
+
+        var saved = UseAssignments(provider, assignments => assignments.UpdateSettings(new UpdateAssignmentSettingsDto(
+            [SidorovEmployeeId],
+            new AssignmentShiftSettingsDto("07:30", "15:30", "20:00", "08:00"))));
+
+        Assert.Equal([SidorovEmployeeId], saved.FavoriteEmployeeIds);
+        Assert.Equal("07:30", saved.ShiftSettings.DayStart);
+        Assert.Equal("15:30", saved.ShiftSettings.DayEnd);
+        Assert.Equal("20:00", saved.ShiftSettings.NightStart);
+        Assert.Equal("08:00", saved.ShiftSettings.NightEnd);
+
+        var reloaded = UseAssignments(provider, assignments => assignments.GetSettings());
+
+        Assert.Equal(saved.FavoriteEmployeeIds, reloaded.FavoriteEmployeeIds);
+        Assert.Equal(saved.ShiftSettings, reloaded.ShiftSettings);
+    }
+
+    [DbIntegrationFact]
     public async Task RoutePointNfcCodeMustBeUnique()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
@@ -416,6 +513,46 @@ public sealed class AssignmentsDbIntegrationTests
         using var scope = provider.CreateScope();
         return action(scope.ServiceProvider.GetRequiredService<IRouteCatalogService>());
     }
+
+    private static T UseMobileAccounts<T>(ServiceProvider provider, Func<IMobileAccountService, T> action)
+    {
+        using var scope = provider.CreateScope();
+        return action(scope.ServiceProvider.GetRequiredService<IMobileAccountService>());
+    }
+
+    private static async Task<MobileNotificationRow?> ReadMobileNotificationAsync(string connectionString, Guid accountId, string idempotencyKey)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            select notification_type, title, entity_type, entity_id
+            from mobile_notifications
+            where mobile_account_id = @account_id and idempotency_key = @idempotency_key
+            order by created_at desc
+            limit 1;
+            """;
+        command.Parameters.AddWithValue("account_id", accountId);
+        command.Parameters.AddWithValue("idempotency_key", idempotencyKey);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+        {
+            return null;
+        }
+
+        return new MobileNotificationRow(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3));
+    }
+
+    private sealed record MobileNotificationRow(
+        string Type,
+        string Title,
+        string EntityType,
+        string EntityId);
 
     private static async Task<List<CompleteAssignmentPointDto>> ReadRoutePointResultsAsync(string connectionString, Guid routeId)
     {

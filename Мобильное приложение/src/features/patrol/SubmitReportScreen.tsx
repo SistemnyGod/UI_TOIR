@@ -2,6 +2,8 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { listSyncQueueFiles } from "@/db/repositories/filesRepository";
+import { listSyncQueueCommands } from "@/db/repositories/outboxRepository";
 import { completeAssignmentLocally, getReportReadiness, ReportReadiness } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
@@ -35,7 +37,7 @@ export function SubmitReportScreen() {
   useFocusEffect(load);
 
   async function handleSubmit() {
-    if (!readiness?.ready) {
+    if (!readiness?.ready || isSubmitting) {
       return;
     }
 
@@ -43,12 +45,24 @@ export function SubmitReportScreen() {
     setMessage(null);
 
     try {
-      await completeAssignmentLocally(assignmentId);
-      setMessage("Отчет сохранен на телефоне и будет отправлен при наличии интернета.");
+      const result = await completeAssignmentLocally(assignmentId);
+      const [commands, files] = await Promise.all([listSyncQueueCommands(200), listSyncQueueFiles(200)]);
+      const reportCount = commands.filter((command) => command.commandType === "completePatrolAssignment").length;
+      const fileCount = files.length;
+
+      if (result.alreadyQueued) {
+        setMessage("Отчет уже есть в очереди отправки. Повторная копия не создана.");
+      } else if (reportCount > 1 || fileCount > 0) {
+        setMessage(
+          `Отчет сохранен на устройстве. Сейчас будет отправлена очередь: ${reportCount} отчет(ов), ${fileCount} файл(ов).`
+        );
+      } else {
+        setMessage("Отчет сохранен на устройстве и будет отправлен автоматически. Если сеть пропадет, данные не потеряются.");
+      }
+
       triggerForegroundSyncWithRetry();
-      router.replace(`/patrol/assignment/${assignmentId}`);
-    } catch {
-      setMessage("Не удалось подготовить отчет к отправке.");
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "Не удалось подготовить отчет к отправке.");
     } finally {
       setIsSubmitting(false);
     }
@@ -65,22 +79,33 @@ export function SubmitReportScreen() {
 
   if (!readiness) {
     return (
-      <Screen title="Отправка отчета" subtitle="Проверка заполнения меток перед завершением обхода.">
+      <Screen title="Отправка отчета" subtitle="Проверяем обязательные метки перед завершением обхода.">
         <ActivityIndicator />
       </Screen>
     );
   }
 
   return (
-    <Screen title="Отправка отчета" subtitle="Проверьте метки перед завершением обхода.">
+    <Screen title="Отправка отчета" subtitle="Проверьте результат обхода. Отчет не потеряется при offline или сбое сети.">
       <Card>
         <View style={styles.row}>
           <Text style={[styles.title, { color: colors.text }]}>{readiness.assignment?.routeName ?? "Обход"}</Text>
-          <StatusPill label={readiness.ready ? "Готов" : "Нужно заполнить"} tone={readiness.ready ? "success" : "warning"} />
+          <StatusPill label={readiness.ready ? "Готов к отправке" : "Нужно заполнить"} tone={readiness.ready ? "success" : "warning"} />
         </View>
         <Text style={[styles.text, { color: colors.mutedText }]}>
           Заполнено {readiness.progress.completed} из {readiness.progress.total}. Неисправно: {readiness.progress.issues}.
-          Отложено: {readiness.progress.deferred}.
+          Отложено: {readiness.progress.deferred}. Метка недоступна: {readiness.progress.skipped}.
+        </Text>
+      </Card>
+
+      <Card style={readiness.ready ? styles.safeCard : styles.warningCard}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          {readiness.ready ? "Безопасная отправка" : "Отчет пока нельзя отправить"}
+        </Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>
+          {readiness.ready
+            ? "После нажатия отчет сначала сохранится локально. Если сервер или сеть недоступны, он останется в очереди восстановления и отправится позже."
+            : "Закройте обязательные метки. Если физическую метку нельзя просканировать, откройте ее и выберите статус «Метка недоступна»."}
         </Text>
       </Card>
 
@@ -105,31 +130,32 @@ export function SubmitReportScreen() {
 
       {message ? <Text style={styles.message}>{message}</Text> : null}
       {isSubmitting ? <ActivityIndicator /> : null}
-      <PrimaryButton disabled={!readiness.ready || isSubmitting} label="Отправить отчет" onPress={handleSubmit} />
-      <PrimaryButton disabled={isSubmitting} label="Все метки" onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} />
+      <PrimaryButton disabled={!readiness.ready || isSubmitting} icon="send-outline" label="Сохранить и отправить" onPress={handleSubmit} />
+      <View style={styles.actions}>
+        <PrimaryButton disabled={isSubmitting} icon="list-outline" label="Все метки" onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} variant="secondary" />
+        <PrimaryButton disabled={isSubmitting} icon="cloud-upload-outline" label="Очередь отправки" onPress={() => router.push("/settings/sync-queue" as never)} variant="secondary" />
+        <PrimaryButton disabled={isSubmitting} icon="shield-checkmark-outline" label="К обходу" onPress={() => router.push(`/patrol/assignment/${assignmentId}`)} variant="secondary" />
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
-    alignItems: "center",
+  actions: {
     flexDirection: "row",
-    gap: 8,
-    justifyContent: "space-between"
+    flexWrap: "wrap",
+    gap: 10
   },
-  title: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: "600"
-  },
-  text: {
-    fontSize: 15,
-    lineHeight: 21
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600"
+  message: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#bfdbfe",
+    borderRadius: 12,
+    borderWidth: 1,
+    color: "#1d4ed8",
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 20,
+    padding: 12
   },
   problem: {
     borderColor: "#fecaca",
@@ -138,19 +164,39 @@ const styles = StyleSheet.create({
     gap: 4,
     padding: 12
   },
-  problemTitle: {
-    color: "#991b1b",
-    fontSize: 15,
-    fontWeight: "600"
-  },
   problemText: {
     color: "#ef4444",
     fontSize: 13,
     lineHeight: 18
   },
-  message: {
-    color: "#1e5bff",
-    fontSize: 14,
-    lineHeight: 20
+  problemTitle: {
+    color: "#991b1b",
+    fontSize: 15,
+    fontWeight: "700"
+  },
+  row: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between"
+  },
+  safeCard: {
+    borderColor: "#bbf7d0"
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700"
+  },
+  text: {
+    fontSize: 15,
+    lineHeight: 21
+  },
+  title: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: "700"
+  },
+  warningCard: {
+    borderColor: "#fed7aa"
   }
 });

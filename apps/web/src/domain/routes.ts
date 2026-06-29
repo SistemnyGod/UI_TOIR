@@ -76,7 +76,7 @@ export function updateRoutePointDraft(point: RoutePoint, payload: RoutePointForm
     name: payload.name.trim(),
     zone: payload.zone.trim() || point.zone,
     type: payload.type,
-    tag: payload.tag.trim() || point.tag,
+    tag: payload.tag.trim(),
     interval: payload.interval.trim() || point.interval,
     expectedTime: payload.expectedTime.trim() || point.expectedTime,
     status: payload.status,

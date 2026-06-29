@@ -41,3 +41,17 @@ public sealed record AssignmentCommandResultDto(
     AssignmentDto Assignment,
     bool Changed,
     string Message);
+
+public sealed record AssignmentShiftSettingsDto(
+    string DayStart,
+    string DayEnd,
+    string NightStart,
+    string NightEnd);
+
+public sealed record AssignmentSettingsDto(
+    IReadOnlyList<Guid> FavoriteEmployeeIds,
+    AssignmentShiftSettingsDto ShiftSettings);
+
+public sealed record UpdateAssignmentSettingsDto(
+    IReadOnlyList<Guid>? FavoriteEmployeeIds = null,
+    AssignmentShiftSettingsDto? ShiftSettings = null);

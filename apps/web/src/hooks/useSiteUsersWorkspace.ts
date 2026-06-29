@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ApiError } from "../api/client";
+import type { SiteUserAccessDto, SiteUserAccessScopeUpsertDto } from "../api/contracts";
 import type { DataSourceMode, DataSourceStatus, SiteUser } from "../types";
 import {
   createApiSiteUsersRepository,
@@ -43,7 +45,7 @@ export function useSiteUsersWorkspace({
       setApiUsers(nextUsers);
       setStatus("ready");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Не удалось загрузить пользователей сайта";
+      const message = formatApiError(error, "Не удалось загрузить пользователей сайта");
       setApiUsers([]);
       setStatus("error");
       setErrorMessage(message);
@@ -60,27 +62,99 @@ export function useSiteUsersWorkspace({
       return;
     }
 
-    const result = await apiSiteUsers.createUser(payload);
-    await refreshUsers();
-    showTemporaryPassword({
-      accountLogin: result.user.login,
-      password: result.temporaryPassword,
-      title: "Временный пароль пользователя сайта",
-    });
-    showToast(`Пользователь ${result.user.login} создан`);
+    try {
+      const result = await apiSiteUsers.createUser(payload);
+      await refreshUsers();
+      showTemporaryPassword({
+        accountLogin: result.user.login,
+        password: result.temporaryPassword || payload.initialPassword || "",
+        title: "Пароль пользователя сайта задан",
+      });
+      showToast(`Пользователь ${result.user.login} создан`);
+    } catch (error) {
+      showToast(formatApiError(error, "Пользователь не создан"));
+      throw error;
+    }
+  }
+
+  async function updateUser(userId: string, payload: SiteUserFormPayload) {
+    if (dataSourceMode !== "api") {
+      showToast("Изменения пользователя будут сохранены после подключения backend API");
+      return;
+    }
+
+    try {
+      const result = await apiSiteUsers.updateUser(userId, payload);
+      setApiUsers((current) => current.map((user) => user.id === userId ? result : user));
+      showToast(`Пользователь ${result.login} обновлен`);
+    } catch (error) {
+      showToast(formatApiError(error, "Пользователь не обновлен"));
+      throw error;
+    }
+  }
+
+  const loadUserAccess = useCallback(async (userId: string): Promise<SiteUserAccessDto | null> => {
+    if (dataSourceMode !== "api") {
+      return null;
+    }
+
+    try {
+      return await apiSiteUsers.getAccess(userId);
+    } catch (error) {
+      showToast(formatApiError(error, "Не удалось загрузить права пользователя"));
+      return null;
+    }
+  }, [apiSiteUsers, dataSourceMode, showToast]);
+
+  async function saveUserPermissions(userId: string, permissionCodes: string[]) {
+    if (dataSourceMode !== "api") {
+      showToast("Индивидуальные права будут сохранены после подключения backend API");
+      return null;
+    }
+
+    try {
+      const updated = await apiSiteUsers.updatePermissions(userId, permissionCodes);
+      setApiUsers((current) => current.map((user) => user.id === userId ? updated : user));
+      showToast("Индивидуальные права сохранены");
+      return updated;
+    } catch (error) {
+      showToast(formatApiError(error, "Права не сохранены"));
+      throw error;
+    }
+  }
+
+  async function saveUserScopes(userId: string, scopes: SiteUserAccessScopeUpsertDto[]) {
+    if (dataSourceMode !== "api") {
+      showToast("Ограничения по участкам будут сохранены после подключения backend API");
+      return null;
+    }
+
+    try {
+      const updated = await apiSiteUsers.updateScopes(userId, scopes);
+      showToast("Ограничения по участкам сохранены");
+      return updated;
+    } catch (error) {
+      showToast(formatApiError(error, "Участки не сохранены"));
+      throw error;
+    }
   }
 
   async function toggleBlockUser(user: SiteUser) {
     if (dataSourceMode !== "api") {
-      showToast("Блокировка будет сохранена после подключения backend API");
+      showToast("Блокировка будет доступна после подключения backend API");
       return;
     }
 
-    const nextUser = user.status === "Заблокирован"
-      ? await apiSiteUsers.unblockUser(user.id)
-      : await apiSiteUsers.blockUser(user.id);
-    await refreshUsers();
-    showToast(nextUser.status === "Заблокирован" ? `Пользователь ${nextUser.login} заблокирован` : `Пользователь ${nextUser.login} активен`);
+    try {
+      const updated = user.status === "Заблокирован"
+        ? await apiSiteUsers.unblockUser(user.id)
+        : await apiSiteUsers.blockUser(user.id);
+      setApiUsers((current) => current.map((item) => item.id === user.id ? updated : item));
+      showToast(updated.status === "Заблокирован" ? "Пользователь заблокирован" : "Пользователь разблокирован");
+    } catch (error) {
+      showToast(formatApiError(error, "Статус пользователя не изменен"));
+      throw error;
+    }
   }
 
   async function resetPassword(user: SiteUser) {
@@ -89,22 +163,42 @@ export function useSiteUsersWorkspace({
       return;
     }
 
-    const result = await apiSiteUsers.resetPassword(user.id);
-    showTemporaryPassword({
-      accountLogin: user.login,
-      password: result.temporaryPassword,
-      title: "Временный пароль пользователя сайта",
-    });
-    showToast(`Временный пароль для ${user.login} выдан`);
+    try {
+      const result = await apiSiteUsers.resetPassword(user.id);
+      showTemporaryPassword({
+        accountLogin: user.login,
+        password: result.temporaryPassword,
+        title: "Новый временный пароль",
+      });
+      showToast("Пароль пересоздан");
+    } catch (error) {
+      showToast(formatApiError(error, "Пароль не пересоздан"));
+      throw error;
+    }
   }
 
   return {
     createUser,
     errorMessage,
+    loadUserAccess,
     refreshUsers,
     resetPassword,
+    saveUserPermissions,
+    saveUserScopes,
     status,
     toggleBlockUser,
+    updateUser,
     users,
   };
+}
+
+function formatApiError(error: unknown, fallback: string) {
+  if (error instanceof ApiError) {
+    const fieldMessages = error.errors
+      ? Object.values(error.errors).flat().filter(Boolean)
+      : [];
+    return fieldMessages[0] ?? error.problem?.detail ?? error.message ?? fallback;
+  }
+
+  return error instanceof Error ? error.message : fallback;
 }

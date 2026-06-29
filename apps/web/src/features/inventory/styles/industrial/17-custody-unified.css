@@ -1,0 +1,907 @@
+/* Custody unified workflow pass */
+.inventory-custody-screen {
+  --custody-border: #d8e4f7;
+  --custody-border-strong: #b9cbed;
+  --custody-surface: rgba(255, 255, 255, 0.94);
+  --custody-soft: rgba(245, 249, 255, 0.88);
+  --custody-text: #0b1f3d;
+  --custody-muted: #607292;
+  gap: 12px;
+  max-width: 100%;
+  padding-bottom: 28px;
+}
+
+.inventory-custody-screen .inventory-custody-commandbar {
+  align-items: center;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 249, 255, 0.9));
+  border: 1px solid var(--custody-border);
+  border-radius: 12px;
+  box-shadow: 0 16px 34px rgba(21, 66, 130, 0.08);
+  margin-bottom: 12px;
+  min-height: 76px;
+  padding: 14px 16px;
+}
+
+.inventory-custody-screen .inventory-custody-title {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 44px minmax(0, 1fr);
+}
+
+.inventory-custody-screen .inventory-custody-title-icon {
+  background: linear-gradient(135deg, #1d6df2, #0f54d8);
+  border-radius: 12px;
+  box-shadow: 0 12px 24px rgba(31, 103, 224, 0.2);
+  color: #fff;
+  height: 44px;
+  width: 44px;
+}
+
+.inventory-custody-screen .inventory-custody-title p {
+  color: var(--custody-muted);
+  font-size: 11px;
+  letter-spacing: 0;
+  line-height: 1.2;
+  margin: 0 0 2px;
+  text-transform: uppercase;
+}
+
+.inventory-custody-screen .inventory-custody-title h1 {
+  color: var(--custody-text);
+  font-size: 28px;
+  line-height: 1.05;
+  margin: 0;
+}
+
+.inventory-custody-screen .inventory-custody-title span {
+  color: var(--custody-muted);
+  display: block;
+  font-size: 13px;
+  line-height: 1.35;
+  max-width: 780px;
+}
+
+.inventory-custody-screen .inventory-custody-command-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.inventory-custody-screen .inventory-custody-command-actions .button {
+  border-radius: 10px;
+  min-height: 40px;
+}
+
+.inventory-custody-screen .inventory-custody-kpis {
+  display: none !important;
+}
+
+.inventory-custody-screen .inventory-custody-composer,
+.inventory-custody-screen .inventory-custody-journal,
+.inventory-custody-screen .inventory-custody-inspector,
+.inventory-custody-screen .inventory-custody-card-section {
+  background: var(--custody-surface);
+  border: 1px solid var(--custody-border);
+  border-radius: 12px;
+  box-shadow: 0 16px 34px rgba(21, 66, 130, 0.07);
+}
+
+.inventory-custody-screen .inventory-custody-composer {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(230px, 0.36fr) minmax(0, 1fr);
+  margin-bottom: 12px;
+  padding: 14px;
+}
+
+.inventory-custody-screen .inventory-custody-step {
+  align-items: flex-start;
+  background: var(--custody-soft);
+  border: 1px solid var(--custody-border);
+  border-radius: 10px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  margin: 0;
+  padding: 10px;
+}
+
+.inventory-custody-screen .inventory-custody-step > span {
+  align-items: center;
+  background: #1d6df2;
+  border-radius: 9px;
+  color: #fff;
+  display: inline-flex;
+  font-weight: 900;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.inventory-custody-screen .inventory-custody-step strong {
+  color: var(--custody-text);
+  display: block;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.inventory-custody-screen .inventory-custody-step small {
+  color: var(--custody-muted);
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+  margin-top: 3px;
+}
+
+.inventory-custody-screen .inventory-custody-composer-fields {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) 86px minmax(180px, 0.9fr) auto;
+}
+
+.inventory-custody-screen .inventory-custody-composer label {
+  color: var(--custody-muted);
+  display: grid;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 6px;
+  letter-spacing: 0;
+  min-width: 0;
+  text-transform: none;
+}
+
+.inventory-custody-screen .inventory-custody-composer select,
+.inventory-custody-screen .inventory-custody-composer input,
+.inventory-custody-screen .inventory-custody-search input {
+  background: #fff;
+  border: 1px solid var(--custody-border-strong);
+  border-radius: 10px;
+  color: var(--custody-text);
+  font-size: 13px;
+  height: 40px;
+  min-width: 0;
+}
+
+.inventory-custody-screen .inventory-custody-composer select,
+.inventory-custody-screen .inventory-custody-composer input {
+  padding: 0 12px;
+}
+
+.inventory-custody-screen .inventory-custody-submit {
+  border-radius: 10px;
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.inventory-custody-screen .inventory-custody-workspace {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+}
+
+.inventory-custody-screen .inventory-custody-journal,
+.inventory-custody-screen .inventory-custody-inspector {
+  min-width: 0;
+  padding: 14px;
+}
+
+.inventory-custody-screen .inventory-custody-inspector {
+  position: static;
+}
+
+.inventory-custody-screen .inventory-custody-panel-head,
+.inventory-custody-screen .inventory-custody-section-head {
+  align-items: center;
+  border-bottom: 1px solid #edf2fb;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin: -2px -2px 12px;
+  padding: 0 0 12px;
+}
+
+.inventory-custody-screen .inventory-custody-panel-head h2,
+.inventory-custody-screen .inventory-custody-section-head h3 {
+  color: var(--custody-text);
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.inventory-custody-screen .inventory-custody-panel-head p,
+.inventory-custody-screen .inventory-custody-section-head span {
+  color: var(--custody-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.inventory-custody-screen .inventory-custody-search {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--custody-border-strong);
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr);
+  height: 40px;
+  min-width: min(100%, 300px);
+  padding: 0 12px;
+}
+
+.inventory-custody-screen .inventory-custody-search input {
+  border: 0;
+  height: auto;
+  outline: 0;
+  padding: 0;
+}
+
+.inventory-custody-screen .inventory-custody-act-list {
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-custody-screen .inventory-custody-act-row {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--custody-border);
+  border-radius: 10px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(130px, 0.66fr) minmax(180px, 1fr) minmax(110px, 0.45fr) minmax(170px, auto);
+  min-height: 64px;
+  padding: 10px 12px;
+}
+
+.inventory-custody-screen .inventory-custody-act-row.is-selected {
+  background: linear-gradient(135deg, rgba(224, 238, 255, 0.9), rgba(246, 251, 255, 0.96));
+  border-color: #1976ff;
+  box-shadow: inset 3px 0 0 #1976ff;
+}
+
+.inventory-custody-screen .inventory-custody-act-main,
+.inventory-custody-screen .inventory-custody-act-person,
+.inventory-custody-screen .inventory-custody-act-status {
+  min-width: 0;
+}
+
+.inventory-custody-screen .inventory-custody-act-row strong,
+.inventory-custody-screen .inventory-custody-act-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-custody-screen .inventory-custody-row-actions,
+.inventory-custody-screen .inventory-custody-line-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.inventory-custody-screen .inventory-custody-row-actions .button,
+.inventory-custody-screen .inventory-custody-line-actions .button {
+  border-radius: 9px;
+  min-height: 34px;
+  min-width: 54px;
+  padding: 0 10px;
+}
+
+.inventory-custody-screen .inventory-custody-profile {
+  align-items: center;
+  background: var(--custody-soft);
+  border: 1px solid var(--custody-border);
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 44px minmax(0, 1fr);
+  padding: 12px;
+}
+
+.inventory-custody-screen .inventory-custody-profile > span {
+  align-items: center;
+  background: #e8f2ff;
+  border-radius: 12px;
+  color: #1769e8;
+  display: inline-flex;
+  font-weight: 900;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.inventory-custody-screen .inventory-custody-meta-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 10px;
+}
+
+.inventory-custody-screen .inventory-custody-meta {
+  background: #fff;
+  border: 1px solid var(--custody-border);
+  border-radius: 10px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.inventory-custody-screen .inventory-custody-meta span {
+  color: var(--custody-muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.inventory-custody-screen .inventory-custody-meta strong {
+  color: var(--custody-text);
+  display: block;
+  font-size: 13px;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-custody-screen .inventory-custody-inspector-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 72px 72px;
+  margin-top: 10px;
+}
+
+.inventory-custody-screen .inventory-custody-inspector-actions .button {
+  border-radius: 9px;
+  min-height: 36px;
+}
+
+.inventory-custody-screen .inventory-custody-print-preview {
+  border-radius: 10px;
+  margin-top: 12px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  padding: 12px;
+}
+
+.inventory-custody-screen .inventory-custody-print-preview div,
+.inventory-custody-screen .inventory-custody-print-preview p,
+.inventory-custody-screen .inventory-custody-print-preview table,
+.inventory-custody-screen .inventory-custody-print-preview tbody,
+.inventory-custody-screen .inventory-custody-print-preview tr {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.inventory-custody-screen .inventory-custody-print-preview strong,
+.inventory-custody-screen .inventory-custody-print-preview span,
+.inventory-custody-screen .inventory-custody-print-preview p,
+.inventory-custody-screen .inventory-custody-print-preview td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-custody-screen .inventory-custody-print-preview table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.inventory-custody-screen .inventory-custody-print-preview td {
+  max-width: 0;
+}
+
+.inventory-custody-screen .inventory-custody-lines-wrap,
+.inventory-custody-screen .inventory-custody-table-wrap,
+.inventory-custody-screen .inventory-custody-history-wrap {
+  border: 1px solid var(--custody-border);
+  border-radius: 10px;
+  overflow: auto;
+}
+
+.inventory-custody-screen .inventory-custody-lines-table,
+.inventory-custody-screen .inventory-custody-table,
+.inventory-custody-screen .inventory-custody-history-table {
+  min-width: 760px;
+}
+
+.inventory-custody-screen .inventory-custody-lines-table th,
+.inventory-custody-screen .inventory-custody-table th,
+.inventory-custody-screen .inventory-custody-history-table th {
+  background: #f5f8fc;
+  color: var(--custody-muted);
+  font-size: 11px;
+  letter-spacing: 0;
+  padding: 10px 12px;
+}
+
+.inventory-custody-screen .inventory-custody-lines-table td,
+.inventory-custody-screen .inventory-custody-table td,
+.inventory-custody-screen .inventory-custody-history-table td {
+  color: var(--custody-text);
+  font-size: 12px;
+  padding: 11px 12px;
+}
+
+.inventory-custody-screen .inventory-custody-card-section {
+  margin-top: 12px;
+  padding: 14px;
+}
+
+.inventory-custody-screen .inventory-custody-composer-summary {
+  align-items: stretch;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inventory-custody-screen .inventory-custody-composer-summary div,
+.inventory-custody-screen .inventory-custody-onhands-panel,
+.inventory-custody-screen .inventory-custody-movement-journal {
+  background: var(--custody-soft);
+  border: 1px solid var(--custody-border);
+  border-radius: 12px;
+}
+
+.inventory-custody-screen .inventory-custody-composer-summary div {
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.inventory-custody-screen .inventory-custody-composer-summary span {
+  color: var(--custody-muted);
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.inventory-custody-screen .inventory-custody-composer-summary strong {
+  color: var(--custody-text);
+  display: block;
+  font-size: 20px;
+  line-height: 1.2;
+  margin-top: 3px;
+}
+
+.inventory-custody-screen .inventory-custody-employee-flow {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(260px, 0.32fr) minmax(0, 1fr);
+  margin-bottom: 12px;
+}
+
+.inventory-custody-screen .inventory-custody-employee-select {
+  align-self: start;
+  background: #fff;
+  border: 1px solid var(--custody-border);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 12px;
+}
+
+.inventory-custody-screen .inventory-custody-employee-select svg {
+  color: #1769e8;
+  grid-row: span 2;
+  margin-top: 2px;
+}
+
+.inventory-custody-screen .inventory-custody-employee-select span {
+  color: var(--custody-muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.inventory-custody-screen .inventory-custody-employee-select select {
+  background: #fff;
+  border: 1px solid var(--custody-border-strong);
+  border-radius: 10px;
+  color: var(--custody-text);
+  font-weight: 800;
+  height: 40px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.inventory-custody-screen .inventory-custody-onhands-panel {
+  min-width: 0;
+  padding: 12px;
+}
+
+.inventory-custody-screen .inventory-custody-onhands-head {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.56fr);
+  margin-bottom: 10px;
+}
+
+.inventory-custody-screen .inventory-custody-onhands-head strong {
+  color: var(--custody-text);
+  display: block;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.inventory-custody-screen .inventory-custody-onhands-head span {
+  color: var(--custody-muted);
+  display: block;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.inventory-custody-screen .inventory-custody-onhands-stats {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inventory-custody-screen .inventory-custody-record-filters {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.inventory-custody-screen .inventory-custody-record-filters button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--custody-border);
+  border-radius: 999px;
+  color: var(--custody-text);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.inventory-custody-screen .inventory-custody-record-filters button.is-active {
+  background: #1d6df2;
+  border-color: #1d6df2;
+  color: #fff;
+}
+
+.inventory-custody-screen .inventory-custody-record-filters button span {
+  background: rgba(23, 105, 232, 0.1);
+  border-radius: 999px;
+  min-width: 22px;
+  padding: 2px 6px;
+  text-align: center;
+}
+
+.inventory-custody-screen .inventory-custody-record-filters button.is-active span {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.inventory-custody-screen .inventory-custody-record-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inventory-custody-screen .inventory-custody-record-row {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--custody-border);
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(130px, 0.75fr) minmax(90px, 0.48fr) minmax(90px, 0.46fr) minmax(98px, 0.55fr) minmax(110px, 0.52fr) minmax(260px, auto);
+  min-height: 66px;
+  padding: 10px 12px;
+}
+
+.inventory-custody-screen .inventory-custody-record-main,
+.inventory-custody-screen .inventory-custody-record-meta,
+.inventory-custody-screen .inventory-custody-record-status {
+  min-width: 0;
+}
+
+.inventory-custody-screen .inventory-custody-record-main strong,
+.inventory-custody-screen .inventory-custody-record-meta strong {
+  color: var(--custody-text);
+  display: block;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-custody-screen .inventory-custody-record-main span,
+.inventory-custody-screen .inventory-custody-record-meta span {
+  color: var(--custody-muted);
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-custody-screen .inventory-custody-movement-journal {
+  margin-top: 12px;
+  padding: 12px;
+}
+
+.inventory-custody-screen .inventory-custody-movement-kpis {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-bottom: 10px;
+}
+
+.inventory-custody-screen .inventory-custody-movement-filters {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(220px, 1.2fr) repeat(2, minmax(128px, 0.44fr)) repeat(4, minmax(128px, 0.55fr));
+  margin-bottom: 10px;
+}
+
+.inventory-custody-screen .inventory-custody-movement-filters label {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--custody-border-strong);
+  border-radius: 10px;
+  display: grid;
+  gap: 7px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.inventory-custody-screen .inventory-custody-movement-filters input,
+.inventory-custody-screen .inventory-custody-movement-filters select {
+  background: #fff;
+  border: 1px solid var(--custody-border-strong);
+  border-radius: 10px;
+  color: var(--custody-text);
+  height: 38px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.inventory-custody-screen .inventory-custody-movement-filters label input {
+  border: 0;
+  height: 36px;
+  outline: 0;
+  padding: 0;
+}
+
+.inventory-custody-screen .inventory-custody-movement-table-wrap {
+  background: #fff;
+  border: 1px solid var(--custody-border);
+  border-radius: 10px;
+  overflow: auto;
+}
+
+.inventory-custody-screen .inventory-custody-movement-table {
+  border-collapse: collapse;
+  min-width: 1040px;
+  width: 100%;
+}
+
+.inventory-custody-screen .inventory-custody-movement-table th {
+  background: #f5f8fc;
+  color: var(--custody-muted);
+  font-size: 11px;
+  font-weight: 900;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.inventory-custody-screen .inventory-custody-movement-table td {
+  border-top: 1px solid #edf2fb;
+  color: var(--custody-text);
+  font-size: 12px;
+  padding: 10px 12px;
+  vertical-align: top;
+}
+
+.inventory-custody-screen .inventory-custody-state {
+  background: #fff;
+  border: 1px dashed var(--custody-border-strong);
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.inventory-custody-action-backdrop {
+  align-items: center;
+  background: rgba(8, 21, 43, 0.42);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 18px;
+  position: fixed;
+  z-index: 1100;
+}
+
+.inventory-custody-action-modal {
+  background: #fff;
+  border: 1px solid #d8e4f7;
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(11, 31, 61, 0.24);
+  color: #0b1f3d;
+  display: grid;
+  gap: 14px;
+  max-width: min(620px, 100%);
+  padding: 16px;
+  width: 100%;
+}
+
+.inventory-custody-action-modal header,
+.inventory-custody-action-modal footer {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.inventory-custody-action-modal header span {
+  color: #607292;
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.inventory-custody-action-modal header h3 {
+  font-size: 20px;
+  line-height: 1.2;
+  margin: 2px 0 0;
+}
+
+.inventory-custody-action-summary {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inventory-custody-action-summary div {
+  background: #f6f9fe;
+  border: 1px solid #dce7f8;
+  border-radius: 10px;
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.inventory-custody-action-summary span,
+.inventory-custody-action-comment {
+  color: #607292;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.inventory-custody-action-summary strong {
+  display: block;
+  font-size: 13px;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-custody-action-comment {
+  display: grid;
+  gap: 7px;
+}
+
+.inventory-custody-action-comment textarea {
+  border: 1px solid #b9cbed;
+  border-radius: 10px;
+  color: #0b1f3d;
+  min-height: 96px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.inventory-custody-action-error {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  border-radius: 10px;
+  color: #be123c;
+  font-size: 12px;
+  font-weight: 800;
+  margin: 0;
+  padding: 8px 10px;
+}
+
+@media (max-width: 1380px) {
+  .inventory-custody-screen .inventory-custody-composer {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-custody-screen .inventory-custody-composer-fields {
+    grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) 84px minmax(160px, 0.9fr);
+  }
+
+  .inventory-custody-screen .inventory-custody-submit {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+
+  .inventory-custody-screen .inventory-custody-act-row {
+    grid-template-columns: minmax(120px, 0.75fr) minmax(170px, 1fr) minmax(96px, 0.45fr);
+  }
+
+  .inventory-custody-screen .inventory-custody-record-row {
+    grid-template-columns: minmax(180px, 1fr) repeat(3, minmax(96px, 0.42fr)) minmax(104px, 0.48fr);
+  }
+
+  .inventory-custody-screen .inventory-custody-record-status,
+  .inventory-custody-screen .inventory-custody-line-actions {
+    grid-column: 1 / -1;
+  }
+
+  .inventory-custody-screen .inventory-custody-row-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .inventory-custody-screen .inventory-custody-movement-filters {
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 1120px) {
+  .inventory-custody-screen .inventory-custody-commandbar,
+  .inventory-custody-screen .inventory-custody-panel-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-custody-screen .inventory-custody-command-actions,
+  .inventory-custody-screen .inventory-custody-search {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .inventory-custody-screen .inventory-custody-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-custody-screen .inventory-custody-employee-flow,
+  .inventory-custody-screen .inventory-custody-onhands-head {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-custody-screen .inventory-custody-movement-kpis,
+  .inventory-custody-screen .inventory-custody-movement-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 780px) {
+  .inventory-custody-screen .inventory-custody-title {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .inventory-custody-screen .inventory-custody-title h1 {
+    font-size: 24px;
+  }
+
+  .inventory-custody-screen .inventory-custody-composer-fields,
+  .inventory-custody-screen .inventory-custody-act-row,
+  .inventory-custody-screen .inventory-custody-meta-grid,
+  .inventory-custody-screen .inventory-custody-inspector-actions,
+  .inventory-custody-screen .inventory-custody-composer-summary,
+  .inventory-custody-screen .inventory-custody-onhands-stats,
+  .inventory-custody-screen .inventory-custody-record-row,
+  .inventory-custody-screen .inventory-custody-movement-kpis,
+  .inventory-custody-screen .inventory-custody-movement-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-custody-screen .inventory-custody-submit {
+    justify-self: stretch;
+  }
+}

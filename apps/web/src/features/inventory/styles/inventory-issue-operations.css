@@ -1,0 +1,4 @@
+/* Inventory issue operations entrypoint. Ordered imports preserve the previous cascade. */
+@import "./issue/01-issue-legacy-base.css";
+@import "./issue/02-issue-redesign.css";
+@import "./issue/03-issue-compact-polish.css";

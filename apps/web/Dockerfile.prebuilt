@@ -1,0 +1,6 @@
+FROM caddy:2.8-alpine
+
+COPY apps/web/Caddyfile.prebuilt /etc/caddy/Caddyfile
+COPY apps/web/dist /srv
+
+EXPOSE 80

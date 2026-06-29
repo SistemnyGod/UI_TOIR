@@ -1,4 +1,5 @@
 import type {
+  CreateEmployeeDto,
   CreateInventoryCategoryDto,
   CreateInventoryCustodyRecordDto,
   CreateInventoryItemSetDto,
@@ -30,8 +31,10 @@ import type {
   InventoryOverviewDto,
   InventoryPpeCardDetailDto,
   InventoryPpeCardDto,
+  InventoryPpeEmployeeDetailsDto,
   InventoryPpeCardLineDto,
   InventoryPpeModuleOptionsDto,
+  InventoryPpeSummaryDto,
   InventoryReferenceOptionDto,
   InventoryReportDto,
   InventorySettingsDto,
@@ -39,6 +42,7 @@ import type {
   InventorySystemLogDto,
   InventoryUserDto,
   UpdateInventoryCategoryDto,
+  UpdateEmployeeDto,
   UpdateInventoryItemSetDto,
   UpdateInventorySimpleReferenceDto,
   UpdateInventoryStatusDto,
@@ -84,6 +88,18 @@ const emptyPpeSummary = {
   total: 0,
   writtenOff: 0,
 };
+
+function emptyPpeEmployeeDetails(): InventoryPpeEmployeeDetailsDto {
+  return {
+    clothingSize: "",
+    gender: "",
+    handProtectionSize: "",
+    headSize: "",
+    height: "",
+    respiratorSize: "",
+    shoeSize: "",
+  };
+}
 
 let memoryStore: InventoryMockStore | null = null;
 
@@ -172,7 +188,9 @@ export function createMockInventoryRepository(): InventoryRepository {
       const store = readStore();
       const employee = required(store.employees.find((row) => row.id === payload.employeeId), "Сотрудник не найден");
       const item = required(store.items.find((row) => row.id === payload.itemId), "Позиция не найдена");
-      const warehouse = required(store.settings.warehouses.find((row) => row.id === payload.warehouseId), "Склад не найден");
+      const warehouse = payload.warehouseId
+        ? store.settings.warehouses.find((row) => row.id === payload.warehouseId)
+        : null;
       const now = new Date().toISOString();
       const documentId = payload.documentId || id("custody-document");
       const existingDocument = store.custodyDocuments.find((row) => row.id === documentId);
@@ -196,14 +214,16 @@ export function createMockInventoryRepository(): InventoryRepository {
         quantity: payload.quantity,
         status: "issued",
         unit: item.unit,
-        warehouseId: warehouse.id,
-        warehouseName: warehouse.name,
+        warehouseId: warehouse?.id ?? "",
+        warehouseName: warehouse?.name ?? "",
       };
       if (!existingDocument) store.custodyDocuments.unshift(document);
       store.custodyRecords.unshift(record);
       document.recordsCount = store.custodyRecords.filter((row) => row.documentId === documentId).length;
       addHistory(store, "custody_record", "created", `Выдано под запись: ${item.name}`, "Mock");
-      adjustStock(store, item.id, warehouse.id, -payload.quantity);
+      if (warehouse) {
+        adjustStock(store, item.id, warehouse.id, -payload.quantity);
+      }
       writeStore(store);
       return record;
     },
@@ -275,33 +295,34 @@ export function createMockInventoryRepository(): InventoryRepository {
 
     async getPpeCards(params = {}) {
       const store = readStore();
-      let rows = store.ppeCards;
+      const allRows = store.ppeCards;
+      let rows = allRows;
       if (params.status && params.status !== "all") {
         rows = rows.filter((row) => row.status === params.status || row.lines.some((line) => line.status === params.status));
       }
+      if (params.department) {
+        rows = rows.filter((row) => row.employeeDepartment === params.department);
+      }
+      if (params.priceState === "missing") {
+        rows = rows.filter((row) => cardSummary(row).zeroPriceLines > 0);
+      }
+      if (params.priceState === "priced") {
+        rows = rows.filter((row) => cardSummary(row).zeroPriceLines === 0);
+      }
       rows = filterByQuery(rows, params.query, (row) => [
         row.employeeName,
+        row.employeePersonnelNo,
         row.position,
         row.employeeDepartment,
         row.status,
         ...row.lines.map((line) => line.itemName),
       ]);
       const response = pageRows(rows, params);
-      const summarySource = rows;
-      const summary = {
-        ...emptyPpeSummary,
-        active: summarySource.filter((row) => row.status === "active").length,
-        issued: summarySource.filter((row) => row.status === "issued" || row.lines.some((line) => line.status === "issued")).length,
-        issuedLines: summarySource.reduce((sum, row) => sum + row.lines.filter((line) => line.status === "issued").length, 0),
-        linesTotal: summarySource.reduce((sum, row) => sum + row.lines.length, 0),
-        notIssuedLines: summarySource.reduce((sum, row) => sum + row.lines.filter((line) => line.status === "not_issued").length, 0),
-        total: summarySource.length,
-      };
       return {
         ...response,
-        rows: response.rows.map(({ lines, ...card }) => ({ ...card, linesCount: lines.length })),
-        summary,
-        filteredSummary: summary,
+        rows: response.rows.map(cardSummary),
+        summary: ppeSummary(allRows),
+        filteredSummary: ppeSummary(rows),
       };
     },
 
@@ -317,6 +338,7 @@ export function createMockInventoryRepository(): InventoryRepository {
       card.employeeName = employee.fullName;
       card.employeePersonnelNo = employee.personnelNo;
       card.employeeDepartment = employee.department;
+      card.employeeDetails = payload.employeeDetails ?? emptyPpeEmployeeDetails();
       card.position = employee.position;
       writeStore(store);
       return card;
@@ -335,10 +357,24 @@ export function createMockInventoryRepository(): InventoryRepository {
       const store = readStore();
       return {
         employees: activeEmployees(store),
-        items: activeItems(store),
+        items: activeItems(store).slice(0, 50),
         settings: store.settings,
         statuses: ["draft", "issued", "closed", "problem"],
       };
+    },
+
+    async getPpeItems(params = {}) {
+      const store = readStore();
+      const normalized = (params.query ?? "").trim().toLowerCase();
+      const categoryId = params.categoryId ?? "";
+      const rows = activeItems(store).filter((item) => {
+        const matchesQuery =
+          !normalized ||
+          [item.name, item.article, item.sku, item.category].join(" ").toLowerCase().includes(normalized);
+        const matchesCategory = !categoryId || item.categoryId === categoryId;
+        return matchesQuery && matchesCategory;
+      });
+      return pageRows(rows, params);
     },
 
     async getPpeCardHistory() {
@@ -356,6 +392,7 @@ export function createMockInventoryRepository(): InventoryRepository {
         createdAt: new Date().toISOString(),
         employeeDepartment: employee.department,
         employeeId: employee.id,
+        employeeDetails: payload.employeeDetails ?? emptyPpeEmployeeDetails(),
         employeeName: employee.fullName,
         employeePersonnelNo: employee.personnelNo,
         id: id("ppe-card"),
@@ -374,19 +411,21 @@ export function createMockInventoryRepository(): InventoryRepository {
       const card = required(store.ppeCards.find((row) => row.id === cardId), "Карточка СИЗ не найдена");
       const item = required(store.items.find((row) => row.id === payload.itemId), "Позиция не найдена");
       const warehouse = payload.warehouseId ? store.settings.warehouses.find((row) => row.id === payload.warehouseId) : null;
+      const unitPriceMinor = payload.unitPriceMinor ?? item.defaultUnitPriceMinor ?? 0;
       const line: InventoryPpeCardLineDto = {
-        amountMinor: (item.defaultUnitPriceMinor ?? 0) * payload.quantity,
+        amountMinor: unitPriceMinor * payload.quantity,
         dueAt: payload.dueAt ?? null,
         id: id("ppe-line"),
         issuedAt: payload.status === "issued" ? new Date().toISOString() : null,
         itemId: item.id,
         itemName: item.name,
         modelDescription: [item.brandName, item.modelName, item.article].filter(Boolean).join(" "),
+        brandModelArticle: payload.brandModelArticle ?? [item.brandName, item.modelName, item.article].filter(Boolean).join(" "),
         normPoint: "",
         quantity: payload.quantity,
         status: payload.status ?? "draft",
         unit: item.unit,
-        unitPriceMinor: item.defaultUnitPriceMinor ?? 0,
+        unitPriceMinor,
         warehouseId: warehouse?.id ?? null,
         warehouseName: warehouse?.name ?? "",
       };
@@ -403,15 +442,17 @@ export function createMockInventoryRepository(): InventoryRepository {
       const line = required(card.lines.find((row) => row.id === lineId), "Строка СИЗ не найдена");
       const item = required(store.items.find((row) => row.id === payload.itemId), "Позиция не найдена");
       const warehouse = payload.warehouseId ? store.settings.warehouses.find((row) => row.id === payload.warehouseId) : null;
+      const unitPriceMinor = payload.unitPriceMinor ?? item.defaultUnitPriceMinor ?? 0;
       line.dueAt = payload.dueAt ?? null;
       line.itemId = item.id;
       line.itemName = item.name;
       line.modelDescription = [item.brandName, item.modelName, item.article].filter(Boolean).join(" ");
+      line.brandModelArticle = payload.brandModelArticle ?? line.modelDescription;
       line.quantity = payload.quantity;
       line.status = payload.status ?? line.status;
       line.unit = item.unit;
-      line.unitPriceMinor = item.defaultUnitPriceMinor ?? 0;
-      line.amountMinor = (item.defaultUnitPriceMinor ?? 0) * payload.quantity;
+      line.unitPriceMinor = unitPriceMinor;
+      line.amountMinor = unitPriceMinor * payload.quantity;
       line.warehouseId = warehouse?.id ?? null;
       line.warehouseName = warehouse?.name ?? "";
       writeStore(store);
@@ -537,6 +578,72 @@ export function createMockInventoryRepository(): InventoryRepository {
       if (params.employeeGroup) rows = rows.filter((row) => row.employeeGroup === params.employeeGroup);
       rows = filterByQuery(rows, params.query, (row) => [row.fullName, row.personnelNo, row.position, row.department, row.employeeGroup]);
       return pageRows(rows, params);
+    },
+
+    async createEmployee(payload: CreateEmployeeDto) {
+      const store = readStore();
+      const fullName = payload.fullName.trim();
+      if (!fullName) {
+        throw new Error("Укажите ФИО сотрудника");
+      }
+
+      const personnelNo = payload.personnelNo.trim() || `MOCK-${Date.now()}`;
+      if (store.employees.some((row) => normalize(row.personnelNo) === normalize(personnelNo))) {
+        throw new Error("Сотрудник с таким табельным номером уже есть");
+      }
+
+      const employee: InventoryEmployeeDto = {
+        birthDate: payload.birthDate,
+        department: payload.department.trim() || "Не указано",
+        employeeGroup: payload.employeeGroup.trim(),
+        fullName,
+        hiredAt: payload.hiredAt,
+        id: id("employee"),
+        personnelNo,
+        position: payload.position.trim() || "Сотрудник",
+        status: "active",
+      };
+      store.employees.unshift(employee);
+      upsertReference(store.settings.employeePositions, employee.position);
+      upsertReference(store.settings.employeeDepartments, employee.department);
+      if (employee.employeeGroup) upsertReference(store.settings.employeeGroups, employee.employeeGroup);
+      addHistory(store, "employee", "created", `Создан сотрудник: ${employee.fullName}`, "Mock");
+      addSystemLog(store, "employee", "created", employee.fullName);
+      writeStore(store);
+      return employee;
+    },
+
+    async updateEmployee(employeeId: string, payload: UpdateEmployeeDto) {
+      const store = readStore();
+      const employee = required(store.employees.find((row) => row.id === employeeId), "Сотрудник не найден");
+      const fullName = payload.fullName.trim();
+      if (!fullName) {
+        throw new Error("Укажите ФИО сотрудника");
+      }
+
+      const personnelNo = payload.personnelNo.trim() || employee.personnelNo || `MOCK-${Date.now()}`;
+      const duplicate = store.employees.some(
+        (row) => row.id !== employeeId && normalize(row.personnelNo) === normalize(personnelNo),
+      );
+      if (duplicate) {
+        throw new Error("Сотрудник с таким табельным номером уже есть");
+      }
+
+      employee.fullName = fullName;
+      employee.personnelNo = personnelNo;
+      employee.position = payload.position.trim() || "Сотрудник";
+      employee.department = payload.department.trim() || "Не указано";
+      employee.employeeGroup = payload.employeeGroup.trim();
+      employee.hiredAt = payload.hiredAt;
+      employee.birthDate = payload.birthDate;
+      employee.status = normalizeEmployeeStatus(payload.status);
+      upsertReference(store.settings.employeePositions, employee.position);
+      upsertReference(store.settings.employeeDepartments, employee.department);
+      if (employee.employeeGroup) upsertReference(store.settings.employeeGroups, employee.employeeGroup);
+      addHistory(store, "employee", "updated", `Обновлена карточка сотрудника: ${employee.fullName}`, "Mock");
+      addSystemLog(store, "employee", "updated", employee.fullName);
+      writeStore(store);
+      return employee;
     },
 
     async importEmployees(file, previewToken) {
@@ -806,7 +913,9 @@ export function createMockInventoryRepository(): InventoryRepository {
       const employee = payload.employeeId ? store.employees.find((row) => row.id === payload.employeeId) : null;
       const quantity = payload.quantity;
       const signed = payload.type === "issue" || payload.type === "write_off" ? -quantity : quantity;
-      adjustStock(store, item.id, warehouse.id, signed);
+      if (warehouse) {
+        adjustStock(store, item.id, warehouse.id, signed);
+      }
       const document: InventoryDocumentDto = {
         comment: payload.comment ?? "",
         createdAt: payload.movedAt ?? new Date().toISOString(),
@@ -818,7 +927,7 @@ export function createMockInventoryRepository(): InventoryRepository {
         status: "posted",
         type: payload.type,
         unit: item.unit,
-        warehouseName: warehouse.name,
+        warehouseName: warehouse?.name ?? "",
       };
       store.documents.unshift(document);
       addHistory(store, "stock_move", payload.type, `${operationLabel(payload.type)}: ${item.name}`, "Mock");
@@ -911,6 +1020,7 @@ function createSeedStore(): InventoryMockStore {
     createdAt: now,
     employeeDepartment: employees[0].department,
     employeeId: employees[0].id,
+    employeeDetails: emptyPpeEmployeeDetails(),
     employeeName: employees[0].fullName,
     employeePersonnelNo: employees[0].personnelNo,
     id: "ppe-card-1",
@@ -922,6 +1032,7 @@ function createSeedStore(): InventoryMockStore {
         itemId: items[0].id,
         itemName: items[0].name,
         modelDescription: "Стандарт",
+        brandModelArticle: "Стандарт",
         normPoint: "п. 1",
         quantity: 1,
         status: "issued",
@@ -1372,6 +1483,14 @@ function normalizeFullName(value: string) {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function normalizeEmployeeStatus(value: string) {
+  const normalized = normalize(value);
+  if (["archived", "архив"].includes(normalized)) return "archived";
+  if (["disabled", "отключен"].includes(normalized)) return "disabled";
+  if (["inactive", "неактивен"].includes(normalized)) return "inactive";
+  return "active";
+}
+
 function mockImportToken(value: string) {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {
@@ -1392,14 +1511,45 @@ function readField(row: Record<string, string>, ...keys: string[]) {
 }
 
 function cardSummary(card: InventoryPpeCardDetailDto): InventoryPpeCardDto {
+  const activeLines = card.lines.filter((line) => line.status !== "archived");
   return {
+    amountMinor: activeLines.reduce((sum, line) => sum + (line.amountMinor ?? (line.unitPriceMinor ?? 0) * line.quantity), 0),
     employeeId: card.employeeId,
     employeeName: card.employeeName,
     id: card.id,
-    linesCount: card.lines.length,
+    linesCount: activeLines.length,
     position: card.position,
     status: card.status,
+    zeroPriceLines: activeLines.filter((line) => (line.unitPriceMinor ?? 0) <= 0).length,
   };
+}
+
+function ppeSummary(cards: InventoryPpeCardDetailDto[]): InventoryPpeSummaryDto {
+  return cards.reduce<InventoryPpeSummaryDto>((summary, card) => {
+    const activeLines = card.lines.filter((line) => line.status !== "archived");
+    const hasLineStatus = (status: string) => activeLines.some((line) => line.status === status);
+    const hasProblem =
+      card.status === "warning" ||
+      card.status === "overdue" ||
+      card.status === "lost" ||
+      activeLines.some((line) => (line.unitPriceMinor ?? 0) <= 0) ||
+      activeLines.some((line) => ["lost", "overdue"].includes(line.status));
+
+    return {
+      active: summary.active + (card.status === "active" ? 1 : 0),
+      issued: summary.issued + (card.status === "issued" || hasLineStatus("issued") ? 1 : 0),
+      issuedLines: summary.issuedLines + activeLines.filter((line) => line.status === "issued").length,
+      issuing: summary.issuing + (card.status === "issuing" || hasLineStatus("issuing") ? 1 : 0),
+      linesTotal: summary.linesTotal + activeLines.length,
+      notIssued: summary.notIssued + (card.status === "not_issued" || hasLineStatus("not_issued") ? 1 : 0),
+      notIssuedLines: summary.notIssuedLines + activeLines.filter((line) => line.status === "not_issued").length,
+      partial: summary.partial + (card.status === "partial" || hasLineStatus("partial") ? 1 : 0),
+      problem: summary.problem + (hasProblem ? 1 : 0),
+      returned: summary.returned + (card.status === "returned" || hasLineStatus("returned") ? 1 : 0),
+      total: summary.total + 1,
+      writtenOff: summary.writtenOff + (card.status === "written_off" || hasLineStatus("written_off") ? 1 : 0),
+    };
+  }, { ...emptyPpeSummary });
 }
 
 function mockReports(): InventoryReportDto[] {

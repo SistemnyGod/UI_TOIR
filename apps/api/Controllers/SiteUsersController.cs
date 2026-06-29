@@ -20,6 +20,13 @@ public sealed class SiteUsersController(ISiteUserAdminService siteUserAdminServi
         return user is null ? NotFound() : Ok(user);
     }
 
+    [HttpGet("{id:guid}/access")]
+    public ActionResult<SiteUserAccessDto> GetAccess(Guid id)
+    {
+        var access = siteUserAdminService.GetUserAccess(id);
+        return access is null ? NotFound() : Ok(access);
+    }
+
     [HttpGet("roles")]
     public ActionResult<IReadOnlyList<RoleDto>> Roles() => Ok(siteUserAdminService.GetRoles());
 
@@ -41,15 +48,40 @@ public sealed class SiteUsersController(ISiteUserAdminService siteUserAdminServi
         var result = siteUserAdminService.UpdateUser(id, request);
         if (!result.Succeeded)
         {
-            if (result.Errors.ContainsKey("user"))
-            {
-                return NotFound();
-            }
-
-            return SiteUserValidationProblem(result.Errors);
+            return result.Errors.ContainsKey("user")
+                ? NotFound()
+                : SiteUserValidationProblem(result.Errors);
         }
 
         return Ok(result.User);
+    }
+
+    [HttpPut("{id:guid}/permissions")]
+    public ActionResult<SiteUserDto> UpdatePermissions(Guid id, UpdateSiteUserPermissionsDto request)
+    {
+        var result = siteUserAdminService.UpdateUserPermissions(id, request);
+        if (!result.Succeeded)
+        {
+            return result.Errors.ContainsKey("user")
+                ? NotFound()
+                : SiteUserValidationProblem(result.Errors);
+        }
+
+        return Ok(result.User);
+    }
+
+    [HttpPut("{id:guid}/scopes")]
+    public ActionResult<SiteUserAccessDto> UpdateScopes(Guid id, UpdateSiteUserScopesDto request)
+    {
+        var result = siteUserAdminService.UpdateUserScopes(id, request);
+        if (!result.Succeeded)
+        {
+            return result.Errors.ContainsKey("user")
+                ? NotFound()
+                : SiteUserValidationProblem(result.Errors);
+        }
+
+        return Ok(result.Access);
     }
 
     [HttpPost("{id:guid}/block")]

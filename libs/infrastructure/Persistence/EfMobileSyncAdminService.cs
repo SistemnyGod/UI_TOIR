@@ -47,6 +47,67 @@ internal sealed class EfMobileSyncAdminService(Patrol360DbContext dbContext) : I
             .ToList();
     }
 
+    public IReadOnlyList<MobileDeviceHealthDto> GetDeviceHealth()
+    {
+        var staleBefore = DateTimeOffset.UtcNow.AddMinutes(-15);
+        var accounts = dbContext.MobileAccounts
+            .AsNoTracking()
+            .Include(account => account.Sessions)
+            .OrderBy(account => account.Login)
+            .ToList();
+        var accountIds = accounts.Select(account => account.Id).ToHashSet();
+
+        var outboxByAccount = dbContext.MobileOutboxOperations
+            .AsNoTracking()
+            .Where(operation => accountIds.Contains(operation.MobileAccountId))
+            .AsEnumerable()
+            .GroupBy(operation => operation.MobileAccountId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        var notificationsByAccount = dbContext.MobileNotifications
+            .AsNoTracking()
+            .Where(notification => accountIds.Contains(notification.MobileAccountId))
+            .AsEnumerable()
+            .GroupBy(notification => notification.MobileAccountId)
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(item => item.CreatedAt).ToList());
+
+        return accounts
+            .Select(account =>
+            {
+                var latestSession = account.Sessions
+                    .OrderByDescending(session => session.LastSeenAt)
+                    .FirstOrDefault();
+                outboxByAccount.TryGetValue(account.Id, out var operations);
+                notificationsByAccount.TryGetValue(account.Id, out var notifications);
+                operations ??= [];
+                notifications ??= [];
+
+                var latestErrorOperation = operations
+                    .Where(operation => ConflictStatuses.Contains(operation.Status))
+                    .OrderByDescending(operation => operation.CreatedAtServer)
+                    .FirstOrDefault();
+                var latestFailedPush = notifications
+                    .FirstOrDefault(notification =>
+                        notification.PushStatus.Equals("failed", StringComparison.OrdinalIgnoreCase) &&
+                        !string.IsNullOrWhiteSpace(notification.PushLastError));
+
+                return new MobileDeviceHealthDto(
+                    account.Id,
+                    account.Login,
+                    string.IsNullOrWhiteSpace(latestSession?.DeviceId) ? null : latestSession.DeviceId,
+                    string.IsNullOrWhiteSpace(latestSession?.Device) ? null : latestSession.Device,
+                    string.IsNullOrWhiteSpace(latestSession?.AppVersion) ? null : latestSession.AppVersion,
+                    latestSession?.LastSeenAt ?? account.LastSeenAt,
+                    ReadPushStatus(latestSession, notifications),
+                    operations.Count(IsPendingOutbox),
+                    operations.Count(operation => IsStaleOutbox(operation, staleBefore)),
+                    latestErrorOperation is not null
+                        ? ReadMessage(latestErrorOperation)
+                        : string.IsNullOrWhiteSpace(latestFailedPush?.PushLastError) ? null : latestFailedPush.PushLastError);
+            })
+            .ToList();
+    }
+
     public MobileSyncConflictDetailDto? GetConflict(string clientOperationId)
     {
         var operation = dbContext.MobileOutboxOperations
@@ -182,4 +243,37 @@ internal sealed class EfMobileSyncAdminService(Patrol360DbContext dbContext) : I
 
     private static string NormalizeComment(string? comment) =>
         string.IsNullOrWhiteSpace(comment) ? string.Empty : comment.Trim();
+
+    private static bool IsPendingOutbox(MobileOutboxOperationEntity operation) =>
+        operation.Status.Equals("pending", StringComparison.OrdinalIgnoreCase) ||
+        operation.Status.Equals("sending", StringComparison.OrdinalIgnoreCase) ||
+        operation.Status.Equals("retryLater", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsStaleOutbox(MobileOutboxOperationEntity operation, DateTimeOffset staleBefore) =>
+        (operation.Status.Equals("sending", StringComparison.OrdinalIgnoreCase) ||
+         operation.Status.Equals("retryLater", StringComparison.OrdinalIgnoreCase)) &&
+        operation.CreatedAtServer < staleBefore;
+
+    private static string ReadPushStatus(
+        MobileAccountSessionEntity? latestSession,
+        IReadOnlyList<MobileNotificationEntity> notifications)
+    {
+        if (latestSession is null || string.IsNullOrWhiteSpace(latestSession.PushToken))
+        {
+            return "notRegistered";
+        }
+
+        if (latestSession.PushTokenRevokedAt is not null)
+        {
+            return "revoked";
+        }
+
+        var latestPush = notifications.FirstOrDefault();
+        if (latestPush is null)
+        {
+            return "registered";
+        }
+
+        return latestPush.PushStatus;
+    }
 }

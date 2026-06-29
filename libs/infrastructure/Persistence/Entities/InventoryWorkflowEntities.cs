@@ -66,6 +66,13 @@ internal sealed class InventoryPpeCardEntity
     public string Position { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public string Comment { get; set; } = string.Empty;
+    public string Gender { get; set; } = string.Empty;
+    public string Height { get; set; } = string.Empty;
+    public string ClothingSize { get; set; } = string.Empty;
+    public string ShoeSize { get; set; } = string.Empty;
+    public string HeadSize { get; set; } = string.Empty;
+    public string RespiratorSize { get; set; } = string.Empty;
+    public string HandProtectionSize { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? ArchivedAt { get; set; }
     public EmployeeEntity Employee { get; set; } = null!;
@@ -80,10 +87,15 @@ internal sealed class InventoryPpeCardLineEntity
     public Guid ItemId { get; set; }
     public Guid? WarehouseId { get; set; }
     public decimal Quantity { get; set; }
+    public long? UnitPriceMinor { get; set; }
     public string Status { get; set; } = string.Empty;
     public DateTimeOffset? IssuedAt { get; set; }
     public DateTimeOffset? DueAt { get; set; }
     public string Comment { get; set; } = string.Empty;
+    public string PrintItemName { get; set; } = string.Empty;
+    public string NormPoint { get; set; } = string.Empty;
+    public string IssuePeriodText { get; set; } = string.Empty;
+    public string BrandModelArticle { get; set; } = string.Empty;
     public InventoryPpeCardEntity Card { get; set; } = null!;
     public InventoryItemEntity Item { get; set; } = null!;
     public InventoryWarehouseEntity? Warehouse { get; set; }
@@ -138,6 +150,10 @@ internal sealed class InventoryPositionNormEntity
     public int? LegacyId { get; set; }
     public string PositionName { get; set; } = string.Empty;
     public Guid ItemId { get; set; }
+    public string NormItemName { get; set; } = string.Empty;
+    public string NormPoint { get; set; } = string.Empty;
+    public string IssuePeriodText { get; set; } = string.Empty;
+    public string QuantityText { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
     public int? LifeMonths { get; set; }
     public InventoryItemEntity Item { get; set; } = null!;

@@ -1,0 +1,697 @@
+/* Final visual layer for the Inventory Issue workspace.
+   Keep this file imported last so old module styles cannot leak into this screen. */
+
+.inventory-web-workspace:has(.inventory-issue-screen),
+.inventory-web-workspace:has(.inventory-operations-screen),
+.inventory-web-workspace:has(.inventory-custody-screen),
+.inventory-web-workspace:has(.inventory-ppe-screen) {
+  --issue-bg: #f6faff;
+  --issue-panel: rgba(255, 255, 255, 0.94);
+  --issue-panel-solid: #ffffff;
+  --issue-border: #d8e5f5;
+  --issue-border-strong: #b9cbea;
+  --issue-text: #0f2342;
+  --issue-muted: #60718e;
+  --issue-blue: #1267ef;
+  --issue-blue-dark: #0b4fc7;
+  --issue-blue-soft: #eef5ff;
+  --issue-danger: #e5484d;
+  --issue-danger-soft: #fff1f2;
+  --issue-success: #10825f;
+  --issue-success-soft: #eaf8f2;
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(245, 249, 255, 0.96) 58%, rgba(238, 246, 255, 0.94) 100%),
+    url("/inventory-issue-mountains.png") center bottom / cover no-repeat;
+}
+
+.inventory-web-workspace:has(.inventory-operations-screen) {
+  padding: 0 0 28px;
+}
+
+.inventory-web-workspace:has(.inventory-custody-screen) {
+  padding: 0 0 28px;
+}
+
+.inventory-issue-screen {
+  color: var(--issue-text);
+  gap: 16px;
+  max-width: 100%;
+}
+
+.inventory-issue-hero {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  gap: 14px;
+  padding: 0 0 8px;
+}
+
+.inventory-issue-breadcrumbs {
+  color: var(--issue-muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.inventory-issue-title-row {
+  align-items: center;
+  gap: 12px;
+}
+
+.inventory-issue-title-icon {
+  background: var(--issue-blue);
+  border-radius: 8px;
+  box-shadow: none;
+  flex: 0 0 44px;
+  height: 44px;
+  width: 44px;
+}
+
+.inventory-issue-title-row h1 {
+  color: var(--issue-text);
+  font-size: 28px;
+  letter-spacing: 0;
+  line-height: 1.05;
+}
+
+.inventory-issue-title-row p {
+  color: var(--issue-muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 4px;
+}
+
+.inventory-issue-tabs {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--issue-border);
+  border-radius: 0;
+  box-shadow: none;
+  gap: 8px;
+  padding: 0;
+}
+
+.inventory-issue-tabs button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
+  border-radius: 8px 8px 0 0;
+  box-shadow: none;
+  color: var(--issue-text);
+  min-height: 42px;
+  padding: 0 12px;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.inventory-issue-tabs button:hover {
+  background: rgba(255, 255, 255, 0.76);
+  border-color: var(--issue-border);
+}
+
+.inventory-issue-tabs button.is-active {
+  background: var(--issue-panel-solid);
+  border-color: var(--issue-border);
+  border-bottom-color: var(--issue-blue);
+  color: var(--issue-blue-dark);
+}
+
+.inventory-issue-workspace {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(360px, 0.95fr) minmax(460px, 1.05fr);
+}
+
+.inventory-issue-catalog,
+.inventory-issue-draft,
+.inventory-issue-table-card,
+.inventory-issue-state {
+  background: var(--issue-panel);
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.inventory-issue-catalog,
+.inventory-issue-draft,
+.inventory-issue-table-card {
+  padding: 14px;
+}
+
+.inventory-issue-panel-head {
+  align-items: start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.inventory-issue-panel-head h2 {
+  color: var(--issue-text);
+  font-size: 18px;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.inventory-issue-panel-head p {
+  color: var(--issue-muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 4px;
+}
+
+.inventory-issue-view-switch {
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  padding: 3px;
+}
+
+.inventory-issue-view-switch button {
+  border-radius: 6px;
+  height: 34px;
+  width: 34px;
+}
+
+.inventory-issue-filters {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 190px);
+  margin-bottom: 12px;
+}
+
+.inventory-issue-search,
+.inventory-issue-field select,
+.inventory-issue-field textarea,
+.inventory-issue-line-details input,
+.inventory-issue-filter-field input,
+.inventory-issue-filter-field select,
+.inventory-issue-table-toolbar select,
+.inventory-issue-filters select {
+  background: var(--issue-panel-solid);
+  border: 1px solid var(--issue-border-strong);
+  border-radius: 8px;
+  box-shadow: none;
+  color: var(--issue-text);
+  min-height: 40px;
+}
+
+.inventory-issue-search {
+  align-items: center;
+  display: flex;
+  gap: 9px;
+  padding: 0 12px;
+}
+
+.inventory-issue-search input {
+  color: var(--issue-text);
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 0;
+}
+
+.inventory-issue-item-grid {
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-height: calc(100vh - 336px);
+  padding-right: 4px;
+}
+
+.inventory-issue-item-grid article {
+  align-items: center;
+  background: var(--issue-panel-solid);
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 44px minmax(0, 1fr) 34px;
+  min-height: 70px;
+  outline: none;
+  padding: 10px;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.inventory-issue-item-grid article:hover,
+.inventory-issue-item-grid article.is-selected {
+  background: #f8fbff;
+  border-color: var(--issue-blue);
+}
+
+.inventory-issue-item-grid article:hover {
+  box-shadow: 0 10px 24px rgba(15, 89, 220, 0.08);
+  transform: translateY(-1px);
+}
+
+.inventory-issue-item-grid article:focus-visible {
+  border-color: var(--issue-blue);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.inventory-issue-item-avatar {
+  background: var(--issue-blue-soft);
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  color: var(--issue-blue);
+  height: 44px;
+  width: 44px;
+}
+
+.inventory-issue-item-avatar.small {
+  height: 38px;
+  width: 38px;
+}
+
+.inventory-issue-item-main {
+  min-width: 0;
+}
+
+.inventory-issue-item-main strong {
+  color: var(--issue-text);
+  display: block;
+  font-size: 13px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-issue-item-main span,
+.inventory-issue-item-main small {
+  color: var(--issue-muted);
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-issue-item-action {
+  align-items: center;
+  align-self: center;
+  background: transparent;
+  border: 1px solid var(--issue-border);
+  border-radius: 50%;
+  color: var(--issue-blue);
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  justify-self: end;
+  padding: 0;
+  width: 30px;
+}
+
+.inventory-issue-item-card.is-selected .inventory-issue-item-action {
+  background: #e8fff4;
+  border-color: #b8efd3;
+  color: #07834f;
+}
+
+.inventory-issue-item-card.is-selected .inventory-issue-item-avatar {
+  background: #e8fff4;
+  border-color: #b8efd3;
+  color: #07834f;
+}
+
+.inventory-issue-screen .button {
+  border-radius: 8px;
+  box-shadow: none;
+  font-weight: 850;
+  letter-spacing: 0;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.inventory-issue-screen .button.primary {
+  background: var(--issue-blue);
+  border-color: var(--issue-blue);
+  color: #ffffff;
+}
+
+.inventory-issue-screen .button.primary:hover {
+  background: var(--issue-blue-dark);
+  border-color: var(--issue-blue-dark);
+}
+
+.inventory-issue-screen .button.ghost {
+  background: var(--issue-panel-solid);
+  border: 1px solid var(--issue-border);
+  color: var(--issue-text);
+}
+
+.inventory-issue-screen .button.ghost:hover {
+  border-color: var(--issue-blue);
+  color: var(--issue-blue-dark);
+}
+
+.inventory-issue-screen .button.icon-only {
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  width: 36px;
+}
+
+.inventory-issue-screen .button.danger {
+  color: var(--issue-danger);
+}
+
+.inventory-issue-screen .button.danger:hover {
+  background: var(--issue-danger-soft);
+  border-color: #fecdd3;
+}
+
+.inventory-issue-draft {
+  align-self: start;
+  gap: 12px;
+  position: sticky;
+  top: 12px;
+}
+
+.inventory-issue-field {
+  color: var(--issue-muted);
+  gap: 6px;
+}
+
+.inventory-issue-field textarea {
+  min-height: 64px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.inventory-issue-employee {
+  background: #f8fbff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  gap: 10px;
+  padding: 10px;
+}
+
+.inventory-issue-employee > span {
+  background: var(--issue-blue-soft);
+  color: var(--issue-blue-dark);
+}
+
+.inventory-issue-draft-lines {
+  gap: 10px;
+  max-height: calc(100vh - 548px);
+  overflow: auto;
+  padding-right: 3px;
+}
+
+.inventory-issue-draft-line {
+  background: var(--issue-panel-solid);
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  overflow: hidden;
+  padding: 10px;
+}
+
+.inventory-issue-draft-line.is-expanded {
+  border-color: var(--issue-blue);
+}
+
+.inventory-issue-draft-line.has-warning {
+  border-color: #f4a261;
+}
+
+.inventory-issue-draft-line .inventory-issue-line-summary {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(210px, 1fr) minmax(300px, auto) 80px;
+  min-width: 0;
+  width: 100%;
+}
+
+.inventory-issue-line-item {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 38px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.inventory-issue-line-item strong,
+.inventory-issue-line-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-issue-line-controls {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.inventory-issue-qty-stepper {
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  flex: 0 0 108px;
+  height: 38px;
+  overflow: hidden;
+}
+
+.inventory-issue-qty-stepper button {
+  color: var(--issue-blue-dark);
+  width: 32px;
+}
+
+.inventory-issue-qty-stepper input {
+  color: var(--issue-text);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.inventory-issue-line-unit {
+  color: var(--issue-text);
+  flex: 0 0 34px;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.inventory-issue-line-controls > input {
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  color: var(--issue-text);
+  flex: 0 0 82px;
+  font-size: 13px;
+  font-weight: 900;
+  height: 38px;
+  text-align: right;
+}
+
+.inventory-issue-line-actions {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+  justify-content: flex-end;
+  min-width: 78px;
+}
+
+.inventory-issue-draft-line.is-expanded .inventory-issue-line-actions .button:first-child svg {
+  transform: rotate(180deg);
+}
+
+.inventory-issue-line-details {
+  background: #f8fbff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-sizing: border-box;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 10px;
+  padding: 10px;
+}
+
+.inventory-issue-line-details label {
+  color: var(--issue-muted);
+  font-size: 11px;
+  font-weight: 850;
+  gap: 5px;
+}
+
+.inventory-issue-line-details input {
+  height: 38px;
+  padding: 0 10px;
+}
+
+.inventory-issue-line-footer {
+  align-items: center;
+  color: var(--issue-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 11px;
+  font-weight: 750;
+  gap: 8px;
+  line-height: 1.35;
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.inventory-issue-line-footer span {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.inventory-issue-line-footer strong {
+  background: var(--issue-danger-soft);
+  border-radius: 999px;
+  color: var(--issue-danger);
+  padding: 4px 8px;
+}
+
+.inventory-issue-draft-total {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inventory-issue-draft-total article {
+  background: #f8fbff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  padding: 10px 12px;
+}
+
+.inventory-issue-draft-total article span {
+  color: var(--issue-muted);
+  font-size: 11px;
+}
+
+.inventory-issue-draft-total article strong {
+  color: var(--issue-text);
+  font-size: 20px;
+}
+
+.inventory-issue-draft-total article:last-child strong {
+  color: var(--issue-blue-dark);
+}
+
+.issue-submit {
+  min-height: 46px;
+}
+
+.inventory-issue-table-toolbar {
+  align-items: end;
+  gap: 10px;
+}
+
+.inventory-issue-table-wrap {
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  overflow: auto;
+}
+
+.inventory-issue-table {
+  font-size: 12px;
+  min-width: 860px;
+}
+
+.inventory-issue-table th {
+  background: #f3f7fc;
+  color: var(--issue-muted);
+  font-size: 11px;
+  letter-spacing: 0;
+  padding: 10px 12px;
+}
+
+.inventory-issue-table td {
+  color: var(--issue-text);
+  padding: 11px 12px;
+}
+
+.inventory-issue-status {
+  border-radius: 999px;
+  box-shadow: none;
+  font-size: 11px;
+  padding: 5px 10px;
+}
+
+.inventory-issue-status.is-issued {
+  background: var(--issue-success-soft);
+  color: var(--issue-success);
+}
+
+.inventory-issue-history-summary article {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+@media (max-width: 1380px) {
+  .inventory-issue-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-issue-draft {
+    position: static;
+  }
+
+  .inventory-issue-draft-lines,
+  .inventory-issue-item-grid {
+    max-height: none;
+  }
+
+  .inventory-issue-item-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .inventory-issue-title-row {
+    align-items: flex-start;
+  }
+
+  .inventory-issue-tabs {
+    overflow-x: auto;
+  }
+
+  .inventory-issue-tabs button {
+    flex: 0 0 auto;
+  }
+
+  .inventory-issue-filters,
+  .inventory-issue-item-grid,
+  .inventory-issue-line-details,
+  .inventory-issue-draft-total {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-issue-draft-line .inventory-issue-line-summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .inventory-issue-line-controls {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .inventory-issue-line-actions {
+    align-self: start;
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .inventory-issue-line-controls > input,
+  .inventory-issue-qty-stepper {
+    flex: 1 1 104px;
+  }
+}
+

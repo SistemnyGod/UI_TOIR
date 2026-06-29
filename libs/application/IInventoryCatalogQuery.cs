@@ -46,4 +46,5 @@ public sealed record InventoryListQuery(
     string? Item = null,
     string? Sort = null,
     string? Direction = null,
+    string? PriceState = null,
     bool IncludeLines = true);

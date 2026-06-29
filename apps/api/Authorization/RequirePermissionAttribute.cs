@@ -10,6 +10,23 @@ public sealed class RequirePermissionAttribute(string permission) : Attribute, I
 {
     public void OnAuthorization(AuthorizationFilterContext context)
     {
+        PermissionAuthorization.Apply(context, [permission]);
+    }
+}
+
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
+public sealed class RequireAnyPermissionAttribute(params string[] permissions) : Attribute, IAuthorizationFilter
+{
+    public void OnAuthorization(AuthorizationFilterContext context)
+    {
+        PermissionAuthorization.Apply(context, permissions);
+    }
+}
+
+internal static class PermissionAuthorization
+{
+    public static void Apply(AuthorizationFilterContext context, IReadOnlyList<string> permissions)
+    {
         var token = ReadBearerToken(context.HttpContext.Request);
         if (token is null)
         {
@@ -35,12 +52,13 @@ public sealed class RequirePermissionAttribute(string permission) : Attribute, I
             return;
         }
 
-        if (!user.Permissions.Contains(permission, StringComparer.OrdinalIgnoreCase))
+        if (!permissions.Any(permission => user.Permissions.Contains(permission, StringComparer.OrdinalIgnoreCase)))
         {
+            var permissionList = string.Join(", ", permissions);
             context.Result = new ObjectResult(new ProblemDetails
             {
                 Title = "Недостаточно прав",
-                Detail = $"Для действия требуется право {permission}.",
+                Detail = $"Для действия требуется одно из прав: {permissionList}.",
                 Status = StatusCodes.Status403Forbidden
             })
             {

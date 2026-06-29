@@ -1,0 +1,6 @@
+/* PPE industrial layer entrypoint. Ordered imports preserve the previous cascade. */
+@import "./ppe-industrial/01-ppe-shell-filters.css";
+@import "./ppe-industrial/02-ppe-table.css";
+@import "./ppe-industrial/03-ppe-card-list.css";
+@import "./ppe-industrial/04-ppe-inspector-print.css";
+@import "./ppe-industrial/05-ppe-responsive.css";

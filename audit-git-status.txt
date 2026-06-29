@@ -1,0 +1,471 @@
+﻿ M .dockerignore
+MM .gitignore
+D  .tmp/apk-check/patrol360-mobile-release.apk
+D  .tmp/publish-api/Microsoft.EntityFrameworkCore.Abstractions.dll
+D  .tmp/publish-api/Microsoft.EntityFrameworkCore.Relational.dll
+D  .tmp/publish-api/Microsoft.EntityFrameworkCore.dll
+D  .tmp/publish-api/Npgsql.EntityFrameworkCore.PostgreSQL.dll
+D  .tmp/publish-api/Npgsql.dll
+D  .tmp/publish-api/Patrol360.Api.deps.json
+D  .tmp/publish-api/Patrol360.Api.dll
+D  .tmp/publish-api/Patrol360.Api.exe
+D  .tmp/publish-api/Patrol360.Api.pdb
+D  .tmp/publish-api/Patrol360.Api.runtimeconfig.json
+D  .tmp/publish-api/Patrol360.Api.staticwebassets.endpoints.json
+D  .tmp/publish-api/Patrol360.Application.dll
+D  .tmp/publish-api/Patrol360.Application.pdb
+D  .tmp/publish-api/Patrol360.Contracts.dll
+D  .tmp/publish-api/Patrol360.Contracts.pdb
+D  .tmp/publish-api/Patrol360.Domain.dll
+D  .tmp/publish-api/Patrol360.Domain.pdb
+D  .tmp/publish-api/Patrol360.Infrastructure.dll
+D  .tmp/publish-api/Patrol360.Infrastructure.pdb
+D  .tmp/publish-api/Persistence/SeedData/accounting-employees.json
+D  .tmp/publish-api/appsettings.Development.json
+D  .tmp/publish-api/appsettings.json
+D  .tmp/publish-api/web.config
+D  apk-check/patrol360-current.apk
+D  apk-check/patrol360-v5.apk
+D  apk-check/patrol360.apk
+M  apps/api/Authorization/RequirePermissionAttribute.cs
+M  apps/api/Controllers/AssignmentsController.cs
+MM apps/api/Controllers/EmuController.cs
+MM apps/api/Controllers/InventoryController.cs
+ M apps/api/Controllers/MobileAccountsController.cs
+M  apps/api/Controllers/MobileSyncController.cs
+A  apps/api/Controllers/PercoIntegrationController.cs
+MM apps/api/Controllers/SiteUsersController.cs
+ M apps/api/Patrol360.Api.csproj
+A  apps/web/e2e/emu-api-contour.spec.ts
+M  apps/web/e2e/emu-mvp.spec.ts
+M  apps/web/e2e/inventory-employees-users-smoke.spec.ts
+M  apps/web/e2e/inventory-history-audit-smoke.spec.ts
+MM apps/web/e2e/inventory-issue-smoke.spec.ts
+M  apps/web/e2e/inventory-mock-acceptance.spec.ts
+M  apps/web/e2e/inventory-settings-smoke.spec.ts
+M  apps/web/e2e/run-playwright.mjs
+MM apps/web/index.html
+M  apps/web/playwright.config.ts
+MM apps/web/src/App.tsx
+M  apps/web/src/__tests__/domain.test.ts
+AM apps/web/src/__tests__/emuWorkBoard.test.ts
+MM apps/web/src/__tests__/emuWorkTime.test.ts
+ M apps/web/src/__tests__/ui.test.tsx
+MM apps/web/src/api/contracts.ts
+ M apps/web/src/components/ChromeIcon.tsx
+MM apps/web/src/components/NavIcon.tsx
+MM apps/web/src/components/ScreenRouter.tsx
+MM apps/web/src/components/Sidebar.tsx
+ M apps/web/src/components/Topbar.tsx
+ M apps/web/src/components/WorkspaceHeader.tsx
+ M apps/web/src/components/accounts/MobileAccountAccessScope.tsx
+ M apps/web/src/components/accounts/MobileAccountCreateDrawer.tsx
+ M apps/web/src/components/accounts/MobileAccountListPanel.tsx
+ M apps/web/src/components/accounts/MobileAccountMetrics.tsx
+ M apps/web/src/components/accounts/MobileAccountSecurityPanels.tsx
+ M apps/web/src/components/accounts/TemporaryPasswordPanel.tsx
+ M apps/web/src/components/assignments/ActiveAssignmentsPanel.tsx
+ M apps/web/src/components/assignments/AssignableEmployeesPanel.tsx
+ M apps/web/src/components/assignments/AssignableRoutesPanel.tsx
+ M apps/web/src/components/assignments/AssignmentDraftDrawer.tsx
+ M apps/web/src/components/assignments/AssignmentToolbar.tsx
+ M apps/web/src/components/dashboard/ActivePatrolDetail.tsx
+ M apps/web/src/components/dashboard/ActivePatrolsPanel.tsx
+ M apps/web/src/components/dashboard/DashboardCommandPanel.tsx
+ M apps/web/src/components/dashboard/DashboardEmptyPanel.tsx
+ M apps/web/src/components/dashboard/DashboardMetricsBar.tsx
+ M apps/web/src/components/dashboard/DashboardProblemPointsPanel.tsx
+ M apps/web/src/components/dashboard/DashboardReadinessPanel.tsx
+ M apps/web/src/components/dashboard/DashboardRequestsPanel.tsx
+ M apps/web/src/components/dashboard/DashboardTodayRoutesPanel.tsx
+ M apps/web/src/components/employees/EmployeeDirectoryPanel.tsx
+ M apps/web/src/components/employees/EmployeeFormModal.tsx
+ M apps/web/src/components/employees/EmployeeMetricsBar.tsx
+ M apps/web/src/components/employees/EmployeeMobileAccessPanel.tsx
+ M apps/web/src/components/employees/EmployeeProfileDrawer.tsx
+ M apps/web/src/components/requests/RequestCreateModal.tsx
+ M apps/web/src/components/requests/RequestModals.tsx
+ M apps/web/src/components/requests/RequestViewModal.tsx
+ M apps/web/src/components/requests/requestModalUtils.ts
+MM apps/web/src/components/results/MobileSyncPanel.tsx
+MM apps/web/src/components/results/ResultDetailDrawer.tsx
+ M apps/web/src/components/results/ResultsJournalPanel.tsx
+ M apps/web/src/components/routes/PointEditorForm.tsx
+ M apps/web/src/components/routes/RouteCreateModal.tsx
+ M apps/web/src/components/routes/RouteDirectoryPanel.tsx
+ M apps/web/src/components/routes/RouteEditModal.tsx
+ M apps/web/src/components/routes/RouteEditorForm.tsx
+ M apps/web/src/components/routes/RoutePointDrawer.tsx
+ M apps/web/src/components/routes/RoutePointTable.tsx
+ M apps/web/src/components/routes/RouteWorkspacePanel.tsx
+ M apps/web/src/components/schedule/PlanningSummaryCards.tsx
+ M apps/web/src/components/schedule/ScheduleEditPanel.tsx
+ M apps/web/src/components/schedule/ScheduleGridPanel.tsx
+ M apps/web/src/components/schedule/ScheduleSidePanels.tsx
+ M apps/web/src/components/schedule/ScheduleToolbar.tsx
+ M apps/web/src/components/site-users/RoleAccessPanel.tsx
+AM apps/web/src/components/site-users/SiteUserAccessPanel.tsx
+MM apps/web/src/components/site-users/SiteUserFormPanel.tsx
+ M apps/web/src/components/site-users/SiteUserProfileDrawer.tsx
+ M apps/web/src/components/site-users/SiteUsersTablePanel.tsx
+ M apps/web/src/components/ui.tsx
+MM apps/web/src/data.ts
+M  apps/web/src/domain/dashboardMetrics.ts
+AM apps/web/src/domain/emuWorkBoard.ts
+MM apps/web/src/domain/emuWorkTime.ts
+ M apps/web/src/domain/routes.ts
+ M apps/web/src/features/patrol/results/PointResultTable.tsx
+ M apps/web/src/features/patrol/results/ResultsWorkspace.tsx
+M  apps/web/src/hooks/useAssignmentsWorkspace.ts
+MM apps/web/src/hooks/useEmuWorkspace.ts
+M  apps/web/src/hooks/useMobileSyncWorkspace.ts
+M  apps/web/src/hooks/useResultsWorkspace.ts
+ M apps/web/src/hooks/useRoutesEditor.ts
+M  apps/web/src/hooks/useSession.ts
+MM apps/web/src/hooks/useSiteUsersWorkspace.ts
+ M apps/web/src/main.tsx
+MM apps/web/src/repositories/assignmentsRepository.ts
+MM apps/web/src/repositories/emuRepository.ts
+M  apps/web/src/repositories/inventoryRepository.ts
+M  apps/web/src/repositories/mobileSyncRepository.ts
+MM apps/web/src/repositories/mockInventoryRepository.ts
+M  apps/web/src/repositories/patrolDataRepository.ts
+A  apps/web/src/repositories/percoRepository.ts
+MM apps/web/src/repositories/resultsRepository.ts
+MM apps/web/src/repositories/siteUsersRepository.ts
+MM apps/web/src/screens/AssignmentScreen.tsx
+MM apps/web/src/screens/DashboardScreen.tsx
+ M apps/web/src/screens/EmployeesScreen.tsx
+MM apps/web/src/screens/EmuScreen.tsx
+ M apps/web/src/screens/InventoryScreen.tsx
+ M apps/web/src/screens/LoginScreen.tsx
+ M apps/web/src/screens/MobileAccountsScreen.tsx
+AM apps/web/src/screens/PercoIntegrationScreen.tsx
+MM apps/web/src/screens/ResultsScreen.tsx
+ M apps/web/src/screens/RoutesScreen.tsx
+ M apps/web/src/screens/ScheduleScreen.tsx
+MM apps/web/src/screens/SiteUsersScreen.tsx
+MM apps/web/src/screens/emu/EmuCompletedWorkHistoryScreen.tsx
+MM apps/web/src/screens/emu/EmuDashboardScreen.tsx
+MM apps/web/src/screens/emu/EmuWorkAccountingScreen.tsx
+MM apps/web/src/screens/emu/emu.css
+ M apps/web/src/screens/inventory/InventoryCustodyScreen.tsx
+MM apps/web/src/screens/inventory/InventoryEmployeesScreen.tsx
+MM apps/web/src/screens/inventory/InventoryHistoryScreen.tsx
+ M apps/web/src/screens/inventory/InventoryIssueScreen.tsx
+MM apps/web/src/screens/inventory/InventoryItemsScreen.tsx
+MM apps/web/src/screens/inventory/InventoryOperationsScreen.tsx
+ M apps/web/src/screens/inventory/InventoryOverviewScreen.tsx
+MM apps/web/src/screens/inventory/InventoryPpeScreen.tsx
+ M apps/web/src/screens/inventory/InventoryReportsScreen.tsx
+ M apps/web/src/screens/inventory/InventorySettingsScreen.tsx
+MM apps/web/src/screens/inventory/InventorySystemLogScreen.tsx
+ M apps/web/src/screens/inventory/InventoryUsersScreen.tsx
+MM apps/web/src/screens/inventory/PpeMovementHistoryPanel.tsx
+ D apps/web/src/screens/inventory/custody/custodyCommon.tsx
+ D apps/web/src/screens/inventory/custody/custodyComposer.tsx
+MD apps/web/src/screens/inventory/custody/custodyDrawer.tsx
+ D apps/web/src/screens/inventory/custody/custodyJournal.tsx
+ D apps/web/src/screens/inventory/custody/custodyPrint.tsx
+ D apps/web/src/screens/inventory/custody/custodyTypes.ts
+ D apps/web/src/screens/inventory/custody/useCustodyJournalState.ts
+ D apps/web/src/screens/inventory/custody/useCustodyRepositoryActions.ts
+MM apps/web/src/screens/inventory/inventoryWeb.css
+MD apps/web/src/screens/inventory/ppe/inventoryPpeConfig.ts
+MD apps/web/src/screens/inventory/ppe/ppeCommon.tsx
+MD apps/web/src/screens/inventory/ppe/ppeDrawer.tsx
+MD apps/web/src/screens/inventory/ppe/ppeJournal.tsx
+MD apps/web/src/screens/inventory/ppe/ppePrint.tsx
+MD apps/web/src/screens/inventory/ppe/ppeTypes.ts
+MD apps/web/src/screens/inventory/ppe/ppeWizard.tsx
+MD apps/web/src/screens/inventory/ppe/usePpeJournalState.ts
+MD apps/web/src/screens/inventory/ppe/usePpeRepositoryActions.ts
+AD apps/web/src/screens/perco/perco.css
+MM apps/web/src/security/permissions.ts
+MM apps/web/src/styles.css
+MM apps/web/src/types.ts
+MM apps/web/vite.config.ts
+ M apps/worker/Patrol360.Worker.csproj
+M  apps/worker/Worker.cs
+D  artifacts/api-publish/Microsoft.EntityFrameworkCore.Abstractions.dll
+D  artifacts/api-publish/Microsoft.EntityFrameworkCore.Relational.dll
+D  artifacts/api-publish/Microsoft.EntityFrameworkCore.dll
+D  artifacts/api-publish/Npgsql.EntityFrameworkCore.PostgreSQL.dll
+D  artifacts/api-publish/Npgsql.dll
+D  artifacts/api-publish/Patrol360.Api.deps.json
+D  artifacts/api-publish/Patrol360.Api.dll
+D  artifacts/api-publish/Patrol360.Api.exe
+D  artifacts/api-publish/Patrol360.Api.pdb
+D  artifacts/api-publish/Patrol360.Api.runtimeconfig.json
+D  artifacts/api-publish/Patrol360.Api.staticwebassets.endpoints.json
+D  artifacts/api-publish/Patrol360.Application.dll
+D  artifacts/api-publish/Patrol360.Application.pdb
+D  artifacts/api-publish/Patrol360.Contracts.dll
+D  artifacts/api-publish/Patrol360.Contracts.pdb
+D  artifacts/api-publish/Patrol360.Domain.dll
+D  artifacts/api-publish/Patrol360.Domain.pdb
+D  artifacts/api-publish/Patrol360.Infrastructure.dll
+D  artifacts/api-publish/Patrol360.Infrastructure.pdb
+D  artifacts/api-publish/Persistence/SeedData/accounting-employees.json
+D  artifacts/api-publish/appsettings.Development.json
+D  artifacts/api-publish/appsettings.json
+D  artifacts/api-publish/web.config
+A  docs/accounting-development-plan.md
+ M docs/architecture.md
+A  docs/emu-work-accounting-development-plan.md
+A  docs/emu-work-accounting-ideas.md
+M  docs/mobile-app-technical-requirements.md
+A  docs/modules/emu-navigation.md
+A  docs/modules/inventory-navigation.md
+A  docs/modules/obhod-navigation.md
+A  docs/modules/perco-navigation.md
+A  docs/modules/users-navigation.md
+A  docs/perco-web-integration-spec.md
+A  docs/perco-web-module-summary.md
+MM docs/project-issue-register.md
+M  infra/docker/compose.yaml
+M  libs/application/IAssignmentService.cs
+MM libs/application/IEmuServices.cs
+M  libs/application/IInventoryCatalogQuery.cs
+M  libs/application/IMobileSyncAdminService.cs
+A  libs/application/IPercoIntegrationService.cs
+MM libs/application/ISiteUserAdminService.cs
+ M libs/application/Patrol360.Application.csproj
+M  libs/contracts/AssignmentContracts.cs
+MM libs/contracts/EmuContracts.cs
+MM libs/contracts/InventoryContracts.cs
+MM libs/contracts/MobileAppContracts.cs
+ M libs/contracts/Patrol360.Contracts.csproj
+A  libs/contracts/PercoContracts.cs
+ M libs/contracts/ResultContracts.cs
+MM libs/contracts/SiteUserContracts.cs
+ M libs/domain/Patrol360.Domain.csproj
+MM libs/infrastructure/DependencyInjection.cs
+MM libs/infrastructure/Patrol360.Infrastructure.csproj
+ M libs/infrastructure/Persistence/AssignmentStatusValues.cs
+M  libs/infrastructure/Persistence/EfAuthSessionService.cs
+MM libs/infrastructure/Persistence/EfEmuService.cs
+ M libs/infrastructure/Persistence/EfInventoryCatalogCommandService.cs
+ M libs/infrastructure/Persistence/EfInventoryCatalogQuery.cs
+MM libs/infrastructure/Persistence/EfInventoryExportService.cs
+MM libs/infrastructure/Persistence/EfInventoryWorkflowService.cs
+MM libs/infrastructure/Persistence/EfMobileAppService.cs
+M  libs/infrastructure/Persistence/EfMobileSyncAdminService.cs
+MM libs/infrastructure/Persistence/EfPatrolResultQuery.cs
+MM libs/infrastructure/Persistence/EfPatrolStore.cs
+AM libs/infrastructure/Persistence/EfPercoIntegrationService.cs
+MM libs/infrastructure/Persistence/EfSiteUserAdminService.cs
+M  libs/infrastructure/Persistence/EfSystemNotificationService.cs
+A  libs/infrastructure/Persistence/Entities/AssignmentSettingsEntities.cs
+M  libs/infrastructure/Persistence/Entities/EmuEntities.cs
+MM libs/infrastructure/Persistence/Entities/InventoryWorkflowEntities.cs
+A  libs/infrastructure/Persistence/Entities/MobileShiftRemarkEntity.cs
+A  libs/infrastructure/Persistence/Entities/PercoEntities.cs
+M  libs/infrastructure/Persistence/Entities/PermissionEntity.cs
+A  libs/infrastructure/Persistence/Entities/SiteUserAccessScopeEntity.cs
+M  libs/infrastructure/Persistence/Entities/SiteUserEntity.cs
+A  libs/infrastructure/Persistence/Entities/SiteUserPermissionEntity.cs
+ M libs/infrastructure/Persistence/Migrations/20260514190555_InitialPatrolCore.Designer.cs
+ M libs/infrastructure/Persistence/Migrations/20260514201028_RouteCatalogCrudFields.Designer.cs
+ M libs/infrastructure/Persistence/Migrations/20260514223719_MobileAccounts.Designer.cs
+ M libs/infrastructure/Persistence/Migrations/20260515024643_MobileAccountPasswordSecurity.Designer.cs
+ M libs/infrastructure/Persistence/Migrations/20260518155301_MobileAccountBindingsSessions.Designer.cs
+ M libs/infrastructure/Persistence/Migrations/20260520083246_InventoryCatalog.Designer.cs
+ M libs/infrastructure/Persistence/Migrations/20260520090720_InventoryCatalogItemDetails.Designer.cs
+ M libs/infrastructure/Persistence/Migrations/20260520110927_InventoryCustodyPpeWorkflow.Designer.cs
+ M libs/infrastructure/Persistence/Migrations/20260526061029_SnapshotSync20260526.Designer.cs
+A  libs/infrastructure/Persistence/Migrations/20260529120000_MobileWorkBoard.cs
+A  libs/infrastructure/Persistence/Migrations/20260529143000_PpeNoStockLedger.cs
+A  libs/infrastructure/Persistence/Migrations/20260530093000_InventoryPpeCatalogClassification.cs
+A  libs/infrastructure/Persistence/Migrations/20260530094000_AssignmentServerSettings.cs
+A  libs/infrastructure/Persistence/Migrations/20260530100000_RepairInventoryPpeCatalogClassification.cs
+A  libs/infrastructure/Persistence/Migrations/20260601090000_SiteUserDirectPermissions.cs
+A  libs/infrastructure/Persistence/Migrations/20260601093000_PpeLinePrintFields.cs
+A  libs/infrastructure/Persistence/Migrations/20260602103000_EmuPlanningNotifications.cs
+A  libs/infrastructure/Persistence/Migrations/20260602120000_PercoIntegrationStage1.cs
+A  libs/infrastructure/Persistence/Migrations/20260602133000_PercoIntegrationStage2.cs
+A  libs/infrastructure/Persistence/Migrations/20260602160000_EmuWorkParticipationIntervals.cs
+A  libs/infrastructure/Persistence/Migrations/20260602190000_EmuEmployeeShifts.cs
+A  libs/infrastructure/Persistence/Migrations/20260602203000_EmuDecisions.cs
+A  libs/infrastructure/Persistence/Migrations/20260603012000_PercoIntegrationSchemaRepair.cs
+A  libs/infrastructure/Persistence/Migrations/20260603150000_PercoAuthModeAndSecretChecks.cs
+A  libs/infrastructure/Persistence/Migrations/20260608120000_SiteUserAccessScopes.cs
+MM libs/infrastructure/Persistence/Migrations/Patrol360DbContextModelSnapshot.cs
+MM libs/infrastructure/Persistence/Patrol360DbContext.cs
+MM libs/infrastructure/Persistence/Patrol360DbSeeder.cs
+A  libs/infrastructure/Persistence/Templates/Inventory/PpePersonalCard.docx
+A  libs/infrastructure/Persistence/Templates/Inventory/PpeSignatureSheet.docx
+A  scripts/generate-ppe-print-fixture.ps1
+MM tests/Patrol360.Api.Tests/ApiSmokeTests.cs
+MM tests/Patrol360.Api.Tests/InventoryControllerTests.cs
+ M tests/Patrol360.Api.Tests/Patrol360.Api.Tests.csproj
+ M tests/Patrol360.Application.Tests/Patrol360.Application.Tests.csproj
+ M tests/Patrol360.Domain.Tests/Patrol360.Domain.Tests.csproj
+MM tests/Patrol360.Infrastructure.Tests/AssignmentsDbIntegrationTests.cs
+A  tests/Patrol360.Infrastructure.Tests/EmployeeDirectoryDbIntegrationTests.cs
+MM tests/Patrol360.Infrastructure.Tests/EmuDbIntegrationTests.cs
+M  tests/Patrol360.Infrastructure.Tests/InfrastructureSmokeTests.cs
+AM tests/Patrol360.Infrastructure.Tests/InventoryPpePrintDbIntegrationTests.cs
+ M tests/Patrol360.Infrastructure.Tests/MobileAppDbIntegrationTests.cs
+ M tests/Patrol360.Infrastructure.Tests/Patrol360.Infrastructure.Tests.csproj
+M  tests/Patrol360.Infrastructure.Tests/ResultsDbIntegrationTests.cs
+ M tests/Patrol360.Structure.Tests/Program.cs
+ M tests/Patrol360.Worker.Tests/Patrol360.Worker.Tests.csproj
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/app.config.js"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/app/(tabs)/_layout.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/app/_layout.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/app/settings/account.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/app/settings/index.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/package-lock.json"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/package.json"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/api/fileApi.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/api/networkTimeout.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/api/serverHealthApi.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/auth/authService.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/core/serverSettings.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/db/database.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/db/repositories/bootstrapRepository.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/db/repositories/filesRepository.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/db/repositories/outboxRepository.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/db/repositories/patrolRepository.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/db/repositories/shiftRemarkRepository.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/db/repositories/workTaskRepository.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/domain/emu/emuTypes.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/domain/patrol/patrolTypes.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/domain/sync/syncTypes.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/allPoints/AllPointsScreen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/auth/LoginScreen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/camera/CameraCaptureScreen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/emuTask/WorkAccountingScreen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/patrol/ActivePatrolScreen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/patrol/PatrolRequestScreen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/patrol/PointDetailScreen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/patrol/PointFillScreen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/patrol/RequestBoardScreen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/patrol/ScanNfcScreen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/patrol/ScanQrScreen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/patrol/SubmitReportScreen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/patrolHome/PatrolHomeScreen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/profile/ProfileScreen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/settings/ServerSettingsScreen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/settings/themePreference.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/services/mediaAttachmentService.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/services/mobileDataRefreshService.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/services/notificationService.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/sync/outboxProcessor.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/sync/syncEngine.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/sync/syncTriggers.ts"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/ui/Card.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/ui/PrimaryButton.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/ui/Screen.tsx"
+ M "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/ui/StatusPill.tsx"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/.gitignore"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/build.gradle"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/debug.keystore"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/proguard-rules.pro"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/debug/AndroidManifest.xml"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/debugOptimized/AndroidManifest.xml"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/AndroidManifest.xml"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/java/com/patrol360/MainActivity.kt"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/java/com/patrol360/MainApplication.kt"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/drawable-hdpi/splashscreen_logo.png"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/drawable-mdpi/splashscreen_logo.png"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/drawable-xhdpi/splashscreen_logo.png"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/drawable-xxhdpi/splashscreen_logo.png"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/drawable-xxxhdpi/splashscreen_logo.png"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/drawable/ic_launcher_background.xml"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/drawable/rn_edit_text_material.xml"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/mipmap-hdpi/ic_launcher.webp"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/mipmap-hdpi/ic_launcher_round.webp"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/mipmap-mdpi/ic_launcher.webp"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/mipmap-mdpi/ic_launcher_round.webp"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/mipmap-xhdpi/ic_launcher.webp"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.webp"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.webp"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.webp"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/values/colors.xml"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/values/strings.xml"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/app/src/main/res/values/styles.xml"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/build.gradle"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/gradle.properties"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/gradle/wrapper/gradle-wrapper.jar"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/gradle/wrapper/gradle-wrapper.properties"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/gradlew"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/gradlew.bat"
+D  "\320\240\321\232\320\240\321\225\320\240\302\261\320\240\321\221\320\240\302\273\320\241\320\212\320\240\320\205\320\240\321\225\320\240\302\265 \320\240\321\227\320\241\320\202\320\240\321\221\320\240\302\273\320\240\321\225\320\240\302\266\320\240\302\265\320\240\320\205\320\240\321\221\320\240\302\265/android/settings.gradle"
+?? Start-Patrol360.cmd
+?? apps/web/Caddyfile.prebuilt
+?? apps/web/Dockerfile.prebuilt
+?? apps/web/public/favicon.svg
+?? apps/web/public/inventory-issue-mountains.png
+?? apps/web/src/app/
+?? apps/web/src/features/README.md
+?? apps/web/src/features/dashboard/
+?? apps/web/src/features/emu/
+?? apps/web/src/features/inventory/
+?? apps/web/src/features/mobileAccounts/
+?? apps/web/src/features/patrol/AssignmentScreen.tsx
+?? apps/web/src/features/patrol/EmployeesScreen.tsx
+?? apps/web/src/features/patrol/README.md
+?? apps/web/src/features/patrol/RoutesScreen.tsx
+?? apps/web/src/features/patrol/ScheduleScreen.tsx
+?? apps/web/src/features/patrol/assignments/
+?? apps/web/src/features/patrol/components/
+?? apps/web/src/features/patrol/index.ts
+?? apps/web/src/features/perco/
+?? apps/web/src/features/users/
+?? apps/web/src/shared/
+?? audit-diff-stat.txt
+?? audit-git-status.txt
+?? "docs/Audit patrol-360 chart-1.1.md"
+?? docs/analytics-internal-services-audit-2026-06-22.md
+?? docs/api-integrations-audit-2026-06-22.md
+?? docs/architecture-audit-2026-06-22.md
+?? docs/architecture-technical-decisions-audit-2026-06-22.md
+?? docs/audit-patrol360-consolidated-priority-plan-2026-06-28.md
+?? docs/code-quality-audit-2026-06-22.md
+?? docs/docker-startup.md
+?? docs/emu-work-accounting-audit.md
+?? docs/emu-work-accounting-control-audit.md
+?? docs/inventory-ppe-full-audit-2026-06-25.md
+?? docs/inventory-ppe-legacy-business-rules-audit-2026-06-25.md
+?? docs/inventory-ppe-stabilization-status-2026-06-26.md
+?? docs/mobile-offline-recovery.md
+?? docs/mobile-patrol-scenario-stabilization-plan.md
+?? docs/mobile-report-sync-audit-2026-06-25.md
+?? docs/patrol-api-contract.md
+?? docs/patrol-db-model.md
+?? docs/patrol-routes-points-audit-2026-06-25.md
+?? docs/patrol-status-lifecycle.md
+?? docs/patrol-structure-audit-2026-06-24.md
+?? docs/patrol-web-structure.md
+?? docs/project-full-audit-2026-06-22.md
+?? docs/project-refactoring-audit-2026-06-25.md
+?? docs/refactor-structure-plan.md
+?? docs/residual-p1-p2-audit-2026-06-26.md
+?? docs/security-api-audit-2026-06-23.md
+?? docs/visual-defects-audit-2026-06-28.md
+?? infra/docker/compose.web-prebuilt.yaml
+?? libs/README.md
+?? libs/infrastructure/Persistence/Configurations/
+?? libs/infrastructure/Persistence/Emu/
+?? libs/infrastructure/Persistence/Inventory/
+?? libs/infrastructure/Persistence/Migrations/20260622120000_InventoryStockMoveAggregationIndex.cs
+?? libs/infrastructure/Persistence/Migrations/20260625120000_PpeLineBrandModelArticle.cs
+?? libs/infrastructure/Persistence/Migrations/20260625133000_PpeCardEmployeeDetails.cs
+?? libs/infrastructure/Persistence/Migrations/20260626100000_PpePositionNormPrintFields.cs
+?? libs/infrastructure/Persistence/MobileApp/
+?? libs/infrastructure/Persistence/Patrol/
+?? libs/infrastructure/Persistence/Perco/
+?? tools/Start-Patrol360.ps1
+?? "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/app/settings/sync-queue.tsx"
+?? "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/assets/app-icon.png"
+?? "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/db/repositories/mobileActionLogRepository.ts"
+?? "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/domain/sync/localStatus.ts"
+?? "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/patrol/pointFillTypes.ts"
+?? "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/features/syncQueue/"
+?? "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/sync/backgroundSyncTask.ts"
+?? "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/sync/syncEvents.ts"
+?? "\320\234\320\276\320\261\320\270\320\273\321\214\320\275\320\276\320\265 \320\277\321\200\320\270\320\273\320\276\320\266\320\265\320\275\320\270\320\265/src/ui/MetricCard.tsx"

@@ -39,6 +39,7 @@ export async function initializeDatabase() {
 
     CREATE TABLE IF NOT EXISTS patrol_request_board (
       request_id TEXT PRIMARY KEY,
+      display_number TEXT,
       owner_user_id TEXT NOT NULL,
       route_id TEXT NOT NULL,
       route_name TEXT NOT NULL,
@@ -134,6 +135,7 @@ export async function initializeDatabase() {
       created_at_local TEXT NOT NULL,
       updated_at_local TEXT,
       attempt_count INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
       status TEXT NOT NULL
     );
 
@@ -166,6 +168,17 @@ export async function initializeDatabase() {
       read_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS mobile_action_log (
+      id TEXT PRIMARY KEY,
+      owner_user_id TEXT,
+      event_type TEXT NOT NULL,
+      entity_type TEXT,
+      entity_id TEXT,
+      message TEXT NOT NULL,
+      payload_json TEXT,
+      created_at_local TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS work_tasks (
       task_id TEXT PRIMARY KEY,
       owner_user_id TEXT NOT NULL,
@@ -173,7 +186,27 @@ export async function initializeDatabase() {
       status TEXT NOT NULL,
       planned_at TEXT,
       revision INTEGER NOT NULL,
-      completed_at_local TEXT
+      completed_at_local TEXT,
+      section_id TEXT,
+      section_name TEXT,
+      employee_id TEXT,
+      employee_name TEXT,
+      created_at_local TEXT,
+      sync_status TEXT NOT NULL DEFAULT 'synced'
+    );
+
+    CREATE TABLE IF NOT EXISTS mobile_employees (
+      employee_id TEXT PRIMARY KEY,
+      owner_user_id TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      position TEXT,
+      department TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS emu_sections (
+      section_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS shift_remarks (
@@ -184,7 +217,12 @@ export async function initializeDatabase() {
       media_client_file_ids_json TEXT NOT NULL DEFAULT '[]',
       status TEXT NOT NULL,
       created_at_local TEXT NOT NULL,
-      server_remark_id TEXT
+      server_remark_id TEXT,
+      section_id TEXT,
+      section_name TEXT,
+      employee_id TEXT,
+      employee_name TEXT,
+      sync_status TEXT NOT NULL DEFAULT 'pending'
     );
   `);
 
@@ -202,6 +240,22 @@ export async function initializeDatabase() {
 
   await runLocalMigration(db, "20260528_mobile_file_scopes", async () => {
     await ensureMobileFileScopes(db);
+  });
+
+  await runLocalMigration(db, "20260529_mobile_work_board", async () => {
+    await ensureMobileWorkBoard(db);
+  });
+
+  await runLocalMigration(db, "20260602_mobile_action_log", async () => {
+    await ensureMobileActionLog(db);
+  });
+
+  await runLocalMigration(db, "20260623_outbox_last_error", async () => {
+    await ensureOutboxLastError(db);
+  });
+
+  await runLocalMigration(db, "20260623_mobile_hot_path_indexes", async () => {
+    await ensureMobileHotPathIndexes(db);
   });
 }
 
@@ -226,6 +280,10 @@ async function ensureMobileColumns(db: SQLite.SQLiteDatabase) {
     { name: "push_token", sql: "ALTER TABLE devices ADD COLUMN push_token TEXT" },
     { name: "trusted", sql: "ALTER TABLE devices ADD COLUMN trusted INTEGER NOT NULL DEFAULT 0" },
     { name: "blocked_at", sql: "ALTER TABLE devices ADD COLUMN blocked_at TEXT" }
+  ]);
+
+  await ensureColumns(db, "patrol_request_board", [
+    { name: "display_number", sql: "ALTER TABLE patrol_request_board ADD COLUMN display_number TEXT" }
   ]);
 
   await ensureColumns(db, "patrol_assignments", [
@@ -264,6 +322,7 @@ async function ensureMobileColumns(db: SQLite.SQLiteDatabase) {
     { name: "entity_server_id", sql: "ALTER TABLE outbox_commands ADD COLUMN entity_server_id TEXT" },
     { name: "updated_at_local", sql: "ALTER TABLE outbox_commands ADD COLUMN updated_at_local TEXT" },
     { name: "attempt_count", sql: "ALTER TABLE outbox_commands ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0" },
+    { name: "last_error", sql: "ALTER TABLE outbox_commands ADD COLUMN last_error TEXT" },
     { name: "status", sql: "ALTER TABLE outbox_commands ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'" }
   ]);
 
@@ -278,6 +337,37 @@ async function ensureMobileColumns(db: SQLite.SQLiteDatabase) {
     { name: "entity_id", sql: "ALTER TABLE mobile_notifications ADD COLUMN entity_id TEXT" },
     { name: "read_at", sql: "ALTER TABLE mobile_notifications ADD COLUMN read_at TEXT" }
   ]);
+}
+
+async function ensureOutboxLastError(db: SQLite.SQLiteDatabase) {
+  await ensureColumns(db, "outbox_commands", [
+    { name: "last_error", sql: "ALTER TABLE outbox_commands ADD COLUMN last_error TEXT" }
+  ]);
+}
+
+async function ensureMobileHotPathIndexes(db: SQLite.SQLiteDatabase) {
+  await db.execAsync(`
+    CREATE INDEX IF NOT EXISTS ix_patrol_request_board_owner_status_start
+      ON patrol_request_board (owner_user_id, status, planned_start_at);
+
+    CREATE INDEX IF NOT EXISTS ix_patrol_assignments_owner_status_request
+      ON patrol_assignments (owner_user_id, status, request_id);
+
+    CREATE INDEX IF NOT EXISTS ix_assignment_route_points_assignment_order
+      ON assignment_route_points (assignment_id, order_index);
+
+    CREATE INDEX IF NOT EXISTS ix_point_results_assignment_point
+      ON point_results (assignment_id, point_id);
+
+    CREATE INDEX IF NOT EXISTS ix_outbox_commands_status_created
+      ON outbox_commands (status, created_at_local);
+
+    CREATE INDEX IF NOT EXISTS ix_outbox_commands_status_updated
+      ON outbox_commands (status, updated_at_local);
+
+    CREATE INDEX IF NOT EXISTS ix_files_status_assignment_point
+      ON files (status, assignment_id, point_id);
+  `);
 }
 
 async function ensureAssignmentSnapshotAndOutboxRecovery(db: SQLite.SQLiteDatabase) {
@@ -361,6 +451,63 @@ async function ensureMobileFileScopes(db: SQLite.SQLiteDatabase) {
     { name: "content_type", sql: "ALTER TABLE files ADD COLUMN content_type TEXT" },
     { name: "media_kind", sql: "ALTER TABLE files ADD COLUMN media_kind TEXT" },
     { name: "remark_id", sql: "ALTER TABLE files ADD COLUMN remark_id TEXT" }
+  ]);
+}
+
+async function ensureMobileWorkBoard(db: SQLite.SQLiteDatabase) {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS mobile_employees (
+      employee_id TEXT PRIMARY KEY,
+      owner_user_id TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      position TEXT,
+      department TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS emu_sections (
+      section_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+
+  await ensureColumns(db, "work_tasks", [
+    { name: "section_id", sql: "ALTER TABLE work_tasks ADD COLUMN section_id TEXT" },
+    { name: "section_name", sql: "ALTER TABLE work_tasks ADD COLUMN section_name TEXT" },
+    { name: "employee_id", sql: "ALTER TABLE work_tasks ADD COLUMN employee_id TEXT" },
+    { name: "employee_name", sql: "ALTER TABLE work_tasks ADD COLUMN employee_name TEXT" },
+    { name: "created_at_local", sql: "ALTER TABLE work_tasks ADD COLUMN created_at_local TEXT" },
+    { name: "sync_status", sql: "ALTER TABLE work_tasks ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'synced'" }
+  ]);
+
+  await ensureColumns(db, "shift_remarks", [
+    { name: "section_id", sql: "ALTER TABLE shift_remarks ADD COLUMN section_id TEXT" },
+    { name: "section_name", sql: "ALTER TABLE shift_remarks ADD COLUMN section_name TEXT" },
+    { name: "employee_id", sql: "ALTER TABLE shift_remarks ADD COLUMN employee_id TEXT" },
+    { name: "employee_name", sql: "ALTER TABLE shift_remarks ADD COLUMN employee_name TEXT" },
+    { name: "sync_status", sql: "ALTER TABLE shift_remarks ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'pending'" }
+  ]);
+}
+
+async function ensureMobileActionLog(db: SQLite.SQLiteDatabase) {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS mobile_action_log (
+      id TEXT PRIMARY KEY,
+      owner_user_id TEXT,
+      event_type TEXT NOT NULL,
+      entity_type TEXT,
+      entity_id TEXT,
+      message TEXT NOT NULL,
+      payload_json TEXT,
+      created_at_local TEXT NOT NULL
+    );
+  `);
+
+  await ensureColumns(db, "mobile_action_log", [
+    { name: "owner_user_id", sql: "ALTER TABLE mobile_action_log ADD COLUMN owner_user_id TEXT" },
+    { name: "entity_type", sql: "ALTER TABLE mobile_action_log ADD COLUMN entity_type TEXT" },
+    { name: "entity_id", sql: "ALTER TABLE mobile_action_log ADD COLUMN entity_id TEXT" },
+    { name: "payload_json", sql: "ALTER TABLE mobile_action_log ADD COLUMN payload_json TEXT" }
   ]);
 }
 

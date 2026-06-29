@@ -150,6 +150,7 @@ internal sealed class EfSystemNotificationService(Patrol360DbContext dbContext) 
                 notification.Id,
                 notification.Title,
                 notification.Message,
+                notification.Severity,
                 notification.CreatedAt,
                 notification.WorkSessionId,
                 notification.PlanTaskId
@@ -163,7 +164,7 @@ internal sealed class EfSystemNotificationService(Patrol360DbContext dbContext) 
                 "emu",
                 DisplayName(notification.Title, "ЭМУ"),
                 DisplayName(notification.Message, "Новое уведомление по работам"),
-                "warning",
+                NormalizeTone(notification.Severity),
                 notification.CreatedAt,
                 notification.WorkSessionId.HasValue ? "emu_work_session" : notification.PlanTaskId.HasValue ? "emu_plan_task" : "emu",
                 (notification.WorkSessionId ?? notification.PlanTaskId)?.ToString(),
@@ -305,4 +306,13 @@ internal sealed class EfSystemNotificationService(Patrol360DbContext dbContext) 
 
     private static string DisplayName(string? value, string fallback = "Не указано") =>
         string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+
+    private static string NormalizeTone(string? value) =>
+        (value ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "danger" => "danger",
+            "success" => "success",
+            "info" => "info",
+            _ => "warning"
+        };
 }

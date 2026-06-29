@@ -2,32 +2,50 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   EmuAuditEventDto,
   EmuAddFavoriteEmployeeDto,
+  EmuAddWorkSessionEmployeeDto,
   EmuCompleteWorkSessionDto,
+  EmuCarryOverWorkSessionDto,
   EmuCreateReferenceDto,
   EmuCreateWorkSessionDto,
   EmuCreateWorkTemplateDto,
   EmuDashboardDto,
+  EmuDecisionDto,
   EmuDeleteWorkSessionDto,
+  EmuEmployeeShiftDto,
+  EmuEmployeeMonthSummaryDto,
+  EmuEmployeeShiftSummaryDto,
+  EmuEmployeeWorkHistoryReportDto,
   EmuFavoriteEmployeeDto,
+  EmuFinishWorkSessionEmployeeDto,
   EmuListResponseDto,
+  EmuMarkMistakenWorkSessionEmployeeDto,
   EmuMetricDto,
   EmuPauseWorkSessionDto,
   EmuPlanTaskDto,
   EmuReferenceDto,
+  EmuResolveDecisionDto,
+  EmuReschedulePlanTaskDto,
   EmuResumeWorkSessionDto,
   EmuSettingsDto,
+  EmuUpdateEmployeeShiftDto,
   EmuUpdateReferenceDto,
   EmuUpdateWorkSessionDto,
   EmuUpdateWorkTemplateDto,
   EmuUpsertPlanTaskDto,
+  EmuWorkSessionEmployeeDto,
   EmuWorkSessionDto,
+  EmuWorkHistoryReportDto,
+  SessionUserDto,
 } from "../api/contracts";
 import { createEmuRepository, type EmuWorkSessionParams } from "../repositories/emuRepository";
+import { sortEmuHistoryRows } from "../domain/emuWorkBoard";
+import { hasPermission } from "../security/permissions";
 import type { DataSourceMode, EmployeeDirectoryItem } from "../types";
 
 type EmuWorkspaceState = {
   auditEvents: EmuAuditEventDto[];
   dashboard: EmuDashboardDto;
+  decisions: EmuDecisionDto[];
   error?: string;
   loading: boolean;
   planTasks: EmuPlanTaskDto[];
@@ -51,6 +69,9 @@ const employeeStatusWorking = "Работает";
 const employeeStatusWaiting = "В ожидании";
 const employeeStatusOtherWork = "На другой работе";
 const employeeStatusFinished = "Завершил";
+const employeeStatusPartial = "Частично выполнено";
+const employeeStatusMistaken = "Добавлен ошибочно";
+const participationStatusPaused = "На паузе";
 const workStatusActive = "В работе";
 const workStatusWaiting = "В ожидании";
 const workStatusCompleted = "Завершено";
@@ -109,9 +130,11 @@ const demoEmployeeDirectory: EmployeeDirectoryItem[] = [
 ];
 
 export function useEmuWorkspace({
+  currentUser,
   dataSourceMode,
   employeeDirectory,
 }: {
+  currentUser: SessionUserDto | null;
   dataSourceMode: DataSourceMode;
   employeeDirectory: EmployeeDirectoryItem[];
 }) {
@@ -122,6 +145,8 @@ export function useEmuWorkspace({
   const [reloadKey, setReloadKey] = useState(0);
   const lastWorkSyncAtRef = useRef<string | null>(null);
   const lastPlanSyncAtRef = useRef<string | null>(null);
+  const canViewDashboard = dataSourceMode !== "api" || hasPermission(currentUser, "emu.dashboard.view");
+  const canViewPlan = dataSourceMode !== "api" || hasPermission(currentUser, "emu.plan.view");
 
   useEffect(() => {
     if (dataSourceMode !== "api") {
@@ -141,19 +166,22 @@ export function useEmuWorkspace({
     });
     Promise.all([
       emuRepository.getSettings(),
-      emuRepository.getDashboard(),
-      getAllApiWorkSessions({ includeDeleted: true }),
-      emuRepository.getPlanTasks(),
+      canViewDashboard ? emuRepository.getDashboard() : Promise.resolve<EmuDashboardDto | null>(null),
+      getAllApiWorkSessions(),
+      canViewPlan ? emuRepository.getPlanTasks() : Promise.resolve<EmuListResponseDto<EmuPlanTaskDto>>(toList([], 0)),
+      emuRepository.getDecisions({ status: "new" }),
     ])
-      .then(([settings, dashboard, workSessions, planTasks]) => {
+      .then(([settings, dashboard, workSessions, planTasks, decisions]) => {
         if (!mounted) return;
-        lastWorkSyncAtRef.current = null;
-        lastPlanSyncAtRef.current = null;
+        lastWorkSyncAtRef.current = maxUpdatedAt(workSessions.rows) ?? new Date().toISOString();
+        lastPlanSyncAtRef.current = maxUpdatedAt(planTasks.rows) ?? new Date().toISOString();
+        const planRows = planTasks.rows;
         setState({
-          auditEvents: dashboard.recentEvents,
-          dashboard,
+          auditEvents: dashboard?.recentEvents ?? [],
+          dashboard: dashboard ?? buildDashboardFromCollections(workSessions.rows, [], planRows),
+          decisions,
           loading: false,
-          planTasks: planTasks.rows,
+          planTasks: planRows,
           settings,
           sourceMode: "api",
           workSessions,
@@ -172,7 +200,7 @@ export function useEmuWorkspace({
     return () => {
       mounted = false;
     };
-  }, [dataSourceMode, reloadKey]);
+  }, [canViewDashboard, canViewPlan, dataSourceMode, reloadKey]);
 
   useEffect(() => {
     if (dataSourceMode === "api") return;
@@ -197,8 +225,14 @@ export function useEmuWorkspace({
       return;
     }
 
+    const since = lastWorkSyncAtRef.current;
+    if (!since) {
+      await reload();
+      return;
+    }
+
     try {
-      const changes = await emuRepository.getWorkSessionChanges(lastWorkSyncAtRef.current ?? "1970-01-01T00:00:00.000Z");
+      const changes = await emuRepository.getWorkSessionChanges(since);
       lastWorkSyncAtRef.current = changes.serverTime;
       setState((current) => ({
         ...(() => {
@@ -230,8 +264,18 @@ export function useEmuWorkspace({
       return;
     }
 
+    if (!canViewPlan) {
+      return;
+    }
+
+    const since = lastPlanSyncAtRef.current;
+    if (!since) {
+      await reload();
+      return;
+    }
+
     try {
-      const changes = await emuRepository.getPlanTaskChanges(lastPlanSyncAtRef.current ?? "1970-01-01T00:00:00.000Z");
+      const changes = await emuRepository.getPlanTaskChanges(since);
       lastPlanSyncAtRef.current = changes.serverTime;
       setState((current) => {
         const planTasks = mergePlanTasks(current.planTasks, changes.changedTasks, changes.deletedTaskIds);
@@ -253,7 +297,7 @@ export function useEmuWorkspace({
         loading: false,
       }));
     }
-  }, [dataSourceMode, reload, store]);
+  }, [canViewPlan, dataSourceMode, reload, store]);
 
   const runLocalMutation = useCallback(
     async <T,>(mutate: (draft: LocalStore) => T) => {
@@ -289,6 +333,16 @@ export function useEmuWorkspace({
         return runLocalMutation((draft) => updateLocalWorkSession(draft, id, payload, employeeDirectory));
       },
 
+      async addWorkSessionEmployee(id: string, payload: EmuAddWorkSessionEmployeeDto) {
+        if (dataSourceMode === "api") {
+          const result = await emuRepository.addWorkSessionEmployee(id, payload);
+          await reload();
+          return result;
+        }
+
+        return runLocalMutation((draft) => addLocalWorkSessionEmployee(draft, id, payload, employeeDirectory));
+      },
+
       async pauseWorkSession(id: string, payload: EmuPauseWorkSessionDto) {
         if (dataSourceMode === "api") {
           const result = await emuRepository.pauseWorkSession(id, payload);
@@ -317,6 +371,36 @@ export function useEmuWorkspace({
         }
 
         return runLocalMutation((draft) => completeLocalWorkSession(draft, id, payload));
+      },
+
+      async carryOverWorkSession(id: string, payload: EmuCarryOverWorkSessionDto) {
+        if (dataSourceMode === "api") {
+          const result = await emuRepository.carryOverWorkSession(id, payload);
+          await reload();
+          return result;
+        }
+
+        return runLocalMutation((draft) => carryOverLocalWorkSession(draft, id, payload));
+      },
+
+      async finishWorkSessionEmployee(id: string, employeeId: string, payload: EmuFinishWorkSessionEmployeeDto) {
+        if (dataSourceMode === "api") {
+          const result = await emuRepository.finishWorkSessionEmployee(id, employeeId, payload);
+          await reload();
+          return result;
+        }
+
+        return runLocalMutation((draft) => finishLocalWorkSessionEmployee(draft, id, employeeId, payload));
+      },
+
+      async markWorkSessionEmployeeMistaken(id: string, employeeId: string, payload: EmuMarkMistakenWorkSessionEmployeeDto) {
+        if (dataSourceMode === "api") {
+          const result = await emuRepository.markWorkSessionEmployeeMistaken(id, employeeId, payload);
+          await reload();
+          return result;
+        }
+
+        return runLocalMutation((draft) => markLocalWorkSessionEmployeeMistaken(draft, id, employeeId, payload));
       },
 
       async deleteWorkSession(id: string, payload: EmuDeleteWorkSessionDto) {
@@ -438,6 +522,53 @@ export function useEmuWorkspace({
         return toList(rows, rows.length);
       },
 
+      async getEmployeeShiftSummary(employeeId: string, date: string) {
+        if (dataSourceMode === "api") {
+          return emuRepository.getEmployeeShiftSummary(employeeId, date);
+        }
+
+        return buildLocalEmployeeShiftSummary(employeeId, date, store, employeeDirectory);
+      },
+
+      async getEmployeeMonthSummary(employeeId: string, month: string) {
+        if (dataSourceMode === "api") {
+          return emuRepository.getEmployeeMonthSummary(employeeId, month);
+        }
+
+        return buildLocalEmployeeMonthSummary(employeeId, month, store, employeeDirectory);
+      },
+
+      async updateEmployeeShift(id: string, payload: EmuUpdateEmployeeShiftDto) {
+        if (dataSourceMode === "api") {
+          const result = await emuRepository.updateEmployeeShift(id, payload);
+          await reload();
+          return result;
+        }
+
+        return buildLocalEmployeeShift(payload, store, employeeDirectory, id);
+      },
+
+      async getDecisions(status = "new") {
+        if (dataSourceMode === "api") {
+          const decisions = await emuRepository.getDecisions({ status });
+          setState((current) => ({ ...current, decisions }));
+          return decisions;
+        }
+
+        return [];
+      },
+
+      async resolveDecision(id: string, payload: EmuResolveDecisionDto) {
+        if (dataSourceMode === "api") {
+          const result = await emuRepository.resolveDecision(id, payload);
+          const decisions = await emuRepository.getDecisions({ status: "new" });
+          setState((current) => ({ ...current, decisions }));
+          return result;
+        }
+
+        throw new Error("Решения доступны только в API-режиме");
+      },
+
       async createPlanTask(payload: EmuUpsertPlanTaskDto) {
         if (dataSourceMode === "api") {
           const result = await emuRepository.createPlanTask(payload);
@@ -456,6 +587,16 @@ export function useEmuWorkspace({
         }
 
         return runLocalMutation((draft) => updateLocalPlanTask(draft, id, payload));
+      },
+
+      async reschedulePlanTask(id: string, payload: EmuReschedulePlanTaskDto) {
+        if (dataSourceMode === "api") {
+          const result = await emuRepository.reschedulePlanTask(id, payload);
+          await reload();
+          return result;
+        }
+
+        return runLocalMutation((draft) => rescheduleLocalPlanTask(draft, id, payload));
       },
 
       async approvePlanTask(id: string, approved: boolean, comment?: string) {
@@ -489,7 +630,33 @@ export function useEmuWorkspace({
         }
 
         const rows = filterLocalSessions(store.sessions, params);
-        return toList(rows, rows.length, params.page ?? 1, params.pageSize ?? Math.max(1, rows.length));
+        const page = params.page ?? 1;
+        const pageSize = params.pageSize ?? Math.max(1, rows.length);
+        return toList(rows.slice((page - 1) * pageSize, page * pageSize), rows.length, page, pageSize);
+      },
+
+      async queryWorkHistoryReport(params: EmuWorkSessionParams) {
+        if (dataSourceMode === "api") {
+          return emuRepository.getWorkHistoryReport(params);
+        }
+
+        return buildLocalWorkHistoryReport(filterLocalSessions(store.sessions, params), params);
+      },
+
+      async queryEmployeeWorkHistoryReport(employeeId: string, params: EmuWorkSessionParams) {
+        if (dataSourceMode === "api") {
+          return emuRepository.getEmployeeWorkHistoryReport(employeeId, params);
+        }
+
+        return buildLocalEmployeeWorkHistoryReport(employeeId, filterLocalSessions(store.sessions, { ...params, employeeId }), params, employeeDirectory);
+      },
+
+      async exportWorkSessions(params: EmuWorkSessionParams) {
+        if (dataSourceMode !== "api") {
+          throw new Error("Серверный экспорт доступен только в API-режиме");
+        }
+
+        return emuRepository.exportWorkSessions(params);
       },
     }),
     [dataSourceMode, employeeDirectory, reload, runLocalMutation, state.planTasks, store],
@@ -505,6 +672,297 @@ export function useEmuWorkspace({
 }
 
 export type EmuWorkspace = ReturnType<typeof useEmuWorkspace>;
+
+function buildLocalEmployeeShiftSummary(
+  employeeId: string,
+  date: string,
+  store: LocalStore,
+  employeeDirectory: EmployeeDirectoryItem[],
+): EmuEmployeeShiftSummaryDto {
+  const shift = buildLocalEmployeeShift({ shiftDate: date, shiftType: "day", lunchTaken: true, lunchOverridden: false, reason: "mock", rowVersion: 1 }, store, employeeDirectory, `mock-shift-${employeeId}-${date}`, employeeId);
+  const effectiveStart = new Date(shift.actualStartAt);
+  const effectiveEnd = new Date(shift.actualEndAt);
+  const lunchStart = new Date(shift.lunchStartAt);
+  const lunchEnd = new Date(shift.lunchEndAt);
+  const workIntervals = store.sessions.flatMap((session) =>
+    session.employees
+      .filter((employee) => employee.employeeId === employeeId)
+      .flatMap((employee) =>
+        (employee.intervals ?? []).map((interval) => ({
+          endedAt: interval.endedAt ?? new Date().toISOString(),
+          reason: interval.reason,
+          startedAt: interval.startedAt,
+          status: interval.status,
+          workNumber: session.workNumber,
+          workSessionId: session.id,
+        })),
+      ),
+  );
+  const workRanges = workIntervals
+    .filter((interval) => isWorkingParticipationStatus(interval.status))
+    .map((interval) => toRange(interval.startedAt, interval.endedAt));
+  const pauseRanges = workIntervals
+    .filter((interval) => !isWorkingParticipationStatus(interval.status))
+    .map((interval) => toRange(interval.startedAt, interval.endedAt));
+  const occupiedRanges = [...workRanges, ...pauseRanges, ...(shift.lunchTaken ? [{ start: lunchStart, end: lunchEnd }] : [])];
+  const freeRanges = buildFreeDateRanges(effectiveStart, effectiveEnd, occupiedRanges);
+  const intervals = [
+    ...workIntervals.map((interval) => ({
+      endedAt: interval.endedAt,
+      label: isWorkingParticipationStatus(interval.status) ? "Работа" : "Пауза",
+      minutes: diffMinutes(new Date(interval.startedAt), new Date(interval.endedAt)),
+      reason: interval.reason,
+      startedAt: interval.startedAt,
+      type: isWorkingParticipationStatus(interval.status) ? "work" : "pause",
+      workNumber: interval.workNumber,
+      workSessionId: interval.workSessionId,
+    })),
+    ...(shift.lunchTaken
+      ? [
+          {
+            endedAt: shift.lunchEndAt,
+            label: "Обед",
+            minutes: diffMinutes(lunchStart, lunchEnd),
+            reason: "",
+            startedAt: shift.lunchStartAt,
+            type: "lunch",
+            workNumber: "",
+            workSessionId: null,
+          },
+        ]
+      : []),
+    ...freeRanges.map((range) => ({
+      endedAt: range.end.toISOString(),
+      label: "Свободно",
+      minutes: diffMinutes(range.start, range.end),
+      reason: "",
+      startedAt: range.start.toISOString(),
+      type: "free",
+      workNumber: "",
+      workSessionId: null,
+    })),
+  ].sort((left, right) => new Date(left.startedAt).getTime() - new Date(right.startedAt).getTime());
+
+  return {
+    beforeShiftWorkMinutes: sumClippedMinutes(workRanges, new Date(0), effectiveStart),
+    decisions: [],
+    freeMinutes: freeRanges.reduce((sum, range) => sum + diffMinutes(range.start, range.end), 0),
+    intervals,
+    overtimeMinutes: (() => {
+      const minutes = sumClippedMinutes(workRanges, effectiveEnd, new Date(8640000000000000));
+      return minutes > 60 ? minutes : 0;
+    })(),
+    pauseMinutes: sumClippedMinutes(pauseRanges, effectiveStart, effectiveEnd),
+    questionableOvertimeMinutes: (() => {
+      const minutes = sumClippedMinutes(workRanges, effectiveEnd, new Date(8640000000000000));
+      return minutes > 30 && minutes <= 60 ? minutes : 0;
+    })(),
+    shift,
+    workMinutes: sumClippedMinutes(workRanges, effectiveStart, effectiveEnd),
+  };
+}
+
+function buildLocalEmployeeMonthSummary(
+  employeeId: string,
+  month: string,
+  store: LocalStore,
+  employeeDirectory: EmployeeDirectoryItem[],
+): EmuEmployeeMonthSummaryDto {
+  const [year, monthNumber] = month.split("-").map((part) => Number(part));
+  const safeYear = Number.isFinite(year) && year > 0 ? year : new Date().getFullYear();
+  const safeMonth = Number.isFinite(monthNumber) && monthNumber >= 1 && monthNumber <= 12 ? monthNumber : new Date().getMonth() + 1;
+  const start = new Date(Date.UTC(safeYear, safeMonth - 1, 1));
+  const end = new Date(Date.UTC(safeYear, safeMonth, 1));
+  const shifts: EmuEmployeeShiftSummaryDto[] = [];
+
+  for (const cursor = new Date(start); cursor.getTime() < end.getTime(); cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    const date = cursor.toISOString().slice(0, 10);
+    const summary = buildLocalEmployeeShiftSummary(employeeId, date, store, employeeDirectory);
+    if (isMeaningfulLocalMonthShift(summary)) {
+      shifts.push(summary);
+    }
+  }
+
+  const employeeName =
+    shifts[0]?.shift.employeeName ??
+    employeeDirectory.find((employee) => employee.id === employeeId)?.fullName ??
+    store.settings.favoriteEmployees.find((employee) => employee.employeeId === employeeId)?.fullName ??
+    "Сотрудник";
+  const plannedMinutes = shifts.reduce((sum, summary) => sum + diffMinutes(new Date(summary.shift.plannedStartAt), new Date(summary.shift.plannedEndAt)), 0);
+  const workMinutes = shifts.reduce((sum, summary) => sum + summary.workMinutes, 0);
+  const pauseMinutes = shifts.reduce((sum, summary) => sum + summary.pauseMinutes, 0);
+  const freeMinutes = shifts.reduce((sum, summary) => sum + summary.freeMinutes, 0);
+  const beforeShiftWorkMinutes = shifts.reduce((sum, summary) => sum + summary.beforeShiftWorkMinutes, 0);
+  const overtimeMinutes = shifts.reduce((sum, summary) => sum + summary.overtimeMinutes, 0);
+  const questionableOvertimeMinutes = shifts.reduce((sum, summary) => sum + summary.questionableOvertimeMinutes, 0);
+  const presenceMinutes = shifts.reduce((sum, summary) => {
+    const hasFact = summary.shift.source !== "default" || summary.workMinutes > 0 || summary.pauseMinutes > 0 || summary.freeMinutes > 0;
+    return sum + (hasFact ? diffMinutes(new Date(summary.shift.actualStartAt), new Date(summary.shift.actualEndAt)) : 0);
+  }, 0);
+
+  return {
+    beforeShiftWorkMinutes,
+    employeeId,
+    employeeName,
+    freeMinutes,
+    month: `${safeYear}-${String(safeMonth).padStart(2, "0")}`,
+    overtimeMinutes,
+    pauseMinutes,
+    plannedMinutes,
+    presenceMinutes,
+    questionableOvertimeMinutes,
+    shiftCount: shifts.length,
+    shifts,
+    undertimeMinutes: Math.max(0, plannedMinutes - presenceMinutes),
+    workMinutes,
+  };
+}
+
+function isMeaningfulLocalMonthShift(summary: EmuEmployeeShiftSummaryDto) {
+  return (
+    summary.shift.source !== "default" ||
+    summary.workMinutes > 0 ||
+    summary.pauseMinutes > 0 ||
+    summary.freeMinutes > 0 ||
+    summary.beforeShiftWorkMinutes > 0 ||
+    summary.overtimeMinutes > 0 ||
+    summary.decisions.length > 0
+  );
+}
+
+function buildLocalEmployeeShift(
+  payload: EmuUpdateEmployeeShiftDto,
+  store: LocalStore,
+  employeeDirectory: EmployeeDirectoryItem[],
+  id: string,
+  employeeId?: string,
+): EmuEmployeeShiftDto {
+  const resolvedEmployeeId = employeeId ?? store.settings.favoriteEmployees[0]?.employeeId ?? employeeDirectory[0]?.id ?? "";
+  const employee =
+    store.settings.favoriteEmployees.find((item) => item.employeeId === resolvedEmployeeId) ??
+    employeeDirectory.find((item) => item.id === resolvedEmployeeId);
+  const shiftType = payload.shiftType || "day";
+  const base = buildShiftDateTimes(payload.shiftDate, shiftType);
+  const plannedStartAt = payload.plannedStartAt ?? base.plannedStartAt;
+  const plannedEndAt = payload.plannedEndAt ?? base.plannedEndAt;
+  const actualStartAt = payload.actualStartAt ?? plannedStartAt;
+  const actualEndAt = payload.actualEndAt ?? plannedEndAt;
+  const lunchStartAt = payload.lunchStartAt ?? base.lunchStartAt;
+  const lunchEndAt = payload.lunchEndAt ?? base.lunchEndAt;
+
+  return {
+    actualEndAt,
+    actualStartAt,
+    adjustedAt: payload.reason === "mock" ? null : new Date().toISOString(),
+    adjustedByName: payload.reason === "mock" ? "" : "mock",
+    comment: payload.comment ?? "",
+    employeeId: resolvedEmployeeId,
+    employeeName: employee?.fullName ?? "Сотрудник",
+    id,
+    lunchEndAt,
+    lunchOverridden: payload.lunchOverridden,
+    lunchStartAt,
+    lunchTaken: payload.lunchTaken,
+    plannedEndAt,
+    plannedStartAt,
+    reason: payload.reason,
+    rowVersion: payload.rowVersion + 1,
+    shiftDate: payload.shiftDate,
+    shiftType,
+    shiftTypeName: getShiftTypeName(shiftType),
+    source: payload.reason === "mock" ? "default" : "manual",
+    templateId: payload.templateId ?? null,
+  };
+}
+
+function buildShiftDateTimes(date: string, shiftType: string) {
+  const startDate = new Date(`${date}T00:00:00`);
+  const plannedStart = new Date(startDate);
+  const plannedEnd = new Date(startDate);
+  const lunchStart = new Date(startDate);
+  const lunchEnd = new Date(startDate);
+
+  if (shiftType === "night") {
+    plannedStart.setHours(20, 0, 0, 0);
+    plannedEnd.setDate(plannedEnd.getDate() + 1);
+    plannedEnd.setHours(8, 0, 0, 0);
+    lunchStart.setDate(lunchStart.getDate() + 1);
+    lunchStart.setHours(0, 0, 0, 0);
+    lunchEnd.setDate(lunchEnd.getDate() + 1);
+    lunchEnd.setHours(1, 0, 0, 0);
+  } else {
+    plannedStart.setHours(8, 0, 0, 0);
+    plannedEnd.setHours(shiftType === "day11" ? 20 : 17, 0, 0, 0);
+    lunchStart.setHours(12, 0, 0, 0);
+    lunchEnd.setHours(13, 0, 0, 0);
+  }
+
+  return {
+    lunchEndAt: lunchEnd.toISOString(),
+    lunchStartAt: lunchStart.toISOString(),
+    plannedEndAt: plannedEnd.toISOString(),
+    plannedStartAt: plannedStart.toISOString(),
+  };
+}
+
+function getShiftTypeName(shiftType: string) {
+  if (shiftType === "night") return "Ночная";
+  if (shiftType === "day11") return "11-часовая";
+  if (shiftType === "individual") return "Индивидуальная";
+  return "Дневная";
+}
+
+function isWorkingParticipationStatus(status: string) {
+  return status === employeeStatusWorking || status === "Работает";
+}
+
+function toRange(startedAt: string, endedAt: string) {
+  return { start: new Date(startedAt), end: new Date(endedAt) };
+}
+
+function diffMinutes(start: Date, end: Date) {
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+}
+
+function sumClippedMinutes(ranges: Array<{ start: Date; end: Date }>, windowStart: Date, windowEnd: Date) {
+  return ranges.reduce((sum, range) => {
+    const start = new Date(Math.max(range.start.getTime(), windowStart.getTime()));
+    const end = new Date(Math.min(range.end.getTime(), windowEnd.getTime()));
+    return sum + diffMinutes(start, end);
+  }, 0);
+}
+
+function buildFreeDateRanges(
+  start: Date,
+  end: Date,
+  occupiedRanges: Array<{ start: Date; end: Date }>,
+) {
+  const ranges = occupiedRanges
+    .map((range) => ({
+      start: new Date(Math.max(range.start.getTime(), start.getTime())),
+      end: new Date(Math.min(range.end.getTime(), end.getTime())),
+    }))
+    .filter((range) => range.end.getTime() > range.start.getTime())
+    .sort((left, right) => left.start.getTime() - right.start.getTime());
+  const free: Array<{ start: Date; end: Date }> = [];
+  let cursor = new Date(start);
+
+  for (const range of ranges) {
+    if (range.start.getTime() > cursor.getTime()) {
+      free.push({ start: new Date(cursor), end: new Date(range.start) });
+    }
+
+    if (range.end.getTime() > cursor.getTime()) {
+      cursor = new Date(range.end);
+    }
+  }
+
+  if (cursor.getTime() < end.getTime()) {
+    free.push({ start: cursor, end: new Date(end) });
+  }
+
+  return free;
+}
 
 function loadLocalStore(employeeDirectory: EmployeeDirectoryItem[]): LocalStore {
   if (typeof window !== "undefined") {
@@ -616,6 +1074,7 @@ function toWorkspaceState(store: LocalStore, loading: boolean, sourceMode: DataS
   return {
     auditEvents: store.auditEvents,
     dashboard: buildDashboard(store),
+    decisions: [],
     loading,
     planTasks: [...store.planTasks].sort(comparePlanDate),
     settings: store.settings,
@@ -702,6 +1161,7 @@ function createLocalWorkSession(store: LocalStore, payload: EmuCreateWorkSession
   const now = new Date().toISOString();
   const arrivedAt = payload.arrivedAt || now;
   const section = store.settings.sections.find((item) => item.id === payload.sectionId) ?? store.settings.sections[0];
+  const sessionId = createId("emu-work");
   const session: EmuWorkSessionDto = {
     arrivedAt,
     completedAt: null,
@@ -710,22 +1170,29 @@ function createLocalWorkSession(store: LocalStore, payload: EmuCreateWorkSession
     deletedAt: null,
     employees: payload.employeeIds.map((employeeId) => {
       const employee = employeeSource.find((item) => item.id === employeeId);
+      const participantId = createId("emu-participant");
       return {
         arrivedAt,
         employeeId,
         finishedAt: null,
         fullNameSnapshot: employee?.fullName ?? "Сотрудник",
-        id: createId("emu-participant"),
+        id: participantId,
         otherWorkMinutes: 0,
+        participationStatus: employeeStatusWorking,
+        personalPauseMinutes: 0,
+        personalWorkMinutes: 0,
         positionSnapshot: employee?.position ?? "",
         status: employeeStatusWorking,
         waitingMinutes: 0,
         workMinutes: 0,
+        intervals: [createLocalParticipationInterval(sessionId, participantId, employeeId, employeeStatusWorking, arrivedAt, "")],
       };
     }),
-    id: createId("emu-work"),
+    id: sessionId,
     isCarriedOver: false,
     otherWorkMinutes: 0,
+    operationalStatus: workStatusActive,
+    planTaskId: planTask?.id ?? null,
     resultComment: "",
     resultStatus: "",
     rowVersion: 1,
@@ -739,9 +1206,6 @@ function createLocalWorkSession(store: LocalStore, payload: EmuCreateWorkSession
     workMinutes: 0,
     workNumber: `ЭМУ-${payload.workDate.slice(0, 4)}-${String(store.sessions.length + 1).padStart(4, "0")}`,
   };
-  if (planTask) {
-    (session as EmuWorkSessionDto & { planTaskId?: string }).planTaskId = planTask.id;
-  }
 
   store.sessions.unshift(session);
   addAudit(store, session.id, "created", "", workStatusActive, "Создана работа");
@@ -832,13 +1296,18 @@ function updateLocalWorkSession(store: LocalStore, id: string, payload: EmuUpdat
       const existing = session.employees.find((employee) => employee.employeeId === employeeId);
       if (existing) return existing;
       const employee = employeeSource.find((item) => item.id === employeeId);
+      const participantId = createId("emu-participant");
       return {
         arrivedAt: session.arrivedAt,
         employeeId,
         finishedAt: null,
         fullNameSnapshot: employee?.fullName ?? "Сотрудник",
-        id: createId("emu-participant"),
+        id: participantId,
+        intervals: [createLocalParticipationInterval(session.id, participantId, employeeId, employeeStatusWorking, session.arrivedAt, payload.comment)],
         otherWorkMinutes: 0,
+        participationStatus: employeeStatusWorking,
+        personalPauseMinutes: 0,
+        personalWorkMinutes: 0,
         positionSnapshot: employee?.position ?? "",
         status: employeeStatusWorking,
         waitingMinutes: 0,
@@ -858,6 +1327,47 @@ function updateLocalWorkSession(store: LocalStore, id: string, payload: EmuUpdat
   return session;
 }
 
+function addLocalWorkSessionEmployee(store: LocalStore, id: string, payload: EmuAddWorkSessionEmployeeDto, employeeDirectory: EmployeeDirectoryItem[]) {
+  const session = requireSession(store, id);
+  if (payload.rowVersion !== session.rowVersion) {
+    throw new Error("Карточка была изменена другим пользователем");
+  }
+
+  if (session.completedAt) {
+    throw new Error("В завершенную работу нельзя добавить сотрудника");
+  }
+
+  if (session.employees.some((employee) => employee.employeeId === payload.employeeId && !employee.finishedAt)) {
+    throw new Error("Сотрудник уже есть в активном составе работы");
+  }
+
+  const employeeSource = employeeDirectory.length > 0 ? employeeDirectory : demoEmployeeDirectory;
+  const employee = employeeSource.find((item) => item.id === payload.employeeId);
+  const startedAt = payload.startedAt || new Date().toISOString();
+  const participantId = createId("emu-participant");
+  session.employees.push({
+    arrivedAt: startedAt,
+    employeeId: payload.employeeId,
+    finishedAt: null,
+    fullNameSnapshot: employee?.fullName ?? "Сотрудник",
+    id: participantId,
+    intervals: [createLocalParticipationInterval(session.id, participantId, payload.employeeId, employeeStatusWorking, startedAt, payload.comment)],
+    otherWorkMinutes: 0,
+    participationStatus: employeeStatusWorking,
+    personalPauseMinutes: 0,
+    personalWorkMinutes: 0,
+    positionSnapshot: employee?.position ?? "",
+    status: employeeStatusWorking,
+    waitingMinutes: 0,
+    workMinutes: 0,
+  });
+  session.status = workStatusActive;
+  session.operationalStatus = workStatusActive;
+  touchSession(session);
+  addAudit(store, session.id, "employee_added", "", employee?.fullName ?? payload.employeeId, payload.comment);
+  return session;
+}
+
 function pauseLocalWorkSession(store: LocalStore, id: string, payload: EmuPauseWorkSessionDto) {
   const session = requireSession(store, id);
   if (payload.rowVersion !== session.rowVersion) {
@@ -867,11 +1377,18 @@ function pauseLocalWorkSession(store: LocalStore, id: string, payload: EmuPauseW
   const employeeIds = payload.employeeIds.length ? payload.employeeIds : session.employees.map((employee) => employee.employeeId);
   for (const employee of session.employees) {
     if (employeeIds.includes(employee.employeeId) && !employee.finishedAt) {
+      closeLocalParticipationIntervals(employee, payload.startedAt || new Date().toISOString());
       employee.status = payload.markAsOtherWork ? employeeStatusOtherWork : employeeStatusWaiting;
+      employee.participationStatus = payload.markAsOtherWork ? employeeStatusOtherWork : participationStatusPaused;
+      employee.intervals = [
+        ...(employee.intervals ?? []),
+        createLocalParticipationInterval(session.id, employee.id, employee.employeeId, employee.participationStatus, payload.startedAt || new Date().toISOString(), payload.comment),
+      ];
     }
   }
 
   session.status = session.employees.some((employee) => employee.status === employeeStatusWorking && !employee.finishedAt) ? workStatusActive : workStatusWaiting;
+  session.operationalStatus = session.status;
   touchSession(session);
   addAudit(store, session.id, "paused", workStatusActive, session.status, payload.comment || "Пауза");
   return session;
@@ -886,13 +1403,72 @@ function resumeLocalWorkSession(store: LocalStore, id: string, payload: EmuResum
   const employeeIds = payload.employeeIds.length ? payload.employeeIds : session.employees.map((employee) => employee.employeeId);
   for (const employee of session.employees) {
     if (employeeIds.includes(employee.employeeId) && !employee.finishedAt) {
+      closeLocalParticipationIntervals(employee, payload.resumedAt || new Date().toISOString());
       employee.status = employeeStatusWorking;
+      employee.participationStatus = employeeStatusWorking;
+      employee.intervals = [
+        ...(employee.intervals ?? []),
+        createLocalParticipationInterval(session.id, employee.id, employee.employeeId, employeeStatusWorking, payload.resumedAt || new Date().toISOString(), payload.comment),
+      ];
     }
   }
 
   session.status = workStatusActive;
+  session.operationalStatus = workStatusActive;
   touchSession(session);
   addAudit(store, session.id, "resumed", workStatusWaiting, workStatusActive, payload.comment || "Работа возобновлена");
+  return session;
+}
+
+function finishLocalWorkSessionEmployee(store: LocalStore, id: string, employeeId: string, payload: EmuFinishWorkSessionEmployeeDto) {
+  const session = requireSession(store, id);
+  if (payload.rowVersion !== session.rowVersion) {
+    throw new Error("Карточка была изменена другим пользователем");
+  }
+
+  const employee = session.employees.find((item) => item.employeeId === employeeId && !item.finishedAt);
+  if (!employee) {
+    throw new Error("Активный сотрудник в карточке не найден");
+  }
+
+  const finishedAt = payload.finishedAt || new Date().toISOString();
+  const status = payload.participationStatus === employeeStatusPartial ? employeeStatusPartial : employeeStatusFinished;
+  closeLocalParticipationIntervals(employee, finishedAt);
+  employee.status = status;
+  employee.participationStatus = status;
+  employee.finishedAt = finishedAt;
+  session.status = session.employees.some((item) => item.status === employeeStatusWorking && !item.finishedAt) ? workStatusActive : workStatusWaiting;
+  session.operationalStatus = session.status;
+  touchSession(session);
+  addAudit(store, session.id, "employee_finished", employeeStatusWorking, status, payload.comment);
+  return session;
+}
+
+function markLocalWorkSessionEmployeeMistaken(store: LocalStore, id: string, employeeId: string, payload: EmuMarkMistakenWorkSessionEmployeeDto) {
+  const session = requireSession(store, id);
+  if (payload.rowVersion !== session.rowVersion) {
+    throw new Error("Карточка была изменена другим пользователем");
+  }
+
+  const employee = session.employees.find((item) => item.employeeId === employeeId);
+  if (!employee) {
+    throw new Error("Сотрудник в карточке не найден");
+  }
+
+  const finishedAt = new Date().toISOString();
+  closeLocalParticipationIntervals(employee, finishedAt);
+  employee.status = employeeStatusMistaken;
+  employee.participationStatus = employeeStatusMistaken;
+  employee.finishedAt = finishedAt;
+  employee.workMinutes = 0;
+  employee.waitingMinutes = 0;
+  employee.otherWorkMinutes = 0;
+  employee.personalWorkMinutes = 0;
+  employee.personalPauseMinutes = 0;
+  session.status = session.employees.some((item) => item.status === employeeStatusWorking && !item.finishedAt) ? workStatusActive : workStatusWaiting;
+  session.operationalStatus = session.status;
+  touchSession(session);
+  addAudit(store, session.id, "employee_marked_mistaken", "", employeeStatusMistaken, payload.comment);
   return session;
 }
 
@@ -922,16 +1498,21 @@ function completeLocalWorkSession(store: LocalStore, id: string, payload: EmuCom
   }
 
   for (const employee of targetEmployees) {
+    closeLocalParticipationIntervals(employee, now);
     employee.status = employeeStatusFinished;
+    employee.participationStatus = employeeStatusFinished;
     employee.finishedAt = now;
   }
 
   if (session.employees.every((employee) => employee.finishedAt)) {
     session.completedAt = now;
-    session.status = workStatusCompleted;
+    session.operationalStatus = workStatusCompleted;
   }
 
   session.resultStatus = payload.resultStatus;
+  if (session.completedAt) {
+    session.status = payload.resultStatus;
+  }
   session.resultComment = payload.resultComment;
   touchSession(session);
   addAudit(store, session.id, "completed", workStatusActive, session.status, payload.resultComment);
@@ -939,13 +1520,39 @@ function completeLocalWorkSession(store: LocalStore, id: string, payload: EmuCom
     addAudit(store, session.id, "completed_at_changed", "", payload.completedAt, buildManualTimeComment("времени окончания", payload.completedAt, payload.resultComment));
   }
 
-  const planTask = store.planTasks.find((task) => task.id && task.id === (session as EmuWorkSessionDto & { planTaskId?: string }).planTaskId);
+  const planTask = store.planTasks.find((task) => task.id && task.id === session.planTaskId);
   if (planTask && session.completedAt) {
     planTask.status = payload.resultStatus;
     planTask.rowVersion += 1;
     planTask.updatedAt = new Date().toISOString();
   }
 
+  return session;
+}
+
+function carryOverLocalWorkSession(store: LocalStore, id: string, payload: EmuCarryOverWorkSessionDto) {
+  if (!payload.comment.trim()) {
+    throw new Error("Укажите причину переноса работы");
+  }
+
+  const session = requireSession(store, id);
+  if (payload.rowVersion !== session.rowVersion) {
+    throw new Error("Карточка была изменена другим пользователем");
+  }
+
+  if (session.completedAt) {
+    throw new Error("Завершенную работу нельзя перенести");
+  }
+
+  if (payload.toDate <= session.workDate) {
+    throw new Error("Новая дата должна быть позже текущей даты работы");
+  }
+
+  const previousDate = session.workDate;
+  session.workDate = payload.toDate;
+  session.isCarriedOver = true;
+  touchSession(session);
+  addAudit(store, session.id, "carried_over", previousDate, payload.toDate, payload.comment);
   return session;
 }
 
@@ -962,6 +1569,7 @@ function deleteLocalWorkSession(store: LocalStore, id: string, payload: EmuDelet
   session.deletedAt = new Date().toISOString();
   session.deleteReason = payload.reason;
   session.status = workStatusDeleted;
+  session.operationalStatus = workStatusDeleted;
   touchSession(session);
   addAudit(store, session.id, "deleted", "", workStatusDeleted, payload.reason);
   return session;
@@ -1151,6 +1759,30 @@ function updateLocalPlanTask(store: LocalStore, id: string, payload: EmuUpsertPl
   return task;
 }
 
+function rescheduleLocalPlanTask(store: LocalStore, id: string, payload: EmuReschedulePlanTaskDto) {
+  const task = store.planTasks.find((item) => item.id === id);
+  if (!task) throw new Error("Задача плана не найдена");
+  if (payload.rowVersion !== task.rowVersion) {
+    throw new Error("Задача была изменена другим пользователем");
+  }
+
+  const comment = payload.comment.trim();
+  if (!comment) {
+    throw new Error("Укажите причину переноса плановой задачи");
+  }
+
+  if (task.plannedDate === payload.newPlannedDate) {
+    throw new Error("Новая дата должна отличаться от текущей");
+  }
+
+  const oldDate = task.plannedDate;
+  task.plannedDate = payload.newPlannedDate;
+  task.rowVersion += 1;
+  task.updatedAt = new Date().toISOString();
+  addAudit(store, null, "plan_rescheduled", oldDate, task.plannedDate, comment, task.id);
+  return task;
+}
+
 function approveLocalPlanTask(store: LocalStore, id: string, approved: boolean, comment?: string) {
   const task = store.planTasks.find((item) => item.id === id);
   if (!task) throw new Error("Задача плана не найдена");
@@ -1168,11 +1800,11 @@ function approveLocalPlanTask(store: LocalStore, id: string, approved: boolean, 
 
 function approveLocalWeek(store: LocalStore, weekStart: string, comment?: string) {
   const normalizedComment = comment?.trim() || "Неделя согласована";
-  const start = new Date(weekStart);
+  const start = parseDateKey(weekStart);
   const end = new Date(start);
   end.setDate(start.getDate() + 7);
   const updated = store.planTasks.filter((task) => {
-    const date = new Date(task.plannedDate);
+    const date = parseDateKey(task.plannedDate);
     return date >= start && date < end && task.approvalStatus !== planApprovalApproved;
   });
   for (const task of updated) {
@@ -1226,15 +1858,199 @@ function touchSession(session: EmuWorkSessionDto) {
   session.updatedAt = new Date().toISOString();
 }
 
+function buildLocalWorkHistoryReport(rows: EmuWorkSessionDto[], params: EmuWorkSessionParams): EmuWorkHistoryReportDto {
+  const participants = rows.flatMap((session) =>
+    session.employees
+      .filter((employee) => employee.status !== employeeStatusMistaken)
+      .map((employee) => ({ employee, session })),
+  );
+  const problemRows = rows.filter(isLocalProblemSession);
+  const employeeIds = new Set(participants.map((row) => row.employee.employeeId));
+  const sectionIds = new Set(rows.map((row) => row.sectionId));
+
+  return {
+    appliedQuery: {
+      allowedSectionIds: null,
+      dateFrom: params.dateFrom ?? null,
+      dateTo: params.dateTo ?? null,
+      employeeId: params.employeeId ?? null,
+      employeeSearch: params.employeeSearch ?? null,
+      includeDeleted: Boolean(params.includeDeleted),
+      manualCorrectionsOnly: Boolean(params.manualCorrectionsOnly),
+      notCompletedReasonId: params.notCompletedReasonId ?? null,
+      operationalStatus: params.operationalStatus ?? null,
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? 0,
+      problemOnly: Boolean(params.problemOnly),
+      resultStatus: params.resultStatus ?? null,
+      sectionId: params.sectionId ?? null,
+      shiftType: params.shiftType ?? null,
+      sortBy: params.sortBy ?? null,
+      status: params.status ?? null,
+      waitReasonId: params.waitReasonId ?? null,
+    },
+    employees: Array.from(groupBy(participants, (row) => row.employee.employeeId).entries())
+      .map(([employeeId, group]) => {
+        const first = group[0]?.employee;
+        return {
+          department: "",
+          employeeId,
+          employeeName: first?.fullNameSnapshot ?? "",
+          otherWorkMinutes: group.reduce((sum, row) => sum + row.employee.otherWorkMinutes, 0),
+          personnelNo: "",
+          position: first?.positionSnapshot ?? "",
+          sectionCount: new Set(group.map((row) => row.session.sectionId)).size,
+          totalMinutes: group.reduce((sum, row) => sum + row.employee.workMinutes + row.employee.waitingMinutes + row.employee.otherWorkMinutes, 0),
+          waitingMinutes: group.reduce((sum, row) => sum + row.employee.waitingMinutes, 0),
+          workCount: new Set(group.map((row) => row.session.id)).size,
+          workMinutes: group.reduce((sum, row) => sum + row.employee.workMinutes, 0),
+        };
+      })
+      .sort((left, right) => right.totalMinutes - left.totalMinutes || left.employeeName.localeCompare(right.employeeName)),
+    exceptions: problemRows.slice(0, 200).map((session) => ({
+      otherWorkMinutes: session.otherWorkMinutes,
+      reason: buildLocalExceptionReason(session),
+      sectionId: session.sectionId,
+      sectionName: session.sectionName,
+      severity: session.deletedAt ? "danger" : "warning",
+      waitingMinutes: session.waitingMinutes,
+      workDate: session.workDate,
+      workMinutes: session.workMinutes,
+      workNumber: session.workNumber,
+      workSessionId: session.id,
+    })),
+    generatedAt: new Date().toISOString(),
+    sections: Array.from(groupBy(rows, (row) => row.sectionId).entries())
+      .map(([sectionId, group]) => ({
+        employeeCount: new Set(group.flatMap((row) => row.employees.map((employee) => employee.employeeId))).size,
+        otherWorkMinutes: group.reduce((sum, row) => sum + row.otherWorkMinutes, 0),
+        problemWorks: group.filter(isLocalProblemSession).length,
+        sectionId,
+        sectionName: group[0]?.sectionName ?? "",
+        totalMinutes: group.reduce((sum, row) => sum + row.workMinutes + row.waitingMinutes + row.otherWorkMinutes, 0),
+        waitingMinutes: group.reduce((sum, row) => sum + row.waitingMinutes, 0),
+        workCount: group.length,
+        workMinutes: group.reduce((sum, row) => sum + row.workMinutes, 0),
+      }))
+      .sort((left, right) => right.totalMinutes - left.totalMinutes || left.sectionName.localeCompare(right.sectionName)),
+    totals: {
+      averageWorkMinutes: rows.length ? Math.round(rows.reduce((sum, row) => sum + row.workMinutes + row.waitingMinutes + row.otherWorkMinutes, 0) / rows.length) : 0,
+      completedWorks: rows.filter((row) => !row.deletedAt && row.completedAt).length,
+      deletedWorks: rows.filter((row) => row.deletedAt).length,
+      employeeCount: employeeIds.size,
+      otherWorkMinutes: rows.reduce((sum, row) => sum + row.otherWorkMinutes, 0),
+      problemWorks: problemRows.length,
+      sectionCount: sectionIds.size,
+      totalMinutes: rows.reduce((sum, row) => sum + row.workMinutes + row.waitingMinutes + row.otherWorkMinutes, 0),
+      totalWorks: rows.length,
+      waitingMinutes: rows.reduce((sum, row) => sum + row.waitingMinutes, 0),
+      workMinutes: rows.reduce((sum, row) => sum + row.workMinutes, 0),
+    },
+  };
+}
+
+function buildLocalEmployeeWorkHistoryReport(
+  employeeId: string,
+  rows: EmuWorkSessionDto[],
+  params: EmuWorkSessionParams,
+  employeeDirectory: EmployeeDirectoryItem[],
+): EmuEmployeeWorkHistoryReportDto {
+  const report = buildLocalWorkHistoryReport(rows, { ...params, employeeId });
+  const employee = report.employees.find((row) => row.employeeId === employeeId);
+  const directoryEmployee = employeeDirectory.find((row) => row.id === employeeId);
+  const page = params.page ?? 1;
+  const pageSize = params.pageSize ?? Math.max(1, rows.length);
+  return {
+    appliedQuery: report.appliedQuery,
+    employee: employee ?? {
+      department: directoryEmployee?.department ?? "",
+      employeeId,
+      employeeName: directoryEmployee?.fullName ?? "",
+      otherWorkMinutes: 0,
+      personnelNo: directoryEmployee?.personnelNo ?? "",
+      position: directoryEmployee?.position ?? "",
+      sectionCount: 0,
+      totalMinutes: 0,
+      waitingMinutes: 0,
+      workCount: 0,
+      workMinutes: 0,
+    },
+    generatedAt: report.generatedAt,
+    sections: report.sections,
+    works: toList(rows.slice((page - 1) * pageSize, page * pageSize), rows.length, page, pageSize),
+  };
+}
+
+function groupBy<T, TKey>(items: T[], getKey: (item: T) => TKey) {
+  const map = new Map<TKey, T[]>();
+  for (const item of items) {
+    const key = getKey(item);
+    map.set(key, [...(map.get(key) ?? []), item]);
+  }
+
+  return map;
+}
+
+function isLocalProblemSession(session: EmuWorkSessionDto) {
+  return Boolean(session.deletedAt) || session.isCarriedOver || session.waitingMinutes > 0 || session.otherWorkMinutes > 0 || (session.resultStatus !== "" && session.resultStatus !== "Выполнено");
+}
+
+function buildLocalExceptionReason(session: EmuWorkSessionDto) {
+  const reasons: string[] = [];
+  if (session.deletedAt) reasons.push("deleted");
+  if (session.isCarriedOver) reasons.push("carry-over");
+  if (session.waitingMinutes > 0) reasons.push("pause");
+  if (session.otherWorkMinutes > 0) reasons.push("other work");
+  if (session.resultStatus) reasons.push(session.resultStatus);
+  return reasons.length ? reasons.join(", ") : "check";
+}
+
 function filterLocalSessions(sessions: EmuWorkSessionDto[], params: EmuWorkSessionParams) {
-  return sessions
+  const rows = sessions
     .filter((session) => (params.includeDeleted ? true : !session.deletedAt))
     .filter((session) => (params.dateFrom ? session.workDate >= params.dateFrom : true))
     .filter((session) => (params.dateTo ? session.workDate <= params.dateTo : true))
     .filter((session) => (params.sectionId ? session.sectionId === params.sectionId : true))
-    .filter((session) => (params.status ? session.status === params.status : true))
+    .filter((session) => (params.operationalStatus ? session.operationalStatus === params.operationalStatus : true))
+    .filter((session) => (params.resultStatus ? session.resultStatus === params.resultStatus : true))
+    .filter((session) => (params.status ? session.status === params.status || session.operationalStatus === params.status || session.resultStatus === params.status : true))
     .filter((session) => (params.employeeId ? session.employees.some((employee) => employee.employeeId === params.employeeId) : true))
-    .sort(compareCreatedAt);
+    .filter((session) => matchesLocalEmployeeSearch(session, params.employeeSearch))
+    .filter((session) => matchesLocalShiftType(session, params.shiftType))
+    .filter((session) =>
+      params.problemOnly
+        ? session.isCarriedOver ||
+          session.waitingMinutes > 0 ||
+          session.otherWorkMinutes > 0 ||
+          (session.resultStatus !== "" && session.resultStatus !== "Выполнено")
+        : true,
+    );
+
+  return sortEmuHistoryRows(rows, params.sortBy ?? "date");
+}
+
+function matchesLocalEmployeeSearch(session: EmuWorkSessionDto, employeeSearch?: string) {
+  const search = (employeeSearch ?? "").trim().toLowerCase();
+  if (!search) return true;
+
+  return session.employees.some((employee) =>
+    [
+      employee.fullNameSnapshot,
+      employee.positionSnapshot,
+      employee.employeeId,
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(search),
+  );
+}
+
+function matchesLocalShiftType(session: EmuWorkSessionDto, shiftType?: "day" | "night" | "") {
+  if (!shiftType) return true;
+  const source = session.arrivedAt ?? session.completedAt ?? `${session.workDate}T09:00:00`;
+  const hour = new Date(source).getHours();
+  const isNight = hour >= 20 || hour < 8;
+  return shiftType === "night" ? isNight : !isNight;
 }
 
 function toList<T>(rows: T[], total: number, page = 1, pageSize = 100): EmuListResponseDto<T> {
@@ -1275,6 +2091,14 @@ function compareCreatedAt(a: { createdAt: string }, b: { createdAt: string }) {
 
 function comparePlanDate(a: EmuPlanTaskDto, b: EmuPlanTaskDto) {
   return a.plannedDate.localeCompare(b.plannedDate) || compareCreatedAt(a, b);
+}
+
+function maxUpdatedAt(rows: Array<{ updatedAt?: string }>) {
+  return rows.reduce<string | null>((latest, row) => {
+    if (!row.updatedAt) return latest;
+    if (!latest || new Date(row.updatedAt).getTime() > new Date(latest).getTime()) return row.updatedAt;
+    return latest;
+  }, null);
 }
 
 function compareSortOrder(a: { name: string; sortOrder: number }, b: { name: string; sortOrder: number }) {
@@ -1327,11 +2151,53 @@ function createId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function createLocalParticipationInterval(
+  workSessionId: string,
+  workSessionEmployeeId: string,
+  employeeId: string,
+  status: string,
+  startedAt: string,
+  reason: string,
+) {
+  return {
+    createdAt: new Date().toISOString(),
+    createdByName: "mock",
+    employeeId,
+    endedAt: null,
+    id: createId("emu-interval"),
+    reason,
+    startedAt,
+    status,
+    workSessionEmployeeId,
+    workSessionId,
+  };
+}
+
+function closeLocalParticipationIntervals(employee: EmuWorkSessionEmployeeDto, endedAt: string) {
+  employee.intervals = (employee.intervals ?? []).map((interval) =>
+    interval.endedAt
+      ? interval
+      : {
+          ...interval,
+          endedAt: new Date(endedAt).getTime() < new Date(interval.startedAt).getTime() ? interval.startedAt : endedAt,
+        },
+  );
+}
+
 function toDateKey(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function parseDateKey(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  if (!year || !month || !day) {
+    return new Date(dateKey);
+  }
+
+  return new Date(year, month - 1, day);
 }
 
 function isCompletedOnDate(session: EmuWorkSessionDto, dateKey: string) {

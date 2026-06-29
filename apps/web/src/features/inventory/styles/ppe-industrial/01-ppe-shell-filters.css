@@ -1,0 +1,193 @@
+/* PPE journal workspace: final pass for card readability and compact monitors. */
+
+.inventory-web-workspace:has(.inventory-ppe-screen) {
+  padding: 0 0 28px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign {
+  --ppe-card-radius: 8px;
+  --ppe-line: var(--issue-border);
+  --ppe-line-strong: var(--issue-border-strong);
+  --ppe-ink: var(--issue-text);
+  --ppe-soft-ink: var(--issue-muted);
+  --ppe-brand: var(--issue-blue);
+  --ppe-panel-shadow: none;
+  color: var(--issue-text);
+  gap: 14px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-commandbar {
+  align-items: center;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fcff 100%);
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  min-height: auto;
+  padding: 12px 14px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-title {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 40px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-title-icon {
+  align-items: center;
+  background: var(--issue-blue);
+  border-radius: 8px;
+  box-shadow: none;
+  color: #ffffff;
+  display: inline-flex;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-title p,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-title h1,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-title span {
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-title p {
+  color: var(--issue-blue-dark);
+  font-size: 11px;
+  line-height: 1.1;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-title h1 {
+  color: var(--issue-text);
+  font-size: 26px;
+  line-height: 1.05;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-title span {
+  color: var(--issue-muted);
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 4px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-command-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .button {
+  border-radius: 8px;
+  box-shadow: none;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .button.primary {
+  background: var(--issue-blue);
+  border-color: var(--issue-blue);
+  box-shadow: none;
+  color: #ffffff;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .button.ghost {
+  background: var(--issue-panel-solid);
+  border: 1px solid var(--issue-border);
+  color: var(--issue-text);
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-workspace {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(276px, 304px);
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-journal,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-inspector {
+  background: var(--issue-panel);
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-panel-head {
+  align-items: center;
+  border-bottom: 1px solid var(--issue-border);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: auto;
+  padding: 14px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-panel-head h2 {
+  color: var(--issue-text);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-panel-head p {
+  color: var(--issue-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-page-size {
+  background: #f8fbff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-journal > .inventory-ppe-picker-filters {
+  background: #f8fbff;
+  border-bottom: 1px solid var(--issue-border);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(220px, 1.15fr) repeat(3, minmax(136px, 0.7fr)) auto;
+  padding: 12px 14px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-journal-filters .inventory-ppe-search,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-journal-filters select {
+  min-height: 38px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-journal-filters .inventory-ppe-search {
+  background: #ffffff;
+  border: 1px solid var(--issue-border-strong);
+  border-radius: 8px;
+  padding-left: 34px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-journal-filters .inventory-ppe-search svg {
+  left: 11px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-journal-filters .inventory-ppe-search input,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-journal-filters select {
+  background: #ffffff;
+  border: 1px solid var(--issue-border-strong);
+  border-radius: 8px;
+  color: var(--issue-text);
+  font-size: 12px;
+  font-weight: 800;
+  height: 38px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-journal-filters .inventory-ppe-search input {
+  border: 0;
+  height: 36px;
+  padding-left: 0;
+}
+

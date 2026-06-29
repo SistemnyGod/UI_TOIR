@@ -11,7 +11,7 @@ export default function SettingsRoute() {
   const { colors, effectiveScheme, preference } = useAppTheme();
 
   return (
-    <Screen title="Настройки" subtitle="Персонализация, аккаунт и параметры приложения.">
+    <Screen title="Настройки" subtitle="Персонализация, аккаунт, сервер и восстановление отправки.">
       <Card>
         <View style={styles.headerRow}>
           <View style={styles.headerText}>
@@ -28,15 +28,27 @@ export default function SettingsRoute() {
       <Card>
         <Text style={[styles.title, { color: colors.text }]}>Аккаунт</Text>
         <Text style={[styles.text, { color: colors.mutedText }]}>
-          Смена пользователя очищает локальные заявки, результаты, фото, outbox и конфликты прошлого аккаунта.
+          Смена пользователя безопасно проверяет локальные заявки, результаты, фото, видео и очередь отправки.
         </Text>
         <SettingsRow label="Аккаунт и выход" value="Сменить пользователя безопасно" onPress={() => router.push("/settings/account")} />
       </Card>
 
       <Card>
+        <Text style={[styles.title, { color: colors.text }]}>Синхронизация</Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>
+          Проверьте отчеты, команды и файлы, которые еще не приняты сервером.
+        </Text>
+        <SettingsRow
+          label="Не отправлено"
+          value="Очередь восстановления, ошибки и ручной повтор отправки"
+          onPress={() => router.push("/settings/sync-queue" as never)}
+        />
+      </Card>
+
+      <Card>
         <Text style={[styles.title, { color: colors.text }]}>Сервер</Text>
         <Text style={[styles.text, { color: colors.mutedText }]}>
-          Адрес backend API для входа, загрузки заявок, отправки отчетов и фото.
+          Адрес backend API для входа, загрузки заявок, отправки отчетов и файлов.
         </Text>
         <SettingsRow
           label="Адрес сервера"
@@ -53,7 +65,7 @@ export default function SettingsRoute() {
         <View style={styles.pills}>
           <StatusPill label="Offline-first" tone="success" />
           <StatusPill label="NFC" tone="success" />
-          <StatusPill label="Фото необязательно" tone="neutral" />
+          <StatusPill label="Фото и видео" tone="neutral" />
         </View>
       </Card>
     </Screen>
@@ -95,6 +107,10 @@ function themeLabel(preference: string) {
 }
 
 const styles = StyleSheet.create({
+  chevron: {
+    fontSize: 28,
+    lineHeight: 28
+  },
   headerRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -105,13 +121,10 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4
   },
-  title: {
-    fontSize: 18,
-    fontWeight: "600"
-  },
-  text: {
-    fontSize: 14,
-    lineHeight: 20
+  pills: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
   },
   row: {
     alignItems: "center",
@@ -123,21 +136,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12
   },
-  rowText: {
-    flex: 1,
-    gap: 2
-  },
   rowLabel: {
     fontSize: 16,
     fontWeight: "600"
   },
-  chevron: {
-    fontSize: 28,
-    lineHeight: 28
+  rowText: {
+    flex: 1,
+    gap: 2
   },
-  pills: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
+  text: {
+    fontSize: 14,
+    lineHeight: 20
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: "600"
   }
 });

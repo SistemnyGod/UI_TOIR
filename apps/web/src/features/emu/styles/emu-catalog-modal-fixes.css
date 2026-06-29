@@ -1,0 +1,119 @@
+/* Scroll and density fixes for EMU catalogs/favorites modals. */
+.emu-modal-backdrop {
+  overflow: hidden;
+  padding: 18px;
+}
+
+.emu-modal,
+.emu-modal-wide {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 36px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.emu-modal > header {
+  flex: 0 0 auto;
+}
+
+.emu-modal > :not(header):not(.emu-modal-actions) {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.emu-modal-wide > .emu-reference-grid,
+.emu-modal-wide > .emu-favorite-grid {
+  align-items: stretch;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.emu-reference-grid,
+.emu-favorite-grid {
+  min-height: 0;
+}
+
+.emu-reference-block {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.emu-reference-heading,
+.emu-reference-toolbar,
+.emu-inline-form,
+.emu-reference-search,
+.emu-textarea-label,
+.emu-reference-block > .emu-primary-button,
+.emu-pagination,
+.emu-nested-confirm {
+  flex: 0 0 auto;
+}
+
+.emu-reference-list {
+  flex: 1 1 auto;
+  min-height: 150px;
+  max-height: min(50dvh, 540px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.emu-favorite-grid .emu-reference-list {
+  max-height: min(58dvh, 620px);
+}
+
+.emu-template-block .emu-reference-list {
+  max-height: min(42dvh, 460px);
+}
+
+.emu-favorite-grid .emu-reference-block,
+.emu-template-block {
+  min-height: min(62dvh, 640px);
+}
+
+.emu-reference-row {
+  min-width: 0;
+}
+
+.emu-reference-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.emu-reference-actions {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .emu-modal-backdrop {
+    align-items: stretch;
+    padding: 8px;
+  }
+
+  .emu-modal,
+  .emu-modal-wide {
+    max-height: calc(100dvh - 16px);
+    width: 100%;
+  }
+
+  .emu-reference-grid,
+  .emu-favorite-grid {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .emu-reference-list,
+  .emu-favorite-grid .emu-reference-list,
+  .emu-template-block .emu-reference-list {
+    max-height: none;
+  }
+
+  .emu-favorite-grid .emu-reference-block,
+  .emu-template-block {
+    min-height: 0;
+  }
+}

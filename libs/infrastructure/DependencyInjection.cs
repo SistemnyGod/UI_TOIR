@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -19,6 +20,18 @@ public static class DependencyInjection
         services.AddDbContext<Patrol360DbContext>(options => options
             .UseNpgsql(connectionString)
             .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning)));
+        services.AddMemoryCache();
+
+        var dataProtection = services
+            .AddDataProtection()
+            .SetApplicationName("Patrol360");
+        var keyRingPath = configuration["DataProtection:KeyRingPath"];
+        if (!string.IsNullOrWhiteSpace(keyRingPath))
+        {
+            Directory.CreateDirectory(keyRingPath);
+            dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keyRingPath));
+        }
+
         services.AddScoped<Patrol360DbSeeder>();
         services.AddScoped<EfPatrolStore>();
         services.AddScoped<IPatrolDashboardQuery>(provider => provider.GetRequiredService<EfPatrolStore>());
@@ -42,8 +55,10 @@ public static class DependencyInjection
         services.AddScoped<EfEmuService>();
         services.AddScoped<IEmuCatalogService>(provider => provider.GetRequiredService<EfEmuService>());
         services.AddScoped<IEmuWorkService>(provider => provider.GetRequiredService<EfEmuService>());
+        services.AddScoped<IEmuShiftService>(provider => provider.GetRequiredService<EfEmuService>());
         services.AddScoped<IEmuPlanService>(provider => provider.GetRequiredService<EfEmuService>());
         services.AddScoped<IEmuMaintenanceService>(provider => provider.GetRequiredService<EfEmuService>());
+        services.AddScoped<IPercoIntegrationService, EfPercoIntegrationService>();
         services.AddScoped<IAuthSessionService, EfAuthSessionService>();
         services.AddScoped<ISiteUserAdminService, EfSiteUserAdminService>();
         services.AddScoped<ISystemNotificationService, EfSystemNotificationService>();

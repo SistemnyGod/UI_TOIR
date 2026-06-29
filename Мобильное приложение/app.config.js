@@ -3,16 +3,25 @@ const path = require("path");
 const { AndroidConfig, withAndroidManifest, withDangerousMod } = require("expo/config-plugins");
 
 const googleServicesFile = "./secrets/google-services.json";
+const appIconFile = "./assets/app-icon.png";
 
 const androidConfig = {
   package: "ru.patrol360.mobile",
   versionCode: 18,
   usesCleartextTraffic: true,
+  adaptiveIcon: {
+    foregroundImage: appIconFile,
+    backgroundColor: "#061A3A"
+  },
   permissions: [
     "android.permission.INTERNET",
     "android.permission.ACCESS_NETWORK_STATE",
     "android.permission.ACCESS_WIFI_STATE",
+    "android.permission.POST_NOTIFICATIONS",
     "android.permission.NFC"
+  ],
+  blockedPermissions: [
+    "android.permission.RECORD_AUDIO"
   ]
 };
 
@@ -72,7 +81,8 @@ function withPatrol360AndroidNetwork(config) {
   config = AndroidConfig.Permissions.withPermissions(config, [
     "android.permission.INTERNET",
     "android.permission.ACCESS_NETWORK_STATE",
-    "android.permission.ACCESS_WIFI_STATE"
+    "android.permission.ACCESS_WIFI_STATE",
+    "android.permission.POST_NOTIFICATIONS"
   ]);
   config = withPilotNetworkSecurityConfig(config);
   return withPilotCleartextTraffic(config);
@@ -86,26 +96,29 @@ module.exports = {
     version: "0.1.17",
     platforms: ["android"],
     orientation: "portrait",
+    icon: appIconFile,
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     android: androidConfig,
     plugins: [
       withPatrol360AndroidNetwork,
       "expo-router",
+      "expo-notifications",
+      "expo-background-task",
       "expo-secure-store",
       "expo-sqlite",
       [
         "expo-camera",
         {
-          cameraPermission: "Камера нужна для фотофиксации исправностей и неисправностей.",
+          cameraPermission: "Камера нужна для фото- и видеофиксации обходов, исправностей и неисправностей.",
           recordAudioAndroid: false
         }
       ],
       [
         "expo-image-picker",
         {
-          cameraPermission: "Камера нужна для фотофиксации обходов и замечаний.",
-          photosPermission: "Галерея нужна для выбора фото к обходам и замечаниям."
+          cameraPermission: "Камера нужна для фото- и видеофиксации обходов и замечаний.",
+          photosPermission: "Галерея нужна для выбора фото и видео к обходам и замечаниям."
         }
       ]
     ],

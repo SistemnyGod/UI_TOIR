@@ -28,6 +28,8 @@ internal sealed class EfAuthSessionService(Patrol360DbContext dbContext) : IAuth
                 .ThenInclude(userRole => userRole.Role)
                     .ThenInclude(role => role.Permissions)
                         .ThenInclude(rolePermission => rolePermission.Permission)
+            .Include(siteUser => siteUser.Permissions)
+                .ThenInclude(userPermission => userPermission.Permission)
             .FirstOrDefault(siteUser => siteUser.NormalizedLogin == normalizedLogin);
 
         if (user is null || !IsActive(user))
@@ -77,6 +79,9 @@ internal sealed class EfAuthSessionService(Patrol360DbContext dbContext) : IAuth
                     .ThenInclude(userRole => userRole.Role)
                         .ThenInclude(role => role.Permissions)
                             .ThenInclude(rolePermission => rolePermission.Permission)
+            .Include(item => item.SiteUser)
+                .ThenInclude(siteUser => siteUser.Permissions)
+                    .ThenInclude(userPermission => userPermission.Permission)
             .FirstOrDefault(item => item.TokenHash == tokenHash);
 
         if (session is null || session.RevokedAt is not null || session.ExpiresAt <= now || !IsActive(session.SiteUser))
@@ -140,6 +145,7 @@ internal sealed class EfAuthSessionService(Patrol360DbContext dbContext) : IAuth
         var permissions = user.Roles
             .SelectMany(item => item.Role.Permissions)
             .Select(item => item.Permission.Code)
+            .Concat(user.Permissions.Select(item => item.Permission.Code))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Order()
             .ToArray();

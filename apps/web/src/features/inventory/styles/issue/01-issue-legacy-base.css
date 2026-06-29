@@ -1,0 +1,1398 @@
+.inventory-issue-screen {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.inventory-issue-commandbar,
+.inventory-issue-catalog,
+.inventory-issue-draft,
+.inventory-issue-journal,
+.inventory-issue-state {
+  border: 1px solid var(--inventory-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(44, 72, 113, 0.08);
+}
+
+.inventory-issue-commandbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+}
+
+.inventory-issue-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.inventory-issue-title-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 8px;
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb 0%, #6d5dfc 100%);
+}
+
+.inventory-issue-title p,
+.inventory-issue-title h1,
+.inventory-issue-title span {
+  margin: 0;
+}
+
+.inventory-issue-title p {
+  color: var(--inventory-blue);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.inventory-issue-title h1 {
+  color: var(--inventory-text);
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.inventory-issue-title span {
+  display: block;
+  margin-top: 3px;
+  color: var(--inventory-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.inventory-issue-command-actions,
+.inventory-issue-panel-head,
+.inventory-issue-stock-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inventory-issue-command-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.inventory-issue-command-actions .button,
+.inventory-issue-panel-head .button,
+.inventory-issue-stock-line .button,
+.inventory-issue-draft .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.inventory-issue-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.inventory-issue-kpi {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  min-height: 58px;
+  padding: 12px 14px;
+  border: 1px solid var(--inventory-border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.inventory-issue-kpi span {
+  color: var(--inventory-muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.inventory-issue-kpi strong {
+  color: var(--inventory-text);
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.inventory-issue-kpi.tone-blue strong {
+  color: var(--inventory-blue);
+}
+
+.inventory-issue-kpi.tone-green strong {
+  color: var(--inventory-green);
+}
+
+.inventory-issue-kpi.tone-red strong {
+  color: var(--inventory-red);
+}
+
+.inventory-issue-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 14px;
+  min-width: 0;
+  align-items: start;
+}
+
+.inventory-issue-catalog,
+.inventory-issue-draft,
+.inventory-issue-journal {
+  min-width: 0;
+  padding: 14px;
+}
+
+.inventory-issue-draft {
+  position: sticky;
+  top: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.inventory-issue-panel-head {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.inventory-issue-panel-head h2,
+.inventory-issue-panel-head p {
+  margin: 0;
+}
+
+.inventory-issue-panel-head h2 {
+  color: var(--inventory-text);
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.inventory-issue-panel-head p {
+  margin-top: 3px;
+  color: var(--inventory-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inventory-issue-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 220px;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.inventory-issue-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid #cdddf1;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.inventory-issue-search svg {
+  color: #7183a1;
+  flex: 0 0 auto;
+}
+
+.inventory-issue-search input,
+.inventory-issue-filters select,
+.inventory-issue-field input,
+.inventory-issue-field select,
+.inventory-issue-field textarea,
+.inventory-issue-draft-lines input,
+.inventory-issue-draft-lines select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid #cdddf1;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--inventory-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+}
+
+.inventory-issue-search input {
+  height: 38px;
+  border: 0;
+}
+
+.inventory-issue-filters select,
+.inventory-issue-field input,
+.inventory-issue-field select,
+.inventory-issue-draft-lines input,
+.inventory-issue-draft-lines select {
+  height: 40px;
+  padding: 0 10px;
+}
+
+.inventory-issue-field {
+  display: grid;
+  gap: 6px;
+  color: #526783;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.inventory-issue-field textarea {
+  min-height: 76px;
+  padding: 10px;
+  resize: vertical;
+}
+
+.inventory-issue-item-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.inventory-issue-item-grid article {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #d8e5f5;
+  border-radius: 8px;
+  background: #f9fbff;
+}
+
+.inventory-issue-item-grid article.is-selected {
+  border-color: #8eb5ff;
+  background: #edf5ff;
+}
+
+.inventory-issue-item-grid strong,
+.inventory-issue-item-grid span,
+.inventory-issue-item-grid small,
+.inventory-issue-employee strong,
+.inventory-issue-employee small,
+.inventory-issue-draft-lines strong,
+.inventory-issue-draft-lines span {
+  display: block;
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-issue-item-grid strong {
+  color: var(--inventory-text);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.inventory-issue-item-grid span,
+.inventory-issue-item-grid small,
+.inventory-issue-draft-lines span,
+.inventory-issue-line-stock {
+  color: var(--inventory-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inventory-issue-stock-line {
+  justify-content: space-between;
+}
+
+.inventory-issue-employee {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #d8e5f5;
+  border-radius: 8px;
+  background: #f7fbff;
+}
+
+.inventory-issue-employee > span {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  color: #1d4ed8;
+  background: #eaf2ff;
+  font-weight: 900;
+}
+
+.inventory-issue-draft-lines {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.inventory-issue-draft-lines article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.8fr) 78px;
+  gap: 8px;
+  align-items: end;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #d8e5f5;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.inventory-issue-draft-lines article.has-warning {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.inventory-issue-draft-lines label {
+  display: grid;
+  gap: 4px;
+  color: #526783;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.inventory-issue-line-stock,
+.inventory-issue-draft-lines .button {
+  grid-column: 1 / -1;
+}
+
+.inventory-issue-table-wrap {
+  overflow: auto;
+  min-width: 0;
+  border: 1px solid #e1ebf8;
+  border-radius: 8px;
+}
+
+.inventory-issue-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.inventory-issue-table th,
+.inventory-issue-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef3fb;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.inventory-issue-table th {
+  color: #647694;
+  background: #f7fbff;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.inventory-issue-table td strong,
+.inventory-issue-table td span {
+  display: block;
+}
+
+.inventory-issue-table td span {
+  margin-top: 2px;
+  color: var(--inventory-muted);
+  font-size: 12px;
+}
+
+.inventory-issue-status {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: #1d4ed8;
+  background: #eaf2ff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.inventory-issue-state {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-height: 120px;
+  padding: 18px;
+  text-align: center;
+}
+
+.inventory-issue-state > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: #1d4ed8;
+  background: #eaf2ff;
+  font-weight: 900;
+}
+
+.inventory-issue-state strong,
+.inventory-issue-state p {
+  margin: 0;
+}
+
+.inventory-issue-state strong {
+  color: var(--inventory-text);
+  font-weight: 900;
+}
+
+.inventory-issue-state p {
+  max-width: 460px;
+  color: var(--inventory-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.inventory-issue-state.is-error {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.inventory-issue-state.is-error > span {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+.inventory-operations-screen {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.inventory-operations-commandbar,
+.inventory-operations-catalog,
+.inventory-operations-composer,
+.inventory-operations-ppe-workbench,
+.inventory-operations-journal,
+.inventory-operations-state {
+  border: 1px solid var(--inventory-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(44, 72, 113, 0.08);
+}
+
+.inventory-operations-commandbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+}
+
+.inventory-operations-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.inventory-operations-title-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 8px;
+  color: #fff;
+  background: linear-gradient(135deg, #0f766e 0%, #2563eb 100%);
+}
+
+.inventory-operations-title p,
+.inventory-operations-title h1,
+.inventory-operations-title span {
+  margin: 0;
+}
+
+.inventory-operations-title p {
+  color: var(--inventory-blue);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.inventory-operations-title h1 {
+  color: var(--inventory-text);
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.inventory-operations-title span {
+  display: block;
+  margin-top: 3px;
+  color: var(--inventory-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.inventory-operations-command-actions,
+.inventory-operations-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inventory-operations-command-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.inventory-operations-command-actions .button,
+.inventory-operations-composer .button,
+.inventory-operations-dialog .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.inventory-operations-screen .button.danger {
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  background: #fff5f5;
+}
+
+.inventory-operations-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.inventory-operations-kpi {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  min-height: 58px;
+  padding: 12px 14px;
+  border: 1px solid var(--inventory-border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.inventory-operations-kpi span {
+  color: var(--inventory-muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.inventory-operations-kpi strong {
+  color: var(--inventory-text);
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.inventory-operations-kpi.tone-blue strong {
+  color: var(--inventory-blue);
+}
+
+.inventory-operations-kpi.tone-green strong {
+  color: var(--inventory-green);
+}
+
+.inventory-operations-kpi.tone-red strong {
+  color: var(--inventory-red);
+}
+
+.inventory-operations-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 410px;
+  gap: 14px;
+  min-width: 0;
+  align-items: start;
+}
+
+.inventory-operations-catalog,
+.inventory-operations-composer,
+.inventory-operations-ppe-workbench,
+.inventory-operations-journal {
+  min-width: 0;
+  padding: 14px;
+}
+
+.inventory-operations-ppe-workbench {
+  display: grid;
+  gap: 12px;
+}
+
+.inventory-operations-ppe-workbench > .inventory-operations-field {
+  max-width: 520px;
+}
+
+.inventory-operations-ppe-list {
+  display: grid;
+  gap: 10px;
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.inventory-operations-ppe-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #d7e4f7;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.inventory-operations-ppe-card strong,
+.inventory-operations-ppe-card span,
+.inventory-operations-ppe-card small {
+  display: block;
+  min-width: 0;
+}
+
+.inventory-operations-ppe-card strong {
+  color: var(--inventory-text);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.inventory-operations-ppe-card span,
+.inventory-operations-ppe-card small {
+  margin-top: 3px;
+  color: var(--inventory-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inventory-operations-ppe-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.inventory-return-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.85fr) minmax(360px, 1.35fr) minmax(280px, 0.9fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.inventory-return-panel {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #d7e4f7;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 16px 32px rgba(31, 76, 145, 0.08);
+}
+
+.inventory-return-employees,
+.inventory-return-action {
+  position: sticky;
+  top: 12px;
+}
+
+.inventory-return-employee-list,
+.inventory-return-item-list {
+  display: grid;
+  gap: 8px;
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.inventory-return-employee-list button,
+.inventory-return-item-list button {
+  width: 100%;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid #d7e4f7;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: var(--inventory-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.inventory-return-employee-list button {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 4px 9px;
+}
+
+.inventory-return-employee-list button > span {
+  grid-row: 1 / span 2;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 8px;
+  background: #eaf2ff;
+  color: #1261d8;
+}
+
+.inventory-return-employee-list button strong,
+.inventory-return-employee-list button small,
+.inventory-return-item-main strong,
+.inventory-return-item-main small,
+.inventory-return-item-main em {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-return-employee-list button strong,
+.inventory-return-item-main strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.inventory-return-employee-list button small,
+.inventory-return-item-main small,
+.inventory-return-item-main em {
+  margin-top: 3px;
+  color: var(--inventory-muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.inventory-return-employee-list button.is-selected,
+.inventory-return-item-list button.is-selected {
+  border-color: #1769ff;
+  background: #eef5ff;
+  box-shadow: inset 3px 0 0 #1769ff;
+}
+
+.inventory-return-item-list button {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.inventory-return-item-marker {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 8px;
+  background: #eaf2ff;
+  color: #1769ff;
+}
+
+.inventory-return-status,
+.inventory-operations-type.returned,
+.inventory-operations-type.written_off {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #ecfdf3;
+  color: #047857;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.inventory-operations-type.written_off {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.inventory-return-selected {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d7e4f7;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.inventory-return-selected > span {
+  justify-self: start;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #ecfdf3;
+  color: #047857;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.inventory-return-selected h3 {
+  margin: 0;
+  color: var(--inventory-text);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.inventory-return-selected dl {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.inventory-return-selected dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 7px;
+  border-top: 1px solid #e5edf8;
+}
+
+.inventory-return-selected dt,
+.inventory-return-selected dd {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.inventory-return-selected dt {
+  color: var(--inventory-muted);
+}
+
+.inventory-return-selected dd {
+  color: var(--inventory-text);
+  text-align: right;
+}
+
+.inventory-return-action-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.inventory-return-action-toggle button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  border: 1px solid #cfe0f6;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--inventory-text);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.inventory-return-action-toggle button.is-selected {
+  border-color: #1769ff;
+  background: #1769ff;
+  color: #fff;
+}
+
+.inventory-operations-composer {
+  position: sticky;
+  top: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.inventory-operations-panel-head {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.inventory-operations-panel-head h2,
+.inventory-operations-panel-head p {
+  margin: 0;
+}
+
+.inventory-operations-panel-head h2 {
+  color: var(--inventory-text);
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.inventory-operations-panel-head p {
+  margin-top: 3px;
+  color: var(--inventory-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inventory-operations-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 220px;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.inventory-operations-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid #cdddf1;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.inventory-operations-search svg {
+  color: #7183a1;
+  flex: 0 0 auto;
+}
+
+.inventory-operations-search input,
+.inventory-operations-filters select,
+.inventory-operations-field input,
+.inventory-operations-field select,
+.inventory-operations-field textarea {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid #cdddf1;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--inventory-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+}
+
+.inventory-operations-search input {
+  height: 38px;
+  border: 0;
+}
+
+.inventory-operations-filters select,
+.inventory-operations-field input,
+.inventory-operations-field select {
+  height: 40px;
+  padding: 0 10px;
+}
+
+.inventory-operations-field {
+  display: grid;
+  gap: 6px;
+  color: #526783;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.inventory-operations-field textarea {
+  min-height: 74px;
+  padding: 10px;
+  resize: vertical;
+}
+
+.inventory-operations-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inventory-operations-type-grid button {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  min-height: 94px;
+  padding: 10px;
+  border: 1px solid #d8e5f5;
+  border-radius: 8px;
+  color: var(--inventory-text);
+  background: #f9fbff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inventory-operations-type-grid button.is-selected {
+  border-color: #8eb5ff;
+  background: #edf5ff;
+  box-shadow: inset 0 0 0 1px #8eb5ff;
+}
+
+.inventory-operations-type-grid svg {
+  color: var(--inventory-blue);
+}
+
+.inventory-operations-type-grid strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.inventory-operations-type-grid span {
+  color: var(--inventory-muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.inventory-operations-item-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inventory-operations-item-list button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid #d8e5f5;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--inventory-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.inventory-operations-item-list button.is-selected {
+  border-color: #2563eb;
+  background: #edf5ff;
+}
+
+.inventory-operations-item-list strong,
+.inventory-operations-item-list small,
+.inventory-operations-item-list em {
+  display: block;
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-operations-item-list strong {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.inventory-operations-item-list small {
+  margin-top: 2px;
+  color: var(--inventory-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inventory-operations-item-list em {
+  color: #0f766e;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.inventory-operations-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #d8e5f5;
+  border-radius: 8px;
+  background: #f7fbff;
+}
+
+.inventory-operations-summary div {
+  min-width: 0;
+}
+
+.inventory-operations-summary span,
+.inventory-operations-summary strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-operations-summary span {
+  color: var(--inventory-muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.inventory-operations-summary strong {
+  margin-top: 3px;
+  color: var(--inventory-text);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.inventory-operations-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  color: #c2410c;
+  background: #fff7ed;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.inventory-operations-table-wrap {
+  overflow: auto;
+  min-width: 0;
+  border: 1px solid #e1ebf8;
+  border-radius: 8px;
+}
+
+.inventory-operations-table {
+  width: 100%;
+  min-width: 960px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.inventory-operations-table th,
+.inventory-operations-table td {
+  overflow: hidden;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef3fb;
+  text-align: left;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.inventory-operations-table th {
+  color: #647694;
+  background: #f7fbff;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.inventory-operations-table th:nth-child(1),
+.inventory-operations-table td:nth-child(1) {
+  width: 130px;
+}
+
+.inventory-operations-table th:nth-child(2),
+.inventory-operations-table td:nth-child(2) {
+  width: 140px;
+}
+
+.inventory-operations-table th:nth-child(3),
+.inventory-operations-table td:nth-child(3) {
+  width: 28%;
+}
+
+.inventory-operations-table th:nth-child(4),
+.inventory-operations-table td:nth-child(4),
+.inventory-operations-table th:nth-child(5),
+.inventory-operations-table td:nth-child(5) {
+  width: 16%;
+}
+
+.inventory-operations-table th:nth-child(6),
+.inventory-operations-table td:nth-child(6) {
+  width: 120px;
+}
+
+.inventory-operations-table th:nth-child(7),
+.inventory-operations-table td:nth-child(7) {
+  width: 130px;
+}
+
+.inventory-operations-table td strong,
+.inventory-operations-table td span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventory-operations-table td span {
+  margin-top: 2px;
+  color: var(--inventory-muted);
+  font-size: 12px;
+}
+
+.inventory-operations-type,
+.inventory-operations-status {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: #1d4ed8;
+  background: #eaf2ff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.inventory-operations-type.receipt,
+.inventory-operations-type.return {
+  color: #047857;
+  background: #dcfce7;
+}
+
+.inventory-operations-type.write_off {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.inventory-operations-state {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-height: 120px;
+  padding: 18px;
+  text-align: center;
+}
+
+.inventory-operations-state > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: #1d4ed8;
+  background: #eaf2ff;
+  font-weight: 900;
+}
+
+.inventory-operations-state strong,
+.inventory-operations-state p {
+  margin: 0;
+}
+
+.inventory-operations-state strong {
+  color: var(--inventory-text);
+  font-weight: 900;
+}
+
+.inventory-operations-state p {
+  max-width: 460px;
+  color: var(--inventory-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.inventory-operations-state.is-error {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.inventory-operations-state.is-error > span {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+.inventory-operations-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.38);
+  backdrop-filter: blur(5px);
+}
+
+.inventory-operations-dialog {
+  width: min(520px, 100%);
+  border: 1px solid var(--inventory-border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.24);
+  overflow: hidden;
+}
+
+.inventory-operations-dialog header,
+.inventory-operations-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid #e1ebf8;
+}
+
+.inventory-operations-dialog header {
+  justify-content: flex-start;
+}
+
+.inventory-operations-dialog header > span {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 8px;
+  color: #1d4ed8;
+  background: #eaf2ff;
+}
+
+.inventory-operations-dialog h2,
+.inventory-operations-dialog p {
+  margin: 0;
+}
+
+.inventory-operations-dialog h2 {
+  color: var(--inventory-text);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.inventory-operations-dialog p {
+  margin-top: 2px;
+  color: var(--inventory-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.inventory-operations-dialog dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 16px;
+}
+
+.inventory-operations-dialog dl div {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.inventory-operations-dialog dt,
+.inventory-operations-dialog dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.inventory-operations-dialog dt {
+  color: var(--inventory-muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.inventory-operations-dialog dd {
+  color: var(--inventory-text);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.inventory-operations-dialog footer {
+  justify-content: flex-end;
+  border-top: 1px solid #e1ebf8;
+  border-bottom: 0;
+}
+

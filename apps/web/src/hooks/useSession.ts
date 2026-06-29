@@ -59,6 +59,11 @@ const mockSessionUser: SessionUserDto = {
     "inventory.import",
     "inventory.audit.view",
     "inventory.users.manage",
+    "integrations.perco.view",
+    "integrations.perco.manage",
+    "integrations.perco.sync",
+    "integrations.perco.match",
+    "integrations.perco.logs.view",
   ],
 };
 

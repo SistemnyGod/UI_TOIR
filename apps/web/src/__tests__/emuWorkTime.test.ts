@@ -38,6 +38,26 @@ describe("EMU live work time", () => {
     expect(result.waitingMinutes).toBe(8);
   });
 
+  it("uses participation status over legacy employee status for live pause time", () => {
+    const work = createWork({
+      employees: [
+        createEmployee({
+          arrivedAt: "2026-05-26T06:00:00.000Z",
+          participationStatus: "В ожидании",
+          status: "Работает",
+          waitingMinutes: 3,
+          workMinutes: 12,
+        }),
+      ],
+    });
+
+    const result = calculateLiveWorkSessionMinutes(work, new Date("2026-05-26T06:20:00.000Z"));
+
+    expect(result.workMinutes).toBe(12);
+    expect(result.waitingMinutes).toBe(8);
+    expect(result.employeesById.get("employee-1")?.personalPauseMinutes).toBe(8);
+  });
+
   it("adds live pause minutes to other work when employee is assigned elsewhere", () => {
     const work = createWork({
       employees: [
@@ -75,6 +95,32 @@ describe("EMU live work time", () => {
     expect(result.workMinutes).toBe(22);
     expect(result.waitingMinutes).toBe(4);
   });
+
+  it("counts session time by merged employee intervals and keeps personal minutes separately", () => {
+    const work = createWork({
+      employees: [
+        createEmployee({
+          employeeId: "employee-1",
+          intervals: [
+            createInterval("interval-1", "participant-1", "employee-1", "Работает", "2026-05-26T06:00:00.000Z", "2026-05-26T06:10:00.000Z"),
+          ],
+        }),
+        createEmployee({
+          employeeId: "employee-2",
+          id: "participant-2",
+          intervals: [
+            createInterval("interval-2", "participant-2", "employee-2", "Работает", "2026-05-26T06:00:00.000Z", "2026-05-26T06:10:00.000Z"),
+          ],
+        }),
+      ],
+    });
+
+    const result = calculateLiveWorkSessionMinutes(work, new Date("2026-05-26T06:20:00.000Z"));
+
+    expect(result.workMinutes).toBe(10);
+    expect(result.employeesById.get("employee-1")?.personalWorkMinutes).toBe(10);
+    expect(result.employeesById.get("employee-2")?.personalWorkMinutes).toBe(10);
+  });
 });
 
 function createWork(overrides: Partial<EmuWorkSessionDto> = {}): EmuWorkSessionDto {
@@ -87,7 +133,9 @@ function createWork(overrides: Partial<EmuWorkSessionDto> = {}): EmuWorkSessionD
     employees: [createEmployee()],
     id: "work-1",
     isCarriedOver: false,
+    operationalStatus: "В работе",
     otherWorkMinutes: 0,
+    planTaskId: null,
     resultComment: "",
     resultStatus: "",
     rowVersion: 1,
@@ -117,5 +165,27 @@ function createEmployee(overrides: Partial<EmuWorkSessionDto["employees"][number
     waitingMinutes: 0,
     workMinutes: 0,
     ...overrides,
+  };
+}
+
+function createInterval(
+  id: string,
+  workSessionEmployeeId: string,
+  employeeId: string,
+  status: string,
+  startedAt: string,
+  endedAt: string | null,
+): NonNullable<EmuWorkSessionDto["employees"][number]["intervals"]>[number] {
+  return {
+    createdAt: startedAt,
+    createdByName: "test",
+    employeeId,
+    endedAt,
+    id,
+    reason: "",
+    startedAt,
+    status,
+    workSessionEmployeeId,
+    workSessionId: "work-1",
   };
 }

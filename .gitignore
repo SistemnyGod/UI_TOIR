@@ -4,7 +4,13 @@ obj/
 node_modules/
 dist/
 .vite/
+.tmp/
+apk-check/
 output/
+tmp/
+apps/web/.tmp/
+artifacts/
+artifacts/publish/
 .env
 .env.*
 !.env.example
@@ -24,6 +30,7 @@ infra/docker/certs/*.srl
 infra/docker/certs/*.pfx
 infra/docker/secrets/
 Мобильное приложение/secrets/
+apps/mobile/secrets/
 *firebase-adminsdk*.json
 firebase-service-account*.json
 google-services.json

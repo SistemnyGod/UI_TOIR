@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 
 import { checkServerConnection } from "@/api/serverHealthApi";
 import {
@@ -109,8 +109,7 @@ export function ServerSettingsScreen() {
           <View style={styles.headerText}>
             <Text style={[styles.title, { color: colors.text }]}>Адрес сервера</Text>
             <Text style={[styles.text, { color: colors.mutedText }]}>
-              Для работы в одной Wi-Fi/локальной сети используйте адрес сервера {localLanServerBaseUrl}. Локальные данные телефона
-              при смене адреса не очищаются.
+              Для работы в одной Wi-Fi/локальной сети используйте адрес сервера {localLanServerBaseUrl}. Локальные данные телефона при смене адреса не очищаются.
             </Text>
           </View>
           {isPilotHttpServer(serverUrl) ? <StatusPill label="Локальный HTTP" tone="neutral" /> : null}
@@ -129,8 +128,7 @@ export function ServerSettingsScreen() {
         />
 
         <Text style={[styles.note, { color: colors.mutedText }]}>
-          Проверка должна открыть /api/v1/mobile/health. Если телефон не подключается, чаще всего мешает Windows Firewall или
-          Wi-Fi изолирует клиентов.
+          Проверка должна открыть /api/v1/mobile/health. Если телефон не подключается, чаще всего мешает Windows Firewall или Wi-Fi изолирует клиентов.
         </Text>
 
         {statusMessage ? (
@@ -148,24 +146,13 @@ export function ServerSettingsScreen() {
         <View style={styles.buttonColumn}>
           <PrimaryButton
             disabled={isBusy}
+            icon="wifi-outline"
             label={isBusy ? "Проверка..." : "Подключить локальный сервер"}
             onPress={handleUseLocalServer}
           />
-          <PrimaryButton label="Проверить подключение" disabled={isBusy} onPress={handleCheck} />
-          <PrimaryButton label="Сохранить вручную" disabled={isBusy} onPress={handleSave} />
-          <Pressable
-            accessibilityRole="button"
-            disabled={isBusy}
-            onPress={handleReset}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              { borderColor: colors.border },
-              pressed && !isBusy ? { backgroundColor: colors.background } : null,
-              isBusy ? styles.disabled : null
-            ]}
-          >
-            <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Сбросить</Text>
-          </Pressable>
+          <PrimaryButton icon="pulse-outline" label="Проверить подключение" disabled={isBusy} onPress={handleCheck} variant="secondary" />
+          <PrimaryButton icon="save-outline" label="Сохранить вручную" disabled={isBusy} onPress={handleSave} variant="secondary" />
+          <PrimaryButton icon="refresh-circle-outline" label="Сбросить" disabled={isBusy} onPress={handleReset} variant="ghost" />
         </View>
       </Card>
     </Screen>
@@ -219,19 +206,5 @@ const styles = StyleSheet.create({
   },
   buttonColumn: {
     gap: 10
-  },
-  secondaryButton: {
-    alignItems: "center",
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14
-  },
-  secondaryButtonText: {
-    fontSize: 16,
-    fontWeight: "600"
-  },
-  disabled: {
-    opacity: 0.6
   }
 });

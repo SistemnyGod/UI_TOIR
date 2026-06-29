@@ -1,0 +1,325 @@
+.emu-filter-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.emu-history-employee-filter {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  min-width: 220px;
+}
+
+.emu-history-employee-results,
+.emu-history-selected-employee {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  border: 1px solid #d8e3f2;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 34px rgba(15, 35, 75, 0.14);
+}
+
+.emu-history-employee-results {
+  display: grid;
+  gap: 4px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 6px;
+}
+
+.emu-history-employee-results button,
+.emu-history-selected-employee {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #172747;
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+  padding: 8px 9px;
+  text-align: left;
+}
+
+.emu-history-employee-results button:hover,
+.emu-history-selected-employee:hover {
+  background: #eef5ff;
+}
+
+.emu-history-employee-results strong,
+.emu-history-selected-employee {
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.emu-history-employee-results span,
+.emu-history-selected-employee span,
+.emu-history-employee-results em {
+  color: #66738a;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.emu-history-selected-employee {
+  position: static;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-color: #c9ddff;
+  background: #eef5ff;
+  box-shadow: none;
+  margin-top: 2px;
+}
+
+.emu-history-selected-employee span {
+  color: #0d5de8;
+}
+
+.emu-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.emu-form-grid-two {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  margin-top: 12px;
+}
+
+.emu-form-grid-one {
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 12px;
+}
+
+.emu-filter-panel label,
+.emu-form-grid label,
+.emu-modal label {
+  color: #52627d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.emu-filter-panel input,
+.emu-filter-panel select,
+.emu-history-employee-filter input,
+.emu-form-grid input,
+.emu-form-grid select,
+.emu-modal input,
+.emu-modal select,
+.emu-modal textarea,
+.emu-plan-create input,
+.emu-plan-create select,
+.emu-inline-form input,
+.emu-inline-form select {
+  width: 100%;
+  border: 1px solid #d8e3f2;
+  border-radius: 8px;
+  background: #fff;
+  color: #172747;
+  font: 600 13px/1.2 inherit;
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.emu-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+}
+
+.emu-checkbox input {
+  width: 16px;
+  min-height: 16px;
+}
+
+.emu-table-wrap {
+  overflow: auto;
+  margin-top: 16px;
+}
+
+.emu-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.emu-table th,
+.emu-table td {
+  border-bottom: 1px solid #e6eef8;
+  padding: 11px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.emu-table th {
+  color: #6b7891;
+  font-size: 12px;
+}
+
+.emu-table tr.selected td {
+  background: #f4f8ff;
+}
+
+.emu-history-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 8px;
+}
+
+.emu-history-scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.emu-history-scope span {
+  color: #6b7891;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.emu-history-scope strong {
+  color: #172747;
+}
+
+.emu-history-stats article {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  border: 1px solid #e4edf8;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.emu-history-stats span,
+.emu-kv dt {
+  color: #6b7891;
+  font-size: 12px;
+}
+
+.emu-history-stats strong,
+.emu-kv dd {
+  display: block;
+  margin: 0;
+  color: #172747;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.emu-employee-analytics {
+  border: 1px solid #e4edf8;
+  border-radius: 8px;
+  background: #f8fbff;
+  margin-top: 12px;
+  padding: 12px;
+}
+
+.emu-employee-time-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 8px;
+}
+
+.emu-employee-time-grid article {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dce8f7;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.emu-employee-time-grid strong,
+.emu-employee-time-grid span,
+.emu-employee-time-grid small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.emu-employee-time-grid strong {
+  color: #172747;
+  font-size: 13px;
+}
+
+.emu-employee-time-grid span {
+  color: #1d6fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.emu-employee-time-grid small,
+.emu-employee-time-grid p {
+  color: #52627d;
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.emu-avatar-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.emu-avatar-title h3,
+.emu-avatar-title p {
+  margin: 0;
+}
+
+.emu-kv {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.emu-kv div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.emu-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.emu-detail-grid div {
+  border: 1px solid #e4edf8;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.emu-detail-grid strong,
+.emu-detail-grid span,
+.emu-detail-grid small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.emu-result-text {
+  border-radius: 8px;
+  background: #f6f9fd;
+  color: #25395f;
+  line-height: 1.45;
+  padding: 12px;
+}
+
+.emu-subtitle {
+  margin: 16px 0 8px;
+  color: #172747;
+  font-size: 15px;
+}
+

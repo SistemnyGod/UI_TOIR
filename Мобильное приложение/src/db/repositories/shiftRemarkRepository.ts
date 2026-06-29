@@ -14,15 +14,28 @@ export type ShiftRemark = {
   status: "pending" | "accepted" | "duplicate" | "retryLater" | "rejected" | "conflict";
   createdAtLocal: string;
   serverRemarkId: string | null;
+  sectionId: string | null;
+  sectionName: string | null;
+  employeeId: string | null;
+  employeeName: string | null;
+  syncStatus: string;
 };
 
-export async function createShiftRemarkLocally(input: { title: string; comment: string; mediaClientFileIds?: string[] }) {
+export async function createShiftRemarkLocally(input: {
+  title?: string;
+  comment: string;
+  sectionId: string;
+  sectionName: string;
+  employeeId: string;
+  employeeName: string;
+  mediaClientFileIds?: string[];
+}) {
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
     throw new Error("Нужно войти в мобильный аккаунт.");
   }
 
-  const title = input.title.trim() || "Замечание по смене";
+  const title = input.title?.trim() || "Замечание по смене";
   const comment = input.comment.trim();
   if (!comment) {
     throw new Error("Заполните текст замечания.");
@@ -34,57 +47,77 @@ export async function createShiftRemarkLocally(input: { title: string; comment: 
   const createdAtLocal = new Date().toISOString();
   const mediaClientFileIds = input.mediaClientFileIds ?? [];
 
-  await db.withExclusiveTransactionAsync(async (tx) => {
-    await tx.runAsync(
-      `
-        INSERT INTO shift_remarks (
-          remark_id,
-          owner_user_id,
-          title,
-          comment,
-          media_client_file_ids_json,
-          status,
-          created_at_local,
-          server_remark_id
-        )
-        VALUES (?, ?, ?, ?, ?, 'pending', ?, NULL)
-      `,
-      [remarkId, ownerUserId, title, comment, JSON.stringify(mediaClientFileIds), createdAtLocal]
-    );
-
-    await tx.runAsync(
-      `
-        INSERT INTO outbox_commands (
-          client_operation_id,
-          owner_user_id,
-          command_type,
-          entity_type,
-          entity_local_id,
-          entity_server_id,
-          payload_json,
-          created_at_local,
-          updated_at_local,
-          attempt_count,
-          status
-        )
-        VALUES (?, ?, 'createShiftRemark', 'shiftRemark', ?, NULL, ?, ?, ?, 0, 'pending')
-      `,
-      [
-        clientOperationId,
-        ownerUserId,
-        remarkId,
-        JSON.stringify({
+  await withSqliteBusyRetry(() =>
+    db.withExclusiveTransactionAsync(async (tx) => {
+      await tx.runAsync(
+        `
+          INSERT INTO shift_remarks (
+            remark_id,
+            owner_user_id,
+            title,
+            comment,
+            media_client_file_ids_json,
+            status,
+            created_at_local,
+            server_remark_id,
+            section_id,
+            section_name,
+            employee_id,
+            employee_name,
+            sync_status
+          )
+          VALUES (?, ?, ?, ?, ?, 'pending', ?, NULL, ?, ?, ?, ?, 'pending')
+        `,
+        [
           remarkId,
+          ownerUserId,
           title,
           comment,
-          mediaClientFileIds,
+          JSON.stringify(mediaClientFileIds),
+          createdAtLocal,
+          input.sectionId,
+          input.sectionName,
+          input.employeeId,
+          input.employeeName
+        ]
+      );
+
+      await tx.runAsync(
+        `
+          INSERT INTO outbox_commands (
+            client_operation_id,
+            owner_user_id,
+            command_type,
+            entity_type,
+            entity_local_id,
+            entity_server_id,
+            payload_json,
+            created_at_local,
+            updated_at_local,
+            attempt_count,
+            status
+          )
+          VALUES (?, ?, 'createShiftRemark', 'shiftRemark', ?, NULL, ?, ?, ?, 0, 'pending')
+        `,
+        [
+          clientOperationId,
+          ownerUserId,
+          remarkId,
+          JSON.stringify({
+            remarkId,
+            title,
+            comment,
+            sectionId: input.sectionId,
+            employeeId: input.employeeId,
+            mediaClientFileIds,
+            createdAtLocal
+          }),
+          createdAtLocal,
           createdAtLocal
-        }),
-        createdAtLocal,
-        createdAtLocal
-      ]
-    );
-  });
+        ]
+      );
+    })
+  );
 
   return remarkId;
 }
@@ -131,7 +164,8 @@ export async function attachMediaToShiftRemark(remarkId: string, file: LocalMobi
         `
           UPDATE shift_remarks
           SET media_client_file_ids_json = ?,
-              status = 'pending'
+              status = 'pending',
+              sync_status = 'pending'
           WHERE remark_id = ?
         `,
         [JSON.stringify(mediaClientFileIds), remarkId]
@@ -196,9 +230,14 @@ export async function listShiftRemarks(limit = 20) {
     title: string;
     comment: string;
     media_client_file_ids_json: string;
-    status: ShiftRemark["status"];
+   status: ShiftRemark["status"];
     created_at_local: string;
     server_remark_id: string | null;
+    section_id: string | null;
+    section_name: string | null;
+    employee_id: string | null;
+    employee_name: string | null;
+    sync_status: string;
   }>(
     `
       SELECT
@@ -208,7 +247,12 @@ export async function listShiftRemarks(limit = 20) {
         media_client_file_ids_json,
         status,
         created_at_local,
-        server_remark_id
+        server_remark_id,
+        section_id,
+        section_name,
+        employee_id,
+        employee_name,
+        sync_status
       FROM shift_remarks
       WHERE owner_user_id = ?
       ORDER BY created_at_local DESC
@@ -224,7 +268,12 @@ export async function listShiftRemarks(limit = 20) {
     mediaClientFileIds: safeParseStringArray(row.media_client_file_ids_json),
     status: row.status,
     createdAtLocal: row.created_at_local,
-    serverRemarkId: row.server_remark_id
+    serverRemarkId: row.server_remark_id,
+    sectionId: row.section_id,
+    sectionName: row.section_name,
+    employeeId: row.employee_id,
+    employeeName: row.employee_name,
+    syncStatus: row.sync_status
   }));
 }
 

@@ -1,0 +1,176 @@
+/* System log final pass */
+.inventory-system-log-screen {
+  gap: 10px;
+}
+
+.inventory-system-log-commandbar {
+  align-items: center;
+  border-radius: 8px;
+  min-height: 74px;
+  padding: 12px 14px;
+}
+
+.inventory-system-log-title {
+  min-width: 0;
+}
+
+.inventory-system-log-title-icon {
+  border-radius: 8px;
+  flex: 0 0 42px;
+  height: 42px;
+  width: 42px;
+}
+
+.inventory-system-log-title h1 {
+  font-size: 28px;
+  line-height: 1.05;
+}
+
+.inventory-system-log-title span {
+  max-width: 760px;
+}
+
+.inventory-system-log-kpis {
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inventory-system-log-kpi {
+  border-color: var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  min-height: 54px;
+  padding: 10px 12px;
+}
+
+.inventory-system-log-kpi span {
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.inventory-system-log-kpi strong {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.inventory-system-log-filters {
+  border-radius: 8px;
+  box-shadow: none;
+  gap: 8px;
+  grid-template-columns:
+    minmax(260px, 1fr)
+    minmax(132px, 0.44fr)
+    minmax(132px, 0.44fr)
+    minmax(142px, 0.48fr)
+    minmax(122px, 0.36fr)
+    minmax(122px, 0.36fr)
+    minmax(112px, 0.32fr);
+  padding: 10px;
+}
+
+.inventory-system-log-search,
+.inventory-system-log-filters select,
+.inventory-system-log-filters input[type="date"] {
+  border-color: var(--issue-border-strong);
+  border-radius: 8px;
+  height: 40px;
+}
+
+.inventory-system-log-search input,
+.inventory-system-log-filters select,
+.inventory-system-log-filters input[type="date"] {
+  font-size: 12px;
+}
+
+.inventory-system-log-card {
+  border-radius: 8px;
+  box-shadow: none;
+  padding: 12px;
+}
+
+.inventory-system-log-panel-head {
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.inventory-system-log-panel-head h2 {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.inventory-system-log-pager {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.inventory-system-log-pager span {
+  color: var(--issue-text);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.inventory-system-log-pager .button {
+  min-height: 30px;
+  padding: 0 9px;
+}
+
+.inventory-system-log-table-wrap {
+  border-radius: 8px;
+}
+
+.inventory-system-log-table {
+  min-width: 980px;
+}
+
+.inventory-system-log-table th {
+  background: #f5f8fc;
+  color: var(--issue-muted);
+  font-size: 10px;
+  letter-spacing: 0;
+  padding: 10px 12px;
+}
+
+.inventory-system-log-table td {
+  color: var(--issue-text);
+  font-size: 12px;
+  padding: 11px 12px;
+}
+
+.inventory-system-log-action {
+  border-radius: 999px;
+  font-size: 11px;
+  max-width: 180px;
+  overflow: hidden;
+  padding: 7px 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-system-log-state,
+.inventory-system-log-drawer {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+@media (max-width: 1360px) {
+  .inventory-system-log-filters {
+    grid-template-columns: minmax(240px, 1fr) repeat(3, minmax(132px, 0.48fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .inventory-system-log-kpis,
+  .inventory-system-log-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-system-log-commandbar,
+  .inventory-system-log-panel-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+

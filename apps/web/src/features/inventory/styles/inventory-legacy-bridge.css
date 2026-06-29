@@ -1,0 +1,351 @@
+/* Legacy Web Inventory visual bridge.
+   This keeps the Patrol360 class structure, but aligns surfaces, controls,
+   tables and PPE screens with the source Web-inventory interface. */
+.inventory-web-shell {
+  --inventory-bg: #f6f9fe;
+  --inventory-card: rgba(255, 255, 255, 0.94);
+  --inventory-card-soft: #f7faff;
+  --inventory-border: #e3eaf5;
+  --inventory-border-strong: #d1dced;
+  --inventory-text: #17213a;
+  --inventory-muted: #70809a;
+  --inventory-blue: #2b6df3;
+  --inventory-blue-strong: #1657dc;
+  --inventory-blue-soft: #edf4ff;
+  --inventory-green: #16a373;
+  --inventory-red: #ef4444;
+  --inventory-shadow: 0 1px 2px rgba(15, 23, 42, 0.035), 0 18px 52px rgba(58, 92, 145, 0.08);
+  --inventory-shadow-lifted: 0 22px 52px rgba(46, 74, 119, 0.13);
+  background:
+    linear-gradient(rgba(43, 109, 243, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(43, 109, 243, 0.035) 1px, transparent 1px),
+    linear-gradient(180deg, #fbfdff 0%, #f3f7fd 100%);
+  background-size: 34px 34px, 34px 34px, auto;
+  color: var(--inventory-text);
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.inventory-web-sidebar,
+.inventory-web-topbar,
+.inventory-ppe-commandbar,
+.inventory-ppe-composer,
+.inventory-ppe-journal,
+.inventory-ppe-inspector,
+.inventory-ppe-state,
+.inventory-ppe-card-section,
+.inventory-ppe-wizard-head,
+.inventory-ppe-wizard-panel,
+.inventory-ppe-wizard-preview,
+.inventory-ppe-picker,
+.inventory-ppe-checklist,
+.inventory-items-commandbar,
+.inventory-items-panel,
+.inventory-item-inspector,
+.inventory-overview-commandbar,
+.inventory-overview-panel,
+.inventory-issue-commandbar,
+.inventory-issue-panel,
+.inventory-operations-commandbar,
+.inventory-operations-panel,
+.inventory-history-commandbar,
+.inventory-history-panel,
+.inventory-reports-commandbar,
+.inventory-reports-panel,
+.inventory-employees-commandbar,
+.inventory-employees-panel,
+.inventory-users-commandbar,
+.inventory-users-panel,
+.inventory-system-log-commandbar,
+.inventory-system-log-panel,
+.inventory-custody-commandbar,
+.inventory-custody-panel,
+.inventory-web-panel {
+  border: 1px solid var(--inventory-border);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96)),
+    var(--inventory-card);
+  box-shadow: var(--inventory-shadow);
+}
+
+.inventory-web-sidebar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.96)),
+    var(--inventory-card);
+  box-shadow: 16px 0 44px rgba(46, 74, 119, 0.08);
+}
+
+.inventory-web-brand-mark,
+.inventory-ppe-title-icon,
+.inventory-ppe-profile > span,
+.inventory-ppe-wizard-employee > span,
+.inventory-ppe-state > span {
+  border-radius: 10px;
+  background: linear-gradient(180deg, #2f7cff, #2563eb);
+  color: #fff;
+  box-shadow: 0 8px 16px rgba(43, 109, 243, 0.26);
+}
+
+.inventory-web-nav-item {
+  border-radius: 10px;
+  transition:
+    transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.inventory-web-nav-item:hover,
+.inventory-web-nav-item.is-active {
+  border-color: #b8d2ff;
+  background: #edf4ff;
+  color: var(--inventory-blue-strong);
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.12);
+}
+
+.inventory-web-shell .button,
+.inventory-web-shell button {
+  border-radius: 9px;
+  transition:
+    transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.inventory-web-shell .button:not(.primary):not(.danger),
+.inventory-web-shell button:not(.primary):not(.danger):not(.inventory-ppe-row-menu-button) {
+  border-color: var(--inventory-border);
+  background: linear-gradient(180deg, #fff, #f8fbff);
+  color: var(--inventory-text);
+}
+
+.inventory-web-shell .button:hover:not(:disabled),
+.inventory-web-shell button:hover:not(:disabled) {
+  border-color: #9db9f8;
+  color: var(--inventory-blue-strong);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.12);
+}
+
+.inventory-web-shell .button.primary,
+.inventory-web-shell button.primary,
+.inventory-web-shell .primary-action {
+  border-color: rgba(37, 99, 235, 0.9);
+  background: linear-gradient(180deg, #2f7cff, #2563eb);
+  color: #fff;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.2);
+}
+
+.inventory-web-shell .button.danger,
+.inventory-web-shell button.danger,
+.inventory-web-shell .is-danger {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: var(--inventory-red);
+}
+
+.inventory-web-shell input,
+.inventory-web-shell select,
+.inventory-web-shell textarea,
+.inventory-ppe-field input,
+.inventory-ppe-field select,
+.inventory-ppe-field textarea,
+.inventory-ppe-wizard-lines input,
+.inventory-ppe-wizard-lines select,
+.inventory-ppe-picker select,
+.inventory-ppe-journal .inventory-ppe-picker-filters input,
+.inventory-ppe-journal .inventory-ppe-picker-filters select {
+  border: 1px solid var(--inventory-border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--inventory-text);
+  box-shadow: none;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
+}
+
+.inventory-web-shell input:focus,
+.inventory-web-shell select:focus,
+.inventory-web-shell textarea:focus,
+.inventory-ppe-field input:focus,
+.inventory-ppe-field select:focus,
+.inventory-ppe-field textarea:focus,
+.inventory-ppe-wizard-lines input:focus,
+.inventory-ppe-wizard-lines select:focus,
+.inventory-ppe-picker select:focus,
+.inventory-ppe-journal .inventory-ppe-picker-filters input:focus,
+.inventory-ppe-journal .inventory-ppe-picker-filters select:focus {
+  border-color: #8fb0f5;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13), 0 8px 20px rgba(30, 41, 59, 0.06);
+}
+
+.inventory-ppe-kpi,
+.inventory-items-kpi,
+.inventory-overview-kpi,
+.inventory-operations-kpi,
+.inventory-history-kpi,
+.inventory-reports-kpi,
+.inventory-employees-kpi,
+.inventory-users-kpi,
+.inventory-system-log-kpi,
+.inventory-custody-kpi {
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 8px 20px rgba(30, 41, 59, 0.05);
+}
+
+.inventory-ppe-kpi span,
+.inventory-items-kpi span,
+.inventory-overview-kpi span,
+.inventory-operations-kpi span,
+.inventory-history-kpi span,
+.inventory-reports-kpi span,
+.inventory-employees-kpi span,
+.inventory-users-kpi span,
+.inventory-system-log-kpi span,
+.inventory-custody-kpi span {
+  color: var(--inventory-muted);
+}
+
+.inventory-ppe-table,
+.inventory-ppe-lines-table,
+.inventory-ppe-history-table,
+.inventory-items-table,
+.inventory-operations-table,
+.inventory-history-table,
+.inventory-reports-table,
+.inventory-employees-table,
+.inventory-users-table,
+.inventory-system-log-table,
+.inventory-custody-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.inventory-ppe-table th,
+.inventory-ppe-lines-table th,
+.inventory-ppe-history-table th,
+.inventory-items-table th,
+.inventory-operations-table th,
+.inventory-history-table th,
+.inventory-reports-table th,
+.inventory-employees-table th,
+.inventory-users-table th,
+.inventory-system-log-table th,
+.inventory-custody-table th {
+  background: #f5f9ff;
+  color: #58708f;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.inventory-ppe-table td,
+.inventory-ppe-lines-table td,
+.inventory-ppe-history-table td,
+.inventory-items-table td,
+.inventory-operations-table td,
+.inventory-history-table td,
+.inventory-reports-table td,
+.inventory-employees-table td,
+.inventory-users-table td,
+.inventory-system-log-table td,
+.inventory-custody-table td {
+  border-top: 1px solid #edf2f8;
+  color: var(--inventory-text);
+  overflow-wrap: anywhere;
+}
+
+.inventory-ppe-table tbody tr:hover,
+.inventory-ppe-table tbody tr.is-selected,
+.inventory-items-table tbody tr:hover,
+.inventory-employees-table tbody tr:hover,
+.inventory-users-table tbody tr:hover,
+.inventory-custody-table tbody tr:hover {
+  background: #f8fbff;
+}
+
+.inventory-ppe-table tbody tr.is-selected {
+  background: #edf4ff;
+  box-shadow: inset 3px 0 0 var(--inventory-blue);
+}
+
+.inventory-ppe-picker-backdrop,
+.inventory-ppe-drawer-backdrop {
+  background: rgba(15, 23, 42, 0.36);
+  backdrop-filter: blur(2px);
+}
+
+.inventory-ppe-picker,
+.inventory-ppe-drawer {
+  border-radius: 10px;
+  box-shadow: var(--inventory-shadow-lifted);
+}
+
+.inventory-ppe-picker-grid button,
+.inventory-ppe-reference-list article,
+.inventory-ppe-wizard-employee,
+.inventory-ppe-combobox-list,
+.inventory-ppe-meta,
+.inventory-ppe-print-preview,
+.inventory-ppe-picker-summary > div {
+  border-radius: 10px;
+}
+
+.inventory-ppe-picker-grid button,
+.inventory-ppe-reference-list article {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.inventory-ppe-picker-grid button.is-selected,
+.inventory-ppe-reference-list article:hover {
+  border-color: #8fb4ff;
+  background: #edf4ff;
+  box-shadow: inset 3px 0 0 var(--inventory-blue);
+}
+
+.inventory-ppe-wizard-preview .inventory-ppe-print-paper,
+.inventory-ppe-print-scroll .inventory-ppe-print-paper {
+  color: #111;
+  font-family: "Times New Roman", Times, serif;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+}
+
+.inventory-ppe-print-paper table {
+  min-width: 0;
+}
+
+.inventory-ppe-print-paper td,
+.inventory-ppe-print-paper th {
+  border-color: #333;
+  background: #fff;
+  color: #111;
+  white-space: normal;
+  vertical-align: middle;
+}
+
+@media (max-width: 980px) {
+  .inventory-web-shell {
+    background-size: 28px 28px, 28px 28px, auto;
+  }
+
+  .inventory-web-sidebar,
+  .inventory-web-topbar,
+  .inventory-ppe-commandbar,
+  .inventory-ppe-journal,
+  .inventory-ppe-inspector,
+  .inventory-ppe-wizard-head,
+  .inventory-ppe-wizard-panel,
+  .inventory-ppe-wizard-preview,
+  .inventory-ppe-picker {
+    border-radius: 10px;
+  }
+}
+

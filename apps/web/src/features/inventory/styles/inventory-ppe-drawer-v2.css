@@ -1,0 +1,290 @@
+/* PPE card drawer v2: compact rows and row action menu. */
+.inventory-ppe-drawer {
+  width: min(1040px, calc(100vw - 36px));
+  max-width: min(1040px, calc(100vw - 36px));
+}
+
+.inventory-ppe-drawer-toolbar {
+  grid-template-columns: repeat(6, minmax(112px, 1fr));
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-wrap {
+  max-height: min(44dvh, 390px);
+  background: #fff;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table {
+  min-width: 900px;
+  table-layout: fixed;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table th,
+.inventory-ppe-drawer .inventory-ppe-lines-table td {
+  height: 42px;
+  padding: 7px 8px;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table th:nth-child(1),
+.inventory-ppe-drawer .inventory-ppe-lines-table td:nth-child(1) {
+  width: 300px;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table th:nth-child(2),
+.inventory-ppe-drawer .inventory-ppe-lines-table td:nth-child(2) {
+  width: 64px;
+  text-align: center;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table th:nth-child(3),
+.inventory-ppe-drawer .inventory-ppe-lines-table td:nth-child(3),
+.inventory-ppe-drawer .inventory-ppe-lines-table th:nth-child(4),
+.inventory-ppe-drawer .inventory-ppe-lines-table td:nth-child(4) {
+  width: 86px;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table th:nth-child(5),
+.inventory-ppe-drawer .inventory-ppe-lines-table td:nth-child(5),
+.inventory-ppe-drawer .inventory-ppe-lines-table th:nth-child(6),
+.inventory-ppe-drawer .inventory-ppe-lines-table td:nth-child(6) {
+  width: 96px;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table th:nth-child(7),
+.inventory-ppe-drawer .inventory-ppe-lines-table td:nth-child(7) {
+  width: 104px;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table th:nth-child(8),
+.inventory-ppe-drawer .inventory-ppe-lines-table td:nth-child(8) {
+  width: 54px;
+  text-align: center;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table tbody tr {
+  background: #fff;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table tbody tr:hover td {
+  background: #f4f8ff;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table tr.has-warning td {
+  background: #fffafd;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table tr.has-warning td:first-child {
+  box-shadow: inset 3px 0 0 #ef4444;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table tr.has-warning:hover td {
+  background: #fff4f7;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table td:first-child strong {
+  display: -webkit-box;
+  max-height: 34px;
+  overflow: hidden;
+  color: var(--inventory-text);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.18;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.inventory-ppe-drawer .inventory-ppe-lines-table td:first-child span {
+  margin-top: 2px;
+  color: #5c7397;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.inventory-ppe-drawer .inventory-ppe-status {
+  max-width: 86px;
+  min-height: 20px;
+  padding: 3px 7px;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-ppe-drawer .inventory-ppe-field-warning {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 3px;
+  padding: 2px 6px;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  color: #b91c1c;
+  background: #fff1f2;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.inventory-ppe-line-menu {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+
+.inventory-ppe-line-menu summary {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 28px;
+  border: 1px solid #c9dcf4;
+  border-radius: 8px;
+  color: #14345d;
+  background: #fff;
+  cursor: pointer;
+  list-style: none;
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.inventory-ppe-line-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.inventory-ppe-line-menu summary:hover,
+.inventory-ppe-line-menu[open] summary {
+  border-color: #2f6df6;
+  color: #0f4bd8;
+  background: #f2f7ff;
+  box-shadow: 0 0 0 2px rgba(47, 109, 246, 0.12);
+}
+
+.inventory-ppe-line-menu-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  min-width: 150px;
+  padding: 5px;
+  border: 1px solid #c9dcf4;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 18px 36px rgba(24, 51, 88, 0.18);
+}
+
+.inventory-ppe-line-menu-popover button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  color: #12345d;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 850;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inventory-ppe-line-menu-popover button:hover {
+  color: #0f4bd8;
+  background: #f2f7ff;
+}
+
+.inventory-ppe-line-menu-popover button.danger {
+  color: #b91c1c;
+}
+
+.inventory-ppe-line-menu-popover button.danger:hover {
+  background: #fff1f2;
+}
+
+.inventory-ppe-line-menu-popover button:disabled {
+  color: #93a4bc;
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.inventory-ppe-line-menu-button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 28px;
+  border: 1px solid #c9dcf4;
+  border-radius: 8px;
+  color: #14345d;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.inventory-ppe-line-menu-button:hover,
+.inventory-ppe-line-menu-button[aria-expanded="true"] {
+  border-color: #2f6df6;
+  color: #0f4bd8;
+  background: #f2f7ff;
+  box-shadow: 0 0 0 2px rgba(47, 109, 246, 0.12);
+}
+
+.inventory-ppe-command-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 7000;
+  background: transparent;
+}
+
+.inventory-ppe-command-menu {
+  position: fixed;
+  z-index: 7001;
+  display: grid;
+  width: 176px;
+  padding: 6px;
+  border: 1px solid #c4d8f3;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(13, 35, 66, 0.22);
+}
+
+.inventory-ppe-command-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #14345d;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 850;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.inventory-ppe-command-menu button:hover {
+  color: #0f4bd8;
+  background: #f2f7ff;
+}
+
+.inventory-ppe-command-menu button.danger {
+  color: #b91c1c;
+}
+
+.inventory-ppe-command-menu button.danger:hover {
+  background: #fff1f2;
+}
+
+.inventory-ppe-command-menu button:disabled {
+  color: #93a4bc;
+  cursor: not-allowed;
+  background: transparent;
+}
+
+@media (max-width: 980px) {
+  .inventory-ppe-drawer-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

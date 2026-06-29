@@ -1,0 +1,147 @@
+/* Accounting reports final pass */
+.inventory-reports-screen {
+  gap: 10px;
+}
+
+.inventory-reports-commandbar {
+  align-items: center;
+  border-radius: 8px;
+  min-height: 74px;
+  padding: 12px 14px;
+}
+
+.inventory-reports-title {
+  min-width: 0;
+}
+
+.inventory-reports-title-icon {
+  border-radius: 8px;
+  flex: 0 0 42px;
+  height: 42px;
+  width: 42px;
+}
+
+.inventory-reports-title h1 {
+  font-size: 28px;
+  line-height: 1.05;
+}
+
+.inventory-reports-title span {
+  max-width: 820px;
+}
+
+.inventory-reports-kpis {
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inventory-reports-kpi {
+  border-color: var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  min-height: 54px;
+  padding: 10px 12px;
+}
+
+.inventory-reports-kpi span {
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.inventory-reports-kpi strong {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.inventory-reports-filters {
+  border-radius: 8px;
+  box-shadow: none;
+  grid-template-columns: minmax(260px, 520px);
+  padding: 10px;
+}
+
+.inventory-reports-search {
+  border-color: var(--issue-border-strong);
+  border-radius: 8px;
+  height: 40px;
+}
+
+.inventory-reports-search input {
+  font-size: 12px;
+}
+
+.inventory-reports-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inventory-reports-card {
+  align-items: start;
+  border-color: var(--issue-border);
+  border-radius: 8px;
+  box-shadow: none;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  min-height: 132px;
+  padding: 12px;
+}
+
+.inventory-reports-card:hover {
+  border-color: var(--issue-border-strong);
+  transform: none;
+}
+
+.inventory-reports-card-icon {
+  border-radius: 8px;
+  height: 42px;
+  width: 42px;
+}
+
+.inventory-reports-card h2 {
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.inventory-reports-card p {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.inventory-reports-formats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
+.inventory-reports-formats .button {
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.inventory-reports-state {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+@media (max-width: 1180px) {
+  .inventory-reports-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .inventory-reports-kpis,
+  .inventory-reports-grid,
+  .inventory-reports-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-reports-commandbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+

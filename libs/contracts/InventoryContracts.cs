@@ -131,7 +131,11 @@ public sealed record InventoryPositionNormDto(
     Guid ItemId,
     string ItemName,
     decimal Quantity,
-    int? LifeMonths);
+    int? LifeMonths,
+    string NormItemName = "",
+    string NormPoint = "",
+    string IssuePeriodText = "",
+    string QuantityText = "");
 
 public sealed record CreateInventorySimpleReferenceDto(
     string Name);
@@ -158,7 +162,11 @@ public sealed record UpsertInventoryPositionNormDto(
     string PositionName,
     Guid ItemId,
     decimal Quantity,
-    int? LifeMonths = null);
+    int? LifeMonths = null,
+    string? NormItemName = null,
+    string? NormPoint = null,
+    string? IssuePeriodText = null,
+    string? QuantityText = null);
 
 public sealed record CreateInventoryCategoryDto(
     string Name,
@@ -223,7 +231,7 @@ public sealed record InventoryInitialStockDto(
 public sealed record CreateInventoryOperationDto(
     string Type,
     Guid ItemId,
-    Guid WarehouseId,
+    Guid? WarehouseId,
     decimal Quantity,
     Guid? EmployeeId = null,
     DateTimeOffset? MovedAt = null,
@@ -303,7 +311,7 @@ public sealed record InventoryCustodyModuleOptionsDto(
 public sealed record CreateInventoryCustodyRecordDto(
     Guid EmployeeId,
     Guid ItemId,
-    Guid WarehouseId,
+    Guid? WarehouseId,
     decimal Quantity,
     string? Comment = null,
     Guid? DocumentId = null);
@@ -341,7 +349,9 @@ public sealed record InventoryPpeCardDto(
     string EmployeeName,
     string Position,
     string Status,
-    int LinesCount);
+    int LinesCount,
+    decimal AmountMinor,
+    int ZeroPriceLines);
 
 public sealed record InventoryPpeCardDetailDto(
     Guid Id,
@@ -353,7 +363,17 @@ public sealed record InventoryPpeCardDetailDto(
     string Status,
     DateTime CreatedAt,
     string Comment,
+    InventoryPpeEmployeeDetailsDto EmployeeDetails,
     IReadOnlyList<InventoryPpeCardLineDto> Lines);
+
+public sealed record InventoryPpeEmployeeDetailsDto(
+    string Gender = "",
+    string Height = "",
+    string ClothingSize = "",
+    string ShoeSize = "",
+    string HeadSize = "",
+    string RespiratorSize = "",
+    string HandProtectionSize = "");
 
 public sealed record InventoryPpeCardLineDto(
     Guid Id,
@@ -369,7 +389,10 @@ public sealed record InventoryPpeCardLineDto(
     DateTime? IssuedAt,
     DateTime? DueAt,
     string ModelDescription,
-    string NormPoint);
+    string BrandModelArticle,
+    string NormPoint,
+    string PrintItemName = "",
+    string IssuePeriodText = "");
 
 public sealed record InventoryPpeMovementDto(
     Guid CardId,
@@ -400,15 +423,22 @@ public sealed record InventoryPpeModuleOptionsDto(
 
 public sealed record CreateInventoryPpeCardDto(
     Guid EmployeeId,
-    string? Comment = null);
+    string? Comment = null,
+    InventoryPpeEmployeeDetailsDto? EmployeeDetails = null);
 
 public sealed record UpsertInventoryPpeCardLineDto(
     Guid ItemId,
     Guid? WarehouseId,
     decimal Quantity,
+    long? UnitPriceMinor = null,
     string? Status = null,
     DateTimeOffset? DueAt = null,
-    string? Comment = null);
+    string? Comment = null,
+    string? PrintItemName = null,
+    string? NormPoint = null,
+    string? IssuePeriodText = null,
+    DateTimeOffset? IssuedAt = null,
+    string? BrandModelArticle = null);
 
 public sealed record InventoryReportDto(
     string Id,
@@ -422,7 +452,9 @@ public sealed record InventoryHistoryDto(
     string Action,
     string Description,
     string Actor,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string EmployeeName = "",
+    string ItemName = "");
 
 public sealed record InventoryExportJobDto(
     Guid Id,

@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+const mojibakePattern = new RegExp("\\u0420[\\u0402\\u040e\\u045c\\u045f\\u0098\\u201d]|\\u0421\\u0453|\\u0412\\u00b7");
+
 const sessionUser = {
   id: "admin-1",
   login: "admin",
@@ -89,7 +91,7 @@ test("inventory history and system log use server filters and show clean text", 
   await expect(page.locator(".inventory-history-drawer")).toContainText("Описание");
 
   const historyText = await page.locator(".inventory-history-screen").innerText();
-  expect(historyText).not.toMatch(/Рџ|РЎ|Рќ|Рђ|Р”|Р|СЃ|В·/);
+  expect(historyText).not.toMatch(mojibakePattern);
 
   await page.goto("/#inventory-system-log");
   await expect(page.getByRole("heading", { name: "Системный журнал" })).toBeVisible();
@@ -100,7 +102,7 @@ test("inventory history and system log use server filters and show clean text", 
   await expect(page.locator(".inventory-system-log-drawer")).toContainText("Детали");
 
   const systemLogText = await page.locator(".inventory-system-log-screen").innerText();
-  expect(systemLogText).not.toMatch(/Рџ|РЎ|Рќ|Рђ|Р”|Р|СЃ|В·/);
+  expect(systemLogText).not.toMatch(mojibakePattern);
 });
 
 test("inventory audit endpoints are not available without audit permission", async ({ page }) => {

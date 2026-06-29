@@ -4,37 +4,55 @@ import { refreshMobileData } from "@/services/mobileDataRefreshService";
 import { runForegroundSync } from "@/sync/syncEngine";
 
 const retryDelaysMs = [30_000, 60_000, 120_000, 300_000];
+const fallbackRefreshMs = 300_000;
+const refreshCooldownMs = 15_000;
 
 let retryTimeout: ReturnType<typeof setTimeout> | null = null;
-let refreshInterval: ReturnType<typeof setInterval> | null = null;
+let fallbackRefreshInterval: ReturnType<typeof setInterval> | null = null;
+let scheduledRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
 let retryAttempt = 0;
+let lastRefreshStartedAt = 0;
+let activeRefreshPromise: Promise<boolean> | null = null;
+
+export type MobileDataRefreshReason = "push" | "notificationResponse" | "network" | "appActive" | "fallback" | "manual";
 
 export function subscribeToNetworkSync() {
-  refreshInterval ??= setInterval(() => {
-    triggerMobileDataRefresh();
-  }, 30_000);
+  fallbackRefreshInterval ??= setInterval(() => {
+    requestMobileDataRefresh("fallback");
+  }, fallbackRefreshMs);
 
   const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
     if (state.isConnected && state.isInternetReachable !== false) {
-      triggerMobileDataRefresh();
+      requestMobileDataRefresh("network");
       triggerForegroundSyncWithRetry();
     }
   });
 
   return () => {
     unsubscribeNetInfo();
-    if (refreshInterval) {
-      clearInterval(refreshInterval);
-      refreshInterval = null;
+    if (fallbackRefreshInterval) {
+      clearInterval(fallbackRefreshInterval);
+      fallbackRefreshInterval = null;
+    }
+    if (scheduledRefreshTimeout) {
+      clearTimeout(scheduledRefreshTimeout);
+      scheduledRefreshTimeout = null;
     }
   };
 }
 
 export function triggerForegroundSyncWithRetry() {
   clearScheduledRetry();
+  const pendingRefresh = activeRefreshPromise;
 
-  void runForegroundSync()
+  void (pendingRefresh ? pendingRefresh.catch(() => false) : Promise.resolve(false))
+    .then(() => runForegroundSync())
     .then((result) => {
+      if (result.skipped === "serverUnavailable") {
+        scheduleRetry();
+        return;
+      }
+
       if (result.skipped !== "busy") {
         resetRetryBackoff();
       }
@@ -45,7 +63,43 @@ export function triggerForegroundSyncWithRetry() {
 }
 
 export function triggerMobileDataRefresh() {
-  void refreshMobileData().catch(() => undefined);
+  requestMobileDataRefresh("manual", { force: true });
+}
+
+export function requestMobileDataRefresh(
+  reason: MobileDataRefreshReason,
+  options: { force?: boolean } = {}
+) {
+  const now = Date.now();
+  const elapsedMs = now - lastRefreshStartedAt;
+
+  if (activeRefreshPromise) {
+    scheduleMobileDataRefresh(reason, options.force ? 1_000 : refreshCooldownMs);
+    return;
+  }
+
+  if (!options.force && elapsedMs < refreshCooldownMs) {
+    scheduleMobileDataRefresh(reason, refreshCooldownMs - elapsedMs);
+    return;
+  }
+
+  lastRefreshStartedAt = now;
+  activeRefreshPromise = refreshMobileData()
+    .catch(() => false)
+    .finally(() => {
+      activeRefreshPromise = null;
+    });
+}
+
+function scheduleMobileDataRefresh(reason: MobileDataRefreshReason, delayMs: number) {
+  if (scheduledRefreshTimeout) {
+    return;
+  }
+
+  scheduledRefreshTimeout = setTimeout(() => {
+    scheduledRefreshTimeout = null;
+    requestMobileDataRefresh(reason);
+  }, delayMs);
 }
 
 function scheduleRetry() {

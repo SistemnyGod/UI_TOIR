@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+const mojibakePattern = new RegExp("\\u0420[\\u0402\\u040e\\u045c\\u045f\\u0098\\u201d]|\\u0421\\u0453|\\u043f\\u0457\\u0405");
+
 const adminUser = {
   id: "admin-1",
   login: "admin",
@@ -142,5 +144,5 @@ test("inventory settings loads clean UTF-8 references and lazy-loads editor item
   await expect(page.getByText("Критичных проблем не найдено")).toBeVisible();
 
   const screenText = await page.locator(".inventory-settings-screen").innerText();
-  expect(screenText).not.toMatch(/Рџ|РЎ|Рќ|Рђ|Р”|Р|СЃ|пїЅ/);
+  expect(screenText).not.toMatch(mojibakePattern);
 });

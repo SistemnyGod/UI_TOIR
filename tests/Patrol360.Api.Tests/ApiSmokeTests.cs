@@ -84,6 +84,186 @@ public class ApiSmokeTests
     }
 
     [Fact]
+    public void RequireAnyPermissionAllowsUserWithOneMatchingPermission()
+    {
+        var user = new SessionUserDto(Guid.NewGuid(), "emu", "EMU", ["emu_operator"], ["emu.completed.delete"]);
+        var context = CreateAuthorizationContext(new FakeAuthSessionService(currentUser: user), "token-1");
+        var attribute = new RequireAnyPermissionAttribute("emu.work.delete", "emu.completed.delete");
+
+        attribute.OnAuthorization(context);
+
+        Assert.Null(context.Result);
+    }
+
+    [Fact]
+    public void RequireAnyPermissionReturnsForbiddenWhenUserLacksAllPermissions()
+    {
+        var user = new SessionUserDto(Guid.NewGuid(), "emu", "EMU", ["emu_operator"], ["emu.work-accounting.view"]);
+        var context = CreateAuthorizationContext(new FakeAuthSessionService(currentUser: user), "token-1");
+        var attribute = new RequireAnyPermissionAttribute("emu.work.delete", "emu.completed.delete");
+
+        attribute.OnAuthorization(context);
+
+        var result = Assert.IsType<ObjectResult>(context.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, result.StatusCode);
+    }
+
+    [Fact]
+    public void EmuWorkSessionsRejectsDeletedRowsForBaseOperator()
+    {
+        var workService = new FakeEmuWorkService();
+        var user = new SessionUserDto(Guid.NewGuid(), "emu", "EMU", ["emu_operator"], ["emu.view", "emu.work-accounting.view"]);
+        var controller = CreateEmuController(workService, user);
+
+        var result = controller.WorkSessions(includeDeleted: true);
+
+        var forbidden = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        Assert.Null(workService.LastQuery);
+    }
+
+    [Fact]
+    public void EmuWorkSessionsRequiresHistoryPermissionForCompletedHistory()
+    {
+        var workService = new FakeEmuWorkService();
+        var user = new SessionUserDto(Guid.NewGuid(), "emu", "EMU", ["emu_operator"], ["emu.view", "emu.work-accounting.view"]);
+        var controller = CreateEmuController(workService, user);
+
+        var result = controller.WorkSessions(operationalStatus: "Завершено");
+
+        var forbidden = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        Assert.Null(workService.LastQuery);
+    }
+
+    [Fact]
+    public void EmuWorkSessionsAllowsCompletedHistoryWithHistoryPermission()
+    {
+        var workService = new FakeEmuWorkService();
+        var user = new SessionUserDto(Guid.NewGuid(), "emu", "EMU", ["emu_operator"], ["emu.view", "emu.history.view"]);
+        var controller = CreateEmuController(workService, user);
+        var waitReasonId = Guid.NewGuid();
+        var notCompletedReasonId = Guid.NewGuid();
+
+        var result = controller.WorkSessions(
+            waitReasonId: waitReasonId,
+            notCompletedReasonId: notCompletedReasonId,
+            operationalStatus: "Завершено",
+            resultStatus: "Выполнено",
+            shiftType: "night",
+            employeeSearch: "fitter",
+            problemOnly: true,
+            manualCorrectionsOnly: true,
+            sortBy: "section");
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.IsType<EmuListResponseDto<EmuWorkSessionDto>>(ok.Value);
+        Assert.NotNull(workService.LastQuery);
+        Assert.Equal(waitReasonId, workService.LastQuery!.WaitReasonId);
+        Assert.Equal(notCompletedReasonId, workService.LastQuery.NotCompletedReasonId);
+        Assert.Equal("Завершено", workService.LastQuery!.OperationalStatus);
+        Assert.Equal("Выполнено", workService.LastQuery.ResultStatus);
+        Assert.Equal("night", workService.LastQuery.ShiftType);
+        Assert.Equal("fitter", workService.LastQuery.EmployeeSearch);
+        Assert.True(workService.LastQuery.ProblemOnly);
+        Assert.True(workService.LastQuery.ManualCorrectionsOnly);
+        Assert.Equal("section", workService.LastQuery.SortBy);
+    }
+
+    [Fact]
+    public void EmuCreateWorkSessionRejectsSectionOutsideActorScopes()
+    {
+        var workService = new FakeEmuWorkService();
+        var user = new SessionUserDto(Guid.NewGuid(), "emu", "EMU", ["emu_operator"], ["emu.view", "emu.work.create"]);
+        var controller = CreateEmuController(workService, user);
+
+        var result = controller.CreateWorkSession(new EmuCreateWorkSessionDto(
+            WorkDate: new DateOnly(2026, 6, 15),
+            SectionId: Guid.NewGuid(),
+            ArrivedAt: null,
+            EmployeeIds: [],
+            TaskDescription: "Scoped work"));
+
+        var forbidden = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        Assert.Null(workService.CreatedRequest);
+    }
+
+    [Fact]
+    public void EmuWorkSessionsExportRequiresExportPermissionAttribute()
+    {
+        AssertEndpointPermission(typeof(EmuController), nameof(EmuController.ExportWorkSessions), "emu.reports.export");
+    }
+
+    [Fact]
+    public void EmuWorkSessionsExportReturnsCsvWithCurrentFilters()
+    {
+        var workService = new FakeEmuWorkService();
+        var user = new SessionUserDto(Guid.NewGuid(), "emu", "EMU", ["emu_manager"], ["emu.view", "emu.reports.export"]);
+        var controller = CreateEmuController(workService, user);
+        var dateFrom = new DateOnly(2026, 6, 1);
+        var waitReasonId = Guid.NewGuid();
+
+        var result = controller.ExportWorkSessions(dateFrom: dateFrom, waitReasonId: waitReasonId, operationalStatus: "Завершено", resultStatus: "Выполнено", shiftType: "day", employeeSearch: "master", problemOnly: true, sortBy: "waiting");
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("text/csv; charset=utf-8", file.ContentType);
+        Assert.StartsWith("emu-history-", file.FileDownloadName);
+        Assert.NotEmpty(file.FileContents);
+        Assert.NotNull(workService.LastQuery);
+        Assert.Equal(dateFrom, workService.LastQuery!.DateFrom);
+        Assert.Equal(waitReasonId, workService.LastQuery.WaitReasonId);
+        Assert.Equal("Завершено", workService.LastQuery.OperationalStatus);
+        Assert.Equal("Выполнено", workService.LastQuery.ResultStatus);
+        Assert.Equal("day", workService.LastQuery.ShiftType);
+        Assert.Equal("master", workService.LastQuery.EmployeeSearch);
+        Assert.True(workService.LastQuery.ProblemOnly);
+        Assert.Equal("waiting", workService.LastQuery.SortBy);
+    }
+
+    [Fact]
+    public void EmuWorkSessionsExportRejectsDeletedRowsWithoutAuditPermission()
+    {
+        var workService = new FakeEmuWorkService();
+        var user = new SessionUserDto(Guid.NewGuid(), "emu", "EMU", ["emu_manager"], ["emu.view", "emu.reports.export"]);
+        var controller = CreateEmuController(workService, user);
+
+        var result = controller.ExportWorkSessions(includeDeleted: true);
+
+        var forbidden = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        Assert.Null(workService.LastQuery);
+    }
+
+    [Fact]
+    public void EmuEmployeeWorkHistoryReportUsesEmployeeAndFilters()
+    {
+        var workService = new FakeEmuWorkService();
+        var user = new SessionUserDto(Guid.NewGuid(), "emu", "EMU", ["emu_manager"], ["emu.view", "emu.history.view"]);
+        var controller = CreateEmuController(workService, user);
+        var employeeId = Guid.NewGuid();
+        var sectionId = Guid.NewGuid();
+
+        var result = controller.EmployeeWorkHistoryReport(
+            employeeId,
+            dateFrom: new DateOnly(2026, 6, 1),
+            sectionId: sectionId,
+            shiftType: "night",
+            page: 2,
+            pageSize: 25);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.IsType<EmuEmployeeWorkHistoryReportDto>(ok.Value);
+        Assert.NotNull(workService.LastEmployeeReportQuery);
+        Assert.Equal(employeeId, workService.LastEmployeeReportId);
+        Assert.Equal(employeeId, workService.LastEmployeeReportQuery!.EmployeeId);
+        Assert.Equal(sectionId, workService.LastEmployeeReportQuery.SectionId);
+        Assert.Equal("night", workService.LastEmployeeReportQuery.ShiftType);
+        Assert.Equal(2, workService.LastEmployeeReportQuery.Page);
+        Assert.Equal(25, workService.LastEmployeeReportQuery.PageSize);
+    }
+
+    [Fact]
     public void PatrolReadEndpointsRequireReadPermissions()
     {
         AssertEndpointPermission(typeof(DashboardController), nameof(DashboardController.Summary), "dashboard.read");
@@ -99,6 +279,20 @@ public class ApiSmokeTests
     }
 
     [Fact]
+    public void PercoIntegrationEndpointsRequireExpectedPermissions()
+    {
+        AssertEndpointPermission(typeof(PercoIntegrationController), nameof(PercoIntegrationController.GetSettings), "integrations.perco.view");
+        AssertEndpointPermission(typeof(PercoIntegrationController), nameof(PercoIntegrationController.UpdateSettings), "integrations.perco.manage");
+        AssertEndpointPermission(typeof(PercoIntegrationController), nameof(PercoIntegrationController.TestConnection), "integrations.perco.manage");
+        AssertEndpointPermission(typeof(PercoIntegrationController), nameof(PercoIntegrationController.SyncEmployees), "integrations.perco.sync");
+        AssertEndpointPermission(typeof(PercoIntegrationController), nameof(PercoIntegrationController.SyncEvents), "integrations.perco.sync");
+        AssertEndpointPermission(typeof(PercoIntegrationController), nameof(PercoIntegrationController.GetUnmatchedEmployees), "integrations.perco.match");
+        AssertEndpointPermission(typeof(PercoIntegrationController), nameof(PercoIntegrationController.MatchEmployee), "integrations.perco.match");
+        AssertEndpointPermission(typeof(PercoIntegrationController), nameof(PercoIntegrationController.GetLogs), "integrations.perco.logs.view");
+        AssertEndpointPermission(typeof(PercoIntegrationController), nameof(PercoIntegrationController.GetDiagnostics), "integrations.perco.view");
+    }
+
+    [Fact]
     public void SiteUsersControllerCreateReturnsCreatedUserWhenServiceSucceeds()
     {
         var user = new SiteUserDto(
@@ -106,15 +300,16 @@ public class ApiSmokeTests
             "operator",
             "Operator",
             ["operator"],
-            "active",
-            DateTimeOffset.UtcNow,
-            null,
-            ["dashboard.read"]);
+              "active",
+              DateTimeOffset.UtcNow,
+              null,
+              ["dashboard.read"],
+              []);
         var created = new SiteUserCreatedDto(user, "Patrol-123456!");
         var controller = new SiteUsersController(new FakeSiteUserAdminService(
             createResult: new CreateSiteUserResult(created, new Dictionary<string, string[]>())));
 
-        var result = controller.Create(new CreateSiteUserDto("operator", "Operator", ["operator"], "active"));
+        var result = controller.Create(new CreateSiteUserDto("operator", "Operator", ["operator"], "active", "Password1"));
 
         var objectResult = Assert.IsType<CreatedAtActionResult>(result.Result);
         Assert.Same(created, objectResult.Value);
@@ -135,6 +330,26 @@ public class ApiSmokeTests
         var problem = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
         Assert.Equal(400, objectResult.StatusCode);
         Assert.Contains("login", problem.Errors.Keys);
+    }
+
+    [Fact]
+    public void SiteUsersControllerUpdateScopesReturnsValidationProblemWhenServiceFails()
+    {
+        var controller = new SiteUsersController(new FakeSiteUserAdminService(
+            scopesResult: new UpdateSiteUserScopesResult(null, new Dictionary<string, string[]>
+            {
+                ["scopes"] = ["Invalid EMU section"],
+            })));
+
+        var result = controller.UpdateScopes(Guid.NewGuid(), new UpdateSiteUserScopesDto(
+        [
+            new SiteUserAccessScopeUpsertDto("emu", "section", Guid.Empty),
+        ]));
+
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result.Result);
+        var problem = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.Equal(400, objectResult.StatusCode);
+        Assert.Contains("scopes", problem.Errors.Keys);
     }
 
     [Fact]
@@ -245,6 +460,36 @@ public class ApiSmokeTests
         var result = controller.Block(Guid.NewGuid());
 
         Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public void MobileAccountsControllerRequiresReadOrWritePermissionAtClassLevel()
+    {
+        var attribute = typeof(MobileAccountsController)
+            .GetCustomAttributes(typeof(RequireAnyPermissionAttribute), inherit: false)
+            .OfType<RequireAnyPermissionAttribute>()
+            .SingleOrDefault();
+        Assert.NotNull(attribute);
+
+        var missingToken = CreateAuthorizationContext(new FakeAuthSessionService());
+        attribute!.OnAuthorization(missingToken);
+        Assert.IsType<UnauthorizedObjectResult>(missingToken.Result);
+
+        var unrelatedUser = new SessionUserDto(Guid.NewGuid(), "viewer", "Viewer", ["viewer"], ["dashboard.read"]);
+        var unrelatedContext = CreateAuthorizationContext(new FakeAuthSessionService(currentUser: unrelatedUser), "token-1");
+        attribute.OnAuthorization(unrelatedContext);
+        var forbidden = Assert.IsType<ObjectResult>(unrelatedContext.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+
+        var readUser = new SessionUserDto(Guid.NewGuid(), "reader", "Reader", ["operator"], ["mobile_accounts.read"]);
+        var readContext = CreateAuthorizationContext(new FakeAuthSessionService(currentUser: readUser), "token-1");
+        attribute.OnAuthorization(readContext);
+        Assert.Null(readContext.Result);
+
+        var writeUser = new SessionUserDto(Guid.NewGuid(), "writer", "Writer", ["admin"], ["mobile_accounts.write"]);
+        var writeContext = CreateAuthorizationContext(new FakeAuthSessionService(currentUser: writeUser), "token-1");
+        attribute.OnAuthorization(writeContext);
+        Assert.Null(writeContext.Result);
     }
 
     [Fact]
@@ -371,6 +616,8 @@ public class ApiSmokeTests
             Shift: "День",
             PlannedAt: DateTimeOffset.UtcNow.AddMinutes(-30),
             ActualAt: DateTimeOffset.UtcNow.AddMinutes(-20),
+            StartedAt: DateTimeOffset.UtcNow.AddMinutes(-25),
+            FinishedAt: DateTimeOffset.UtcNow.AddMinutes(-20),
             Deviation: "+10 min",
             Comment: "No issues",
             Photos: 1,
@@ -426,6 +673,160 @@ public class ApiSmokeTests
         attribute!.OnAuthorization(context);
 
         Assert.Null(context.Result);
+    }
+
+    private static EmuController CreateEmuController(FakeEmuWorkService workService, SessionUserDto user)
+    {
+        var controller = new EmuController(
+            new FakeEmuCatalogService(),
+            workService,
+            new FakeEmuShiftService(),
+            new FakeEmuPlanService(),
+            new FakeAuthSessionService(currentUser: user),
+            new FakeSiteUserAdminService());
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext()
+        };
+        controller.ControllerContext.HttpContext.Request.Headers.Authorization = "Bearer token-1";
+        return controller;
+    }
+
+    private sealed class FakeEmuCatalogService : IEmuCatalogService
+    {
+        public EmuSettingsDto GetSettings() => new([], [], [], [], []);
+
+        public EmuCommandResult<EmuReferenceDto> CreateSection(EmuCreateReferenceDto request) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuReferenceDto> UpdateSection(Guid id, EmuUpdateReferenceDto request) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuReferenceDto> CreateWaitReason(EmuCreateReferenceDto request) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuReferenceDto> UpdateWaitReason(Guid id, EmuUpdateReferenceDto request) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuReferenceDto> CreateNotCompletedReason(EmuCreateReferenceDto request) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuReferenceDto> UpdateNotCompletedReason(Guid id, EmuUpdateReferenceDto request) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuWorkTemplateDto> CreateWorkTemplate(EmuCreateWorkTemplateDto request) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuWorkTemplateDto> UpdateWorkTemplate(Guid id, EmuUpdateWorkTemplateDto request) => new(null, new Dictionary<string, string[]>());
+
+        public IReadOnlyList<EmuFavoriteEmployeeDto> GetFavoriteEmployees() => [];
+
+        public EmuCommandResult<EmuFavoriteEmployeeDto> AddFavoriteEmployee(EmuAddFavoriteEmployeeDto request) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuFavoriteEmployeeDto> RemoveFavoriteEmployee(Guid employeeId) => new(null, new Dictionary<string, string[]>());
+    }
+
+    private sealed class FakeEmuWorkService : IEmuWorkService
+    {
+        public EmuCreateWorkSessionDto? CreatedRequest { get; private set; }
+
+        public Guid? LastEmployeeReportId { get; private set; }
+
+        public EmuWorkSessionQueryDto? LastEmployeeReportQuery { get; private set; }
+
+        public EmuWorkSessionQueryDto? LastQuery { get; private set; }
+
+        public EmuDashboardDto GetDashboard(IReadOnlyList<Guid>? allowedSectionIds = null) => new([], [], [], [], []);
+
+        public EmuListResponseDto<EmuWorkSessionDto> GetWorkSessions(EmuWorkSessionQueryDto query)
+        {
+            LastQuery = query;
+            return new EmuListResponseDto<EmuWorkSessionDto>([], 0, query.Page, query.PageSize, 1);
+        }
+
+        public EmuWorkHistoryReportDto GetWorkHistoryReport(EmuWorkSessionQueryDto query) =>
+            new(
+                query,
+                DateTimeOffset.UtcNow,
+                new EmuWorkHistoryTotalsDto(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+                [],
+                [],
+                []);
+
+        public EmuCommandResult<EmuEmployeeWorkHistoryReportDto> GetEmployeeWorkHistoryReport(Guid employeeId, EmuWorkSessionQueryDto query)
+        {
+            LastEmployeeReportId = employeeId;
+            LastEmployeeReportQuery = query;
+            return new(
+                new EmuEmployeeWorkHistoryReportDto(
+                    query,
+                    DateTimeOffset.UtcNow,
+                    new EmuEmployeeWorkReportDto(employeeId, "Employee", "", "", "", 0, 0, 0, 0, 0, 0),
+                    [],
+                    new EmuListResponseDto<EmuWorkSessionDto>([], 0, query.Page, query.PageSize, 1)),
+                new Dictionary<string, string[]>());
+        }
+
+        public EmuWorkSessionChangesDto GetWorkSessionChanges(DateTimeOffset since, IReadOnlyList<Guid>? allowedSectionIds = null) => new(DateTimeOffset.UtcNow, [], []);
+
+        public EmuCommandResult<EmuWorkSessionDto> GetWorkSession(Guid id) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuWorkSessionDto> CreateWorkSession(EmuCreateWorkSessionDto request, Guid? actorUserId, string actorName, bool canOverridePlanApproval = false)
+        {
+            CreatedRequest = request;
+            return new(null, new Dictionary<string, string[]>());
+        }
+
+        public EmuCommandResult<EmuWorkSessionDto> UpdateWorkSession(Guid id, EmuUpdateWorkSessionDto request, Guid? actorUserId, string actorName) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuWorkSessionDto> AddWorkSessionEmployee(Guid id, EmuAddWorkSessionEmployeeDto request, Guid? actorUserId, string actorName) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuWorkSessionDto> FinishWorkSessionEmployee(Guid id, Guid employeeId, EmuFinishWorkSessionEmployeeDto request, Guid? actorUserId, string actorName) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuWorkSessionDto> MarkWorkSessionEmployeeMistaken(Guid id, Guid employeeId, EmuMarkMistakenWorkSessionEmployeeDto request, Guid? actorUserId, string actorName) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuWorkSessionDto> PauseWorkSession(Guid id, EmuPauseWorkSessionDto request, Guid? actorUserId, string actorName) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuWorkSessionDto> ResumeWorkSession(Guid id, EmuResumeWorkSessionDto request, Guid? actorUserId, string actorName) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuWorkSessionDto> CompleteWorkSession(Guid id, EmuCompleteWorkSessionDto request, Guid? actorUserId, string actorName) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuWorkSessionDto> CarryOverWorkSession(Guid id, EmuCarryOverWorkSessionDto request, Guid? actorUserId, string actorName) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuWorkSessionDto> DeleteWorkSession(Guid id, EmuDeleteWorkSessionDto request, Guid? actorUserId, string actorName) => new(null, new Dictionary<string, string[]>());
+
+        public EmuListResponseDto<EmuAuditEventDto> GetWorkSessionAudit(Guid id, int page = 1, int pageSize = 100) => new([], 0, page, pageSize, 1);
+    }
+
+    private sealed class FakeEmuPlanService : IEmuPlanService
+    {
+        public EmuListResponseDto<EmuPlanTaskDto> GetPlanTasks(DateOnly? weekStart = null, IReadOnlyList<Guid>? allowedSectionIds = null) => new([], 0, 1, 100, 1);
+
+        public EmuPlanTaskChangesDto GetPlanTaskChanges(DateTimeOffset since, IReadOnlyList<Guid>? allowedSectionIds = null) => new(DateTimeOffset.UtcNow, [], []);
+
+        public EmuCommandResult<EmuPlanTaskDto> CreatePlanTask(EmuUpsertPlanTaskDto request, Guid? actorUserId, string actorName) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuPlanTaskDto> UpdatePlanTask(Guid id, EmuUpsertPlanTaskDto request, Guid? actorUserId, string actorName, IReadOnlyList<Guid>? allowedSectionIds = null) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuPlanTaskDto> ReschedulePlanTask(Guid id, EmuReschedulePlanTaskDto request, Guid? actorUserId, string actorName, IReadOnlyList<Guid>? allowedSectionIds = null) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuPlanTaskDto> ApprovePlanTask(Guid id, EmuApprovePlanTaskDto request, Guid? actorUserId, string actorName, IReadOnlyList<Guid>? allowedSectionIds = null) => new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<IReadOnlyList<EmuPlanTaskDto>> ApproveWeek(EmuApproveWeekDto request, Guid? actorUserId, string actorName, IReadOnlyList<Guid>? allowedSectionIds = null) => new(null, new Dictionary<string, string[]>());
+    }
+
+    private sealed class FakeEmuShiftService : IEmuShiftService
+    {
+        public IReadOnlyList<EmuShiftTemplateDto> GetShiftTemplates() => [];
+
+        public IReadOnlyList<EmuEmployeeShiftDto> GetEmployeeShifts(DateOnly date, Guid? employeeId = null, IReadOnlyList<Guid>? allowedSectionIds = null) => [];
+
+        public EmuCommandResult<EmuEmployeeShiftDto> UpdateEmployeeShift(Guid id, EmuUpdateEmployeeShiftDto request, Guid? actorUserId, string actorName) =>
+            new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuEmployeeShiftSummaryDto> GetEmployeeShiftSummary(Guid employeeId, DateOnly date, IReadOnlyList<Guid>? allowedSectionIds = null) =>
+            new(null, new Dictionary<string, string[]>());
+
+        public EmuCommandResult<EmuEmployeeMonthSummaryDto> GetEmployeeMonthSummary(Guid employeeId, DateOnly month, IReadOnlyList<Guid>? allowedSectionIds = null) =>
+            new(null, new Dictionary<string, string[]>());
+
+        public IReadOnlyList<EmuDecisionDto> GetDecisions(EmuDecisionQueryDto query, IReadOnlyList<Guid>? allowedSectionIds = null) => [];
+
+        public EmuCommandResult<EmuDecisionDto> ResolveDecision(Guid id, EmuResolveDecisionDto request, Guid? actorUserId, string actorName, IReadOnlyList<Guid>? allowedSectionIds = null) =>
+            new(null, new Dictionary<string, string[]>());
     }
 
     private sealed class FakeRouteCatalogQuery(IReadOnlyList<RouteDto> routes) : IRouteCatalogQuery
@@ -525,6 +926,12 @@ public class ApiSmokeTests
     {
         public IReadOnlyList<AssignmentDto> GetAssignments() => assignments ?? [];
 
+        public AssignmentSettingsDto GetSettings() =>
+            new([], new AssignmentShiftSettingsDto("08:00", "20:00", "20:00", "08:00"));
+
+        public AssignmentSettingsDto UpdateSettings(UpdateAssignmentSettingsDto request) =>
+            new(request.FavoriteEmployeeIds ?? [], request.ShiftSettings ?? new AssignmentShiftSettingsDto("08:00", "20:00", "20:00", "08:00"));
+
         public CreateAssignmentResult Create(CreateAssignmentDto request) =>
             createResult ?? new CreateAssignmentResult(CreateAssignment(), new Dictionary<string, string[]>());
 
@@ -545,13 +952,17 @@ public class ApiSmokeTests
         public bool Logout(string accessToken) => true;
     }
 
-    private sealed class FakeSiteUserAdminService(CreateSiteUserResult? createResult = null) : ISiteUserAdminService
+    private sealed class FakeSiteUserAdminService(
+        CreateSiteUserResult? createResult = null,
+        UpdateSiteUserScopesResult? scopesResult = null) : ISiteUserAdminService
     {
         public IReadOnlyList<SiteUserDto> GetUsers() => [];
 
         public SiteUserDto? GetUser(Guid id) => null;
 
         public IReadOnlyList<RoleDto> GetRoles() => [];
+
+        public SiteUserAccessDto? GetUserAccess(Guid id) => null;
 
         public CreateSiteUserResult CreateUser(CreateSiteUserDto request) =>
             createResult ?? new CreateSiteUserResult(null, new Dictionary<string, string[]>());
@@ -564,6 +975,12 @@ public class ApiSmokeTests
 
         public UpdateSiteUserResult UnblockUser(Guid id) =>
             new(null, new Dictionary<string, string[]>());
+
+        public UpdateSiteUserResult UpdateUserPermissions(Guid id, UpdateSiteUserPermissionsDto request) =>
+            new(null, new Dictionary<string, string[]>());
+
+        public UpdateSiteUserScopesResult UpdateUserScopes(Guid id, UpdateSiteUserScopesDto request, Guid? actorUserId = null) =>
+            scopesResult ?? new(null, new Dictionary<string, string[]> { ["user"] = ["Not found"] });
 
         public ResetSiteUserPasswordDto? ResetPassword(Guid id) => null;
     }

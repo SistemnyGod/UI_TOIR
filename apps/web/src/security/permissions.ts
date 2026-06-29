@@ -16,21 +16,29 @@ export type PermissionCode =
   | "schedule.write"
   | "results.read"
   | "emu.view"
+  | "emu.work-accounting.view"
+  | "emu.dashboard.view"
+  | "emu.history.view"
   | "emu.work.create"
   | "emu.work.update"
   | "emu.work.pause"
   | "emu.work.complete"
   | "emu.work.delete"
+  | "emu.completed.delete"
   | "emu.directories.manage"
   | "emu.favorite-employees.manage"
   | "emu.plan.view"
   | "emu.plan.manage"
   | "emu.plan.approve"
+  | "emu.scope.all"
   | "emu.plan.override-approval"
   | "emu.plan.recurrence.manage"
   | "emu.reports.view"
+  | "emu.reports.export"
   | "emu.time.override"
   | "emu.audit.view"
+  | "emu.shift.adjust"
+  | "emu.decision.resolve"
   | "inventory.view"
   | "inventory.items.manage"
   | "inventory.stock.view"
@@ -42,7 +50,12 @@ export type PermissionCode =
   | "inventory.settings.manage"
   | "inventory.import"
   | "inventory.audit.view"
-  | "inventory.users.manage";
+  | "inventory.users.manage"
+  | "integrations.perco.view"
+  | "integrations.perco.manage"
+  | "integrations.perco.sync"
+  | "integrations.perco.match"
+  | "integrations.perco.logs.view";
 
 export function hasPermission(user: SessionUserDto | null | undefined, permission: PermissionCode) {
   if (!user) return false;
@@ -68,16 +81,15 @@ export function getPrimaryActionPermission(screen: ScreenId): PermissionCode | u
     case "users":
       return "site_users.write";
     case "emu-dashboard":
-      return "emu.view";
+      return "emu.dashboard.view";
     case "emu-work-accounting":
-      return "emu.work.create";
+      return "emu.work-accounting.view";
     case "emu-completed-work-history":
-      return "emu.reports.view";
+      return "emu.history.view";
     case "inventory-overview":
     case "inventory-items":
-      return "inventory.view";
     case "inventory-employees":
-      return "inventory.import";
+      return "inventory.view";
     case "inventory-issue":
     case "inventory-operations":
       return "inventory.issue.manage";
@@ -94,6 +106,8 @@ export function getPrimaryActionPermission(screen: ScreenId): PermissionCode | u
       return "inventory.users.manage";
     case "inventory-settings":
       return "inventory.settings.manage";
+    case "perco-integration":
+      return "integrations.perco.view";
     default:
       return undefined;
   }

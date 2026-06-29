@@ -1,0 +1,145 @@
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-list {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--issue-border);
+  border-left: 3px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  grid-template-columns:
+    minmax(104px, 0.7fr)
+    minmax(150px, 1fr)
+    minmax(170px, 1.1fr)
+    minmax(118px, 0.72fr)
+    minmax(108px, 0.68fr)
+    minmax(166px, auto);
+  min-width: 0;
+  padding: 10px;
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row:hover,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row:focus-visible {
+  background: #fbfdff;
+  border-color: var(--issue-border-strong);
+  outline: 0;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row.is-selected {
+  background: #f4f9ff;
+  border-color: var(--issue-blue);
+  border-left-color: var(--issue-blue);
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-id,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-person,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-work,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-status,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-total {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-id strong,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-person strong,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-work strong,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-total strong,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-id span,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-person span,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-work span,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-total span {
+  display: block;
+  letter-spacing: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-id strong,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-person strong,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-work strong,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-total strong {
+  color: var(--issue-text);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-id span,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-person span,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-work span,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-total span {
+  color: var(--issue-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row-status {
+  align-items: start;
+  justify-items: start;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-card-row .inventory-ppe-row-actions-compact {
+  justify-self: end;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table td strong,
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table td span {
+  display: block;
+  letter-spacing: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-table td:nth-child(7) strong {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-status {
+  border-radius: 999px;
+  box-shadow: none;
+  font-size: 10px;
+  min-height: 22px;
+  padding: 3px 9px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-price-warning {
+  color: var(--issue-danger) !important;
+  font-size: 10px;
+  margin-top: 4px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-row-actions-compact {
+  align-items: center;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: repeat(2, minmax(52px, 1fr)) 32px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-row-actions-compact .button {
+  font-size: 11px;
+  min-height: 31px;
+  padding: 0 6px;
+}
+
+.inventory-ppe-screen.inventory-ppe-redesign .inventory-ppe-more-button {
+  background: #ffffff;
+  border: 1px solid var(--issue-border);
+  border-radius: 8px;
+  color: var(--issue-text);
+  height: 31px;
+  width: 32px;
+}
+

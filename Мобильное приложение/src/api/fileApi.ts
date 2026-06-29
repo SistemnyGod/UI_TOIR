@@ -1,25 +1,24 @@
 import * as FileSystem from "expo-file-system/legacy";
 
 import { refreshStoredAccessToken } from "@/api/httpClient";
-import { photoUploadTimeoutMs, serverUnavailableMessage, withTimeout } from "@/api/networkTimeout";
+import { photoUploadTimeoutMs, serverUnavailableMessage, videoUploadTimeoutMs, withTimeout } from "@/api/networkTimeout";
 import { getAccessToken } from "@/auth/tokenStorage";
 import { getMobileRuntimeConfig, getServerCandidateBaseUrls, setServerBaseUrl } from "@/core/serverSettings";
 import { LocalMobileFile, MobileFileUploadResponse } from "@/domain/files/fileTypes";
 
-export async function uploadPatrolPhoto(file: LocalMobileFile) {
-  const hasPatrolPointScope = Boolean(file.assignmentId && file.pointId);
-  const hasRemarkScope = Boolean(file.remarkId);
-  if ((!hasPatrolPointScope && !hasRemarkScope) || !file.sha256 || !file.sizeBytes) {
-    throw new Error("Локальные данные файла неполные.");
-  }
+const maxPhotoBytes = 8 * 1024 * 1024;
+const maxVideoBytes = 25 * 1024 * 1024;
+
+export async function uploadMobileFile(file: LocalMobileFile) {
+  await validateMobileFileBeforeUpload(file);
 
   const token = await getAccessToken();
   const runtimeConfig = await getMobileRuntimeConfig();
-  let { apiBaseUrl, result } = await uploadPhotoWithFailover(runtimeConfig.apiBaseUrl, runtimeConfig.syncProtocolVersion, file, token);
+  let { apiBaseUrl, result } = await uploadFileWithFailover(runtimeConfig.apiBaseUrl, runtimeConfig.syncProtocolVersion, file, token);
 
   if (result.status === 401 && token) {
     const refreshedToken = await refreshStoredAccessToken();
-    ({ result } = await uploadPhotoWithFailover(apiBaseUrl, runtimeConfig.syncProtocolVersion, file, refreshedToken));
+    ({ result } = await uploadFileWithFailover(apiBaseUrl, runtimeConfig.syncProtocolVersion, file, refreshedToken));
   }
 
   if (result.status < 200 || result.status >= 300) {
@@ -29,7 +28,36 @@ export async function uploadPatrolPhoto(file: LocalMobileFile) {
   return JSON.parse(result.body) as MobileFileUploadResponse;
 }
 
-async function uploadPhotoWithFailover(
+export const uploadPatrolPhoto = uploadMobileFile;
+
+async function validateMobileFileBeforeUpload(file: LocalMobileFile) {
+  const hasPatrolPointScope = Boolean(file.assignmentId && file.pointId);
+  const hasRemarkScope = Boolean(file.remarkId);
+
+  if (!hasPatrolPointScope && !hasRemarkScope) {
+    throw new Error("Файл не привязан к точке обхода или замечанию смены.");
+  }
+
+  if (!file.clientFileId || !file.localPath || !file.sha256 || !file.sizeBytes) {
+    throw new Error("Локальные данные файла неполные.");
+  }
+
+  if (file.contentType !== "image/jpeg" && file.contentType !== "video/mp4") {
+    throw new Error("Можно отправлять только фото JPEG и видео MP4.");
+  }
+
+  const maxSize = file.contentType === "video/mp4" || file.mediaKind === "video" ? maxVideoBytes : maxPhotoBytes;
+  if (file.sizeBytes <= 0 || file.sizeBytes > maxSize) {
+    throw new Error(file.mediaKind === "video" ? "Видео слишком большое. Максимум 25 МБ." : "Фото слишком большое. Максимум 8 МБ.");
+  }
+
+  const fileInfo = await FileSystem.getInfoAsync(file.localPath);
+  if (!fileInfo.exists) {
+    throw new Error("Файл не найден на телефоне. Добавьте вложение повторно.");
+  }
+}
+
+async function uploadFileWithFailover(
   preferredApiBaseUrl: string,
   syncProtocolVersion: string,
   file: LocalMobileFile,
@@ -40,7 +68,7 @@ async function uploadPhotoWithFailover(
 
   for (const apiBaseUrl of apiBaseUrls) {
     try {
-      const result = await uploadPhotoWithToken(apiBaseUrl, syncProtocolVersion, file, token);
+      const result = await uploadFileWithToken(apiBaseUrl, syncProtocolVersion, file, token);
       await setServerBaseUrl(apiBaseUrl).catch(() => undefined);
       return { apiBaseUrl, result };
     } catch (error) {
@@ -55,13 +83,14 @@ async function uploadPhotoWithFailover(
   throw new Error(`${serverUnavailableMessage} Проверенные адреса: ${apiBaseUrls.join(", ")}`);
 }
 
-async function uploadPhotoWithToken(
+async function uploadFileWithToken(
   apiBaseUrl: string,
   syncProtocolVersion: string,
   file: LocalMobileFile,
   token: string | null
 ) {
   const contentType = file.contentType ?? "image/jpeg";
+  const timeoutMs = file.mediaKind === "video" || contentType === "video/mp4" ? videoUploadTimeoutMs : photoUploadTimeoutMs;
   try {
     return await withTimeout(
       FileSystem.uploadAsync(`${apiBaseUrl}/api/v1/mobile/files`, file.localPath, {
@@ -85,7 +114,7 @@ async function uploadPhotoWithToken(
         },
         uploadType: FileSystem.FileSystemUploadType.MULTIPART
       }),
-      photoUploadTimeoutMs
+      timeoutMs
     );
   } catch {
     throw new Error(serverUnavailableMessage);

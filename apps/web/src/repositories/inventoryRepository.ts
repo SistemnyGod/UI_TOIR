@@ -1,5 +1,6 @@
 import { ApiClient } from "../api/client";
 import type {
+  CreateEmployeeDto,
   CreateInventoryCategoryDto,
   CreateInventoryCustodyRecordDto,
   InventoryCustodyModuleOptionsDto,
@@ -15,6 +16,7 @@ import type {
   InventoryInitialStockDto,
   InventoryCustodyRecordDto,
   InventoryDocumentDto,
+  EmployeeDto,
   InventoryEmployeeDto,
   InventoryEmployeeImportPreviewDto,
   InventoryEmployeeImportResultDto,
@@ -42,6 +44,7 @@ import type {
   InventorySystemLogDto,
   InventoryUserDto,
   UpdateInventoryCategoryDto,
+  UpdateEmployeeDto,
   UpdateInventorySimpleReferenceDto,
   UpdateInventoryItemSetDto,
   UpdateInventoryStatusDto,
@@ -71,6 +74,7 @@ export type InventoryListParams = {
   direction?: string;
   item?: string;
   position?: string;
+  priceState?: string;
   sort?: string;
   page?: number;
   pageSize?: number;
@@ -230,6 +234,12 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
       return client.get<InventoryPpeModuleOptionsDto>("/api/v1/inventory/ppe/options");
     },
 
+    getPpeItems(params: InventoryListParams = {}) {
+      return client.get<InventoryListResponseDto<InventoryItemDto>>(
+        `/api/v1/inventory/ppe/items${toQueryString(params)}`,
+      );
+    },
+
     getPpeCardHistory(id: string, params: InventoryListParams = {}) {
       return client.get<InventoryListResponseDto<InventoryHistoryDto>>(
         `/api/v1/inventory/ppe/cards/${id}/history${toQueryString(params)}`,
@@ -334,6 +344,16 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
       return client.get<InventoryListResponseDto<InventoryEmployeeDto>>(
         `/api/v1/inventory/employees${toQueryString(params)}`,
       );
+    },
+
+    async createEmployee(payload: CreateEmployeeDto) {
+      const employee = await client.post<EmployeeDto, CreateEmployeeDto>("/api/v1/employees", payload);
+      return mapEmployeeToInventoryEmployee(employee);
+    },
+
+    async updateEmployee(id: string, payload: UpdateEmployeeDto) {
+      const employee = await client.put<EmployeeDto, UpdateEmployeeDto>(`/api/v1/employees/${id}`, payload);
+      return mapEmployeeToInventoryEmployee(employee);
     },
 
     importEmployees(file: File, previewToken?: string) {
@@ -533,6 +553,28 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
       return client.get(`/api/v1/inventory/legacy/import-runs/${id}/tables`);
     },
   };
+}
+
+function mapEmployeeToInventoryEmployee(employee: EmployeeDto): InventoryEmployeeDto {
+  return {
+    birthDate: employee.birthDate,
+    department: employee.department,
+    employeeGroup: employee.employeeGroup,
+    fullName: employee.fullName,
+    hiredAt: employee.hiredAt,
+    id: employee.id,
+    personnelNo: employee.personnelNo,
+    position: employee.position,
+    status: mapEmployeeStatusSafe(employee.status),
+  };
+}
+
+function mapEmployeeStatusSafe(status: string) {
+  const normalized = status.trim().toLowerCase();
+  if (["архив", "archived", "офлайн"].includes(normalized)) return "archived";
+  if (["disabled", "отключен"].includes(normalized)) return "disabled";
+  if (["inactive", "неактивен"].includes(normalized)) return "inactive";
+  return "active";
 }
 
 function toQueryString(params: InventoryListParams) {

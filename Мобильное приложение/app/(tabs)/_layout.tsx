@@ -13,8 +13,8 @@ const tabIcon = (name: keyof typeof Ionicons.glyphMap) =>
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const { colors } = useAppTheme();
-  const bottomInset = Math.max(insets.bottom, 38);
-  const tabBarHeight = 66 + bottomInset;
+  const bottomInset = Math.max(insets.bottom, 34);
+  const tabBarHeight = 72 + bottomInset;
 
   return (
     <Tabs
@@ -24,15 +24,17 @@ export default function TabsLayout() {
         tabBarHideOnKeyboard: true,
         tabBarInactiveTintColor: colors.mutedText,
         tabBarIconStyle: {
-          marginTop: 2
+          marginBottom: -1,
+          marginTop: 0
         },
         tabBarItemStyle: {
-          paddingTop: 4
+          paddingTop: 7
         },
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: "700",
-          marginTop: 2
+          fontSize: 10,
+          fontWeight: "800",
+          lineHeight: 12,
+          marginTop: 0
         },
         tabBarStyle: {
           backgroundColor: colors.navBackground,
@@ -40,8 +42,8 @@ export default function TabsLayout() {
           borderTopWidth: 1,
           elevation: 16,
           height: tabBarHeight,
-          paddingBottom: bottomInset + 6,
-          paddingTop: 7,
+          paddingBottom: bottomInset + 8,
+          paddingTop: 8,
           shadowColor: "#0f1a2b",
           shadowOffset: { width: 0, height: -4 },
           shadowOpacity: 0.08,

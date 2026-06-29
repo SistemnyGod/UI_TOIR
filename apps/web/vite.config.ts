@@ -1,7 +1,12 @@
 import { configDefaults, defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const appRoot = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  root: appRoot,
   build: {
     rollupOptions: {
       output: {
@@ -14,9 +19,38 @@ export default defineConfig({
 
           if (
             normalizedId.includes("/src/screens/InventoryScreen") ||
+            normalizedId.includes("/src/features/inventory/") ||
             normalizedId.includes("/src/repositories/inventoryRepository")
           ) {
             return "inventory";
+          }
+
+          if (
+            normalizedId.includes("/src/screens/ResultsScreen") ||
+            normalizedId.includes("/src/features/patrol/ResultsScreen") ||
+            normalizedId.includes("/src/repositories/resultsRepository") ||
+            normalizedId.includes("/src/hooks/useResultsWorkspace")
+          ) {
+            return "patrol-results";
+          }
+
+          if (
+            normalizedId.includes("/src/screens/EmuScreen") ||
+            normalizedId.includes("/src/screens/emu/") ||
+            normalizedId.includes("/src/features/emu/") ||
+            normalizedId.includes("/src/hooks/useEmuWorkspace") ||
+            normalizedId.includes("/src/repositories/emuRepository") ||
+            normalizedId.includes("/src/domain/emu")
+          ) {
+            return "emu";
+          }
+
+          if (
+            normalizedId.includes("/src/screens/PercoIntegrationScreen") ||
+            normalizedId.includes("/src/features/perco/") ||
+            normalizedId.includes("/src/repositories/percoRepository")
+          ) {
+            return "perco";
           }
 
           return undefined;

@@ -7,6 +7,8 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbContext) : IInventoryCatalogCommandService
 {
+    private const string AccountingMovementWarehouseName = "Системный учет движения";
+
     private static readonly HashSet<string> ReservationMoveTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "reservation",
@@ -523,8 +525,37 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
 
         entity.Quantity = request.Quantity;
         entity.LifeMonths = request.LifeMonths;
+        entity.NormItemName = NormalizeOptional(request.NormItemName);
+        entity.NormPoint = NormalizeOptional(request.NormPoint);
+        entity.IssuePeriodText = NormalizeOptional(request.IssuePeriodText);
+        entity.QuantityText = NormalizeOptional(request.QuantityText);
+        if (entity.NormItemName.Length == 0)
+        {
+            entity.NormItemName = NormalizeOptional(item.NormItemName);
+        }
+
+        if (entity.NormItemName.Length == 0)
+        {
+            entity.NormItemName = item.Name;
+        }
+
+        if (entity.QuantityText.Length == 0)
+        {
+            entity.QuantityText = $"{entity.Quantity:g}";
+        }
+
         dbContext.SaveChanges();
-        return Success(new InventoryPositionNormDto(entity.Id, entity.PositionName, item.Id, item.Name, entity.Quantity, entity.LifeMonths));
+        return Success(new InventoryPositionNormDto(
+            entity.Id,
+            entity.PositionName,
+            item.Id,
+            item.Name,
+            entity.Quantity,
+            entity.LifeMonths,
+            entity.NormItemName,
+            entity.NormPoint,
+            entity.IssuePeriodText,
+            entity.QuantityText));
     }
 
     public InventoryCommandResult<InventoryItemDto> CreateItem(UpsertInventoryItemDto request)
@@ -653,7 +684,10 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
             return Failure<InventoryDocumentDto>("itemId", "Позиция не найдена");
         }
 
-        var warehouse = dbContext.InventoryWarehouses.FirstOrDefault(row => row.Id == request.WarehouseId);
+        var hasExplicitWarehouse = request.WarehouseId is not null;
+        var warehouse = hasExplicitWarehouse
+            ? dbContext.InventoryWarehouses.FirstOrDefault(row => row.Id == request.WarehouseId!.Value)
+            : EnsureAccountingMovementWarehouse();
         if (warehouse is null)
         {
             return Failure<InventoryDocumentDto>("warehouseId", "Склад не найден");
@@ -670,7 +704,7 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
         }
 
         var quantityDelta = ToQuantityDelta(type, request.Quantity);
-        if (quantityDelta < 0)
+        if (hasExplicitWarehouse && quantityDelta < 0)
         {
             var stock = GetStockByItemAndWarehouse(item.Id, warehouse.Id);
             if (stock.Available < Math.Abs(quantityDelta))
@@ -705,10 +739,30 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
             "posted",
             movedAt.UtcDateTime,
             item.Name,
-            warehouse.Name,
+            hasExplicitWarehouse ? warehouse.Name : string.Empty,
             quantityDelta,
             item.Unit?.Symbol ?? item.Unit?.Name ?? string.Empty,
             move.ReferenceType));
+    }
+
+    private InventoryWarehouseEntity EnsureAccountingMovementWarehouse()
+    {
+        var warehouse = dbContext.InventoryWarehouses
+            .FirstOrDefault(row => row.Name == AccountingMovementWarehouseName);
+        if (warehouse is not null)
+        {
+            return warehouse;
+        }
+
+        warehouse = new InventoryWarehouseEntity
+        {
+            Id = Guid.NewGuid(),
+            Name = AccountingMovementWarehouseName,
+            IsDefault = false,
+            IsArchived = true
+        };
+        dbContext.InventoryWarehouses.Add(warehouse);
+        return warehouse;
     }
 
     private InventoryCommandResult<InventoryItemDto>? ValidateItem(UpsertInventoryItemDto request)
@@ -821,6 +875,12 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
 
         foreach (var row in rows)
         {
+            if (IsAccountingOnlyMoveType(row.MoveType))
+            {
+                tracked = true;
+                continue;
+            }
+
             tracked = true;
             if (ReservationMoveTypes.Contains(row.MoveType))
             {
@@ -926,6 +986,9 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
         var type = NormalizeOptional(value).ToLowerInvariant();
         return type is "receipt" or "issue" or "return" or "write_off" ? type : string.Empty;
     }
+
+    private static bool IsAccountingOnlyMoveType(string moveType) =>
+        moveType is "ppe_issue" or "ppe_return" or "ppe_write_off" or "custody_issue" or "custody_return";
 
     private static decimal ToQuantityDelta(string type, decimal quantity) =>
         type is "issue" or "write_off" ? -quantity : quantity;

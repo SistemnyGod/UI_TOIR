@@ -1,6 +1,6 @@
 import { CameraView } from "expo-camera";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { scanPointByQr } from "@/db/repositories/patrolRepository";
@@ -17,6 +17,7 @@ export function ScanQrScreen() {
   const [status, setStatus] = useState<"idle" | "reading" | "matched" | "error">("reading");
   const [hasPermission, setHasPermission] = useState(false);
   const [message, setMessage] = useState("Наведите камеру на QR-метку точки.");
+  const isHandlingScanRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -37,24 +38,39 @@ export function ScanQrScreen() {
   }, []);
 
   async function handleBarcode(data: string) {
-    if (status !== "reading") {
+    if (status !== "reading" || isHandlingScanRef.current) {
       return;
     }
 
+    isHandlingScanRef.current = true;
     setStatus("idle");
 
-    const qr = createQrScanResult(data);
-    const result = await scanPointByQr(assignmentId, qr.qrCodeHash);
+    try {
+      const qr = createQrScanResult(data);
+      const result = await scanPointByQr(assignmentId, qr.qrCodeHash);
 
-    if (!result.matched) {
+      if (!result.matched) {
+        setStatus("error");
+        setMessage("QR-метка не соответствует этому обходу.");
+        return;
+      }
+
+      setStatus("matched");
+      setMessage("QR подтвержден.");
+      router.replace(`/patrol/assignment/${assignmentId}/point/${result.point.pointId}/fill`);
+    } catch {
       setStatus("error");
-      setMessage("QR-метка не соответствует этому обходу.");
-      return;
+      setMessage("Не удалось обработать QR-метку. Проверьте подключение и попробуйте снова.");
+    } finally {
+      isHandlingScanRef.current = false;
     }
+  }
 
-    setStatus("matched");
-    setMessage("QR подтвержден.");
-    router.replace(`/patrol/assignment/${assignmentId}/point/${result.point.pointId}/fill`);
+  async function retryScan() {
+    const granted = hasPermission || (await ensureCameraPermission());
+    setHasPermission(granted);
+    setStatus(granted ? "reading" : "error");
+    setMessage(granted ? "Ожидание QR-метки..." : "Нет доступа к камере.");
   }
 
   return (
@@ -70,7 +86,7 @@ export function ScanQrScreen() {
           <CameraView
             barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
             facing="back"
-            onBarcodeScanned={(event) => void handleBarcode(event.data)}
+            onBarcodeScanned={status === "reading" ? (event) => void handleBarcode(event.data) : undefined}
             style={styles.camera}
           />
         ) : (
@@ -83,14 +99,12 @@ export function ScanQrScreen() {
       {status === "reading" ? <ActivityIndicator /> : null}
       {status === "error" ? (
         <PrimaryButton
+          icon="qr-code-outline"
           label="Сканировать снова"
-          onPress={() => {
-            setStatus("reading");
-            setMessage("Ожидание QR-метки...");
-          }}
+          onPress={() => void retryScan()}
         />
       ) : null}
-      <PrimaryButton label="Все метки" onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} />
+      <PrimaryButton icon="list-outline" label="Все метки" onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} variant="secondary" />
     </Screen>
   );
 }

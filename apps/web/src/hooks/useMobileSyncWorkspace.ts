@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createApiMobileSyncRepository } from "../repositories/mobileSyncRepository";
-import type { DataSourceMode, DataSourceStatus, MobileSyncConflict } from "../types";
+import type { DataSourceMode, DataSourceStatus, MobileDeviceHealth, MobileSyncConflict } from "../types";
 
 export interface MobileSyncWorkspace {
   conflicts: MobileSyncConflict[];
+  deviceHealth: MobileDeviceHealth[];
   errorMessage?: string;
   refreshConflicts: () => Promise<void>;
   resolveConflict: (clientOperationId: string, status: "accepted" | "rejected" | "repeatRequested", comment?: string) => Promise<void>;
@@ -19,12 +20,14 @@ export function useMobileSyncWorkspace({
 }): MobileSyncWorkspace {
   const repository = useMemo(() => createApiMobileSyncRepository(), []);
   const [conflicts, setConflicts] = useState<MobileSyncConflict[]>([]);
+  const [deviceHealth, setDeviceHealth] = useState<MobileDeviceHealth[]>([]);
   const [status, setStatus] = useState<DataSourceStatus>(dataSourceMode === "api" ? "loading" : "idle");
   const [errorMessage, setErrorMessage] = useState<string>();
 
   const refreshConflicts = useCallback(async () => {
     if (dataSourceMode !== "api") {
       setConflicts([]);
+      setDeviceHealth([]);
       setStatus("idle");
       setErrorMessage(undefined);
       return;
@@ -33,8 +36,12 @@ export function useMobileSyncWorkspace({
     setStatus("loading");
     setErrorMessage(undefined);
     try {
-      const rows = await repository.getConflicts();
-      setConflicts(rows);
+      const [conflictRows, healthRows] = await Promise.all([
+        repository.getConflicts(),
+        repository.getDeviceHealth(),
+      ]);
+      setConflicts(conflictRows);
+      setDeviceHealth(healthRows);
       setStatus("ready");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Не удалось загрузить конфликты мобильной синхронизации";
@@ -58,6 +65,7 @@ export function useMobileSyncWorkspace({
 
   return {
     conflicts,
+    deviceHealth,
     errorMessage,
     refreshConflicts,
     resolveConflict,

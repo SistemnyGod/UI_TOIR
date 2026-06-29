@@ -2,6 +2,13 @@ import { getDatabase } from "@/db/database";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 
+export type SyncQueueFileItem = Pick<
+  LocalMobileFile,
+  "clientFileId" | "localPath" | "serverFileId" | "status" | "contentType" | "mediaKind" | "assignmentId" | "pointId" | "remarkId" | "createdAtLocal"
+> & {
+  assignmentRouteName: string | null;
+};
+
 export async function insertLocalFile(file: LocalMobileFile) {
   const db = await getDatabase();
 
@@ -152,6 +159,36 @@ export async function listKnownLocalFilePaths() {
   );
 
   return rows.map((row) => row.local_path);
+}
+
+export async function listSyncQueueFiles(limit = 100) {
+  const db = await getDatabase();
+
+  return withSqliteBusyRetry(() =>
+    db.getAllAsync<SyncQueueFileItem>(
+      `
+        SELECT
+          file.client_file_id AS clientFileId,
+          file.local_path AS localPath,
+          file.server_file_id AS serverFileId,
+          file.status,
+          file.content_type AS contentType,
+          file.media_kind AS mediaKind,
+          file.assignment_id AS assignmentId,
+          file.point_id AS pointId,
+          file.remark_id AS remarkId,
+          file.created_at_local AS createdAtLocal,
+          assignment.route_name AS assignmentRouteName
+        FROM files file
+        LEFT JOIN patrol_assignments assignment
+          ON assignment.assignment_id = file.assignment_id
+        WHERE file.status NOT IN ('uploaded', 'linked')
+        ORDER BY file.created_at_local DESC
+        LIMIT ?
+      `,
+      [limit]
+    )
+  );
 }
 
 export async function markFileUploading(clientFileId: string) {

@@ -1,0 +1,138 @@
+@media (max-width: 1180px) {
+  .inventory-ppe-redesign .inventory-ppe-workspace,
+  .inventory-ppe-redesign .inventory-ppe-wizard-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-inspector,
+  .inventory-ppe-redesign .inventory-ppe-wizard-preview {
+    position: static;
+    max-height: none;
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-filter-row.primary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-scenario-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-line-card-grid {
+    grid-template-areas:
+      "norm norm"
+      "catalog model"
+      "fact status";
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-filter-row.secondary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .inventory-ppe-redesign .inventory-ppe-commandbar,
+  .inventory-ppe-redesign .inventory-ppe-wizard-stage,
+  .inventory-ppe-redesign .inventory-ppe-wizard-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-kpis,
+  .inventory-ppe-redesign .inventory-ppe-wizard-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-journal > .inventory-ppe-picker-filters,
+  .inventory-ppe-redesign .inventory-ppe-journal > .inventory-ppe-journal-filters,
+  .inventory-ppe-redesign .inventory-ppe-filter-row.primary,
+  .inventory-ppe-redesign .inventory-ppe-filter-row.secondary,
+  .inventory-ppe-redesign .inventory-ppe-form-grid,
+  .inventory-ppe-redesign .inventory-ppe-wizard-summary,
+  .inventory-ppe-redesign .inventory-ppe-scenario-strip,
+  .inventory-ppe-redesign .inventory-ppe-picker-layout,
+  .inventory-ppe-redesign .inventory-ppe-picker-grid,
+  .inventory-ppe-redesign .inventory-ppe-picker .inventory-ppe-picker-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-line-card-grid,
+  .inventory-ppe-redesign .inventory-ppe-line-section.is-fact {
+    grid-template-areas:
+      "norm"
+      "catalog"
+      "model"
+      "fact"
+      "status";
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-line-section.is-fact {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .inventory-ppe-redesign .inventory-ppe-command-actions,
+  .inventory-ppe-redesign .inventory-ppe-panel-actions,
+  .inventory-ppe-redesign .inventory-ppe-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-command-actions .button,
+  .inventory-ppe-redesign .inventory-ppe-panel-actions .button,
+  .inventory-ppe-redesign .inventory-ppe-print-tabs,
+  .inventory-ppe-redesign .inventory-ppe-pagination > div,
+  .inventory-ppe-redesign .inventory-ppe-pagination .button {
+    width: 100%;
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-panel-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-line-card-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-line-card-actions {
+    justify-content: flex-start;
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-page-size {
+    justify-content: space-between;
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .inventory-ppe-redesign .inventory-ppe-title {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-kpis,
+  .inventory-ppe-redesign .inventory-ppe-wizard-stage-metrics,
+  .inventory-ppe-redesign .inventory-ppe-wizard-steps,
+  .inventory-ppe-redesign .inventory-ppe-meta-grid,
+  .inventory-ppe-redesign .inventory-ppe-inspector-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-journal > .inventory-ppe-picker-actions,
+  .inventory-ppe-redesign .inventory-ppe-wizard-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-picker-backdrop {
+    padding: 8px;
+  }
+
+  .inventory-ppe-redesign .inventory-ppe-picker {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+  }
+}
+

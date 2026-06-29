@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 
 import { signOut } from "@/auth/authService";
 import { listLocalNotifications } from "@/db/repositories/notificationRepository";
@@ -37,8 +37,12 @@ export function ProfileScreen() {
   );
 
   async function handleChangeAccount() {
-    await signOut();
-    router.replace("/(auth)/login");
+    try {
+      await signOut();
+      router.replace("/(auth)/login");
+    } catch (error) {
+      Alert.alert("Нельзя сменить пользователя", error instanceof Error ? error.message : "Сначала отправьте все локальные отчеты и действия.");
+    }
   }
 
   async function handleRead(notificationId: string) {
@@ -47,40 +51,33 @@ export function ProfileScreen() {
   }
 
   return (
-    <Screen title="Профиль" subtitle="Устройство, уведомления, настройки и смена пользователя.">
+    <Screen title="Профиль" subtitle="Устройство, настройки и смена пользователя.">
       <Card>
         <View style={styles.row}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Работы и замечания</Text>
-          <StatusPill label="Активно" tone="success" />
-        </View>
-        <Text style={[styles.text, { color: colors.mutedText }]}>
-          Задачи учета работ и замечания доступны на вкладке Работы. Фото и видео сохраняются локально и уходят при синхронизации.
-        </Text>
-        <PrimaryButton label="Открыть работы" onPress={() => router.push("/(tabs)/work-accounting")} variant="secondary" />
-      </Card>
-
-      <Card>
-        <View style={styles.row}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Синхронизация</Text>
-          <StatusPill label="Фоновая" tone="success" />
-        </View>
-        <Text style={[styles.text, { color: colors.mutedText }]}>
-          Данные сохраняются на телефоне и синхронизируются при появлении интернета. Отдельный технический экран сотруднику не нужен.
-        </Text>
-      </Card>
-
-      <Card>
-        <View style={styles.row}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Устройство и аккаунт</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Устройство</Text>
           <StatusPill label="Kenshi Armor C1s" tone="success" />
         </View>
         <Text style={[styles.deviceTitle, { color: colors.text }]}>Kenshi Armor C1s</Text>
-        <Text style={[styles.text, { color: colors.mutedText }]}>Приложение: Patrol360. Устройство фиксируется в мобильной сессии.</Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>
+          Patrol360. Устройство привязано к мобильной сессии.
+        </Text>
       </Card>
 
       <Card>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Уведомления</Text>
-        {notifications.length > 0 ? (
+        <View style={styles.row}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Настройки</Text>
+          <StatusPill label="Offline-first" tone="success" />
+        </View>
+        <View style={styles.settingsGrid}>
+          <PrimaryButton icon="server-outline" label="Сервер" onPress={() => router.push("/(auth)/server-settings")} variant="secondary" />
+          <PrimaryButton icon="color-palette-outline" label="Тема" onPress={() => router.push("/settings/theme")} variant="secondary" />
+          <PrimaryButton icon="settings-outline" label="Все настройки" onPress={() => router.push("/settings")} variant="secondary" />
+        </View>
+      </Card>
+
+      {notifications.length > 0 ? (
+        <Card>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Уведомления</Text>
           <View style={styles.notificationList}>
             {notifications.map((notification) => (
               <View key={notification.id} style={[styles.notificationItem, { borderColor: colors.border }]}>
@@ -88,26 +85,41 @@ export function ProfileScreen() {
                 <Text style={[styles.text, { color: colors.mutedText }]}>{notification.message}</Text>
                 <PrimaryButton
                   label={notification.readAt ? "Прочитано" : "Отметить прочитанным"}
+                  icon={notification.readAt ? "checkmark-circle-outline" : "notifications-outline"}
                   onPress={() => handleRead(notification.id)}
                   variant={notification.readAt ? "ghost" : "secondary"}
                 />
               </View>
             ))}
           </View>
-        ) : (
-          <Text style={[styles.text, { color: colors.mutedText }]}>Новых уведомлений нет.</Text>
-        )}
-      </Card>
+        </Card>
+      ) : null}
 
       <View style={styles.settingsGrid}>
-        <PrimaryButton label="Настройки" onPress={() => router.push("/settings")} variant="secondary" />
-        <PrimaryButton label="Сменить пользователя" onPress={handleChangeAccount} variant="secondary" />
+        <PrimaryButton icon="person-add-outline" label="Сменить пользователя" onPress={handleChangeAccount} variant="secondary" />
       </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  deviceTitle: {
+    fontSize: 17,
+    fontWeight: "800"
+  },
+  notificationItem: {
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+    padding: 12
+  },
+  notificationList: {
+    gap: 10
+  },
+  notificationTitle: {
+    fontSize: 16,
+    fontWeight: "700"
+  },
   row: {
     alignItems: "center",
     flexDirection: "row",
@@ -119,28 +131,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "800"
   },
-  deviceTitle: {
-    fontSize: 17,
-    fontWeight: "800"
-  },
-  text: {
-    fontSize: 15,
-    lineHeight: 21
-  },
-  notificationList: {
-    gap: 10
-  },
-  notificationItem: {
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 8,
-    padding: 12
-  },
-  notificationTitle: {
-    fontSize: 16,
-    fontWeight: "700"
-  },
   settingsGrid: {
     gap: 10
+  },
+  text: {
+    fontSize: 14,
+    lineHeight: 20
   }
 });

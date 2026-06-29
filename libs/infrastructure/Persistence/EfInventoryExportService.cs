@@ -1,6 +1,9 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Security;
 using System.Text;
+using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.EntityFrameworkCore;
 using Patrol360.Application;
 using Patrol360.Contracts;
@@ -8,7 +11,7 @@ using Patrol360.Infrastructure.Persistence.Entities;
 
 namespace Patrol360.Infrastructure.Persistence;
 
-internal sealed class EfInventoryExportService(Patrol360DbContext dbContext) : IInventoryExportService
+internal sealed partial class EfInventoryExportService(Patrol360DbContext dbContext) : IInventoryExportService
 {
     public InventoryCommandResult<InventoryGeneratedFileDto> ExportReport(string reportId, string format)
     {
@@ -46,152 +49,6 @@ internal sealed class EfInventoryExportService(Patrol360DbContext dbContext) : I
         return Success(new InventoryGeneratedFileDto(fileName, ContentType(normalizedFormat), content));
     }
 
-    public InventoryCommandResult<InventoryGeneratedFileDto> PrintCustodyDocument(Guid documentId, string format)
-    {
-        var document = dbContext.InventoryCustodyDocuments
-            .AsNoTracking()
-            .Include(row => row.Employee)
-            .Include(row => row.Records)
-                .ThenInclude(record => record.Item)
-                    .ThenInclude(item => item.Unit)
-            .Include(row => row.Records)
-                .ThenInclude(record => record.Warehouse)
-            .FirstOrDefault(row => row.Id == documentId && row.ArchivedAt == null);
-
-        if (document is null)
-        {
-            return Failure<InventoryGeneratedFileDto>("documentId", "Custody document not found");
-        }
-
-        var normalizedFormat = Normalize(format);
-        if (normalizedFormat.Length == 0)
-        {
-            normalizedFormat = "pdf";
-        }
-
-        var paragraphs = new List<string>
-        {
-            $"РђРєС‚ РїРѕРґ Р·Р°РїРёСЃСЊ {document.Number}",
-            $"РЎРѕС‚СЂСѓРґРЅРёРє: {document.Employee.FullName}",
-            $"РўР°Р±РµР»СЊРЅС‹Р№ РЅРѕРјРµСЂ: {document.Employee.PersonnelNo}",
-            $"РџРѕРґСЂР°Р·РґРµР»РµРЅРёРµ: {document.Employee.Department}",
-            $"РЎС‚Р°С‚СѓСЃ: {ToRussianCustodyStatus(document.Status)}",
-            $"Р”Р°С‚Р°: {document.CreatedAt.LocalDateTime:dd.MM.yyyy HH:mm}",
-            string.Empty,
-            "РЎС‚СЂРѕРєРё Р°РєС‚Р°:"
-        };
-        paragraphs.AddRange(document.Records
-            .Where(row => row.ArchivedAt == null)
-            .OrderBy(row => row.IssuedAt)
-            .Select(row => $"{row.Item.Name}; СЃРєР»Р°Рґ: {row.Warehouse.Name}; РєРѕР»РёС‡РµСЃС‚РІРѕ: {row.Quantity:0.###} {row.Item.Unit?.Symbol}; СЃС‚Р°С‚СѓСЃ: {ToRussianCustodyStatus(row.Status)}; РєРѕРјРјРµРЅС‚Р°СЂРёР№: {row.Comment}"));
-
-        return BuildPrintFile($"custody-{document.Number}", "РђРєС‚ РїРѕРґ Р·Р°РїРёСЃСЊ", paragraphs, normalizedFormat, "custody_document", document.Id);
-    }
-
-    public InventoryCommandResult<InventoryGeneratedFileDto> PrintPpeCard(Guid cardId, string type, string format)
-    {
-        var card = dbContext.InventoryPpeCards
-            .AsNoTracking()
-            .Include(row => row.Employee)
-            .Include(row => row.Lines)
-                .ThenInclude(line => line.Item)
-                    .ThenInclude(item => item.Unit)
-            .Include(row => row.Lines)
-                .ThenInclude(line => line.Warehouse)
-            .FirstOrDefault(row => row.Id == cardId && row.ArchivedAt == null);
-
-        if (card is null)
-        {
-            return Failure<InventoryGeneratedFileDto>("cardId", "PPE card not found");
-        }
-
-        var normalizedFormat = Normalize(format);
-        if (normalizedFormat.Length == 0)
-        {
-            normalizedFormat = "pdf";
-        }
-
-        var normalizedType = Normalize(type);
-        var isSheet = normalizedType == "sheet";
-        var title = isSheet ? "Лист росписи по получению СИЗ" : "Личная карточка учета выдачи СИЗ";
-        var lines = card.Lines
-            .Where(line => line.Status != "archived")
-            .OrderBy(line => line.Item.Name)
-            .Select(line => new PpePrintLine(
-                line.Item.Name,
-                string.Join(" / ", new[] { line.Item.BrandName, line.Item.ModelName, line.Item.Article, line.Item.ProtectionClass }.Where(part => !string.IsNullOrWhiteSpace(part))),
-                line.Quantity,
-                line.Item.Unit?.Symbol ?? "шт.",
-                line.Status,
-                FormatDate(line.IssuedAt),
-                FormatDate(line.DueAt),
-                line.Item.DefaultLifeMonths,
-                line.Item.NormItemName,
-                line.Item.DefaultUnitPriceMinor,
-                (line.Item.DefaultUnitPriceMinor ?? 0) * line.Quantity))
-            .ToList();
-        var paragraphs = new List<string>
-        {
-            title,
-            $"Сотрудник: {card.Employee.FullName}",
-            $"Должность: {card.Position}",
-            $"Статус карточки: {ToRussianPpeStatus(card.Status)}",
-            $"Дата создания: {card.CreatedAt.LocalDateTime:dd.MM.yyyy HH:mm}",
-            string.Empty,
-            "Строки СИЗ:"
-        };
-        paragraphs.AddRange(lines.Select(line => $"{line.ItemName}; количество: {line.Quantity:0.###} {line.Unit}; статус: {ToRussianPpeStatus(line.Status)}; выдано: {line.IssuedAt}; до: {line.DueAt}"));
-
-        if (normalizedFormat == "docx")
-        {
-            var content = isSheet
-                ? WordDocumentBuilder.BuildPpeSignatureSheet(card.Employee.FullName, card.Employee.PersonnelNo, card.Position, card.CreatedAt, lines)
-                : WordDocumentBuilder.BuildPpePersonalCard(card.Id, card.Employee.FullName, card.Employee.PersonnelNo, card.Employee.Department, card.Position, card.CreatedAt, lines);
-
-            return BuildGeneratedFile($"ppe-{card.Employee.PersonnelNo}-{card.Id:N}", normalizedFormat, content, "ppe_card", card.Id);
-        }
-
-        return BuildPrintFile($"ppe-{card.Employee.PersonnelNo}-{card.Id:N}", title, paragraphs, normalizedFormat, "ppe_card", card.Id);
-    }
-
-    private InventoryCommandResult<InventoryGeneratedFileDto> BuildPrintFile(
-        string name,
-        string title,
-        IReadOnlyList<string> paragraphs,
-        string format,
-        string entityType,
-        Guid entityId)
-    {
-        var content = format switch
-        {
-            "pdf" => SimplePdfBuilder.Build(title, paragraphs),
-            "docx" => WordDocumentBuilder.Build(title, paragraphs),
-            _ => []
-        };
-
-        if (content.Length == 0)
-        {
-            return Failure<InventoryGeneratedFileDto>("format", "Unsupported print format");
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        var fileName = $"{SanitizeFileName(name)}-{now:yyyyMMddHHmmss}.{format}";
-        AddExportJob(entityType, format, fileName, now);
-        dbContext.InventorySystemLogs.Add(new InventorySystemLogEntity
-        {
-            Id = Guid.NewGuid(),
-            EntityType = entityType,
-            EntityId = entityId,
-            Action = "print",
-            Details = fileName,
-            Actor = "system",
-            CreatedAt = now
-        });
-        dbContext.SaveChanges();
-
-        return Success(new InventoryGeneratedFileDto(fileName, ContentType(format), content));
-    }
-
     private InventoryCommandResult<InventoryGeneratedFileDto> BuildGeneratedFile(
         string name,
         string format,
@@ -212,7 +69,7 @@ internal sealed class EfInventoryExportService(Patrol360DbContext dbContext) : I
             Id = Guid.NewGuid(),
             EntityType = entityType,
             EntityId = entityId,
-            Action = "print",
+            Action = format == "docx" ? "docx_exported" : format == "pdf" ? "pdf_exported" : "print",
             Details = fileName,
             Actor = "system",
             CreatedAt = now
@@ -233,7 +90,7 @@ internal sealed class EfInventoryExportService(Patrol360DbContext dbContext) : I
                 .GroupBy(row => new { row.ItemId, Item = row.Item.Name, Unit = row.Item.Unit != null ? row.Item.Unit.Symbol : "", row.WarehouseId, Warehouse = row.Warehouse.Name })
                 .Select(row => new[] { row.Key.Item, row.Key.Warehouse, row.Sum(move => move.QuantityDelta).ToString("0.###"), row.Key.Unit })
                 .ToList();
-            return new("РћСЃС‚Р°С‚РєРё", ["РџРѕР·РёС†РёСЏ", "РЎРєР»Р°Рґ", "РћСЃС‚Р°С‚РѕРє", "Р•Рґ."], rows);
+            return new("Остатки", ["Позиция", "Склад", "Остаток", "Ед."], rows);
         }
 
         if (reportId == "moves")
@@ -255,12 +112,12 @@ internal sealed class EfInventoryExportService(Patrol360DbContext dbContext) : I
                     row.Employee != null ? row.Employee.FullName : ""
                 })
                 .ToList();
-            return new("Р”РІРёР¶РµРЅРёСЏ", ["Р”Р°С‚Р°", "РўРёРї", "РџРѕР·РёС†РёСЏ", "РЎРєР»Р°Рґ", "РљРѕР»РёС‡РµСЃС‚РІРѕ", "РЎРѕС‚СЂСѓРґРЅРёРє"], rows);
+            return new("Движения", ["Дата", "Тип", "Позиция", "Склад", "Количество", "Сотрудник"], rows);
         }
 
         if (reportId == "ppe")
         {
-            var rows = dbContext.InventoryPpeCardLines
+            var lines = dbContext.InventoryPpeCardLines
                 .AsNoTracking()
                 .Include(row => row.Card).ThenInclude(row => row.Employee)
                 .Include(row => row.Item).ThenInclude(row => row.Unit)
@@ -268,6 +125,8 @@ internal sealed class EfInventoryExportService(Patrol360DbContext dbContext) : I
                 .Where(row => row.Status != "archived")
                 .OrderBy(row => row.Card.Employee.FullName)
                 .ThenBy(row => row.Item.Name)
+                .ToList();
+            var rows = lines
                 .Select(row => new[]
                 {
                     row.Card.Id.ToString(),
@@ -276,8 +135,8 @@ internal sealed class EfInventoryExportService(Patrol360DbContext dbContext) : I
                     row.Item.Name,
                     row.Quantity.ToString("0.###"),
                     row.Item.Unit != null ? row.Item.Unit.Symbol : "",
-                    FormatMoney(row.Item.DefaultUnitPriceMinor),
-                    FormatMoney((row.Item.DefaultUnitPriceMinor ?? 0) * row.Quantity),
+                    FormatMoney(PpeUnitPriceMinor(row)),
+                    FormatMoney((PpeUnitPriceMinor(row) ?? 0) * row.Quantity),
                     row.Status,
                     FormatDate(row.IssuedAt),
                     FormatDate(row.DueAt)
@@ -311,7 +170,7 @@ internal sealed class EfInventoryExportService(Patrol360DbContext dbContext) : I
                     row.IssuedAt.UtcDateTime.ToString("dd.MM.yyyy")
                 })
                 .ToList();
-            return new("РџРѕРґ Р·Р°РїРёСЃСЊ", ["РђРєС‚", "РЎРѕС‚СЂСѓРґРЅРёРє", "РџРѕР·РёС†РёСЏ", "РЎРєР»Р°Рґ", "РљРѕР»-РІРѕ", "Р•Рґ.", "РЎС‚Р°С‚СѓСЃ", "Р”Р°С‚Р°"], rows);
+            return new("Под подпись", ["Акт", "Сотрудник", "Позиция", "Склад", "Кол-во", "Ед.", "Статус", "Дата"], rows);
         }
 
         if (reportId == "history")
@@ -329,7 +188,7 @@ internal sealed class EfInventoryExportService(Patrol360DbContext dbContext) : I
                     row.Actor
                 })
                 .ToList();
-            return new("РСЃС‚РѕСЂРёСЏ РѕРїРµСЂР°С†РёР№", ["Р”Р°С‚Р°", "РЎСѓС‰РЅРѕСЃС‚СЊ", "Р”РµР№СЃС‚РІРёРµ", "Р”РµС‚Р°Р»Рё", "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ"], rows);
+            return new("История операций", ["Дата", "Сущность", "Действие", "Детали", "Пользователь"], rows);
         }
 
         if (reportId == "employees")
@@ -339,7 +198,7 @@ internal sealed class EfInventoryExportService(Patrol360DbContext dbContext) : I
                 .OrderBy(row => row.FullName)
                 .Select(row => new[] { row.FullName, row.PersonnelNo, row.Position, row.Department, row.Status })
                 .ToList();
-            return new("РЎРѕС‚СЂСѓРґРЅРёРєРё СѓС‡РµС‚Р°", ["Р¤РРћ", "РўР°Р±РµР»СЊРЅС‹Р№", "Р”РѕР»Р¶РЅРѕСЃС‚СЊ", "РџРѕРґСЂР°Р·РґРµР»РµРЅРёРµ", "РЎС‚Р°С‚СѓСЃ"], rows);
+            return new("Сотрудники учета", ["ФИО", "Табельный", "Должность", "Подразделение", "Статус"], rows);
         }
 
         if (reportId == "system_log")
@@ -350,7 +209,7 @@ internal sealed class EfInventoryExportService(Patrol360DbContext dbContext) : I
                 .Take(5000)
                 .Select(row => new[] { row.CreatedAt.UtcDateTime.ToString("dd.MM.yyyy HH:mm"), row.EntityType, row.Action, row.Details, row.Actor })
                 .ToList();
-            return new("РЎРёСЃС‚РµРјРЅС‹Р№ Р¶СѓСЂРЅР°Р»", ["Р”Р°С‚Р°", "РЎСѓС‰РЅРѕСЃС‚СЊ", "Р”РµР№СЃС‚РІРёРµ", "Р”РµС‚Р°Р»Рё", "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ"], rows);
+            return new("Системный журнал", ["Дата", "Сущность", "Действие", "Детали", "Пользователь"], rows);
         }
 
         return null;
@@ -409,28 +268,42 @@ internal sealed class EfInventoryExportService(Patrol360DbContext dbContext) : I
 
     private static string ToRussianCustodyStatus(string status) => Normalize(status) switch
     {
-        "open" => "РћС‚РєСЂС‹С‚",
-        "closed" => "Р—Р°РєСЂС‹С‚",
-        "archived" => "РђСЂС…РёРІ",
-        "in_use" => "РќР° СЂСѓРєР°С…",
-        "returned" => "Р’РѕР·РІСЂР°С‰РµРЅРѕ",
-        "written_off" => "РЎРїРёСЃР°РЅРѕ",
-        "lost" => "РЈС‚РµСЂСЏРЅРѕ",
+        "open" => "Открыт",
+        "closed" => "Закрыт",
+        "archived" => "Архив",
+        "in_use" => "На руках",
+        "returned" => "Возвращено",
+        "written_off" => "Списано",
+        "lost" => "Утеряно",
         _ => status
     };
+
+    private static long? PpeUnitPriceMinor(InventoryPpeCardLineEntity line) =>
+        line.UnitPriceMinor ?? line.Item.DefaultUnitPriceMinor;
+
+    private static string ToPpeStatusLabel(string status) => PpeIssueStatusCatalog.Label(status);
+
+    private static bool IsSectionTitle(string? printItemName) =>
+        !string.IsNullOrWhiteSpace(printItemName) &&
+        printItemName.Trim().EndsWith(':');
 
     private static string ToRussianPpeStatus(string status) => Normalize(status) switch
     {
         "active" => "Активна",
         "archived" => "Архив",
         "issued" => "Выдано",
+        "issue_later" => "Выдать позже",
         "not_issued" => "Не выдано",
+        "no_stock" => "Нет на складе",
         "returned" => "Возвращено",
         "written_off" => "Списано",
         "lost" => "Утеряно",
         "reissued" => "Переоформлено",
+        "replacement" => "Заменено аналогом",
         _ => status
     };
+
+    private static bool IsOpenPpeLineForSignature(string status) => Normalize(status) is "issued" or "replacement" or "reissued";
 
     private static string SanitizeFileName(string value)
     {
@@ -455,7 +328,7 @@ internal sealed class EfInventoryExportService(Patrol360DbContext dbContext) : I
     private sealed record ReportRows(string Title, IReadOnlyList<string> Headers, IReadOnlyList<IReadOnlyList<string>> Rows);
 }
 
-file sealed record PpePrintLine(
+internal sealed record PpePrintLine(
     string ItemName,
     string Model,
     decimal Quantity,
@@ -465,10 +338,143 @@ file sealed record PpePrintLine(
     string DueAt,
     int? LifeMonths,
     string NormPoint,
+    string IssuePeriodText,
     long? UnitPriceMinor,
-    decimal AmountMinor);
+    decimal AmountMinor,
+    bool IsSectionTitle);
 
-file static class SpreadsheetDocumentBuilder
+internal sealed record PpeEmployeePrintDetails(
+    string Gender,
+    string Height,
+    string ClothingSize,
+    string ShoeSize,
+    string HeadSize,
+    string RespiratorSize,
+    string HandProtectionSize);
+
+internal static class PpeEmployeePrintDetailsValidator
+{
+    public static string? Validate(PpeEmployeePrintDetails details)
+    {
+        foreach (var (label, value) in RequiredFields(details))
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return $"Перед печатью карточки СИЗ заполните поле '{label}'.";
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<(string Label, string Value)> RequiredFields(PpeEmployeePrintDetails details)
+    {
+        yield return ("Пол", details.Gender);
+        yield return ("Рост", details.Height);
+        yield return ("Размер одежды", details.ClothingSize);
+        yield return ("Размер обуви", details.ShoeSize);
+        yield return ("Размер головного убора", details.HeadSize);
+        yield return ("СИЗОД", details.RespiratorSize);
+        yield return ("СИЗ рук", details.HandProtectionSize);
+    }
+}
+
+internal static class PpePrintLineValidator
+{
+    private static readonly HashSet<string> GenericPpePrintNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Каски",
+        "Одежда",
+        "Обувь",
+        "Брюки",
+        "Спецодежда",
+        "СИЗ",
+        "Средства индивидуальной защиты"
+    };
+
+    public static string? Validate(IReadOnlyList<PpePrintLine> lines, bool isSignatureSheet)
+    {
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line.ItemName))
+            {
+                return "PPE print line must contain normative item name.";
+            }
+
+            if (GenericPpePrintNames.Contains(line.ItemName.Trim()))
+            {
+                return $"Строка '{line.ItemName}' похожа на категорию. Укажите полное нормативное наименование СИЗ перед печатью.";
+            }
+
+            if (ContainsCategoryDashCatalog(line.ItemName))
+            {
+                return $"Строка '{line.ItemName}' смешивает категорию и складскую номенклатуру. Первая колонка должна содержать норму СИЗ.";
+            }
+
+            if (line.IsSectionTitle)
+            {
+                if (isSignatureSheet)
+                {
+                    return $"Разделитель '{line.ItemName}' не может попасть в лист подписи.";
+                }
+
+                continue;
+            }
+            if (!string.IsNullOrWhiteSpace(line.Model)
+                && Normalize(line.Model) == Normalize(line.ItemName))
+            {
+                return $"Строка '{line.ItemName}' смешивает модель/марку с нормативным наименованием.";
+            }
+
+            if (line.Quantity <= 0)
+            {
+                return $"Строка '{line.ItemName}' должна содержать количество больше нуля.";
+            }
+
+            if (string.IsNullOrWhiteSpace(line.Unit))
+            {
+                return $"Строка '{line.ItemName}' должна содержать единицу измерения.";
+            }
+
+            if (!isSignatureSheet)
+            {
+                if (string.IsNullOrWhiteSpace(line.NormPoint))
+                {
+                    return $"Строка '{line.ItemName}' должна содержать пункт норм.";
+                }
+
+                if (string.IsNullOrWhiteSpace(line.IssuePeriodText))
+                {
+                    return $"Строка '{line.ItemName}' должна содержать единицу измерения и периодичность выдачи.";
+                }
+            }
+
+            if (isSignatureSheet && !IsSignaturePpeLineStatus(line.Status))
+            {
+                return $"Строка '{line.ItemName}' не является фактически выданной и не может попасть в лист подписи.";
+            }
+
+            if (isSignatureSheet && string.IsNullOrWhiteSpace(line.IssuedAt))
+            {
+                return $"Строка листа подписи '{line.ItemName}' должна содержать дату выдачи.";
+            }
+        }
+
+        return null;
+    }
+
+    private static string Normalize(string value) => value.Trim().ToLowerInvariant();
+
+    private static bool IsSignaturePpeLineStatus(string value) =>
+        PpeIssueStatusCatalog.IsSignatureStatus(value);
+
+    private static bool ContainsCategoryDashCatalog(string value)
+    {
+        var parts = value.Split(" - ", 2, StringSplitOptions.TrimEntries);
+        return parts.Length == 2 && GenericPpePrintNames.Contains(parts[0]);
+    }
+}
+internal static class SpreadsheetDocumentBuilder
 {
     public static byte[] Build(string sheetName, IReadOnlyList<string> headers, IReadOnlyList<IReadOnlyList<string>> rows)
     {
@@ -559,8 +565,13 @@ file static class SpreadsheetDocumentBuilder
     }
 }
 
-file static class WordDocumentBuilder
+internal static class WordDocumentBuilder
 {
+    private const string WordFont = "Times New Roman";
+    private const int BodyFontSize = 20;
+    private const int SmallFontSize = 16;
+    private const int TitleFontSize = 32;
+
     public static byte[] Build(string title, IReadOnlyList<string> paragraphs)
     {
         var builder = StartDocument();
@@ -581,33 +592,30 @@ file static class WordDocumentBuilder
         string department,
         string position,
         DateTimeOffset createdAt,
+        PpeEmployeePrintDetails employeeDetails,
         IReadOnlyList<PpePrintLine> lines)
     {
         var builder = StartDocument();
-        AppendParagraph(builder, $"ЛИЧНАЯ КАРТОЧКА № СИЗ-{cardId.ToString("N")[..8]}", bold: true, center: true);
+        AppendParagraph(builder, $"ЛИЧНАЯ КАРТОЧКА № СИЗ-{cardId.ToString("N")[..8]}", bold: true, center: true, fontSize: TitleFontSize);
         AppendParagraph(builder, "УЧЕТА ВЫДАЧИ СИЗ", bold: true, center: true);
-        AppendParagraph(builder, $"Дата оформления: {createdAt.LocalDateTime:dd.MM.yyyy}", bold: false, center: true);
         AppendParagraph(builder, string.Empty, bold: false);
         var (lastName, restName) = SplitEmployeeName(employeeName);
         AppendTable(builder, [
-            ["Фамилия", lastName, "Пол", ""],
-            ["Имя", restName, "Рост", ""],
-            ["Табельный номер", personnelNo, "Размер одежды", ""],
-            ["Структурное подразделение", department, "Размер обуви", ""],
-            ["Профессия (должность)", position, "Размер головного убора", ""],
-            ["Дата поступления на работу", "", "СИЗОД", ""],
-            ["Дата изменения профессии (должности) или перевода в другое структурное подразделение", "", "СИЗ рук", ""]
+            [
+                $"Фамилия {lastName}\nИмя {restName}\nТабельный номер {personnelNo}\nСтруктурное подразделение {department}\nПрофессия (должность) {position}\nДата поступления на работу ____________________\nДата изменения профессии (должности) или перевода в другое структурное подразделение ____________________",
+                BuildEmployeeDetailsText(employeeDetails)
+            ]
         ]);
         AppendParagraph(builder, string.Empty, bold: false);
         AppendParagraph(builder,
-            "Выдача предусмотрена Приказом Минтруда России от 27.12.2017 N 882н «Об утверждении Типовых норм бесплатной выдачи специальной одежды, специальной обуви и других средств индивидуальной защиты работникам промышленности строительных материалов, стекольной и фарфоро-фаянсовой промышленности, занятым на работах с вредными и (или) опасными условиями труда, а также на работах, выполняемых в особых температурных условиях или связанных с загрязнением» (зарегистрировано в Минюсте России 01.03.2018 N 50193), Межотраслевыми правилами обеспечения работников специальной одеждой, специальной обувью и другими средствами индивидуальной защиты (утв. Приказом Минздравсоцразвития России от 01.06.2009 N 290н).",
-            bold: false);
-        AppendParagraph(builder, "(наименование типовых (типовых отраслевых) норм)", bold: false, center: true);
+            "Выдача предусмотрена типовыми нормами бесплатной выдачи специальной одежды, специальной обуви и других средств индивидуальной защиты.",
+            bold: false,
+            fontSize: SmallFontSize);
+        AppendParagraph(builder, "(наименование типовых (типовых отраслевых) норм)", bold: false, center: true, fontSize: SmallFontSize);
         AppendParagraph(builder, string.Empty, bold: false);
         AppendTable(builder, BuildPersonalCardRows(lines), headerRows: 1);
         AppendParagraph(builder, string.Empty, bold: false);
-        AppendParagraph(builder, $"Итого к выдаче: {lines.Count} поз.; количество {TotalQuantity(lines):0.###}; сумма {FormatMoneyMinor(TotalAmountMinor(lines))}", bold: true);
-        AppendParagraph(builder, "Ответственное лицо за ведение карточек учета СИЗ ____________________   ________________", bold: false);
+        AppendParagraph(builder, "Ответственное лицо за ведение карточек учета выдачи СИЗ ____________________   ________________", bold: false);
         AppendSection(builder, landscape: false);
         return BuildPackage(builder.ToString());
     }
@@ -620,14 +628,7 @@ file static class WordDocumentBuilder
         IReadOnlyList<PpePrintLine> lines)
     {
         var builder = StartDocument();
-        AppendParagraph(builder, "ЛИСТ РОСПИСИ ПО ПОЛУЧЕНИЮ СИЗ", bold: true, center: true);
-        AppendParagraph(builder, $"Сотрудник: {employeeName}    Табельный номер: {personnelNo}    Должность: {position}", bold: false, center: true);
-        AppendParagraph(builder, $"Дата оформления: {createdAt.LocalDateTime:dd.MM.yyyy}", bold: false, center: true);
-        AppendParagraph(builder, string.Empty, bold: false);
         AppendTable(builder, BuildSignatureSheetRows(lines), headerRows: 3);
-        AppendParagraph(builder, string.Empty, bold: false);
-        AppendParagraph(builder, $"Итого к выдаче: {lines.Count} поз.; количество {TotalQuantity(lines):0.###}; сумма {FormatMoneyMinor(TotalAmountMinor(lines))}", bold: true);
-        AppendParagraph(builder, "СИЗ выдал ____________________ / ____________________     СИЗ получил ____________________ / ____________________", bold: false);
         AppendSection(builder, landscape: true);
         return BuildPackage(builder.ToString());
     }
@@ -639,13 +640,15 @@ file static class WordDocumentBuilder
             new[] { "Наименование СИЗ", "Пункт норм", "Единица измерения, периодичность выдачи", "Количество на период" }
         };
 
-        rows.AddRange(lines.Select(line => new[]
-        {
-            line.ItemName,
-            string.IsNullOrWhiteSpace(line.NormPoint) ? "по нормам должности" : line.NormPoint,
-            PeriodText(line),
-            $"{line.Quantity:0.###} {line.Unit}"
-        }));
+        rows.AddRange(lines.Select(line => line.IsSectionTitle
+            ? new[] { line.ItemName, string.Empty, string.Empty, string.Empty }
+            : new[]
+            {
+                line.ItemName,
+                string.IsNullOrWhiteSpace(line.NormPoint) ? "п. 1645 Приложения № 1" : line.NormPoint,
+                PeriodText(line),
+                $"{line.Quantity:0.###} {line.Unit}"
+            }));
 
         return rows;
     }
@@ -654,8 +657,8 @@ file static class WordDocumentBuilder
     {
         var rows = new List<IReadOnlyList<string>>
         {
-            new[] { "Наименование СИЗ", "Модель, марка, артикул, класс защиты СИЗ, дерматологических СИЗ", "Выдано", "", "", "", "Возвращено", "", "", "" },
-            new[] { "", "", "дата", "количество", "Лично/дозатор", "Подпись получившего СИЗ", "дата", "Количество", "Подпись сдавшего СИЗ", "Акт списания (дата, номер)" },
+            new[] { "Наименование СИЗ", "Модель, марка, артикул, класс защиты СИЗ", "Выдано", "", "", "", "Возвращено", "", "", "" },
+            new[] { "", "", "дата", "количество", "Лично/дозатор", "Подпись получившего СИЗ", "дата", "количество", "Подпись сдавшего СИЗ", "Акт списания (дата, номер)" },
             new[] { "1", "2", "3", "4", "5", "6", "7", "8", "9", "10" }
         };
 
@@ -664,7 +667,7 @@ file static class WordDocumentBuilder
             line.ItemName,
             string.IsNullOrWhiteSpace(line.Model) ? "-" : line.Model,
             string.IsNullOrWhiteSpace(line.IssuedAt) ? "-" : line.IssuedAt,
-            line.Quantity.ToString("0.###"),
+            $"{line.Quantity:0.###} {line.Unit}",
             IsConsumable(line) ? "Дозатор" : "-",
             "",
             "",
@@ -678,32 +681,39 @@ file static class WordDocumentBuilder
 
     private static string PeriodText(PpePrintLine line)
     {
+        if (!string.IsNullOrWhiteSpace(line.IssuePeriodText))
+        {
+            return line.IssuePeriodText;
+        }
+
         var unit = string.IsNullOrWhiteSpace(line.Unit) ? "шт." : line.Unit;
-        return line.LifeMonths is > 0 ? $"{unit}, на {line.LifeMonths} мес." : $"{unit}, по сроку носки";
+        if (!string.IsNullOrWhiteSpace(line.DueAt))
+        {
+            return $"{unit}, до {line.DueAt}";
+        }
+
+        return line.LifeMonths is > 0 ? $"{unit}, {FormatIssuePeriodText(line.LifeMonths)}" : $"{unit}, по сроку носки";
     }
 
-    private static string StatusText(string status) => status.Trim().ToLowerInvariant() switch
+    private static string FormatIssuePeriodText(int? lifeMonths) => lifeMonths switch
     {
-        "issued" => "Выдано",
-        "not_issued" => "Не выдано",
-        "returned" => "Возвращено",
-        "written_off" => "Списано",
-        "lost" => "Утеряно",
-        "reissued" => "Переоформлено",
-        _ => status
+        6 => "0,5 года",
+        12 => "1 год",
+        18 => "1,5 года",
+        24 => "2 года",
+        30 => "2,5 года",
+        36 => "3 года",
+        > 0 => $"на {lifeMonths.Value} мес.",
+        _ => "по сроку носки"
     };
 
     private static bool IsConsumable(PpePrintLine line) =>
         line.LifeMonths is null or <= 0 && string.IsNullOrWhiteSpace(line.DueAt);
 
-    private static decimal TotalQuantity(IReadOnlyList<PpePrintLine> lines) =>
-        lines.Sum(line => line.Quantity);
+    private static string BuildEmployeeDetailsText(PpeEmployeePrintDetails details) =>
+        $"Пол {PrintDetailValue(details.Gender)}\nРост {PrintDetailValue(details.Height)}\nРазмер одежды {PrintDetailValue(details.ClothingSize)}\nРазмер обуви {PrintDetailValue(details.ShoeSize)}\nРазмер головного убора {PrintDetailValue(details.HeadSize)}\nСИЗОД {PrintDetailValue(details.RespiratorSize)}\nСИЗ рук {PrintDetailValue(details.HandProtectionSize)}";
 
-    private static decimal TotalAmountMinor(IReadOnlyList<PpePrintLine> lines) =>
-        lines.Sum(line => line.AmountMinor);
-
-    private static string FormatMoneyMinor(decimal amountMinor) =>
-        $"{amountMinor / 100m:0.##} руб.";
+    private static string PrintDetailValue(string value) => string.IsNullOrWhiteSpace(value) ? "____" : value.Trim();
 
     private static (string LastName, string RestName) SplitEmployeeName(string employeeName)
     {
@@ -756,19 +766,30 @@ file static class WordDocumentBuilder
             builder.Append("<w:tr>");
             foreach (var cell in rows[rowIndex])
             {
-                builder.Append("<w:tc><w:tcPr><w:tcW w:w=\"2400\" w:type=\"dxa\"/></w:tcPr><w:p><w:r>");
-                if (rowIndex < headerRows)
-                {
-                    builder.Append("<w:rPr><w:b/></w:rPr>");
-                }
-
-                builder.Append($"<w:t xml:space=\"preserve\">{Xml(cell)}</w:t></w:r></w:p></w:tc>");
+                builder.Append("<w:tc><w:tcPr><w:tcW w:w=\"2400\" w:type=\"dxa\"/><w:tcMar><w:top w:w=\"40\" w:type=\"dxa\"/><w:left w:w=\"60\" w:type=\"dxa\"/><w:bottom w:w=\"40\" w:type=\"dxa\"/><w:right w:w=\"60\" w:type=\"dxa\"/></w:tcMar></w:tcPr><w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/></w:pPr><w:r>");
+                AppendRunProperties(builder, rowIndex < headerRows, BodyFontSize);
+                AppendTextWithBreaks(builder, cell);
+                builder.Append("</w:r></w:p></w:tc>");
             }
 
             builder.Append("</w:tr>");
         }
 
         builder.Append("</w:tbl>");
+    }
+
+    private static void AppendTextWithBreaks(StringBuilder builder, string value)
+    {
+        var parts = value.Replace("\r\n", "\n").Split('\n');
+        for (var index = 0; index < parts.Length; index++)
+        {
+            if (index > 0)
+            {
+                builder.Append("<w:br/>");
+            }
+
+            builder.Append($"<w:t xml:space=\"preserve\">{Xml(parts[index])}</w:t>");
+        }
     }
 
     private static void AppendSection(StringBuilder builder, bool landscape)
@@ -779,21 +800,29 @@ file static class WordDocumentBuilder
         builder.Append($"<w:sectPr>{pageSize}<w:pgMar w:top=\"720\" w:right=\"720\" w:bottom=\"720\" w:left=\"720\"/></w:sectPr></w:body></w:document>");
     }
 
-    private static void AppendParagraph(StringBuilder builder, string text, bool bold, bool center = false)
+    private static void AppendParagraph(StringBuilder builder, string text, bool bold, bool center = false, int fontSize = BodyFontSize)
     {
-        builder.Append("<w:p>");
+        builder.Append("<w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/>");
         if (center)
         {
-            builder.Append("<w:pPr><w:jc w:val=\"center\"/></w:pPr>");
+            builder.Append("<w:jc w:val=\"center\"/>");
         }
 
+        builder.Append("</w:pPr>");
         builder.Append("<w:r>");
+        AppendRunProperties(builder, bold, fontSize);
+        builder.Append($"<w:t xml:space=\"preserve\">{Xml(text)}</w:t></w:r></w:p>");
+    }
+
+    private static void AppendRunProperties(StringBuilder builder, bool bold, int fontSize)
+    {
+        builder.Append($"<w:rPr><w:rFonts w:ascii=\"{WordFont}\" w:hAnsi=\"{WordFont}\" w:cs=\"{WordFont}\"/><w:sz w:val=\"{fontSize}\"/><w:szCs w:val=\"{fontSize}\"/>");
         if (bold)
         {
-            builder.Append("<w:rPr><w:b/></w:rPr>");
+            builder.Append("<w:b/>");
         }
 
-        builder.Append($"<w:t xml:space=\"preserve\">{Xml(text)}</w:t></w:r></w:p>");
+        builder.Append("</w:rPr>");
     }
 
     private static string Xml(string value) => SecurityElement.Escape(value) ?? string.Empty;
@@ -805,7 +834,350 @@ file static class WordDocumentBuilder
         writer.Write(content.Trim());
     }
 }
-file static class SimplePdfBuilder
+
+internal static class PpeTemplateDocumentBuilder
+{
+    private const string PersonalCardTemplate = "PpePersonalCard.docx";
+    private const string SignatureSheetTemplate = "PpeSignatureSheet.docx";
+
+    public static byte[] BuildPersonalCard(
+        Guid cardId,
+        string employeeName,
+        string personnelNo,
+        string department,
+        string position,
+        DateTimeOffset createdAt,
+        PpeEmployeePrintDetails employeeDetails,
+        IReadOnlyList<PpePrintLine> lines)
+    {
+        var template = TemplatePath(PersonalCardTemplate);
+        if (!File.Exists(template))
+        {
+            return WordDocumentBuilder.BuildPpePersonalCard(cardId, employeeName, personnelNo, department, position, createdAt, employeeDetails, lines);
+        }
+
+        using var stream = OpenTemplateStream(template);
+        using (var document = WordprocessingDocument.Open(stream, true))
+        {
+            var mainPart = document.MainDocumentPart ?? throw new InvalidOperationException("DOCX template does not contain a main document part.");
+            var wordDocument = mainPart.Document ?? throw new InvalidOperationException("DOCX template does not contain a document.");
+            var body = wordDocument.Body ?? throw new InvalidOperationException("DOCX template does not contain a document body.");
+            var tables = body.Descendants<Table>().ToList();
+            if (tables.Count < 2)
+            {
+                return WordDocumentBuilder.BuildPpePersonalCard(cardId, employeeName, personnelNo, department, position, createdAt, employeeDetails, lines);
+            }
+
+            SetFirstParagraphContaining(body, "ЛИЧНАЯ КАРТОЧКА", $"ЛИЧНАЯ КАРТОЧКА № СИЗ-{cardId.ToString("N")[..8]}");
+            SetFirstParagraphContaining(body, "УЧЕТА ВЫДАЧИ СИЗ", "УЧЕТА ВЫДАЧИ СИЗ");
+            FillPersonalInfoTable(tables[0], employeeName, personnelNo, department, position, createdAt, employeeDetails);
+            FillPersonalLinesTable(tables[1], lines);
+            wordDocument.Save();
+        }
+
+        return stream.ToArray();
+    }
+
+    public static byte[] BuildSignatureSheet(
+        string employeeName,
+        string personnelNo,
+        string position,
+        DateTimeOffset createdAt,
+        IReadOnlyList<PpePrintLine> lines)
+    {
+        var template = TemplatePath(SignatureSheetTemplate);
+        if (!File.Exists(template))
+        {
+            return WordDocumentBuilder.BuildPpeSignatureSheet(employeeName, personnelNo, position, createdAt, lines);
+        }
+
+        using var stream = OpenTemplateStream(template);
+        using (var document = WordprocessingDocument.Open(stream, true))
+        {
+            var mainPart = document.MainDocumentPart ?? throw new InvalidOperationException("DOCX template does not contain a main document part.");
+            var wordDocument = mainPart.Document ?? throw new InvalidOperationException("DOCX template does not contain a document.");
+            var body = wordDocument.Body ?? throw new InvalidOperationException("DOCX template does not contain a document body.");
+            var table = body.Descendants<Table>().FirstOrDefault();
+            if (table is null)
+            {
+                return WordDocumentBuilder.BuildPpeSignatureSheet(employeeName, personnelNo, position, createdAt, lines);
+            }
+
+            FillSignatureLinesTable(table, lines);
+            wordDocument.Save();
+        }
+
+        return stream.ToArray();
+    }
+
+    private static void FillPersonalInfoTable(
+        Table table,
+        string employeeName,
+        string personnelNo,
+        string department,
+        string position,
+        DateTimeOffset createdAt,
+        PpeEmployeePrintDetails employeeDetails)
+    {
+        var cells = table.Descendants<TableCell>().Take(2).ToList();
+        if (cells.Count < 2)
+        {
+            return;
+        }
+
+        var (lastName, restName) = SplitEmployeeName(employeeName);
+        SetCellText(cells[0],
+            $"Фамилия {lastName}\nИмя {restName}\nТабельный номер {personnelNo}\nСтруктурное подразделение {department}\nПрофессия (должность) {position}\nДата поступления на работу _________________\nДата изменения профессии (должности) или перевода в другое структурное подразделение _________________");
+        SetCellText(cells[1], BuildEmployeeDetailsText(employeeDetails));
+    }
+
+    private static string BuildEmployeeDetailsText(PpeEmployeePrintDetails details) =>
+        $"Пол {PrintDetailValue(details.Gender)}\nРост {PrintDetailValue(details.Height)}\nРазмер одежды {PrintDetailValue(details.ClothingSize)}\nРазмер обуви {PrintDetailValue(details.ShoeSize)}\nРазмер головного убора {PrintDetailValue(details.HeadSize)}\nСИЗОД {PrintDetailValue(details.RespiratorSize)}\nСИЗ рук {PrintDetailValue(details.HandProtectionSize)}";
+
+    private static string PrintDetailValue(string value) => string.IsNullOrWhiteSpace(value) ? "____" : value.Trim();
+
+    private static MemoryStream OpenTemplateStream(string templatePath)
+    {
+        var bytes = File.ReadAllBytes(templatePath);
+        var stream = new MemoryStream();
+        stream.Write(bytes, 0, bytes.Length);
+        stream.Position = 0;
+        return stream;
+    }
+
+    private static void FillPersonalLinesTable(Table table, IReadOnlyList<PpePrintLine> lines)
+    {
+        var rows = table.Elements<TableRow>().ToList();
+        if (rows.Count == 0)
+        {
+            return;
+        }
+
+        var templateRow = (TableRow)(rows.Count > 1 ? rows[1] : rows[0]).CloneNode(true);
+        foreach (var row in rows.Skip(1).ToList())
+        {
+            row.Remove();
+        }
+
+        foreach (var line in lines)
+        {
+            var row = (TableRow)templateRow.CloneNode(true);
+            SetRowCells(row, [
+                line.ItemName,
+                string.IsNullOrWhiteSpace(line.NormPoint) ? "п. 1645 Приложения № 1" : line.NormPoint,
+                PeriodText(line),
+                $"{line.Quantity:0.###} {line.Unit}"
+            ]);
+            table.Append(row);
+        }
+
+        if (lines.Count == 0)
+        {
+            var row = (TableRow)templateRow.CloneNode(true);
+            SetRowCells(row, ["Позиции СИЗ не добавлены", "", "", ""]);
+            table.Append(row);
+        }
+    }
+
+    private static void FillSignatureLinesTable(Table table, IReadOnlyList<PpePrintLine> lines)
+    {
+        var rows = table.Elements<TableRow>().ToList();
+        if (rows.Count < 3)
+        {
+            return;
+        }
+
+        var templateRow = (TableRow)(rows.Count > 3 ? rows[3] : rows[2]).CloneNode(true);
+        foreach (var row in rows.Skip(3).ToList())
+        {
+            row.Remove();
+        }
+
+        foreach (var line in lines)
+        {
+            var row = (TableRow)templateRow.CloneNode(true);
+            SetRowCells(row, [
+                line.ItemName,
+                string.IsNullOrWhiteSpace(line.Model) ? "-" : line.Model,
+                string.IsNullOrWhiteSpace(line.IssuedAt) ? "-" : line.IssuedAt,
+                $"{line.Quantity:0.###} {line.Unit}",
+                IsConsumable(line) ? "Дозатор" : "-",
+                "",
+                "",
+                "",
+                "",
+                ""
+            ]);
+            table.Append(row);
+        }
+
+        if (lines.Count == 0)
+        {
+            var row = (TableRow)templateRow.CloneNode(true);
+            SetRowCells(row, ["Позиции СИЗ не добавлены", "", "", "", "", "", "", "", "", ""]);
+            table.Append(row);
+        }
+    }
+
+    private static void SetRowCells(TableRow row, IReadOnlyList<string> values)
+    {
+        var cells = row.Elements<TableCell>().ToList();
+        while (cells.Count < values.Count)
+        {
+            var cell = new TableCell(new Paragraph());
+            row.Append(cell);
+            cells.Add(cell);
+        }
+
+        for (var index = 0; index < values.Count; index++)
+        {
+            SetCellText(cells[index], values[index]);
+        }
+    }
+
+    private static void SetCellText(TableCell cell, string value)
+    {
+        var templateParagraph = cell.Elements<Paragraph>().FirstOrDefault();
+        var paragraphProperties = templateParagraph?.ParagraphProperties?.CloneNode(true) as ParagraphProperties;
+        var runProperties = templateParagraph?
+            .Descendants<RunProperties>()
+            .FirstOrDefault()?
+            .CloneNode(true) as RunProperties;
+
+        cell.RemoveAllChildren<Paragraph>();
+        foreach (var line in value.Replace("\r\n", "\n").Split('\n'))
+        {
+            var run = new Run(new Text(line) { Space = SpaceProcessingModeValues.Preserve });
+            if (runProperties is not null)
+            {
+                run.PrependChild((RunProperties)runProperties.CloneNode(true));
+            }
+
+            var paragraph = new Paragraph();
+            if (paragraphProperties is not null)
+            {
+                paragraph.PrependChild((ParagraphProperties)paragraphProperties.CloneNode(true));
+            }
+
+            paragraph.Append(run);
+            cell.Append(paragraph);
+        }
+    }
+
+    private static void SetFirstParagraphContaining(Body body, string marker, string value)
+    {
+        var paragraph = body.Descendants<Paragraph>()
+            .FirstOrDefault(row => row.InnerText.Contains(marker, StringComparison.OrdinalIgnoreCase));
+        if (paragraph is null)
+        {
+            return;
+        }
+
+        SetParagraphText(paragraph, value, bold: true, center: true);
+    }
+
+    private static void InsertParagraphBefore(OpenXmlElement element, string value, bool bold, bool center = false)
+    {
+        element.InsertBeforeSelf(CreateParagraph(value, bold, center));
+    }
+
+    private static void InsertParagraphAfter(OpenXmlElement element, string value, bool bold, bool center = false)
+    {
+        element.InsertAfterSelf(CreateParagraph(value, bold, center));
+    }
+
+    private static void SetParagraphText(Paragraph paragraph, string value, bool bold, bool center)
+    {
+        paragraph.RemoveAllChildren<Run>();
+        if (center)
+        {
+            paragraph.ParagraphProperties ??= new ParagraphProperties();
+            paragraph.ParagraphProperties.Justification = new Justification { Val = JustificationValues.Center };
+        }
+
+        paragraph.Append(CreateRun(value, bold));
+    }
+
+    private static Paragraph CreateParagraph(string value, bool bold, bool center)
+    {
+        var paragraph = new Paragraph();
+        if (center)
+        {
+            paragraph.ParagraphProperties = new ParagraphProperties(new Justification { Val = JustificationValues.Center });
+        }
+
+        paragraph.Append(CreateRun(value, bold));
+        return paragraph;
+    }
+
+    private static Run CreateRun(string value, bool bold)
+    {
+        var run = new Run();
+        if (bold)
+        {
+            run.RunProperties = new RunProperties(new Bold());
+        }
+
+        var parts = value.Replace("\r\n", "\n").Split('\n');
+        for (var index = 0; index < parts.Length; index++)
+        {
+            if (index > 0)
+            {
+                run.Append(new Break());
+            }
+
+            run.Append(new Text(parts[index]) { Space = SpaceProcessingModeValues.Preserve });
+        }
+
+        return run;
+    }
+
+    private static string PeriodText(PpePrintLine line)
+    {
+        if (!string.IsNullOrWhiteSpace(line.IssuePeriodText))
+        {
+            return line.IssuePeriodText;
+        }
+
+        var unit = string.IsNullOrWhiteSpace(line.Unit) ? "шт." : line.Unit;
+        if (!string.IsNullOrWhiteSpace(line.DueAt))
+        {
+            return $"{unit}, до {line.DueAt}";
+        }
+
+        return line.LifeMonths is > 0 ? $"{unit}, {FormatIssuePeriodText(line.LifeMonths)}" : $"{unit}, по сроку носки";
+    }
+
+    private static string FormatIssuePeriodText(int? lifeMonths) => lifeMonths switch
+    {
+        6 => "0,5 года",
+        12 => "1 год",
+        18 => "1,5 года",
+        24 => "2 года",
+        30 => "2,5 года",
+        36 => "3 года",
+        > 0 => $"на {lifeMonths.Value} мес.",
+        _ => "по сроку носки"
+    };
+
+    private static bool IsConsumable(PpePrintLine line) =>
+        line.LifeMonths is null or <= 0 && string.IsNullOrWhiteSpace(line.DueAt);
+
+    private static (string LastName, string RestName) SplitEmployeeName(string employeeName)
+    {
+        var parts = employeeName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length switch
+        {
+            0 => ("", ""),
+            1 => (parts[0], ""),
+            _ => (parts[0], string.Join(' ', parts.Skip(1)))
+        };
+    }
+
+    private static string TemplatePath(string fileName) =>
+        Path.Combine(AppContext.BaseDirectory, "Persistence", "Templates", "Inventory", fileName);
+}
+internal static class SimplePdfBuilder
 {
     public static byte[] Build(string title, IReadOnlyList<string> paragraphs)
     {

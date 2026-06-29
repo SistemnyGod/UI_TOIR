@@ -7,6 +7,8 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : IInventoryCatalogQuery
 {
+    private const string AccountingMovementWarehouseName = "Системный учет движения";
+
     private static readonly IReadOnlyDictionary<string, string[]> EmptyErrors = new Dictionary<string, string[]>();
 
     private static readonly HashSet<string> ReservationMoveTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -15,6 +17,15 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
         "reserve",
         "ppe_reserve",
         "ppe_reservation"
+    };
+
+    private static readonly HashSet<string> AccountingOnlyMoveTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ppe_issue",
+        "ppe_return",
+        "ppe_write_off",
+        "custody_issue",
+        "custody_return"
     };
 
     public InventoryOverviewDto GetOverview()
@@ -186,29 +197,9 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
             stockMoveQuery = stockMoveQuery.Where(move => move.ItemId == query.ItemId.Value);
         }
 
-        var stockMoveRows = stockMoveQuery
-            .GroupBy(move => new
-            {
-                move.ItemId,
-                move.ItemName,
-                move.Unit,
-                move.WarehouseId,
-                move.WarehouseName,
-                move.MoveType
-            })
-            .Select(group => new
-            {
-                group.Key.ItemId,
-                group.Key.ItemName,
-                group.Key.Unit,
-                group.Key.WarehouseId,
-                group.Key.WarehouseName,
-                group.Key.MoveType,
-                Quantity = group.Sum(move => move.QuantityDelta)
-            })
-            .ToList();
-
-        var balances = stockMoveRows
+        var reservationMoveTypes = ReservationMoveTypes.ToArray();
+        var accountingOnlyMoveTypes = AccountingOnlyMoveTypes.ToArray();
+        var balanceQuery = stockMoveQuery
             .GroupBy(move => new
             {
                 move.ItemId,
@@ -224,27 +215,36 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
                 group.Key.Unit,
                 group.Key.WarehouseId,
                 group.Key.WarehouseName,
-                Stock = BuildStockTotals(group.Select(move => (move.MoveType, move.Quantity)))
-            })
+                Physical = group
+                    .Where(move => !reservationMoveTypes.Contains(move.MoveType) && !accountingOnlyMoveTypes.Contains(move.MoveType))
+                    .Sum(move => move.QuantityDelta),
+                Reserved = group
+                    .Where(move => reservationMoveTypes.Contains(move.MoveType))
+                    .Sum(move => Math.Abs(move.QuantityDelta))
+            });
+
+        var total = balanceQuery.Count();
+        var rows = balanceQuery
             .OrderBy(balance => balance.ItemName)
             .ThenBy(balance => balance.WarehouseName)
-            .ToList();
-
-        var total = balances.Count;
-        var rows = balances
             .Skip((paging.Page - 1) * paging.PageSize)
             .Take(paging.PageSize)
+            .AsEnumerable()
             .Select(balance => new InventoryStockBalanceDto(
                 balance.ItemId,
                 balance.ItemName,
                 balance.WarehouseId,
                 balance.WarehouseName,
-                balance.Stock.Available,
-                balance.Stock.Physical,
-                balance.Stock.Reserved,
-                balance.Stock.Available,
+                Math.Max(0m, balance.Physical - balance.Reserved),
+                balance.Physical,
+                Math.Max(0m, balance.Reserved),
+                Math.Max(0m, balance.Physical - balance.Reserved),
                 balance.Unit,
-                balance.Stock.Status))
+                balance.Physical - balance.Reserved > 0m
+                    ? "available"
+                    : balance.Reserved > 0m && balance.Physical > 0m
+                        ? "reserved"
+                        : "not_available"))
             .ToList();
 
         return ToListResponse(rows, total, paging);
@@ -342,7 +342,17 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
                 .Include(norm => norm.Item)
                 .OrderBy(norm => norm.PositionName)
                 .ThenBy(norm => norm.Item.Name)
-                .Select(norm => new InventoryPositionNormDto(norm.Id, norm.PositionName, norm.ItemId, norm.Item.Name, norm.Quantity, norm.LifeMonths))
+                .Select(norm => new InventoryPositionNormDto(
+                    norm.Id,
+                    norm.PositionName,
+                    norm.ItemId,
+                    norm.Item.Name,
+                    norm.Quantity,
+                    norm.LifeMonths,
+                    norm.NormItemName,
+                    norm.NormPoint,
+                    norm.IssuePeriodText,
+                    norm.QuantityText))
                 .ToList(),
             EmployeePositions: GetEmployeeReferenceOptions("position", dbContext.Employees.Select(employee => employee.Position)),
             EmployeeDepartments: GetEmployeeReferenceOptions("department", dbContext.Employees.Select(employee => employee.Department)),
@@ -406,6 +416,7 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
     public InventoryDbHealthDto GetDbHealth()
     {
         var issues = new List<InventoryDbHealthIssueDto>();
+        var accountingOnlyMoveTypes = AccountingOnlyMoveTypes.ToArray();
 
         AddIssue(
             issues,
@@ -479,6 +490,7 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
             "inventory.stock_moves",
             dbContext.InventoryStockMoves
                 .AsNoTracking()
+                .Where(move => !accountingOnlyMoveTypes.Contains(move.MoveType))
                 .GroupBy(move => new { move.ItemId, move.WarehouseId })
                 .Count(group => group.Sum(move => move.QuantityDelta) < 0),
             "Отрицательные остатки",
@@ -565,7 +577,7 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
             "posted",
             move.MovedAt.UtcDateTime,
             move.Item.Name,
-            move.Warehouse.Name,
+            move.Warehouse.Name == AccountingMovementWarehouseName ? string.Empty : move.Warehouse.Name,
             move.QuantityDelta,
             move.Item.Unit?.Symbol ?? move.Item.Unit?.Name ?? string.Empty,
             move.ReferenceType);
@@ -675,6 +687,12 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
 
         foreach (var row in rows)
         {
+            if (AccountingOnlyMoveTypes.Contains(row.MoveType))
+            {
+                isTracked = true;
+                continue;
+            }
+
             isTracked = true;
             if (ReservationMoveTypes.Contains(row.MoveType))
             {

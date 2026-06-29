@@ -1,0 +1,1142 @@
+/* Unified EMU interface pass: dashboard, work accounting, history. */
+.emu-shell {
+  --emu-surface: rgba(255, 255, 255, 0.96);
+  --emu-surface-soft: rgba(248, 251, 255, 0.92);
+  --emu-line: #d7e4f7;
+  --emu-line-strong: #b9cdf0;
+  --emu-text: #0d1b34;
+  --emu-muted: #52637f;
+  --emu-blue: #1267f1;
+  --emu-blue-dark: #0b52c5;
+  --emu-green: #0f9f6e;
+  --emu-orange: #f97316;
+  --emu-red: #ef4444;
+  --emu-shadow: 0 18px 44px rgba(37, 99, 235, 0.08);
+  --emu-shadow-soft: 0 10px 26px rgba(15, 35, 70, 0.06);
+}
+
+.emu-shell *,
+.emu-shell *::before,
+.emu-shell *::after {
+  box-sizing: border-box;
+}
+
+.emu-page,
+.emu-dashboard-page,
+.emu-history-v2 {
+  gap: 16px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 10px 12px 32px;
+}
+
+.emu-page-heading,
+.emu-dashboard-header,
+.emu-history-v2-header {
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.emu-page-heading h2,
+.emu-dashboard-header h2,
+.emu-history-v2-header h2 {
+  color: var(--emu-text);
+  font-size: clamp(24px, 2vw, 32px);
+  line-height: 1.08;
+  margin: 0;
+}
+
+.emu-page-heading p,
+.emu-dashboard-header p,
+.emu-history-v2-header p,
+.emu-panel-header p {
+  color: var(--emu-muted);
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 4px 0 0;
+}
+
+.emu-panel,
+.emu-kpi,
+.emu-dashboard-metric,
+.emu-dashboard-shift,
+.emu-dashboard-card,
+.emu-board-section,
+.emu-work-card,
+.emu-work-side-panel,
+.emu-shift-summary-card,
+.emu-history-filter-card,
+.emu-history-kpi,
+.emu-history-content-card,
+.emu-history-right-card,
+.emu-employee-month-panel,
+.emu-employee-shift-list button,
+.emu-employee-period-row,
+.emu-reference-block,
+.emu-plan-card,
+.emu-plan-column,
+.emu-catalog-editor,
+.emu-modal {
+  background: var(--emu-surface);
+  border: 1px solid var(--emu-line);
+  border-radius: 14px;
+  box-shadow: var(--emu-shadow-soft);
+  color: var(--emu-text);
+  min-width: 0;
+}
+
+.emu-panel,
+.emu-dashboard-card,
+.emu-history-content-card,
+.emu-history-right-card {
+  overflow: hidden;
+}
+
+.emu-panel-header,
+.emu-dashboard-card-title,
+.emu-dashboard-card > header,
+.emu-history-content-card > header,
+.emu-history-right-card > header,
+.emu-board-section-header,
+.emu-modal header {
+  border-bottom: 1px solid rgba(215, 228, 247, 0.78);
+  min-height: 54px;
+  padding: 14px 16px;
+}
+
+.emu-panel-header h3,
+.emu-dashboard-card-title h3,
+.emu-dashboard-card > header h3,
+.emu-history-content-card > header h3,
+.emu-history-right-card > header h3,
+.emu-board-section-header strong,
+.emu-modal header h3 {
+  color: var(--emu-text);
+  font-size: 17px;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.emu-kpi-row,
+.emu-dashboard-top-grid,
+.emu-history-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.emu-kpi,
+.emu-dashboard-metric,
+.emu-history-kpi {
+  min-height: 96px;
+  padding: 15px;
+}
+
+.emu-kpi strong,
+.emu-dashboard-metric strong,
+.emu-history-kpi strong {
+  color: var(--emu-text);
+  font-size: clamp(24px, 2.2vw, 31px);
+  line-height: 1;
+}
+
+.emu-kpi span,
+.emu-dashboard-metric span,
+.emu-history-kpi small,
+.emu-history-kpi em {
+  color: var(--emu-muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.emu-kpi-icon,
+.emu-dashboard-icon,
+.emu-history-kpi > span {
+  align-items: center;
+  background: #eaf2ff;
+  border-radius: 14px;
+  color: var(--emu-blue);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.emu-primary-button,
+.emu-secondary-button,
+.emu-ghost-button,
+.emu-danger-button,
+.emu-command-button,
+.emu-create-actions button,
+.emu-modal-actions button,
+.emu-dashboard-card > header button,
+.emu-dashboard-actions button,
+.emu-work-filters button,
+.emu-history-tabs button,
+.emu-density-switch button,
+.emu-workload-filters button,
+.emu-group-toggle,
+.emu-inline-form button,
+.emu-reference-row button,
+.emu-pagination button {
+  align-items: center;
+  border-radius: 10px;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 800;
+  gap: 8px;
+  justify-content: center;
+  line-height: 1.1;
+  min-height: 38px;
+  padding: 0 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.emu-primary-button,
+.emu-dashboard-actions button.primary,
+.emu-history-tabs button.active {
+  background: linear-gradient(180deg, #1d73ff, var(--emu-blue));
+  border: 1px solid var(--emu-blue);
+  box-shadow: 0 12px 24px rgba(18, 103, 241, 0.22);
+  color: #fff;
+}
+
+.emu-secondary-button,
+.emu-ghost-button,
+.emu-command-button,
+.emu-dashboard-card > header button,
+.emu-dashboard-actions button:not(.primary),
+.emu-group-toggle,
+.emu-inline-form button,
+.emu-reference-row button,
+.emu-pagination button {
+  background: #fff;
+  border: 1px solid #c9daf4;
+  color: #17345f;
+}
+
+.emu-danger-button {
+  background: #fff5f5;
+  border: 1px solid #fecaca;
+  color: #c81e1e;
+}
+
+.emu-primary-button:hover,
+.emu-dashboard-actions button.primary:hover {
+  background: linear-gradient(180deg, #1d73ff, var(--emu-blue));
+  border-color: #8fb8ff;
+  box-shadow: 0 0 0 3px rgba(29, 111, 255, 0.14), 0 10px 22px rgba(18, 103, 241, 0.18);
+  transform: translateY(-1px);
+}
+
+.emu-secondary-button:hover,
+.emu-ghost-button:hover,
+.emu-command-button:hover,
+.emu-dashboard-card > header button:hover,
+.emu-dashboard-actions button:not(.primary):hover,
+.emu-reference-row button:hover {
+  background: #f4f8ff;
+  border-color: #a9c5ef;
+}
+
+.emu-shell input,
+.emu-shell select,
+.emu-shell textarea,
+.emu-inline-select,
+.emu-input-action,
+.emu-history-search-box,
+.emu-picker-toolbar input {
+  background: #fff;
+  border: 1px solid #cdddf4;
+  border-radius: 10px;
+  color: var(--emu-text);
+  font-size: 13px;
+  min-height: 40px;
+  outline: none;
+}
+
+.emu-shell input,
+.emu-shell select,
+.emu-shell textarea {
+  padding: 0 12px;
+}
+
+.emu-shell textarea {
+  line-height: 1.45;
+  min-height: 88px;
+  padding: 10px 12px;
+}
+
+.emu-shell input:focus,
+.emu-shell select:focus,
+.emu-shell textarea:focus,
+.emu-history-search-box:focus-within {
+  border-color: var(--emu-blue);
+  box-shadow: 0 0 0 3px rgba(18, 103, 241, 0.12);
+}
+
+.emu-form-grid label,
+.emu-textarea-label,
+.emu-modal label,
+.emu-history-filter-card label {
+  color: #415472;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 6px;
+}
+
+.emu-work-layout,
+.emu-history-main-grid,
+.emu-dashboard-middle-grid,
+.emu-dashboard-bottom-grid {
+  align-items: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.emu-work-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+}
+
+.emu-card-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.emu-board-stack {
+  gap: 12px;
+}
+
+.emu-board-section {
+  background: rgba(255, 255, 255, 0.88);
+  border-left-width: 4px;
+  padding: 0;
+}
+
+.emu-board-section-header {
+  background: linear-gradient(180deg, #fbfdff, #f6faff);
+}
+
+.emu-work-card {
+  border-left: 4px solid var(--emu-blue);
+  box-shadow: 0 8px 18px rgba(15, 35, 70, 0.07);
+  gap: 9px;
+  padding: 12px;
+}
+
+.emu-work-card:hover {
+  box-shadow: 0 14px 28px rgba(18, 103, 241, 0.13);
+}
+
+.emu-work-card h4 {
+  color: var(--emu-text);
+  font-size: 14px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.emu-work-card p,
+.emu-work-meta,
+.emu-card-warning {
+  color: var(--emu-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.emu-card-actions {
+  gap: 6px;
+}
+
+.emu-status-pill,
+.emu-history-status,
+.emu-dashboard-status,
+.emu-dashboard-severity,
+.emu-employee-status,
+.emu-workload-pill {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 5px;
+  min-height: 24px;
+  padding: 0 9px;
+  white-space: nowrap;
+}
+
+.emu-employee-chips {
+  gap: 5px;
+}
+
+.emu-employee-status {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.emu-work-side-panel,
+.emu-history-right-card {
+  position: sticky;
+  top: 12px;
+}
+
+.emu-side-employee-card,
+.emu-history-data-table tr,
+.emu-history-timeline-row,
+.emu-reference-row,
+.emu-selected-chip,
+.emu-picker button,
+.emu-plan-task-card {
+  border-radius: 10px;
+}
+
+.emu-side-employee-card {
+  padding: 10px;
+}
+
+.emu-history-tabs,
+.emu-work-filters,
+.emu-density-switch,
+.emu-workload-filters {
+  background: #f5f9ff;
+  border-color: var(--emu-line);
+  border-radius: 12px;
+  overflow-x: auto;
+  padding: 4px;
+}
+
+.emu-history-tabs button,
+.emu-work-filters button {
+  min-height: 34px;
+}
+
+.emu-history-filter-card {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(6, minmax(150px, 1fr));
+  padding: 16px;
+}
+
+.emu-history-filter-buttons,
+.emu-history-filter-flags {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.emu-history-table-wrap {
+  overflow-x: auto;
+}
+
+.emu-history-data-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 760px;
+  width: 100%;
+}
+
+.emu-history-data-table th {
+  background: #f4f8ff;
+  color: #52637f;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+  padding: 12px;
+  text-align: left;
+  text-transform: none;
+}
+
+.emu-history-data-table td {
+  border-top: 1px solid #edf3fb;
+  color: var(--emu-text);
+  font-size: 12px;
+  padding: 12px;
+  vertical-align: middle;
+}
+
+.emu-history-data-table tr.selected td,
+.emu-history-data-table tr:hover td {
+  background: #f5f9ff;
+}
+
+.emu-history-timeline-board {
+  border: 1px solid var(--emu-line);
+  border-radius: 14px;
+  overflow: auto;
+}
+
+.emu-history-timeline-track {
+  min-width: 560px;
+}
+
+.emu-dashboard-top-grid {
+  grid-template-columns: repeat(5, minmax(170px, 1fr)) minmax(230px, 280px);
+}
+
+.emu-dashboard-middle-grid {
+  grid-template-columns: minmax(280px, 0.95fr) minmax(340px, 1.3fr) minmax(230px, 280px);
+}
+
+.emu-dashboard-bottom-grid {
+  grid-template-columns: minmax(280px, 1fr) minmax(280px, 0.82fr) minmax(260px, 0.82fr) minmax(220px, 260px);
+}
+
+.emu-dashboard-metric {
+  min-height: 150px;
+}
+
+.emu-dashboard-metric-main {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.emu-dashboard-sparkline,
+.emu-dashboard-sparkline-empty {
+  margin-top: 10px;
+}
+
+.emu-dashboard-actions .emu-quick-actions {
+  display: grid;
+  gap: 9px;
+  padding: 14px;
+}
+
+.emu-empty-state,
+.emu-empty-card-text {
+  background: #f8fbff;
+  border: 1px dashed #cbdcf4;
+  border-radius: 12px;
+  color: #5a6b86;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 18px;
+  text-align: center;
+}
+
+.emu-modal {
+  box-shadow: 0 28px 72px rgba(15, 35, 70, 0.22);
+}
+
+.emu-modal-wide {
+  width: min(1180px, calc(100vw - 32px));
+}
+
+.emu-modal-actions,
+.emu-modal > .emu-modal-actions,
+.emu-create-actions {
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 1px solid var(--emu-line);
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.emu-picker-shell {
+  background: #f8fbff;
+  border: 1px solid var(--emu-line);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.emu-picker {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+}
+
+.emu-picker button,
+.emu-reference-row {
+  background: #fff;
+  border: 1px solid #d6e2f4;
+  color: var(--emu-text);
+  min-width: 0;
+}
+
+.emu-plan-board,
+.emu-kanban,
+.emu-reference-grid,
+.emu-favorite-grid {
+  gap: 12px;
+}
+
+@media (max-width: 1320px) {
+  .emu-dashboard-top-grid,
+  .emu-dashboard-middle-grid,
+  .emu-dashboard-bottom-grid,
+  .emu-work-layout,
+  .emu-history-main-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emu-work-side-panel,
+  .emu-history-right-card {
+    position: static;
+  }
+
+  .emu-dashboard-metric {
+    min-height: 128px;
+  }
+}
+
+@media (max-width: 900px) {
+  .emu-page,
+  .emu-dashboard-page,
+  .emu-history-v2 {
+    padding: 8px 8px 24px;
+  }
+
+  .emu-page-heading,
+  .emu-dashboard-header,
+  .emu-history-v2-header,
+  .emu-panel-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .emu-heading-actions,
+  .emu-dashboard-header-actions,
+  .emu-history-view-actions,
+  .emu-panel-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .emu-kpi-row,
+  .emu-dashboard-top-grid,
+  .emu-history-kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .emu-history-filter-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emu-card-grid,
+  .emu-picker {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .emu-primary-button,
+  .emu-secondary-button,
+  .emu-ghost-button,
+  .emu-danger-button,
+  .emu-command-button,
+  .emu-create-actions button,
+  .emu-modal-actions button,
+  .emu-dashboard-actions button,
+  .emu-group-toggle {
+    width: 100%;
+  }
+
+  .emu-work-filters,
+  .emu-history-tabs,
+  .emu-density-switch,
+  .emu-workload-filters {
+    width: 100%;
+  }
+
+  .emu-dashboard-metric-main,
+  .emu-work-card-top {
+    align-items: flex-start;
+  }
+}
+
+.emu-work-main > .emu-panel-header {
+  align-items: start;
+  display: grid;
+  gap: 10px 14px;
+  grid-template-columns: minmax(190px, 0.72fr) minmax(0, 1fr);
+  min-height: 0;
+  padding: 12px 14px;
+}
+
+.emu-work-main > .emu-panel-header > div:first-child {
+  min-width: 0;
+}
+
+.emu-work-main .emu-panel-actions {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, max-content) minmax(190px, 1fr) max-content;
+  justify-content: stretch;
+  min-width: 0;
+  width: 100%;
+}
+
+.emu-work-main .emu-panel-actions > .emu-inline-select {
+  justify-self: stretch;
+  height: 34px;
+  min-height: 34px;
+}
+
+.emu-work-main .emu-panel-actions > .emu-inline-select select {
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.emu-work-main .emu-panel-actions > .emu-density-switch {
+  grid-column: 1 / span 2;
+  justify-self: start;
+  min-height: 34px;
+  order: 6;
+}
+
+.emu-work-main .emu-panel-actions > .emu-work-filters {
+  box-sizing: border-box;
+  grid-column: 3 / -1;
+  min-height: 36px;
+  min-width: 0;
+  order: 7;
+  overflow-x: auto;
+  overflow-y: hidden;
+  width: 100%;
+}
+
+.emu-work-main .emu-panel-actions > .emu-secondary-button,
+.emu-work-main .emu-panel-actions > .emu-primary-button,
+.emu-work-main .emu-panel-actions > .emu-density-switch button,
+.emu-work-main .emu-panel-actions > .emu-work-filters button {
+  min-height: 32px;
+  padding-left: 11px;
+  padding-right: 11px;
+}
+
+.emu-work-main .emu-panel-actions > .emu-secondary-button:last-child {
+  justify-self: end;
+  order: 5;
+}
+
+@media (max-width: 1180px) {
+  .emu-work-main > .emu-panel-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emu-work-main .emu-panel-actions {
+    grid-template-columns: repeat(3, max-content) minmax(170px, 1fr) max-content;
+  }
+}
+
+@media (max-width: 720px) {
+  .emu-work-main .emu-panel-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emu-work-main .emu-panel-actions > .emu-density-switch,
+  .emu-work-main .emu-panel-actions > .emu-work-filters {
+    grid-column: 1;
+    width: 100%;
+  }
+
+  .emu-work-main .emu-panel-actions > .emu-secondary-button,
+  .emu-work-main .emu-panel-actions > .emu-primary-button,
+  .emu-work-main .emu-panel-actions > .emu-secondary-button:last-child {
+    justify-self: stretch;
+    width: 100%;
+  }
+}
+.emu-history-pagination {
+  align-items: center;
+  border-top: 1px solid #d8e6f8;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 0 0;
+}
+
+.emu-history-pagination label {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.emu-history-pagination > div {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.emu-history-section-accordion {
+  display: grid;
+  gap: 8px;
+}
+
+.emu-history-section-accordion > article {
+  border: 1px solid #d7e5f7;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.emu-history-section-accordion > article > button {
+  align-items: center;
+  background: #fff;
+  border: 0;
+  color: #0d2a52;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1fr) 90px 110px 110px 80px;
+  padding: 10px 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.emu-history-section-accordion > article.active > button {
+  background: #eef6ff;
+}
+
+.emu-history-section-accordion em {
+  color: #d8342a;
+  font-style: normal;
+}
+
+.emu-history-section-work-list {
+  background: #f8fbff;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+}
+
+.emu-history-section-work-list > button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #d7e5f7;
+  border-radius: 8px;
+  color: #0d2a52;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 8px;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 1fr) 120px 160px 110px;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.emu-history-exception-list {
+  display: grid;
+  gap: 8px;
+}
+
+.emu-history-exception-list article {
+  background: #fff;
+  border: 1px solid #d7e5f7;
+  border-left: 3px solid #f59e0b;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.emu-history-exception-list article.danger {
+  border-left-color: #ef4444;
+}
+
+.emu-history-exception-list article > div,
+.emu-history-exception-list dl {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 0;
+}
+
+.emu-history-exception-list p {
+  color: #405a7d;
+  font-size: 13px;
+  margin: 0;
+}
+
+.emu-history-exception-list dt {
+  color: #6b7f9f;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.emu-history-exception-list dd {
+  color: #0d2a52;
+  font-weight: 800;
+  margin: 0;
+}
+
+.emu-history-modal-backdrop {
+  align-items: center;
+  background: rgba(9, 30, 66, 0.38);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 80;
+}
+
+.emu-history-employee-modal {
+  background: #fff;
+  border: 1px solid #cfe0f5;
+  border-radius: 10px;
+  box-shadow: 0 24px 70px rgba(12, 34, 66, 0.24);
+  max-height: min(760px, calc(100vh - 48px));
+  max-width: 1180px;
+  overflow: auto;
+  padding: 16px;
+  width: min(1180px, 100%);
+}
+
+.emu-history-employee-modal > header {
+  align-items: flex-start;
+  border-bottom: 1px solid #d8e6f8;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+.emu-history-employee-modal > header h3 {
+  margin: 2px 0;
+}
+
+.emu-history-employee-modal > nav {
+  display: flex;
+  gap: 6px;
+  padding: 12px 0;
+}
+
+.emu-history-employee-modal > nav button {
+  background: #f4f8fd;
+  border: 1px solid #d7e5f7;
+  border-radius: 8px;
+  color: #0d2a52;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 8px 12px;
+}
+
+.emu-history-employee-modal > nav button.active {
+  background: #206bff;
+  border-color: #206bff;
+  color: #fff;
+}
+
+.emu-history-modal-kpis,
+.emu-history-employee-section-report {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.emu-history-modal-kpis article,
+.emu-history-employee-section-report article {
+  background: #f8fbff;
+  border: 1px solid #d7e5f7;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.emu-history-modal-note {
+  color: #526986;
+  font-size: 12px;
+  margin: 8px 0 0;
+}
+
+@media (max-width: 900px) {
+  .emu-history-pagination,
+  .emu-history-section-accordion > article > button,
+  .emu-history-section-work-list > button {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .emu-history-modal-backdrop {
+    padding: 8px;
+  }
+}
+
+/* EMU dashboard and work accounting final unification pass. */
+.emu-shell .emu-work-accounting-heading,
+.emu-shell .emu-dashboard-header {
+  align-items: center;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 251, 255, 0.94));
+  border: 1px solid var(--emu-line);
+  border-radius: 16px;
+  box-shadow: var(--emu-shadow-soft);
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 18px;
+}
+
+.emu-shell .emu-work-accounting-heading h2,
+.emu-shell .emu-dashboard-header h2 {
+  font-size: clamp(24px, 2vw, 31px);
+  line-height: 1.08;
+}
+
+.emu-shell .emu-heading-actions,
+.emu-shell .emu-dashboard-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.emu-shell .emu-kpi-row {
+  grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
+}
+
+.emu-shell .emu-kpi {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-height: 88px;
+  padding: 14px;
+}
+
+.emu-shell .emu-kpi small,
+.emu-shell .emu-kpi span {
+  color: var(--emu-muted);
+  font-size: 12px;
+  line-height: 1.28;
+}
+
+.emu-shell .emu-kpi strong {
+  display: block;
+  margin-top: 3px;
+}
+
+.emu-shell .emu-work-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+}
+
+.emu-shell .emu-work-main > .emu-panel-header {
+  align-items: start;
+  background: linear-gradient(180deg, #fbfdff, #f5f9ff);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(230px, 0.52fr) minmax(0, 1fr);
+  padding: 14px 16px;
+}
+
+.emu-shell .emu-work-main .emu-panel-actions {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: max-content max-content minmax(170px, 1fr);
+}
+
+.emu-shell .emu-work-main .emu-panel-actions > .emu-inline-select {
+  grid-column: 1 / -1;
+  order: 3;
+}
+
+.emu-shell .emu-work-main .emu-panel-actions > .emu-density-switch {
+  grid-column: auto;
+  justify-self: start;
+  order: 4;
+}
+
+.emu-shell .emu-work-main .emu-panel-actions > .emu-work-filters {
+  grid-column: 1 / -1;
+  order: 5;
+}
+
+.emu-shell .emu-work-filters,
+.emu-shell .emu-density-switch,
+.emu-shell .emu-workload-filters {
+  background: #f7fbff;
+  border: 1px solid var(--emu-line);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.emu-shell .emu-card-grid {
+  grid-template-columns: repeat(auto-fill, minmax(238px, 1fr));
+}
+
+.emu-shell .emu-work-card {
+  border-radius: 12px;
+  min-height: 150px;
+  padding: 12px;
+}
+
+.emu-shell .emu-work-card.density-compact {
+  min-height: 126px;
+}
+
+.emu-shell .emu-work-card h4 {
+  overflow-wrap: anywhere;
+}
+
+.emu-shell .emu-work-meta {
+  background: #f8fbff;
+}
+
+.emu-shell .emu-work-side-panel {
+  max-height: calc(100vh - 112px);
+  overflow: auto;
+}
+
+.emu-shell .emu-dashboard-top-grid {
+  grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+}
+
+.emu-shell .emu-dashboard-middle-grid,
+.emu-shell .emu-dashboard-bottom-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.82fr) minmax(260px, 0.72fr);
+}
+
+.emu-shell .emu-dashboard-card,
+.emu-shell .emu-dashboard-metric,
+.emu-shell .emu-dashboard-shift {
+  border-radius: 14px;
+}
+
+.emu-shell .emu-dashboard-metric {
+  min-height: 132px;
+}
+
+@media (max-width: 1360px) {
+  .emu-shell .emu-work-layout,
+  .emu-shell .emu-dashboard-middle-grid,
+  .emu-shell .emu-dashboard-bottom-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emu-shell .emu-work-side-panel {
+    max-height: none;
+    position: static;
+  }
+}
+
+@media (max-width: 920px) {
+  .emu-shell .emu-work-accounting-heading,
+  .emu-shell .emu-dashboard-header,
+  .emu-shell .emu-work-main > .emu-panel-header {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emu-shell .emu-heading-actions,
+  .emu-shell .emu-dashboard-header-actions {
+    justify-content: flex-start;
+  }
+
+  .emu-shell .emu-work-main .emu-panel-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emu-shell .emu-work-main .emu-panel-actions > * {
+    width: 100%;
+  }
+}
+
