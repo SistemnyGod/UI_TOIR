@@ -4,7 +4,7 @@
 
 .inventory-ppe-employee-workflow .inventory-ppe-employee-layout {
   display: grid;
-  grid-template-columns: minmax(250px, 300px) minmax(0, 1fr) minmax(260px, 320px);
+  grid-template-columns: minmax(260px, 310px) minmax(0, 1fr);
   gap: 14px;
   align-items: start;
 }
@@ -164,11 +164,13 @@
 
 .inventory-ppe-employee-workflow .inventory-ppe-employee-card {
   display: grid;
-  gap: 12px;
+  gap: 0;
   padding: 0;
-  background: transparent;
-  border: 0;
-  box-shadow: none;
+  overflow: hidden;
+  border: 1px solid var(--ppe-line);
+  border-radius: var(--ppe-card-radius);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: var(--ppe-panel-shadow);
 }
 
 .inventory-ppe-employee-workflow .inventory-ppe-employee-summary {
@@ -176,7 +178,12 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
-  padding: 14px;
+  padding: 16px;
+  border: 0;
+  border-bottom: 1px solid var(--ppe-line);
+  border-radius: 0;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: none;
 }
 
 .inventory-ppe-employee-workflow .inventory-ppe-employee-person {
@@ -236,23 +243,37 @@
 
 .inventory-ppe-employee-workflow .inventory-ppe-tabs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid var(--ppe-line);
-  border-radius: var(--ppe-card-radius);
-  background: rgba(255, 255, 255, 0.94);
+  flex-wrap: nowrap;
+  gap: 0;
+  overflow-x: auto;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--ppe-line);
+  border-radius: 0;
+  background: #fbfdff;
+  scrollbar-width: thin;
 }
 
 .inventory-ppe-employee-workflow .inventory-ppe-tabs button {
-  min-height: 38px;
-  padding: 0 14px;
-  border: 1px solid transparent;
-  border-radius: 9px;
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid var(--ppe-line);
+  border-right: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--ppe-soft-ink);
   font-size: 13px;
   font-weight: 950;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-tabs button:first-child {
+  border-radius: 9px 0 0 9px;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-tabs button:last-child {
+  border-right: 1px solid var(--ppe-line);
+  border-radius: 0 9px 9px 0;
 }
 
 .inventory-ppe-employee-workflow .inventory-ppe-tabs button.is-active {
@@ -265,7 +286,11 @@
   display: grid;
   gap: 14px;
   min-height: 360px;
-  padding: 14px;
+  padding: 16px;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
 }
 
 .inventory-ppe-employee-workflow .inventory-ppe-norm-toolbar {
@@ -589,15 +614,17 @@
 }
 
 .inventory-ppe-employee-workflow .inventory-ppe-side-panel {
-  position: sticky;
-  top: 12px;
+  grid-column: 2;
+  position: static;
   display: grid;
-  gap: 12px;
+  grid-template-columns: minmax(210px, 0.8fr) minmax(280px, 1.1fr) minmax(260px, 1fr);
+  gap: 10px;
 }
 
 .inventory-ppe-employee-workflow .inventory-ppe-side-panel section {
   display: grid;
-  gap: 12px;
+  align-content: start;
+  gap: 10px;
   padding: 12px;
 }
 
@@ -620,13 +647,14 @@
 .inventory-ppe-employee-workflow .inventory-ppe-side-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .inventory-ppe-employee-workflow .inventory-ppe-side-metric {
   display: grid;
-  gap: 5px;
-  padding: 10px;
+  gap: 4px;
+  min-height: 58px;
+  padding: 8px;
   border: 1px solid var(--ppe-line);
   border-radius: 9px;
   background: #f8fbff;
@@ -641,7 +669,7 @@
 
 .inventory-ppe-employee-workflow .inventory-ppe-side-metric strong {
   color: var(--ppe-ink);
-  font-size: 22px;
+  font-size: 18px;
   line-height: 1;
 }
 
@@ -681,10 +709,18 @@
   width: 100%;
 }
 
+.inventory-ppe-employee-workflow .inventory-ppe-side-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-side-actions .button.primary {
+  grid-column: 1 / -1;
+}
+
 .inventory-ppe-employee-workflow .inventory-ppe-side-history article {
   display: grid;
   gap: 3px;
-  padding: 9px;
+  padding: 8px;
   border: 1px solid var(--ppe-line);
   border-radius: 9px;
   background: #f8fbff;
@@ -828,11 +864,18 @@
   }
 
   .inventory-ppe-employee-workflow .inventory-ppe-side-panel {
+    grid-column: auto;
+    grid-template-columns: minmax(0, 1fr);
     position: static;
   }
 
   .inventory-ppe-employee-workflow .inventory-ppe-employee-list {
     max-height: 280px;
+  }
+
+  .inventory-ppe-employee-workflow .inventory-ppe-side-metrics,
+  .inventory-ppe-employee-workflow .inventory-ppe-side-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -852,11 +895,20 @@
     flex: 1 1 180px;
   }
 
+  .inventory-ppe-employee-workflow .inventory-ppe-tabs {
+    padding: 8px;
+  }
+
   .inventory-ppe-employee-workflow .inventory-ppe-norm-toolbar {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .inventory-ppe-employee-workflow .inventory-ppe-norm-toolbar-metrics {
     justify-content: flex-start;
+  }
+
+  .inventory-ppe-employee-workflow .inventory-ppe-side-metrics,
+  .inventory-ppe-employee-workflow .inventory-ppe-side-actions {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
