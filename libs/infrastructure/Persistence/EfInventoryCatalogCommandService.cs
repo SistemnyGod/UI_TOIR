@@ -529,6 +529,7 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
         entity.NormPoint = NormalizeOptional(request.NormPoint);
         entity.IssuePeriodText = NormalizeOptional(request.IssuePeriodText);
         entity.QuantityText = NormalizeOptional(request.QuantityText);
+        entity.IsSectionTitle = request.IsSectionTitle == true;
         if (entity.NormItemName.Length == 0)
         {
             entity.NormItemName = NormalizeOptional(item.NormItemName);
@@ -539,7 +540,7 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
             entity.NormItemName = item.Name;
         }
 
-        if (entity.QuantityText.Length == 0)
+        if (entity.QuantityText.Length == 0 && !entity.IsSectionTitle)
         {
             entity.QuantityText = $"{entity.Quantity:g}";
         }
@@ -555,7 +556,8 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
             entity.NormItemName,
             entity.NormPoint,
             entity.IssuePeriodText,
-            entity.QuantityText));
+            entity.QuantityText,
+            entity.IsSectionTitle));
     }
 
     public InventoryCommandResult<InventoryItemDto> CreateItem(UpsertInventoryItemDto request)

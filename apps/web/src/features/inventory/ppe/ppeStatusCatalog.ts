@@ -56,7 +56,7 @@ export const INVENTORY_PPE_MODULE_STATUSES = [
 ] as const;
 
 export const PPE_ISSUE_PERIOD_OPTIONS = [
-  "1 год",
+  "на год",
   "1,5 года",
   "2 года",
   "2,5 года",
@@ -103,7 +103,7 @@ export function isPpeSignatureStatus(status: string) {
 export function defaultIssuePeriodText(lifeMonths?: number | null) {
   switch (lifeMonths) {
     case 12:
-      return "1 год";
+      return "на год";
     case 18:
       return "1,5 года";
     case 24:

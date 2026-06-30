@@ -783,6 +783,8 @@ export interface InventoryPpeCardLineDto {
   normPoint: string;
   printItemName?: string;
   issuePeriodText?: string;
+  quantityText?: string;
+  isSectionTitle?: boolean;
 }
 
 export interface InventoryPpeMovementDto {
@@ -832,6 +834,8 @@ export interface UpsertInventoryPpeCardLineDto {
   printItemName?: string | null;
   normPoint?: string | null;
   issuePeriodText?: string | null;
+  quantityText?: string | null;
+  isSectionTitle?: boolean | null;
   brandModelArticle?: string | null;
 }
 
@@ -991,6 +995,7 @@ export interface InventoryPositionNormDto {
   normPoint?: string;
   issuePeriodText?: string;
   quantityText?: string;
+  isSectionTitle?: boolean;
 }
 
 export interface CreateInventorySimpleReferenceDto {
@@ -1029,6 +1034,7 @@ export interface UpsertInventoryPositionNormDto {
   normPoint?: string | null;
   issuePeriodText?: string | null;
   quantityText?: string | null;
+  isSectionTitle?: boolean | null;
 }
 
 export interface CreateInventoryCategoryDto {

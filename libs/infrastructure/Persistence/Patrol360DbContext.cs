@@ -1350,6 +1350,8 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(row => row.PrintItemName).HasColumnName("print_item_name").HasMaxLength(600).IsRequired();
             entity.Property(row => row.NormPoint).HasColumnName("norm_point").HasMaxLength(240).IsRequired();
             entity.Property(row => row.IssuePeriodText).HasColumnName("issue_period_text").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.QuantityText).HasColumnName("quantity_text");
+            entity.Property(row => row.IsSectionTitle).HasColumnName("is_section_title").HasDefaultValue(false);
             entity.Property(row => row.BrandModelArticle).HasColumnName("brand_model_article").HasMaxLength(600).IsRequired();
             entity.HasOne(row => row.Card).WithMany(card => card.Lines).HasForeignKey(row => row.CardId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(row => row.Item).WithMany().HasForeignKey(row => row.ItemId).OnDelete(DeleteBehavior.Restrict);
@@ -1417,6 +1419,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(row => row.NormPoint).HasColumnName("norm_point").HasMaxLength(240).HasDefaultValue("");
             entity.Property(row => row.IssuePeriodText).HasColumnName("issue_period_text").HasMaxLength(160).HasDefaultValue("");
             entity.Property(row => row.QuantityText).HasColumnName("quantity_text").HasMaxLength(80).HasDefaultValue("");
+            entity.Property(row => row.IsSectionTitle).HasColumnName("is_section_title").HasDefaultValue(false);
             entity.Property(row => row.Quantity).HasColumnName("quantity").HasPrecision(12, 3);
             entity.Property(row => row.LifeMonths).HasColumnName("life_months");
             entity.HasOne(row => row.Item).WithMany().HasForeignKey(row => row.ItemId).OnDelete(DeleteBehavior.Restrict);

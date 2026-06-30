@@ -28,6 +28,7 @@ export function PointResultTable({ group, results, onOpenAttachment, photoLoadin
           const statusMeta = getPointStatusMeta(result);
           const photoCount = getPhotoCount(result);
           const isManual = isManualPointResult(result);
+          const hasComment = isUsefulText(result.comment);
           const StateIcon = statusMeta.key === "ok" ? CheckCircle2 : AlertTriangle;
           const pointOrder = Math.max(1, group.results.findIndex((item) => item.id === result.id) + 1) || index + 1;
 
@@ -39,10 +40,10 @@ export function PointResultTable({ group, results, onOpenAttachment, photoLoadin
               </span>
               <div className="results-review-point-name">
                 <strong>{result.point || `Точка ${index + 1}`}</strong>
-                <small>Очередность: {pointOrder}</small>
-                {isManual ? <span className="results-review-method-badge is-manual">Без сканирования</span> : null}
-              </div>
-              <div className="results-review-point-status">
+                <div className="results-review-point-name-meta">
+                  <small>Очередность: {pointOrder}</small>
+                  {isManual ? <span className="results-review-method-badge is-manual">Без сканирования</span> : null}
+                </div>
                 <PointStatusPill result={result} />
               </div>
               <div className="results-review-point-cell is-time">
@@ -50,13 +51,9 @@ export function PointResultTable({ group, results, onOpenAttachment, photoLoadin
                 <strong>{formatPointActualTime(result.actualAt)}</strong>
                 <small>{getPointDurationLabel(result)}</small>
               </div>
-              <div className="results-review-point-cell is-comment">
+              <div className={`results-review-point-comment ${hasComment ? "" : "is-empty"}`}>
                 <span>Комментарий</span>
-                <strong>{getPointComment(result)}</strong>
-              </div>
-              <div className="results-review-point-cell is-result">
-                <span>Итог по метке</span>
-                <strong>{statusMeta.detail}</strong>
+                <p>{getPointComment(result)}</p>
               </div>
               <div className="results-review-point-photo">
                 {photoCount > 0 ? (

@@ -43,8 +43,8 @@ export function PpePositionNormList({
             </button>
           </div>
           <div className="inventory-ppe-reference-meta">
-            <span className="inventory-ppe-reference-chip">{formatQuantity(norm.quantity)} шт.</span>
-            <span className="inventory-ppe-reference-chip">{norm.lifeMonths ?? 12} мес.</span>
+            <span className="inventory-ppe-reference-chip">{norm.quantityText || `${formatQuantity(norm.quantity)} шт.`}</span>
+            <span className="inventory-ppe-reference-chip">{norm.issuePeriodText || `${norm.lifeMonths ?? 12} мес.`}</span>
           </div>
         </article>
       ))}

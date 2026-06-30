@@ -95,6 +95,8 @@ internal sealed class InventoryPpeCardLineEntity
     public string PrintItemName { get; set; } = string.Empty;
     public string NormPoint { get; set; } = string.Empty;
     public string IssuePeriodText { get; set; } = string.Empty;
+    public string? QuantityText { get; set; }
+    public bool IsSectionTitle { get; set; }
     public string BrandModelArticle { get; set; } = string.Empty;
     public InventoryPpeCardEntity Card { get; set; } = null!;
     public InventoryItemEntity Item { get; set; } = null!;
@@ -154,6 +156,7 @@ internal sealed class InventoryPositionNormEntity
     public string NormPoint { get; set; } = string.Empty;
     public string IssuePeriodText { get; set; } = string.Empty;
     public string QuantityText { get; set; } = string.Empty;
+    public bool IsSectionTitle { get; set; }
     public decimal Quantity { get; set; }
     public int? LifeMonths { get; set; }
     public InventoryItemEntity Item { get; set; } = null!;

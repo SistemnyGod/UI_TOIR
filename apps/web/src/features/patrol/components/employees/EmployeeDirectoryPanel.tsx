@@ -110,63 +110,40 @@ export function EmployeeDirectoryPanel({
       </div>
 
       {filteredEmployees.length > 0 ? (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>ФИО</th>
-                <th>Табельный N</th>
-                <th>Должность</th>
-                <th>Подразделение</th>
-                <th>Группа</th>
-                <th>Статус</th>
-                <th>Маршруты сегодня</th>
-                <th>Мобильный аккаунт</th>
-                <th>Обновлено</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredEmployees.map((employee) => {
-                const rowProgress = Math.round((employee.routesDone / Math.max(1, employee.routesTotal)) * 100);
-                return (
-                  <tr
-                    className={`clickable ${selectedEmployeeId === employee.id ? "selected" : ""}`}
-                    key={employee.id}
-                    onClick={() => onSelectEmployee(employee.id)}
-                  >
-                    <td>
-                      <div className="identity-cell">
-                        <span className="avatar small">{employee.initials}</span>
-                        <div>
-                          <strong>{employee.fullName}</strong>
-                          <span className="muted-line">{employee.department}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td>{employee.personnelNo}</td>
-                    <td>{employee.position}</td>
-                    <td>{employee.zone}</td>
-                    <td>{employee.employeeGroup || "-"}</td>
-                    <td>
-                      <Chip>{employee.status}</Chip>
-                    </td>
-                    <td>
-                      <div className="table-progress wide-progress">
-                        <ProgressBar value={rowProgress} />
-                        <span>
-                          {employee.routesDone} / {employee.routesTotal}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <Chip>{employee.mobileStatus}</Chip>
-                    </td>
-                    <td>{employee.lastSeen}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="employee-roster-list">
+          {filteredEmployees.map((employee) => {
+            const rowProgress = Math.round((employee.routesDone / Math.max(1, employee.routesTotal)) * 100);
+            return (
+              <button
+                className={`employee-roster-row ${selectedEmployeeId === employee.id ? "selected" : ""}`}
+                key={employee.id}
+                onClick={() => onSelectEmployee(employee.id)}
+                type="button"
+              >
+                <div className="identity-cell employee-roster-identity">
+                  <span className="avatar small">{employee.initials}</span>
+                  <div>
+                    <strong>{employee.fullName}</strong>
+                    <span className="muted-line">{employee.position}</span>
+                  </div>
+                </div>
+                <div className="employee-roster-meta">
+                  <span>{employee.personnelNo}</span>
+                  <span>{employee.department || employee.zone}</span>
+                  <span>{employee.employeeGroup || "Без группы"}</span>
+                </div>
+                <div className="employee-roster-progress">
+                  <span>Маршруты сегодня</span>
+                  <ProgressBar value={rowProgress} />
+                  <strong>{employee.routesDone} / {employee.routesTotal}</strong>
+                </div>
+                <div className="employee-roster-badges">
+                  <Chip>{employee.status}</Chip>
+                  <Chip>{employee.mobileStatus}</Chip>
+                </div>
+              </button>
+            );
+          })}
         </div>
       ) : (
         <EmptyState

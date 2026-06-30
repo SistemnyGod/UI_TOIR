@@ -24,7 +24,7 @@ internal sealed partial class EfInventoryWorkflowService
             return Failure<InventoryPpeCardLineDto>("itemId", "Item not found");
         }
 
-        if (IsPpeSectionTitle(request.PrintItemName) && IsPpeSignatureLineStatus(NormalizePpeStatus(request.Status)))
+        if (IsPpeSectionTitle(request) && IsPpeSignatureLineStatus(NormalizePpeStatus(request.Status)))
         {
             return Failure<InventoryPpeCardLineDto>("status", "PPE section title cannot be issued.");
         }
@@ -101,6 +101,9 @@ internal sealed partial class EfInventoryWorkflowService
     private static bool IsPpeSectionTitle(string? printItemName) =>
         !string.IsNullOrWhiteSpace(printItemName) &&
         printItemName.Trim().EndsWith(':');
+
+    private static bool IsPpeSectionTitle(UpsertInventoryPpeCardLineDto request) =>
+        request.IsSectionTitle == true || IsPpeSectionTitle(request.PrintItemName);
 
     private static string NormalizePpeStatus(string? status)
     {

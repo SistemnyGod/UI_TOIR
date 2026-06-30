@@ -26,6 +26,7 @@ import { getConfiguredDataSourceMode, getDefaultDataSourceMode, isDataSourceMode
 import { useMobileAccountsWorkspace, type TemporaryPasswordNotice } from "../hooks/useMobileAccountsWorkspace";
 import { usePatrolDataSource } from "../hooks/usePatrolDataSource";
 import { usePatrolWorkspaceData } from "../hooks/usePatrolWorkspaceData";
+import { useResultsWorkspace } from "../hooks/useResultsWorkspace";
 import { useSession } from "../hooks/useSession";
 import { useStoredState } from "../hooks/useStoredState";
 import { useSystemNotifications } from "../hooks/useSystemNotifications";
@@ -65,6 +66,12 @@ export function App() {
     session.user.id !== "mock-session-user";
   const dataAccessMode = dataSourceMode === "api" && !hasApiSession ? "mock" : dataSourceMode;
   const patrolData = usePatrolDataSource(dataAccessMode);
+  const scheduleResultHistory = useResultsWorkspace({
+    dataSourceMode: dataAccessMode,
+    selectedResultId,
+    onSelectResult: setSelectedResultId,
+    showToast,
+  });
   const scheduleAssignmentsApi = useMemo(() => createApiAssignmentsRepository(), []);
   const [temporaryPasswordNotice, setTemporaryPasswordNotice] = useState<TemporaryPasswordNotice | null>(null);
   const mobileAccounts = useMobileAccountsWorkspace({
@@ -254,6 +261,11 @@ export function App() {
   }
 
   function openRequestById(requestId: string) {
+    if (!requests.some((request) => request.id === requestId)) {
+      showToast("Заявка не найдена в текущем списке");
+      return;
+    }
+
     setRequestModal({ kind: "view", requestId });
   }
 
@@ -480,6 +492,7 @@ export function App() {
           requests={requests}
           requestListErrorMessage={requestListErrorMessage}
           requestListStatus={requestListStatus}
+          patrolResults={scheduleResultHistory.results}
           onRetryRequests={refreshRequests}
           resultMode={resultMode}
           employeeCreateIntent={employeeCreateIntent}

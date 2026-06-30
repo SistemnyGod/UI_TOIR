@@ -470,15 +470,19 @@ export function createMockInventoryRepository(): InventoryRepository {
       const unitPriceMinor = payload.unitPriceMinor ?? item.defaultUnitPriceMinor ?? 0;
       const line: InventoryPpeCardLineDto = {
         amountMinor: unitPriceMinor * payload.quantity,
+        brandModelArticle: payload.brandModelArticle ?? [item.brandName, item.modelName, item.article].filter(Boolean).join(" "),
         dueAt: payload.dueAt ?? null,
         id: id("ppe-line"),
+        isSectionTitle: Boolean(payload.isSectionTitle),
         issuedAt: payload.status === "issued" ? new Date().toISOString() : null,
+        issuePeriodText: payload.issuePeriodText ?? "",
         itemId: item.id,
         itemName: item.name,
         modelDescription: [item.brandName, item.modelName, item.article].filter(Boolean).join(" "),
-        brandModelArticle: payload.brandModelArticle ?? [item.brandName, item.modelName, item.article].filter(Boolean).join(" "),
-        normPoint: "",
+        normPoint: payload.normPoint ?? "",
+        printItemName: payload.printItemName ?? (item.normItemName || item.name),
         quantity: payload.quantity,
+        quantityText: payload.quantityText ?? `${payload.quantity} ${item.unit || "шт."}`,
         status: payload.status ?? "draft",
         unit: item.unit,
         unitPriceMinor,
@@ -500,11 +504,16 @@ export function createMockInventoryRepository(): InventoryRepository {
       const warehouse = payload.warehouseId ? store.settings.warehouses.find((row) => row.id === payload.warehouseId) : null;
       const unitPriceMinor = payload.unitPriceMinor ?? item.defaultUnitPriceMinor ?? 0;
       line.dueAt = payload.dueAt ?? null;
+      line.isSectionTitle = Boolean(payload.isSectionTitle);
+      line.issuePeriodText = payload.issuePeriodText ?? line.issuePeriodText ?? "";
       line.itemId = item.id;
       line.itemName = item.name;
       line.modelDescription = [item.brandName, item.modelName, item.article].filter(Boolean).join(" ");
       line.brandModelArticle = payload.brandModelArticle ?? line.modelDescription;
+      line.normPoint = payload.normPoint ?? line.normPoint ?? "";
+      line.printItemName = payload.printItemName ?? line.printItemName ?? (item.normItemName || item.name);
       line.quantity = payload.quantity;
+      line.quantityText = payload.quantityText ?? line.quantityText ?? `${payload.quantity} ${item.unit || "шт."}`;
       line.status = payload.status ?? line.status;
       line.unit = item.unit;
       line.unitPriceMinor = unitPriceMinor;
@@ -917,14 +926,24 @@ export function createMockInventoryRepository(): InventoryRepository {
       if (existing) {
         existing.quantity = payload.quantity;
         existing.lifeMonths = payload.lifeMonths ?? null;
+        existing.normItemName = payload.normItemName ?? item.normItemName ?? item.name;
+        existing.normPoint = payload.normPoint ?? existing.normPoint ?? "";
+        existing.issuePeriodText = payload.issuePeriodText ?? existing.issuePeriodText ?? "";
+        existing.quantityText = payload.quantityText ?? existing.quantityText ?? `${payload.quantity} ${item.unit || "шт."}`;
+        existing.isSectionTitle = Boolean(payload.isSectionTitle);
       } else {
         store.settings.positionNorms.push({
           id: id("position-norm"),
           itemId: item.id,
           itemName: item.name,
+          issuePeriodText: payload.issuePeriodText ?? "",
+          isSectionTitle: Boolean(payload.isSectionTitle),
           lifeMonths: payload.lifeMonths ?? null,
+          normItemName: payload.normItemName ?? item.normItemName ?? item.name,
+          normPoint: payload.normPoint ?? "",
           positionName: payload.positionName,
           quantity: payload.quantity,
+          quantityText: payload.quantityText ?? `${payload.quantity} ${item.unit || "шт."}`,
         });
       }
       writeStore(store);
@@ -1060,12 +1079,30 @@ function createSeedStore(): InventoryMockStore {
   const items: InventoryItemDto[] = [
     item("item-helmet", "Каска защитная", "PPE-001", categories[0], units[0], 24, "ppe"),
     item("item-gloves", "Перчатки диэлектрические", "PPE-002", categories[0], units[1], 18, "ppe"),
+    {
+      ...item("item-ppe-section-winter", "На наружных работах, зимой дополнительно:", "PPE-SEC-WINTER", categories[0], units[0], 0, "ppe"),
+      normItemName: "На наружных работах, зимой дополнительно:",
+    },
+    {
+      ...item("item-arc-suit-summer", "Костюм летний термостойкий", "PPE-ARC-SUMMER", categories[0], units[0], 8, "ppe"),
+      defaultLifeMonths: 48,
+      normItemName: "Костюм летний (куртка, брюки или полукомбинезон) термостойкий для защиты электротехнического персонала от термических рисков электрической дуги",
+    },
+    {
+      ...item("item-arc-suit-winter", "Костюм зимний термостойкий", "PPE-ARC-WINTER", categories[0], units[0], 6, "ppe"),
+      defaultLifeMonths: 48,
+      normItemName: "Костюм от пониженных температур (куртка, брюки или полукомбинезон) термостойкий для защиты электротехнического персонала от термических рисков электрической дуги",
+    },
+    {
+      ...item("item-raincoat", "Плащ от воды", "PPE-RAIN", categories[0], units[0], 10, "ppe"),
+      normItemName: "Плащ от воды 3 класса защиты, растворов нетоксичных веществ и общих производственных загрязнений",
+    },
     item("item-wrench", "Ключ гаечный 24", "TOOL-024", categories[1], units[0], 7, "custody"),
   ];
   const stock: InventoryStockBalanceDto[] = [
     stockRow(items[0], warehouses[1], 24),
     stockRow(items[1], warehouses[1], 18),
-    stockRow(items[2], warehouses[0], 7),
+    stockRow(items[6], warehouses[0], 7),
   ];
   const itemSets: InventoryItemSetDto[] = [{ id: "set-electrician", isActive: true, itemsCount: 2, name: "Бригада электрика" }];
   const itemSetItems = {
@@ -1123,7 +1160,13 @@ function createSeedStore(): InventoryMockStore {
       employeeGroups: [ref("group-atom", "Атом"), ref("group-atom-eco", "Атом Экология")],
       employeePositions: [ref("pos-locksmith", "Слесарь"), ref("pos-electrician", "Электрик"), ref("pos-storekeeper", "Кладовщик")],
       itemSets,
-      positionNorms: [],
+      positionNorms: [
+        positionNorm("norm-electric-arc-summer", "Электрик", items[3], 2, 48, "п. 5294 Приложения № 1; п.2.1.1., п.3.5. Приложения № 2", "2 шт., на 4 года", "2 шт."),
+        positionNorm("norm-electric-section-winter", "Электрик", items[2], 1, null, "", "", "", true),
+        positionNorm("norm-electric-arc-winter", "Электрик", items[4], 2, 48, "п.4.7. Приложения № 2", "2 шт., на 4 года", "2 шт."),
+        positionNorm("norm-electric-raincoat", "Электрик", items[5], 1, 12, "п.4.9. Приложения № 2", "шт., на год", "1 шт."),
+        positionNorm("norm-electrician-arc-summer", "Электромонтер", items[3], 2, 48, "п. 5294 Приложения № 1; п.2.1.1., п.3.5. Приложения № 2", "2 шт., на 4 года", "2 шт."),
+      ],
       returnReasons: [ref("return-wear", "Износ"), ref("return-replace", "Замена")],
       units,
       warehouses,
@@ -1512,6 +1555,32 @@ function stockRow(itemRow: InventoryItemDto, warehouse: InventoryReferenceOption
     unit: itemRow.unit,
     warehouseId: warehouse.id,
     warehouseName: warehouse.name,
+  };
+}
+
+function positionNorm(
+  idValue: string,
+  positionName: string,
+  itemRow: InventoryItemDto,
+  quantity: number,
+  lifeMonths: number | null,
+  normPoint: string,
+  issuePeriodText: string,
+  quantityText: string,
+  isSectionTitle = false,
+): InventorySettingsDto["positionNorms"][number] {
+  return {
+    id: idValue,
+    issuePeriodText,
+    isSectionTitle,
+    itemId: itemRow.id,
+    itemName: itemRow.name,
+    lifeMonths,
+    normItemName: itemRow.normItemName || itemRow.name,
+    normPoint,
+    positionName,
+    quantity,
+    quantityText,
   };
 }
 

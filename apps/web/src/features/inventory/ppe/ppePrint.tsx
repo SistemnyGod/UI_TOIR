@@ -4,8 +4,8 @@ import { Printer, X } from "lucide-react";
 import { escapeHtml, formatDate, formatQuantity, isConsumableLine, isPpeSignatureLineStatus } from "./ppeCommon";
 import type { PrintData, PrintLine, PrintMode } from "./ppeTypes";
 
-const PPE_NORM_TEXT =
-  "Выдача предусмотрена Приказом Минтруда России от 27.12.2017 № 882н, типовыми нормами бесплатной выдачи специальной одежды, специальной обуви и других средств индивидуальной защиты, а также межотраслевыми правилами обеспечения работников средствами индивидуальной защиты.";
+export const PPE_NORM_TEXT =
+  "Выдача предусмотрена Приказом Минтруда России от 27.12.2017 N 882н \"Об утверждении Типовых норм бесплатной выдачи специальной одежды, специальной обуви и других средств индивидуальной защиты работникам промышленности строительных материалов, стекольной и фарфоро-фаянсовой промышленности, занятым на работах с вредными и (или) опасными условиями труда, а также на работах, выполняемых в особых температурных условиях или связанных с загрязнением\" (Зарегистрировано в Минюсте России 01.03.2018 N 50193); Межотраслевыми правилами обеспечения работников специальной одеждой, специальной обувью и другими средствами индивидуальной защиты (утв. Приказом Минздравсоцразвития России от 01.06.2009 N 290н).";
 
 export function PrintPreviewModal({
   data,
@@ -142,7 +142,7 @@ function PersonalCardPaper({
   return (
     <>
       <div className="ppe-print-title">
-        <h3>Личная карточка N {cardNumber(data)}</h3>
+        <h3>Личная карточка № {cardNumber(data)}</h3>
         <h4>учета выдачи СИЗ</h4>
       </div>
       <EmployeeInfoBlock data={data} />
@@ -265,7 +265,7 @@ function PersonalCardLinesTable({
                   />
                 )}
               </td>
-              <td>{line.isSectionTitle ? "" : `${formatQuantity(line.quantity)} ${line.unit || "шт."}`}</td>
+              <td>{line.isSectionTitle ? "" : quantityText(line)}</td>
             </tr>
           ))
         ) : (
@@ -368,13 +368,13 @@ function buildCardHtml(data: PrintData) {
         .map((line) =>
           line.isSectionTitle
             ? `<tr class="is-section-title"><td>${escapeHtml(printItemName(line))}</td><td></td><td></td><td></td></tr>`
-            : `<tr><td>${escapeHtml(printItemName(line))}</td><td>${escapeHtml(line.normPoint || "п. 1645")}</td><td>${escapeHtml(periodText(line))}</td><td>${escapeHtml(`${formatQuantity(line.quantity)} ${line.unit || "шт."}`)}</td></tr>`,
+            : `<tr><td>${escapeHtml(printItemName(line))}</td><td>${escapeHtml(line.normPoint || "п. 1645")}</td><td>${escapeHtml(periodText(line))}</td><td>${escapeHtml(quantityText(line))}</td></tr>`,
         )
         .join("")
     : `<tr><td colspan="4">Позиции СИЗ не добавлены</td></tr>`;
 
   return `
-    <div class="ppe-print-title"><h3>Личная карточка N ${escapeHtml(cardNumber(data))}</h3><h4>учета выдачи СИЗ</h4></div>
+    <div class="ppe-print-title"><h3>Личная карточка № ${escapeHtml(cardNumber(data))}</h3><h4>учета выдачи СИЗ</h4></div>
     ${buildEmployeeInfoHtml(data)}
     <p class="norm-text">${escapeHtml(PPE_NORM_TEXT)}</p>
     <table class="ppe-print-lines ppe-personal-lines">
@@ -481,11 +481,20 @@ function formatOptionalDate(value?: string | null) {
 }
 
 function periodText(line: PrintLine) {
-  return line.issuePeriodText?.trim() || "1 год";
+  const explicitText = line.issuePeriodText?.trim();
+  if (explicitText) return explicitText;
+
+  const unit = line.unit || "шт.";
+  if (line.dueAt) return `${unit}, до ${formatDate(line.dueAt, "date")}`;
+  return `${unit}, на год`;
 }
 
 function signatureQuantity(line: PrintLine) {
   return `${formatQuantity(line.quantity)} ${line.unit || "шт."}`;
+}
+
+function quantityText(line: PrintLine) {
+  return line.quantityText?.trim() || signatureQuantity(line);
 }
 
 function printItemName(line: PrintLine) {

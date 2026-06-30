@@ -352,7 +352,8 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
                     norm.NormItemName,
                     norm.NormPoint,
                     norm.IssuePeriodText,
-                    norm.QuantityText))
+                    norm.QuantityText,
+                    norm.IsSectionTitle))
                 .ToList(),
             EmployeePositions: GetEmployeeReferenceOptions("position", dbContext.Employees.Select(employee => employee.Position)),
             EmployeeDepartments: GetEmployeeReferenceOptions("department", dbContext.Employees.Select(employee => employee.Department)),

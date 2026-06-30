@@ -9,6 +9,10 @@ export function findPatrolResult(results: PatrolResult[], resultId: string) {
   return results.find((result) => result.id === resultId) ?? results[0];
 }
 
+export function isBackendResultId(resultId: string | undefined | null) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(resultId ?? "");
+}
+
 export interface ResultFilterOptions {
   employeeId?: string;
   routeId?: string;
@@ -34,6 +38,10 @@ export function createApiResultsRepository({
     },
 
     async getResult(resultId: string, options: ApiRequestOptions = {}) {
+      if (!isBackendResultId(resultId)) {
+        throw new Error("Result id is not a backend API id");
+      }
+
       const result = await client.get<ResultDetailDto>(`/api/v1/results/${resultId}`, options);
       return mapResult(result);
     },

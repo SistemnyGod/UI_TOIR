@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { Chip, EmptyState, Field } from "../../../../shared/ui";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Bell, CalendarDays, ChevronDown, Clock3, MapPin, Moon, UserRound } from "lucide-react";
+import { Chip, Field } from "../../../../shared/ui";
 import type {
   CreateServiceRequestPayload,
   CompleteAssignmentPayload,
   EmployeeDirectoryItem,
+  PatrolResult,
   RouteDirectoryItem,
   ScheduleCell,
   ServiceRequest,
@@ -15,8 +17,10 @@ type AssignmentCommand = "start" | "cancel" | "complete";
 interface ScheduleEditPanelProps {
   canManage?: boolean;
   employees: EmployeeDirectoryItem[];
+  resultHistory?: PatrolResult[];
   routes: RouteDirectoryItem[];
   selected?: ScheduleCell;
+  onClose: () => void;
   onCreateScheduledRequest: (payload: CreateServiceRequestPayload) => MaybePromise<ServiceRequest>;
   onNotify: (message: string) => void;
   onOpenRequestById: (requestId: string) => void;
@@ -26,8 +30,10 @@ interface ScheduleEditPanelProps {
 export function ScheduleEditPanel({
   canManage = true,
   employees,
+  resultHistory = [],
   routes,
   selected,
+  onClose,
   onCreateScheduledRequest,
   onNotify,
   onOpenRequestById,
@@ -43,6 +49,7 @@ export function ScheduleEditPanel({
   const [saving, setSaving] = useState(false);
   const [commandSaving, setCommandSaving] = useState<AssignmentCommand | null>(null);
   const [showQuickCompleteConfirm, setShowQuickCompleteConfirm] = useState(false);
+  const [selectedResultId, setSelectedResultId] = useState("");
 
   const selectedEmployee = useMemo(
     () => employees.find((employee) => employee.id === employeeId),
@@ -52,6 +59,10 @@ export function ScheduleEditPanel({
     () => routes.find((route) => route.id === routeId),
     [routeId, routes],
   );
+  const selectedResult = useMemo(
+    () => resultHistory.find((result) => result.id === selectedResultId) ?? resultHistory[0],
+    [resultHistory, selectedResultId],
+  );
   const routeRequiresChecklist = (selectedRoute?.points.length ?? 0) > 0;
 
   useEffect(() => {
@@ -60,15 +71,12 @@ export function ScheduleEditPanel({
     resetFormFromSelected(selected, employees, routes);
   }, [employees, routes, selected]);
 
+  useEffect(() => {
+    setSelectedResultId(resultHistory[0]?.id ?? "");
+  }, [resultHistory, selected?.id]);
+
   if (!selected) {
-    return (
-      <aside className="edit-modal">
-        <EmptyState
-          title="Ячейка плана не выбрана"
-          description="Выберите свободную или заполненную ячейку, чтобы создать заявку на обход или управлять назначением."
-        />
-      </aside>
-    );
+    return null;
   }
 
   const isExisting = selected.state !== "empty";
@@ -86,6 +94,26 @@ export function ScheduleEditPanel({
     setShift(cell.shift);
     setNotifyEmployee(cell.notifyEmployee ?? true);
     setDescription(cell.notificationText || "");
+  }
+
+  function applyResultToPlan(result: PatrolResult) {
+    const resultEmployee = employees.find((employee) => employee.id === result.employeeId || employee.fullName === result.employee);
+    const resultRoute = routes.find((route) => route.id === result.routeId || route.name === result.route);
+
+    setSelectedResultId(result.id);
+
+    if (resultEmployee) {
+      setEmployeeId(resultEmployee.id);
+    }
+
+    if (resultRoute) {
+      setRouteId(resultRoute.id);
+    }
+
+    setShift(result.shift === "Ночь" ? "Ночная" : "Дневная");
+    setNotifyEmployee(true);
+    setDescription(createResultNotificationText(result));
+    onNotify("Данные результата подставлены в плановый обход");
   }
 
   async function submitScheduleItem() {
@@ -118,6 +146,7 @@ export function ScheduleEditPanel({
         description: description.trim(),
       });
       onNotify(notifyEmployee ? "Плановый обход создан, уведомление подготовлено" : "Плановый обход создан");
+      onClose();
     } catch (error) {
       onNotify(error instanceof Error ? error.message : "Не удалось сохранить плановый обход");
     } finally {
@@ -154,15 +183,20 @@ export function ScheduleEditPanel({
   }
 
   return (
-    <aside className="edit-modal">
+    <aside className="edit-modal schedule-plan-modal" role="dialog" aria-modal="true" aria-labelledby="schedule-plan-modal-title">
       <div className="drawer-title">
         <div>
-          <h2>{isExisting ? "Плановый обход" : "Создание планового обхода"}</h2>
+          <h2 id="schedule-plan-modal-title">{isExisting ? "Плановый обход" : "Создание планового обхода"}</h2>
           <p>
             {selected.day} · {selected.shift}
           </p>
         </div>
-        <Chip>{getSelectedChipLabel(selected)}</Chip>
+        <div className="schedule-plan-modal-head-actions">
+          <Chip>{getSelectedChipLabel(selected)}</Chip>
+          <button className="icon-button" onClick={onClose} type="button" aria-label="Закрыть">
+            ×
+          </button>
+        </div>
       </div>
 
       {isExisting ? (
@@ -240,9 +274,8 @@ export function ScheduleEditPanel({
         </>
       ) : null}
 
-      <div className="form-stack schedule-plan-form">
-        <label>
-          Сотрудник
+      <div className="schedule-plan-form">
+        <SchedulePlanField icon={<UserRound size={19} />} label="Сотрудник">
           <select value={employeeId} onChange={(event) => setEmployeeId(event.currentTarget.value)}>
             <option value="">Выберите сотрудника</option>
             {employees.map((employee) => (
@@ -251,10 +284,10 @@ export function ScheduleEditPanel({
               </option>
             ))}
           </select>
-        </label>
+          <ChevronDown aria-hidden="true" className="schedule-plan-field-caret" size={18} />
+        </SchedulePlanField>
 
-        <label>
-          Маршрут
+        <SchedulePlanField icon={<MapPin size={19} />} label="Маршрут">
           <select value={routeId} onChange={(event) => setRouteId(event.currentTarget.value)}>
             <option value="">Выберите маршрут</option>
             {routes.map((route) => (
@@ -263,53 +296,64 @@ export function ScheduleEditPanel({
               </option>
             ))}
           </select>
-        </label>
+          <ChevronDown aria-hidden="true" className="schedule-plan-field-caret" size={18} />
+        </SchedulePlanField>
 
-        <div className="form-grid two">
-          <label>
-            Дата
+        <div className="schedule-plan-field-row">
+          <SchedulePlanField icon={<CalendarDays size={18} />} label="Дата">
             <input value={date} onChange={(event) => setDate(event.currentTarget.value)} type="date" />
-          </label>
-          <label>
-            Время
+          </SchedulePlanField>
+          <SchedulePlanField icon={<Clock3 size={18} />} label="Время начала">
             <input value={time} onChange={(event) => setTime(event.currentTarget.value)} type="time" />
-          </label>
-          <label>
-            Смена
-            <select value={shift} onChange={(event) => setShift(event.currentTarget.value as "Дневная" | "Ночная")}>
-              <option value="Дневная">Дневная</option>
-              <option value="Ночная">Ночная</option>
-            </select>
-          </label>
-          <label className="schedule-check">
-            <input
-              checked={notifyEmployee}
-              onChange={(event) => setNotifyEmployee(event.currentTarget.checked)}
-              type="checkbox"
-            />
-            Уведомить сотрудника
-          </label>
+          </SchedulePlanField>
         </div>
 
-        <label className="full-label">
-          Сообщение сотруднику
-          <textarea
-            maxLength={1000}
-            onChange={(event) => setDescription(event.currentTarget.value)}
-            placeholder="Например: Назначен обход северного периметра. Начало смены в 08:00."
-            value={description}
+        <SchedulePlanField icon={<Moon size={18} />} label="Смена">
+          <select value={shift} onChange={(event) => setShift(event.currentTarget.value as "Дневная" | "Ночная")}>
+            <option value="Дневная">Дневная</option>
+            <option value="Ночная">Ночная</option>
+          </select>
+          <ChevronDown aria-hidden="true" className="schedule-plan-field-caret" size={18} />
+        </SchedulePlanField>
+
+        <label className="schedule-plan-notify-row">
+          <span>
+            <Bell size={18} />
+            Уведомить сотрудника
+          </span>
+          <input
+            checked={notifyEmployee}
+            onChange={(event) => setNotifyEmployee(event.currentTarget.checked)}
+            type="checkbox"
           />
         </label>
+
+        <label className="schedule-plan-message">
+          <span>Сообщение сотруднику <small>(необязательно)</small></span>
+          <textarea
+            maxLength={500}
+            onChange={(event) => setDescription(event.currentTarget.value)}
+            placeholder="Введите сообщение..."
+            value={description}
+          />
+          <em>{description.length} / 500</em>
+        </label>
       </div>
+
+      <ScheduleResultHistory
+        canManage={canManage}
+        resultHistory={resultHistory}
+        selectedResult={selectedResult}
+        selectedResultId={selectedResultId}
+        onApplyResult={applyResultToPlan}
+        onSelectResult={setSelectedResultId}
+      />
 
       <div className="drawer-actions">
         <button
           className="button ghost"
           disabled={saving}
-          onClick={() => {
-            resetFormFromSelected(selected, employees, routes);
-            onNotify("Изменения в форме отменены");
-          }}
+          onClick={onClose}
           type="button"
         >
           Отмена
@@ -327,6 +371,100 @@ export function ScheduleEditPanel({
   );
 }
 
+function SchedulePlanField({ children, icon, label }: { children: ReactNode; icon: ReactNode; label: string }) {
+  return (
+    <label className="schedule-plan-field">
+      <span>{label}</span>
+      <div className="schedule-plan-field-control">
+        <span className="schedule-plan-field-icon" aria-hidden="true">
+          {icon}
+        </span>
+        {children}
+      </div>
+    </label>
+  );
+}
+
+function ScheduleResultHistory({
+  canManage,
+  resultHistory,
+  selectedResult,
+  selectedResultId,
+  onApplyResult,
+  onSelectResult,
+}: {
+  canManage: boolean;
+  resultHistory: PatrolResult[];
+  selectedResult?: PatrolResult;
+  selectedResultId: string;
+  onApplyResult: (result: PatrolResult) => void;
+  onSelectResult: (id: string) => void;
+}) {
+  const visibleResults = resultHistory.slice(0, 10);
+
+  if (resultHistory.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="schedule-result-history" aria-label="История результатов за день">
+      <div className="schedule-result-history-head">
+        <div>
+          <strong>История результатов за день</strong>
+          <span>{resultHistory.length} результатов для быстрого назначения</span>
+        </div>
+      </div>
+
+      <div className="schedule-result-layout">
+          <div className="schedule-result-list" role="list">
+            {visibleResults.map((result) => (
+              <button
+                className={`schedule-result-row ${result.id === selectedResultId ? "is-active" : ""}`}
+                key={result.id}
+                onClick={() => onSelectResult(result.id)}
+                type="button"
+              >
+                <span className={getResultStatusClassName(result)}>{result.status}</span>
+                <strong>{result.route}</strong>
+                <small>
+                  {result.employee} · {result.actualAt}
+                </small>
+              </button>
+            ))}
+          </div>
+
+          {selectedResult ? (
+            <article className="schedule-result-detail">
+              <div className="schedule-result-detail-title">
+                <div>
+                  <strong>{selectedResult.route}</strong>
+                  <span>{selectedResult.employee}</span>
+                </div>
+                <span className={getResultStatusClassName(selectedResult)}>{selectedResult.status}</span>
+              </div>
+              <dl>
+                <Field label="Точка" value={selectedResult.point || "-"} />
+                <Field label="Факт" value={selectedResult.actualAt || "-"} />
+                <Field label="Отклонение" value={selectedResult.deviation || "-"} />
+                <Field label="Замечание" value={selectedResult.issueType || "-"} />
+                <Field label="Комментарий" value={selectedResult.comment || "Без комментария"} />
+                <Field label="Фото" value={`${selectedResult.photos || 0}`} />
+              </dl>
+              <button
+                className="button ghost"
+                disabled={!canManage}
+                onClick={() => onApplyResult(selectedResult)}
+                type="button"
+              >
+                Назначить по результату
+              </button>
+            </article>
+          ) : null}
+      </div>
+    </section>
+  );
+}
+
 function getSelectedChipLabel(selected: ScheduleCell) {
   if (selected.state === "sick") return "Больничный";
   if (selected.state === "vacation") return "Отпуск";
@@ -334,6 +472,23 @@ function getSelectedChipLabel(selected: ScheduleCell) {
   if (selected.state === "alternate") return "Резерв";
   if (selected.state === "transfer") return "Перенос";
   return "Назначен";
+}
+
+function createResultNotificationText(result: PatrolResult) {
+  const parts = [
+    `Назначен повторный обход ${result.route}`,
+    result.point ? `по точке ${result.point}` : "",
+    result.status ? `после результата: ${result.status}` : "",
+    result.issueType && result.issueType !== "-" ? `замечание: ${result.issueType}` : "",
+    result.comment ? `комментарий: ${result.comment}` : "",
+  ].filter(Boolean);
+
+  return `${parts.join(". ")}.`;
+}
+
+function getResultStatusClassName(result: PatrolResult) {
+  const hasIssue = result.status !== "Подтверждено" || (result.issueType && result.issueType !== "-");
+  return `schedule-result-status ${hasIssue ? "is-issue" : "is-ok"}`;
 }
 
 function normalizeTime(value?: string) {

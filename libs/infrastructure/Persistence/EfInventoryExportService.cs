@@ -287,6 +287,18 @@ internal sealed partial class EfInventoryExportService(Patrol360DbContext dbCont
         !string.IsNullOrWhiteSpace(printItemName) &&
         printItemName.Trim().EndsWith(':');
 
+    private static string PpePrintQuantityText(PpePrintLine line)
+    {
+        if (line.IsSectionTitle)
+        {
+            return string.Empty;
+        }
+
+        return string.IsNullOrWhiteSpace(line.QuantityText)
+            ? $"{line.Quantity:0.###} {line.Unit}"
+            : line.QuantityText;
+    }
+
     private static string ToRussianPpeStatus(string status) => Normalize(status) switch
     {
         "active" => "Активна",
@@ -339,6 +351,7 @@ internal sealed record PpePrintLine(
     int? LifeMonths,
     string NormPoint,
     string IssuePeriodText,
+    string QuantityText,
     long? UnitPriceMinor,
     decimal AmountMinor,
     bool IsSectionTitle);
@@ -571,6 +584,8 @@ internal static class WordDocumentBuilder
     private const int BodyFontSize = 20;
     private const int SmallFontSize = 16;
     private const int TitleFontSize = 32;
+    private const string PpeNormText =
+        "Выдача предусмотрена Приказом Минтруда России от 27.12.2017 N 882н \"Об утверждении Типовых норм бесплатной выдачи специальной одежды, специальной обуви и других средств индивидуальной защиты работникам промышленности строительных материалов, стекольной и фарфоро-фаянсовой промышленности, занятым на работах с вредными и (или) опасными условиями труда, а также на работах, выполняемых в особых температурных условиях или связанных с загрязнением\" (Зарегистрировано в Минюсте России 01.03.2018 N 50193); Межотраслевыми правилами обеспечения работников специальной одеждой, специальной обувью и другими средствами индивидуальной защиты (утв. Приказом Минздравсоцразвития России от 01.06.2009 N 290н).";
 
     public static byte[] Build(string title, IReadOnlyList<string> paragraphs)
     {
@@ -607,10 +622,7 @@ internal static class WordDocumentBuilder
             ]
         ]);
         AppendParagraph(builder, string.Empty, bold: false);
-        AppendParagraph(builder,
-            "Выдача предусмотрена типовыми нормами бесплатной выдачи специальной одежды, специальной обуви и других средств индивидуальной защиты.",
-            bold: false,
-            fontSize: SmallFontSize);
+        AppendParagraph(builder, PpeNormText, bold: false, fontSize: SmallFontSize);
         AppendParagraph(builder, "(наименование типовых (типовых отраслевых) норм)", bold: false, center: true, fontSize: SmallFontSize);
         AppendParagraph(builder, string.Empty, bold: false);
         AppendTable(builder, BuildPersonalCardRows(lines), headerRows: 1);
@@ -647,7 +659,7 @@ internal static class WordDocumentBuilder
                 line.ItemName,
                 string.IsNullOrWhiteSpace(line.NormPoint) ? "п. 1645 Приложения № 1" : line.NormPoint,
                 PeriodText(line),
-                $"{line.Quantity:0.###} {line.Unit}"
+                QuantityText(line)
             }));
 
         return rows;
@@ -667,7 +679,7 @@ internal static class WordDocumentBuilder
             line.ItemName,
             string.IsNullOrWhiteSpace(line.Model) ? "-" : line.Model,
             string.IsNullOrWhiteSpace(line.IssuedAt) ? "-" : line.IssuedAt,
-            $"{line.Quantity:0.###} {line.Unit}",
+            QuantityText(line),
             IsConsumable(line) ? "Дозатор" : "-",
             "",
             "",
@@ -695,10 +707,22 @@ internal static class WordDocumentBuilder
         return line.LifeMonths is > 0 ? $"{unit}, {FormatIssuePeriodText(line.LifeMonths)}" : $"{unit}, по сроку носки";
     }
 
+    private static string QuantityText(PpePrintLine line)
+    {
+        if (line.IsSectionTitle)
+        {
+            return string.Empty;
+        }
+
+        return string.IsNullOrWhiteSpace(line.QuantityText)
+            ? $"{line.Quantity:0.###} {line.Unit}"
+            : line.QuantityText;
+    }
+
     private static string FormatIssuePeriodText(int? lifeMonths) => lifeMonths switch
     {
         6 => "0,5 года",
-        12 => "1 год",
+        12 => "на год",
         18 => "1,5 года",
         24 => "2 года",
         30 => "2,5 года",
@@ -764,10 +788,14 @@ internal static class WordDocumentBuilder
         for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
         {
             builder.Append("<w:tr>");
+            var isSectionRow = rowIndex >= headerRows
+                && rows[rowIndex].Count > 1
+                && !string.IsNullOrWhiteSpace(rows[rowIndex][0])
+                && rows[rowIndex].Skip(1).All(string.IsNullOrWhiteSpace);
             foreach (var cell in rows[rowIndex])
             {
                 builder.Append("<w:tc><w:tcPr><w:tcW w:w=\"2400\" w:type=\"dxa\"/><w:tcMar><w:top w:w=\"40\" w:type=\"dxa\"/><w:left w:w=\"60\" w:type=\"dxa\"/><w:bottom w:w=\"40\" w:type=\"dxa\"/><w:right w:w=\"60\" w:type=\"dxa\"/></w:tcMar></w:tcPr><w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/></w:pPr><w:r>");
-                AppendRunProperties(builder, rowIndex < headerRows, BodyFontSize);
+                AppendRunProperties(builder, rowIndex < headerRows || isSectionRow, BodyFontSize);
                 AppendTextWithBreaks(builder, cell);
                 builder.Append("</w:r></w:p></w:tc>");
             }
@@ -962,12 +990,15 @@ internal static class PpeTemplateDocumentBuilder
         foreach (var line in lines)
         {
             var row = (TableRow)templateRow.CloneNode(true);
-            SetRowCells(row, [
-                line.ItemName,
-                string.IsNullOrWhiteSpace(line.NormPoint) ? "п. 1645 Приложения № 1" : line.NormPoint,
-                PeriodText(line),
-                $"{line.Quantity:0.###} {line.Unit}"
-            ]);
+            SetRowCells(row, line.IsSectionTitle
+                ? [line.ItemName, string.Empty, string.Empty, string.Empty]
+                : [
+                    line.ItemName,
+                    string.IsNullOrWhiteSpace(line.NormPoint) ? "п. 1645 Приложения № 1" : line.NormPoint,
+                    PeriodText(line),
+                    QuantityText(line)
+                ],
+                bold: line.IsSectionTitle);
             table.Append(row);
         }
 
@@ -1000,7 +1031,7 @@ internal static class PpeTemplateDocumentBuilder
                 line.ItemName,
                 string.IsNullOrWhiteSpace(line.Model) ? "-" : line.Model,
                 string.IsNullOrWhiteSpace(line.IssuedAt) ? "-" : line.IssuedAt,
-                $"{line.Quantity:0.###} {line.Unit}",
+                QuantityText(line),
                 IsConsumable(line) ? "Дозатор" : "-",
                 "",
                 "",
@@ -1019,7 +1050,7 @@ internal static class PpeTemplateDocumentBuilder
         }
     }
 
-    private static void SetRowCells(TableRow row, IReadOnlyList<string> values)
+    private static void SetRowCells(TableRow row, IReadOnlyList<string> values, bool bold = false)
     {
         var cells = row.Elements<TableCell>().ToList();
         while (cells.Count < values.Count)
@@ -1031,11 +1062,11 @@ internal static class PpeTemplateDocumentBuilder
 
         for (var index = 0; index < values.Count; index++)
         {
-            SetCellText(cells[index], values[index]);
+            SetCellText(cells[index], values[index], bold);
         }
     }
 
-    private static void SetCellText(TableCell cell, string value)
+    private static void SetCellText(TableCell cell, string value, bool bold = false)
     {
         var templateParagraph = cell.Elements<Paragraph>().FirstOrDefault();
         var paragraphProperties = templateParagraph?.ParagraphProperties?.CloneNode(true) as ParagraphProperties;
@@ -1051,6 +1082,11 @@ internal static class PpeTemplateDocumentBuilder
             if (runProperties is not null)
             {
                 run.PrependChild((RunProperties)runProperties.CloneNode(true));
+            }
+            if (bold)
+            {
+                run.RunProperties ??= new RunProperties();
+                run.RunProperties.Bold = new Bold();
             }
 
             var paragraph = new Paragraph();
@@ -1148,10 +1184,22 @@ internal static class PpeTemplateDocumentBuilder
         return line.LifeMonths is > 0 ? $"{unit}, {FormatIssuePeriodText(line.LifeMonths)}" : $"{unit}, по сроку носки";
     }
 
+    private static string QuantityText(PpePrintLine line)
+    {
+        if (line.IsSectionTitle)
+        {
+            return string.Empty;
+        }
+
+        return string.IsNullOrWhiteSpace(line.QuantityText)
+            ? $"{line.Quantity:0.###} {line.Unit}"
+            : line.QuantityText;
+    }
+
     private static string FormatIssuePeriodText(int? lifeMonths) => lifeMonths switch
     {
         6 => "0,5 года",
-        12 => "1 год",
+        12 => "на год",
         18 => "1,5 года",
         24 => "2 года",
         30 => "2,5 года",

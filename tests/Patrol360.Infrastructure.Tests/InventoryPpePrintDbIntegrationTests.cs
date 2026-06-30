@@ -185,6 +185,149 @@ public sealed class InventoryPpePrintDbIntegrationTests
     }
 
     [DbIntegrationFact]
+    public async Task PpePrintQuantityTextAndExplicitSectionFlagsRoundTripThroughDatabase()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+
+        await provider.InitializePatrolDatabaseAsync();
+
+        var employee = UseWorkflow(provider, workflow => workflow.GetEmployees(new InventoryListQuery(PageSize: 1)).Rows.Single());
+        var issuedNorm = "Harness with custom quantity text";
+        var sectionTitle = "Outdoor work additionally:";
+        var issuedItem = CreatePpeItem(provider, issuedNorm, brand: "SafeBrand", catalogName: "Warehouse harness SafeBrand");
+        var sectionItem = CreatePpeItem(provider, sectionTitle, brand: "", catalogName: sectionTitle);
+
+        var card = UseWorkflow(provider, workflow => workflow.CreatePpeCard(new CreateInventoryPpeCardDto(
+            employee.Id,
+            "PPE quantity text DB round-trip",
+            CompleteEmployeeDetails())));
+        Assert.True(card.Succeeded);
+        Assert.NotNull(card.Value);
+        var cardId = card.Value!.Id;
+
+        var issued = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+            cardId,
+            new UpsertInventoryPpeCardLineDto(
+                issuedItem.Id,
+                null,
+                1,
+                12_300,
+                "issued",
+                DateTimeOffset.UtcNow.AddYears(2),
+                "Issued with custom quantity text",
+                PrintItemName: issuedNorm,
+                NormPoint: "p. 1.3.1 Appendix 2",
+                IssuePeriodText: "pcs., 2 years",
+                IssuedAt: DateTimeOffset.UtcNow.AddDays(-1),
+                BrandModelArticle: "SafeBrand H1",
+                QuantityText: "1 custom pcs.",
+                IsSectionTitle: false)));
+        Assert.True(issued.Succeeded);
+        Assert.NotNull(issued.Value);
+        Assert.Equal("1 custom pcs.", issued.Value!.QuantityText);
+        Assert.False(issued.Value.IsSectionTitle);
+
+        var updated = UseWorkflow(provider, workflow => workflow.UpdatePpeCardLine(
+            cardId,
+            issued.Value.Id,
+            new UpsertInventoryPpeCardLineDto(
+                issuedItem.Id,
+                null,
+                1,
+                12_300,
+                "issued",
+                DateTimeOffset.UtcNow.AddYears(3),
+                "Updated custom quantity text",
+                PrintItemName: issuedNorm,
+                NormPoint: "p. 1.3.1 Appendix 2 updated",
+                IssuePeriodText: "pcs., 3 years",
+                IssuedAt: DateTimeOffset.UtcNow.AddDays(-1),
+                BrandModelArticle: "SafeBrand H1 updated",
+                QuantityText: "1 custom pcs. updated",
+                IsSectionTitle: false)));
+        Assert.True(updated.Succeeded);
+        Assert.NotNull(updated.Value);
+
+        var section = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+            cardId,
+            new UpsertInventoryPpeCardLineDto(
+                sectionItem.Id,
+                null,
+                1,
+                null,
+                "not_issued",
+                null,
+                "Explicit section row",
+                PrintItemName: sectionTitle,
+                NormPoint: "",
+                IssuePeriodText: "",
+                QuantityText: "",
+                IsSectionTitle: true)));
+        Assert.True(section.Succeeded);
+        Assert.NotNull(section.Value);
+        Assert.True(section.Value!.IsSectionTitle);
+        Assert.Equal(string.Empty, section.Value.NormPoint);
+        Assert.Equal(string.Empty, section.Value.IssuePeriodText);
+        Assert.Equal(string.Empty, section.Value.QuantityText);
+
+        var detail = UseWorkflow(provider, workflow => workflow.GetPpeCard(cardId));
+        Assert.True(detail.Succeeded);
+        Assert.NotNull(detail.Value);
+        var persistedLine = detail.Value!.Lines.Single(line => line.Id == issued.Value.Id);
+        var persistedSection = detail.Value.Lines.Single(line => line.Id == section.Value.Id);
+
+        Assert.Equal("1 custom pcs. updated", persistedLine.QuantityText);
+        Assert.Equal("p. 1.3.1 Appendix 2 updated", persistedLine.NormPoint);
+        Assert.Equal("pcs., 3 years", persistedLine.IssuePeriodText);
+        Assert.False(persistedLine.IsSectionTitle);
+        Assert.True(persistedSection.IsSectionTitle);
+        Assert.Equal(string.Empty, persistedSection.QuantityText);
+
+        var personalCard = UseExport(provider, export => export.PrintPpeCard(cardId, "card", "docx"));
+        var signatureSheet = UseExport(provider, export => export.PrintPpeCard(cardId, "sheet", "docx"));
+
+        Assert.True(personalCard.Succeeded);
+        Assert.True(signatureSheet.Succeeded);
+        Assert.NotNull(personalCard.Value);
+        Assert.NotNull(signatureSheet.Value);
+
+        var cardXml = ReadDocxDocumentXml(personalCard.Value!.Content);
+        var sheetXml = ReadDocxDocumentXml(signatureSheet.Value!.Content);
+
+        Assert.Contains(issuedNorm, cardXml, StringComparison.Ordinal);
+        Assert.Contains(sectionTitle, cardXml, StringComparison.Ordinal);
+        Assert.Contains("1 custom pcs. updated", cardXml, StringComparison.Ordinal);
+        Assert.Contains("p. 1.3.1 Appendix 2 updated", cardXml, StringComparison.Ordinal);
+        Assert.Contains("pcs., 3 years", cardXml, StringComparison.Ordinal);
+        Assert.Contains(issuedNorm, sheetXml, StringComparison.Ordinal);
+        Assert.Contains("1 custom pcs. updated", sheetXml, StringComparison.Ordinal);
+        Assert.DoesNotContain(sectionTitle, sheetXml, StringComparison.Ordinal);
+
+        var norm = UseCommand(provider, command => command.UpsertPositionNorm(new UpsertInventoryPositionNormDto(
+            "Test PPE position",
+            sectionItem.Id,
+            1,
+            null,
+            NormItemName: sectionTitle,
+            NormPoint: "",
+            IssuePeriodText: "",
+            QuantityText: "",
+            IsSectionTitle: true)));
+        Assert.True(norm.Succeeded);
+        Assert.NotNull(norm.Value);
+        Assert.True(norm.Value!.IsSectionTitle);
+        Assert.Equal(string.Empty, norm.Value.QuantityText);
+
+        var storedNorm = UseQuery(provider, query => query.GetSettings())
+            .PositionNorms
+            .Single(row => row.Id == norm.Value.Id);
+        Assert.True(storedNorm.IsSectionTitle);
+        Assert.Equal(string.Empty, storedNorm.QuantityText);
+        Assert.Equal(sectionTitle, storedNorm.NormItemName);
+    }
+
+    [DbIntegrationFact]
     public async Task PpeDocxPrintUsesNormNamesAndFiltersSignatureRows()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();

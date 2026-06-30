@@ -103,6 +103,31 @@ export function RequestModals({
           onCreateRelated={() => onCreateRelated(request.sourceResultId)}
         />
       ) : null}
+      {modal.kind === "view" && !request ? (
+        <section
+          aria-label="Заявка не найдена"
+          aria-modal="true"
+          className="modal-window request-modal"
+          onMouseDown={(event) => event.stopPropagation()}
+          role="dialog"
+        >
+          <div className="modal-head">
+            <div>
+              <span className="modal-kicker">Заявка на обход</span>
+              <h2>Заявка не найдена</h2>
+              <p>Запись отсутствует в текущем списке заявок. Обновите данные или создайте новую заявку.</p>
+            </div>
+            <button aria-label="Закрыть" className="modal-close" onClick={requestClose} type="button">
+              ×
+            </button>
+          </div>
+          <div className="modal-actions">
+            <button className="button primary" onClick={requestClose} type="button">
+              Закрыть
+            </button>
+          </div>
+        </section>
+      ) : null}
       {modal.kind === "create" ? (
         <RequestCreateModal
           employeeOptions={employeeOptions}

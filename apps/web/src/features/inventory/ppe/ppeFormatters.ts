@@ -29,7 +29,9 @@ export function formatQuantity(value: number) {
 }
 
 export function parsePositiveQuantity(value: string) {
-  const quantity = Number(value.trim().replace(",", "."));
+  const normalized = value.trim().replace(",", ".");
+  const match = normalized.match(/^(\d+(?:\.\d+)?)(?:\s|$)/);
+  const quantity = match ? Number(match[1]) : Number(normalized);
   return Number.isFinite(quantity) && quantity > 0 ? quantity : null;
 }
 

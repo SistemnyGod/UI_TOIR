@@ -10,14 +10,17 @@ import {
   getEmployeeMetrics,
   getEmployeeRouteProgress,
 } from "../../repositories/employeesRepository";
+import {
+  loadAssignmentFavoriteEmployeeIds,
+  saveAssignmentFavoriteEmployeeIds,
+  subscribeAssignmentFavoriteEmployeeIds,
+} from "./assignments/assignmentStorage";
 import type { EmployeeDirectoryItem, EmployeeFormPayload, ScreenId } from "../../types";
 
 type EmployeeFormState =
   | { mode: "create" }
   | { mode: "edit"; employeeId: string }
   | null;
-
-const patrolEmployeesStorageKey = "patrol360.patrolEmployees.favoriteIds.v1";
 
 export function EmployeesScreen({
   employees,
@@ -43,7 +46,7 @@ export function EmployeesScreen({
 }) {
   const [formState, setFormState] = useState<EmployeeFormState>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [patrolEmployeeIds, setPatrolEmployeeIds] = useState<string[]>(() => loadPatrolEmployeeIds());
+  const [patrolEmployeeIds, setPatrolEmployeeIds] = useState<string[]>(() => loadAssignmentFavoriteEmployeeIds());
   const allEmployees = employees.length > 0 ? employees : employeesFallback;
   const patrolEmployeeSet = useMemo(() => new Set(patrolEmployeeIds), [patrolEmployeeIds]);
   const employeeDirectory = useMemo(
@@ -62,6 +65,10 @@ export function EmployeesScreen({
     }),
     [allEmployees],
   );
+
+  useEffect(() => {
+    return subscribeAssignmentFavoriteEmployeeIds(setPatrolEmployeeIds);
+  }, []);
 
   useEffect(() => {
     if (selectedEmployeeId && !patrolEmployeeSet.has(selectedEmployeeId)) {
@@ -117,7 +124,7 @@ export function EmployeesScreen({
   function updatePatrolEmployeeIds(nextIds: string[]) {
     const uniqueIds = Array.from(new Set(nextIds));
     setPatrolEmployeeIds(uniqueIds);
-    savePatrolEmployeeIds(uniqueIds);
+    saveAssignmentFavoriteEmployeeIds(uniqueIds);
   }
 
   return (
@@ -256,24 +263,6 @@ function PatrolEmployeePickerModal({
       </section>
     </div>
   );
-}
-
-function loadPatrolEmployeeIds() {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = window.localStorage.getItem(patrolEmployeesStorageKey);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function savePatrolEmployeeIds(ids: string[]) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(patrolEmployeesStorageKey, JSON.stringify(ids));
 }
 
 function uniqueValues(values: string[]) {

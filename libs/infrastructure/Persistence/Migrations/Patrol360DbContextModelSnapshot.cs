@@ -1902,6 +1902,19 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("item_id");
 
+                    b.Property<string>("IssuePeriodText")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasDefaultValue("")
+                        .HasColumnName("issue_period_text");
+
+                    b.Property<bool>("IsSectionTitle")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_section_title");
+
                     b.Property<int?>("LegacyId")
                         .HasColumnType("integer")
                         .HasColumnName("legacy_id");
@@ -1909,6 +1922,20 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Property<int?>("LifeMonths")
                         .HasColumnType("integer")
                         .HasColumnName("life_months");
+
+                    b.Property<string>("NormItemName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasDefaultValue("")
+                        .HasColumnName("norm_item_name");
+
+                    b.Property<string>("NormPoint")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)")
+                        .HasDefaultValue("")
+                        .HasColumnName("norm_point");
 
                     b.Property<string>("PositionName")
                         .IsRequired()
@@ -1920,6 +1947,13 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasPrecision(12, 3)
                         .HasColumnType("numeric(12,3)")
                         .HasColumnName("quantity");
+
+                    b.Property<string>("QuantityText")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasDefaultValue("")
+                        .HasColumnName("quantity_text");
 
                     b.HasKey("Id");
 
@@ -1998,6 +2032,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("card_id");
 
+                    b.Property<string>("BrandModelArticle")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)")
+                        .HasColumnName("brand_model_article");
+
                     b.Property<string>("Comment")
                         .IsRequired()
                         .HasMaxLength(1200)
@@ -2012,6 +2052,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("issued_at");
 
+                    b.Property<bool>("IsSectionTitle")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_section_title");
+
                     b.Property<Guid>("ItemId")
                         .HasColumnType("uuid")
                         .HasColumnName("item_id");
@@ -2020,10 +2066,32 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("legacy_id");
 
+                    b.Property<string>("IssuePeriodText")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("issue_period_text");
+
+                    b.Property<string>("NormPoint")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)")
+                        .HasColumnName("norm_point");
+
+                    b.Property<string>("PrintItemName")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)")
+                        .HasColumnName("print_item_name");
+
                     b.Property<decimal>("Quantity")
                         .HasPrecision(12, 3)
                         .HasColumnType("numeric(12,3)")
                         .HasColumnName("quantity");
+
+                    b.Property<string>("QuantityText")
+                        .HasColumnType("text")
+                        .HasColumnName("quantity_text");
 
                     b.Property<string>("Status")
                         .IsRequired()

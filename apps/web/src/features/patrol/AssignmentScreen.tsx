@@ -50,11 +50,13 @@ import {
 } from "./assignments/assignmentDateUtils";
 import {
   defaultAssignmentShiftSettings,
+  hasStoredAssignmentFavoriteEmployeeIds,
   loadAssignmentFavoriteEmployeeIds,
   loadAssignmentShiftSettings,
   normalizeShiftSettings,
   saveAssignmentFavoriteEmployeeIds,
   saveAssignmentShiftSettings,
+  subscribeAssignmentFavoriteEmployeeIds,
 } from "./assignments/assignmentStorage";
 import type { ShiftTimeSettings } from "./assignments/assignmentTypes";
 import { useAssignmentsWorkspace } from "../../hooks/useAssignmentsWorkspace";
@@ -301,12 +303,17 @@ export function AssignmentScreen({
   }, [selectedEmployee?.id, selectedEmployee?.shift, shiftSettings]);
 
   useEffect(() => {
+    return subscribeAssignmentFavoriteEmployeeIds(setFavoriteEmployeeIds);
+  }, []);
+
+  useEffect(() => {
     if (dataSourceMode !== "api" || serverSettingsApplied || !assignments.assignmentSettings) {
       return;
     }
 
     const serverFavoriteIds = assignments.assignmentSettings.favoriteEmployeeIds ?? [];
-    const nextFavoriteIds = serverFavoriteIds.length > 0 ? serverFavoriteIds : favoriteEmployeeIds;
+    const hasLocalFavoriteIds = hasStoredAssignmentFavoriteEmployeeIds();
+    const nextFavoriteIds = hasLocalFavoriteIds ? favoriteEmployeeIds : serverFavoriteIds;
     const nextShiftSettings = normalizeShiftSettings(assignments.assignmentSettings.shiftSettings);
 
     setFavoriteEmployeeIds(nextFavoriteIds);
@@ -315,7 +322,7 @@ export function AssignmentScreen({
     saveAssignmentShiftSettings(nextShiftSettings);
     setServerSettingsApplied(true);
 
-    if (serverFavoriteIds.length === 0 && nextFavoriteIds.length > 0) {
+    if (!areStringArraysEqual(serverFavoriteIds, nextFavoriteIds)) {
       void assignments.updateAssignmentSettings({
         favoriteEmployeeIds: nextFavoriteIds,
         shiftSettings: nextShiftSettings,
@@ -1119,7 +1126,7 @@ function EmployeeHistoryPanel({
         assignmentId: assignment.id,
         id: `assignment-${assignment.id}`,
         meta: formatAssignmentActionTime(assignment),
-        requestId: assignment.patrolRequestId,
+        requestId: request?.id,
         route: assignment.route,
         status: assignmentStatusText(assignment.status),
         title: request?.title || "Действующая заявка",
@@ -1920,6 +1927,11 @@ function Tag({ children }: { children: React.ReactNode }) {
 
 function getInitials(name: string) {
   return name.split(" ").filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "С";
+}
+
+function areStringArraysEqual(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+  return left.every((item, index) => item === right[index]);
 }
 
 async function readPhotoFiles(files: FileList | null): Promise<PatrolCompletionPhotoPayload[]> {

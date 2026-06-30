@@ -1,19 +1,23 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { MouseEvent } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
+  Archive,
   Camera,
   CheckCircle2,
   Download,
   ExternalLink,
   FileText,
   MapPinned,
+  MoreVertical,
   PlusCircle,
   Search,
   Timer,
+  Trash2,
   User,
 } from "lucide-react";
-import { createApiResultsRepository, downloadResultAttachment } from "../../../repositories/resultsRepository";
+import { createApiResultsRepository, downloadResultAttachment, isBackendResultId } from "../../../repositories/resultsRepository";
 import { useResultsWorkspace } from "../../../hooks/useResultsWorkspace";
 import type { DataSourceMode, PatrolResult, PatrolResultAttachment, ResultMode, ScreenId } from "../../../types";
 import { PatrolResultDetails } from "./PatrolResultDetails";
@@ -45,6 +49,16 @@ const FILTERS: Array<{ id: ResultMode; label: string }> = [
 const emptyResultFilters = {};
 const showResultInspector = false;
 const MAX_VALID_PATROL_DURATION_MINUTES = 24 * 60;
+const CONTEXT_PANEL_WIDTH = 220;
+const CONTEXT_PANEL_HEIGHT = 132;
+const RESULT_VISIBILITY_STORAGE_KEY = "patrol360.results.hiddenGroups.v1";
+
+interface ResultVisibilityState {
+  archived: string[];
+  deleted: string[];
+}
+
+const emptyResultVisibilityState: ResultVisibilityState = { archived: [], deleted: [] };
 
 export function ResultsWorkspace({
   canCreateRequest = true,
@@ -60,7 +74,12 @@ export function ResultsWorkspace({
 }: ResultsScreenProps) {
   const [activeMode, setActiveMode] = useState<ResultMode>(mode);
   const [query, setQuery] = useState("");
+  const [routeFilter, setRouteFilter] = useState("all");
   const [openGroupId, setOpenGroupId] = useState<string | null>(null);
+  const [actionMenuGroupId, setActionMenuGroupId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ groupId: string; x: number; y: number } | null>(null);
+  const [archivedGroupIds, setArchivedGroupIds] = useState<string[]>(() => readResultVisibilityState().archived);
+  const [deletedGroupIds, setDeletedGroupIds] = useState<string[]>(() => readResultVisibilityState().deleted);
   const [detailedResults, setDetailedResults] = useState<Record<string, PatrolResult>>({});
   const [photoLoadingResultId, setPhotoLoadingResultId] = useState<string | null>(null);
   const [mediaPreview, setMediaPreview] = useState<ResultMediaPreviewState | null>(null);
@@ -79,17 +98,36 @@ export function ResultsWorkspace({
     [detailedResults, results],
   );
   const groups = useMemo(() => buildResultGroups(mergedResults), [mergedResults]);
-  const filteredGroups = useMemo(() => filterGroups(groups, activeMode, query), [groups, activeMode, query]);
-  const counters = useMemo(() => buildCounters(groups), [groups]);
-  const metrics = useMemo(() => buildMetrics(groups), [groups]);
+  const visibleGroups = useMemo(() => {
+    const hiddenIds = new Set([...archivedGroupIds, ...deletedGroupIds]);
+    return groups.filter((group) => !hiddenIds.has(group.id));
+  }, [archivedGroupIds, deletedGroupIds, groups]);
+  const routeOptions = useMemo(
+    () => Array.from(new Set(visibleGroups.map((group) => group.route))).sort((left, right) => left.localeCompare(right, "ru")),
+    [visibleGroups],
+  );
+  const filteredGroups = useMemo(() => filterGroups(visibleGroups, activeMode, query, routeFilter), [visibleGroups, activeMode, query, routeFilter]);
+  const counters = useMemo(() => buildCounters(visibleGroups), [visibleGroups]);
+  const metrics = useMemo(() => buildMetrics(visibleGroups), [visibleGroups]);
   const loading = listStatus === "loading";
   const error = listStatus === "error" ? errorMessage : undefined;
 
   const selectedGroup =
-    (openGroupId ? groups.find((group) => group.id === openGroupId) : undefined) ??
-    (selectedResult ? groups.find((group) => group.results.some((result) => result.id === selectedResult.id)) : undefined) ??
+    (openGroupId ? visibleGroups.find((group) => group.id === openGroupId) : undefined) ??
+    (selectedResult ? visibleGroups.find((group) => group.results.some((result) => result.id === selectedResult.id)) : undefined) ??
     filteredGroups[0];
-  const modalGroup = openGroupId ? groups.find((group) => group.id === openGroupId) : undefined;
+  const modalGroup = openGroupId ? visibleGroups.find((group) => group.id === openGroupId) : undefined;
+  const contextGroup = contextMenu ? visibleGroups.find((group) => group.id === contextMenu.groupId) : undefined;
+
+  useEffect(() => {
+    if (routeFilter !== "all" && !routeOptions.includes(routeFilter)) {
+      setRouteFilter("all");
+    }
+  }, [routeFilter, routeOptions]);
+
+  useEffect(() => {
+    writeResultVisibilityState({ archived: archivedGroupIds, deleted: deletedGroupIds });
+  }, [archivedGroupIds, deletedGroupIds]);
 
   const changeFilter = (nextMode: ResultMode) => {
     setActiveMode(nextMode);
@@ -99,6 +137,43 @@ export function ResultsWorkspace({
   const selectGroup = (group: ResultGroup) => {
     onSelectResult?.(group.results[0]?.id ?? "");
     setOpenGroupId(null);
+    setActionMenuGroupId(null);
+    setContextMenu(null);
+  };
+
+  const openRowMenu = (group: ResultGroup) => {
+    setContextMenu(null);
+    setActionMenuGroupId((current) => (current === group.id ? null : group.id));
+  };
+
+  const openContextPanel = (event: MouseEvent<HTMLElement>, group: ResultGroup) => {
+    event.preventDefault();
+    onSelectResult?.(group.results[0]?.id ?? "");
+    setOpenGroupId(null);
+    setActionMenuGroupId(null);
+    setContextMenu({
+      groupId: group.id,
+      x: Math.max(12, Math.min(event.clientX, window.innerWidth - CONTEXT_PANEL_WIDTH - 12)),
+      y: Math.max(12, Math.min(event.clientY, window.innerHeight - CONTEXT_PANEL_HEIGHT - 12)),
+    });
+  };
+
+  const hideGroup = (group: ResultGroup, action: "archive" | "delete") => {
+    const setHiddenIds = action === "archive" ? setArchivedGroupIds : setDeletedGroupIds;
+    setHiddenIds((current) => (current.includes(group.id) ? current : [...current, group.id]));
+
+    if (openGroupId === group.id) {
+      setOpenGroupId(null);
+    }
+
+    setActionMenuGroupId(null);
+    setContextMenu(null);
+    addToast?.(
+      action === "archive"
+        ? "Результат обхода отправлен в архив текущей сессии"
+        : "Результат обхода удален из текущего списка",
+      action === "archive" ? "info" : "success",
+    );
   };
 
   const openDetails = (group: ResultGroup) => {
@@ -118,6 +193,7 @@ export function ResultsWorkspace({
     if (cached?.attachments !== undefined) return cached;
     if (result.attachments !== undefined) return result;
     if (dataSourceMode !== "api") return result;
+    if (!isBackendResultId(result.id)) return result;
 
     const detailed = await apiResultsRepository.getResult(result.id);
     setDetailedResults((current) => ({ ...current, [detailed.id]: detailed }));
@@ -183,7 +259,7 @@ export function ResultsWorkspace({
   }
 
   return (
-    <div className="results-review-screen">
+    <div className="results-review-screen" onClick={() => setContextMenu(null)}>
       <div className="results-review-hero">
         <div>
           <p className="results-review-eyebrow">Обходы</p>
@@ -228,6 +304,18 @@ export function ResultsWorkspace({
                 </button>
               ))}
             </div>
+            <label className="results-review-route-filter">
+              <MapPinned size={17} />
+              <span>Маршрут</span>
+              <select aria-label="Маршрут" value={routeFilter} onChange={(event) => setRouteFilter(event.target.value)}>
+                <option value="all">Все маршруты</option>
+                {routeOptions.map((route) => (
+                  <option key={route} value={route}>
+                    {route}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="results-review-search">
               <Search size={18} />
               <input
@@ -264,6 +352,11 @@ export function ResultsWorkspace({
                   onClick={() => selectGroup(group)}
                   onOpen={() => openDetails(group)}
                   onCreateRequest={() => void createRequest(group)}
+                  menuOpen={actionMenuGroupId === group.id}
+                  onOpenMenu={() => openRowMenu(group)}
+                  onOpenContextMenu={(event) => openContextPanel(event, group)}
+                  onArchive={() => hideGroup(group, "archive")}
+                  onDelete={() => hideGroup(group, "delete")}
                   canCreateRequest={canCreateRequest}
                 />
               ))}
@@ -288,6 +381,26 @@ export function ResultsWorkspace({
           )}
         </aside> : null}
       </section>
+
+      {contextMenu && contextGroup ? (
+        <div
+          className="results-review-context-panel"
+          role="menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <strong>{contextGroup.route}</strong>
+          <button type="button" role="menuitem" data-action="archive" onClick={() => hideGroup(contextGroup, "archive")}>
+            <Archive size={16} />
+            Архивировать
+          </button>
+          <button type="button" role="menuitem" data-action="delete" className="is-danger" onClick={() => hideGroup(contextGroup, "delete")}>
+            <Trash2 size={16} />
+            Удалить из списка
+          </button>
+        </div>
+      ) : null}
 
       {modalGroup ? (
         <PatrolResultDetails
@@ -342,21 +455,41 @@ function ResultRow({
   active,
   canCreateRequest,
   group,
+  menuOpen,
+  onArchive,
   onClick,
   onCreateRequest,
+  onDelete,
   onOpen,
+  onOpenContextMenu,
+  onOpenMenu,
 }: {
   active?: boolean;
   canCreateRequest: boolean;
   group: ResultGroup;
+  menuOpen: boolean;
+  onArchive: () => void;
   onClick: () => void;
   onCreateRequest: () => void;
+  onDelete: () => void;
   onOpen: () => void;
+  onOpenContextMenu: (event: MouseEvent<HTMLElement>) => void;
+  onOpenMenu: () => void;
 }) {
   const hasIssue = group.issuePoints > 0 || group.issues > 0;
+  const handleClick = (event: MouseEvent<HTMLElement>) => {
+    onClick();
+    if (event.detail >= 2) {
+      onOpen();
+    }
+  };
 
   return (
-    <article className={`results-review-row ${active ? "is-active" : ""} ${hasIssue ? "has-issues" : ""}`} onClick={onClick}>
+    <article
+      className={`results-review-row ${active ? "is-active" : ""} ${hasIssue ? "has-issues" : ""}`}
+      onClick={handleClick}
+      onContextMenu={onOpenContextMenu}
+    >
       <div className="results-review-row-status">
         {hasIssue ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
       </div>
@@ -379,7 +512,7 @@ function ResultRow({
         <span className={group.issuePoints > 0 ? "issue" : ""}>Неисправно: {group.issuePoints}</span>
         <span>Медиа: {group.photos}</span>
       </div>
-      <div className="results-review-row-actions">
+      <div className="results-review-row-actions" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
         <button
           type="button"
           className="secondary-action"
@@ -402,6 +535,29 @@ function ResultRow({
             Заявка
           </button>
         ) : null}
+        <div className="results-review-row-menu-wrap">
+          <button
+            type="button"
+            className="results-review-row-more"
+            aria-label="Действия результата"
+            aria-expanded={menuOpen}
+            onClick={onOpenMenu}
+          >
+            <MoreVertical size={18} />
+          </button>
+          {menuOpen ? (
+            <div className="results-review-row-menu" role="menu">
+              <button type="button" role="menuitem" data-action="archive" onClick={onArchive}>
+                <Archive size={16} />
+                Архивировать
+              </button>
+              <button type="button" role="menuitem" data-action="delete" className="is-danger" onClick={onDelete}>
+                <Trash2 size={16} />
+                Удалить из списка
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
     </article>
   );
@@ -508,10 +664,11 @@ export function buildCounters(groups: ResultGroup[]): Record<ResultMode, number>
   };
 }
 
-export function filterGroups(groups: ResultGroup[], mode: ResultMode, query: string) {
+export function filterGroups(groups: ResultGroup[], mode: ResultMode, query: string, route = "all") {
   const normalizedQuery = normalizeText(query);
 
   return groups.filter((group) => {
+    const matchesRoute = route === "all" || group.route === route;
     const matchesMode =
       mode === "all" ||
       (mode === "issues" && (group.issuePoints > 0 || group.issues > 0)) ||
@@ -519,7 +676,7 @@ export function filterGroups(groups: ResultGroup[], mode: ResultMode, query: str
       (mode === "photos" && group.photos > 0) ||
       (mode === "noPhotos" && group.photos === 0);
     const haystack = normalizeText([group.route, group.territory, group.employee, group.shift, group.comment].join(" "));
-    return matchesMode && (!normalizedQuery || haystack.includes(normalizedQuery));
+    return matchesRoute && matchesMode && (!normalizedQuery || haystack.includes(normalizedQuery));
   });
 }
 
@@ -629,6 +786,39 @@ function isLateResult(result: PatrolResult): boolean {
 
 function isLateGroup(group: ResultGroup): boolean {
   return group.status === "late" || group.results.some(isLateResult);
+}
+
+function readResultVisibilityState(): ResultVisibilityState {
+  if (typeof window === "undefined") return emptyResultVisibilityState;
+
+  try {
+    const rawValue = window.localStorage.getItem(RESULT_VISIBILITY_STORAGE_KEY);
+    if (!rawValue) return emptyResultVisibilityState;
+
+    const parsed = JSON.parse(rawValue) as Partial<ResultVisibilityState>;
+    return {
+      archived: Array.isArray(parsed.archived) ? parsed.archived.filter((id): id is string => typeof id === "string") : [],
+      deleted: Array.isArray(parsed.deleted) ? parsed.deleted.filter((id): id is string => typeof id === "string") : [],
+    };
+  } catch {
+    return emptyResultVisibilityState;
+  }
+}
+
+function writeResultVisibilityState(state: ResultVisibilityState) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      RESULT_VISIBILITY_STORAGE_KEY,
+      JSON.stringify({
+        archived: Array.from(new Set(state.archived)),
+        deleted: Array.from(new Set(state.deleted)),
+      }),
+    );
+  } catch {
+    // Local storage can be unavailable; current-session hiding still works.
+  }
 }
 
 function sortableTime(group: ResultGroup): number {

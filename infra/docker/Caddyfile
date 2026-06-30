@@ -5,6 +5,15 @@
 (patrol360_routes) {
 	encode zstd gzip
 
+	header {
+		?Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; form-action 'self'; require-trusted-types-for 'script'"
+		?Cross-Origin-Resource-Policy "same-origin"
+		?Permissions-Policy "accelerometer=(), bluetooth=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), fullscreen=(self)"
+		?Referrer-Policy "strict-origin-when-cross-origin"
+		?X-Content-Type-Options "nosniff"
+		?X-Frame-Options "DENY"
+	}
+
 	handle /api/* {
 		reverse_proxy api:8080
 	}
@@ -34,6 +43,11 @@
 	}
 
 	tls /etc/caddy/certs/patrol360.local.crt /etc/caddy/certs/patrol360.local.key
+
+	header {
+		?Cross-Origin-Opener-Policy "same-origin"
+		?Strict-Transport-Security "max-age=300"
+	}
 
 	import patrol360_routes
 }

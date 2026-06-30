@@ -25,6 +25,7 @@ export type PrintLine = {
   normPoint: string;
   printItemName?: string | null;
   quantity: number;
+  quantityText?: string | null;
   status: string;
   unit: string;
   unitPrice: number;

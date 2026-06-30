@@ -11,6 +11,32 @@ export function buildWizardLinePayloads(
   const payloads: Array<{ line: PpeWizardLine; payload: UpsertInventoryPpeCardLineDto }> = [];
 
   for (const line of lines) {
+    const printItemName = (line.printItemName || line.item.normItemName || "").trim();
+    const isSectionTitle = Boolean(line.isSectionTitle || (printItemName && printItemName.endsWith(":")));
+
+    if (isSectionTitle) {
+      payloads.push({
+        line,
+        payload: {
+          brandModelArticle: null,
+          comment: null,
+          dueAt: null,
+          issuedAt: null,
+          issuePeriodText: null,
+          itemId: line.item.id,
+          normPoint: line.normPoint || null,
+          printItemName: printItemName || line.item.name,
+          quantity: 1,
+          quantityText: "",
+          isSectionTitle: true,
+          status: "not_issued",
+          unitPriceMinor: 0,
+          warehouseId: null,
+        },
+      });
+      continue;
+    }
+
     const quantity = parsePositiveQuantity(line.quantityText);
     if (!quantity) {
       return { error: `Проверьте количество для позиции ${line.item.name}` };
@@ -21,16 +47,15 @@ export function buildWizardLinePayloads(
       return { error: `Проверьте цену для позиции ${line.item.name}` };
     }
 
-    const printItemName = (line.printItemName || line.item.normItemName || "").trim();
-    if (!line.isSectionTitle && !printItemName) {
+    if (!printItemName) {
       return { error: `Укажите полное нормативное наименование СИЗ для позиции ${line.item.name}` };
     }
 
-    if (!line.isSectionTitle && isGenericPpeCategory(printItemName)) {
+    if (isGenericPpeCategory(printItemName)) {
       return { error: `Строка "${printItemName}" является категорией. Укажите полное нормативное наименование СИЗ.` };
     }
 
-    if (!line.isSectionTitle && printItemName.includes(" - ")) {
+    if (printItemName.includes(" - ")) {
       return { error: `Нельзя печатать строку в формате "Категория - номенклатура": ${printItemName}` };
     }
 
@@ -57,6 +82,8 @@ export function buildWizardLinePayloads(
         normPoint: line.normPoint || null,
         printItemName: printItemName || line.item.name,
         quantity,
+        quantityText: line.isSectionTitle ? "" : line.quantityText.trim() || `${quantity} ${line.item.unit || "шт."}`,
+        isSectionTitle: Boolean(line.isSectionTitle),
         status: nextStatus,
         unitPriceMinor,
         warehouseId: line.warehouseId || null,

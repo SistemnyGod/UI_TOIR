@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { InventoryItemDto, InventoryPpeCardDetailDto } from "../api/contracts";
+import type { InventoryItemDto, InventoryPpeCardDetailDto, InventoryPositionNormDto } from "../api/contracts";
 import { buildPrintHtml } from "../features/inventory/ppe/ppePrint";
-import { printDataFromDetail } from "../features/inventory/ppe/ppePrintMapping";
+import { parsePositiveQuantity } from "../features/inventory/ppe/ppeFormatters";
+import { printDataFromDetail, printDataFromWizard, toLineFromNorm } from "../features/inventory/ppe/ppePrintMapping";
 import { defaultIssuePeriodText } from "../features/inventory/ppe/ppeStatusCatalog";
+import { buildWizardLinePayloads } from "../features/inventory/ppe/ppeWizardPayloads";
 
 describe("ppe print mapping", () => {
   it("formats supported PPE issue periods", () => {
-    expect(defaultIssuePeriodText(12)).toBe("1 год");
+    expect(defaultIssuePeriodText(12)).toBe("на год");
     expect(defaultIssuePeriodText(18)).toBe("1,5 года");
     expect(defaultIssuePeriodText(24)).toBe("2 года");
     expect(defaultIssuePeriodText(30)).toBe("2,5 года");
@@ -29,7 +31,10 @@ describe("ppe print mapping", () => {
     expect(html).toContain("Каска защитная от механических воздействий");
     expect(html).toContain("Средства защиты головы:");
     expect(html).toContain("Перчатки диэлектрические");
+    expect(html).toContain("Выдача предусмотрена Приказом Минтруда России от 27.12.2017 N 882н");
+    expect(html).toContain("Зарегистрировано в Минюсте России 01.03.2018 N 50193");
     expect(html).toContain("1,5 года");
+    expect(html).toContain("1 пара");
   });
 
   it("prints actual issued PPE in the signature sheet without norm-only rows", () => {
@@ -41,6 +46,26 @@ describe("ppe print mapping", () => {
     expect(html).toContain("10.06.2026");
     expect(html).not.toContain("Средства защиты головы:");
     expect(html).not.toContain("Перчатки диэлектрические");
+  });
+
+  it("keeps section rows as personal-card separators only", () => {
+    const data = printDataFromDetail(cardDetail(), inventoryItems());
+    const cardHtml = buildPrintHtml(data, "card");
+    const sheetHtml = buildPrintHtml(data, "sheet");
+    const section = data.lines.find((line) => line.printItemName === "Средства защиты головы:");
+
+    expect(section).toMatchObject({
+      amount: 0,
+      dueAt: null,
+      issuedAt: null,
+      isSectionTitle: true,
+      issuePeriodText: "",
+      normPoint: "",
+      quantityText: "",
+      unitPrice: 0,
+    });
+    expect(cardHtml).toContain('<tr class="is-section-title"><td>Средства защиты головы:</td><td></td><td></td><td></td></tr>');
+    expect(sheetHtml).not.toContain("Средства защиты головы:");
   });
 
   it("keeps not-issued rows out of the signature sheet but does not break empty employee details", () => {
@@ -61,6 +86,162 @@ describe("ppe print mapping", () => {
     expect(() => buildPrintHtml(data, "card")).not.toThrow();
     expect(buildPrintHtml(data, "card")).toContain("Перчатки диэлектрические");
     expect(buildPrintHtml(data, "sheet")).toContain("Нет строк со статусом");
+  });
+
+  it("preserves printable quantity text from position norms through wizard payload and preview", () => {
+    const item = { ...inventoryItem("item-test-gloves", "Test gloves", "Test gloves norm", "", "", 12), unit: "pair" };
+    const norm: InventoryPositionNormDto = {
+      id: "norm-print-quantity",
+      itemId: item.id,
+      itemName: item.name,
+      lifeMonths: 12,
+      normItemName: "Test gloves norm",
+      normPoint: "p. 1.2",
+      positionName: "Electrician",
+      quantity: 2,
+      quantityText: "2 pair per year",
+      issuePeriodText: "pair, per year",
+      isSectionTitle: false,
+    };
+    const line = toLineFromNorm(norm, new Map([[item.id, item]]));
+
+    expect(line.quantityText).toBe("2 pair per year");
+    expect(parsePositiveQuantity(line.quantityText ?? "")).toBe(2);
+
+    const wizardLine = {
+      brandModelArticle: line.brandModelArticle ?? "",
+      catalogName: line.catalogName ?? item.name,
+      dueAt: line.dueAt ?? "",
+      issuePeriodText: line.issuePeriodText ?? "",
+      issuedAt: "",
+      isSectionTitle: false,
+      item,
+      normPoint: line.normPoint ?? "",
+      priceText: "0",
+      printItemName: line.printItemName ?? item.normItemName,
+      quantityText: line.quantityText ?? "",
+      status: "not_issued",
+      warehouseId: "",
+    };
+    const payloads = buildWizardLinePayloads([wizardLine], false);
+    const printData = printDataFromWizard(
+      { comment: "", employeeId: "emp-test", lines: [wizardLine], mode: "create", step: 2 },
+      null,
+    );
+
+    expect("payloads" in payloads ? payloads.payloads[0].payload.quantityText : "").toBe("2 pair per year");
+    expect(printData.lines[0].quantityText).toBe("2 pair per year");
+  });
+
+  it("keeps position norm section rows clean before wizard save", () => {
+    const item = { ...inventoryItem("item-section-source", "Source item", "Source item", "Brand", "Model", 12), defaultUnitPriceMinor: 12345 };
+    const norm: InventoryPositionNormDto = {
+      id: "norm-section-source",
+      itemId: item.id,
+      itemName: item.name,
+      lifeMonths: 12,
+      normItemName: "Head protection:",
+      normPoint: "p. ignored",
+      positionName: "Electrician",
+      quantity: 3,
+      quantityText: "3 pcs",
+      issuePeriodText: "ignored period",
+      isSectionTitle: true,
+    };
+    const line = toLineFromNorm(norm, new Map([[item.id, item]]));
+
+    expect(line).toMatchObject({
+      brandModelArticle: "",
+      dueAt: "",
+      isSectionTitle: true,
+      issuePeriodText: "",
+      normPoint: "",
+      priceText: "0",
+      printItemName: "Head protection:",
+      quantityText: "",
+    });
+  });
+
+  it("keeps section wizard rows out of issue quantity and price validation", () => {
+    const item = inventoryItem("item-section-head", "Head protection:", "Head protection:", "", "", 0);
+    const payloads = buildWizardLinePayloads(
+      [
+        {
+          brandModelArticle: "",
+          catalogName: item.name,
+          dueAt: "",
+          issuePeriodText: "",
+          issuedAt: "",
+          isSectionTitle: true,
+          item,
+          normPoint: "",
+          priceText: "",
+          printItemName: "Head protection:",
+          quantityText: "",
+          status: "issuing",
+          warehouseId: "",
+        },
+      ],
+      true,
+    );
+
+    if ("error" in payloads) {
+      throw new Error(payloads.error);
+    }
+
+    expect(payloads.payloads[0].payload).toMatchObject({
+      dueAt: null,
+      issuedAt: null,
+      isSectionTitle: true,
+      issuePeriodText: null,
+      printItemName: "Head protection:",
+      quantity: 1,
+      quantityText: "",
+      status: "not_issued",
+      unitPriceMinor: 0,
+      warehouseId: null,
+    });
+  });
+
+  it("normalizes colon section rows in wizard print preview", () => {
+    const item = inventoryItem("item-section-manual", "Head protection:", "Head protection:", "", "", 0);
+    const data = printDataFromWizard(
+      {
+        comment: "",
+        employeeId: "emp-test",
+        lines: [
+          {
+            brandModelArticle: "Ignored model",
+            catalogName: item.name,
+            dueAt: "2027-01-01",
+            issuePeriodText: "1 year",
+            issuedAt: "2026-06-01",
+            item,
+            normPoint: "ignored point",
+            priceText: "123.45",
+            printItemName: "Head protection:",
+            quantityText: "2 pcs",
+            status: "issued",
+            warehouseId: "wh-ppe",
+          },
+        ],
+        mode: "create",
+        step: 2,
+      },
+      null,
+    );
+
+    expect(data.lines[0]).toMatchObject({
+      amount: 0,
+      dueAt: null,
+      issuedAt: null,
+      isSectionTitle: true,
+      issuePeriodText: "",
+      printItemName: "Head protection:",
+      quantity: 2,
+      quantityText: "",
+      unitPrice: 0,
+    });
   });
 });
 
@@ -102,6 +283,7 @@ function sectionLine() {
     modelDescription: "",
     normPoint: "",
     printItemName: "Средства защиты головы:",
+    quantityText: "",
     quantity: 1,
     status: "not_issued",
     unit: "",
@@ -124,6 +306,7 @@ function issuedLine() {
     modelDescription: "Форвард, Эксперт К3/SIM-06/K",
     normPoint: "п. 1645",
     printItemName: "Каска защитная от механических воздействий",
+    quantityText: "1 шт.",
     quantity: 1,
     status: "issued",
     unit: "шт.",
@@ -146,6 +329,7 @@ function notIssuedLine() {
     modelDescription: "Класс 0",
     normPoint: "п. 1646",
     printItemName: "Перчатки диэлектрические",
+    quantityText: "1 пара",
     quantity: 1,
     status: "not_issued",
     unit: "пар",

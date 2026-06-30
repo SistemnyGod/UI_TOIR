@@ -135,7 +135,8 @@ public sealed record InventoryPositionNormDto(
     string NormItemName = "",
     string NormPoint = "",
     string IssuePeriodText = "",
-    string QuantityText = "");
+    string QuantityText = "",
+    bool IsSectionTitle = false);
 
 public sealed record CreateInventorySimpleReferenceDto(
     string Name);
@@ -166,7 +167,8 @@ public sealed record UpsertInventoryPositionNormDto(
     string? NormItemName = null,
     string? NormPoint = null,
     string? IssuePeriodText = null,
-    string? QuantityText = null);
+    string? QuantityText = null,
+    bool? IsSectionTitle = null);
 
 public sealed record CreateInventoryCategoryDto(
     string Name,
@@ -407,7 +409,9 @@ public sealed record InventoryPpeCardLineDto(
     string BrandModelArticle,
     string NormPoint,
     string PrintItemName = "",
-    string IssuePeriodText = "");
+    string IssuePeriodText = "",
+    string QuantityText = "",
+    bool IsSectionTitle = false);
 
 public sealed record InventoryPpeMovementDto(
     Guid CardId,
@@ -453,7 +457,9 @@ public sealed record UpsertInventoryPpeCardLineDto(
     string? NormPoint = null,
     string? IssuePeriodText = null,
     DateTimeOffset? IssuedAt = null,
-    string? BrandModelArticle = null);
+    string? BrandModelArticle = null,
+    string? QuantityText = null,
+    bool? IsSectionTitle = null);
 
 public sealed record InventoryReportDto(
     string Id,

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MobileAccountCreateDrawer, MobileAccountLinkPanel } from "../components/accounts/MobileAccountCreateDrawer";
 import { MobileAccountListPanel } from "../components/accounts/MobileAccountListPanel";
@@ -10,16 +11,39 @@ import { SiteUserFormPanel } from "../components/site-users/SiteUserFormPanel";
 import { SiteUserAccessPanel } from "../components/site-users/SiteUserAccessPanel";
 import { SiteUsersTablePanel } from "../components/site-users/SiteUsersTablePanel";
 import { Chip, EmptyState, ProgressBar } from "../components/ui";
+import { useResultsWorkspace } from "../hooks/useResultsWorkspace";
 import { InventoryRepositoryProvider } from "../repositories/inventoryRepositoryContext";
 import { createMockInventoryRepository } from "../repositories/mockInventoryRepository";
+import { PointResultTable } from "../features/patrol/results/PointResultTable";
+import { filterGroups, ResultsWorkspace } from "../features/patrol/results/ResultsWorkspace";
+import { AssignmentScreen } from "../features/patrol/AssignmentScreen";
+import { ScheduleScreen } from "../features/patrol/ScheduleScreen";
+import {
+  loadAssignmentFavoriteEmployeeIds,
+  saveAssignmentFavoriteEmployeeIds,
+  subscribeAssignmentFavoriteEmployeeIds,
+} from "../features/patrol/assignments/assignmentStorage";
+import { RequestModals } from "../features/patrol/components/requests/RequestModals";
+import { EmployeeDirectoryPanel } from "../features/patrol/components/employees/EmployeeDirectoryPanel";
+import { EmployeeProfileDrawer } from "../features/patrol/components/employees/EmployeeProfileDrawer";
 import { InventoryPpeScreen } from "../screens/inventory/InventoryPpeScreen";
 import { CompactTable, KpiStrip, PaginationBar } from "../shared/ui";
 import { LoginScreen } from "../screens/LoginScreen";
-import type { SiteUser } from "../types";
+import type { PatrolResult, SiteUser } from "../types";
+import type { ResultGroup } from "../features/patrol/results/resultTypes";
 
 afterEach(() => {
+  window.localStorage?.removeItem?.("patrol360.results.hiddenGroups.v1");
+  window.localStorage?.removeItem?.("patrol360.patrolEmployees.favoriteIds.v1");
   vi.unstubAllGlobals();
 });
+
+function formatTestRuDate(date: Date) {
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}.${month}.${year}`;
+}
 
 describe("shared UI primitives", () => {
   it("submits login credentials from the auth screen", async () => {
@@ -276,6 +300,605 @@ describe("shared UI primitives", () => {
     })));
   });
 
+  it("shows a clear request fallback instead of an empty view modal", () => {
+    render(
+      <RequestModals
+        modal={{ kind: "view", requestId: "missing-request" }}
+        request={undefined}
+        sourceResult={undefined}
+        sourceResultId={undefined}
+        employeeOptions={[]}
+        routeOptions={[]}
+        onClose={vi.fn()}
+        onCreateRelated={vi.fn()}
+        onSubmitCreate={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Заявка не найдена")).toBeInTheDocument();
+    expect(screen.getByText(/отсутствует в текущем списке заявок/i)).toBeInTheDocument();
+  });
+
+  it("does not show request view action for an assignment with a missing request", async () => {
+    window.localStorage.setItem("patrol360.patrolEmployees.favoriteIds.v1", JSON.stringify(["employee-1"]));
+
+    render(
+      <AssignmentScreen
+        activePatrols={[
+          {
+            id: "assignment-1",
+            patrolRequestId: "missing-request",
+            employee: "Костарев Илья Сергеевич",
+            employeeId: "employee-1",
+            routeId: "route-1",
+            route: "Обход печей",
+            zone: "Импорт atom_obhod",
+            shift: "День",
+            currentPoint: "КПП-1",
+            status: "Ожидает",
+            progress: 0,
+            eta: "20:20",
+            deviation: "0",
+            plannedAt: "29.06.2026, 20:20",
+          } as never,
+        ]}
+        assignmentCreateIntent={0}
+        canManage={true}
+        dataSourceMode="mock"
+        employeeDirectory={[
+          {
+            id: "employee-1",
+            fullName: "Костарев Илья Сергеевич",
+            initials: "КИ",
+            personnelNo: "001",
+            position: "Сотрудник подрядной организации",
+            department: "ИП Бобровник",
+            employeeGroup: "Подрядчик",
+            birthDate: "1990-01-01",
+            zone: "ИП Бобровник",
+            status: "Активен",
+            routesDone: 0,
+            routesTotal: 0,
+            mobileStatus: "Привязан",
+            lastSeen: "сейчас",
+            phone: "",
+            hiredAt: "2026-01-01",
+            brigade: "3 смена",
+            shift: "day",
+            leader: "",
+            email: "",
+          } as never,
+        ]}
+        refreshPatrolData={vi.fn().mockResolvedValue(undefined)}
+        requestListStatus="ready"
+        requests={[]}
+        routeDirectory={[
+          {
+            id: "route-1",
+            name: "Обход печей",
+            territory: "Импорт atom_obhod",
+            status: "Активен",
+            description: "",
+            duration: "30 мин",
+            distance: "0",
+            periodicity: "Ежедневно",
+            points: [],
+          } as never,
+        ]}
+        selectedEmployeeId="employee-1"
+        selectedRouteId="route-1"
+        onOpenRequestById={vi.fn()}
+        onRefreshRequests={vi.fn()}
+        onNavigate={vi.fn()}
+        onNotify={vi.fn()}
+        onCreatePatrolRequest={vi.fn()}
+        onSelectEmployee={vi.fn()}
+        onSelectRoute={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByText("Костарев Илья Сергеевич").length).toBeGreaterThan(0));
+
+    expect(screen.queryByText("Просмотр")).not.toBeInTheDocument();
+    expect(screen.getByText(/Действующая заявка/i)).toBeInTheDocument();
+  });
+
+  it("uses assignment favorite employees in the patrol schedule grid", async () => {
+    window.localStorage.setItem("patrol360.patrolEmployees.favoriteIds.v1", JSON.stringify(["employee-favorite"]));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response("[]", { headers: { "content-type": "application/json" }, status: 200 }))),
+    );
+
+    render(
+      <ScheduleScreen
+        activePatrols={[]}
+        canManage={true}
+        employeeDirectory={[
+          {
+            id: "employee-favorite",
+            fullName: "Favorite Employee",
+            initials: "FE",
+            personnelNo: "001",
+            position: "Inspector",
+            department: "Patrol",
+            employeeGroup: "Primary",
+            birthDate: "",
+            zone: "Patrol",
+            status: "Active",
+            routesDone: 0,
+            routesTotal: 0,
+            mobileStatus: "Linked",
+            lastSeen: "",
+            phone: "",
+            hiredAt: "",
+            brigade: "",
+            shift: "day",
+            leader: "",
+            email: "",
+          } as never,
+          {
+            id: "employee-other",
+            fullName: "Other Employee",
+            initials: "OE",
+            personnelNo: "002",
+            position: "Inspector",
+            department: "Patrol",
+            employeeGroup: "Primary",
+            birthDate: "",
+            zone: "Patrol",
+            status: "Active",
+            routesDone: 0,
+            routesTotal: 0,
+            mobileStatus: "Linked",
+            lastSeen: "",
+            phone: "",
+            hiredAt: "",
+            brigade: "",
+            shift: "day",
+            leader: "",
+            email: "",
+          } as never,
+        ]}
+        mode="week"
+        onModeChange={vi.fn()}
+        onNotify={vi.fn()}
+        onCreateScheduledRequest={vi.fn().mockResolvedValue({} as never)}
+        onOpenRequestById={vi.fn()}
+        onRunAssignmentCommand={vi.fn()}
+        requests={[]}
+        routeDirectory={[]}
+        selectedCellId=""
+        onSelectCell={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("Favorite Employee")).toBeInTheDocument();
+    expect(screen.queryByText("Other Employee")).not.toBeInTheDocument();
+  });
+
+  it("shares patrol employee favorites through one storage contract", () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeAssignmentFavoriteEmployeeIds(listener);
+
+    saveAssignmentFavoriteEmployeeIds(["employee-a", "employee-a", "employee-b"]);
+
+    expect(loadAssignmentFavoriteEmployeeIds()).toEqual(["employee-a", "employee-b"]);
+    expect(listener).toHaveBeenCalledWith(["employee-a", "employee-b"]);
+
+    unsubscribe();
+  });
+
+  it("opens schedule planning modal from an empty cell and sends notification payload", async () => {
+    window.localStorage.setItem("patrol360.patrolEmployees.favoriteIds.v1", JSON.stringify(["employee-favorite"]));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response("[]", { headers: { "content-type": "application/json" }, status: 200 }))),
+    );
+    const onCreateScheduledRequest = vi.fn().mockResolvedValue({ id: "request-1" } as never);
+    const resultDate = formatTestRuDate(new Date());
+
+    function ScheduleHarness() {
+      const [selectedCellId, setSelectedCellId] = useState("");
+      return (
+        <ScheduleScreen
+          activePatrols={[]}
+          canManage={true}
+          employeeDirectory={[
+            {
+              id: "employee-favorite",
+              fullName: "Favorite Employee",
+              initials: "FE",
+              personnelNo: "001",
+              position: "Inspector",
+              department: "Patrol",
+              employeeGroup: "Primary",
+              birthDate: "",
+              zone: "Patrol",
+              status: "Active",
+              routesDone: 0,
+              routesTotal: 0,
+              mobileStatus: "Linked",
+              lastSeen: "",
+              phone: "",
+              hiredAt: "",
+              brigade: "",
+              shift: "day",
+              leader: "",
+              email: "",
+            } as never,
+          ]}
+          mode="week"
+          patrolResults={[
+            {
+              id: "result-schedule-history",
+              status: "Замечание",
+              point: "Point 7",
+              pointId: "point-7",
+              employee: "Favorite Employee",
+              employeeId: "employee-favorite",
+              routeId: "route-2",
+              route: "Route B",
+              territory: "Patrol",
+              shift: "День",
+              plannedAt: `${resultDate}, 08:00`,
+              actualAt: `${resultDate}, 08:20`,
+              deviation: "+20m",
+              comment: "Needs follow-up",
+              photos: 1,
+              issueType: "Issue",
+              severity: "Средняя",
+              chronology: [],
+            } satisfies PatrolResult,
+          ]}
+          onModeChange={vi.fn()}
+          onNotify={vi.fn()}
+          onCreateScheduledRequest={onCreateScheduledRequest}
+          onOpenRequestById={vi.fn()}
+          onRunAssignmentCommand={vi.fn()}
+          requests={[]}
+          routeDirectory={[
+            {
+              id: "route-1",
+              name: "Route A",
+              territory: "Patrol",
+              status: "Active",
+              description: "",
+              duration: "30 min",
+              distance: "",
+              periodicity: "",
+              points: [],
+            } as never,
+            {
+              id: "route-2",
+              name: "Route B",
+              territory: "Patrol",
+              status: "Active",
+              description: "",
+              duration: "45 min",
+              distance: "",
+              periodicity: "",
+              points: [],
+            } as never,
+          ]}
+          selectedCellId={selectedCellId}
+          onSelectCell={setSelectedCellId}
+        />
+      );
+    }
+
+    const { container } = render(<ScheduleHarness />);
+
+    await waitFor(() => expect(container.querySelector("button.schedule-cell.empty")).not.toBeNull());
+    fireEvent.click(container.querySelector<HTMLButtonElement>("button.schedule-cell.empty")!);
+
+    expect(await screen.findByRole("dialog", { name: "Создание планового обхода" })).toBeInTheDocument();
+    expect(screen.getByText("Уведомить сотрудника")).toBeInTheDocument();
+    expect(screen.getByText("История результатов за день")).toBeInTheDocument();
+    expect(screen.getByText("Point 7")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Назначить по результату" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить заявку" }));
+
+    await waitFor(() => expect(onCreateScheduledRequest).toHaveBeenCalledOnce());
+    expect(onCreateScheduledRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        employeeId: "employee-favorite",
+        employee: "Favorite Employee",
+        routeId: "route-2",
+        route: "Route B",
+        notifyEmployee: true,
+        notificationText: expect.stringContaining("Point 7"),
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Создание планового обхода" })).not.toBeInTheDocument());
+  });
+
+  it("renders patrol employees as compact roster rows with a structured profile", () => {
+    const employee = {
+      id: "employee-compact",
+      fullName: "Костарев Илья Сергеевич",
+      initials: "КИ",
+      personnelNo: "PERCO-38925",
+      position: "Сотрудник подрядной организации",
+      department: "ИП Бобровник",
+      employeeGroup: "Подрядчики",
+      birthDate: "",
+      zone: "ИП Бобровник",
+      status: "Активен",
+      routesDone: 0,
+      routesTotal: 3,
+      mobileStatus: "Привязан",
+      lastSeen: "03.06.2026, 14:50:26",
+      phone: "",
+      hiredAt: "",
+      brigade: "",
+      shift: "День",
+      leader: "",
+      email: "",
+    } as never;
+    const { container } = render(
+      <>
+        <EmployeeDirectoryPanel
+          allEmployeesCount={213}
+          employees={[employee]}
+          selectedEmployeeId="employee-compact"
+          onOpenAddFromAccounting={vi.fn()}
+          onOpenCreate={vi.fn()}
+          onSelectEmployee={vi.fn()}
+        />
+        <EmployeeProfileDrawer
+          employee={employee}
+          progress={0}
+          onDeleteEmployee={vi.fn()}
+          onEditEmployee={vi.fn()}
+          onNavigate={vi.fn()}
+          onNotify={vi.fn()}
+        />
+      </>,
+    );
+
+    expect(container.querySelector(".employee-roster-row")).not.toBeNull();
+    expect(container.querySelector("table")).toBeNull();
+    expect(screen.getByText("Основные данные")).toBeInTheDocument();
+    expect(screen.getByText("Кадровая информация")).toBeInTheDocument();
+    expect(screen.getAllByText("Маршруты сегодня").length).toBeGreaterThan(0);
+    expect(screen.getByText("Мобильный вход")).toBeInTheDocument();
+  });
+
+  it("opens patrol result details on result row double click", async () => {
+    const user = userEvent.setup();
+    const onSelectResult = vi.fn();
+
+    const { container } = render(
+      <ResultsWorkspace
+        dataSourceMode="mock"
+        onSelectResult={onSelectResult}
+        onCreateRequest={vi.fn()}
+        onOpenRequest={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(container.querySelectorAll("article.results-review-row").length).toBeGreaterThan(0));
+    const row = container.querySelector<HTMLElement>("article.results-review-row");
+    expect(row).not.toBeNull();
+
+    await user.dblClick(row!);
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(onSelectResult).toHaveBeenCalled();
+  });
+
+  it("filters patrol result groups by selected route", () => {
+    const baseGroup = {
+      id: "route-a",
+      status: "ok",
+      route: "Маршрут A",
+      territory: "Цех",
+      employee: "Иванов Иван",
+      employeeId: "employee-a",
+      shift: "День",
+      duration: { label: "10 мин", hint: "", tone: "ok", minutes: 10 },
+      photos: 0,
+      issues: 0,
+      points: 1,
+      okPoints: 1,
+      issuePoints: 0,
+      results: [],
+    } as ResultGroup;
+    const groups = [
+      baseGroup,
+      { ...baseGroup, id: "route-b", route: "Маршрут B", employee: "Петров Петр" },
+    ];
+
+    expect(filterGroups(groups, "all", "", "Маршрут B")).toEqual([groups[1]]);
+  });
+
+  it("renders a route selector in the patrol results toolbar", async () => {
+    const { container } = render(
+      <ResultsWorkspace
+        dataSourceMode="mock"
+        onSelectResult={vi.fn()}
+        onCreateRequest={vi.fn()}
+        onOpenRequest={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(container.querySelectorAll("article.results-review-row").length).toBeGreaterThan(0));
+
+    expect(screen.getByLabelText("Маршрут")).toBeInTheDocument();
+  });
+
+  it("opens a dedicated patrol result context panel from right click and archives the row locally", async () => {
+    const addToast = vi.fn();
+    const user = userEvent.setup();
+
+    const { container, unmount } = render(
+      <ResultsWorkspace
+        dataSourceMode="mock"
+        onSelectResult={vi.fn()}
+        onCreateRequest={vi.fn()}
+        onOpenRequest={vi.fn()}
+        addToast={addToast}
+      />,
+    );
+
+    await waitFor(() => expect(container.querySelectorAll("article.results-review-row").length).toBeGreaterThan(0));
+    const initialRows = container.querySelectorAll("article.results-review-row").length;
+    const row = container.querySelector<HTMLElement>("article.results-review-row");
+    expect(row).not.toBeNull();
+
+    fireEvent.contextMenu(row!, { clientX: 320, clientY: 240 });
+
+    await waitFor(() => expect(container.querySelector(".results-review-context-panel")).not.toBeNull());
+    expect(container.querySelector(".results-review-row-menu")).toBeNull();
+    const archiveButton = container.querySelector<HTMLButtonElement>(".results-review-context-panel [data-action='archive']");
+    expect(archiveButton).not.toBeNull();
+    await user.click(archiveButton!);
+
+    await waitFor(() => expect(container.querySelectorAll("article.results-review-row")).toHaveLength(initialRows - 1));
+    expect(addToast).toHaveBeenCalledWith(expect.any(String), "info");
+
+    unmount();
+
+    const persisted = render(
+      <ResultsWorkspace
+        dataSourceMode="mock"
+        onSelectResult={vi.fn()}
+        onCreateRequest={vi.fn()}
+        onOpenRequest={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(persisted.container.querySelectorAll("article.results-review-row")).toHaveLength(initialRows - 1));
+  });
+
+  it("opens patrol result row menu from the three-dot button and removes the row locally", async () => {
+    const addToast = vi.fn();
+    const user = userEvent.setup();
+
+    const { container, unmount } = render(
+      <ResultsWorkspace
+        dataSourceMode="mock"
+        onSelectResult={vi.fn()}
+        onCreateRequest={vi.fn()}
+        onOpenRequest={vi.fn()}
+        addToast={addToast}
+      />,
+    );
+
+    await waitFor(() => expect(container.querySelectorAll("article.results-review-row").length).toBeGreaterThan(0));
+    const initialRows = container.querySelectorAll("article.results-review-row").length;
+    const menuButton = container.querySelector<HTMLButtonElement>(".results-review-row-more");
+    expect(menuButton).not.toBeNull();
+
+    await user.click(menuButton!);
+
+    await waitFor(() => expect(container.querySelector(".results-review-row-menu")).not.toBeNull());
+    expect(container.querySelector(".results-review-context-panel")).toBeNull();
+    const deleteButton = container.querySelector<HTMLButtonElement>(".results-review-row-menu [data-action='delete']");
+    expect(deleteButton).not.toBeNull();
+    await user.click(deleteButton!);
+
+    await waitFor(() => expect(container.querySelectorAll("article.results-review-row")).toHaveLength(initialRows - 1));
+    expect(addToast).toHaveBeenCalledWith(expect.any(String), "success");
+
+    unmount();
+
+    const persisted = render(
+      <ResultsWorkspace
+        dataSourceMode="mock"
+        onSelectResult={vi.fn()}
+        onCreateRequest={vi.fn()}
+        onOpenRequest={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(persisted.container.querySelectorAll("article.results-review-row")).toHaveLength(initialRows - 1));
+  });
+
+  it("renders issue point status under marker name with a dedicated comment block", () => {
+    const result = {
+      id: "point-issue-1",
+      point: "К14",
+      pointId: "point-k14",
+      employee: "Костарев Илья Сергеевич",
+      employeeId: "employee-1",
+      route: "Обход печей",
+      routeId: "route-1",
+      territory: "Импорт atom_obhod",
+      shift: "День",
+      plannedAt: "2026-06-28T20:20:00.000Z",
+      actualAt: "2026-06-29T01:50:00.000Z",
+      deviation: "+331m",
+      comment: "Нужна замена заслонки",
+      photos: 0,
+      issueType: "Неисправность",
+      severity: "Средняя",
+      status: "Замечание",
+      chronology: [],
+      source: "mobile",
+    } as PatrolResult;
+    const group: ResultGroup = {
+      id: "group-1",
+      status: "issue",
+      route: result.route,
+      routeId: result.routeId,
+      territory: result.territory,
+      employee: result.employee,
+      employeeId: result.employeeId,
+      shift: result.shift,
+      duration: { label: "10 ч 52 мин", hint: "", tone: "ok", minutes: 652 },
+      photos: 0,
+      issues: 1,
+      points: 1,
+      okPoints: 0,
+      issuePoints: 1,
+      results: [result],
+    };
+
+    const { container } = render(
+      <PointResultTable
+        group={group}
+        results={[result]}
+        onOpenAttachment={vi.fn()}
+        photoLoadingResultId={null}
+      />,
+    );
+    const row = container.querySelector("article.results-review-point-row.is-issue");
+
+    expect(row).not.toBeNull();
+    expect(row?.querySelector(".results-review-point-name .results-review-status.is-issue")).not.toBeNull();
+    expect(row?.querySelector(".results-review-point-status")).toBeNull();
+    expect(row?.querySelector(".results-review-point-cell.is-result")).toBeNull();
+    expect(row?.querySelector(".results-review-point-comment")?.textContent).toContain("Нужна замена заслонки");
+  });
+
+  it("does not request API details for a stale mock selected result id", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify([]), { headers: { "content-type": "application/json" }, status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+
+    function Probe() {
+      useResultsWorkspace({
+        dataSourceMode: "api",
+        selectedResultId: "result-smoke-photo",
+        onSelectResult: vi.fn(),
+        showToast: vi.fn(),
+      });
+      return <div>results probe</div>;
+    }
+
+    render(<Probe />);
+
+    await waitFor(() => expect(fetcher).toHaveBeenCalled());
+
+    const requestedUrls = fetcher.mock.calls.map(([input]) => String(input));
+    expect(requestedUrls.some((url) => url.endsWith("/api/v1/results"))).toBe(true);
+    expect(requestedUrls.some((url) => url.includes("result-smoke-photo"))).toBe(false);
+  });
+
   it("renders request list loading state", () => {
     render(
       <DashboardRequestsPanel
@@ -476,12 +1099,48 @@ describe("shared UI primitives", () => {
 
     expect(screen.getByText("online")).toBeInTheDocument();
     expect(screen.getByText("Xiaomi / Android / 2.3.0")).toBeInTheDocument();
+    expect(screen.getByText("Вход в приложение")).toBeInTheDocument();
     expect(screen.getByText("Login accepted")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c" }));
+    await user.click(screen.getAllByRole("button", { name: "\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c" })[0]);
 
     expect(onRefresh).toHaveBeenCalledOnce();
     expect(onNotify).not.toHaveBeenCalled();
+  });
+
+  it("limits mobile account security events to the latest 10 with readable labels", () => {
+    render(
+      <MobileAccountSecurityPanels
+        onNotify={vi.fn()}
+        onRefresh={vi.fn()}
+        securityEvents={Array.from({ length: 11 }, (_, index) => ({
+          id: `event-${index + 1}`,
+          accountId: "account-1",
+          eventType: "mobile_account.employee_attached",
+          message: `Employee employee-${index + 1} attached.`,
+          createdAt: `2026-05-${String(index + 1).padStart(2, "0")}T10:30:00Z`,
+          actor: "operator",
+        }))}
+        sessions={[
+          {
+            id: "session-1",
+            accountId: "account-1",
+            status: "online",
+            deviceId: "device-1",
+            device: "Xiaomi",
+            platform: "Android",
+            appVersion: "2.3.0",
+            ipAddress: "127.0.0.1",
+            lastSeenAt: "2026-05-18T10:20:00Z",
+          },
+        ]}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByText("Последние 10 из 11")).toBeInTheDocument();
+    expect(screen.getAllByText("Сотрудник привязан")).toHaveLength(10);
+    expect(screen.getAllByText("Код: mobile_account.employee_attached")).toHaveLength(10);
   });
 
   it("does not render mobile account inactivity session policy control", () => {

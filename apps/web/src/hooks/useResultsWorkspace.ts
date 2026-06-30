@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createApiResultsRepository,
   findPatrolResult,
+  isBackendResultId,
   patrolResultsFallback,
   type ResultFilterOptions,
 } from "../repositories/resultsRepository";
@@ -32,6 +33,10 @@ export function useResultsWorkspace({
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
 
   const selectedListItem = useMemo(() => findPatrolResult(results, selectedResultId), [results, selectedResultId]);
+  const exactSelectedListItem = useMemo(
+    () => results.find((result) => result.id === selectedResultId),
+    [results, selectedResultId],
+  );
   const selectedResult = selectedDetail ?? selectedListItem;
 
   const refreshResults = useCallback(
@@ -84,7 +89,7 @@ export function useResultsWorkspace({
   useEffect(() => {
     setSelectedDetail(undefined);
 
-    if (!selectedResultId || dataSourceMode !== "api") {
+    if (!selectedResultId || dataSourceMode !== "api" || !exactSelectedListItem || !isBackendResultId(selectedResultId)) {
       setDetailStatus("idle");
       return;
     }
@@ -108,7 +113,7 @@ export function useResultsWorkspace({
       });
 
     return () => controller.abort();
-  }, [apiResults, dataSourceMode, selectedResultId, showToast]);
+  }, [apiResults, dataSourceMode, exactSelectedListItem, selectedResultId, showToast]);
 
   const exportResults = useCallback(async () => {
     if (dataSourceMode !== "api") {

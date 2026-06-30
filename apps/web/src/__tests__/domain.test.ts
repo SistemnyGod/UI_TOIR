@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildLocalDashboardMetrics } from "../domain/dashboardMetrics";
 import { createMobileAccountDraft } from "../domain/mobileAccounts";
 import { moveRoutePoint } from "../domain/routes";
@@ -96,6 +96,14 @@ describe("domain workflows", () => {
       issueType: "Повреждение",
       severity: "Высокая",
     });
+  });
+
+  it("does not request API details for local mock result ids", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const repository = createApiResultsRepository({ fetcher });
+
+    await expect(repository.getResult("result-smoke-photo")).rejects.toThrow("backend API id");
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it("sends sourceResultId when creating a request through API repository", async () => {

@@ -21,6 +21,7 @@ export function MobileAccountSecurityPanels({
   const isLoading = status === "loading";
   const isError = status === "error";
   const analytics = buildSessionAnalytics(sessions);
+  const visibleSecurityEvents = securityEvents.slice(0, 10);
 
   return (
     <section className="mobile-am-bottom">
@@ -41,33 +42,37 @@ export function MobileAccountSecurityPanels({
             description={errorMessage ?? "Не удалось загрузить данные по мобильным сессиям."}
           />
         ) : sessions.length > 0 ? (
-          <div className="mobile-am-analytics-grid">
-            <div>
-              <span>Среднее время сессии</span>
-              <strong>{analytics.averageSessionTime}</strong>
-              <em>{analytics.trend}</em>
+          <div className="mobile-am-analytics-compact">
+            <div className="mobile-am-analytics-metrics">
+              <div>
+                <span>Среднее время</span>
+                <strong>{analytics.averageSessionTime}</strong>
+                <em>{analytics.trend}</em>
+              </div>
+              <div>
+                <span>Всего сессий</span>
+                <strong>{sessions.length}</strong>
+                <em>загружено</em>
+              </div>
+              <div>
+                <span>Успешные</span>
+                <strong className="success-text">{analytics.successCount} ({analytics.successPercent}%)</strong>
+                <em>без обрыва</em>
+              </div>
+              <div>
+                <span>Прерванные</span>
+                <strong className="danger-text">{analytics.interruptedCount} ({analytics.interruptedPercent}%)</strong>
+                <em>требуют проверки</em>
+              </div>
             </div>
 
             <div className="mobile-am-chart">
-              <span>Всего сессий</span>
-              <strong>{sessions.length}</strong>
-              <svg viewBox="0 0 360 120" role="img" aria-label="Активность сессий">
+              <svg viewBox="0 0 360 86" role="img" aria-label="Активность сессий">
                 <polyline points={analytics.points} />
                 {analytics.chart.map((point) => (
                   <circle cx={point.x} cy={point.y} key={`${point.x}-${point.y}`} r="4" />
                 ))}
               </svg>
-            </div>
-
-            <div className="mobile-am-session-facts">
-              <div>
-                <span>Успешных сессий</span>
-                <strong className="success-text">{analytics.successCount} ({analytics.successPercent}%)</strong>
-              </div>
-              <div>
-                <span>Прерванных сессий</span>
-                <strong className="danger-text">{analytics.interruptedCount} ({analytics.interruptedPercent}%)</strong>
-              </div>
             </div>
 
             <div className="mobile-am-session-list">
@@ -94,7 +99,10 @@ export function MobileAccountSecurityPanels({
 
       <article className="mobile-am-panel mobile-am-events">
         <div className="mobile-am-panel-head compact">
-          <h2>События безопасности</h2>
+          <div>
+            <h2>События безопасности</h2>
+            <span>Последние {Math.min(securityEvents.length, 10)} из {securityEvents.length}</span>
+          </div>
           <button
             onClick={() => {
               void onRefresh();
@@ -102,7 +110,7 @@ export function MobileAccountSecurityPanels({
             }}
             type="button"
           >
-            Все события
+            Обновить
           </button>
         </div>
 
@@ -118,16 +126,20 @@ export function MobileAccountSecurityPanels({
           />
         ) : securityEvents.length > 0 ? (
           <div className="mobile-am-event-list">
-            {securityEvents.map((event) => (
+            {visibleSecurityEvents.map((event) => {
+              const readableEvent = describeSecurityEvent(event);
+              return (
               <div className="mobile-am-event" key={event.id}>
                 <span className={`mobile-am-event-icon ${eventTone(event)}`}>!</span>
                 <div>
-                  <strong>{event.eventType || "Событие"}</strong>
-                  <span>{event.message || "-"}</span>
+                    <strong>{readableEvent.title}</strong>
+                    <span>{readableEvent.description}</span>
+                    <small>{readableEvent.meta}</small>
                 </div>
                 <time>{formatDateTime(event.createdAt)}</time>
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <EmptyState
@@ -153,7 +165,7 @@ function buildSessionAnalytics(sessions: MobileAccountSession[]) {
   const maxValue = Math.max(...chartValues, 1);
   const chart = chartValues.map((value, index) => ({
     x: 24 + index * 50,
-    y: 98 - (value / maxValue) * 70,
+    y: 74 - (value / maxValue) * 52,
   }));
 
   return {
@@ -170,11 +182,77 @@ function buildSessionAnalytics(sessions: MobileAccountSession[]) {
 
 function isSuccessSession(status: string) {
   const text = status.toLowerCase();
-  return text.includes("success") || text.includes("онлайн") || text.includes("active");
+  return text.includes("success") || text.includes("online") || text.includes("онлайн") || text.includes("active");
 }
 
 function getPercent(value: number, total: number) {
   return total > 0 ? Math.round((value / total) * 100) : 0;
+}
+
+function describeSecurityEvent(event: MobileAccountSecurityEvent) {
+  const type = event.eventType || "mobile_account.event";
+  const normalizedType = type.toLowerCase().replace(/[._-]+/g, " ");
+  const employeeId = event.message.match(/employee\s+([a-f0-9-]{8,})/i)?.[1];
+  const accountId = event.message.match(/account\s+([a-f0-9-]{8,})/i)?.[1];
+  const details = employeeId
+    ? `ID сотрудника: ${employeeId}`
+    : accountId
+      ? `ID аккаунта: ${accountId}`
+      : event.message || "Подробности не переданы";
+
+  if (normalizedType.includes("employee attached")) {
+    return {
+      title: "Сотрудник привязан",
+      description: `Мобильный аккаунт получил доступ к сотруднику. ${details}`,
+      meta: `Код: ${type}`,
+    };
+  }
+
+  if (normalizedType.includes("employee detached")) {
+    return {
+      title: "Сотрудник отвязан",
+      description: `Связь мобильного аккаунта с сотрудником снята. ${details}`,
+      meta: `Код: ${type}`,
+    };
+  }
+
+  if (normalizedType.includes("login")) {
+    return {
+      title: "Вход в приложение",
+      description: event.message || "Мобильный пользователь выполнил вход.",
+      meta: `Код: ${type}`,
+    };
+  }
+
+  if (normalizedType.includes("password") || normalizedType.includes("reset")) {
+    return {
+      title: "Пароль изменен",
+      description: event.message || "Для мобильного аккаунта выполнено действие с паролем.",
+      meta: `Код: ${type}`,
+    };
+  }
+
+  if (normalizedType.includes("block")) {
+    return {
+      title: "Доступ заблокирован",
+      description: event.message || "Мобильный аккаунт был заблокирован или получил отказ доступа.",
+      meta: `Код: ${type}`,
+    };
+  }
+
+  if (normalizedType.includes("create")) {
+    return {
+      title: "Аккаунт создан",
+      description: event.message || "Создан мобильный аккаунт.",
+      meta: `Код: ${type}`,
+    };
+  }
+
+  return {
+    title: "Событие доступа",
+    description: event.message || "Зафиксировано изменение мобильного доступа.",
+    meta: `Код: ${type}`,
+  };
 }
 
 function eventTone(event: MobileAccountSecurityEvent) {

@@ -1,6 +1,7 @@
 import type { ShiftTimeSettings } from "./assignmentTypes";
 
-const assignmentFavoriteEmployeesStorageKey = "patrol360.patrolEmployees.favoriteIds.v1";
+export const assignmentFavoriteEmployeesStorageKey = "patrol360.patrolEmployees.favoriteIds.v1";
+export const assignmentFavoriteEmployeesChangedEvent = "patrol360:patrolEmployeesFavoriteIdsChanged";
 const legacyAssignmentFavoriteEmployeesStorageKey = "patrol360.assignment.favoriteEmployees.v1";
 const assignmentShiftSettingsStorageKey = "patrol360.assignment.shiftSettings.v1";
 
@@ -21,7 +22,7 @@ export function loadAssignmentFavoriteEmployeeIds() {
       if (!legacyRaw) return [];
 
       const legacyParsed = JSON.parse(legacyRaw);
-      const legacyIds = Array.isArray(legacyParsed) ? legacyParsed.filter((id): id is string => typeof id === "string") : [];
+      const legacyIds = normalizeFavoriteEmployeeIds(legacyParsed);
       if (legacyIds.length > 0) {
         window.localStorage.setItem(assignmentFavoriteEmployeesStorageKey, JSON.stringify(legacyIds));
       }
@@ -30,7 +31,7 @@ export function loadAssignmentFavoriteEmployeeIds() {
     }
 
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+    return normalizeFavoriteEmployeeIds(parsed);
   } catch {
     return [];
   }
@@ -38,8 +39,40 @@ export function loadAssignmentFavoriteEmployeeIds() {
 
 export function saveAssignmentFavoriteEmployeeIds(ids: string[]) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(assignmentFavoriteEmployeesStorageKey, JSON.stringify(ids));
+  const normalizedIds = normalizeFavoriteEmployeeIds(ids);
+  window.localStorage.setItem(assignmentFavoriteEmployeesStorageKey, JSON.stringify(normalizedIds));
   window.localStorage.removeItem(legacyAssignmentFavoriteEmployeesStorageKey);
+  window.dispatchEvent(new CustomEvent(assignmentFavoriteEmployeesChangedEvent, { detail: normalizedIds }));
+}
+
+export function hasStoredAssignmentFavoriteEmployeeIds() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(assignmentFavoriteEmployeesStorageKey) !== null;
+}
+
+export function subscribeAssignmentFavoriteEmployeeIds(listener: (ids: string[]) => void) {
+  if (typeof window === "undefined") return () => undefined;
+
+  const handleLocalChange = (event: Event) => {
+    const detail = (event as CustomEvent<unknown>).detail;
+    listener(Array.isArray(detail) ? normalizeFavoriteEmployeeIds(detail) : loadAssignmentFavoriteEmployeeIds());
+  };
+  const handleStorageChange = (event: StorageEvent) => {
+    if (
+      event.key === assignmentFavoriteEmployeesStorageKey ||
+      event.key === legacyAssignmentFavoriteEmployeesStorageKey
+    ) {
+      listener(loadAssignmentFavoriteEmployeeIds());
+    }
+  };
+
+  window.addEventListener(assignmentFavoriteEmployeesChangedEvent, handleLocalChange);
+  window.addEventListener("storage", handleStorageChange);
+
+  return () => {
+    window.removeEventListener(assignmentFavoriteEmployeesChangedEvent, handleLocalChange);
+    window.removeEventListener("storage", handleStorageChange);
+  };
 }
 
 export function loadAssignmentShiftSettings(): ShiftTimeSettings {
@@ -72,4 +105,9 @@ export function normalizeShiftSettings(settings: Partial<ShiftTimeSettings>): Sh
 
 function isValidTimeValue(value: unknown): value is string {
   return typeof value === "string" && /^\d{2}:\d{2}$/.test(value);
+}
+
+function normalizeFavoriteEmployeeIds(value: unknown) {
+  const ids = Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
+  return Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
 }

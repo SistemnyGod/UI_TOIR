@@ -426,6 +426,15 @@
   background: #f8fafc;
 }
 
+.inventory-ppe-redesign .inventory-ppe-line-card.is-section-title .inventory-ppe-line-card-grid {
+  grid-template-areas: "norm";
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.inventory-ppe-redesign .inventory-ppe-line-card.is-section-title .inventory-ppe-line-section:not(.is-norm) {
+  display: none;
+}
+
 .inventory-ppe-redesign .inventory-ppe-line-card.has-warning {
   border-left-color: #f59e0b;
   background: #fffaf0;
@@ -716,4 +725,3 @@
   color: #000;
   font-weight: 400;
 }
-

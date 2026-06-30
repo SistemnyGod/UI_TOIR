@@ -318,6 +318,88 @@ describe("mock Inventory repository", () => {
     const history = await repository.getHistory({ pageSize: 100 });
     expect(history.rows.some((row) => row.entityType === "employee" && row.action === "archived")).toBe(true);
   });
+
+  it("persists PPE print fields on add and update", async () => {
+    const repository = createMockInventoryRepository();
+    const card = await repository.createPpeCard({
+      employeeDetails: {
+        clothingSize: "52-54",
+        gender: "муж.",
+        handProtectionSize: "10",
+        headSize: "58",
+        height: "176",
+        respiratorSize: "К3",
+        shoeSize: "43",
+      },
+      employeeId: "emp-2",
+    });
+
+    const created = await repository.addPpeCardLine(card.id, {
+      brandModelArticle: "Форвард, Эксперт К3/SIM-06/K",
+      issuePeriodText: "шт., 2 года",
+      itemId: "item-helmet",
+      normPoint: "п.1.3.1. Приложения № 2",
+      printItemName: "Каска защитная от механических воздействий",
+      quantity: 1,
+      quantityText: "1 шт.",
+      status: "not_issued",
+      unitPriceMinor: 0,
+      warehouseId: null,
+    });
+
+    expect(created).toMatchObject({
+      brandModelArticle: "Форвард, Эксперт К3/SIM-06/K",
+      issuePeriodText: "шт., 2 года",
+      normPoint: "п.1.3.1. Приложения № 2",
+      printItemName: "Каска защитная от механических воздействий",
+      quantityText: "1 шт.",
+    });
+
+    const updated = await repository.updatePpeCardLine(card.id, created.id, {
+      issuePeriodText: "до износа (не менее 1 шт. в год)",
+      itemId: "item-helmet",
+      normPoint: "п.1.4. Приложения № 2",
+      printItemName: "Очки закрытые для защиты от механических воздействий",
+      quantity: 1,
+      quantityText: "1 шт.",
+      status: "not_issued",
+      unitPriceMinor: 0,
+      warehouseId: null,
+    });
+
+    expect(updated).toMatchObject({
+      issuePeriodText: "до износа (не менее 1 шт. в год)",
+      normPoint: "п.1.4. Приложения № 2",
+      printItemName: "Очки закрытые для защиты от механических воздействий",
+      quantityText: "1 шт.",
+    });
+  });
+
+  it("keeps PPE position norms and section rows available in mock settings", async () => {
+    const repository = createMockInventoryRepository();
+    const settings = await repository.getSettings();
+
+    expect(settings.positionNorms.some((row) => row.positionName === "Электрик" && row.issuePeriodText === "2 шт., на 4 года")).toBe(true);
+    expect(settings.positionNorms.some((row) => row.isSectionTitle && row.normItemName?.endsWith(":"))).toBe(true);
+
+    await repository.upsertPositionNorm({
+      isSectionTitle: true,
+      issuePeriodText: "",
+      itemId: "item-ppe-section-winter",
+      lifeMonths: null,
+      normItemName: "При использовании грузоподъемных механизмов и/или работе на высоте дополнительно:",
+      normPoint: "",
+      positionName: "Электрик",
+      quantity: 1,
+      quantityText: "",
+    });
+
+    const updated = await repository.getSettings();
+    expect(updated.positionNorms.some((row) =>
+      row.isSectionTitle &&
+      row.normItemName === "При использовании грузоподъемных механизмов и/или работе на высоте дополнительно:",
+    )).toBe(true);
+  });
 });
 
 function createMemoryStorage(): Storage {

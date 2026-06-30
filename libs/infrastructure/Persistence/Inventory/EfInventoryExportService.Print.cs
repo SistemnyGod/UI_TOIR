@@ -95,14 +95,15 @@ internal sealed partial class EfInventoryExportService
                 FormatDate(line.IssuedAt),
                 FormatDate(line.DueAt),
                 line.Item.DefaultLifeMonths,
-                string.IsNullOrWhiteSpace(line.NormPoint) ? "п. 1645 Приложения № 1" : line.NormPoint,
-                line.IssuePeriodText,
+                (line.IsSectionTitle || IsSectionTitle(line.PrintItemName)) ? string.Empty : string.IsNullOrWhiteSpace(line.NormPoint) ? "п. 1645 Приложения № 1" : line.NormPoint,
+                (line.IsSectionTitle || IsSectionTitle(line.PrintItemName)) ? string.Empty : line.IssuePeriodText,
+                (line.IsSectionTitle || IsSectionTitle(line.PrintItemName)) ? string.Empty : (line.QuantityText ?? string.Empty),
                 PpeUnitPriceMinor(line),
                 (PpeUnitPriceMinor(line) ?? 0) * line.Quantity,
-                IsSectionTitle(line.PrintItemName)))
+                line.IsSectionTitle || IsSectionTitle(line.PrintItemName)))
             .ToList();
         var printLines = isSheet
-            ? lines.Where(line => PpeIssueStatusCatalog.IsSignatureStatus(line.Status)).ToList()
+            ? lines.Where(line => !line.IsSectionTitle && PpeIssueStatusCatalog.IsSignatureStatus(line.Status)).ToList()
             : lines;
         var printValidation = PpePrintLineValidator.Validate(printLines, isSheet);
         if (printValidation is not null)
@@ -134,7 +135,7 @@ internal sealed partial class EfInventoryExportService
             string.Empty,
             "Строки СИЗ:"
         };
-        paragraphs.AddRange(lines.Select(line => $"{line.ItemName}; количество: {line.Quantity:0.###} {line.Unit}; статус: {ToPpeStatusLabel(line.Status)}; выдано: {line.IssuedAt}; до: {line.DueAt}"));
+        paragraphs.AddRange(lines.Select(line => $"{line.ItemName}; количество: {PpePrintQuantityText(line)}; статус: {ToPpeStatusLabel(line.Status)}; выдано: {line.IssuedAt}; до: {line.DueAt}"));
         var fileBaseName = isSheet
             ? $"ppe-signature-sheet-{card.Employee.PersonnelNo}-{card.Id:N}"
             : $"ppe-personal-card-{card.Employee.PersonnelNo}-{card.Id:N}";
