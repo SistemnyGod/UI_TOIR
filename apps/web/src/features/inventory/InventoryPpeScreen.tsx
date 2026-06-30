@@ -266,7 +266,7 @@ export function InventoryPpeScreen({
 
   async function saveNormIssue(row: EmployeePpeNormRow, draft: PpeIssueDraft) {
     if (!selectedEmployee || row.isSectionTitle) return;
-    const item = itemsById.get(draft.itemId);
+    const item = findIssueItem(row, draft.itemId, itemsById);
     if (!item) {
       onNotify("Выберите номенклатуру для выдачи");
       return;
@@ -1096,14 +1096,18 @@ function PpeIssueModal({
   row: EmployeePpeNormRow;
 }) {
   const line = row.existingLine;
-  const initialItem = row.catalogItem ?? (line ? itemFromLine(line) : items.find((item) => item.id === row.norm?.itemId) ?? null);
+  const ppeItems = useMemo(() => items.filter(isPpeItem), [items]);
+  const initialItem = row.catalogItem ?? (line ? itemFromLine(line) : items.find((item) => item.id === row.norm?.itemId) ?? ppeItems[0] ?? null);
+  const visibleItems = initialItem && !ppeItems.some((item) => item.id === initialItem.id)
+    ? [initialItem, ...ppeItems]
+    : ppeItems;
   const [draft, setDraft] = useState<PpeIssueDraft>({
     brandModelArticle: line?.brandModelArticle || (initialItem ? itemModelDescription(initialItem) : ""),
     comment: "",
     dueAt: line?.dueAt?.slice(0, 10) ?? (row.norm?.lifeMonths ? getDefaultDueDate(row.norm.lifeMonths) : ""),
     issueMethod: initialItem?.isConsumable ? "dispenser" : "personal",
     issuedAt: line?.issuedAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
-    itemId: initialItem?.id ?? row.norm?.itemId ?? items[0]?.id ?? "",
+    itemId: initialItem?.id ?? row.norm?.itemId ?? ppeItems[0]?.id ?? "",
     priceText: moneyMinorToInput(line?.unitPriceMinor ?? initialItem?.defaultUnitPriceMinor ?? 0),
     quantityText: line?.quantityText || row.quantityText,
     sizeText: initialItem ? defaultItemSize(initialItem) : "",
@@ -1137,8 +1141,9 @@ function PpeIssueModal({
             <h3>Каталог</h3>
           <label className="is-wide">
             <span>Номенклатура</span>
-            <select value={draft.itemId} onChange={(event) => setDraft((current) => patchDraftForItem(current, items, event.target.value))}>
-              {items.filter(isPpeItem).map((item) => (
+            <select disabled={!visibleItems.length} value={draft.itemId} onChange={(event) => setDraft((current) => patchDraftForItem(current, visibleItems, event.target.value))}>
+              {!visibleItems.length ? <option value="">СИЗ-номенклатура не найдена</option> : null}
+              {visibleItems.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name}
                 </option>
@@ -1571,6 +1576,13 @@ function patchDraftForItem(current: PpeIssueDraft, items: InventoryItemDto[], it
     sizeText: item ? defaultItemSize(item) : current.sizeText,
     unitText: item?.unit || current.unitText,
   };
+}
+
+function findIssueItem(row: EmployeePpeNormRow, itemId: string, itemsById: Map<string, InventoryItemDto>) {
+  return itemsById.get(itemId)
+    ?? (row.catalogItem?.id === itemId ? row.catalogItem : null)
+    ?? (row.existingLine?.itemId === itemId ? itemFromLine(row.existingLine) : null)
+    ?? (row.norm?.itemId === itemId ? toItemFromNorm(row.norm) : null);
 }
 
 function PrintCheckCard({
