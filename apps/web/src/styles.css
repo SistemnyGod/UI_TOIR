@@ -209,6 +209,567 @@
   }
 }
 
+/* Web UI polish layer: shared visual tokens, controls and microinteractions. */
+:root {
+  --ui-bg: #f3f7fc;
+  --ui-surface: #ffffff;
+  --ui-surface-muted: #f8fbff;
+  --ui-border: #d8e4f2;
+  --ui-border-strong: #bfd0e5;
+  --ui-text: #10213f;
+  --ui-muted: #64748b;
+  --ui-blue: #1769ff;
+  --ui-blue-hover: #0f5be8;
+  --ui-blue-soft: #eef5ff;
+  --ui-success: #0f9f5f;
+  --ui-success-soft: #eafaf2;
+  --ui-warning: #d97706;
+  --ui-warning-soft: #fff7e8;
+  --ui-danger: #d92d20;
+  --ui-danger-soft: #fff1f0;
+  --ui-info-soft: #edf5ff;
+  --ui-radius-control: 8px;
+  --ui-radius-card: 10px;
+  --ui-radius-dialog: 14px;
+  --ui-shadow-card: 0 10px 28px rgba(15, 49, 92, 0.07), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --ui-shadow-hover: 0 14px 34px rgba(15, 49, 92, 0.11), 0 1px 2px rgba(15, 23, 42, 0.05);
+  --ui-shadow-control: 0 8px 18px rgba(23, 105, 255, 0.14);
+  --ui-motion-fast: 140ms;
+  --ui-motion-normal: 190ms;
+}
+
+.screen-area :where(
+  .button,
+  .compact-button,
+  .action-button,
+  .primary-button,
+  .secondary-button,
+  .danger-button,
+  .primary-action,
+  .secondary-action,
+  .ghost-action,
+  .link-button,
+  .dashboard-am-panel-action,
+  .assign-am-panel-action,
+  .assign-am-mini-button,
+  .perco-button,
+  .perco-action-button,
+  .emu-primary-button,
+  .emu-secondary-button,
+  .emu-ghost-button,
+  .emu-danger-button,
+  .site-user-primary
+) {
+  align-items: center;
+  border-radius: var(--ui-radius-control);
+  display: inline-flex;
+  font-weight: 850;
+  gap: 8px;
+  justify-content: center;
+  letter-spacing: 0;
+  line-height: 1.15;
+  min-height: 38px;
+  position: relative;
+  text-decoration: none;
+  transition:
+    background-color var(--ui-motion-fast) ease,
+    border-color var(--ui-motion-fast) ease,
+    box-shadow var(--ui-motion-normal) ease,
+    color var(--ui-motion-fast) ease,
+    transform var(--ui-motion-fast) ease;
+  user-select: none;
+}
+
+.screen-area :where(
+  .button,
+  .compact-button,
+  .action-button,
+  .primary-button,
+  .secondary-button,
+  .danger-button,
+  .primary-action,
+  .secondary-action,
+  .ghost-action,
+  .dashboard-am-panel-action,
+  .assign-am-panel-action,
+  .assign-am-mini-button,
+  .perco-button,
+  .perco-action-button,
+  .emu-primary-button,
+  .emu-secondary-button,
+  .emu-ghost-button,
+  .emu-danger-button,
+  .site-user-primary
+):not(:disabled):not([aria-disabled="true"]):hover {
+  box-shadow: var(--ui-shadow-control);
+  transform: translateY(-1px);
+}
+
+.screen-area :where(
+  .button,
+  .compact-button,
+  .action-button,
+  .primary-button,
+  .secondary-button,
+  .danger-button,
+  .primary-action,
+  .secondary-action,
+  .ghost-action,
+  .dashboard-am-panel-action,
+  .assign-am-panel-action,
+  .assign-am-mini-button,
+  .perco-button,
+  .perco-action-button,
+  .emu-primary-button,
+  .emu-secondary-button,
+  .emu-ghost-button,
+  .emu-danger-button,
+  .site-user-primary
+):not(:disabled):not([aria-disabled="true"]):active {
+  box-shadow: none;
+  transform: translateY(0) scale(0.99);
+}
+
+.screen-area :where(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid rgba(23, 105, 255, 0.22);
+  outline-offset: 2px;
+}
+
+.screen-area :where(button, .button, .compact-button, .action-button):disabled,
+.screen-area :where(button, .button, .compact-button, .action-button)[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.62;
+  transform: none;
+}
+
+.screen-area :where(.is-loading, .loading, [aria-busy="true"]):where(
+  .button,
+  .compact-button,
+  .action-button,
+  .primary-button,
+  .primary-action,
+  .site-user-primary
+) {
+  color: transparent !important;
+  pointer-events: none;
+}
+
+.screen-area :where(.is-loading, .loading, [aria-busy="true"]):where(
+  .button,
+  .compact-button,
+  .action-button,
+  .primary-button,
+  .primary-action,
+  .site-user-primary
+)::after {
+  animation: ui-button-spin 760ms linear infinite;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  border-top-color: #ffffff;
+  border-radius: 999px;
+  content: "";
+  height: 16px;
+  inset: calc(50% - 8px) auto auto calc(50% - 8px);
+  position: absolute;
+  width: 16px;
+}
+
+.screen-area :where(.icon-button, .chrome-icon-button, .perco-icon-button, .inventory-ppe-more-button, .results-review-row-more, .emu-command-button, .modal-close) {
+  align-items: center;
+  border-radius: var(--ui-radius-control);
+  display: inline-flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 36px;
+  transition:
+    background-color var(--ui-motion-fast) ease,
+    border-color var(--ui-motion-fast) ease,
+    box-shadow var(--ui-motion-normal) ease,
+    color var(--ui-motion-fast) ease,
+    transform var(--ui-motion-fast) ease;
+}
+
+.screen-area :where(.icon-button, .chrome-icon-button, .perco-icon-button, .inventory-ppe-more-button, .results-review-row-more, .emu-command-button, .modal-close):not(:disabled):hover {
+  background: var(--ui-blue-soft);
+  border-color: #b8d4ff;
+  color: var(--ui-blue);
+  transform: translateY(-1px);
+}
+
+.screen-area :where(
+  .panel,
+  .card,
+  .stat-tile,
+  .summary-card,
+  .dashboard-am-panel,
+  .assign-am-panel,
+  .inventory-am-panel,
+  .inventory-ppe-inspector,
+  .inventory-ppe-reference-card,
+  .results-review-kpi,
+  .mobile-am-panel,
+  .emu-panel,
+  .perco-panel,
+  .site-users-table-panel,
+  .site-user-access-panel
+) {
+  background: var(--ui-surface);
+  border-color: var(--ui-border);
+  border-radius: var(--ui-radius-card);
+  box-shadow: var(--ui-shadow-card);
+  transition:
+    border-color var(--ui-motion-normal) ease,
+    box-shadow var(--ui-motion-normal) ease,
+    transform var(--ui-motion-fast) ease;
+}
+
+.screen-area :where(button.card, a.card, .is-clickable, [role="button"].card, .results-review-row, .inventory-ppe-employee-card):not(:disabled):hover {
+  border-color: #abc9f8;
+  box-shadow: var(--ui-shadow-hover);
+  transform: translateY(-1px);
+}
+
+.screen-area :where(
+  .section-tabs,
+  .module-tabs,
+  .inventory-ppe-tabs,
+  .inventory-custody-tabs,
+  .results-review-filter-tabs,
+  .assign-am-filters,
+  .mobile-am-tabs,
+  .emu-tabs,
+  .perco-tabs
+) {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 5px;
+  scrollbar-width: thin;
+}
+
+.screen-area :where(
+  .section-tabs,
+  .module-tabs,
+  .inventory-ppe-tabs,
+  .inventory-custody-tabs,
+  .results-review-filter-tabs,
+  .assign-am-filters,
+  .mobile-am-tabs,
+  .emu-tabs,
+  .perco-tabs
+) > :where(button, a) {
+  border-radius: 7px;
+  min-height: 34px;
+  white-space: nowrap;
+}
+
+.screen-area :where(
+  .section-tabs,
+  .module-tabs,
+  .inventory-ppe-tabs,
+  .inventory-custody-tabs,
+  .results-review-filter-tabs,
+  .assign-am-filters,
+  .mobile-am-tabs,
+  .emu-tabs,
+  .perco-tabs
+) > :where(button, a).is-active,
+.screen-area :where(
+  .section-tabs,
+  .module-tabs,
+  .inventory-ppe-tabs,
+  .inventory-custody-tabs,
+  .results-review-filter-tabs,
+  .assign-am-filters,
+  .mobile-am-tabs,
+  .emu-tabs,
+  .perco-tabs
+) > :where(button, a)[aria-selected="true"] {
+  background: var(--ui-blue);
+  border-color: var(--ui-blue);
+  box-shadow: 0 8px 20px rgba(23, 105, 255, 0.18);
+  color: #ffffff;
+}
+
+.screen-area :where(
+  .table-wrap,
+  .table-scroll,
+  .table-wrapper,
+  .inventory-table-wrapper,
+  .inventory-ppe-table-wrap,
+  .results-review-table-wrap,
+  .inventory-reports-table-wrap,
+  .compact-table-wrap
+) {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.screen-area :where(table) {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.screen-area :where(thead th) {
+  background: #f5f8fd;
+  color: #425b7d;
+  font-weight: 900;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.screen-area :where(tbody tr, .compact-table-row, .results-review-point-row, .inventory-ppe-table-row) {
+  transition:
+    background-color var(--ui-motion-fast) ease,
+    box-shadow var(--ui-motion-fast) ease;
+}
+
+.screen-area :where(tbody tr, .compact-table-row, .results-review-point-row, .inventory-ppe-table-row):hover {
+  background: #f8fbff;
+}
+
+.screen-area :where(.compact-table-row.is-active, .compact-table-row.is-selected, .results-review-row.is-active, .results-review-row.is-selected, .inventory-ppe-table-row.is-active, .inventory-ppe-table-row.is-selected, tr.is-active, tr.is-selected) {
+  background: #eaf3ff;
+  box-shadow: inset 3px 0 0 var(--ui-blue);
+}
+
+.screen-area :where(.badge, .chip, .status-badge, .status-pill, .results-review-status, .inventory-status-badge, .mobile-am-badge, .emu-status-pill, .perco-status-pill, .site-user-status-pill) {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.screen-area :where(.is-success, .is-ok, .green, .status-success, .tone-green) {
+  background-color: var(--ui-success-soft);
+  border-color: #b7efd3;
+  color: #087443;
+}
+
+.screen-area :where(.is-warning, .is-pending, .yellow, .orange, .status-warning, .tone-yellow, .tone-orange) {
+  background-color: var(--ui-warning-soft);
+  border-color: #fed7aa;
+  color: #9a5100;
+}
+
+.screen-area :where(.is-danger, .is-error, .is-issue, .red, .status-danger, .tone-red) {
+  background-color: var(--ui-danger-soft);
+  border-color: #ffc7c2;
+  color: #b42318;
+}
+
+.screen-area :where(.is-info, .blue, .status-info, .tone-blue) {
+  background-color: var(--ui-info-soft);
+  border-color: #bed8ff;
+  color: #1454b8;
+}
+
+.screen-area :where(.empty-state, .dashboard-am-empty, .results-review-empty, .inventory-empty, .emu-empty, .perco-empty, .site-user-empty-panel) {
+  align-items: center;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border: 1px dashed #bdd3f0;
+  border-radius: 12px;
+  color: var(--ui-muted);
+  display: grid;
+  justify-items: center;
+  min-height: 132px;
+  padding: 20px;
+  text-align: center;
+}
+
+.screen-area :where(.empty-state, .dashboard-am-empty, .results-review-empty, .inventory-empty, .emu-empty, .perco-empty, .site-user-empty-panel)::before {
+  background: linear-gradient(180deg, #eef5ff 0%, #ffffff 100%);
+  border: 1px solid #cfe0f8;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 4px rgba(23, 105, 255, 0.04);
+  content: "";
+  height: 34px;
+  margin-bottom: 2px;
+  width: 34px;
+}
+
+.toast,
+.app-toast,
+.screen-area :where(.toast, .app-toast) {
+  align-items: flex-start;
+  background: #ffffff;
+  border: 1px solid #cfe0f8;
+  border-radius: 12px;
+  box-shadow: 0 16px 36px rgba(15, 49, 92, 0.16);
+  color: var(--ui-text);
+  display: grid;
+  gap: 8px;
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 14px 16px;
+}
+
+.toast :where(button, a),
+.app-toast :where(button, a),
+.screen-area :where(.toast, .app-toast) :where(button, a) {
+  border-radius: 7px;
+  font-weight: 850;
+  min-height: 32px;
+}
+
+.skeleton-list {
+  display: grid;
+  gap: 8px;
+}
+
+.skeleton-list-row {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid #e3ecf8;
+  border-radius: 10px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 36px minmax(0, 1fr) 82px;
+  padding: 12px;
+}
+
+.skeleton-list-row .is-icon {
+  border-radius: 10px;
+  height: 36px;
+  width: 36px;
+}
+
+.skeleton-list-row .is-title {
+  height: 13px;
+  max-width: 240px;
+}
+
+.skeleton-list-row .is-line {
+  height: 10px;
+  margin-top: 8px;
+  max-width: 320px;
+}
+
+.skeleton-list-row .is-action {
+  height: 32px;
+  justify-self: end;
+  width: 82px;
+}
+
+.modal-window,
+.edit-modal,
+.assign-am-complete-modal,
+.assign-am-shift-modal,
+.assign-am-request-modal,
+.assign-am-employee-picker,
+.results-review-modal,
+.inventory-settings-modal,
+.inventory-operations-dialog,
+.inventory-employees-dialog,
+.inventory-ppe-picker,
+.inventory-ppe-document-modal,
+.emu-modal,
+.perco-modal,
+.site-user-modal {
+  border-color: var(--ui-border);
+  border-radius: var(--ui-radius-dialog);
+  box-shadow: 0 24px 70px rgba(15, 31, 54, 0.2);
+}
+
+.drawer-title,
+.panel-head,
+.modal-header {
+  letter-spacing: 0;
+}
+
+@keyframes ui-button-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .screen-area :where(
+    .button,
+    .compact-button,
+    .action-button,
+    .primary-button,
+    .secondary-button,
+    .danger-button,
+    .primary-action,
+    .secondary-action,
+    .ghost-action
+  ) {
+    min-height: 40px;
+  }
+
+  .screen-area :where(.panel-actions, .toolbar-actions, .drawer-actions, .form-actions, .inline-actions) {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .screen-area :where(.panel-actions, .toolbar-actions, .drawer-actions, .form-actions, .inline-actions) > :where(button, a, .button) {
+    flex: 1 1 150px;
+  }
+
+  .screen-area :where(
+    .section-tabs,
+    .module-tabs,
+    .inventory-ppe-tabs,
+    .inventory-custody-tabs,
+    .results-review-filter-tabs,
+    .assign-am-filters,
+    .mobile-am-tabs,
+    .emu-tabs,
+    .perco-tabs
+  ) {
+    margin-inline: -2px;
+    padding-bottom: 7px;
+  }
+
+  .skeleton-list-row {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .skeleton-list-row .is-action {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-area :where(
+    .button,
+    .compact-button,
+    .action-button,
+    .primary-button,
+    .secondary-button,
+    .danger-button,
+    .primary-action,
+    .secondary-action,
+    .ghost-action,
+    .card,
+    .is-clickable,
+    .results-review-row,
+    .inventory-ppe-employee-card,
+    .compact-table-row,
+    .results-review-point-row,
+    .inventory-ppe-table-row,
+    .icon-button,
+    .chrome-icon-button,
+    .perco-icon-button,
+    .inventory-ppe-more-button,
+    .results-review-row-more,
+    .emu-command-button,
+    .modal-close
+  ) {
+    transition: none !important;
+  }
+
+  .screen-area :where(.is-loading, .loading, [aria-busy="true"])::after {
+    animation: none !important;
+  }
+}
+
 /* Small viewport containment: wide legacy tables must scroll inside their panel, not stretch the page. */
 @media (max-width: 760px) {
   html,
@@ -25346,4 +25907,54 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* UI polish final cascade pass. Keep this at EOF so legacy module CSS cannot erase shared states. */
+.screen-area :where(.button, .compact-button, .action-button, .primary-button, .secondary-button, .danger-button, .primary-action, .secondary-action, .ghost-action, .dashboard-am-panel-action, .assign-am-panel-action, .assign-am-mini-button, .perco-button, .perco-action-button, .emu-primary-button, .emu-secondary-button, .emu-ghost-button, .emu-danger-button, .site-user-primary):not(:disabled):not([aria-disabled="true"]):hover {
+  box-shadow: var(--ui-shadow-control);
+  transform: translateY(-1px);
+}
+
+.screen-area :where(.button, .compact-button, .action-button, .primary-button, .secondary-button, .danger-button, .primary-action, .secondary-action, .ghost-action, .dashboard-am-panel-action, .assign-am-panel-action, .assign-am-mini-button, .perco-button, .perco-action-button, .emu-primary-button, .emu-secondary-button, .emu-ghost-button, .emu-danger-button, .site-user-primary):not(:disabled):not([aria-disabled="true"]):active {
+  box-shadow: none;
+  transform: translateY(0) scale(0.99);
+}
+
+.screen-area :where(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid rgba(23, 105, 255, 0.22);
+  outline-offset: 2px;
+}
+
+.screen-area :where(.panel, .card, .stat-tile, .summary-card, .dashboard-am-panel, .assign-am-panel, .inventory-am-panel, .inventory-ppe-inspector, .inventory-ppe-reference-card, .results-review-kpi, .mobile-am-panel, .emu-panel, .perco-panel, .site-users-table-panel, .site-user-access-panel) {
+  border-color: var(--ui-border);
+  border-radius: var(--ui-radius-card);
+  box-shadow: var(--ui-shadow-card);
+}
+
+.screen-area :where(button.card, a.card, .is-clickable, [role="button"].card, .results-review-row, .inventory-ppe-employee-card):not(:disabled):hover {
+  border-color: #abc9f8;
+  box-shadow: var(--ui-shadow-hover);
+  transform: translateY(-1px);
+}
+
+.screen-area :where(.section-tabs, .module-tabs, .inventory-ppe-tabs, .inventory-custody-tabs, .results-review-filter-tabs, .assign-am-filters, .mobile-am-tabs, .emu-tabs, .perco-tabs) {
+  border-radius: 10px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.screen-area :where(.table-wrap, .table-scroll, .table-wrapper, .inventory-table-wrapper, .inventory-ppe-table-wrap, .results-review-table-wrap, .inventory-reports-table-wrap, .compact-table-wrap) {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.screen-area :where(.badge, .chip, .status-badge, .status-pill, .results-review-status, .inventory-status-badge, .mobile-am-badge, .emu-status-pill, .perco-status-pill, .site-user-status-pill) {
+  border-radius: 999px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.screen-area :where(.empty-state, .dashboard-am-empty, .results-review-empty, .inventory-empty, .emu-empty, .perco-empty, .site-user-empty-panel) {
+  border-color: #bdd3f0;
+  border-radius: 12px;
 }

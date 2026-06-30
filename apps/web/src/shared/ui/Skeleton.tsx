@@ -71,6 +71,23 @@ export function SkeletonCards({ cards = 4 }: SkeletonProps) {
   );
 }
 
+export function SkeletonList({ rows = 6 }: SkeletonProps) {
+  return (
+    <div className="skeleton-list" aria-hidden="true">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div className="skeleton-list-row" key={index}>
+          <SkeletonBlock className="is-icon" />
+          <div>
+            <SkeletonBlock className="is-title" />
+            <SkeletonBlock className="is-line" />
+          </div>
+          <SkeletonBlock className="is-action" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function SkeletonTable({ rows = 6, columns = 5 }: SkeletonProps) {
   const tableStyle = { "--skeleton-columns": columns } as CSSProperties;
 

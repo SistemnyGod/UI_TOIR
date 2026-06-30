@@ -27,7 +27,7 @@ import { RequestModals } from "../features/patrol/components/requests/RequestMod
 import { EmployeeDirectoryPanel } from "../features/patrol/components/employees/EmployeeDirectoryPanel";
 import { EmployeeProfileDrawer } from "../features/patrol/components/employees/EmployeeProfileDrawer";
 import { InventoryPpeScreen } from "../screens/inventory/InventoryPpeScreen";
-import { CompactTable, KpiStrip, PaginationBar, RouteLoadingBar, SkeletonCards, SkeletonForm, SkeletonPreview, SkeletonTable } from "../shared/ui";
+import { CompactTable, KpiStrip, PaginationBar, RouteLoadingBar, SkeletonCards, SkeletonForm, SkeletonList, SkeletonPreview, SkeletonTable } from "../shared/ui";
 import { LoginScreen } from "../screens/LoginScreen";
 import type { PatrolResult, SiteUser } from "../types";
 import type { ResultGroup } from "../features/patrol/results/resultTypes";
@@ -142,6 +142,7 @@ describe("shared UI primitives", () => {
       <>
         <RouteLoadingBar active />
         <SkeletonCards cards={2} />
+        <SkeletonList rows={3} />
         <SkeletonTable rows={2} columns={3} />
         <SkeletonForm fields={2} />
         <SkeletonPreview />
@@ -150,6 +151,7 @@ describe("shared UI primitives", () => {
 
     expect(container.querySelector(".route-loading-line.is-active")).toBeInTheDocument();
     expect(container.querySelectorAll(".skeleton-card")).toHaveLength(2);
+    expect(container.querySelectorAll(".skeleton-list-row")).toHaveLength(3);
     expect(container.querySelectorAll(".skeleton-table-row")).toHaveLength(8);
     expect(container.querySelectorAll(".skeleton-field")).toHaveLength(2);
     expect(container.querySelector(".skeleton-preview")).toBeInTheDocument();
