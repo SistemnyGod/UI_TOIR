@@ -329,8 +329,8 @@ describe("shared UI primitives", () => {
     expect(screen.getByText(/Найдено позиций:/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Отмена" }));
 
-    await user.click(screen.getAllByRole("button", { name: "Выдать" })[0]);
-    expect(await screen.findByRole("heading", { name: "Выдать СИЗ" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Выдать СИЗ" }));
+    expect(await screen.findByRole("heading", { name: /Выдать СИЗ|Редактировать выдачу/ })).toBeInTheDocument();
     expect(screen.getByLabelText("Номенклатура")).toBeInTheDocument();
     expect(screen.getAllByText("Пункт норм").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Единица")).toBeInTheDocument();

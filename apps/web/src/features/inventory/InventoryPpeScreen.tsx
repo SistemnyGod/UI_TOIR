@@ -343,6 +343,19 @@ export function InventoryPpeScreen({
     }
   }
 
+  function openNextIssue() {
+    if (!selectedEmployee) return;
+    setActiveTab("card");
+    const nextRow = findNextIssueRow(normRows);
+    if (!nextRow) {
+      onNotify(normRows.some((row) => !row.isSectionTitle)
+        ? "Все нормы сотрудника уже закрыты фактической выдачей. Откройте строку в личной карточке для правки."
+        : "Для должности сотрудника нет норм СИЗ.");
+      return;
+    }
+    setModal(nextRow.existingLine ? { type: "edit", row: nextRow, line: nextRow.existingLine } : { type: "issue", row: nextRow });
+  }
+
   return (
     <section className="inventory-ppe-screen inventory-ppe-redesign inventory-ppe-employee-workflow">
       <header className="inventory-ppe-commandbar">
@@ -363,7 +376,7 @@ export function InventoryPpeScreen({
           <button className="button ghost" disabled={!selectedEmployee} onClick={() => setPreview({ data: printData, mode: "sheet" })} type="button">
             <Printer size={16} /> Лист подписи
           </button>
-          <button className="button primary" disabled={!selectedEmployee} onClick={() => setActiveTab("card")} type="button">
+          <button className="button primary" disabled={!selectedEmployee || busy === "load-card"} onClick={openNextIssue} type="button">
             <ShieldCheck size={16} /> Выдать СИЗ
           </button>
         </div>
@@ -736,9 +749,11 @@ function PersonalCardTab({
                         <button className="button ghost" onClick={() => onMap(row)} type="button">
                           <Link2 size={15} /> Сопоставить
                         </button>
-                        <button className="button primary" disabled={busy === "save-line"} onClick={() => onIssue(row)} type="button">
-                          Выдать
-                        </button>
+                        {!row.existingLine ? (
+                          <button className="button primary" disabled={busy === "save-line"} onClick={() => onIssue(row)} type="button">
+                            Выдать
+                          </button>
+                        ) : null}
                       </>
                     ) : null}
                     {row.existingLine && !row.isSectionTitle ? (
@@ -859,6 +874,15 @@ function ppeNormRowClass(row: EmployeePpeNormRow) {
     classNames.push(`is-status-${row.existingLine.status.replace(/[^a-z0-9-]/gi, "-").replace(/-+/g, "-").toLowerCase()}`);
   }
   return classNames.join(" ");
+}
+
+function findNextIssueRow(rows: EmployeePpeNormRow[]) {
+  const issueRows = rows.filter((row) => !row.isSectionTitle);
+  return issueRows.find((row) => !row.existingLine)
+    ?? issueRows.find((row) => row.existingLine?.status === PPE_STATUS.partial)
+    ?? issueRows.find((row) => row.existingLine && !isPpeSignatureStatus(row.existingLine.status))
+    ?? issueRows[0]
+    ?? null;
 }
 
 function PrintCheckTab({
