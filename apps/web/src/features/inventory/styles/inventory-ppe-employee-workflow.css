@@ -141,6 +141,27 @@
   font-weight: 800;
 }
 
+.inventory-ppe-employee-workflow .inventory-ppe-employee-empty {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border: 1px dashed var(--ppe-line-strong);
+  border-radius: 10px;
+  background: #f8fbff;
+  color: var(--ppe-soft-ink);
+  text-align: center;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-employee-empty strong {
+  color: var(--ppe-ink);
+  font-size: 13px;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-employee-empty span {
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .inventory-ppe-employee-workflow .inventory-ppe-employee-card {
   display: grid;
   gap: 12px;
@@ -247,6 +268,66 @@
   padding: 14px;
 }
 
+.inventory-ppe-employee-workflow .inventory-ppe-norm-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--ppe-line);
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-toolbar strong {
+  display: block;
+  color: var(--ppe-ink);
+  font-size: 14px;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-toolbar span {
+  color: var(--ppe-soft-ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-toolbar-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-toolbar-metrics span {
+  display: inline-flex;
+  gap: 5px;
+  align-items: baseline;
+  min-height: 30px;
+  padding: 6px 9px;
+  border: 1px solid var(--ppe-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ppe-soft-ink);
+  font-weight: 900;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-toolbar-metrics b {
+  color: var(--ppe-ink);
+  font-size: 14px;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-toolbar-metrics .is-warning {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-toolbar-metrics .is-ok {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #047857;
+}
+
 .inventory-ppe-employee-workflow .inventory-ppe-data-grid,
 .inventory-ppe-employee-workflow .inventory-ppe-detail-form {
   display: grid;
@@ -298,6 +379,14 @@
   border-radius: 9px;
 }
 
+.inventory-ppe-employee-workflow .inventory-ppe-norm-table thead th,
+.inventory-ppe-employee-workflow .inventory-ppe-signature-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fbff;
+}
+
 .inventory-ppe-employee-workflow .inventory-ppe-norm-table td:nth-child(2) strong,
 .inventory-ppe-employee-workflow .inventory-ppe-norm-table td:nth-child(5) strong {
   display: block;
@@ -323,6 +412,46 @@
   background: #f5f9ff;
   color: #0b3b7a;
   font-weight: 950;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-row td:first-child {
+  box-shadow: inset 3px 0 0 #cbd5e1;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-row.is-unmapped td:first-child {
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-row.is-status-not-issued:not(.is-section-title) td {
+  background: #fffdf7;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-row.is-status-partial td {
+  background: #fffaf0;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-row.is-status-issued td,
+.inventory-ppe-employee-workflow .inventory-ppe-norm-row.is-status-returned td {
+  background: #f8fffb;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-row.is-status-written-off td,
+.inventory-ppe-employee-workflow .inventory-ppe-norm-row.is-status-defective td {
+  background: #fff8f8;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-row.is-status-issued td:first-child,
+.inventory-ppe-employee-workflow .inventory-ppe-norm-row.is-status-returned td:first-child {
+  box-shadow: inset 3px 0 0 #22c55e;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-row.is-status-partial td:first-child {
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-norm-row.is-status-written-off td:first-child,
+.inventory-ppe-employee-workflow .inventory-ppe-norm-row.is-status-defective td:first-child {
+  box-shadow: inset 3px 0 0 #ef4444;
 }
 
 .inventory-ppe-employee-workflow .inventory-ppe-row-actions-compact {
@@ -399,6 +528,34 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   padding: 14px 16px;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-mapping-hint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--ppe-line);
+  border-radius: 9px;
+  background: #f8fbff;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-mapping-hint span {
+  color: var(--ppe-soft-ink);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.inventory-ppe-employee-workflow .inventory-ppe-mapping-hint strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ppe-ink);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .inventory-ppe-employee-workflow .inventory-ppe-modal-section {
@@ -693,5 +850,13 @@
   .inventory-ppe-employee-workflow .inventory-ppe-command-actions .button,
   .inventory-ppe-employee-workflow .inventory-ppe-tabs button {
     flex: 1 1 180px;
+  }
+
+  .inventory-ppe-employee-workflow .inventory-ppe-norm-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-ppe-employee-workflow .inventory-ppe-norm-toolbar-metrics {
+    justify-content: flex-start;
   }
 }

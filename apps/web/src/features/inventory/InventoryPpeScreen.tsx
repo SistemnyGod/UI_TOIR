@@ -428,6 +428,12 @@ export function InventoryPpeScreen({
                     <small>{employee.personnelNo || "Без табельного"} · {employee.position || "Должность не указана"}</small>
                   </button>
                 ))}
+                {!filteredEmployees.length ? (
+                  <div className="inventory-ppe-employee-empty" role="status">
+                    <strong>Сотрудники не найдены</strong>
+                    <span>Измените поиск, подразделение или должность.</span>
+                  </div>
+                ) : null}
               </div>
             </aside>
 
@@ -680,6 +686,7 @@ function PersonalCardTab({
 
   return (
     <section className="inventory-ppe-tab-panel">
+      <PpeNormToolbar stats={calculatePpeNormToolbarStats(rows)} />
       <div className="inventory-ppe-norm-table-wrap">
         <table className="inventory-ppe-lines-table inventory-ppe-norm-table">
           <thead>
@@ -696,7 +703,7 @@ function PersonalCardTab({
           </thead>
           <tbody>
             {rows.map((row, index) => (
-              <tr className={row.isSectionTitle ? "is-section-title" : ""} key={row.key}>
+              <tr className={ppeNormRowClass(row)} key={row.key}>
                 <td>{row.isSectionTitle ? "" : index + 1}</td>
                 <td>
                   <strong>{row.normItemName}</strong>
@@ -807,6 +814,51 @@ function SignatureSheetTab({ rows }: { rows: PrintData["lines"] }) {
       )}
     </section>
   );
+}
+
+function PpeNormToolbar({ stats }: { stats: ReturnType<typeof calculatePpeNormToolbarStats> }) {
+  return (
+    <div className="inventory-ppe-norm-toolbar" aria-label="Сводка по нормам СИЗ">
+      <div>
+        <strong>Нормы по должности</strong>
+        <span>Норма, номенклатура и факт выдачи разделены. Сопоставление не создает выдачу.</span>
+      </div>
+      <div className="inventory-ppe-norm-toolbar-metrics">
+        <span><b>{stats.norms}</b> норм</span>
+        <span><b>{stats.mapped}</b> сопоставлено</span>
+        <span><b>{stats.issued}</b> выдано</span>
+        <span className={stats.needsAction ? "is-warning" : "is-ok"}><b>{stats.needsAction}</b> требуют действия</span>
+      </div>
+    </div>
+  );
+}
+
+function calculatePpeNormToolbarStats(rows: EmployeePpeNormRow[]) {
+  const normRows = rows.filter((row) => !row.isSectionTitle);
+  const issued = normRows.filter((row) => row.existingLine && isPpeSignatureStatus(row.existingLine.status)).length;
+  const mapped = normRows.filter((row) => row.hasExplicitMapping || row.existingLine).length;
+  const needsAction = normRows.filter((row) => !row.existingLine || !isPpeSignatureStatus(row.existingLine.status) || (!row.hasExplicitMapping && !row.existingLine)).length;
+  return {
+    issued,
+    mapped,
+    needsAction,
+    norms: normRows.length,
+  };
+}
+
+function ppeNormRowClass(row: EmployeePpeNormRow) {
+  const classNames = ["inventory-ppe-norm-row"];
+  if (row.isSectionTitle) {
+    classNames.push("is-section-title");
+    return classNames.join(" ");
+  }
+  if (!row.hasExplicitMapping && !row.existingLine) classNames.push("is-unmapped");
+  if (!row.existingLine) {
+    classNames.push("is-status-not-issued");
+  } else {
+    classNames.push(`is-status-${row.existingLine.status.replace(/[^a-z0-9-]/gi, "-").replace(/-+/g, "-").toLowerCase()}`);
+  }
+  return classNames.join(" ");
 }
 
 function PrintCheckTab({
@@ -1152,7 +1204,8 @@ function PpeMappingModal({
   onSave: (itemId: string, brandModelArticle: string, priceText: string, isDefault: boolean) => void;
   row: EmployeePpeNormRow;
 }) {
-  const initialItemId = mapping?.itemId || row.catalogItem?.id || row.norm?.itemId || items[0]?.id || "";
+  const initialPpeItem = items.find(isPpeItem);
+  const initialItemId = mapping?.itemId || row.catalogItem?.id || row.norm?.itemId || initialPpeItem?.id || "";
   const initialItem = items.find((item) => item.id === initialItemId);
   const [itemId, setItemId] = useState(initialItemId);
   const [brandModelArticle, setBrandModelArticle] = useState(mapping?.brandModelArticle || (initialItem ? itemModelDescription(initialItem) : ""));
@@ -1168,6 +1221,11 @@ function PpeMappingModal({
         .some((value) => value.toLocaleLowerCase("ru-RU").includes(normalized)),
     );
   }, [items, query]);
+  const selectedItem = items.find((item) => item.id === itemId);
+  const visibleItems = selectedItem && !filteredItems.some((item) => item.id === selectedItem.id)
+    ? [selectedItem, ...filteredItems]
+    : filteredItems;
+  const canSaveMapping = Boolean(itemId && visibleItems.some((item) => item.id === itemId));
 
   return createPortal(
     <div className="inventory-ppe-picker-backdrop" onMouseDown={onClose} role="presentation">
@@ -1199,9 +1257,14 @@ function PpeMappingModal({
               onChange={(event) => setQuery(event.target.value)}
             />
           </label>
+          <div className="inventory-ppe-mapping-hint is-wide" role="status">
+            <span>Найдено позиций: {filteredItems.length}</span>
+            <strong>{selectedItem ? selectedItem.name : "Номенклатура не выбрана"}</strong>
+          </div>
           <label className="is-wide">
             <span>Номенклатура каталога</span>
             <select
+              disabled={!visibleItems.length}
               value={itemId}
               onChange={(event) => {
                 const nextItem = items.find((item) => item.id === event.target.value);
@@ -1210,7 +1273,10 @@ function PpeMappingModal({
                 setPriceText(moneyMinorToInput(nextItem?.defaultUnitPriceMinor ?? 0));
               }}
             >
-              {filteredItems.map((item) => (
+              {!visibleItems.length ? (
+                <option value="">Ничего не найдено</option>
+              ) : null}
+              {visibleItems.map((item) => (
                 <option key={item.id} value={item.id}>
                   {[item.name, itemModelDescription(item)].filter(Boolean).join(" · ")}
                 </option>
@@ -1234,7 +1300,7 @@ function PpeMappingModal({
           <button className="button ghost" onClick={onClose} type="button">
             Отмена
           </button>
-          <button className="button primary" onClick={() => onSave(itemId, brandModelArticle, priceText, isDefault)} type="button">
+          <button className="button primary" disabled={!canSaveMapping} onClick={() => onSave(itemId, brandModelArticle, priceText, isDefault)} type="button">
             Сохранить сопоставление
           </button>
         </footer>

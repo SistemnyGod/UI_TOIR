@@ -321,6 +321,13 @@ describe("shared UI primitives", () => {
     expect(screen.getByRole("button", { name: "Данные сотрудника" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Личная карточка" }).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Каска защитная").length).toBeGreaterThan(0);
+    expect(screen.getByText("Нормы по должности")).toBeInTheDocument();
+    expect(screen.getByText("Норма, номенклатура и факт выдачи разделены. Сопоставление не создает выдачу.")).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole("button", { name: "Сопоставить" })[0]);
+    expect(await screen.findByRole("heading", { name: "Сопоставить норму" })).toBeInTheDocument();
+    expect(screen.getByText(/Найдено позиций:/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Отмена" }));
 
     await user.click(screen.getAllByRole("button", { name: "Выдать" })[0]);
     expect(await screen.findByRole("heading", { name: "Выдать СИЗ" })).toBeInTheDocument();
