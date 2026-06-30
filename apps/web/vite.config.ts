@@ -25,6 +25,32 @@ export default defineConfig({
           }
 
           if (
+            normalizedId.includes("/src/app/") ||
+            normalizedId.includes("/src/shared/") ||
+            normalizedId.includes("/src/api/") ||
+            normalizedId.includes("/src/security/") ||
+            normalizedId.includes("/src/repositories/browserStorageRepository") ||
+            normalizedId.includes("/src/repositories/resultsRepository") ||
+            normalizedId.includes("/src/data.ts") ||
+            normalizedId.includes("/src/types.ts") ||
+            normalizedId.includes("/src/hooks/useAssignmentsWorkspace") ||
+            normalizedId.includes("/src/hooks/useHashScreen") ||
+            normalizedId.includes("/src/hooks/useMobileAccountsWorkspace") ||
+            normalizedId.includes("/src/hooks/usePatrolDataSource") ||
+            normalizedId.includes("/src/hooks/usePatrolWorkspaceData") ||
+            normalizedId.includes("/src/hooks/useResultsWorkspace") ||
+            normalizedId.includes("/src/hooks/useRoutesEditor") ||
+            normalizedId.includes("/src/hooks/useSchedulePlanning") ||
+            normalizedId.includes("/src/hooks/useSession") ||
+            normalizedId.includes("/src/hooks/useSiteUsersWorkspace") ||
+            normalizedId.includes("/src/hooks/useStoredState") ||
+            normalizedId.includes("/src/hooks/useSystemNotifications") ||
+            normalizedId.includes("/src/hooks/useToast")
+          ) {
+            return "app-core";
+          }
+
+          if (
             normalizedId.includes("/src/screens/InventoryScreen") ||
             normalizedId.includes("/src/features/inventory/") ||
             normalizedId.includes("/src/repositories/inventoryRepository")
