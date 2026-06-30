@@ -92,6 +92,11 @@ export function PointFillScreen() {
 
   async function confirmSkipTag() {
     setError(null);
+    if (point?.requiresPhoto && !hasPhotoAttachment(attachments)) {
+      setError("Для этой метки требуется фотофиксация.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await skipPoint(assignmentId, pointId, {
@@ -117,6 +122,11 @@ export function PointFillScreen() {
 
     if (selectedStatus === "issue" && comment.trim().length === 0) {
       setError("Для неисправности нужен комментарий.");
+      return;
+    }
+
+    if (point?.requiresPhoto && !hasPhotoAttachment(attachments)) {
+      setError("Для этой метки требуется фотофиксация.");
       return;
     }
 
@@ -445,6 +455,10 @@ function toPointAttachment(file: { clientFileId: string; localPath: string; stat
     status: file.status,
     mediaKind: file.mediaKind ?? "photo"
   } satisfies PointAttachment;
+}
+
+function hasPhotoAttachment(attachments: PointAttachment[]) {
+  return attachments.some((attachment) => attachment.mediaKind !== "video");
 }
 
 const styles = StyleSheet.create({

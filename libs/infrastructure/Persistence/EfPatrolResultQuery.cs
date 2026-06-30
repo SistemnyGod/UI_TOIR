@@ -34,7 +34,8 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
             .Select((group, index) => new { Key = BuildResultGroupKey(group.AssignmentId, group.ResultId), Index = index })
             .ToDictionary(group => group.Key, group => group.Index);
 
-        return ApplyFilter(dbContext.PatrolResults.AsNoTracking(), filter)
+        return dbContext.PatrolResults
+            .AsNoTracking()
             .Include(result => result.Assignment)
             .Where(result =>
                 (result.AssignmentId.HasValue && assignmentIds.Contains(result.AssignmentId.Value))
@@ -154,7 +155,8 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
     {
         if (!string.IsNullOrWhiteSpace(filter.Status))
         {
-            query = query.Where(result => result.Status == filter.Status);
+            var statusValues = GetStatusFilterValues(filter.Status);
+            query = query.Where(result => statusValues.Contains(result.Status));
         }
 
         if (filter.RouteId is not null)
@@ -179,6 +181,34 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
             query = query.Where(result => result.ActualAt < to);
         }
 
+        if (filter.AssignmentId is not null)
+        {
+            query = query.Where(result => result.AssignmentId == filter.AssignmentId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Query))
+        {
+            var search = filter.Query.Trim().ToLowerInvariant();
+            query = query.Where(result =>
+                (result.PointName ?? string.Empty).ToLower().Contains(search)
+                || (result.EmployeeName ?? string.Empty).ToLower().Contains(search)
+                || (result.RouteName ?? string.Empty).ToLower().Contains(search)
+                || (result.Territory ?? string.Empty).ToLower().Contains(search)
+                || (result.Shift ?? string.Empty).ToLower().Contains(search)
+                || (result.Comment ?? string.Empty).ToLower().Contains(search)
+                || (result.IssueType ?? string.Empty).ToLower().Contains(search)
+                || (result.Severity ?? string.Empty).ToLower().Contains(search));
+        }
+
+        if (filter.HasPhotos is true)
+        {
+            query = query.Where(result => result.Photos > 0 || result.Attachments.Any());
+        }
+        else if (filter.HasPhotos is false)
+        {
+            query = query.Where(result => result.Photos == 0 && !result.Attachments.Any());
+        }
+
         return query;
     }
 
@@ -188,7 +218,9 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
 
         if (!string.IsNullOrWhiteSpace(filter.Status))
         {
-            where.Append(" AND status = ").Append(AddSqlParameter(parameters, filter.Status));
+            var statusValues = GetStatusFilterValues(filter.Status)
+                .Select(value => AddSqlParameter(parameters, value));
+            where.Append(" AND status IN (").Append(string.Join(", ", statusValues)).Append(')');
         }
 
         if (filter.RouteId is not null)
@@ -213,6 +245,27 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
             where.Append(" AND actual_at < ").Append(AddSqlParameter(parameters, to));
         }
 
+        if (filter.AssignmentId is not null)
+        {
+            where.Append(" AND assignment_id = ").Append(AddSqlParameter(parameters, filter.AssignmentId.Value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Query))
+        {
+            var search = $"%{filter.Query.Trim().ToLowerInvariant()}%";
+            var parameter = AddSqlParameter(parameters, search);
+            where
+                .Append(" AND (LOWER(COALESCE(point_name, '')) LIKE ").Append(parameter)
+                .Append(" OR LOWER(COALESCE(employee_name, '')) LIKE ").Append(parameter)
+                .Append(" OR LOWER(COALESCE(route_name, '')) LIKE ").Append(parameter)
+                .Append(" OR LOWER(COALESCE(territory, '')) LIKE ").Append(parameter)
+                .Append(" OR LOWER(COALESCE(shift, '')) LIKE ").Append(parameter)
+                .Append(" OR LOWER(COALESCE(comment, '')) LIKE ").Append(parameter)
+                .Append(" OR LOWER(COALESCE(issue_type, '')) LIKE ").Append(parameter)
+                .Append(" OR LOWER(COALESCE(severity, '')) LIKE ").Append(parameter)
+                .Append(')');
+        }
+
         return where.ToString();
     }
 
@@ -222,17 +275,61 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
         return "{" + (parameters.Count - 1) + "}";
     }
 
+    private static IReadOnlyList<string> GetStatusFilterValues(string status)
+    {
+        var value = status.Trim();
+        if (value.Equals("issue", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("Замеч", StringComparison.OrdinalIgnoreCase))
+        {
+            return ["issue", "Замечание"];
+        }
+
+        if (value.Equals("late", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("Просроч", StringComparison.OrdinalIgnoreCase))
+        {
+            return ["late", "Просрочено"];
+        }
+
+        if (value.Equals("ok", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("completed", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("confirmed", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("Подтвержден", StringComparison.OrdinalIgnoreCase))
+        {
+            return ["ok", "Подтверждено"];
+        }
+
+        if (value.Equals("unconfirmed", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("Не подтвержден", StringComparison.OrdinalIgnoreCase))
+        {
+            return ["unconfirmed", "Не подтверждено"];
+        }
+
+        if (value.Equals("skipped", StringComparison.OrdinalIgnoreCase))
+        {
+            return ["skipped"];
+        }
+
+        if (value.Equals("manual", StringComparison.OrdinalIgnoreCase))
+        {
+            return ["manual"];
+        }
+
+        return [value];
+    }
+
     private IReadOnlyList<ResultPageGroup> GetResultPageGroups(
         ResultFilterDto filter,
         PatrolPaging paging)
     {
         var parameters = new List<object>();
         var whereClause = BuildResultFilterSql(filter, parameters);
+        var assignmentPhotoFilter = BuildAssignmentPhotoFilterSql(filter);
+        var standalonePhotoFilter = BuildStandalonePhotoFilterSql(filter);
         var offset = AddSqlParameter(parameters, (paging.Page - 1) * paging.PageSize);
         var limit = AddSqlParameter(parameters, paging.PageSize);
         var sql = $"""
             WITH filtered AS (
-                SELECT assignment_id, id, actual_at
+                SELECT assignment_id, id, actual_at, photos
                 FROM patrol_results
                 {whereClause}
             ),
@@ -245,6 +342,7 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
                 FROM filtered
                 WHERE assignment_id IS NOT NULL
                 GROUP BY assignment_id
+                {assignmentPhotoFilter}
                 UNION ALL
                 SELECT
                     NULL::uuid AS "AssignmentId",
@@ -253,6 +351,7 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
                     id AS "SortId"
                 FROM filtered
                 WHERE assignment_id IS NULL
+                {standalonePhotoFilter}
             )
             SELECT "AssignmentId", "ResultId", "LastActualAt"
             FROM page_groups
@@ -265,6 +364,22 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
             .SqlQueryRaw<ResultPageGroup>(sql, parameters.ToArray())
             .ToList();
     }
+
+    private static string BuildAssignmentPhotoFilterSql(ResultFilterDto filter) =>
+        filter.HasPhotos switch
+        {
+            true => "HAVING SUM(CASE WHEN photos > 0 THEN 1 ELSE 0 END) > 0",
+            false => "HAVING COALESCE(SUM(photos), 0) = 0",
+            _ => string.Empty
+        };
+
+    private static string BuildStandalonePhotoFilterSql(ResultFilterDto filter) =>
+        filter.HasPhotos switch
+        {
+            true => "AND photos > 0",
+            false => "AND photos = 0",
+            _ => string.Empty
+        };
 
     private static ResultListItemDto MapListItem(PatrolResultEntity result) =>
         new(

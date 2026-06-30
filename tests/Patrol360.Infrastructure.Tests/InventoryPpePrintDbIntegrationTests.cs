@@ -530,6 +530,57 @@ public sealed class InventoryPpePrintDbIntegrationTests
     }
 
     [DbIntegrationFact]
+    public async Task PpeDocxPrintAllowsEmptyEmployeeDetails()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+
+        await provider.InitializePatrolDatabaseAsync();
+
+        var employee = UseWorkflow(provider, workflow => workflow.GetEmployees(new InventoryListQuery(PageSize: 1)).Rows.Single());
+        var normName = "Respirator with optional employee detail fields";
+        var item = CreatePpeItem(provider, normName, brand: "SafeBrand", model: "R1");
+        var card = UseWorkflow(provider, workflow => workflow.CreatePpeCard(new CreateInventoryPpeCardDto(
+            employee.Id,
+            "Empty employee details must not block PPE print",
+            new InventoryPpeEmployeeDetailsDto())));
+        Assert.True(card.Succeeded);
+        Assert.NotNull(card.Value);
+
+        var line = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+            card.Value!.Id,
+            new UpsertInventoryPpeCardLineDto(
+                item.Id,
+                null,
+                1,
+                10_000,
+                "issued",
+                DateTimeOffset.UtcNow.AddMonths(12),
+                "Issued with empty employee details",
+                PrintItemName: normName,
+                NormPoint: "p. 1.1",
+                IssuePeriodText: "pcs., 1 year",
+                IssuedAt: DateTimeOffset.UtcNow.AddDays(-1),
+                BrandModelArticle: "SafeBrand R1")));
+        Assert.True(line.Succeeded);
+
+        var personalCard = UseExport(provider, export => export.PrintPpeCard(card.Value!.Id, "card", "docx"));
+        var signatureSheet = UseExport(provider, export => export.PrintPpeCard(card.Value!.Id, "sheet", "docx"));
+
+        Assert.True(personalCard.Succeeded);
+        Assert.True(signatureSheet.Succeeded);
+        Assert.NotNull(personalCard.Value);
+        Assert.NotNull(signatureSheet.Value);
+
+        var cardXml = ReadDocxDocumentXml(personalCard.Value!.Content);
+        var sheetXml = ReadDocxDocumentXml(signatureSheet.Value!.Content);
+
+        Assert.Contains(normName, cardXml, StringComparison.Ordinal);
+        Assert.Contains(normName, sheetXml, StringComparison.Ordinal);
+        Assert.Contains("SafeBrand R1", sheetXml, StringComparison.Ordinal);
+    }
+
+    [DbIntegrationFact]
     public async Task PpeIssueReturnAndWriteOffCreateMovementDocumentsWithoutRestocking()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();

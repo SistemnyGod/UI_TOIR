@@ -58,7 +58,10 @@ internal sealed partial class EfMobileAppService
         var resultsByPoint = pointResults
             .GroupBy(result => result.PointId)
             .ToDictionary(group => group.Key, group => group.Last());
-        foreach (var point in assignment.Route.Points.Where(point => point.IsRequired))
+        var routePointsByIdForValidation = assignment.Route.Points
+            .Where(IsMobileRoutePointVisible)
+            .ToDictionary(point => point.Id);
+        foreach (var point in routePointsByIdForValidation.Values.Where(point => point.IsRequired))
         {
             if (!resultsByPoint.TryGetValue(point.Id, out var result)
                 || result.Status.Equals("deferred", StringComparison.OrdinalIgnoreCase)
@@ -70,7 +73,12 @@ internal sealed partial class EfMobileAppService
 
         foreach (var result in pointResults)
         {
-            if (assignment.Route.Points.All(point => point.Id != result.PointId))
+            if (!IsAllowedCompletePointStatus(result.Status))
+            {
+                return Rejected(command.ClientOperationId, "Point result status is not supported.");
+            }
+
+            if (!routePointsByIdForValidation.TryGetValue(result.PointId, out var routePoint))
             {
                 return Conflict(command.ClientOperationId, "Point result does not belong to assignment route.");
             }
@@ -81,17 +89,39 @@ internal sealed partial class EfMobileAppService
                 return Rejected(command.ClientOperationId, "Issue point result requires a comment.");
             }
 
-            foreach (var clientFileId in result.PhotoClientFileIds)
+            if (result.Status.Equals("issue", StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrWhiteSpace(result.IssueTypeId))
             {
-                var uploaded = dbContext.MobileUploadedFiles.Any(file =>
+                return Rejected(command.ClientOperationId, "Issue point result requires an issue type.");
+            }
+
+            if (!wasCancelledByDispatcher && routePoint.RequiresPhoto && result.PhotoClientFileIds.Count == 0)
+            {
+                return Rejected(command.ClientOperationId, "Required photo point result must include at least one photo.");
+            }
+
+            var uploadedFilesForPoint = dbContext.MobileUploadedFiles
+                .Where(file =>
                     file.MobileAccountId == account.Id
                     && file.AssignmentId == assignment.Id
-                    && file.PointId == result.PointId
-                    && file.ClientFileId == clientFileId);
+                    && file.PointId == result.PointId)
+                .ToArray();
+            foreach (var clientFileId in result.PhotoClientFileIds)
+            {
+                var uploaded = uploadedFilesForPoint.Any(file => file.ClientFileId == clientFileId);
                 if (!uploaded)
                 {
                     return Rejected(command.ClientOperationId, "All attached photos must be uploaded before report submit.");
                 }
+            }
+
+            if (!wasCancelledByDispatcher
+                && routePoint.RequiresPhoto
+                && !result.PhotoClientFileIds.Any(clientFileId => uploadedFilesForPoint.Any(file =>
+                    file.ClientFileId == clientFileId
+                    && file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))))
+            {
+                return Rejected(command.ClientOperationId, "Required photo point result must include at least one image file.");
             }
         }
 
@@ -123,6 +153,11 @@ internal sealed partial class EfMobileAppService
             if (baseRevision.Value != assignment.LockVersion)
             {
                 return Conflict(command.ClientOperationId, "Patrol assignment was changed after mobile sync.");
+            }
+
+            if (assignment.RouteVersionNo > 0 && assignment.Route.VersionNo != assignment.RouteVersionNo)
+            {
+                return Conflict(command.ClientOperationId, "Patrol route was changed after assignment sync.");
             }
         }
 
@@ -451,6 +486,11 @@ internal sealed partial class EfMobileAppService
 
         return IsManualPointResult(pointResult) ? "manual" : "ok";
     }
+
+    private static bool IsAllowedCompletePointStatus(string status) =>
+        status.Equals("ok", StringComparison.OrdinalIgnoreCase)
+        || status.Equals("issue", StringComparison.OrdinalIgnoreCase)
+        || status.Equals("skipped", StringComparison.OrdinalIgnoreCase);
 
     private sealed record ExistingCompleteReportValidation(bool HasExistingReport, bool PayloadMatches);
 

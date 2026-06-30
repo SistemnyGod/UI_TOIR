@@ -524,7 +524,7 @@ public class ApiSmokeTests
         var resultItem = CreateResultListItem();
         var controller = new ResultsController(new FakePatrolResultQuery([resultItem]));
 
-        var result = controller.List(null, null, null, null, null);
+        var result = controller.List(null, null, null, null, null, null);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var results = Assert.IsAssignableFrom<IReadOnlyList<ResultListItemDto>>(ok.Value);
@@ -538,7 +538,7 @@ public class ApiSmokeTests
         var query = new FakePatrolResultQuery([]);
         var controller = new ResultsController(query);
 
-        _ = controller.List(null, null, null, null, null, 3, 25);
+        _ = controller.List(null, null, null, null, null, null, 3, 25);
 
         Assert.Equal(3, query.LastPage);
         Assert.Equal(25, query.LastPageSize);

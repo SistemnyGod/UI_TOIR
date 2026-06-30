@@ -32,6 +32,7 @@ export type ActiveAssignment = {
   startedAtLocal: string | null;
   completedAtLocal: string | null;
   revision: number;
+  routeVersionNo: number;
 };
 
 export type PointListItem = {
@@ -40,8 +41,10 @@ export type PointListItem = {
   name: string;
   orderIndex: number;
   required: boolean;
+  requiresPhoto: boolean;
   status: "pending" | "scanned" | "ok" | "issue" | "deferred" | "skipped";
   comment: string | null;
+  photoClientFileIds: string[];
 };
 
 export type PointForFill = PointListItem & {
@@ -146,7 +149,8 @@ export async function getActiveAssignment() {
         assignment.status,
         assignment.started_at_local AS startedAtLocal,
         assignment.completed_at_local AS completedAtLocal,
-        assignment.revision
+        assignment.revision,
+        assignment.route_version_no AS routeVersionNo
       FROM patrol_assignments assignment
       LEFT JOIN routes route ON route.route_id = assignment.route_id
       LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
@@ -181,7 +185,8 @@ export async function getAssignmentByRequestId(requestId: string) {
         assignment.status,
         assignment.started_at_local AS startedAtLocal,
         assignment.completed_at_local AS completedAtLocal,
-        assignment.revision
+        assignment.revision,
+        assignment.route_version_no AS routeVersionNo
       FROM patrol_assignments assignment
       LEFT JOIN routes route ON route.route_id = assignment.route_id
       LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
@@ -248,9 +253,10 @@ export async function takeRequestLocally(requestId: string) {
           status,
           started_at_local,
           completed_at_local,
-          revision
+          revision,
+          route_version_no
         )
-        VALUES (?, ?, ?, ?, 'inProgress', ?, NULL, 0)
+        VALUES (?, ?, ?, ?, 'inProgress', ?, NULL, 0, 0)
       `,
       [assignmentId, ownerUserId, request.requestId, request.routeId, takenAtLocal]
     );
@@ -266,6 +272,7 @@ export async function takeRequestLocally(requestId: string) {
           nfc_uid_hash,
           qr_code_hash,
           required,
+          requires_photo,
           revision
         )
         SELECT
@@ -277,6 +284,7 @@ export async function takeRequestLocally(requestId: string) {
           nfc_uid_hash,
           qr_code_hash,
           required,
+          requires_photo,
           revision
         FROM route_points
         WHERE route_id = ?
@@ -327,7 +335,8 @@ export async function takeRequestLocally(requestId: string) {
       status: "inProgress",
       startedAtLocal: takenAtLocal,
       completedAtLocal: null,
-      revision: 0
+      revision: 0,
+      routeVersionNo: 0
     } satisfies ActiveAssignment,
     created: true
   };
@@ -378,9 +387,10 @@ export async function acceptRequestLocally(requestId: string) {
             status,
             started_at_local,
             completed_at_local,
-            revision
+            revision,
+            route_version_no
           )
-          VALUES (?, ?, ?, ?, 'accepted', NULL, NULL, 0)
+          VALUES (?, ?, ?, ?, 'accepted', NULL, NULL, 0, 0)
         `,
         [assignmentId, ownerUserId, request.requestId, request.routeId]
       );
@@ -410,7 +420,8 @@ export async function acceptRequestLocally(requestId: string) {
       status: "accepted",
       startedAtLocal: null,
       completedAtLocal: null,
-      revision: 0
+      revision: 0,
+      routeVersionNo: 0
     } satisfies ActiveAssignment,
     created: true
   };
@@ -484,16 +495,28 @@ export async function handoffAssignmentLocally(assignmentId: string) {
 export async function listAssignmentPoints(assignmentId: string) {
   const db = await getDatabase();
 
-  return db.getAllAsync<PointListItem>(
+  const rows = await db.getAllAsync<{
+    pointId: string;
+    routeId: string;
+    name: string;
+    orderIndex: number;
+    required: number;
+    requiresPhoto: number;
+    status: PointListItem["status"];
+    comment: string | null;
+    photoClientFileIdsJson: string | null;
+  }>(
     `
       SELECT
         point.point_id AS pointId,
         point.route_id AS routeId,
         point.name,
         point.order_index AS orderIndex,
-        point.required = 1 AS required,
+        point.required AS required,
+        point.requires_photo AS requiresPhoto,
         COALESCE(result.status, 'pending') AS status,
-        result.comment AS comment
+        result.comment AS comment,
+        result.photo_client_file_ids_json AS photoClientFileIdsJson
       FROM patrol_assignments assignment
       JOIN assignment_route_points point ON point.assignment_id = assignment.assignment_id
       LEFT JOIN point_results result
@@ -504,6 +527,18 @@ export async function listAssignmentPoints(assignmentId: string) {
     `,
     [assignmentId]
   );
+
+  return rows.map((row) => ({
+    pointId: row.pointId,
+    routeId: row.routeId,
+    name: row.name,
+    orderIndex: row.orderIndex,
+    required: row.required === 1,
+    requiresPhoto: row.requiresPhoto === 1,
+    status: row.status,
+    comment: row.comment,
+    photoClientFileIds: parseStringArray(row.photoClientFileIdsJson)
+  } satisfies PointListItem));
 }
 
 export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
@@ -516,6 +551,7 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
     name: string;
     orderIndex: number;
     required: number;
+    requiresPhoto: number;
     revision: number;
     nfcUidHash: string | null;
   }>(
@@ -526,6 +562,7 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
         point.name,
         point.order_index AS orderIndex,
         point.required AS required,
+        point.requires_photo AS requiresPhoto,
         point.revision AS revision,
         point.nfc_uid_hash AS nfcUidHash
       FROM patrol_assignments assignment
@@ -620,8 +657,10 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
       name: point.name,
       orderIndex: point.orderIndex,
       required: point.required === 1,
+      requiresPhoto: point.requiresPhoto === 1,
       status: "scanned" as const,
-      comment: null
+      comment: null,
+      photoClientFileIds: []
     } satisfies PointListItem
   };
 }
@@ -636,6 +675,7 @@ export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
     name: string;
     orderIndex: number;
     required: number;
+    requiresPhoto: number;
     revision: number;
   }>(
     `
@@ -645,6 +685,7 @@ export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
         point.name,
         point.order_index AS orderIndex,
         point.required AS required,
+        point.requires_photo AS requiresPhoto,
         point.revision AS revision
       FROM patrol_assignments assignment
       JOIN assignment_route_points point ON point.assignment_id = assignment.assignment_id
@@ -709,8 +750,10 @@ export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
       name: point.name,
       orderIndex: point.orderIndex,
       required: point.required === 1,
+      requiresPhoto: point.requiresPhoto === 1,
       status: "scanned" as const,
-      comment: null
+      comment: null,
+      photoClientFileIds: []
     } satisfies PointListItem
   };
 }
@@ -725,6 +768,7 @@ export async function getPointForFill(assignmentId: string, pointId: string) {
     name: string;
     orderIndex: number;
     required: number;
+    requiresPhoto: number;
     nfcUidHash: string | null;
     qrCodeHash: string | null;
     status: PointListItem["status"] | null;
@@ -744,6 +788,7 @@ export async function getPointForFill(assignmentId: string, pointId: string) {
         point.name,
         point.order_index AS orderIndex,
         point.required AS required,
+        point.requires_photo AS requiresPhoto,
         point.nfc_uid_hash AS nfcUidHash,
         point.qr_code_hash AS qrCodeHash,
         result.status AS status,
@@ -777,6 +822,7 @@ export async function getPointForFill(assignmentId: string, pointId: string) {
     name: row.name,
     orderIndex: row.orderIndex,
     required: row.required === 1,
+    requiresPhoto: row.requiresPhoto === 1,
     nfcUidHash: row.nfcUidHash,
     qrCodeHash: row.qrCodeHash,
     status: row.status ?? "pending",
@@ -924,9 +970,25 @@ export async function attachPhotoToPoint(assignmentId: string, pointId: string, 
 }
 
 export async function getReportReadiness(assignmentId: string): Promise<ReportReadiness> {
+  const db = await getDatabase();
   const assignment = await getAssignmentById(assignmentId);
   const points = await listAssignmentPoints(assignmentId);
   const problems: ReportProblem[] = [];
+
+  if (assignment?.routeVersionNo) {
+    const route = await db.getFirstAsync<{ version: number }>(
+      "SELECT version FROM routes WHERE route_id = ? LIMIT 1",
+      [assignment.routeId]
+    );
+    if (route && route.version !== assignment.routeVersionNo) {
+      problems.push({
+        pointId: "route-version",
+        pointName: assignment.routeName,
+        orderIndex: 0,
+        reason: "Маршрут обновлен после назначения. Синхронизируйте данные и получите актуальный чек-лист."
+      });
+    }
+  }
 
   if (assignment && points.length === 0) {
     problems.push({
@@ -962,6 +1024,15 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointName: point.name,
         orderIndex: point.orderIndex,
         reason: "Для неисправности нужен комментарий"
+      });
+    }
+
+    if (point.requiresPhoto && point.photoClientFileIds.length === 0) {
+      problems.push({
+        pointId: point.pointId,
+        pointName: point.name,
+        orderIndex: point.orderIndex,
+        reason: "Для метки требуется фотофиксация"
       });
     }
   }
@@ -1020,6 +1091,7 @@ export async function completeAssignmentLocally(assignmentId: string) {
       requestId: readiness.assignment.requestId,
       completedAtLocal,
       baseRevision: readiness.assignment.revision,
+      routeVersionNo: readiness.assignment.routeVersionNo,
       summary: {
         totalPoints: readiness.progress.total,
         completedPoints: readiness.progress.completed,
@@ -1100,7 +1172,8 @@ export async function getAssignmentById(assignmentId: string) {
         assignment.status,
         assignment.started_at_local AS startedAtLocal,
         assignment.completed_at_local AS completedAtLocal,
-        assignment.revision
+        assignment.revision,
+        assignment.route_version_no AS routeVersionNo
       FROM patrol_assignments assignment
       LEFT JOIN routes route ON route.route_id = assignment.route_id
       LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
@@ -1201,6 +1274,7 @@ async function snapshotRoutePointsInTransaction(executor: SqlExecutor, assignmen
         nfc_uid_hash,
         qr_code_hash,
         required,
+        requires_photo,
         revision
       )
       SELECT
@@ -1212,6 +1286,7 @@ async function snapshotRoutePointsInTransaction(executor: SqlExecutor, assignmen
         nfc_uid_hash,
         qr_code_hash,
         required,
+        requires_photo,
         revision
       FROM route_points
       WHERE route_id = ?

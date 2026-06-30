@@ -31,6 +31,7 @@ export function useResultsWorkspace({
   const [listStatus, setListStatus] = useState<DataSourceStatus>(dataSourceMode === "mock" ? "ready" : "idle");
   const [detailStatus, setDetailStatus] = useState<DataSourceStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
+  const [hasMoreResults, setHasMoreResults] = useState(false);
 
   const selectedListItem = useMemo(() => findPatrolResult(results, selectedResultId), [results, selectedResultId]);
   const exactSelectedListItem = useMemo(
@@ -43,6 +44,7 @@ export function useResultsWorkspace({
     async ({ signal }: { signal?: AbortSignal } = {}) => {
       if (dataSourceMode !== "api") {
         setResults(patrolResultsFallback);
+        setHasMoreResults(false);
         setListStatus("ready");
         setErrorMessage(undefined);
         return;
@@ -52,14 +54,16 @@ export function useResultsWorkspace({
       setErrorMessage(undefined);
 
       try {
-        const nextResults = await apiResults.getResults(filters, { signal });
+        const resultPage = await apiResults.getResultPage(filters, { signal });
         if (signal?.aborted) return;
-        setResults(nextResults);
-        setListStatus(nextResults.length > 0 ? "ready" : "idle");
+        setResults(resultPage.results);
+        setHasMoreResults(resultPage.hasMore);
+        setListStatus(resultPage.results.length > 0 ? "ready" : "idle");
       } catch (error) {
         if (signal?.aborted) return;
         const message = error instanceof Error ? error.message : "Не удалось загрузить результаты API";
         setResults([]);
+        setHasMoreResults(false);
         setListStatus("error");
         setErrorMessage(message);
         showToast(`Не удалось загрузить результаты API: ${message}`);
@@ -81,15 +85,19 @@ export function useResultsWorkspace({
       return;
     }
 
+    if (dataSourceMode === "api" && isBackendResultId(selectedResultId)) {
+      return;
+    }
+
     if (!selectedResultId || !results.some((result) => result.id === selectedResultId)) {
       onSelectResult(results[0].id);
     }
-  }, [onSelectResult, results, selectedResultId]);
+  }, [dataSourceMode, onSelectResult, results, selectedResultId]);
 
   useEffect(() => {
     setSelectedDetail(undefined);
 
-    if (!selectedResultId || dataSourceMode !== "api" || !exactSelectedListItem || !isBackendResultId(selectedResultId)) {
+    if (!selectedResultId || dataSourceMode !== "api" || !isBackendResultId(selectedResultId)) {
       setDetailStatus("idle");
       return;
     }
@@ -99,8 +107,16 @@ export function useResultsWorkspace({
 
     apiResults
       .getResult(selectedResultId, { signal: controller.signal })
-      .then((result) => {
+      .then(async (result) => {
         if (controller.signal.aborted) return;
+        if (!exactSelectedListItem) {
+          const relatedResults = result.assignmentId
+            ? await apiResults.getResults({ assignmentId: result.assignmentId }, { signal: controller.signal })
+            : [result];
+          if (controller.signal.aborted) return;
+          setResults((current) => mergePatrolResults(current, relatedResults));
+        }
+
         setSelectedDetail(result);
         setDetailStatus("ready");
       })
@@ -115,21 +131,28 @@ export function useResultsWorkspace({
     return () => controller.abort();
   }, [apiResults, dataSourceMode, exactSelectedListItem, selectedResultId, showToast]);
 
-  const exportResults = useCallback(async () => {
+  const exportResults = useCallback(async (exportFilters: ResultFilterOptions = emptyResultFilters) => {
     if (dataSourceMode !== "api") {
       return undefined;
     }
 
-    return apiResults.exportResults(filters);
+    return apiResults.exportResults({ ...filters, ...exportFilters });
   }, [apiResults, dataSourceMode, filters]);
 
   return {
     detailStatus,
     errorMessage,
     exportResults,
+    hasMoreResults,
     listStatus,
     refreshResults,
     results,
     selectedResult,
   };
+}
+
+function mergePatrolResults(current: PatrolResult[], related: PatrolResult[]) {
+  const byId = new Map(current.map((result) => [result.id, result]));
+  related.forEach((result) => byId.set(result.id, result));
+  return Array.from(byId.values());
 }

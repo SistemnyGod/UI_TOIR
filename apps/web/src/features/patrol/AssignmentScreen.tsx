@@ -73,6 +73,7 @@ import type {
   Employee,
   EmployeeDirectoryItem,
   PatrolCompletionPhotoPayload,
+  RoutePoint,
   RouteOption,
   RouteDirectoryItem,
   ScreenId,
@@ -449,7 +450,7 @@ export function AssignmentScreen({
 
     const completionRoute = routeDirectory.find((route) => route.id === completionTarget.routeId || route.name === completionTarget.route);
     const pointResultsById = new Map((payload.pointResults ?? []).map((point) => [point.routePointId, point]));
-    const missingPhotos = (completionRoute?.points ?? [])
+    const missingPhotos = getCompletionRoutePoints(completionRoute)
       .filter((point) => point.requiresPhoto && ((pointResultsById.get(point.id)?.photoAttachments?.length ?? 0) <= 0))
       .map((point) => point.name);
     if (missingPhotos.length > 0) {
@@ -461,7 +462,12 @@ export function AssignmentScreen({
       return;
     }
 
-    await assignments.runCommand(completionTarget.id, "complete", payload);
+    const commandResult = await assignments.runCommand(completionTarget.id, "complete", payload);
+    if (!commandResult.succeeded) {
+      setCompletionErrors(flattenServerFieldErrors(commandResult.errors));
+      return;
+    }
+
     setCompletionTarget(null);
     setCompletionErrors({});
   }
@@ -1508,7 +1514,7 @@ function ActiveAssignmentsCard({
   canManage: boolean;
   errorMessage?: string;
   onRetry: () => void | Promise<void>;
-  onRunCommand: (id: string, command: "start" | "cancel" | "complete") => void | Promise<void>;
+  onRunCommand: (id: string, command: "start" | "cancel" | "complete") => void | Promise<unknown>;
   savingAssignmentId?: string;
   status: DataSourceStatus;
 }) {
@@ -1574,15 +1580,16 @@ function CompleteAssignmentModal({
   route?: RouteDirectoryItem;
   saving?: boolean;
 }) {
+  const completionRoutePoints = getCompletionRoutePoints(route);
   const [actualAt, setActualAt] = useState(() => toDateTimeInput(new Date()));
   const [status, setStatus] = useState<CompleteAssignmentPayload["status"]>("Подтверждено");
-  const [routePointId, setRoutePointId] = useState(() => route?.points[0]?.id ?? "");
+  const [routePointId, setRoutePointId] = useState(() => completionRoutePoints[0]?.id ?? "");
   const [comment, setComment] = useState("");
   const [issueType, setIssueType] = useState("");
   const [severity, setSeverity] = useState<CompleteAssignmentPayload["severity"]>("Средняя");
   const [photos, setPhotos] = useState(0);
   const [pointResults, setPointResults] = useState<PointCompletionDraft[]>(() =>
-    (route?.points ?? []).map((point) => ({
+    completionRoutePoints.map((point) => ({
       routePointId: point.id,
       status: "Подтверждено",
       comment: "",
@@ -1592,6 +1599,13 @@ function CompleteAssignmentModal({
       photoAttachments: [],
     })),
   );
+  const formError =
+    errors.form ||
+    errors.result ||
+    errors.assignmentId ||
+    errors.routeVersion ||
+    errors.routeVersionNo ||
+    errors.routePointId;
 
   const submit = async () => {
     const date = new Date(actualAt);
@@ -1634,6 +1648,7 @@ function CompleteAssignmentModal({
           <strong>{assignment.progress}%</strong>
           <small>{formatAssignmentActionTime(assignment)}</small>
         </div>
+        {formError ? <p className="field-error assign-am-modal-error">{formError}</p> : null}
         <div className="assign-am-modal-grid">
           <label className="assign-am-field">
             <span>Фактическое время</span>
@@ -1653,10 +1668,10 @@ function CompleteAssignmentModal({
           <label className="assign-am-field">
             <span>Точка маршрута</span>
             <select onChange={(event) => setRoutePointId(event.currentTarget.value)} value={routePointId}>
-              {(route?.points ?? []).map((point) => (
+              {completionRoutePoints.map((point) => (
                 <option key={point.id} value={point.id}>{point.name}</option>
               ))}
-              {route?.points.length ? null : <option value="">Первая точка маршрута</option>}
+              {completionRoutePoints.length ? null : <option value="">Первая точка маршрута</option>}
             </select>
           </label>
           <label className="assign-am-field">
@@ -1694,7 +1709,7 @@ function CompleteAssignmentModal({
             </header>
             <div className="assign-am-list routes">
               {pointResults.map((pointResult, index) => {
-                const point = route?.points.find((item) => item.id === pointResult.routePointId);
+                const point = completionRoutePoints.find((item) => item.id === pointResult.routePointId);
                 return (
                   <div className="assign-am-route" key={pointResult.routePointId}>
                     <div>
@@ -1923,6 +1938,23 @@ function Avatar({ name }: { name: string }) {
 
 function Tag({ children }: { children: React.ReactNode }) {
   return <span className="assign-am-tag">{children}</span>;
+}
+
+function getCompletionRoutePoints(route?: RouteDirectoryItem): RoutePoint[] {
+  return (route?.points ?? []).filter((point) => {
+    const status = String(point.status);
+    return status !== "Черновик" && status !== "Draft";
+  });
+}
+
+function flattenServerFieldErrors(errors?: Record<string, string[]>): Record<string, string> {
+  if (!errors) return {};
+
+  return Object.fromEntries(
+    Object.entries(errors)
+      .map(([field, messages]) => [field, messages.find(Boolean) ?? "Validation error"] as const)
+      .filter(([, message]) => message.length > 0),
+  );
 }
 
 function getInitials(name: string) {

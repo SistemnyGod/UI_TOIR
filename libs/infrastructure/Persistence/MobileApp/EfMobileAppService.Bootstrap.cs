@@ -54,6 +54,7 @@ internal sealed partial class EfMobileAppService
 
         var pointDtos = routes
             .SelectMany(route => route.Points
+                .Where(IsMobileRoutePointVisible)
                 .OrderBy(point => point.SequenceNo)
                 .Select(point => new MobilePatrolPointDto(
                     point.Id,
@@ -63,6 +64,7 @@ internal sealed partial class EfMobileAppService
                     point.NfcCode,
                     string.IsNullOrWhiteSpace(point.Tag) ? null : point.Tag,
                     point.IsRequired,
+                    point.RequiresPhoto,
                     route.VersionNo)))
             .ToArray();
 
@@ -254,7 +256,8 @@ internal sealed partial class EfMobileAppService
                 MapAssignmentStatus(assignment.Status),
                 assignment.StartedAt,
                 assignment.FinishedAt,
-                assignment.LockVersion))
+                assignment.LockVersion,
+                assignment.RouteVersionNo))
             .ToArray();
     }
 

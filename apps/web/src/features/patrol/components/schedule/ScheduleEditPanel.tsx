@@ -63,7 +63,7 @@ export function ScheduleEditPanel({
     () => resultHistory.find((result) => result.id === selectedResultId) ?? resultHistory[0],
     [resultHistory, selectedResultId],
   );
-  const routeRequiresChecklist = (selectedRoute?.points.length ?? 0) > 0;
+  const routeRequiresChecklist = getCompletionRoutePoints(selectedRoute).length > 0;
 
   useEffect(() => {
     if (!selected) return;
@@ -521,4 +521,11 @@ function createScheduleCompletionPayload(selected: ScheduleCell): CompleteAssign
     photos: 0,
     status: "Подтверждено",
   };
+}
+
+function getCompletionRoutePoints(route?: RouteDirectoryItem) {
+  return (route?.points ?? []).filter((point) => {
+    const status = String(point.status);
+    return status !== "Черновик" && status !== "Draft";
+  });
 }

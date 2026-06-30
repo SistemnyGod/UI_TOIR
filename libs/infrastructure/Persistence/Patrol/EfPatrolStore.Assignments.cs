@@ -148,6 +148,7 @@ internal sealed partial class EfPatrolStore
             PatrolRequestId = confirmedPatrolRequest.Id,
             EmployeeId = confirmedEmployee.Id,
             RouteId = confirmedRoute.Id,
+            RouteVersionNo = confirmedRoute.VersionNo,
             Shift = string.IsNullOrWhiteSpace(request.Shift) ? confirmedEmployee.Shift : request.Shift!.Trim(),
             Status = shouldNotify ? AssignmentStatusValues.Waiting : AssignmentStatusValues.Assigned,
             PlannedAt = plannedAt,
@@ -256,6 +257,11 @@ internal sealed partial class EfPatrolStore
             var hasResult = dbContext.PatrolResults.Any(result => result.AssignmentId == assignment.Id);
             if (!hasResult && request is not null)
             {
+                if (HasRouteVersionConflict(assignment))
+                {
+                    return new AssignmentCommandResult(MapAssignment(assignment), false, "Результат обхода не сохранен.", BuildRouteVersionConflictErrors());
+                }
+
                 var backfillErrors = ValidateCompleteAssignment(request, assignment.Route?.Points);
                 if (backfillErrors.Count > 0)
                 {
@@ -281,6 +287,11 @@ internal sealed partial class EfPatrolStore
         if (assignment.Status == AssignmentStatusValues.Cancelled)
         {
             return new AssignmentCommandResult(MapAssignment(assignment), false, "Отмененное назначение не завершается.");
+        }
+
+        if (HasRouteVersionConflict(assignment))
+        {
+            return new AssignmentCommandResult(MapAssignment(assignment), false, "Результат обхода не сохранен.", BuildRouteVersionConflictErrors());
         }
 
         var errors = ValidateCompleteAssignment(request, assignment.Route?.Points);
@@ -529,6 +540,17 @@ internal sealed partial class EfPatrolStore
         var normalizedPage = page <= 0 ? DefaultAssignmentPage : Math.Min(page, maxPage);
         return new AssignmentPaging(normalizedPage, normalizedPageSize);
     }
+
+    private static bool HasRouteVersionConflict(AssignmentEntity assignment) =>
+        assignment.Route is not null
+        && assignment.RouteVersionNo > 0
+        && assignment.Route.VersionNo != assignment.RouteVersionNo;
+
+    private static Dictionary<string, string[]> BuildRouteVersionConflictErrors() =>
+        new()
+        {
+            ["routeVersion"] = ["Маршрут был изменен после назначения. Обновите назначение и повторите завершение."]
+        };
 
     private sealed record AssignmentPaging(int Page, int PageSize);
 

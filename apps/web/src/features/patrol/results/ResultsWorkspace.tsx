@@ -17,9 +17,9 @@ import {
   User,
 } from "lucide-react";
 import type { ApiFileResponse } from "../../../api/client";
-import { createApiResultsRepository, downloadResultAttachment, isBackendResultId } from "../../../repositories/resultsRepository";
+import { createApiResultsRepository, downloadResultAttachment, isBackendResultId, type ResultFilterOptions } from "../../../repositories/resultsRepository";
 import { useResultsWorkspace } from "../../../hooks/useResultsWorkspace";
-import type { DataSourceMode, PatrolResult, PatrolResultAttachment, ResultMode, ScreenId } from "../../../types";
+import type { DataSourceMode, PatrolResult, PatrolResultAttachment, ResultMode, RouteDirectoryItem, ScreenId } from "../../../types";
 import { PatrolResultDetails } from "./PatrolResultDetails";
 import { ResultMediaViewer, type ResultMediaPreviewState } from "./ResultMediaViewer";
 import type { DurationSummary, ResultGroup } from "./resultTypes";
@@ -35,6 +35,7 @@ export interface ResultsScreenProps {
   onOpenRequest?: (resultId?: string) => void;
   onNavigate?: (screen: ScreenId) => void;
   onNotify?: (message: string) => void;
+  routeDirectory?: RouteDirectoryItem[];
   addToast?: (message: string, kind?: "success" | "error" | "info") => void;
 }
 
@@ -46,7 +47,6 @@ const FILTERS: Array<{ id: ResultMode; label: string }> = [
   { id: "noPhotos", label: "Без медиа" },
 ];
 
-const emptyResultFilters = {};
 const showResultInspector = false;
 const MAX_VALID_PATROL_DURATION_MINUTES = 24 * 60;
 const CONTEXT_PANEL_WIDTH = 220;
@@ -70,6 +70,7 @@ export function ResultsWorkspace({
   onCreateRequest,
   onOpenRequest,
   onNotify,
+  routeDirectory = [],
   addToast,
 }: ResultsScreenProps) {
   const [activeMode, setActiveMode] = useState<ResultMode>(mode);
@@ -85,13 +86,14 @@ export function ResultsWorkspace({
   const [mediaPreview, setMediaPreview] = useState<ResultMediaPreviewState | null>(null);
   const [exportInProgress, setExportInProgress] = useState(false);
   const apiResultsRepository = useMemo(() => createApiResultsRepository(), []);
+  const resultApiFilters = useMemo(() => buildResultApiFilters(activeMode, routeFilter, query), [activeMode, query, routeFilter]);
 
-  const { results, selectedResult, listStatus, errorMessage, refreshResults, exportResults } = useResultsWorkspace({
+  const { results, selectedResult, listStatus, errorMessage, refreshResults, exportResults, hasMoreResults } = useResultsWorkspace({
     dataSourceMode,
     selectedResultId,
     onSelectResult: onSelectResult ?? (() => undefined),
     showToast: onNotify ?? (() => undefined),
-    filters: emptyResultFilters,
+    filters: resultApiFilters,
   });
 
   const mergedResults = useMemo(
@@ -103,11 +105,9 @@ export function ResultsWorkspace({
     const hiddenIds = new Set([...archivedGroupIds, ...deletedGroupIds]);
     return groups.filter((group) => !hiddenIds.has(group.id));
   }, [archivedGroupIds, deletedGroupIds, groups]);
-  const routeOptions = useMemo(
-    () => Array.from(new Set(visibleGroups.map((group) => group.route))).sort((left, right) => left.localeCompare(right, "ru")),
-    [visibleGroups],
-  );
-  const filteredGroups = useMemo(() => filterGroups(visibleGroups, activeMode, query, routeFilter), [visibleGroups, activeMode, query, routeFilter]);
+  const routeOptions = useMemo(() => buildRouteOptions(visibleGroups, routeDirectory), [routeDirectory, visibleGroups]);
+  const clientQuery = dataSourceMode === "api" ? "" : query;
+  const filteredGroups = useMemo(() => filterGroups(visibleGroups, activeMode, clientQuery, routeFilter), [visibleGroups, activeMode, clientQuery, routeFilter]);
   const counters = useMemo(() => buildCounters(visibleGroups), [visibleGroups]);
   const metrics = useMemo(() => buildMetrics(visibleGroups), [visibleGroups]);
   const loading = listStatus === "loading";
@@ -121,7 +121,7 @@ export function ResultsWorkspace({
   const contextGroup = contextMenu ? visibleGroups.find((group) => group.id === contextMenu.groupId) : undefined;
 
   useEffect(() => {
-    if (routeFilter !== "all" && !routeOptions.includes(routeFilter)) {
+    if (routeFilter !== "all" && !routeOptions.some((route) => route.id === routeFilter)) {
       setRouteFilter("all");
     }
   }, [routeFilter, routeOptions]);
@@ -238,7 +238,7 @@ export function ResultsWorkspace({
     }
   };
 
-  const exportPatrolResults = async () => {
+  const exportPatrolResults = async (group?: ResultGroup) => {
     if (exportInProgress) return;
     if (dataSourceMode !== "api") {
       addToast?.("Экспорт доступен при подключении к API", "info");
@@ -247,14 +247,24 @@ export function ResultsWorkspace({
 
     setExportInProgress(true);
     try {
-      const file = await exportResults();
+      const file = await exportResults(buildExportFilters(group, activeMode, routeFilter, query));
       if (!file) {
         addToast?.("Экспорт доступен при подключении к API", "info");
         return;
       }
 
       downloadApiFile(file);
-      addToast?.("Экспорт результатов обходов сформирован", "success");
+      const metadata = readExportMetadata(file);
+      if (metadata.truncated) {
+        addToast?.(`Экспорт усечен: выгружены первые ${metadata.rowCount ?? metadata.maxRows ?? "доступные"} строк по лимиту ${metadata.maxRows ?? "сервера"}`, "info");
+      } else {
+        addToast?.(
+          metadata.rowCount !== undefined
+            ? `Экспорт результатов обходов сформирован: ${metadata.rowCount} строк`
+            : "Экспорт результатов обходов сформирован",
+          "success",
+        );
+      }
     } catch (exportError) {
       const message = exportError instanceof Error ? exportError.message : "не удалось сформировать экспорт";
       addToast?.(`Не удалось сформировать экспорт результатов: ${message}`, "error");
@@ -336,8 +346,8 @@ export function ResultsWorkspace({
               <select aria-label="Маршрут" value={routeFilter} onChange={(event) => setRouteFilter(event.target.value)}>
                 <option value="all">Все маршруты</option>
                 {routeOptions.map((route) => (
-                  <option key={route} value={route}>
-                    {route}
+                  <option key={route.id} value={route.id}>
+                    {route.name}
                   </option>
                 ))}
               </select>
@@ -351,6 +361,14 @@ export function ResultsWorkspace({
               />
             </label>
           </div>
+
+          {hasMoreResults ? (
+            <section className="results-review-empty">
+              <FileText size={24} />
+              <h3>Показана первая страница журнала</h3>
+              <p>В истории есть более старые обходы. Уточните фильтр по маршруту, статусу или строке поиска, чтобы сузить выборку.</p>
+            </section>
+          ) : null}
 
           {loading && groups.length === 0 ? (
             <section className="results-review-empty">
@@ -433,7 +451,7 @@ export function ResultsWorkspace({
           group={modalGroup}
           onClose={() => setOpenGroupId(null)}
           onCreateRequest={() => void createRequest(modalGroup)}
-          onExport={() => void exportPatrolResults()}
+          onExport={() => void exportPatrolResults(modalGroup)}
           onOpenRequest={() => onOpenRequest?.(modalGroup.results[0]?.id)}
           onOpenAttachment={openAttachment}
           photoLoadingResultId={photoLoadingResultId}
@@ -461,6 +479,23 @@ function downloadApiFile(file: ApiFileResponse) {
   link.click();
   link.remove();
   URL.revokeObjectURL(href);
+}
+
+function readExportMetadata(file: ApiFileResponse) {
+  return {
+    maxRows: readIntegerHeader(file, "x-patrol360-export-max-rows"),
+    rowCount: readIntegerHeader(file, "x-patrol360-export-row-count"),
+    truncated: readBooleanHeader(file, "x-patrol360-export-truncated"),
+  };
+}
+
+function readBooleanHeader(file: ApiFileResponse, name: string) {
+  return file.headers[name]?.toLowerCase() === "true";
+}
+
+function readIntegerHeader(file: ApiFileResponse, name: string) {
+  const value = Number.parseInt(file.headers[name] ?? "", 10);
+  return Number.isFinite(value) ? value : undefined;
 }
 
 function MetricCard({
@@ -707,7 +742,7 @@ export function filterGroups(groups: ResultGroup[], mode: ResultMode, query: str
   const normalizedQuery = normalizeText(query);
 
   return groups.filter((group) => {
-    const matchesRoute = route === "all" || group.route === route;
+    const matchesRoute = route === "all" || group.routeId === route || group.route === route;
     const matchesMode =
       mode === "all" ||
       (mode === "issues" && (group.issuePoints > 0 || group.issues > 0)) ||
@@ -717,6 +752,72 @@ export function filterGroups(groups: ResultGroup[], mode: ResultMode, query: str
     const haystack = normalizeText([group.route, group.territory, group.employee, group.shift, group.comment].join(" "));
     return matchesRoute && matchesMode && (!normalizedQuery || haystack.includes(normalizedQuery));
   });
+}
+
+function buildResultApiFilters(mode: ResultMode, route: string, query: string): ResultFilterOptions {
+  const filters: ResultFilterOptions = {};
+  if (mode === "issues") {
+    filters.status = "issue";
+  } else if (mode === "late") {
+    filters.status = "late";
+  } else if (mode === "noPhotos") {
+    filters.hasPhotos = false;
+  }
+
+  if (route !== "all") {
+    filters.routeId = route;
+  }
+
+  const normalizedQuery = query.trim();
+  if (normalizedQuery) {
+    filters.query = normalizedQuery;
+  }
+
+  return filters;
+}
+
+function buildRouteOptions(groups: ResultGroup[], routeDirectory: RouteDirectoryItem[]) {
+  const routes = new Map<string, string>();
+  routeDirectory.forEach((route) => {
+    if (route.id) {
+      routes.set(route.id, route.name);
+    }
+  });
+
+  groups.forEach((group) => {
+    if (group.routeId) {
+      routes.set(group.routeId, group.route);
+    }
+  });
+
+  return Array.from(routes, ([id, name]) => ({ id, name })).sort((left, right) => left.name.localeCompare(right.name, "ru"));
+}
+
+function buildExportFilters(group: ResultGroup | undefined, mode: ResultMode, route: string, query: string): ResultFilterOptions {
+  const assignmentId = group?.results.find((result) => result.assignmentId)?.assignmentId;
+  if (assignmentId) {
+    return { assignmentId };
+  }
+
+  const filters: ResultFilterOptions = {};
+  if (mode === "issues") {
+    filters.status = "issue";
+  } else if (mode === "late") {
+    filters.status = "late";
+  } else if (mode === "noPhotos") {
+    filters.hasPhotos = false;
+  }
+
+  if (route !== "all") {
+    filters.routeId = group?.routeId ?? route;
+  }
+
+  const normalizedQuery = query.trim();
+  if (normalizedQuery) {
+    filters.query = normalizedQuery;
+  }
+
+  return filters;
 }
 
 export function buildResultGroups(results: PatrolResult[]): ResultGroup[] {

@@ -4546,6 +4546,7 @@ app_settings
   "name": "Северные ворота",
   "description": "Проверить замок и освещение",
   "isRequired": true,
+  "requiresPhoto": true,
   "confirmationType": "nfc",
   "qrCode": "QR-001",
   "nfcTagHash": "hash-value",
@@ -4848,7 +4849,7 @@ retryLater
 | Заявка на обход | `PatrolRequestDto` | `patrol_requests` | `requestId`, `routeId`, `status`, `revision`, `takenByUserId`, `takenAt` | сервер, mobile только через команды |
 | Назначение обхода | `PatrolAssignmentDto` | `patrol_assignments` | `assignmentId`, `requestId`, `routeId`, `status`, `startedAtLocal`, `completedAtLocal`, `revision` | сервер + mobile commands |
 | Маршрут | `PatrolRouteDto` | `routes` | `routeId`, `name`, `version`, `allowFreeOrder`, `nfcEnabled`, `qrFallbackEnabled` | сервер |
-| Точка маршрута | `PatrolPointDto` | `route_points` | `pointId`, `routeId`, `name`, `orderIndex`, `nfcUidHash`, `qrCodeHash`, `required`, `revision` | сервер |
+| Точка маршрута | `PatrolPointDto` | `route_points` | `pointId`, `routeId`, `name`, `orderIndex`, `nfcUidHash`, `qrCodeHash`, `required`, `requiresPhoto`, `revision` | сервер |
 | Результат точки | `PatrolPointResultDto` | `point_results` | `localResultId`, `assignmentId`, `pointId`, `status`, `comment`, `deferredReason`, `completedAtLocal` | mobile, сервер подтверждает |
 | Фото | `MobileFileDto` | `files` | `clientFileId`, `localPath`, `previewPath`, `serverFileId`, `status`, `sha256`, `sizeBytes` | mobile, сервер подтверждает |
 | Outbox | `MobileOutboxCommandDto` | `outbox_commands` | `clientOperationId`, `commandType`, `entityType`, `entityLocalId`, `entityServerId`, `payload`, `attemptCount`, `status` | mobile, сервер подтверждает |

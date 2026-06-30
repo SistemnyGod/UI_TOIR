@@ -65,6 +65,11 @@ internal sealed partial class EfMobileAppService
             return AssignmentPointValidation.Fail(Conflict(clientOperationId, "Patrol point is not part of assignment route."));
         }
 
+        if (!IsMobileRoutePointVisible(point))
+        {
+            return AssignmentPointValidation.Fail(Conflict(clientOperationId, "Patrol point is not active for mobile assignments."));
+        }
+
         return new AssignmentPointValidation(true, assignment, point, null);
     }
 }

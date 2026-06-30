@@ -377,9 +377,10 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             status,
             started_at_local,
             completed_at_local,
-            revision
+            revision,
+            route_version_no
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(assignment_id) DO UPDATE SET
             owner_user_id = excluded.owner_user_id,
             request_id = excluded.request_id,
@@ -395,7 +396,8 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
               WHEN patrol_assignments.status = 'completedLocal' THEN patrol_assignments.completed_at_local
               ELSE excluded.completed_at_local
             END,
-            revision = excluded.revision
+            revision = excluded.revision,
+            route_version_no = excluded.route_version_no
         `,
         [
           assignment.assignmentId,
@@ -405,7 +407,8 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
           assignment.status,
           assignment.startedAtLocal,
           assignment.completedAtLocal,
-          assignment.revision
+          assignment.revision,
+          assignment.routeVersionNo ?? 0
         ]
       );
     }
@@ -544,9 +547,10 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             nfc_uid_hash,
             qr_code_hash,
             required,
+            requires_photo,
             revision
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(point_id) DO UPDATE SET
             route_id = excluded.route_id,
             name = excluded.name,
@@ -554,6 +558,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             nfc_uid_hash = excluded.nfc_uid_hash,
             qr_code_hash = excluded.qr_code_hash,
             required = excluded.required,
+            requires_photo = excluded.requires_photo,
             revision = excluded.revision
         `,
         [
@@ -564,6 +569,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
           point.nfcUidHash,
           point.qrCodeHash,
           point.required ? 1 : 0,
+          point.requiresPhoto ? 1 : 0,
           point.revision
         ]
       );
@@ -581,6 +587,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             nfc_uid_hash,
             qr_code_hash,
             required,
+            requires_photo,
             revision
           )
           SELECT
@@ -592,6 +599,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             nfc_uid_hash,
             qr_code_hash,
             required,
+            requires_photo,
             revision
           FROM route_points
           WHERE route_id = ?

@@ -1745,6 +1745,7 @@ function fileResponse(fileName: string, text: string): ApiFileResponse {
     contentType: "text/plain;charset=utf-8",
     downloadName: fileName,
     fileName,
+    headers: {},
   };
 }
 

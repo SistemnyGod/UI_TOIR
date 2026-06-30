@@ -57,7 +57,8 @@ export async function initializeDatabase() {
       status TEXT NOT NULL,
       started_at_local TEXT,
       completed_at_local TEXT,
-      revision INTEGER NOT NULL
+      revision INTEGER NOT NULL,
+      route_version_no INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS assignment_route_points (
@@ -69,6 +70,7 @@ export async function initializeDatabase() {
       nfc_uid_hash TEXT,
       qr_code_hash TEXT,
       required INTEGER NOT NULL DEFAULT 1,
+      requires_photo INTEGER NOT NULL DEFAULT 0,
       revision INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (assignment_id, point_id)
     );
@@ -90,6 +92,7 @@ export async function initializeDatabase() {
       nfc_uid_hash TEXT,
       qr_code_hash TEXT,
       required INTEGER NOT NULL DEFAULT 1,
+      requires_photo INTEGER NOT NULL DEFAULT 0,
       revision INTEGER NOT NULL
     );
 
@@ -257,6 +260,10 @@ export async function initializeDatabase() {
   await runLocalMigration(db, "20260623_mobile_hot_path_indexes", async () => {
     await ensureMobileHotPathIndexes(db);
   });
+
+  await runLocalMigration(db, "20260630_route_point_requires_photo", async () => {
+    await ensureRoutePointRequiresPhoto(db);
+  });
 }
 
 async function runLocalMigration(db: SQLite.SQLiteDatabase, id: string, action: () => Promise<void>) {
@@ -288,13 +295,15 @@ async function ensureMobileColumns(db: SQLite.SQLiteDatabase) {
 
   await ensureColumns(db, "patrol_assignments", [
     { name: "completed_at_local", sql: "ALTER TABLE patrol_assignments ADD COLUMN completed_at_local TEXT" },
-    { name: "revision", sql: "ALTER TABLE patrol_assignments ADD COLUMN revision INTEGER NOT NULL DEFAULT 0" }
+    { name: "revision", sql: "ALTER TABLE patrol_assignments ADD COLUMN revision INTEGER NOT NULL DEFAULT 0" },
+    { name: "route_version_no", sql: "ALTER TABLE patrol_assignments ADD COLUMN route_version_no INTEGER NOT NULL DEFAULT 0" }
   ]);
 
   await ensureColumns(db, "route_points", [
     { name: "nfc_uid_hash", sql: "ALTER TABLE route_points ADD COLUMN nfc_uid_hash TEXT" },
     { name: "qr_code_hash", sql: "ALTER TABLE route_points ADD COLUMN qr_code_hash TEXT" },
     { name: "required", sql: "ALTER TABLE route_points ADD COLUMN required INTEGER NOT NULL DEFAULT 1" },
+    { name: "requires_photo", sql: "ALTER TABLE route_points ADD COLUMN requires_photo INTEGER NOT NULL DEFAULT 0" },
     { name: "revision", sql: "ALTER TABLE route_points ADD COLUMN revision INTEGER NOT NULL DEFAULT 0" }
   ]);
 
@@ -370,6 +379,16 @@ async function ensureMobileHotPathIndexes(db: SQLite.SQLiteDatabase) {
   `);
 }
 
+async function ensureRoutePointRequiresPhoto(db: SQLite.SQLiteDatabase) {
+  await ensureColumns(db, "route_points", [
+    { name: "requires_photo", sql: "ALTER TABLE route_points ADD COLUMN requires_photo INTEGER NOT NULL DEFAULT 0" }
+  ]);
+
+  await ensureColumns(db, "assignment_route_points", [
+    { name: "requires_photo", sql: "ALTER TABLE assignment_route_points ADD COLUMN requires_photo INTEGER NOT NULL DEFAULT 0" }
+  ]);
+}
+
 async function ensureAssignmentSnapshotAndOutboxRecovery(db: SQLite.SQLiteDatabase) {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS assignment_route_points (
@@ -381,6 +400,7 @@ async function ensureAssignmentSnapshotAndOutboxRecovery(db: SQLite.SQLiteDataba
       nfc_uid_hash TEXT,
       qr_code_hash TEXT,
       required INTEGER NOT NULL DEFAULT 1,
+      requires_photo INTEGER NOT NULL DEFAULT 0,
       revision INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (assignment_id, point_id)
     );
@@ -390,6 +410,7 @@ async function ensureAssignmentSnapshotAndOutboxRecovery(db: SQLite.SQLiteDataba
     { name: "nfc_uid_hash", sql: "ALTER TABLE assignment_route_points ADD COLUMN nfc_uid_hash TEXT" },
     { name: "qr_code_hash", sql: "ALTER TABLE assignment_route_points ADD COLUMN qr_code_hash TEXT" },
     { name: "required", sql: "ALTER TABLE assignment_route_points ADD COLUMN required INTEGER NOT NULL DEFAULT 1" },
+    { name: "requires_photo", sql: "ALTER TABLE assignment_route_points ADD COLUMN requires_photo INTEGER NOT NULL DEFAULT 0" },
     { name: "revision", sql: "ALTER TABLE assignment_route_points ADD COLUMN revision INTEGER NOT NULL DEFAULT 0" }
   ]);
 
@@ -407,6 +428,7 @@ async function ensureAssignmentSnapshotAndOutboxRecovery(db: SQLite.SQLiteDataba
       nfc_uid_hash,
       qr_code_hash,
       required,
+      requires_photo,
       revision
     )
     SELECT
@@ -418,6 +440,7 @@ async function ensureAssignmentSnapshotAndOutboxRecovery(db: SQLite.SQLiteDataba
       point.nfc_uid_hash,
       point.qr_code_hash,
       point.required,
+      point.requires_photo,
       point.revision
     FROM patrol_assignments assignment
     INNER JOIN route_points point ON point.route_id = assignment.route_id

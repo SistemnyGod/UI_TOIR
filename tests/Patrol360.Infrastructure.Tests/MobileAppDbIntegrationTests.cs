@@ -289,6 +289,38 @@ public sealed class MobileAppDbIntegrationTests
         Assert.NotNull(selectedUpload);
         Assert.Equal("uploaded", selectedUpload!.Status);
 
+        var photoClientFileIdsByPoint = new Dictionary<Guid, string[]>();
+        var requiredPhotoPoints = bootstrap.Points
+            .Where(point => point.RouteId == boardItem.RouteId && point.RequiresPhoto)
+            .ToArray();
+        var requiredPhotoIndex = 0;
+        foreach (var point in requiredPhotoPoints)
+        {
+            if (point.PointId == routePoint.PointId)
+            {
+                photoClientFileIdsByPoint[point.PointId] = ["file-test-2"];
+                continue;
+            }
+
+            var clientFileId = $"required-photo-{requiredPhotoIndex++}";
+            var requiredUpload = UseMobileApp(provider, mobile => mobile.UploadFile(
+                login.Session.AccessToken,
+                new MobileFileUploadCommand(
+                    clientFileId,
+                    assignmentId,
+                    point.PointId,
+                    null,
+                    testFileSha256,
+                    3,
+                    DateTimeOffset.UtcNow,
+                    $"{clientFileId}.jpg",
+                    "image/jpeg",
+                    new MemoryStream([1, 2, 3]))));
+            Assert.NotNull(requiredUpload);
+            Assert.Equal("uploaded", requiredUpload!.Status);
+            photoClientFileIdsByPoint[point.PointId] = [clientFileId];
+        }
+
         var allPointResults = bootstrap.Points
             .Where(point => point.RouteId == boardItem.RouteId)
             .Select(point => new Dictionary<string, object?>
@@ -297,7 +329,9 @@ public sealed class MobileAppDbIntegrationTests
                 ["status"] = point.PointId == routePoint.PointId ? "skipped" : "ok",
                 ["comment"] = point.PointId == routePoint.PointId ? "Метка отсутствует на месте" : "",
                 ["issueTypeId"] = null,
-                ["photoClientFileIds"] = point.PointId == routePoint.PointId ? new[] { "file-test-2" } : Array.Empty<string>(),
+                ["photoClientFileIds"] = photoClientFileIdsByPoint.TryGetValue(point.PointId, out var photoClientFileIds)
+                    ? photoClientFileIds
+                    : Array.Empty<string>(),
                 ["confirmationType"] = point.PointId == routePoint.PointId ? "manual" : "nfc",
                 ["nfcUidHash"] = point.NfcUidHash,
                 ["completedAtLocal"] = DateTimeOffset.UtcNow,
@@ -371,6 +405,54 @@ public sealed class MobileAppDbIntegrationTests
         Assert.Equal("conflict", staleRevisionComplete[0].Status);
         Assert.Contains("changed", staleRevisionComplete[0].Message);
         Assert.Equal(0, CountPatrolResults(database.ConnectionString, assignmentId));
+
+        var invalidStatusPointResults = allPointResults
+            .Select(point => new Dictionary<string, object?>(point))
+            .ToArray();
+        invalidStatusPointResults[0]["status"] = "unknown-status";
+        var invalidStatusComplete = UseMobileApp(provider, mobile => mobile.SaveOutbox(
+            login.Session.AccessToken,
+            new MobileOutboxBatchDto([
+                completeCommand with
+                {
+                    ClientOperationId = "op-complete-invalid-point-status",
+                    Payload = new Dictionary<string, object?>(completeCommand.Payload)
+                    {
+                        ["pointResults"] = invalidStatusPointResults,
+                    }
+                }
+            ])));
+
+        Assert.Single(invalidStatusComplete);
+        Assert.Equal("rejected", invalidStatusComplete[0].Status);
+        Assert.Contains("status", invalidStatusComplete[0].Message);
+        Assert.Equal(0, CountPatrolResults(database.ConnectionString, assignmentId));
+
+        if (requiredPhotoPoints.Length > 0)
+        {
+            var missingPhotoPointResults = allPointResults
+                .Select(point => new Dictionary<string, object?>(point))
+                .ToArray();
+            var missingPhotoPoint = missingPhotoPointResults.First(point => Equals(point["pointId"], requiredPhotoPoints[0].PointId));
+            missingPhotoPoint["photoClientFileIds"] = Array.Empty<string>();
+            var missingPhotoComplete = UseMobileApp(provider, mobile => mobile.SaveOutbox(
+                login.Session.AccessToken,
+                new MobileOutboxBatchDto([
+                    completeCommand with
+                    {
+                        ClientOperationId = "op-complete-missing-required-photo",
+                        Payload = new Dictionary<string, object?>(completeCommand.Payload)
+                        {
+                            ["pointResults"] = missingPhotoPointResults,
+                        }
+                    }
+                ])));
+
+            Assert.Single(missingPhotoComplete);
+            Assert.Equal("rejected", missingPhotoComplete[0].Status);
+            Assert.Contains("photo", missingPhotoComplete[0].Message);
+            Assert.Equal(0, CountPatrolResults(database.ConnectionString, assignmentId));
+        }
 
         var completeAccepted = UseMobileApp(provider, mobile => mobile.SaveOutbox(
             login.Session.AccessToken,

@@ -470,6 +470,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(assignment => assignment.Id).HasColumnName("id");
             entity.Property(assignment => assignment.PatrolRequestId).HasColumnName("patrol_request_id");
             entity.Property(assignment => assignment.RouteId).HasColumnName("route_id");
+            entity.Property(assignment => assignment.RouteVersionNo).HasColumnName("route_version_no");
             entity.Property(assignment => assignment.EmployeeId).HasColumnName("employee_id");
             entity.Property(assignment => assignment.Shift).HasColumnName("shift").HasMaxLength(40).IsRequired();
             entity.Property(assignment => assignment.Status).HasColumnName("status").HasMaxLength(60).IsRequired();

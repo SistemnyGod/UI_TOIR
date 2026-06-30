@@ -385,6 +385,10 @@ internal sealed partial class EfMobileAppService
     private static bool IsManualPointResult(MobilePointResultPayload result) =>
         result.ConfirmationType?.Equals("manual", StringComparison.OrdinalIgnoreCase) == true;
 
+    private static bool IsMobileRoutePointVisible(RoutePointEntity point) =>
+        !point.Status.Equals("Черновик", StringComparison.OrdinalIgnoreCase)
+        && !point.Status.Equals("Draft", StringComparison.OrdinalIgnoreCase);
+
     private static string FormatPointResultStatus(string status)
     {
         if (status.Equals("skipped", StringComparison.OrdinalIgnoreCase))

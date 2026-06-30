@@ -25,5 +25,6 @@ internal sealed partial class EfPatrolStore
         string.Equals(NormalizeOptionalText(status), "Архив", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsActivePointStatus(string? status) =>
-        !string.Equals(NormalizeOptionalText(status), "Черновик", StringComparison.OrdinalIgnoreCase);
+        !string.Equals(NormalizeOptionalText(status), "Черновик", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(NormalizeOptionalText(status), "Draft", StringComparison.OrdinalIgnoreCase);
 }

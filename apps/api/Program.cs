@@ -34,7 +34,11 @@ builder.Services.AddCors(options =>
                 "http://192.168.2.194:5174",
                 "https://192.168.2.194:5173")
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            .WithExposedHeaders(
+                "X-Patrol360-Export-Truncated",
+                "X-Patrol360-Export-Row-Count",
+                "X-Patrol360-Export-Max-Rows");
     });
 });
 builder.Services.AddPatrolInfrastructure(builder.Configuration);

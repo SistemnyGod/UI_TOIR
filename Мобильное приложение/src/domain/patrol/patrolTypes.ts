@@ -74,6 +74,7 @@ export type PatrolAssignmentDto = {
   startedAtLocal: string | null;
   completedAtLocal: string | null;
   revision: number;
+  routeVersionNo: number;
 };
 
 export type PatrolRouteDto = {
@@ -93,6 +94,7 @@ export type PatrolPointDto = {
   nfcUidHash: string | null;
   qrCodeHash: string | null;
   required: boolean;
+  requiresPhoto: boolean;
   revision: number;
 };
 

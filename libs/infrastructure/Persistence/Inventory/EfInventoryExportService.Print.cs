@@ -119,11 +119,6 @@ internal sealed partial class EfInventoryExportService
             card.HeadSize,
             card.RespiratorSize,
             card.HandProtectionSize);
-        var employeeValidation = PpeEmployeePrintDetailsValidator.Validate(employeeDetails);
-        if (employeeValidation is not null)
-        {
-            return Failure<InventoryGeneratedFileDto>("ppeEmployeeDetails", employeeValidation);
-        }
 
         var paragraphs = new List<string>
         {

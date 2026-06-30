@@ -139,7 +139,7 @@ export function ResultsJournalPanel({
       const file = await onExportResults();
       if (file) {
         saveApiFile(file);
-        onNotify(`Экспорт подготовлен на сервере: ${filteredResults.length}`);
+        notifyApiExport(onNotify, file, filteredResults.length);
         return;
       }
     }
@@ -398,6 +398,28 @@ function saveApiFile(file: ApiFileResponse) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function notifyApiExport(onNotify: (message: string) => void, file: ApiFileResponse, fallbackRowCount: number) {
+  const metadata = readExportMetadata(file);
+  onNotify(
+    metadata.truncated
+      ? `Экспорт усечен: выгружены первые ${metadata.rowCount ?? metadata.maxRows ?? "доступные"} строк по лимиту ${metadata.maxRows ?? "сервера"}`
+      : `Экспорт подготовлен на сервере: ${metadata.rowCount ?? fallbackRowCount}`,
+  );
+}
+
+function readExportMetadata(file: ApiFileResponse) {
+  return {
+    maxRows: readIntegerHeader(file, "x-patrol360-export-max-rows"),
+    rowCount: readIntegerHeader(file, "x-patrol360-export-row-count"),
+    truncated: file.headers["x-patrol360-export-truncated"]?.toLowerCase() === "true",
+  };
+}
+
+function readIntegerHeader(file: ApiFileResponse, name: string) {
+  const value = Number.parseInt(file.headers[name] ?? "", 10);
+  return Number.isFinite(value) ? value : undefined;
 }
 
 function toDateKey(value: string) {

@@ -71,6 +71,7 @@ internal sealed partial class EfPatrolStore
             PatrolRequestId = requestEntity.Id,
             EmployeeId = employee.Id,
             RouteId = route.Id,
+            RouteVersionNo = route.VersionNo,
             Shift = NormalizeOptionalText(request.Shift, employee.Shift),
             Status = request.NotifyEmployee ? AssignmentStatusValues.Waiting : AssignmentStatusValues.Assigned,
             PlannedAt = plannedAt!.Value,
@@ -183,7 +184,8 @@ internal sealed partial class EfPatrolStore
     private bool RouteHasActivePoints(Guid routeId) =>
         dbContext.RoutePoints.Any(point =>
             point.RouteId == routeId
-            && point.Status != "Черновик");
+            && point.Status != "Черновик"
+            && point.Status != "Draft");
 
     private string GenerateRequestNumber(DateOnly scheduledDate)
     {

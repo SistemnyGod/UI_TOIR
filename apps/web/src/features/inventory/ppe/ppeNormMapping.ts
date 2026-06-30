@@ -5,6 +5,7 @@ const PPE_NORM_MAPPING_STORAGE_KEY = "patrol360:inventory-ppe-norm-item-mapping:
 
 export type PpeNormItemCatalogMapping = {
   brandModelArticle?: string;
+  isDefault?: boolean;
   itemId: string;
   normKey: string;
   priceText?: string;
@@ -57,7 +58,7 @@ export function mappedItemForNorm(
   mappings: Record<string, PpeNormItemCatalogMapping>,
 ) {
   const mapping = mappings[ppeNormKeyFromNorm(norm)];
-  return itemsById.get(mapping?.itemId ?? "") ?? itemsById.get(norm.itemId) ?? null;
+  return itemsById.get(mapping?.itemId ?? "") ?? null;
 }
 
 export function mappingFromItem(norm: InventoryPositionNormDto, item: InventoryItemDto): PpeNormItemCatalogMapping {

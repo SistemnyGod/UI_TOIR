@@ -97,7 +97,7 @@ export function ppeIssueStatusDescription(status: string) {
 }
 
 export function isPpeSignatureStatus(status: string) {
-  return status === PPE_STATUS.issued || status === PPE_STATUS.replacement || status === PPE_STATUS.reissued;
+  return status === PPE_STATUS.issued || status === PPE_STATUS.partial || status === PPE_STATUS.replacement || status === PPE_STATUS.reissued;
 }
 
 export function defaultIssuePeriodText(lifeMonths?: number | null) {

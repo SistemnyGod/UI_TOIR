@@ -98,7 +98,7 @@ describe("domain workflows", () => {
     });
   });
 
-  it("loads all API result pages before building the journal state", async () => {
+  it("loads a bounded API result page and exposes hasMore", async () => {
     const requestedPaths: string[] = [];
     const repository = createApiResultsRepository({
       baseUrl: "https://api.example.test",
@@ -118,10 +118,11 @@ describe("domain workflows", () => {
       },
     });
 
-    const results = await repository.getResults({ status: "issue" });
+    const resultPage = await repository.getResultPage({ status: "issue" });
 
-    expect(results).toHaveLength(501);
-    expect(results.at(-1)?.id).toBe("result-501");
+    expect(resultPage.results).toHaveLength(500);
+    expect(resultPage.results.at(-1)?.id).toBe("result-500");
+    expect(resultPage.hasMore).toBe(true);
     expect(requestedPaths).toHaveLength(2);
     expect(requestedPaths[0]).toContain("/api/v1/results?status=issue&page=1&pageSize=500");
     expect(requestedPaths[1]).toContain("/api/v1/results?status=issue&page=2&pageSize=500");

@@ -17,10 +17,13 @@ public sealed class ResultsController(IPatrolResultQuery resultQuery) : Controll
         [FromQuery] Guid? employeeId,
         [FromQuery] DateOnly? dateFrom,
         [FromQuery] DateOnly? dateTo,
+        [FromQuery] Guid? assignmentId,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 100)
+        [FromQuery] int pageSize = 100,
+        [FromQuery] string? query = null,
+        [FromQuery] bool? hasPhotos = null)
     {
-        var filter = new ResultFilterDto(status, routeId, employeeId, dateFrom, dateTo);
+        var filter = new ResultFilterDto(status, routeId, employeeId, dateFrom, dateTo, assignmentId, query, hasPhotos);
 
         return Ok(resultQuery.GetResults(filter, page, pageSize));
     }
@@ -32,9 +35,12 @@ public sealed class ResultsController(IPatrolResultQuery resultQuery) : Controll
         [FromQuery] Guid? routeId,
         [FromQuery] Guid? employeeId,
         [FromQuery] DateOnly? dateFrom,
-        [FromQuery] DateOnly? dateTo)
+        [FromQuery] DateOnly? dateTo,
+        [FromQuery] Guid? assignmentId,
+        [FromQuery] string? query = null,
+        [FromQuery] bool? hasPhotos = null)
     {
-        var filter = new ResultFilterDto(status, routeId, employeeId, dateFrom, dateTo);
+        var filter = new ResultFilterDto(status, routeId, employeeId, dateFrom, dateTo, assignmentId, query, hasPhotos);
         var export = resultQuery.ExportResults(filter);
         Response.Headers["X-Patrol360-Export-Truncated"] = export.Truncated ? "true" : "false";
         Response.Headers["X-Patrol360-Export-Row-Count"] = export.RowCount.ToString();

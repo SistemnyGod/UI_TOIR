@@ -22,10 +22,13 @@ internal sealed partial class EfPatrolStore
         }
 
         var status = NormalizeResultStatus(request.Status);
-        var selectedPoint = assignment.Route?.Points
+        var routePoints = assignment.Route?.Points
+            .Where(IsRoutePointVisibleForCompletion)
             .OrderBy(point => point.SequenceNo)
+            .ToList() ?? [];
+        var selectedPoint = routePoints
             .FirstOrDefault(point => request.RoutePointId is not null && point.Id == request.RoutePointId.Value)
-            ?? assignment.Route?.Points.OrderBy(point => point.SequenceNo).FirstOrDefault();
+            ?? routePoints.FirstOrDefault();
         var issueType = NormalizeOptionalText(request.IssueType, "-");
         var severity = NormalizeOptionalText(request.Severity, status == "Замечание" ? "Средняя" : "-");
         var result = dbContext.PatrolResults
@@ -95,7 +98,10 @@ internal sealed partial class EfPatrolStore
         dbContext.Set<PatrolResultIssueEntity>().RemoveRange(existingResults.SelectMany(result => result.Issues));
         dbContext.PatrolResults.RemoveRange(existingResults);
 
-        var routePoints = assignment.Route?.Points.OrderBy(point => point.SequenceNo).ToDictionary(point => point.Id) ?? [];
+        var routePoints = assignment.Route?.Points
+            .Where(IsRoutePointVisibleForCompletion)
+            .OrderBy(point => point.SequenceNo)
+            .ToDictionary(point => point.Id) ?? [];
         foreach (var pointResult in request.PointResults ?? [])
         {
             routePoints.TryGetValue(pointResult.RoutePointId, out var selectedPoint);
@@ -175,7 +181,10 @@ internal sealed partial class EfPatrolStore
             errors["issueType"] = ["Укажите тип замечания."];
         }
 
-        var routePointList = routePoints?.OrderBy(point => point.SequenceNo).ToList() ?? [];
+        var routePointList = routePoints?
+            .Where(IsRoutePointVisibleForCompletion)
+            .OrderBy(point => point.SequenceNo)
+            .ToList() ?? [];
         var requiredRoutePoints = routePointList.Where(point => point.IsRequired).ToList();
         if (requiredRoutePoints.Count > 0 && request.PointResults is not { Count: > 0 })
         {
@@ -378,6 +387,10 @@ internal sealed partial class EfPatrolStore
             ? "Подтверждено"
             : value;
     }
+
+    private static bool IsRoutePointVisibleForCompletion(RoutePointEntity point) =>
+        !point.Status.Equals("Черновик", StringComparison.OrdinalIgnoreCase)
+        && !point.Status.Equals("Draft", StringComparison.OrdinalIgnoreCase);
 
     private static string FormatDeviation(DateTimeOffset plannedAt, DateTimeOffset actualAt)
     {

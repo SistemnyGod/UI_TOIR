@@ -264,6 +264,7 @@ export function ScreenRouter({
             onOpenRequest={onOpenRequest}
             onNavigate={onNavigate}
             onNotify={onNotify}
+            routeDirectory={routeDirectory}
           />
         ) : null}
         {screen === "assign" ? (

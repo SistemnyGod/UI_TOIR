@@ -106,7 +106,8 @@ public sealed record MobilePatrolAssignmentDto(
     string Status,
     DateTimeOffset? StartedAtLocal,
     DateTimeOffset? CompletedAtLocal,
-    long Revision);
+    long Revision,
+    int RouteVersionNo);
 
 public sealed record MobilePatrolRouteDto(
     Guid RouteId,
@@ -124,6 +125,7 @@ public sealed record MobilePatrolPointDto(
     string? NfcUidHash,
     string? QrCodeHash,
     bool Required,
+    bool RequiresPhoto,
     long Revision);
 
 public sealed record MobileOutboxBatchDto(

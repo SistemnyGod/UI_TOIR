@@ -8,6 +8,8 @@ internal sealed class AssignmentEntity
 
     public Guid RouteId { get; set; }
 
+    public int RouteVersionNo { get; set; }
+
     public Guid EmployeeId { get; set; }
 
     public string Shift { get; set; } = string.Empty;

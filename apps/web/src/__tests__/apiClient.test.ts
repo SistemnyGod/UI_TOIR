@@ -53,6 +53,44 @@ describe("ApiClient", () => {
     );
   });
 
+  it("falls back to same-origin API when the configured base url targets this host without the app port", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({ ok: true }));
+    const client = new ApiClient({
+      baseUrl: "https://localhost",
+      fetcher,
+    });
+
+    await client.get("/api/v1/system-notifications?limit=24");
+
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/v1/system-notifications?limit=24",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("exposes response headers for downloaded files", async () => {
+    const client = new ApiClient({
+      fetcher: async () =>
+        new Response("a;b\n1;2", {
+          headers: {
+            "content-disposition": "attachment; filename=results.csv",
+            "content-type": "text/csv",
+            "x-patrol360-export-max-rows": "5000",
+            "x-patrol360-export-row-count": "5000",
+            "x-patrol360-export-truncated": "true",
+          },
+          status: 200,
+        }),
+    });
+
+    const file = await client.download("/api/v1/results/export");
+
+    expect(file.fileName).toBe("results.csv");
+    expect(file.headers["x-patrol360-export-truncated"]).toBe("true");
+    expect(file.headers["x-patrol360-export-row-count"]).toBe("5000");
+    expect(file.headers["x-patrol360-export-max-rows"]).toBe("5000");
+  });
+
   it("binds default browser fetch to the global object", async () => {
     const originalFetch = globalThis.fetch;
     const fetcher = vi.fn(function (this: typeof globalThis) {

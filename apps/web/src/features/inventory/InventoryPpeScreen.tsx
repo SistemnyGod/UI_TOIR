@@ -17,7 +17,6 @@ import type {
 import { useInventoryRepository } from "../../repositories/inventoryRepositoryContext";
 import {
   formatDate,
-  formatMoney,
   formatQuantity,
   getDefaultDueDate,
   getDefaultIssuePeriodText,
@@ -70,8 +69,10 @@ type PpeModal =
 type EmployeePpeNormRow = {
   catalogItem: InventoryItemDto | null;
   existingLine: InventoryPpeCardLineDto | null;
+  hasExplicitMapping: boolean;
   isSectionTitle: boolean;
   key: string;
+  mapping: PpeNormItemCatalogMapping | null;
   norm: InventoryPositionNormDto | null;
   normItemName: string;
   normPoint: string;
@@ -124,6 +125,8 @@ export function InventoryPpeScreen({
   const [employeeQuery, setEmployeeQuery] = useState("");
   const [activeTab, setActiveTab] = useState<PpeTab>("card");
   const [detail, setDetail] = useState<InventoryPpeCardDetailDto | null>(null);
+  const [employeeDepartment, setEmployeeDepartment] = useState("all");
+  const [employeePosition, setEmployeePosition] = useState("all");
   const [history, setHistory] = useState<InventoryHistoryDto[]>([]);
   const [busy, setBusy] = useState("");
   const [modal, setModal] = useState<PpeModal>(null);
@@ -147,16 +150,20 @@ export function InventoryPpeScreen({
       ),
     [selectedEmployee?.position, settings?.positionNorms],
   );
+  const employeeDepartments = useMemo(() => uniqueSorted(employees.map((employee) => employee.department)), [employees]);
+  const employeePositions = useMemo(() => uniqueSorted(employees.map((employee) => employee.position)), [employees]);
   const filteredEmployees = useMemo(() => {
     const query = employeeQuery.trim().toLocaleLowerCase("ru-RU");
     return employees.filter((employee) => {
+      if (employeeDepartment !== "all" && employee.department !== employeeDepartment) return false;
+      if (employeePosition !== "all" && employee.position !== employeePosition) return false;
       if (!query) return true;
       return [employee.fullName, employee.personnelNo, employee.position, employee.department, employee.employeeGroup]
         .join(" ")
         .toLocaleLowerCase("ru-RU")
         .includes(query);
     });
-  }, [employeeQuery, employees]);
+  }, [employeeDepartment, employeePosition, employeeQuery, employees]);
   const normRows = useMemo(
     () => buildEmployeePpeRows(positionNorms, detail?.lines ?? [], itemsById, mappings, selectedEmployee?.position ?? ""),
     [detail?.lines, itemsById, mappings, positionNorms, selectedEmployee?.position],
@@ -165,6 +172,7 @@ export function InventoryPpeScreen({
   const issueRows = useMemo(() => printData.lines.filter((line) => !line.isSectionTitle && isPpeSignatureStatus(line.status)), [printData.lines]);
   const printErrors = useMemo(() => validatePpeEmployeePrintDetails(employeeDetails), [employeeDetails]);
   const counts = useMemo(() => calculateEmployeePpeCounts(normRows, printErrors.length), [normRows, printErrors.length]);
+  const checkSummary = useMemo(() => buildPpeCheckSummary(normRows, printData, printErrors), [normRows, printData, printErrors]);
 
   useEffect(() => {
     if (!selectedEmployeeId && employees.length) {
@@ -268,6 +276,10 @@ export function InventoryPpeScreen({
       onNotify("Укажите количество больше нуля");
       return;
     }
+    if (isPpeSignatureStatus(draft.status) && !draft.issuedAt) {
+      onNotify("Укажите дату выдачи СИЗ");
+      return;
+    }
     const unitPriceMinor = parseMoneyToMinor(draft.priceText);
     if (unitPriceMinor === null) {
       onNotify("Проверьте цену СИЗ");
@@ -277,14 +289,18 @@ export function InventoryPpeScreen({
     try {
       setBusy("save-line");
       const card = await ensureCard();
-      const payload = buildLinePayload(row, item, draft, quantity, unitPriceMinor);
+      const nextDraft = {
+        ...draft,
+        status: draft.status === PPE_STATUS.issued && quantity < row.quantity ? PPE_STATUS.partial : draft.status,
+      };
+      const payload = buildLinePayload(row, item, nextDraft, quantity, unitPriceMinor);
       const savedLine = row.existingLine
         ? await inventoryRepository.updatePpeCardLine(card.id, row.existingLine.id, payload)
         : await inventoryRepository.addPpeCardLine(card.id, payload);
-      if (savedLine.status !== draft.status) {
-        await inventoryRepository.updatePpeCardLineStatus(card.id, savedLine.id, { status: draft.status });
+      if (savedLine.status !== nextDraft.status) {
+        await inventoryRepository.updatePpeCardLineStatus(card.id, savedLine.id, { status: nextDraft.status });
       }
-      saveMappingForRow(row, item, draft);
+      saveMappingForRow(row, item, nextDraft);
       await reloadAfterMutation(card.id);
       setModal(null);
       onNotify(row.existingLine ? "Строка СИЗ обновлена" : "Выдача СИЗ сохранена");
@@ -295,7 +311,7 @@ export function InventoryPpeScreen({
     }
   }
 
-  async function saveMapping(row: EmployeePpeNormRow, itemId: string, brandModelArticle: string, priceText: string) {
+  async function saveMapping(row: EmployeePpeNormRow, itemId: string, brandModelArticle: string, priceText: string, isDefault: boolean) {
     const item = itemsById.get(itemId);
     if (!item) {
       onNotify("Выберите номенклатуру для сопоставления");
@@ -303,6 +319,7 @@ export function InventoryPpeScreen({
     }
     savePpeNormMapping({
       brandModelArticle: brandModelArticle.trim() || itemModelDescription(item),
+      isDefault,
       itemId: item.id,
       normKey: row.key,
       priceText,
@@ -373,6 +390,26 @@ export function InventoryPpeScreen({
                   value={employeeQuery}
                 />
               </label>
+              <div className="inventory-ppe-employee-filters">
+                <label>
+                  <span>Подразделение</span>
+                  <select value={employeeDepartment} onChange={(event) => setEmployeeDepartment(event.target.value)}>
+                    <option value="all">Все</option>
+                    {employeeDepartments.map((department) => (
+                      <option key={department} value={department}>{department}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Должность</span>
+                  <select value={employeePosition} onChange={(event) => setEmployeePosition(event.target.value)}>
+                    <option value="all">Все</option>
+                    {employeePositions.map((position) => (
+                      <option key={position} value={position}>{position}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
               <div className="inventory-ppe-employee-list" role="listbox">
                 {filteredEmployees.map((employee) => (
                   <button
@@ -446,6 +483,17 @@ export function InventoryPpeScreen({
                 />
               ) : null}
             </main>
+
+            <PpeQuickPanel
+              counts={counts}
+              employee={selectedEmployee}
+              history={history}
+              onDownload={downloadFile}
+              onPreview={(mode) => setPreview({ data: printData, mode })}
+              printData={printData}
+              summary={checkSummary}
+              detail={detail}
+            />
           </section>
 
           {modal?.type === "issue" || modal?.type === "edit" ? (
@@ -464,7 +512,7 @@ export function InventoryPpeScreen({
               items={items}
               mapping={mappings[modal.row.key]}
               onClose={() => setModal(null)}
-              onSave={(itemId, brandModelArticle, priceText) => void saveMapping(modal.row, itemId, brandModelArticle, priceText)}
+              onSave={(itemId, brandModelArticle, priceText, isDefault) => void saveMapping(modal.row, itemId, brandModelArticle, priceText, isDefault)}
               row={modal.row}
             />
           ) : null}
@@ -486,6 +534,7 @@ export function InventoryPpeScreen({
   function saveMappingForRow(row: EmployeePpeNormRow, item: InventoryItemDto, draft: PpeIssueDraft) {
     savePpeNormMapping({
       brandModelArticle: draft.brandModelArticle.trim() || itemModelDescription(item),
+      isDefault: false,
       itemId: item.id,
       normKey: row.key,
       priceText: draft.priceText,
@@ -530,6 +579,7 @@ function EmployeePpeHeader({
       <div className="inventory-ppe-kpis inventory-ppe-employee-kpis">
         <PpeKpi label="Нормы" value={counts.norms} />
         <PpeKpi label="Выдано" tone="green" value={counts.issued} />
+        <PpeKpi label="Частично" tone={counts.partial ? "red" : "slate"} value={counts.partial} />
         <PpeKpi label="Не выдано" value={counts.notIssued} />
         <PpeKpi label="Просрочено" tone={counts.overdue ? "red" : "slate"} value={counts.overdue} />
         <PpeKpi label="Ошибки" tone={counts.errors ? "red" : "slate"} value={counts.errors} />
@@ -634,6 +684,7 @@ function PersonalCardTab({
         <table className="inventory-ppe-lines-table inventory-ppe-norm-table">
           <thead>
             <tr>
+              <th>№</th>
               <th>Наименование СИЗ</th>
               <th>Пункт норм</th>
               <th>Единица измерения, периодичность выдачи</th>
@@ -644,8 +695,9 @@ function PersonalCardTab({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {rows.map((row, index) => (
               <tr className={row.isSectionTitle ? "is-section-title" : ""} key={row.key}>
+                <td>{row.isSectionTitle ? "" : index + 1}</td>
                 <td>
                   <strong>{row.normItemName}</strong>
                   {row.isSectionTitle ? <span>Раздел личной карточки</span> : null}
@@ -658,8 +710,14 @@ function PersonalCardTab({
                     "-"
                   ) : (
                     <>
-                      <strong>{row.catalogItem?.name || row.existingLine?.itemName || "Не сопоставлено"}</strong>
-                      <span>{row.catalogItem?.article || row.catalogItem?.sku || row.existingLine?.brandModelArticle || "Без артикула"}</span>
+                      <strong>{row.hasExplicitMapping || row.existingLine ? row.catalogItem?.name || row.existingLine?.itemName || "Не сопоставлено" : "Не сопоставлено"}</strong>
+                      <span>
+                        {row.hasExplicitMapping
+                          ? row.mapping?.brandModelArticle || row.catalogItem?.article || row.catalogItem?.sku || "Связь сохранена"
+                          : row.existingLine
+                            ? row.existingLine.brandModelArticle || row.existingLine.itemName
+                            : "Связь не создает выдачу сама по себе"}
+                      </span>
                     </>
                   )}
                 </td>
@@ -769,14 +827,7 @@ function PrintCheckTab({
   printData: PrintData;
 }) {
   const inventoryRepository = useInventoryRepository();
-  const printableCardRows = printData.lines.length;
-  const printableSheetRows = printData.lines.filter((line) => !line.isSectionTitle && isPpeSignatureStatus(line.status)).length;
-  const unmappedRows = rows.filter((row) => !row.isSectionTitle && !row.catalogItem && !row.existingLine);
-  const notIssuedRows = rows.filter((row) => !row.isSectionTitle && !row.existingLine);
-  const overdueRows = rows.filter((row) => {
-    if (!row.existingLine?.dueAt || !isPpeSignatureStatus(row.existingLine.status)) return false;
-    return new Date(row.existingLine.dueAt).getTime() < Date.now();
-  });
+  const summary = buildPpeCheckSummary(rows, printData, errors);
 
   return (
     <section className="inventory-ppe-tab-panel inventory-ppe-print-check">
@@ -788,34 +839,34 @@ function PrintCheckTab({
           rows={errors.map((row) => row.replace("Заполните поле ", ""))}
         />
         <PrintCheckCard
-          count={unmappedRows.length}
-          tone={unmappedRows.length ? "warning" : "ok"}
+          count={summary.unmappedRows.length}
+          tone={summary.unmappedRows.length ? "warning" : "ok"}
           title="Нормы без номенклатуры"
-          rows={unmappedRows.map((row) => row.normItemName)}
+          rows={summary.unmappedRows.map((row) => row.normItemName)}
         />
         <PrintCheckCard
-          count={notIssuedRows.length}
-          tone={notIssuedRows.length ? "danger" : "ok"}
+          count={summary.notIssuedRows.length}
+          tone={summary.notIssuedRows.length ? "danger" : "ok"}
           title="Нормы без выдачи"
-          rows={notIssuedRows.map((row) => row.normItemName)}
+          rows={summary.notIssuedRows.map((row) => row.normItemName)}
         />
         <PrintCheckCard
-          count={overdueRows.length}
-          tone={overdueRows.length ? "danger" : "ok"}
+          count={summary.overdueRows.length}
+          tone={summary.overdueRows.length ? "danger" : "ok"}
           title="Просроченные выдачи"
-          rows={overdueRows.map((row) => row.normItemName)}
+          rows={summary.overdueRows.map((row) => row.normItemName)}
         />
         <PrintCheckCard
-          count={printableCardRows}
+          count={summary.printableCardRows}
           tone="info"
           title="Попадет в личную карточку"
-          rows={[`${printableCardRows} строк с нормами и разделами`]}
+          rows={[`${summary.printableCardRows} строк с нормами и разделами`]}
         />
         <PrintCheckCard
-          count={printableSheetRows}
+          count={summary.printableSheetRows}
           tone="info"
           title="Попадет в лист подписи"
-          rows={[`${printableSheetRows} фактических выдач`]}
+          rows={[`${summary.printableSheetRows} фактических выдач`]}
         />
       </div>
       <div className="inventory-ppe-print-actions">
@@ -841,6 +892,101 @@ function PrintCheckTab({
         <PrintPaper data={printData} mode="card" />
       </div>
     </section>
+  );
+}
+
+function PpeQuickPanel({
+  counts,
+  detail,
+  employee,
+  history,
+  onDownload,
+  onPreview,
+  printData,
+  summary,
+}: {
+  counts: ReturnType<typeof calculateEmployeePpeCounts>;
+  detail: InventoryPpeCardDetailDto | null;
+  employee: InventoryEmployeeDto | null;
+  history: InventoryHistoryDto[];
+  onDownload: (action: () => Promise<ApiFile>) => Promise<void>;
+  onPreview: (mode: PrintMode) => void;
+  printData: PrintData;
+  summary: PpeCheckSummary;
+}) {
+  const inventoryRepository = useInventoryRepository();
+  const recentHistory = history.slice(0, 4);
+
+  return (
+    <aside className="inventory-ppe-side-panel" aria-label="Быстрая проверка СИЗ">
+      <section>
+        <div className="inventory-ppe-side-head">
+          <strong>Проверка</strong>
+          <span>{employee ? employee.fullName : "Сотрудник не выбран"}</span>
+        </div>
+        <div className="inventory-ppe-side-metrics">
+          <PpeSideMetric label="Нормы" value={counts.norms} />
+          <PpeSideMetric label="Выдано" tone="ok" value={counts.issued} />
+          <PpeSideMetric label="Частично" tone={counts.partial ? "warn" : "soft"} value={counts.partial} />
+          <PpeSideMetric label="Ошибки" tone={counts.errors ? "danger" : "soft"} value={counts.errors} />
+        </div>
+      </section>
+
+      <section>
+        <div className="inventory-ppe-side-head">
+          <strong>Документы</strong>
+          <span>Что попадет в печать</span>
+        </div>
+        <div className="inventory-ppe-side-list">
+          <span>Личная карточка <b>{summary.printableCardRows}</b></span>
+          <span>Лист подписи <b>{summary.printableSheetRows}</b></span>
+          <span>Не сопоставлено <b>{summary.unmappedRows.length}</b></span>
+          <span>Не выдано <b>{summary.notIssuedRows.length}</b></span>
+        </div>
+        <div className="inventory-ppe-side-actions">
+          <button className="button ghost" disabled={!employee} onClick={() => onPreview("card")} type="button">
+            Предпросмотр карточки
+          </button>
+          <button className="button ghost" disabled={!employee} onClick={() => onPreview("sheet")} type="button">
+            Предпросмотр листа
+          </button>
+          <button className="button ghost" disabled={!detail} onClick={() => detail && void onDownload(() => inventoryRepository.printPpeCard(detail.id, "card", "docx"))} type="button">
+            DOCX карточка
+          </button>
+          <button className="button ghost" disabled={!detail} onClick={() => detail && void onDownload(() => inventoryRepository.printPpeCard(detail.id, "sheet", "docx"))} type="button">
+            DOCX лист
+          </button>
+          <button className="button primary" disabled={!employee} onClick={() => printDocument(printData, "card")} type="button">
+            PDF / печать
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <div className="inventory-ppe-side-head">
+          <strong>Последние действия</strong>
+          <span>{recentHistory.length ? `${recentHistory.length} последних` : "История пуста"}</span>
+        </div>
+        <div className="inventory-ppe-side-history">
+          {recentHistory.length ? recentHistory.map((row) => (
+            <article key={row.id}>
+              <strong>{row.action}</strong>
+              <span>{formatDate(row.createdAt, "datetime")}</span>
+              <p>{row.description || row.itemName || "Без комментария"}</p>
+            </article>
+          )) : <p>После выдачи здесь появится движение по карточке.</p>}
+        </div>
+      </section>
+    </aside>
+  );
+}
+
+function PpeSideMetric({ label, tone = "soft", value }: { label: string; tone?: "danger" | "ok" | "soft" | "warn"; value: number }) {
+  return (
+    <div className={`inventory-ppe-side-metric is-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
 
@@ -874,7 +1020,7 @@ function PpeIssueModal({
   row: EmployeePpeNormRow;
 }) {
   const line = row.existingLine;
-  const initialItem = row.catalogItem ?? (line ? itemFromLine(line) : null);
+  const initialItem = row.catalogItem ?? (line ? itemFromLine(line) : items.find((item) => item.id === row.norm?.itemId) ?? null);
   const [draft, setDraft] = useState<PpeIssueDraft>({
     brandModelArticle: line?.brandModelArticle || (initialItem ? itemModelDescription(initialItem) : ""),
     comment: "",
@@ -911,6 +1057,8 @@ function PpeIssueModal({
           </dl>
         </div>
         <div className="inventory-ppe-modal-form">
+          <section className="inventory-ppe-modal-section is-wide">
+            <h3>Каталог</h3>
           <label className="is-wide">
             <span>Номенклатура</span>
             <select value={draft.itemId} onChange={(event) => setDraft((current) => patchDraftForItem(current, items, event.target.value))}>
@@ -925,6 +1073,9 @@ function PpeIssueModal({
             <span>Модель, марка, артикул</span>
             <input value={draft.brandModelArticle} onChange={(event) => setDraft((current) => ({ ...current, brandModelArticle: event.target.value }))} />
           </label>
+          </section>
+          <section className="inventory-ppe-modal-section is-wide">
+            <h3>Факт выдачи</h3>
           <label>
             <span>Количество</span>
             <input inputMode="decimal" value={draft.quantityText} onChange={(event) => setDraft((current) => ({ ...current, quantityText: event.target.value }))} />
@@ -972,6 +1123,7 @@ function PpeIssueModal({
             <span>Комментарий</span>
             <textarea value={draft.comment} onChange={(event) => setDraft((current) => ({ ...current, comment: event.target.value }))} />
           </label>
+          </section>
         </div>
         <footer className="inventory-ppe-picker-actions">
           <button className="button ghost" onClick={onClose} type="button">
@@ -997,7 +1149,7 @@ function PpeMappingModal({
   items: InventoryItemDto[];
   mapping?: PpeNormItemCatalogMapping;
   onClose: () => void;
-  onSave: (itemId: string, brandModelArticle: string, priceText: string) => void;
+  onSave: (itemId: string, brandModelArticle: string, priceText: string, isDefault: boolean) => void;
   row: EmployeePpeNormRow;
 }) {
   const initialItemId = mapping?.itemId || row.catalogItem?.id || row.norm?.itemId || items[0]?.id || "";
@@ -1005,6 +1157,7 @@ function PpeMappingModal({
   const [itemId, setItemId] = useState(initialItemId);
   const [brandModelArticle, setBrandModelArticle] = useState(mapping?.brandModelArticle || (initialItem ? itemModelDescription(initialItem) : ""));
   const [priceText, setPriceText] = useState(mapping?.priceText || moneyMinorToInput(initialItem?.defaultUnitPriceMinor ?? 0));
+  const [isDefault, setIsDefault] = useState(mapping?.isDefault ?? true);
   const [query, setQuery] = useState("");
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("ru-RU");
@@ -1072,12 +1225,16 @@ function PpeMappingModal({
             <span>Цена по умолчанию</span>
             <input inputMode="decimal" value={priceText} onChange={(event) => setPriceText(event.target.value)} />
           </label>
+          <label className="inventory-ppe-checkbox-row is-wide">
+            <input checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} type="checkbox" />
+            <span>Использовать эту номенклатуру как связь по умолчанию для нормы</span>
+          </label>
         </div>
         <footer className="inventory-ppe-picker-actions">
           <button className="button ghost" onClick={onClose} type="button">
             Отмена
           </button>
-          <button className="button primary" onClick={() => onSave(itemId, brandModelArticle, priceText)} type="button">
+          <button className="button primary" onClick={() => onSave(itemId, brandModelArticle, priceText, isDefault)} type="button">
             Сохранить сопоставление
           </button>
         </footer>
@@ -1097,15 +1254,19 @@ function buildEmployeePpeRows(
   const usedLineIds = new Set<string>();
   const rows = norms.map((norm) => {
     const key = ppeNormKeyFromNorm(norm);
+    const mapping = mappings[key] ?? null;
     const existingLine = lines.find((line) => ppeNormKey(positionName || norm.positionName, line.printItemName || line.itemName, line.normPoint) === key) ?? null;
     if (existingLine) usedLineIds.add(existingLine.id);
-    const catalogItem = mappedItemForNorm(norm, itemsById, mappings) ?? (existingLine ? itemsById.get(existingLine.itemId) ?? itemFromLine(existingLine) : toItemFromNorm(norm));
+    const mappedItem = mappedItemForNorm(norm, itemsById, mappings);
+    const catalogItem = mappedItem ?? (existingLine ? itemsById.get(existingLine.itemId) ?? itemFromLine(existingLine) : null);
     const isSectionTitle = Boolean(norm.isSectionTitle || (norm.normItemName || norm.itemName).trim().endsWith(":"));
     return {
       catalogItem,
       existingLine,
+      hasExplicitMapping: Boolean(mapping),
       isSectionTitle,
       key,
+      mapping,
       norm,
       normItemName: norm.normItemName || norm.itemName,
       normPoint: isSectionTitle ? "" : norm.normPoint || "",
@@ -1123,8 +1284,10 @@ function buildEmployeePpeRows(
       return {
         catalogItem: itemsById.get(line.itemId) ?? itemFromLine(line),
         existingLine: line,
+        hasExplicitMapping: false,
         isSectionTitle,
         key,
+        mapping: null,
         norm: null,
         normItemName: line.printItemName || line.itemName,
         normPoint: isSectionTitle ? "" : line.normPoint || "",
@@ -1261,12 +1424,13 @@ function buildLinePayload(
 function calculateEmployeePpeCounts(rows: EmployeePpeNormRow[], printErrors: number) {
   const issueRows = rows.filter((row) => !row.isSectionTitle);
   const issued = issueRows.filter((row) => row.existingLine && isPpeSignatureStatus(row.existingLine.status)).length;
+  const partial = issueRows.filter((row) => row.existingLine?.status === PPE_STATUS.partial).length;
   const overdue = issueRows.filter((row) => {
     if (!row.existingLine?.dueAt || !isPpeSignatureStatus(row.existingLine.status)) return false;
     return new Date(row.existingLine.dueAt).getTime() < Date.now();
   }).length;
   const zeroPrices = issueRows.filter((row) => row.existingLine && (row.existingLine.unitPriceMinor ?? 0) === 0).length;
-  const unmapped = issueRows.filter((row) => !row.catalogItem && !row.existingLine).length;
+  const unmapped = issueRows.filter((row) => !row.hasExplicitMapping && !row.existingLine).length;
 
   return {
     errors: printErrors + zeroPrices + unmapped,
@@ -1274,6 +1438,35 @@ function calculateEmployeePpeCounts(rows: EmployeePpeNormRow[], printErrors: num
     norms: issueRows.length,
     notIssued: Math.max(0, issueRows.length - issued),
     overdue,
+    partial,
+  };
+}
+
+type PpeCheckSummary = {
+  notIssuedRows: EmployeePpeNormRow[];
+  overdueRows: EmployeePpeNormRow[];
+  printableCardRows: number;
+  printableSheetRows: number;
+  unmappedRows: EmployeePpeNormRow[];
+};
+
+function buildPpeCheckSummary(rows: EmployeePpeNormRow[], printData: PrintData, errors: string[]): PpeCheckSummary {
+  void errors;
+  const printableCardRows = printData.lines.length;
+  const printableSheetRows = printData.lines.filter((line) => !line.isSectionTitle && isPpeSignatureStatus(line.status)).length;
+  const unmappedRows = rows.filter((row) => !row.isSectionTitle && !row.hasExplicitMapping && !row.existingLine);
+  const notIssuedRows = rows.filter((row) => !row.isSectionTitle && !row.existingLine);
+  const overdueRows = rows.filter((row) => {
+    if (!row.existingLine?.dueAt || !isPpeSignatureStatus(row.existingLine.status)) return false;
+    return new Date(row.existingLine.dueAt).getTime() < Date.now();
+  });
+
+  return {
+    notIssuedRows,
+    overdueRows,
+    printableCardRows,
+    printableSheetRows,
+    unmappedRows,
   };
 }
 
@@ -1400,4 +1593,9 @@ function isPpeItem(item: InventoryItemDto) {
 
 function sameText(left: string, right: string) {
   return left.trim().toLocaleLowerCase("ru-RU") === right.trim().toLocaleLowerCase("ru-RU");
+}
+
+function uniqueSorted(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))))
+    .sort((left, right) => left.localeCompare(right, "ru-RU"));
 }

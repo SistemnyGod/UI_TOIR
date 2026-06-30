@@ -108,7 +108,7 @@ public sealed class ResultsDbIntegrationTests
     }
 
     [DbIntegrationFact]
-    public async Task ResultsFilterKeepsOnlyMatchingRowsInsidePagedAssignmentGroup()
+    public async Task ResultsFilterSelectsPagedAssignmentGroupAndReturnsAllRows()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
         using var provider = BuildProvider(database.ConnectionString);
@@ -125,8 +125,10 @@ public sealed class ResultsDbIntegrationTests
             pageSize: 1));
 
         Assert.Contains(filtered, item => item.Id == issueResultId);
-        Assert.DoesNotContain(filtered, item => item.Id == okResultId);
-        Assert.All(filtered, item => Assert.Equal("issue", item.Status));
+        Assert.Contains(filtered, item => item.Id == okResultId);
+        Assert.Contains(filtered, item => item.Status == "issue");
+        Assert.Contains(filtered, item => item.Status == "ok");
+        Assert.All(filtered, item => Assert.Equal(FirstDemoAssignmentId, item.AssignmentId));
     }
 
     [DbIntegrationFact]

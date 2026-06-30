@@ -22,6 +22,11 @@ interface UseAssignmentsWorkspaceOptions {
   showToast: (message: string) => void;
 }
 
+interface AssignmentCommandResult {
+  succeeded: boolean;
+  errors?: Record<string, string[]>;
+}
+
 export function useAssignmentsWorkspace({
   dataSourceMode,
   refreshPatrolData,
@@ -191,7 +196,11 @@ export function useAssignmentsWorkspace({
     }
   }
 
-  async function runCommand(id: string, command: "start" | "cancel" | "complete", completePayload?: CompleteAssignmentPayload) {
+  async function runCommand(
+    id: string,
+    command: "start" | "cancel" | "complete",
+    completePayload?: CompleteAssignmentPayload,
+  ): Promise<AssignmentCommandResult> {
     if (dataSourceMode !== "api") {
       setAssignments((current) =>
         current.map((assignment) =>
@@ -201,7 +210,7 @@ export function useAssignmentsWorkspace({
         ),
       );
       showToast("Назначение обновлено");
-      return;
+      return { succeeded: true };
     }
 
     setSavingAssignmentId(id);
@@ -219,20 +228,25 @@ export function useAssignmentsWorkspace({
       await refreshPatrolData();
       await refreshAssignments();
       showToast(result.message || (result.changed ? "Назначение обновлено" : "Назначение уже в актуальном состоянии"));
+      return { succeeded: true };
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
         showToast("Назначение не найдено, список обновлен");
         await refreshAssignments();
-        return;
+        return { errors: error.errors, succeeded: false };
       }
 
       if (error instanceof ApiError && error.status === 409) {
         showToast("Данные устарели, список обновлен");
         await refreshAssignments();
-        return;
+        return { errors: error.errors, succeeded: false };
       }
 
       handleMutationError(error);
+      return {
+        errors: error instanceof ApiError ? error.errors : undefined,
+        succeeded: false,
+      };
     } finally {
       setSavingAssignmentId(undefined);
     }

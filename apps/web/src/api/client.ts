@@ -31,6 +31,7 @@ export interface ApiFileResponse {
   contentType: string;
   downloadName: string;
   fileName: string;
+  headers: HeaderMap;
 }
 
 export interface ApiProblem {
@@ -188,6 +189,7 @@ export class ApiClient {
         contentType: response.headers.get("content-type") ?? "application/octet-stream",
         downloadName: fileName,
         fileName,
+        headers: Object.fromEntries(response.headers.entries()),
       };
     } catch (error) {
       if (error instanceof ApiError) throw error;
@@ -455,7 +457,8 @@ function getDefaultApiBaseUrl() {
 }
 
 function normalizeBaseUrl(baseUrl: string) {
-  return baseUrl.replace(/\/+$/, "");
+  const normalized = baseUrl.replace(/\/+$/, "");
+  return shouldUseSameOriginApi(normalized) ? "" : normalized;
 }
 
 function buildUrl(baseUrl: string, path: string) {
@@ -464,6 +467,29 @@ function buildUrl(baseUrl: string, path: string) {
   }
 
   return `${baseUrl}${path.startsWith("/") ? "" : "/"}${path}`;
+}
+
+function shouldUseSameOriginApi(baseUrl: string) {
+  if (!baseUrl || !/^https?:\/\//i.test(baseUrl) || typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    const configured = new URL(baseUrl);
+    const current = window.location;
+    if (configured.hostname !== current.hostname) {
+      return false;
+    }
+
+    const configuredPort = configured.port;
+    const currentPort = current.port;
+    const sameExplicitPort = configuredPort !== "" && configuredPort === currentPort;
+    const missingCurrentPort = configuredPort === "" && currentPort !== "";
+
+    return configured.origin === current.origin || missingCurrentPort || (sameExplicitPort && configured.protocol !== current.protocol);
+  } catch {
+    return false;
+  }
 }
 
 function readRequestId(response: Response, problem?: ApiProblem) {

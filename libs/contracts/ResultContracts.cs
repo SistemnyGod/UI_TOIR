@@ -5,7 +5,10 @@ public sealed record ResultFilterDto(
     Guid? RouteId,
     Guid? EmployeeId,
     DateOnly? DateFrom,
-    DateOnly? DateTo);
+    DateOnly? DateTo,
+    Guid? AssignmentId = null,
+    string? Query = null,
+    bool? HasPhotos = null);
 
 public sealed record ResultListItemDto(
     Guid Id,

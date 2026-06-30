@@ -97,6 +97,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("route_id");
 
+                    b.Property<int>("RouteVersionNo")
+                        .HasColumnType("integer")
+                        .HasColumnName("route_version_no");
+
                     b.Property<string>("Shift")
                         .IsRequired()
                         .HasMaxLength(40)

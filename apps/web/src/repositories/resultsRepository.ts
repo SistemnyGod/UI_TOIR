@@ -4,7 +4,7 @@ import type { ResultDetailDto, ResultListItemDto } from "../api/contracts";
 import type { PatrolResult, PatrolResultAttachment } from "../types";
 
 export const patrolResultsFallback = patrolResults;
-const resultPageSize = 500;
+export const resultPageSize = 500;
 
 export function findPatrolResult(results: PatrolResult[], resultId: string) {
   return results.find((result) => result.id === resultId) ?? results[0];
@@ -20,6 +20,16 @@ export interface ResultFilterOptions {
   status?: string;
   dateFrom?: string;
   dateTo?: string;
+  assignmentId?: string;
+  query?: string;
+  hasPhotos?: boolean;
+}
+
+export interface ResultPage {
+  hasMore: boolean;
+  page: number;
+  pageSize: number;
+  results: PatrolResult[];
 }
 
 export function createApiResultsRepository({
@@ -33,8 +43,12 @@ export function createApiResultsRepository({
 
   return {
     async getResults(filters: ResultFilterOptions = {}, options: ApiRequestOptions = {}) {
-      const results = await getAllResults(client, filters, options);
-      return results.map(mapResult);
+      const page = await getResultPage(client, filters, options);
+      return page.results;
+    },
+
+    async getResultPage(filters: ResultFilterOptions = {}, options: ApiRequestOptions = {}): Promise<ResultPage> {
+      return getResultPage(client, filters, options);
     },
 
     async getResult(resultId: string, options: ApiRequestOptions = {}) {
@@ -57,23 +71,23 @@ export async function downloadResultAttachment(attachment: PatrolResultAttachmen
   return client.download(attachment.downloadUrl);
 }
 
-async function getAllResults(client: ApiClient, filters: ResultFilterOptions, options: ApiRequestOptions) {
-  const results: ResultListItemDto[] = [];
-  let page = 1;
+async function getResultPage(client: ApiClient, filters: ResultFilterOptions, options: ApiRequestOptions): Promise<ResultPage> {
+  const page = 1;
+  const pageResults = await client.get<ResultListItemDto[]>(
+    `/api/v1/results${buildResultQuery(filters, { page, pageSize: resultPageSize })}`,
+    options,
+  );
+  const nextPageResults = await client.get<ResultListItemDto[]>(
+    `/api/v1/results${buildResultQuery(filters, { page: page + 1, pageSize: resultPageSize })}`,
+    options,
+  );
 
-  while (true) {
-    const pageResults = await client.get<ResultListItemDto[]>(
-      `/api/v1/results${buildResultQuery(filters, { page, pageSize: resultPageSize })}`,
-      options,
-    );
-    results.push(...pageResults);
-
-    if (pageResults.length < resultPageSize) {
-      return results;
-    }
-
-    page += 1;
-  }
+  return {
+    hasMore: nextPageResults.length > 0,
+    page,
+    pageSize: resultPageSize,
+    results: pageResults.map(mapResult),
+  };
 }
 
 function buildResultQuery(filters: ResultFilterOptions, paging?: { page: number; pageSize: number }) {
@@ -84,6 +98,9 @@ function buildResultQuery(filters: ResultFilterOptions, paging?: { page: number;
   if (filters.employeeId) query.set("employeeId", filters.employeeId);
   if (filters.dateFrom) query.set("dateFrom", filters.dateFrom);
   if (filters.dateTo) query.set("dateTo", filters.dateTo);
+  if (filters.assignmentId) query.set("assignmentId", filters.assignmentId);
+  if (filters.query) query.set("query", filters.query);
+  if (filters.hasPhotos !== undefined) query.set("hasPhotos", String(filters.hasPhotos));
   if (paging) {
     query.set("page", String(paging.page));
     query.set("pageSize", String(paging.pageSize));
