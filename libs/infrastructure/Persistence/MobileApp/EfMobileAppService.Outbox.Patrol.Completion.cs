@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Patrol360.Contracts;
 using Patrol360.Infrastructure.Persistence.Entities;
@@ -175,34 +176,93 @@ internal sealed partial class EfMobileAppService
             return new ExistingCompleteReportValidation(false, true);
         }
 
-        var submittedResults = pointResults.ToArray();
+        var submittedSnapshots = BuildCompleteReportPayloadSnapshots(pointResults);
+        var payloadMatches = dbContext.MobileOutboxOperations
+            .AsNoTracking()
+            .Where(operation =>
+                operation.MobileAccountId == account.Id
+                && operation.CommandType == "completePatrolAssignment"
+                && operation.EntityServerId == assignment.Id.ToString()
+                && (operation.Status == "accepted" || operation.Status == "duplicate"))
+            .Select(operation => operation.PayloadJson)
+            .AsEnumerable()
+            .Any(payloadJson => CompleteReportPayloadMatches(submittedSnapshots, payloadJson));
 
-        if (submittedResults.Length != existingResults.Count)
+        return new ExistingCompleteReportValidation(
+            true,
+            payloadMatches);
+    }
+
+    private static bool CompleteReportPayloadMatches(
+        IReadOnlyList<CompletePointResultPayloadSnapshot> submittedSnapshots,
+        string payloadJson)
+    {
+        try
         {
-            return new ExistingCompleteReportValidation(true, false);
+            var payload = JsonSerializer.Deserialize<Dictionary<string, object?>>(payloadJson, JsonOptions);
+            if (payload is null)
+            {
+                return false;
+            }
+
+            var existingSnapshots = BuildCompleteReportPayloadSnapshots(ReadPointResults(payload));
+            return CompleteReportPayloadSnapshotsMatch(submittedSnapshots, existingSnapshots);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static IReadOnlyList<CompletePointResultPayloadSnapshot> BuildCompleteReportPayloadSnapshots(
+        IReadOnlyList<MobilePointResultPayload> pointResults) =>
+        pointResults
+            .Select(pointResult => new CompletePointResultPayloadSnapshot(
+                pointResult.PointId,
+                NormalizeOptionalText(pointResult.Status),
+                NormalizeOptionalText(pointResult.Comment),
+                NormalizeOptionalText(pointResult.IssueTypeId),
+                NormalizeOptionalText(pointResult.ConfirmationType),
+                NormalizeOptionalText(pointResult.NfcUidHash),
+                pointResult.PhotoClientFileIds
+                    .Select(fileId => NormalizeOptionalText(fileId))
+                    .Where(fileId => !string.IsNullOrWhiteSpace(fileId))
+                    .OrderBy(fileId => fileId, StringComparer.Ordinal)
+                    .ToArray()))
+            .OrderBy(snapshot => snapshot.PointId)
+            .ThenBy(snapshot => snapshot.Status, StringComparer.Ordinal)
+            .ThenBy(snapshot => snapshot.Comment, StringComparer.Ordinal)
+            .ThenBy(snapshot => snapshot.IssueType, StringComparer.Ordinal)
+            .ThenBy(snapshot => snapshot.ConfirmationType, StringComparer.Ordinal)
+            .ThenBy(snapshot => snapshot.NfcUidHash, StringComparer.Ordinal)
+            .ToArray();
+
+    private static bool CompleteReportPayloadSnapshotsMatch(
+        IReadOnlyList<CompletePointResultPayloadSnapshot> submittedSnapshots,
+        IReadOnlyList<CompletePointResultPayloadSnapshot> existingSnapshots)
+    {
+        if (submittedSnapshots.Count != existingSnapshots.Count)
+        {
+            return false;
         }
 
-        var submittedIssueCount = submittedResults.Count(item =>
-            item.Status.Equals("issue", StringComparison.OrdinalIgnoreCase) || IsSkippedPointResult(item));
-        var existingIssueCount = existingResults.Count(item => item.Status.Equals("issue", StringComparison.OrdinalIgnoreCase));
-        if (submittedIssueCount != existingIssueCount)
+        for (var index = 0; index < submittedSnapshots.Count; index += 1)
         {
-            return new ExistingCompleteReportValidation(true, false);
+            var submitted = submittedSnapshots[index];
+            var existing = existingSnapshots[index];
+            if (submitted.PointId != existing.PointId
+                || !submitted.Status.Equals(existing.Status, StringComparison.Ordinal)
+                || !submitted.Comment.Equals(existing.Comment, StringComparison.Ordinal)
+                || !submitted.IssueType.Equals(existing.IssueType, StringComparison.Ordinal)
+                || !submitted.ConfirmationType.Equals(existing.ConfirmationType, StringComparison.Ordinal)
+                || !submitted.NfcUidHash.Equals(existing.NfcUidHash, StringComparison.Ordinal)
+                || !submitted.PhotoClientFileIds.SequenceEqual(existing.PhotoClientFileIds, StringComparer.Ordinal))
+            {
+                return false;
+            }
         }
 
-        var submittedPointIds = submittedResults.Select(item => item.PointId).ToHashSet();
-        var submittedAttachmentCount = dbContext.MobileUploadedFiles.Count(file =>
-            file.MobileAccountId == account.Id
-            && file.AssignmentId == assignment.Id
-            && file.PointId != null
-            && submittedPointIds.Contains(file.PointId.Value));
-        var existingAttachmentCount = existingResults.Sum(item => item.Attachments.Count);
-        if (submittedAttachmentCount != existingAttachmentCount)
-        {
-            return new ExistingCompleteReportValidation(true, false);
-        }
-
-        return new ExistingCompleteReportValidation(true, true);
+        return true;
     }
 
     private void SaveMobilePointResults(
@@ -304,5 +364,64 @@ internal sealed partial class EfMobileAppService
         }
     }
 
+    private static string BuildPersistedMobilePointStatus(MobilePointResultPayload pointResult) =>
+        pointResult.Status.Equals("issue", StringComparison.OrdinalIgnoreCase) || IsSkippedPointResult(pointResult)
+            ? "issue"
+            : "ok";
+
+    private static string BuildPersistedMobilePointComment(MobilePointResultPayload pointResult)
+    {
+        var comment = NormalizeOptionalText(pointResult.Comment);
+        if (IsSkippedPointResult(pointResult))
+        {
+            return string.IsNullOrWhiteSpace(comment)
+                ? "РњРµС‚РєР° РЅРµРґРѕСЃС‚СѓРїРЅР°"
+                : $"РњРµС‚РєР° РЅРµРґРѕСЃС‚СѓРїРЅР°: {comment}";
+        }
+
+        if (IsManualPointResult(pointResult))
+        {
+            return string.IsNullOrWhiteSpace(comment)
+                ? "Р—Р°РїРѕР»РЅРµРЅРѕ РІСЂСѓС‡РЅСѓСЋ Р±РµР· СЃРєР°РЅРёСЂРѕРІР°РЅРёСЏ"
+                : $"Р—Р°РїРѕР»РЅРµРЅРѕ РІСЂСѓС‡РЅСѓСЋ Р±РµР· СЃРєР°РЅРёСЂРѕРІР°РЅРёСЏ: {comment}";
+        }
+
+        return string.IsNullOrWhiteSpace(comment) ? "-" : comment;
+    }
+
+    private static string BuildPersistedMobilePointIssueType(MobilePointResultPayload pointResult)
+    {
+        if (IsSkippedPointResult(pointResult))
+        {
+            return "РњРµС‚РєР° РЅРµРґРѕСЃС‚СѓРїРЅР°";
+        }
+
+        return pointResult.Status.Equals("issue", StringComparison.OrdinalIgnoreCase)
+            ? NormalizeOptionalText(pointResult.IssueTypeId, "issue")
+            : "-";
+    }
+
+    private static string BuildPersistedMobilePointSeverity(MobilePointResultPayload pointResult) =>
+        BuildPersistedMobilePointStatus(pointResult).Equals("issue", StringComparison.Ordinal)
+            ? "medium"
+            : "-";
+
     private sealed record ExistingCompleteReportValidation(bool HasExistingReport, bool PayloadMatches);
+
+    private sealed record CompletePointResultPayloadSnapshot(
+        Guid PointId,
+        string Status,
+        string Comment,
+        string IssueType,
+        string ConfirmationType,
+        string NfcUidHash,
+        IReadOnlyList<string> PhotoClientFileIds);
+
+    private sealed record CompletePointResultSnapshot(
+        Guid? PointId,
+        string Status,
+        string Comment,
+        string IssueType,
+        string Severity,
+        IReadOnlyList<string> AttachmentFileNames);
 }

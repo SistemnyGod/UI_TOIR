@@ -1,6 +1,7 @@
 services:
   web:
     image: docker-web:latest
+    depends_on: !reset []
     build:
       context: .
       dockerfile: apps/web/Dockerfile.prebuilt

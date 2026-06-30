@@ -33,6 +33,12 @@
 		format json
 	}
 
+	@legacy_no_port {
+		header_regexp legacyHost Host ^([^:]+)(?::80)?$
+		not path /health/*
+	}
+	redir @legacy_no_port http://{re.legacyHost.1}:5173{uri} 308
+
 	import patrol360_routes
 }
 

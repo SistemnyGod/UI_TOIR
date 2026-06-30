@@ -138,6 +138,31 @@ public sealed class MobileAppDbIntegrationTests
         Assert.Single(scanRejected);
         Assert.Equal("rejected", scanRejected[0].Status);
 
+        var repeatedScanRejected = UseMobileApp(provider, mobile => mobile.SaveOutbox(
+            login.Session.AccessToken,
+            new MobileOutboxBatchDto([
+                new MobileOutboxCommandDto(
+                    "op-scan-rejected",
+                    "scanPatrolPointNfc",
+                    "patrolPoint",
+                    null,
+                    routePoint.PointId.ToString(),
+                    new Dictionary<string, object?>
+                    {
+                        ["assignmentId"] = assignmentId,
+                        ["pointId"] = routePoint.PointId,
+                        ["nfcUidHash"] = "WRONG-TAG",
+                        ["scannedAtLocal"] = DateTimeOffset.UtcNow,
+                    },
+                    DateTimeOffset.UtcNow,
+                    1,
+                    "pending")
+            ])));
+
+        Assert.Single(repeatedScanRejected);
+        Assert.Equal("rejected", repeatedScanRejected[0].Status);
+        Assert.Equal(scanRejected[0].Message, repeatedScanRejected[0].Message);
+
         var qrAccepted = UseMobileApp(provider, mobile => mobile.SaveOutbox(
             login.Session.AccessToken,
             new MobileOutboxBatchDto([
@@ -318,9 +343,7 @@ public sealed class MobileAppDbIntegrationTests
             .Select(point => new Dictionary<string, object?>(point))
             .ToArray();
         var changedPointResult = changedPointResults.First(point => !Equals(point["pointId"], routePoint.PointId));
-        changedPointResult["status"] = "issue";
         changedPointResult["comment"] = "Changed payload after accepted report";
-        changedPointResult["issueTypeId"] = "changed";
         var changedComplete = UseMobileApp(provider, mobile => mobile.SaveOutbox(
             login.Session.AccessToken,
             new MobileOutboxBatchDto([
@@ -382,6 +405,15 @@ public sealed class MobileAppDbIntegrationTests
 
         Assert.Single(conflictOutbox);
         Assert.Equal("conflict", conflictOutbox[0].Status);
+
+        var repeatedConflictOutbox = UseMobileApp(provider, mobile => mobile.SaveOutbox(
+            login.Session.AccessToken,
+            new MobileOutboxBatchDto([conflictCommand])));
+
+        Assert.Single(repeatedConflictOutbox);
+        Assert.Equal("conflict", repeatedConflictOutbox[0].Status);
+        Assert.Equal(conflictOutbox[0].Message, repeatedConflictOutbox[0].Message);
+        Assert.Equal(conflictOutbox[0].ConflictId, repeatedConflictOutbox[0].ConflictId);
 
         var unsupportedOutbox = UseMobileApp(provider, mobile => mobile.SaveOutbox(
             login.Session.AccessToken,

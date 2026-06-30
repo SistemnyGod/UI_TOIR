@@ -39,14 +39,7 @@ internal sealed partial class EfMobileAppService
                 .FirstOrDefault(item => item.ClientOperationId == command.ClientOperationId);
             if (existing is not null)
             {
-                responses.Add(new MobileOutboxResponseDto(
-                    command.ClientOperationId,
-                    "duplicate",
-                    existing.EntityServerId,
-                    null,
-                    "Command was already accepted.",
-                    null,
-                    null));
+                responses.Add(BuildRepeatedOutboxResponse(existing));
                 continue;
             }
 
@@ -121,5 +114,40 @@ internal sealed partial class EfMobileAppService
         dbContext.SaveChanges();
         return responses;
     }
-}
 
+    private static MobileOutboxResponseDto BuildRepeatedOutboxResponse(MobileOutboxOperationEntity existing)
+    {
+        MobileOutboxResponseDto? storedResponse = null;
+        try
+        {
+            storedResponse = JsonSerializer.Deserialize<MobileOutboxResponseDto>(existing.ResponseJson, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            // Older or manually repaired rows may not have a readable response snapshot.
+        }
+
+        var status = storedResponse?.Status ?? existing.Status;
+        if (status.Equals("accepted", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("duplicate", StringComparison.OrdinalIgnoreCase))
+        {
+            return new MobileOutboxResponseDto(
+                existing.ClientOperationId,
+                "duplicate",
+                storedResponse?.ServerEntityId ?? existing.EntityServerId,
+                storedResponse?.ServerRevision,
+                "Command was already accepted.",
+                null,
+                null);
+        }
+
+        return storedResponse ?? new MobileOutboxResponseDto(
+            existing.ClientOperationId,
+            string.IsNullOrWhiteSpace(existing.Status) ? "rejected" : existing.Status,
+            existing.EntityServerId,
+            null,
+            "Command was already processed.",
+            null,
+            null);
+    }
+}

@@ -24403,6 +24403,15 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
   line-height: 1;
 }
 
+.screen-area .schedule-plan-modal-head-actions .schedule-plan-close-button::before {
+  content: none;
+}
+
+.screen-area .schedule-plan-modal-head-actions .schedule-plan-close-button svg {
+  width: 18px;
+  height: 18px;
+}
+
 .screen-area .schedule-plan-modal-head-actions .icon-button:hover {
   border-color: #9fc2ff;
   background: #f4f8ff;
@@ -24485,57 +24494,77 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
 }
 
 .screen-area .schedule-plan-notify-row {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  min-height: 36px;
   color: #17345f;
   font-size: 13px;
   font-weight: 900;
-}
-
-.screen-area .schedule-plan-notify-row span {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.screen-area .schedule-plan-notify-row svg {
-  color: #0b63f6;
-}
-
-.screen-area .schedule-plan-notify-row input {
-  position: relative;
-  width: 38px;
-  height: 22px;
-  flex: 0 0 38px;
-  appearance: none;
-  border: 1px solid #c5d7ee;
-  border-radius: 999px;
-  background: #dbe7f6;
   cursor: pointer;
 }
 
-.screen-area .schedule-plan-notify-row input::after {
+.screen-area .schedule-plan-notify-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.screen-area .schedule-plan-notify-label svg {
+  flex: 0 0 auto;
+  color: #0b63f6;
+}
+
+.screen-area .schedule-plan-notify-input {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
+  right: 0;
+  width: 44px;
+  height: 24px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.screen-area .schedule-plan-switch {
+  position: relative;
+  display: inline-flex;
+  width: 44px;
+  height: 24px;
+  flex: 0 0 44px;
+  align-items: center;
+  border: 1px solid #c5d7ee;
+  border-radius: 999px;
+  background: #dbe7f6;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.screen-area .schedule-plan-switch span {
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
   border-radius: 999px;
   background: #ffffff;
   box-shadow: 0 1px 4px rgba(15, 42, 77, 0.25);
-  content: "";
   transition: transform 160ms ease;
 }
 
-.screen-area .schedule-plan-notify-row input:checked {
+.screen-area .schedule-plan-notify-row.is-checked .schedule-plan-switch {
   border-color: #0b63f6;
   background: #0b63f6;
 }
 
-.screen-area .schedule-plan-notify-row input:checked::after {
-  transform: translateX(16px);
+.screen-area .schedule-plan-notify-row.is-checked .schedule-plan-switch span {
+  transform: translateX(20px);
+}
+
+.screen-area .schedule-plan-notify-input:focus-visible + .schedule-plan-switch {
+  box-shadow: 0 0 0 3px rgba(11, 99, 246, 0.18);
 }
 
 .screen-area .schedule-plan-message {

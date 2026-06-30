@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bell, CalendarDays, ChevronDown, Clock3, MapPin, Moon, UserRound } from "lucide-react";
+import { Bell, CalendarDays, ChevronDown, Clock3, MapPin, Moon, UserRound, X } from "lucide-react";
 import { Chip, Field } from "../../../../shared/ui";
 import type {
   CreateServiceRequestPayload,
@@ -193,8 +193,8 @@ export function ScheduleEditPanel({
         </div>
         <div className="schedule-plan-modal-head-actions">
           <Chip>{getSelectedChipLabel(selected)}</Chip>
-          <button className="icon-button" onClick={onClose} type="button" aria-label="Закрыть">
-            ×
+          <button className="icon-button schedule-plan-close-button" onClick={onClose} type="button" aria-label="Закрыть">
+            <X aria-hidden="true" size={18} strokeWidth={2.6} />
           </button>
         </div>
       </div>
@@ -316,16 +316,20 @@ export function ScheduleEditPanel({
           <ChevronDown aria-hidden="true" className="schedule-plan-field-caret" size={18} />
         </SchedulePlanField>
 
-        <label className="schedule-plan-notify-row">
-          <span>
+        <label className={`schedule-plan-notify-row ${notifyEmployee ? "is-checked" : ""}`}>
+          <span className="schedule-plan-notify-label">
             <Bell size={18} />
             Уведомить сотрудника
           </span>
           <input
+            className="schedule-plan-notify-input"
             checked={notifyEmployee}
             onChange={(event) => setNotifyEmployee(event.currentTarget.checked)}
             type="checkbox"
           />
+          <span className="schedule-plan-switch" aria-hidden="true">
+            <span />
+          </span>
         </label>
 
         <label className="schedule-plan-message">

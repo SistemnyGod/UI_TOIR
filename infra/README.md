@@ -40,3 +40,21 @@ docker compose -f .\infra\docker\compose.yaml --profile app down
 Шаблон локальных переменных находится в `infra/env/.env.example`.
 
 Production secrets не хранятся в репозитории.
+
+## Web-only update
+
+Канонический внешний URL:
+
+```text
+http://192.168.2.194:5173
+```
+
+Для обновления только web-статики используйте:
+
+```powershell
+.\infra\scripts\update-patrol360-web-only.ps1
+```
+
+Скрипт собирает `apps\web`, пересобирает `docker-web:latest`, выполняет `docker compose up -d --no-deps web`,
+проверяет health `patrol360-web` и падает, если во время web-only обновления изменились container id
+`patrol360-api` или `patrol360-postgres`.
