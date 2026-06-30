@@ -368,8 +368,8 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
     private static string BuildAssignmentPhotoFilterSql(ResultFilterDto filter) =>
         filter.HasPhotos switch
         {
-            true => "HAVING SUM(CASE WHEN photos > 0 THEN 1 ELSE 0 END) > 0",
-            false => "HAVING COALESCE(SUM(photos), 0) = 0",
+            true => "HAVING EXISTS (SELECT 1 FROM patrol_results media_results WHERE media_results.assignment_id = filtered.assignment_id AND media_results.photos > 0)",
+            false => "HAVING NOT EXISTS (SELECT 1 FROM patrol_results media_results WHERE media_results.assignment_id = filtered.assignment_id AND media_results.photos > 0)",
             _ => string.Empty
         };
 

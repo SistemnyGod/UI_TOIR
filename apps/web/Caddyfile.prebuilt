@@ -20,6 +20,12 @@
 	header /index.html Cache-Control "no-cache, must-revalidate"
 	header / Cache-Control "no-cache, must-revalidate"
 
-	try_files {path} /index.html
-	file_server
+	handle /assets/* {
+		file_server
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
 }

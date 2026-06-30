@@ -27,7 +27,7 @@ import { RequestModals } from "../features/patrol/components/requests/RequestMod
 import { EmployeeDirectoryPanel } from "../features/patrol/components/employees/EmployeeDirectoryPanel";
 import { EmployeeProfileDrawer } from "../features/patrol/components/employees/EmployeeProfileDrawer";
 import { InventoryPpeScreen } from "../screens/inventory/InventoryPpeScreen";
-import { CompactTable, KpiStrip, PaginationBar } from "../shared/ui";
+import { CompactTable, KpiStrip, PaginationBar, RouteLoadingBar, SkeletonCards, SkeletonForm, SkeletonPreview, SkeletonTable } from "../shared/ui";
 import { LoginScreen } from "../screens/LoginScreen";
 import type { PatrolResult, SiteUser } from "../types";
 import type { ResultGroup } from "../features/patrol/results/resultTypes";
@@ -135,6 +135,24 @@ describe("shared UI primitives", () => {
 
     expect(onPageChange).toHaveBeenCalledWith(3);
     expect(onPageSizeChange).toHaveBeenCalledWith(50);
+  });
+
+  it("renders shared loading primitives", () => {
+    const { container } = render(
+      <>
+        <RouteLoadingBar active />
+        <SkeletonCards cards={2} />
+        <SkeletonTable rows={2} columns={3} />
+        <SkeletonForm fields={2} />
+        <SkeletonPreview />
+      </>,
+    );
+
+    expect(container.querySelector(".route-loading-line.is-active")).toBeInTheDocument();
+    expect(container.querySelectorAll(".skeleton-card")).toHaveLength(2);
+    expect(container.querySelectorAll(".skeleton-table-row")).toHaveLength(8);
+    expect(container.querySelectorAll(".skeleton-field")).toHaveLength(2);
+    expect(container.querySelector(".skeleton-preview")).toBeInTheDocument();
   });
 
   it("requires matching initial password when creating a site user", async () => {

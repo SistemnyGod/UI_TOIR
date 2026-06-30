@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type {
   AccountMode,
   ActivePatrol,
@@ -28,6 +28,7 @@ import type {
 } from "../../types";
 import type { SessionUserDto } from "../../api/contracts";
 import { hasPermission } from "../../security/permissions";
+import { PageTransition, RouteLoadingBar, SkeletonCards, SkeletonForm, SkeletonPreview, SkeletonTable } from "../../shared/ui";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -66,6 +67,21 @@ function isInventoryScreen(screen: ScreenId): screen is InventoryScreenId {
 
 function isEmuScreen(screen: ScreenId): screen is EmuScreenId {
   return emuScreens.has(screen);
+}
+
+function ScreenSkeleton({ screen }: { screen: ScreenId }) {
+  const isPreviewLike = screen === "inventory-ppe" || screen === "inventory-reports" || screen === "results";
+  const isFormLike = screen === "assign" || screen === "schedule" || screen === "routes";
+
+  return (
+    <div className="screen-loading screen-skeleton" aria-label="Загрузка раздела">
+      <SkeletonCards cards={isPreviewLike ? 5 : 4} />
+      <div className="screen-skeleton-grid">
+        <SkeletonTable rows={isFormLike ? 5 : 7} columns={isPreviewLike ? 7 : 5} />
+        {isPreviewLike ? <SkeletonPreview /> : <SkeletonForm fields={5} />}
+      </div>
+    </div>
+  );
 }
 
 export function ScreenRouter({
@@ -229,9 +245,19 @@ export function ScreenRouter({
   selectedScheduleCellId: string;
   selectedUserId: string;
 }) {
+  const [routePending, setRoutePending] = useState(false);
+
+  useEffect(() => {
+    setRoutePending(true);
+    const timeoutId = window.setTimeout(() => setRoutePending(false), 220);
+    return () => window.clearTimeout(timeoutId);
+  }, [screen]);
+
   return (
     <div className="screen-area">
-      <Suspense fallback={<div className="screen-loading">Загрузка раздела...</div>}>
+      <RouteLoadingBar active={routePending} />
+      <Suspense fallback={<ScreenSkeleton screen={screen} />}>
+        <PageTransition key={screen} screenKey={screen}>
         {screen === "dashboard" ? (
           <DashboardScreen
             activePatrols={activePatrols}
@@ -411,6 +437,7 @@ export function ScreenRouter({
             screen={screen}
           />
         ) : null}
+        </PageTransition>
       </Suspense>
     </div>
   );

@@ -132,6 +132,27 @@ public sealed class ResultsDbIntegrationTests
     }
 
     [DbIntegrationFact]
+    public async Task ResultsNoPhotosFilterIsAppliedBeforePaging()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+
+        await provider.InitializePatrolDatabaseAsync();
+        var now = DateTimeOffset.UtcNow.AddDays(32);
+        var noPhotoResultId = await InsertStandalonePatrolResultAsync(database.ConnectionString, "No media point", now, photos: 0);
+        var photoResultId = await InsertStandalonePatrolResultAsync(database.ConnectionString, "With media point", now.AddMinutes(-1), photos: 1);
+
+        var filtered = UseResults(provider, query => query.GetResults(
+            new ResultFilterDto(null, null, null, null, null, HasPhotos: false),
+            page: 1,
+            pageSize: 10));
+
+        Assert.Contains(filtered, item => item.Id == noPhotoResultId);
+        Assert.DoesNotContain(filtered, item => item.Id == photoResultId);
+        Assert.All(filtered.Where(item => item.Id == noPhotoResultId), item => Assert.Equal(0, item.Photos));
+    }
+
+    [DbIntegrationFact]
     public async Task ResultsExportIsCappedAndMarkedWhenFilterMatchesTooManyRows()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
@@ -254,6 +275,63 @@ public sealed class ResultsDbIntegrationTests
         command.Parameters.AddWithValue("issue_type", "-");
         command.Parameters.AddWithValue("severity", "-");
         command.Parameters.AddWithValue("photos", 0);
+        command.Parameters.AddWithValue("created_at", actualAt);
+
+        await command.ExecuteNonQueryAsync();
+        return resultId;
+    }
+
+    private static async Task<Guid> InsertStandalonePatrolResultAsync(
+        string connectionString,
+        string pointName,
+        DateTimeOffset actualAt,
+        int photos)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        var resultId = Guid.NewGuid();
+        command.CommandText = """
+            insert into patrol_results (
+                id,
+                assignment_id,
+                status,
+                point_name,
+                employee_name,
+                route_name,
+                territory,
+                shift,
+                planned_at,
+                actual_at,
+                deviation,
+                comment,
+                issue_type,
+                severity,
+                photos,
+                created_at)
+            values (
+                @id,
+                NULL,
+                'ok',
+                @point_name,
+                'Photo Filter Employee',
+                'Photo Filter Route',
+                'Photo Filter Territory',
+                'day',
+                @planned_at,
+                @actual_at,
+                '0',
+                '-',
+                '-',
+                '-',
+                @photos,
+                @created_at);
+            """;
+        command.Parameters.AddWithValue("id", resultId);
+        command.Parameters.AddWithValue("point_name", pointName);
+        command.Parameters.AddWithValue("planned_at", actualAt.AddMinutes(-15));
+        command.Parameters.AddWithValue("actual_at", actualAt);
+        command.Parameters.AddWithValue("photos", photos);
         command.Parameters.AddWithValue("created_at", actualAt);
 
         await command.ExecuteNonQueryAsync();
