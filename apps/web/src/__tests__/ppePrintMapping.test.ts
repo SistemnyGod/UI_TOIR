@@ -49,6 +49,21 @@ describe("ppe print mapping", () => {
     expect(html).not.toContain("Перчатки диэлектрические");
   });
 
+  it("keeps returned issued PPE in the signature sheet return block", () => {
+    const returnedLine = {
+      ...issuedLine(),
+      dueAt: "2026-07-01T00:00:00.000Z",
+      id: "ppe-line-returned",
+      status: "returned",
+    };
+    const data = printDataFromDetail(cardDetail({ lines: [sectionLine(), returnedLine, notIssuedLine()] }), inventoryItems());
+    const html = buildPrintHtml(data, "sheet");
+
+    expect(html).toContain(returnedLine.printItemName);
+    expect(html).toContain("01.07.2026");
+    expect(html).not.toContain(notIssuedLine().printItemName);
+  });
+
   it("uses explicit issue method in the signature sheet when available", () => {
     const data = printDataFromDetail(cardDetail(), inventoryItems());
     data.lines = data.lines.map((line) =>

@@ -21,6 +21,7 @@ import {
   getDefaultDueDate,
   getDefaultIssuePeriodText,
   getInitials,
+  isPpeSignatureLineStatus,
   itemModelDescription,
   moneyMinorToInput,
   parsePositiveQuantity,
@@ -169,7 +170,7 @@ export function InventoryPpeScreen({
     [detail?.lines, itemsById, mappings, positionNorms, selectedEmployee?.position],
   );
   const printData = useMemo(() => buildEmployeePrintData(selectedEmployee, detail, normRows, employeeDetails), [detail, employeeDetails, normRows, selectedEmployee]);
-  const issueRows = useMemo(() => printData.lines.filter((line) => !line.isSectionTitle && isPpeSignatureStatus(line.status)), [printData.lines]);
+  const issueRows = useMemo(() => printData.lines.filter((line) => !line.isSectionTitle && isPpeSignatureLineStatus(line.status)), [printData.lines]);
   const printErrors = useMemo(() => validatePpeEmployeePrintDetails(employeeDetails), [employeeDetails]);
   const counts = useMemo(() => calculateEmployeePpeCounts(normRows, printErrors.length), [normRows, printErrors.length]);
   const checkSummary = useMemo(() => buildPpeCheckSummary(normRows, printData, printErrors), [normRows, printData, printErrors]);

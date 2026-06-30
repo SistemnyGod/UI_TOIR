@@ -5,7 +5,7 @@ import type {
   InventoryPpeCardLineDto,
   InventoryPositionNormDto,
 } from "../../../api/contracts";
-import { defaultIssuePeriodText } from "./ppeStatusCatalog";
+import { PPE_STATUS, defaultIssuePeriodText } from "./ppeStatusCatalog";
 import { moneyMinorToInput, parsePositiveQuantity } from "./ppeFormatters";
 import type { PickerLineInput, PpeWizardState, PrintData, PrintLine } from "./ppeTypes";
 
@@ -219,7 +219,12 @@ export function isConsumableLine(line: PrintLine) {
 }
 
 export function isPpeSignatureLineStatus(status?: string | null) {
-  return status === "issued" || status === "replacement" || status === "reissued";
+  return status === PPE_STATUS.issued
+    || status === PPE_STATUS.partial
+    || status === PPE_STATUS.replacement
+    || status === PPE_STATUS.reissued
+    || status === PPE_STATUS.returned
+    || status === PPE_STATUS.writtenOff;
 }
 
 function itemModelDescriptionFromOptional(item?: InventoryItemDto | null) {

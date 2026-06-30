@@ -2,6 +2,7 @@ import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import { Printer, X } from "lucide-react";
 import { escapeHtml, formatDate, formatQuantity, isConsumableLine, isPpeSignatureLineStatus } from "./ppeCommon";
+import { PPE_STATUS } from "./ppeStatusCatalog";
 import type { PrintData, PrintLine, PrintMode } from "./ppeTypes";
 
 export const PPE_NORM_TEXT =
@@ -333,10 +334,10 @@ function SignatureLinesTable({
               <td>{signatureQuantity(line)}</td>
               <td>{issueMethodText(line)}</td>
               <td />
+              <td>{returnDateText(line)}</td>
+              <td>{returnQuantityText(line)}</td>
               <td />
-              <td />
-              <td />
-              <td />
+              <td>{writeOffActText(line)}</td>
             </tr>
           ))
         ) : (
@@ -425,7 +426,7 @@ function buildSheetHtml(data: PrintData) {
     ? signatureLines(data.lines)
         .map(
           (line) =>
-            `<tr><td>${escapeHtml(printItemName(line))}</td><td>${escapeHtml(brandModelArticle(line) || "-")}</td><td>${escapeHtml(formatSheetIssuedAt(line.issuedAt))}</td><td>${escapeHtml(signatureQuantity(line))}</td><td>${escapeHtml(issueMethodText(line))}</td><td></td><td></td><td></td><td></td><td></td></tr>`,
+            `<tr><td>${escapeHtml(printItemName(line))}</td><td>${escapeHtml(brandModelArticle(line) || "-")}</td><td>${escapeHtml(formatSheetIssuedAt(line.issuedAt))}</td><td>${escapeHtml(signatureQuantity(line))}</td><td>${escapeHtml(issueMethodText(line))}</td><td></td><td>${escapeHtml(returnDateText(line))}</td><td>${escapeHtml(returnQuantityText(line))}</td><td></td><td>${escapeHtml(writeOffActText(line))}</td></tr>`,
         )
         .join("")
     : `<tr><td colspan="10">Нет строк со статусом &quot;Выдано&quot;. Переключите нужные строки в &quot;Выдано&quot;, чтобы они попали в лист подписи.</td></tr>`;
@@ -509,6 +510,22 @@ function issueMethodText(line: PrintLine) {
   if (line.issueMethod === "dispenser") return "дозатор";
   if (line.issueMethod === "personal") return "лично";
   return isConsumableLine(line) ? "дозатор" : "лично";
+}
+
+function isReturnLine(line: PrintLine) {
+  return line.status === PPE_STATUS.returned || line.status === PPE_STATUS.writtenOff;
+}
+
+function returnDateText(line: PrintLine) {
+  return isReturnLine(line) ? formatSheetIssuedAt(line.dueAt) : "";
+}
+
+function returnQuantityText(line: PrintLine) {
+  return isReturnLine(line) ? signatureQuantity(line) : "";
+}
+
+function writeOffActText(line: PrintLine) {
+  return line.status === PPE_STATUS.writtenOff ? "Требуется акт" : "";
 }
 
 function formatSheetIssuedAt(value?: string | null) {
