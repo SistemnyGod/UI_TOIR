@@ -22,7 +22,18 @@
   min-height: 100vh;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(245, 249, 255, 0.96) 58%, rgba(238, 246, 255, 0.94) 100%),
-    url("/inventory-issue-mountains.png") center bottom / cover no-repeat;
+    linear-gradient(135deg, #f8fbff 0%, #eaf3ff 100%);
+}
+
+@supports (background-image: image-set(url("/inventory-issue-mountains.webp") type("image/webp"))) {
+  .inventory-web-workspace:has(.inventory-issue-screen),
+  .inventory-web-workspace:has(.inventory-operations-screen),
+  .inventory-web-workspace:has(.inventory-custody-screen),
+  .inventory-web-workspace:has(.inventory-ppe-screen) {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(245, 249, 255, 0.96) 58%, rgba(238, 246, 255, 0.94) 100%),
+      image-set(url("/inventory-issue-mountains.webp") type("image/webp")) center bottom / cover no-repeat;
+  }
 }
 
 .inventory-web-workspace:has(.inventory-operations-screen) {
@@ -694,4 +705,3 @@
     flex: 1 1 104px;
   }
 }
-

@@ -3,7 +3,15 @@
   min-height: 100vh;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(240, 247, 255, 0.92) 72%),
-    url("/inventory-issue-mountains.png") center bottom / cover no-repeat;
+    linear-gradient(135deg, #f8fbff 0%, #eaf3ff 100%);
+}
+
+@supports (background-image: image-set(url("/inventory-issue-mountains.webp") type("image/webp"))) {
+  .inventory-web-workspace:has(.inventory-issue-screen) {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(240, 247, 255, 0.92) 72%),
+      image-set(url("/inventory-issue-mountains.webp") type("image/webp")) center bottom / cover no-repeat;
+  }
 }
 
 .inventory-issue-screen {

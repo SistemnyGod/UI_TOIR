@@ -14,6 +14,7 @@ function parsePort(value: string | undefined, fallback: number) {
 export default defineConfig({
   root: appRoot,
   build: {
+    modulePreload: false,
     rollupOptions: {
       output: {
         manualChunks(id) {
