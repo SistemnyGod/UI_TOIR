@@ -193,6 +193,7 @@ public sealed record MobileSyncConflictResolutionRequestDto(
 
 public sealed record MobileSyncConflictResolutionDto(
     string ClientOperationId,
+    Guid MobileAccountId,
     string Status,
     string? Comment,
     string ResolvedBy,

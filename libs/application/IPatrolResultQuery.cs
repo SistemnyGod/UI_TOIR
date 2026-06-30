@@ -4,7 +4,7 @@ namespace Patrol360.Application;
 
 public interface IPatrolResultQuery
 {
-    IReadOnlyList<ResultListItemDto> GetResults(ResultFilterDto filter);
+    IReadOnlyList<ResultListItemDto> GetResults(ResultFilterDto filter, int page = 1, int pageSize = 100);
 
     ResultExportFileDto ExportResults(ResultFilterDto filter);
 
@@ -21,4 +21,7 @@ public sealed record ResultAttachmentFileDto(
 public sealed record ResultExportFileDto(
     byte[] Content,
     string ContentType,
-    string FileName);
+    string FileName,
+    bool Truncated = false,
+    int RowCount = 0,
+    int MaxRows = 0);

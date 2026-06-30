@@ -13,7 +13,7 @@ export function MobileSyncPanel({
   deviceHealth: MobileDeviceHealth[];
   errorMessage?: string;
   onRefresh: () => void;
-  onResolve: (clientOperationId: string, status: "accepted" | "rejected" | "repeatRequested") => void;
+  onResolve: (mobileAccountId: string, clientOperationId: string, status: "accepted" | "rejected" | "repeatRequested") => void;
   status: "idle" | "loading" | "ready" | "error";
 }) {
   return (
@@ -56,7 +56,7 @@ export function MobileSyncPanel({
           ) : (
             <div className="anomaly-list">
               {conflicts.slice(0, 6).map((conflict) => (
-                <div className="anomaly-row" key={conflict.clientOperationId}>
+                <div className="anomaly-row" key={`${conflict.mobileAccountId}:${conflict.clientOperationId}`}>
                   <Chip>{formatConflictStatus(conflict.status)}</Chip>
                   <div>
                     <strong>{conflict.commandType}</strong>
@@ -70,13 +70,13 @@ export function MobileSyncPanel({
                     </details>
                   </div>
                   <div className="inline-actions">
-                    <button className="button ghost" onClick={() => onResolve(conflict.clientOperationId, "repeatRequested")} type="button">
+                    <button className="button ghost" onClick={() => onResolve(conflict.mobileAccountId, conflict.clientOperationId, "repeatRequested")} type="button">
                       Повторить
                     </button>
-                    <button className="button ghost" onClick={() => onResolve(conflict.clientOperationId, "rejected")} type="button">
+                    <button className="button ghost" onClick={() => onResolve(conflict.mobileAccountId, conflict.clientOperationId, "rejected")} type="button">
                       Отклонить
                     </button>
-                    <button className="button primary" onClick={() => onResolve(conflict.clientOperationId, "accepted")} type="button">
+                    <button className="button primary" onClick={() => onResolve(conflict.mobileAccountId, conflict.clientOperationId, "accepted")} type="button">
                       Принять
                     </button>
                   </div>

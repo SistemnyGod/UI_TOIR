@@ -49,6 +49,10 @@ Production secrets не хранятся в репозитории.
 http://192.168.2.194:5173
 ```
 
+Локальные алиасы `http://localhost:5173` и `http://127.0.0.1:5173` не используйте для smoke:
+они имеют отдельные browser cookies/localStorage и могут показывать другой session/mock-api state.
+Proxy перенаправляет эти алиасы на канонический LAN URL.
+
 Для обновления только web-статики используйте:
 
 ```powershell

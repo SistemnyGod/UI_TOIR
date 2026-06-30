@@ -19,21 +19,22 @@ public sealed class MobileSyncController(IMobileSyncAdminService syncAdminServic
     public ActionResult<IReadOnlyList<MobileDeviceHealthDto>> DeviceHealth() =>
         Ok(syncAdminService.GetDeviceHealth());
 
-    [HttpGet("conflicts/{clientOperationId}")]
+    [HttpGet("conflicts/{mobileAccountId:guid}/{clientOperationId}")]
     [RequirePermission("results.read")]
-    public ActionResult<MobileSyncConflictDetailDto> Conflict(string clientOperationId)
+    public ActionResult<MobileSyncConflictDetailDto> Conflict(Guid mobileAccountId, string clientOperationId)
     {
-        var conflict = syncAdminService.GetConflict(clientOperationId);
+        var conflict = syncAdminService.GetConflict(mobileAccountId, clientOperationId);
         return conflict is null ? NotFound() : Ok(conflict);
     }
 
-    [HttpPost("conflicts/{clientOperationId}/resolution")]
+    [HttpPost("conflicts/{mobileAccountId:guid}/{clientOperationId}/resolution")]
     [RequirePermission("results.read")]
     public ActionResult<MobileSyncConflictResolutionDto> Resolve(
+        Guid mobileAccountId,
         string clientOperationId,
         MobileSyncConflictResolutionRequestDto request)
     {
-        var result = syncAdminService.SetResolution(clientOperationId, request, User.Identity?.Name ?? "operator");
+        var result = syncAdminService.SetResolution(mobileAccountId, clientOperationId, request, User.Identity?.Name ?? "operator");
         return result is null ? NotFound() : Ok(result);
     }
 }

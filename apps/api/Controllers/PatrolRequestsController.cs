@@ -11,7 +11,10 @@ public sealed class PatrolRequestsController(IPatrolRequestService patrolRequest
 {
     [HttpGet]
     [RequirePermission("requests.read")]
-    public ActionResult<IReadOnlyList<PatrolRequestDto>> List() => Ok(patrolRequestService.GetRequests());
+    public ActionResult<IReadOnlyList<PatrolRequestDto>> List(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 100) =>
+        Ok(patrolRequestService.GetRequests(page, pageSize));
 
     [HttpPost]
     [RequirePermission("requests.write")]

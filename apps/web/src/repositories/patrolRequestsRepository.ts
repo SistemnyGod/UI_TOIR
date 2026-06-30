@@ -10,6 +10,7 @@ import type { CreateServiceRequestPayload, DataSourceMode, ServiceRequest } from
 
 export const patrolRequestsStorageKey = "patrol360.patrolRequests";
 export const patrolRequestsFallback = serviceRequests;
+const patrolRequestPageSize = 500;
 export { isServiceRequestList };
 
 export function resolveServiceRequests({
@@ -60,7 +61,7 @@ export function createApiPatrolRequestsRepository({
 
   return {
     async getPatrolRequests(options: ApiRequestOptions = {}) {
-      const requests = await client.get<PatrolRequestDto[]>("/api/v1/patrol-requests", options);
+      const requests = await getAllPatrolRequests(client, options);
       return requests.map(mapPatrolRequest);
     },
 
@@ -83,6 +84,25 @@ export function createApiPatrolRequestsRepository({
       return mapPatrolRequest(request);
     },
   };
+}
+
+async function getAllPatrolRequests(client: ApiClient, options: ApiRequestOptions) {
+  const requests: PatrolRequestDto[] = [];
+  let page = 1;
+
+  while (true) {
+    const pageRequests = await client.get<PatrolRequestDto[]>(
+      `/api/v1/patrol-requests?page=${page}&pageSize=${patrolRequestPageSize}`,
+      options,
+    );
+    requests.push(...pageRequests);
+
+    if (pageRequests.length < patrolRequestPageSize) {
+      return requests;
+    }
+
+    page += 1;
+  }
 }
 
 function mapPatrolRequest(request: PatrolRequestDto): ServiceRequest {

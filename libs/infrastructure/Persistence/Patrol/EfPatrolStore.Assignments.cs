@@ -9,6 +9,10 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfPatrolStore
 {
+    private const int DefaultAssignmentPage = 1;
+    private const int DefaultAssignmentPageSize = 100;
+    private const int MaxAssignmentPageSize = 500;
+
     public IReadOnlyList<AssignmentDto> GetActiveAssignments() =>
         GetCurrentAssignmentEntities(DateTimeOffset.UtcNow)
             .OrderByDescending(assignment => assignment.PlannedAt)
@@ -16,10 +20,14 @@ internal sealed partial class EfPatrolStore
             .Select(assignment => MapAssignment(assignment))
             .ToList();
 
-    public IReadOnlyList<AssignmentDto> GetAssignments()
+    public IReadOnlyList<AssignmentDto> GetAssignments(int page = DefaultAssignmentPage, int pageSize = DefaultAssignmentPageSize)
     {
+        var paging = NormalizeAssignmentPaging(page, pageSize);
         var assignments = GetAssignmentQuery()
             .OrderByDescending(assignment => assignment.PlannedAt)
+            .ThenByDescending(assignment => assignment.Id)
+            .Skip((paging.Page - 1) * paging.PageSize)
+            .Take(paging.PageSize)
             .ToList();
         var assignmentIds = assignments.Select(assignment => assignment.Id).ToArray();
         var resultTimesByAssignment = dbContext.PatrolResults
@@ -513,6 +521,16 @@ internal sealed partial class EfPatrolStore
 
     private static TimeOnly ParseShiftTime(string value, TimeOnly fallback) =>
         TimeOnly.TryParseExact(value, "HH:mm", out var parsed) ? parsed : fallback;
+
+    private static AssignmentPaging NormalizeAssignmentPaging(int page, int pageSize)
+    {
+        var normalizedPageSize = pageSize <= 0 ? DefaultAssignmentPageSize : Math.Min(pageSize, MaxAssignmentPageSize);
+        var maxPage = Math.Max(DefaultAssignmentPage, int.MaxValue / normalizedPageSize);
+        var normalizedPage = page <= 0 ? DefaultAssignmentPage : Math.Min(page, maxPage);
+        return new AssignmentPaging(normalizedPage, normalizedPageSize);
+    }
+
+    private sealed record AssignmentPaging(int Page, int PageSize);
 
     private static AssignmentDto MapAssignment(
         AssignmentEntity assignment,

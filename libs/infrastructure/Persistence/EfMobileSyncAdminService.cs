@@ -20,7 +20,7 @@ internal sealed class EfMobileSyncAdminService(Patrol360DbContext dbContext) : I
     {
         var resolutions = dbContext.MobileSyncConflictResolutions
             .AsNoTracking()
-            .ToDictionary(resolution => resolution.ClientOperationId);
+            .ToDictionary(resolution => (resolution.MobileAccountId, resolution.ClientOperationId));
 
         return dbContext.MobileOutboxOperations
             .AsNoTracking()
@@ -31,7 +31,7 @@ internal sealed class EfMobileSyncAdminService(Patrol360DbContext dbContext) : I
             .AsEnumerable()
             .Select(operation =>
             {
-                resolutions.TryGetValue(operation.ClientOperationId, out var resolution);
+                resolutions.TryGetValue((operation.MobileAccountId, operation.ClientOperationId), out var resolution);
                 return new MobileSyncConflictListItemDto(
                     operation.ClientOperationId,
                     operation.MobileAccountId,
@@ -108,12 +108,15 @@ internal sealed class EfMobileSyncAdminService(Patrol360DbContext dbContext) : I
             .ToList();
     }
 
-    public MobileSyncConflictDetailDto? GetConflict(string clientOperationId)
+    public MobileSyncConflictDetailDto? GetConflict(Guid mobileAccountId, string clientOperationId)
     {
         var operation = dbContext.MobileOutboxOperations
             .AsNoTracking()
             .Include(item => item.MobileAccount)
-            .FirstOrDefault(item => item.ClientOperationId == clientOperationId && ConflictStatuses.Contains(item.Status));
+            .FirstOrDefault(item =>
+                item.MobileAccountId == mobileAccountId
+                && item.ClientOperationId == clientOperationId
+                && ConflictStatuses.Contains(item.Status));
 
         if (operation is null)
         {
@@ -122,12 +125,15 @@ internal sealed class EfMobileSyncAdminService(Patrol360DbContext dbContext) : I
 
         var resolution = dbContext.MobileSyncConflictResolutions
             .AsNoTracking()
-            .FirstOrDefault(item => item.ClientOperationId == clientOperationId);
+            .FirstOrDefault(item =>
+                item.MobileAccountId == operation.MobileAccountId
+                && item.ClientOperationId == clientOperationId);
 
         return MapDetail(operation, resolution);
     }
 
     public MobileSyncConflictResolutionDto? SetResolution(
+        Guid mobileAccountId,
         string clientOperationId,
         MobileSyncConflictResolutionRequestDto request,
         string actor)
@@ -138,20 +144,26 @@ internal sealed class EfMobileSyncAdminService(Patrol360DbContext dbContext) : I
             return null;
         }
 
-        var operationExists = dbContext.MobileOutboxOperations
-            .Any(item => item.ClientOperationId == clientOperationId && ConflictStatuses.Contains(item.Status));
-        if (!operationExists)
+        var operation = dbContext.MobileOutboxOperations
+            .FirstOrDefault(item =>
+                item.MobileAccountId == mobileAccountId
+                && item.ClientOperationId == clientOperationId
+                && ConflictStatuses.Contains(item.Status));
+        if (operation is null)
         {
             return null;
         }
 
         var now = DateTimeOffset.UtcNow;
         var resolution = dbContext.MobileSyncConflictResolutions
-            .FirstOrDefault(item => item.ClientOperationId == clientOperationId);
+            .FirstOrDefault(item =>
+                item.MobileAccountId == operation.MobileAccountId
+                && item.ClientOperationId == clientOperationId);
         if (resolution is null)
         {
             resolution = new MobileSyncConflictResolutionEntity
             {
+                MobileAccountId = mobileAccountId,
                 ClientOperationId = clientOperationId
             };
             dbContext.MobileSyncConflictResolutions.Add(resolution);
@@ -165,6 +177,7 @@ internal sealed class EfMobileSyncAdminService(Patrol360DbContext dbContext) : I
 
         return new MobileSyncConflictResolutionDto(
             resolution.ClientOperationId,
+            resolution.MobileAccountId,
             resolution.Status,
             string.IsNullOrWhiteSpace(resolution.Comment) ? null : resolution.Comment,
             resolution.ResolvedBy,

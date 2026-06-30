@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileAccountCreateDrawer, MobileAccountLinkPanel } from "../components/accounts/MobileAccountCreateDrawer";
 import { MobileAccountListPanel } from "../components/accounts/MobileAccountListPanel";
 import { MobileAccountSecurityPanels } from "../components/accounts/MobileAccountSecurityPanels";
@@ -32,6 +32,12 @@ import { LoginScreen } from "../screens/LoginScreen";
 import type { PatrolResult, SiteUser } from "../types";
 import type { ResultGroup } from "../features/patrol/results/resultTypes";
 
+beforeEach(() => {
+  if (!window.localStorage?.getItem || !window.localStorage?.setItem || !window.localStorage?.removeItem) {
+    Object.defineProperty(window, "localStorage", { configurable: true, value: createMemoryStorage() });
+  }
+});
+
 afterEach(() => {
   window.localStorage?.removeItem?.("patrol360.results.hiddenGroups.v1");
   window.localStorage?.removeItem?.("patrol360.patrolEmployees.favoriteIds.v1");
@@ -43,6 +49,24 @@ function formatTestRuDate(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const year = date.getFullYear();
   return `${day}.${month}.${year}`;
+}
+
+function createMemoryStorage(): Storage {
+  const rows = new Map<string, string>();
+  return {
+    clear: () => rows.clear(),
+    get length() {
+      return rows.size;
+    },
+    getItem: (key: string) => rows.get(key) ?? null,
+    key: (index: number) => Array.from(rows.keys())[index] ?? null,
+    removeItem: (key: string) => {
+      rows.delete(key);
+    },
+    setItem: (key: string, value: string) => {
+      rows.set(key, value);
+    },
+  };
 }
 
 describe("shared UI primitives", () => {
@@ -250,20 +274,11 @@ describe("shared UI primitives", () => {
     ]);
   });
 
-  it("queries PPE journal with server pagination and filters", async () => {
+  it("opens PPE as an employee-centered card with tabs and issue action", async () => {
     const user = userEvent.setup();
-    const storage = new Map<string, string>();
-    Object.defineProperty(window, "localStorage", {
-      configurable: true,
-      value: {
-        clear: () => storage.clear(),
-        getItem: (key: string) => storage.get(key) ?? null,
-        removeItem: (key: string) => storage.delete(key),
-        setItem: (key: string, value: string) => storage.set(key, value),
-      },
-    });
+    window.localStorage.removeItem("patrol360:inventory-ppe-norm-item-mapping:v1");
     const repository = createMockInventoryRepository();
-    const getPpeCards = vi.spyOn(repository, "getPpeCards");
+    const getPpeCard = vi.spyOn(repository, "getPpeCard");
     const [cards, options] = await Promise.all([
       repository.getPpeCards({ includeLines: false, page: 1, pageSize: 25 }),
       repository.getPpeOptions(),
@@ -280,24 +295,32 @@ describe("shared UI primitives", () => {
       </InventoryRepositoryProvider>,
     );
 
-    await waitFor(() => expect(getPpeCards).toHaveBeenCalledWith(expect.objectContaining({
-      includeLines: false,
-      page: 1,
-      pageSize: 25,
-    })));
+    await waitFor(() => expect(getPpeCard).toHaveBeenCalledWith(cards.rows[0].id));
 
-    await user.click(screen.getByRole("button", { name: "50" }));
-    await waitFor(() => expect(getPpeCards).toHaveBeenLastCalledWith(expect.objectContaining({
-      page: 1,
-      pageSize: 50,
-    })));
+    expect(screen.getByRole("navigation", { name: "Разделы карточки СИЗ" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Данные сотрудника" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Личная карточка" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Каска защитная").length).toBeGreaterThan(0);
 
-    await user.selectOptions(screen.getAllByRole("combobox")[2], "missing");
-    await waitFor(() => expect(getPpeCards).toHaveBeenLastCalledWith(expect.objectContaining({
-      page: 1,
-      pageSize: 50,
-      priceState: "missing",
-    })));
+    await user.click(screen.getAllByRole("button", { name: "Выдать" })[0]);
+    expect(await screen.findByRole("heading", { name: "Выдать СИЗ" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Номенклатура")).toBeInTheDocument();
+    expect(screen.getAllByText("Пункт норм").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Единица")).toBeInTheDocument();
+    expect(screen.getByLabelText("Размер")).toBeInTheDocument();
+    expect(screen.getByLabelText("Способ выдачи")).toBeInTheDocument();
+    expect(screen.getByLabelText("Комментарий")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Закрыть" }));
+    await user.click(screen.getAllByRole("button", { name: "Лист подписи" })[1]);
+    expect(screen.getByText("Модель / марка / артикул")).toBeInTheDocument();
+    expect(screen.getByText("Подпись получившего")).toBeInTheDocument();
+    expect(screen.getByText("Возврат: дата")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Проверка и печать" }));
+    expect(screen.getByText("Пустые поля сотрудника")).toBeInTheDocument();
+    expect(screen.getByText("Нормы без номенклатуры")).toBeInTheDocument();
+    expect(screen.getByText("Попадет в личную карточку")).toBeInTheDocument();
   });
 
   it("shows a clear request fallback instead of an empty view modal", () => {
@@ -729,7 +752,7 @@ describe("shared UI primitives", () => {
     expect(screen.getByLabelText("Маршрут")).toBeInTheDocument();
   });
 
-  it("opens a dedicated patrol result context panel from right click and archives the row locally", async () => {
+  it("opens a dedicated patrol result context panel from right click and hides the row on this device", async () => {
     const addToast = vi.fn();
     const user = userEvent.setup();
 
@@ -773,7 +796,7 @@ describe("shared UI primitives", () => {
     await waitFor(() => expect(persisted.container.querySelectorAll("article.results-review-row")).toHaveLength(initialRows - 1));
   });
 
-  it("opens patrol result row menu from the three-dot button and removes the row locally", async () => {
+  it("opens patrol result row menu from the three-dot button and hides the row on this device", async () => {
     const addToast = vi.fn();
     const user = userEvent.setup();
 
@@ -895,7 +918,7 @@ describe("shared UI primitives", () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalled());
 
     const requestedUrls = fetcher.mock.calls.map(([input]) => String(input));
-    expect(requestedUrls.some((url) => url.endsWith("/api/v1/results"))).toBe(true);
+    expect(requestedUrls.some((url) => url.includes("/api/v1/results?page=1&pageSize=500"))).toBe(true);
     expect(requestedUrls.some((url) => url.includes("result-smoke-photo"))).toBe(false);
   });
 

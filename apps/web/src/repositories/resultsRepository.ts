@@ -4,6 +4,7 @@ import type { ResultDetailDto, ResultListItemDto } from "../api/contracts";
 import type { PatrolResult, PatrolResultAttachment } from "../types";
 
 export const patrolResultsFallback = patrolResults;
+const resultPageSize = 500;
 
 export function findPatrolResult(results: PatrolResult[], resultId: string) {
   return results.find((result) => result.id === resultId) ?? results[0];
@@ -32,8 +33,7 @@ export function createApiResultsRepository({
 
   return {
     async getResults(filters: ResultFilterOptions = {}, options: ApiRequestOptions = {}) {
-      const query = buildResultQuery(filters);
-      const results = await client.get<ResultListItemDto[]>(`/api/v1/results${query}`, options);
+      const results = await getAllResults(client, filters, options);
       return results.map(mapResult);
     },
 
@@ -57,7 +57,26 @@ export async function downloadResultAttachment(attachment: PatrolResultAttachmen
   return client.download(attachment.downloadUrl);
 }
 
-function buildResultQuery(filters: ResultFilterOptions) {
+async function getAllResults(client: ApiClient, filters: ResultFilterOptions, options: ApiRequestOptions) {
+  const results: ResultListItemDto[] = [];
+  let page = 1;
+
+  while (true) {
+    const pageResults = await client.get<ResultListItemDto[]>(
+      `/api/v1/results${buildResultQuery(filters, { page, pageSize: resultPageSize })}`,
+      options,
+    );
+    results.push(...pageResults);
+
+    if (pageResults.length < resultPageSize) {
+      return results;
+    }
+
+    page += 1;
+  }
+}
+
+function buildResultQuery(filters: ResultFilterOptions, paging?: { page: number; pageSize: number }) {
   const query = new URLSearchParams();
 
   if (filters.status) query.set("status", filters.status);
@@ -65,6 +84,10 @@ function buildResultQuery(filters: ResultFilterOptions) {
   if (filters.employeeId) query.set("employeeId", filters.employeeId);
   if (filters.dateFrom) query.set("dateFrom", filters.dateFrom);
   if (filters.dateTo) query.set("dateTo", filters.dateTo);
+  if (paging) {
+    query.set("page", String(paging.page));
+    query.set("pageSize", String(paging.pageSize));
+  }
 
   const serialized = query.toString();
   return serialized ? `?${serialized}` : "";
@@ -119,6 +142,8 @@ function mapResult(result: ResultListItemDto | ResultDetailDto): PatrolResult {
 
 function normalizeStatus(status: string) {
   const key = statusKey(status);
+  if (key === "skipped") return "skipped";
+  if (key === "manual") return "manual";
 
   if (key === "issue") return "Замечание";
   if (key === "late") return "Просрочено";
@@ -161,6 +186,9 @@ function statusKey(status: string) {
   if (value.includes("замеч") || value.includes("issue") || value.includes("problem")) return "issue";
   if (value.includes("проср") || value.includes("late") || value.includes("overdue")) return "late";
   if (value.includes("не подтверж") || value.includes("unconfirmed")) return "unconfirmed";
+
+  if (value.includes("skipped") || value.includes("unavailable")) return "skipped";
+  if (value.includes("manual")) return "manual";
 
   return "confirmed";
 }

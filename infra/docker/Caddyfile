@@ -33,6 +33,11 @@
 		format json
 	}
 
+	@local_5173_alias {
+		header_regexp localHost Host ^(?:localhost|127\.0\.0\.1|\[::1\]):5173$
+	}
+	redir @local_5173_alias http://192.168.2.194:5173{uri} 308
+
 	@legacy_no_port {
 		header_regexp legacyHost Host ^([^:]+)(?::80)?$
 		not path /health/*

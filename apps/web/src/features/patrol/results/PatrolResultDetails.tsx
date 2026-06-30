@@ -20,18 +20,22 @@ interface PatrolResultDetailsProps {
   group: ResultGroup;
   onClose: () => void;
   onCreateRequest: () => void;
+  onExport: () => void;
   onOpenRequest: () => void;
   onOpenAttachment: (result: PatrolResult, order?: number) => void;
   photoLoadingResultId: string | null;
+  exportInProgress?: boolean;
 }
 
 export function PatrolResultDetails({
   group,
   onClose,
   onCreateRequest,
+  onExport,
   onOpenRequest,
   onOpenAttachment,
   photoLoadingResultId,
+  exportInProgress = false,
 }: PatrolResultDetailsProps) {
   const [pointMode, setPointMode] = useState<"all" | "issues" | "photos">("all");
   const [pointQuery, setPointQuery] = useState("");
@@ -131,9 +135,9 @@ export function PatrolResultDetails({
               placeholder="Поиск по метке или комментарию"
             />
           </label>
-          <button type="button" className="secondary-button">
+          <button type="button" className="secondary-button" onClick={onExport} disabled={exportInProgress}>
             <Download size={16} />
-            Экспорт
+            {exportInProgress ? "Экспорт..." : "Экспорт"}
           </button>
         </div>
 

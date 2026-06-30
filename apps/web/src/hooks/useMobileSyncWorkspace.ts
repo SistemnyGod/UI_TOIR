@@ -7,7 +7,12 @@ export interface MobileSyncWorkspace {
   deviceHealth: MobileDeviceHealth[];
   errorMessage?: string;
   refreshConflicts: () => Promise<void>;
-  resolveConflict: (clientOperationId: string, status: "accepted" | "rejected" | "repeatRequested", comment?: string) => Promise<void>;
+  resolveConflict: (
+    mobileAccountId: string,
+    clientOperationId: string,
+    status: "accepted" | "rejected" | "repeatRequested",
+    comment?: string,
+  ) => Promise<void>;
   status: DataSourceStatus;
 }
 
@@ -52,8 +57,8 @@ export function useMobileSyncWorkspace({
   }, [dataSourceMode, repository, showToast]);
 
   const resolveConflict = useCallback<MobileSyncWorkspace["resolveConflict"]>(
-    async (clientOperationId, resolutionStatus, comment) => {
-      await repository.resolveConflict(clientOperationId, { status: resolutionStatus, comment: comment ?? null });
+    async (mobileAccountId, clientOperationId, resolutionStatus, comment) => {
+      await repository.resolveConflict(mobileAccountId, clientOperationId, { status: resolutionStatus, comment: comment ?? null });
       await refreshConflicts();
     },
     [refreshConflicts, repository],

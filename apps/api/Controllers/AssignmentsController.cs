@@ -12,7 +12,10 @@ public sealed class AssignmentsController(IAssignmentService assignmentService) 
 {
     [HttpGet]
     [RequirePermission("assignments.read")]
-    public ActionResult<IReadOnlyList<AssignmentDto>> List() => Ok(assignmentService.GetAssignments());
+    public ActionResult<IReadOnlyList<AssignmentDto>> List(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 100) =>
+        Ok(assignmentService.GetAssignments(page, pageSize));
 
     [HttpGet("settings")]
     [RequirePermission("assignments.read")]

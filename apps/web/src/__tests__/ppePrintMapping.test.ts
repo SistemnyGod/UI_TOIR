@@ -3,6 +3,7 @@ import type { InventoryItemDto, InventoryPpeCardDetailDto, InventoryPositionNorm
 import { buildPrintHtml } from "../features/inventory/ppe/ppePrint";
 import { parsePositiveQuantity } from "../features/inventory/ppe/ppeFormatters";
 import { printDataFromDetail, printDataFromWizard, toLineFromNorm } from "../features/inventory/ppe/ppePrintMapping";
+import { loadPpeNormMappings, ppeNormKeyFromNorm, savePpeNormMapping } from "../features/inventory/ppe/ppeNormMapping";
 import { defaultIssuePeriodText } from "../features/inventory/ppe/ppeStatusCatalog";
 import { buildWizardLinePayloads } from "../features/inventory/ppe/ppeWizardPayloads";
 
@@ -46,6 +47,15 @@ describe("ppe print mapping", () => {
     expect(html).toContain("10.06.2026");
     expect(html).not.toContain("Средства защиты головы:");
     expect(html).not.toContain("Перчатки диэлектрические");
+  });
+
+  it("uses explicit issue method in the signature sheet when available", () => {
+    const data = printDataFromDetail(cardDetail(), inventoryItems());
+    data.lines = data.lines.map((line) =>
+      line.status === "issued" && !line.isSectionTitle ? { ...line, issueMethod: "dispenser" } : line,
+    );
+
+    expect(buildPrintHtml(data, "sheet")).toContain("дозатор");
   });
 
   it("keeps section rows as personal-card separators only", () => {
@@ -159,6 +169,46 @@ describe("ppe print mapping", () => {
       priceText: "0",
       printItemName: "Head protection:",
       quantityText: "",
+    });
+  });
+
+  it("stores norm-to-catalog mapping in the web mock layer", () => {
+    const storage = new Map<string, string>();
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        clear: () => storage.clear(),
+        getItem: (key: string) => storage.get(key) ?? null,
+        removeItem: (key: string) => storage.delete(key),
+        setItem: (key: string, value: string) => storage.set(key, value),
+      },
+    });
+    const norm: InventoryPositionNormDto = {
+      id: "norm-map",
+      itemId: "item-helmet",
+      itemName: "Helmet catalog",
+      lifeMonths: 24,
+      normItemName: "Helmet by norm",
+      normPoint: "p. 1.3.1",
+      positionName: "Electrician",
+      quantity: 1,
+      quantityText: "1 pcs",
+      issuePeriodText: "2 years",
+      isSectionTitle: false,
+    };
+    const normKey = ppeNormKeyFromNorm(norm);
+
+    savePpeNormMapping({
+      brandModelArticle: "SOMZ, Expert",
+      itemId: "item-helmet",
+      normKey,
+      priceText: "123,45",
+    });
+
+    expect(loadPpeNormMappings()[normKey]).toMatchObject({
+      brandModelArticle: "SOMZ, Expert",
+      itemId: "item-helmet",
+      priceText: "123,45",
     });
   });
 

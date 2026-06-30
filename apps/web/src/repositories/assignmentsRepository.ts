@@ -22,6 +22,7 @@ import type {
 
 export const assignableEmployeesFallback = employees;
 export const assignableRoutesFallback = assignableRoutes;
+const assignmentPageSize = 500;
 
 export interface AssignmentCommandResult {
   assignment: ActivePatrol;
@@ -40,7 +41,7 @@ export function createApiAssignmentsRepository({
 
   return {
     async getAssignments(options: ApiRequestOptions = {}) {
-      const assignments = await client.get<AssignmentDto[]>("/api/v1/assignments", options);
+      const assignments = await getAllAssignments(client, options);
       return assignments.map(mapAssignment);
     },
 
@@ -85,6 +86,25 @@ export function createApiAssignmentsRepository({
       return mapAssignmentCommandResult(result);
     },
   };
+}
+
+async function getAllAssignments(client: ApiClient, options: ApiRequestOptions) {
+  const assignments: AssignmentDto[] = [];
+  let page = 1;
+
+  while (true) {
+    const pageAssignments = await client.get<AssignmentDto[]>(
+      `/api/v1/assignments?page=${page}&pageSize=${assignmentPageSize}`,
+      options,
+    );
+    assignments.push(...pageAssignments);
+
+    if (pageAssignments.length < assignmentPageSize) {
+      return assignments;
+    }
+
+    page += 1;
+  }
 }
 
 function mapCreateAssignmentPayload(payload: CreateAssignmentPayload): CreateAssignmentDto {

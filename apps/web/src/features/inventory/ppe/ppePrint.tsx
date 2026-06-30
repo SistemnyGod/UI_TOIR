@@ -331,7 +331,7 @@ function SignatureLinesTable({
               </td>
               <td>{formatSheetIssuedAt(line.issuedAt)}</td>
               <td>{signatureQuantity(line)}</td>
-              <td>{isConsumableLine(line) ? "дозатор" : "лично"}</td>
+              <td>{issueMethodText(line)}</td>
               <td />
               <td />
               <td />
@@ -425,7 +425,7 @@ function buildSheetHtml(data: PrintData) {
     ? signatureLines(data.lines)
         .map(
           (line) =>
-            `<tr><td>${escapeHtml(printItemName(line))}</td><td>${escapeHtml(brandModelArticle(line) || "-")}</td><td>${escapeHtml(formatSheetIssuedAt(line.issuedAt))}</td><td>${escapeHtml(signatureQuantity(line))}</td><td>${escapeHtml(isConsumableLine(line) ? "дозатор" : "лично")}</td><td></td><td></td><td></td><td></td><td></td></tr>`,
+            `<tr><td>${escapeHtml(printItemName(line))}</td><td>${escapeHtml(brandModelArticle(line) || "-")}</td><td>${escapeHtml(formatSheetIssuedAt(line.issuedAt))}</td><td>${escapeHtml(signatureQuantity(line))}</td><td>${escapeHtml(issueMethodText(line))}</td><td></td><td></td><td></td><td></td><td></td></tr>`,
         )
         .join("")
     : `<tr><td colspan="10">Нет строк со статусом &quot;Выдано&quot;. Переключите нужные строки в &quot;Выдано&quot;, чтобы они попали в лист подписи.</td></tr>`;
@@ -503,6 +503,12 @@ function printItemName(line: PrintLine) {
 
 function brandModelArticle(line: PrintLine) {
   return line.brandModelArticle?.trim() || line.model?.trim() || "";
+}
+
+function issueMethodText(line: PrintLine) {
+  if (line.issueMethod === "dispenser") return "дозатор";
+  if (line.issueMethod === "personal") return "лично";
+  return isConsumableLine(line) ? "дозатор" : "лично";
 }
 
 function formatSheetIssuedAt(value?: string | null) {

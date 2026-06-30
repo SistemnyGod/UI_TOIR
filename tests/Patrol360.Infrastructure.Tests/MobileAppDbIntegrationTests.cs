@@ -90,6 +90,8 @@ public sealed class MobileAppDbIntegrationTests
         var assignmentId = Guid.Parse(firstOutbox[0].ServerEntityId!);
         var routePoint = bootstrap.Points.First(point =>
             point.RouteId == boardItem.RouteId && !string.IsNullOrWhiteSpace(point.NfcUidHash));
+        var manualPoint = bootstrap.Points.First(point =>
+            point.RouteId == boardItem.RouteId && point.PointId != routePoint.PointId);
         var scanAccepted = UseMobileApp(provider, mobile => mobile.SaveOutbox(
             login.Session.AccessToken,
             new MobileOutboxBatchDto([
@@ -239,6 +241,7 @@ public sealed class MobileAppDbIntegrationTests
 
         var capturedAtLocal = new DateTimeOffset(2026, 5, 26, 12, 45, 0, TimeSpan.FromHours(5));
         const string testFileSha256 = "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81";
+        const string selectedFileSha256 = "787c798e39a5bc1910355bae6d0cd87a36b2e10fd0202a83e3bb6b005da83472";
         var upload = UseMobileApp(provider, mobile => mobile.UploadFile(
             login.Session.AccessToken,
             new MobileFileUploadCommand(
@@ -270,6 +273,21 @@ public sealed class MobileAppDbIntegrationTests
         Assert.Equal("uploaded", upload!.Status);
         Assert.NotNull(repeatedUpload);
         Assert.Equal("duplicate", repeatedUpload!.Status);
+        var selectedUpload = UseMobileApp(provider, mobile => mobile.UploadFile(
+            login.Session.AccessToken,
+            new MobileFileUploadCommand(
+                "file-test-2",
+                assignmentId,
+                routePoint.PointId,
+                null,
+                selectedFileSha256,
+                3,
+                DateTimeOffset.UtcNow,
+                "selected.jpg",
+                "image/jpeg",
+                new MemoryStream([4, 5, 6]))));
+        Assert.NotNull(selectedUpload);
+        Assert.Equal("uploaded", selectedUpload!.Status);
 
         var allPointResults = bootstrap.Points
             .Where(point => point.RouteId == boardItem.RouteId)
@@ -279,12 +297,15 @@ public sealed class MobileAppDbIntegrationTests
                 ["status"] = point.PointId == routePoint.PointId ? "skipped" : "ok",
                 ["comment"] = point.PointId == routePoint.PointId ? "Метка отсутствует на месте" : "",
                 ["issueTypeId"] = null,
-                ["photoClientFileIds"] = Array.Empty<string>(),
+                ["photoClientFileIds"] = point.PointId == routePoint.PointId ? new[] { "file-test-2" } : Array.Empty<string>(),
                 ["confirmationType"] = point.PointId == routePoint.PointId ? "manual" : "nfc",
                 ["nfcUidHash"] = point.NfcUidHash,
                 ["completedAtLocal"] = DateTimeOffset.UtcNow,
             })
             .ToArray();
+        var manualPointResult = allPointResults.First(point => Equals(point["pointId"], manualPoint.PointId));
+        manualPointResult["confirmationType"] = "manual";
+        manualPointResult["comment"] = "Manual confirmation without scan";
         var completeCommand = new MobileOutboxCommandDto(
             "op-complete-accepted",
             "completePatrolAssignment",
@@ -311,6 +332,46 @@ public sealed class MobileAppDbIntegrationTests
             DateTimeOffset.UtcNow,
             0,
             "pending");
+        var duplicatePointResults = allPointResults
+            .Select(point => new Dictionary<string, object?>(point))
+            .Concat([new Dictionary<string, object?>(allPointResults[0])])
+            .ToArray();
+        var duplicatePointComplete = UseMobileApp(provider, mobile => mobile.SaveOutbox(
+            login.Session.AccessToken,
+            new MobileOutboxBatchDto([
+                completeCommand with
+                {
+                    ClientOperationId = "op-complete-duplicate-point",
+                    Payload = new Dictionary<string, object?>(completeCommand.Payload)
+                    {
+                        ["pointResults"] = duplicatePointResults,
+                    }
+                }
+            ])));
+
+        Assert.Single(duplicatePointComplete);
+        Assert.Equal("rejected", duplicatePointComplete[0].Status);
+        Assert.Contains("duplicate", duplicatePointComplete[0].Message);
+        Assert.Equal(0, CountPatrolResults(database.ConnectionString, assignmentId));
+
+        var staleRevisionComplete = UseMobileApp(provider, mobile => mobile.SaveOutbox(
+            login.Session.AccessToken,
+            new MobileOutboxBatchDto([
+                completeCommand with
+                {
+                    ClientOperationId = "op-complete-stale-revision",
+                    Payload = new Dictionary<string, object?>(completeCommand.Payload)
+                    {
+                        ["baseRevision"] = 0,
+                    }
+                }
+            ])));
+
+        Assert.Single(staleRevisionComplete);
+        Assert.Equal("conflict", staleRevisionComplete[0].Status);
+        Assert.Contains("changed", staleRevisionComplete[0].Message);
+        Assert.Equal(0, CountPatrolResults(database.ConnectionString, assignmentId));
+
         var completeAccepted = UseMobileApp(provider, mobile => mobile.SaveOutbox(
             login.Session.AccessToken,
             new MobileOutboxBatchDto([completeCommand])));
@@ -321,10 +382,15 @@ public sealed class MobileAppDbIntegrationTests
         Assert.Single(completeAccepted);
         Assert.Equal("accepted", completeAccepted[0].Status);
         var skippedReport = ReadSkippedPatrolResult(database.ConnectionString, assignmentId);
-        Assert.Equal("issue", skippedReport.Status);
+        Assert.Equal("skipped", skippedReport.Status);
         Assert.Equal("Метка недоступна", skippedReport.IssueType);
         Assert.Contains("Метка недоступна", skippedReport.Comment);
         Assert.Contains("Метка отсутствует на месте", skippedReport.IssueMessage);
+        var photoSnapshot = ReadPatrolResultPhotoSnapshot(database.ConnectionString, assignmentId, routePoint.PointId);
+        Assert.Equal(1, photoSnapshot.Photos);
+        Assert.Equal([$"{selectedUpload.ServerFileId:N}.jpg"], photoSnapshot.AttachmentFileNames);
+        Assert.DoesNotContain($"{upload.ServerFileId:N}.jpg", photoSnapshot.AttachmentFileNames);
+        Assert.Equal("manual", ReadPatrolResultStatus(database.ConnectionString, assignmentId, manualPoint.PointId));
         Assert.Equal(allPointResults.Length, CountPatrolResults(database.ConnectionString, assignmentId));
         Assert.Single(completeDuplicate);
         Assert.Equal("duplicate", completeDuplicate[0].Status);
@@ -513,6 +579,116 @@ public sealed class MobileAppDbIntegrationTests
         Assert.Equal(cancelledServerStatus, ReadAssignmentStatus(database.ConnectionString, cancelledAssignmentId));
         Assert.Equal(cancelledServerStatus, ReadPatrolRequestStatus(database.ConnectionString, cancelledRequestId));
         Assert.Equal(cancelledPointResults.Length, CountPatrolResults(database.ConnectionString, cancelledAssignmentId));
+    }
+
+    [DbIntegrationFact]
+    public async Task MobileOutboxClientOperationIdIsScopedByMobileAccount()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+
+        await provider.InitializePatrolDatabaseAsync();
+        var employees = UseEmployees(provider, query => query.GetEmployees().Take(2).ToArray());
+        Assert.True(employees.Length >= 2);
+
+        var firstAccount = UseMobileAccounts(provider, accounts => accounts.CreateAccount(new CreateMobileAccountDto(
+            "РџРµС‚СЂРѕРІ РРІР°РЅ РђР»РµРєСЃР°РЅРґСЂРѕРІРёС‡",
+            "selected",
+            $"mobile_{Guid.NewGuid():N}"[..18],
+            "РњР°СЂС€СЂСѓС‚РЅС‹Р№ РѕР±С…РѕРґС‡РёРє",
+            BindEmployee: true,
+            RestrictToBoundDevice: false,
+            TemporaryPassword: false,
+            Password: "Patrol360!",
+            ConfirmPassword: "Patrol360!",
+            RequirePasswordChange: false)));
+        Assert.True(firstAccount.Succeeded);
+        Assert.NotNull(firstAccount.Account);
+        var firstBinding = UseMobileAccounts(provider, accounts => accounts.AttachEmployee(
+            firstAccount.Account!.Id,
+            new AttachMobileAccountEmployeeDto(employees[0].Id, null)));
+        Assert.True(firstBinding.Succeeded);
+        var firstLogin = UseMobileApp(provider, mobile => mobile.Login(new MobileLoginRequestDto(
+            firstAccount.Account!.Login,
+            "Patrol360!",
+            "device-first",
+            "Device First",
+            "Android",
+            "0.1.0"), "127.0.0.1"));
+        Assert.NotNull(firstLogin.Session);
+
+        var secondAccount = UseMobileAccounts(provider, accounts => accounts.CreateAccount(new CreateMobileAccountDto(
+            "РџРµС‚СЂРѕРІ РРІР°РЅ РђР»РµРєСЃР°РЅРґСЂРѕРІРёС‡",
+            "selected",
+            $"mobile_{Guid.NewGuid():N}"[..18],
+            "РњР°СЂС€СЂСѓС‚РЅС‹Р№ РѕР±С…РѕРґС‡РёРє",
+            BindEmployee: true,
+            RestrictToBoundDevice: false,
+            TemporaryPassword: false,
+            Password: "Patrol360!",
+            ConfirmPassword: "Patrol360!",
+            RequirePasswordChange: false)));
+
+        Assert.True(secondAccount.Succeeded);
+        Assert.NotNull(secondAccount.Account);
+        var secondBinding = UseMobileAccounts(provider, accounts => accounts.AttachEmployee(
+            secondAccount.Account!.Id,
+            new AttachMobileAccountEmployeeDto(employees[1].Id, null)));
+        Assert.True(secondBinding.Succeeded);
+        var secondLogin = UseMobileApp(provider, mobile => mobile.Login(new MobileLoginRequestDto(
+            secondAccount.Account!.Login,
+            "Patrol360!",
+            "device-second",
+            "Device Second",
+            "Android",
+            "0.1.0"), "127.0.0.1"));
+
+        Assert.NotNull(secondLogin.Session);
+
+        var firstCommand = BuildUnsupportedCommand("op-shared-account-scope", "unsupportedFirst");
+        var secondCommand = BuildUnsupportedCommand("op-shared-account-scope", "unsupportedSecond");
+        var firstOutbox = UseMobileApp(provider, mobile => mobile.SaveOutbox(
+            firstLogin.Session!.AccessToken,
+            new MobileOutboxBatchDto([firstCommand])));
+        var secondOutbox = UseMobileApp(provider, mobile => mobile.SaveOutbox(
+            secondLogin.Session!.AccessToken,
+            new MobileOutboxBatchDto([secondCommand])));
+        var repeatedFirstOutbox = UseMobileApp(provider, mobile => mobile.SaveOutbox(
+            firstLogin.Session!.AccessToken,
+            new MobileOutboxBatchDto([firstCommand])));
+
+        Assert.Single(firstOutbox);
+        Assert.Single(secondOutbox);
+        Assert.Single(repeatedFirstOutbox);
+        Assert.Equal("rejected", firstOutbox[0].Status);
+        Assert.Contains("unsupportedFirst", firstOutbox[0].Message);
+        Assert.Equal("rejected", secondOutbox[0].Status);
+        Assert.Contains("unsupportedSecond", secondOutbox[0].Message);
+        Assert.Equal("rejected", repeatedFirstOutbox[0].Status);
+        Assert.Contains("unsupportedFirst", repeatedFirstOutbox[0].Message);
+        Assert.Equal(2, CountOutboxOperations(database.ConnectionString, "op-shared-account-scope"));
+
+        var conflicts = UseMobileSyncAdmin(provider, sync => sync.GetConflicts()
+            .Where(conflict => conflict.ClientOperationId == "op-shared-account-scope")
+            .ToArray());
+        Assert.Equal(2, conflicts.Length);
+        Assert.Contains(conflicts, conflict => conflict.MobileAccountId == firstAccount.Account!.Id);
+        Assert.Contains(conflicts, conflict => conflict.MobileAccountId == secondAccount.Account!.Id);
+
+        var firstResolution = UseMobileSyncAdmin(provider, sync => sync.SetResolution(
+            firstAccount.Account!.Id,
+            "op-shared-account-scope",
+            new MobileSyncConflictResolutionRequestDto("accepted", "first account only"),
+            "tester"));
+        var resolvedFirst = UseMobileSyncAdmin(provider, sync => sync.GetConflict(firstAccount.Account!.Id, "op-shared-account-scope"));
+        var unresolvedSecond = UseMobileSyncAdmin(provider, sync => sync.GetConflict(secondAccount.Account!.Id, "op-shared-account-scope"));
+
+        Assert.NotNull(firstResolution);
+        Assert.Equal(firstAccount.Account!.Id, firstResolution!.MobileAccountId);
+        Assert.Equal("accepted", resolvedFirst!.Status);
+        Assert.Equal("first account only", resolvedFirst.ResolutionComment);
+        Assert.Equal("open", unresolvedSecond!.Status);
+        Assert.Null(unresolvedSecond.ResolutionComment);
     }
 
     [DbIntegrationFact]
@@ -806,6 +982,18 @@ public sealed class MobileAppDbIntegrationTests
             0,
             "pending");
 
+    private static MobileOutboxCommandDto BuildUnsupportedCommand(string clientOperationId, string commandType) =>
+        new(
+            clientOperationId,
+            commandType,
+            "testEntity",
+            null,
+            null,
+            [],
+            DateTimeOffset.UtcNow,
+            0,
+            "pending");
+
     private static ServiceProvider BuildProvider(string connectionString)
     {
         var services = new ServiceCollection();
@@ -827,6 +1015,12 @@ public sealed class MobileAppDbIntegrationTests
     {
         using var scope = provider.CreateScope();
         return action(scope.ServiceProvider.GetRequiredService<IMobileAccountService>());
+    }
+
+    private static T UseEmployees<T>(ServiceProvider provider, Func<IEmployeeDirectoryQuery, T> action)
+    {
+        using var scope = provider.CreateScope();
+        return action(scope.ServiceProvider.GetRequiredService<IEmployeeDirectoryQuery>());
     }
 
     private static T UseAssignments<T>(ServiceProvider provider, Func<IAssignmentService, T> action)
@@ -925,6 +1119,58 @@ public sealed class MobileAppDbIntegrationTests
             reader.GetString(3));
     }
 
+    private static string ReadPatrolResultStatus(string connectionString, Guid assignmentId, Guid pointId)
+    {
+        using var connection = new NpgsqlConnection(connectionString);
+        connection.Open();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT status
+            FROM patrol_results
+            WHERE assignment_id = @assignment_id
+              AND route_point_id = @point_id
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("assignment_id", assignmentId);
+        command.Parameters.AddWithValue("point_id", pointId);
+
+        return Assert.IsType<string>(command.ExecuteScalar());
+    }
+
+    private static PatrolResultPhotoSnapshot ReadPatrolResultPhotoSnapshot(string connectionString, Guid assignmentId, Guid pointId)
+    {
+        using var connection = new NpgsqlConnection(connectionString);
+        connection.Open();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT result.photos, attachment.file_name
+            FROM patrol_results result
+            LEFT JOIN patrol_result_attachments attachment ON attachment.patrol_result_id = result.id
+            WHERE result.assignment_id = @assignment_id
+              AND result.route_point_id = @point_id
+            ORDER BY attachment.file_name;
+            """;
+        command.Parameters.AddWithValue("assignment_id", assignmentId);
+        command.Parameters.AddWithValue("point_id", pointId);
+
+        using var reader = command.ExecuteReader();
+        Assert.True(reader.Read());
+        var photos = reader.GetInt32(0);
+        var fileNames = new List<string>();
+        do
+        {
+            if (!reader.IsDBNull(1))
+            {
+                fileNames.Add(reader.GetString(1));
+            }
+        }
+        while (reader.Read());
+
+        return new PatrolResultPhotoSnapshot(photos, fileNames);
+    }
+
     private static string? ReadAssignmentStatus(string connectionString, Guid assignmentId)
     {
         using var connection = new NpgsqlConnection(connectionString);
@@ -935,6 +1181,18 @@ public sealed class MobileAppDbIntegrationTests
         command.Parameters.AddWithValue("assignment_id", assignmentId);
 
         return command.ExecuteScalar() as string;
+    }
+
+    private static int CountOutboxOperations(string connectionString, string clientOperationId)
+    {
+        using var connection = new NpgsqlConnection(connectionString);
+        connection.Open();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM mobile_outbox_operations WHERE client_operation_id = @client_operation_id;";
+        command.Parameters.AddWithValue("client_operation_id", clientOperationId);
+
+        return Convert.ToInt32(command.ExecuteScalar());
     }
 
     private static string? ReadPatrolRequestStatus(string connectionString, Guid requestId)
@@ -984,6 +1242,10 @@ public sealed class MobileAppDbIntegrationTests
         string Comment,
         string IssueMessage);
 
+    private sealed record PatrolResultPhotoSnapshot(
+        int Photos,
+        IReadOnlyList<string> AttachmentFileNames);
+
     private static T UseRoutes<T>(ServiceProvider provider, Func<IRouteCatalogQuery, T> action)
     {
         using var scope = provider.CreateScope();
@@ -994,5 +1256,11 @@ public sealed class MobileAppDbIntegrationTests
     {
         using var scope = provider.CreateScope();
         return action(scope.ServiceProvider.GetRequiredService<IMobileAppService>());
+    }
+
+    private static T UseMobileSyncAdmin<T>(ServiceProvider provider, Func<IMobileSyncAdminService, T> action)
+    {
+        using var scope = provider.CreateScope();
+        return action(scope.ServiceProvider.GetRequiredService<IMobileSyncAdminService>());
     }
 }

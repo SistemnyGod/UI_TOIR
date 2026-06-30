@@ -10,6 +10,7 @@ internal sealed partial class EfMobileAppService
     {
         var assignmentId = ReadGuid(command.Payload, "assignmentId");
         var requestId = ReadGuid(command.Payload, "requestId");
+        var baseRevision = ReadLong(command.Payload, "baseRevision");
         var completedAtLocal = ReadDateTimeOffset(command.Payload, "completedAtLocal") ?? DateTimeOffset.UtcNow;
         var pointResults = ReadPointResults(command.Payload);
         if (assignmentId is null || requestId is null || pointResults.Count == 0)
@@ -43,6 +44,15 @@ internal sealed partial class EfMobileAppService
         )
         {
             return Conflict(command.ClientOperationId, "Patrol request requires dispatcher decision.");
+        }
+
+        var duplicatePointIds = pointResults
+            .GroupBy(result => result.PointId)
+            .Where(group => group.Count() > 1)
+            .ToArray();
+        if (duplicatePointIds.Length > 0)
+        {
+            return Rejected(command.ClientOperationId, "Point results must not contain duplicate patrol points.");
         }
 
         var resultsByPoint = pointResults
@@ -101,6 +111,19 @@ internal sealed partial class EfMobileAppService
                 "Patrol assignment report was already accepted.",
                 null,
                 null);
+        }
+
+        if (!wasCancelledByDispatcher)
+        {
+            if (baseRevision is null)
+            {
+                return Rejected(command.ClientOperationId, "completePatrolAssignment baseRevision is required.");
+            }
+
+            if (baseRevision.Value != assignment.LockVersion)
+            {
+                return Conflict(command.ClientOperationId, "Patrol assignment was changed after mobile sync.");
+            }
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -294,6 +317,14 @@ internal sealed partial class EfMobileAppService
             var isSkipped = IsSkippedPointResult(pointResult);
             var isManual = IsManualPointResult(pointResult);
             var comment = NormalizeOptionalText(pointResult.Comment);
+            var requestedPhotoClientFileIds = pointResult.PhotoClientFileIds
+                .Select(fileId => NormalizeOptionalText(fileId))
+                .Where(fileId => !string.IsNullOrWhiteSpace(fileId))
+                .ToHashSet(StringComparer.Ordinal);
+            var attachedFiles = uploadedFiles
+                .Where(file => file.PointId == pointResult.PointId
+                    && requestedPhotoClientFileIds.Contains(file.ClientFileId))
+                .ToArray();
             var resultComment = isSkipped
                 ? string.IsNullOrWhiteSpace(comment)
                     ? "Метка недоступна"
@@ -312,7 +343,7 @@ internal sealed partial class EfMobileAppService
                 EmployeeId = assignment.EmployeeId,
                 RouteId = assignment.RouteId,
                 RoutePointId = routePoint?.Id,
-                Status = isIssue || isSkipped ? "issue" : "ok",
+                Status = BuildMobilePointResultStatus(pointResult),
                 PointName = routePoint?.Name ?? pointResult.PointId.ToString(),
                 EmployeeName = assignment.Employee?.FullName ?? assignment.PatrolRequest?.EmployeeName ?? string.Empty,
                 RouteName = assignment.Route?.Name ?? assignment.PatrolRequest?.RouteName ?? string.Empty,
@@ -328,7 +359,7 @@ internal sealed partial class EfMobileAppService
                         ? NormalizeOptionalText(pointResult.IssueTypeId, "issue")
                         : "-",
                 Severity = isIssue || isSkipped ? "medium" : "-",
-                Photos = pointResult.PhotoClientFileIds.Count,
+                Photos = attachedFiles.Length,
                 CreatedAt = operationAt,
             };
 
@@ -348,7 +379,7 @@ internal sealed partial class EfMobileAppService
                 });
             }
 
-            foreach (var file in uploadedFiles.Where(file => file.PointId == pointResult.PointId))
+            foreach (var file in attachedFiles)
             {
                 resultEntity.Attachments.Add(new PatrolResultAttachmentEntity
                 {
@@ -405,6 +436,21 @@ internal sealed partial class EfMobileAppService
         BuildPersistedMobilePointStatus(pointResult).Equals("issue", StringComparison.Ordinal)
             ? "medium"
             : "-";
+
+    private static string BuildMobilePointResultStatus(MobilePointResultPayload pointResult)
+    {
+        if (IsSkippedPointResult(pointResult))
+        {
+            return "skipped";
+        }
+
+        if (pointResult.Status.Equals("issue", StringComparison.OrdinalIgnoreCase))
+        {
+            return "issue";
+        }
+
+        return IsManualPointResult(pointResult) ? "manual" : "ok";
+    }
 
     private sealed record ExistingCompleteReportValidation(bool HasExistingReport, bool PayloadMatches);
 

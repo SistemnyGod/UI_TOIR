@@ -502,6 +502,7 @@ export interface MobileSyncConflictResolutionRequestDto {
 
 export interface MobileSyncConflictResolutionDto {
   clientOperationId: string;
+  mobileAccountId: string;
   status: string;
   comment?: string | null;
   resolvedBy: string;

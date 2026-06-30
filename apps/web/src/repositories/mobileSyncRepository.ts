@@ -28,18 +28,24 @@ export function createApiMobileSyncRepository({
       return rows.map(mapDeviceHealth);
     },
 
-    async getConflict(clientOperationId: string, options: ApiRequestOptions = {}) {
-      const row = await client.get<MobileSyncConflictDetailDto>(`/api/v1/mobile-sync/conflicts/${clientOperationId}`, options);
+    async getConflict(mobileAccountId: string, clientOperationId: string, options: ApiRequestOptions = {}) {
+      const operationId = encodeURIComponent(clientOperationId);
+      const row = await client.get<MobileSyncConflictDetailDto>(
+        `/api/v1/mobile-sync/conflicts/${mobileAccountId}/${operationId}`,
+        options,
+      );
       return mapConflict(row);
     },
 
     resolveConflict(
+      mobileAccountId: string,
       clientOperationId: string,
       payload: MobileSyncConflictResolutionRequestDto,
       options: ApiRequestOptions = {},
     ) {
+      const operationId = encodeURIComponent(clientOperationId);
       return client.post<MobileSyncConflictResolutionDto, MobileSyncConflictResolutionRequestDto>(
-        `/api/v1/mobile-sync/conflicts/${clientOperationId}/resolution`,
+        `/api/v1/mobile-sync/conflicts/${mobileAccountId}/${operationId}/resolution`,
         payload,
         options,
       );

@@ -19,6 +19,7 @@ export type PrintLine = {
   issuePeriodText?: string | null;
   issuedAt?: string | null;
   isSectionTitle?: boolean;
+  issueMethod?: "personal" | "dispenser";
   itemName: string;
   model: string;
   modelOptions?: string[];

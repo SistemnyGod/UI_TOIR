@@ -9,13 +9,26 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfPatrolStore
 {
-    public IReadOnlyList<PatrolRequestDto> GetRequests() =>
-        dbContext.PatrolRequests
+    private const int DefaultPatrolRequestPage = 1;
+    private const int DefaultPatrolRequestPageSize = 100;
+    private const int MaxPatrolRequestPageSize = 500;
+
+    public IReadOnlyList<PatrolRequestDto> GetRequests(
+        int page = DefaultPatrolRequestPage,
+        int pageSize = DefaultPatrolRequestPageSize)
+    {
+        var paging = NormalizePatrolRequestPaging(page, pageSize);
+
+        return dbContext.PatrolRequests
             .AsNoTracking()
             .OrderByDescending(request => request.CreatedAt)
-            .AsEnumerable()
+            .ThenByDescending(request => request.Id)
+            .Skip((paging.Page - 1) * paging.PageSize)
+            .Take(paging.PageSize)
+            .ToList()
             .Select(request => MapPatrolRequest(request))
             .ToList();
+    }
 
     public CreatePatrolRequestResult Create(CreatePatrolRequestDto request)
     {
@@ -216,4 +229,14 @@ internal sealed partial class EfPatrolStore
             request.Status,
             request.CreatedAt,
             request.Description);
+
+    private static PatrolRequestPaging NormalizePatrolRequestPaging(int page, int pageSize)
+    {
+        var normalizedPageSize = pageSize <= 0 ? DefaultPatrolRequestPageSize : Math.Min(pageSize, MaxPatrolRequestPageSize);
+        var maxPage = Math.Max(DefaultPatrolRequestPage, int.MaxValue / normalizedPageSize);
+        var normalizedPage = page <= 0 ? DefaultPatrolRequestPage : Math.Min(page, maxPage);
+        return new PatrolRequestPaging(normalizedPage, normalizedPageSize);
+    }
+
+    private sealed record PatrolRequestPaging(int Page, int PageSize);
 }

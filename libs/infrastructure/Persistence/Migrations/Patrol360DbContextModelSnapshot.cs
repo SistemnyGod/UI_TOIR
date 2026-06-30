@@ -2987,7 +2987,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("status");
 
-                    b.HasKey("ClientOperationId");
+                    b.HasKey("MobileAccountId", "ClientOperationId");
+
+                    b.HasIndex("ClientOperationId")
+                        .HasDatabaseName("ix_mobile_outbox_operations_client_operation_id");
 
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_mobile_outbox_operations_status");
@@ -3000,6 +3003,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.MobileSyncConflictResolutionEntity", b =>
                 {
+                    b.Property<Guid>("MobileAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("mobile_account_id");
+
                     b.Property<string>("ClientOperationId")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)")
@@ -3027,7 +3034,7 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("status");
 
-                    b.HasKey("ClientOperationId");
+                    b.HasKey("MobileAccountId", "ClientOperationId");
 
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_mobile_sync_conflict_resolutions_status");
@@ -4353,7 +4360,7 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                 {
                     b.HasOne("Patrol360.Infrastructure.Persistence.Entities.MobileOutboxOperationEntity", "Operation")
                         .WithOne()
-                        .HasForeignKey("Patrol360.Infrastructure.Persistence.Entities.MobileSyncConflictResolutionEntity", "ClientOperationId")
+                        .HasForeignKey("Patrol360.Infrastructure.Persistence.Entities.MobileSyncConflictResolutionEntity", "MobileAccountId", "ClientOperationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

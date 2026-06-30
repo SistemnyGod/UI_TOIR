@@ -709,7 +709,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
         modelBuilder.Entity<MobileOutboxOperationEntity>(entity =>
         {
             entity.ToTable("mobile_outbox_operations");
-            entity.HasKey(operation => operation.ClientOperationId);
+            entity.HasKey(operation => new { operation.MobileAccountId, operation.ClientOperationId });
 
             entity.Property(operation => operation.ClientOperationId).HasColumnName("client_operation_id").HasMaxLength(80);
             entity.Property(operation => operation.MobileAccountId).HasColumnName("mobile_account_id");
@@ -731,6 +731,8 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
 
             entity.HasIndex(operation => new { operation.MobileAccountId, operation.CreatedAtServer })
                 .HasDatabaseName("ix_mobile_outbox_operations_account_created");
+            entity.HasIndex(operation => operation.ClientOperationId)
+                .HasDatabaseName("ix_mobile_outbox_operations_client_operation_id");
             entity.HasIndex(operation => operation.Status)
                 .HasDatabaseName("ix_mobile_outbox_operations_status");
         });
@@ -825,8 +827,10 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
         modelBuilder.Entity<MobileSyncConflictResolutionEntity>(entity =>
         {
             entity.ToTable("mobile_sync_conflict_resolutions");
-            entity.HasKey(resolution => resolution.ClientOperationId);
+            entity.HasKey(resolution => new { resolution.MobileAccountId, resolution.ClientOperationId });
 
+            entity.Property(resolution => resolution.MobileAccountId)
+                .HasColumnName("mobile_account_id");
             entity.Property(resolution => resolution.ClientOperationId)
                 .HasColumnName("client_operation_id")
                 .HasMaxLength(80);
@@ -846,7 +850,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
 
             entity.HasOne(resolution => resolution.Operation)
                 .WithOne()
-                .HasForeignKey<MobileSyncConflictResolutionEntity>(resolution => resolution.ClientOperationId)
+                .HasForeignKey<MobileSyncConflictResolutionEntity>(resolution => new { resolution.MobileAccountId, resolution.ClientOperationId })
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(resolution => resolution.Status)

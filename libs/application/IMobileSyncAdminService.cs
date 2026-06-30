@@ -8,9 +8,10 @@ public interface IMobileSyncAdminService
 
     IReadOnlyList<MobileDeviceHealthDto> GetDeviceHealth();
 
-    MobileSyncConflictDetailDto? GetConflict(string clientOperationId);
+    MobileSyncConflictDetailDto? GetConflict(Guid mobileAccountId, string clientOperationId);
 
     MobileSyncConflictResolutionDto? SetResolution(
+        Guid mobileAccountId,
         string clientOperationId,
         MobileSyncConflictResolutionRequestDto request,
         string actor);

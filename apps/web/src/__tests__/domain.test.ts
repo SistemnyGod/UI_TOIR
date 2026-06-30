@@ -98,6 +98,35 @@ describe("domain workflows", () => {
     });
   });
 
+  it("loads all API result pages before building the journal state", async () => {
+    const requestedPaths: string[] = [];
+    const repository = createApiResultsRepository({
+      baseUrl: "https://api.example.test",
+      fetcher: async (input) => {
+        const path = String(input);
+        requestedPaths.push(path);
+
+        if (path.includes("page=1")) {
+          return jsonResponse(Array.from({ length: 500 }, (_, index) => createResultDto(`result-${index + 1}`)));
+        }
+
+        if (path.includes("page=2")) {
+          return jsonResponse([createResultDto("result-501")]);
+        }
+
+        return jsonResponse([]);
+      },
+    });
+
+    const results = await repository.getResults({ status: "issue" });
+
+    expect(results).toHaveLength(501);
+    expect(results.at(-1)?.id).toBe("result-501");
+    expect(requestedPaths).toHaveLength(2);
+    expect(requestedPaths[0]).toContain("/api/v1/results?status=issue&page=1&pageSize=500");
+    expect(requestedPaths[1]).toContain("/api/v1/results?status=issue&page=2&pageSize=500");
+  });
+
   it("does not request API details for local mock result ids", async () => {
     const fetcher = vi.fn<typeof fetch>();
     const repository = createApiResultsRepository({ fetcher });
@@ -207,6 +236,35 @@ describe("domain workflows", () => {
     expect(requestedPaths.some((path) => path.endsWith("/api/v1/assignments/assignment-2/start"))).toBe(true);
   });
 
+  it("loads all API assignment pages", async () => {
+    const requestedPaths: string[] = [];
+    const firstPage = Array.from({ length: 500 }, (_, index) => createAssignmentDto(`assignment-${index + 1}`));
+    const repository = createApiAssignmentsRepository({
+      fetcher: async (input) => {
+        const path = String(input);
+        requestedPaths.push(path);
+
+        if (path.includes("page=1")) {
+          return jsonResponse(firstPage);
+        }
+
+        if (path.includes("page=2")) {
+          return jsonResponse([createAssignmentDto("assignment-501")]);
+        }
+
+        return jsonResponse([]);
+      },
+    });
+
+    const assignments = await repository.getAssignments();
+
+    expect(assignments).toHaveLength(501);
+    expect(assignments.at(-1)?.id).toBe("assignment-501");
+    expect(requestedPaths).toHaveLength(2);
+    expect(requestedPaths[0]).toContain("/api/v1/assignments?page=1&pageSize=500");
+    expect(requestedPaths[1]).toContain("/api/v1/assignments?page=2&pageSize=500");
+  });
+
   it("does not double count requests that already have active assignments in dashboard metrics", () => {
     const metrics = buildLocalDashboardMetrics({
       activePatrols: [
@@ -263,6 +321,29 @@ function createAssignmentDto(id: string, status = "Назначена", progress
     finishedAt: null,
     progressPercent,
     eta: "10:00",
+  };
+}
+
+function createResultDto(id: string) {
+  return {
+    id,
+    assignmentId: `assignment-${id}`,
+    status: "issue",
+    pointId: `point-${id}`,
+    point: `Point ${id}`,
+    employeeId: "employee-1",
+    employee: "Employee",
+    routeId: "route-1",
+    route: "Route",
+    territory: "North",
+    shift: "day",
+    plannedAt: "2026-05-18T10:00:00Z",
+    actualAt: "2026-05-18T10:12:00Z",
+    deviation: "+12 min",
+    comment: "Needs review",
+    photos: 0,
+    issueType: "issue",
+    severity: "medium",
   };
 }
 

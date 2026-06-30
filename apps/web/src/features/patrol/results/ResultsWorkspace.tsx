@@ -3,20 +3,20 @@ import type { MouseEvent } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
-  Archive,
   Camera,
   CheckCircle2,
   Download,
   ExternalLink,
+  EyeOff,
   FileText,
   MapPinned,
   MoreVertical,
   PlusCircle,
   Search,
   Timer,
-  Trash2,
   User,
 } from "lucide-react";
+import type { ApiFileResponse } from "../../../api/client";
 import { createApiResultsRepository, downloadResultAttachment, isBackendResultId } from "../../../repositories/resultsRepository";
 import { useResultsWorkspace } from "../../../hooks/useResultsWorkspace";
 import type { DataSourceMode, PatrolResult, PatrolResultAttachment, ResultMode, ScreenId } from "../../../types";
@@ -83,9 +83,10 @@ export function ResultsWorkspace({
   const [detailedResults, setDetailedResults] = useState<Record<string, PatrolResult>>({});
   const [photoLoadingResultId, setPhotoLoadingResultId] = useState<string | null>(null);
   const [mediaPreview, setMediaPreview] = useState<ResultMediaPreviewState | null>(null);
+  const [exportInProgress, setExportInProgress] = useState(false);
   const apiResultsRepository = useMemo(() => createApiResultsRepository(), []);
 
-  const { results, selectedResult, listStatus, errorMessage, refreshResults } = useResultsWorkspace({
+  const { results, selectedResult, listStatus, errorMessage, refreshResults, exportResults } = useResultsWorkspace({
     dataSourceMode,
     selectedResultId,
     onSelectResult: onSelectResult ?? (() => undefined),
@@ -170,8 +171,8 @@ export function ResultsWorkspace({
     setContextMenu(null);
     addToast?.(
       action === "archive"
-        ? "Результат обхода отправлен в архив текущей сессии"
-        : "Результат обхода удален из текущего списка",
+        ? "Результат обхода скрыт на этом устройстве"
+        : "Результат обхода скрыт из списка на этом устройстве",
       action === "archive" ? "info" : "success",
     );
   };
@@ -234,6 +235,31 @@ export function ResultsWorkspace({
     } catch (downloadError) {
       const message = downloadError instanceof Error ? downloadError.message : "не удалось скачать вложение";
       addToast?.(`Не удалось скачать вложение: ${message}`, "error");
+    }
+  };
+
+  const exportPatrolResults = async () => {
+    if (exportInProgress) return;
+    if (dataSourceMode !== "api") {
+      addToast?.("Экспорт доступен при подключении к API", "info");
+      return;
+    }
+
+    setExportInProgress(true);
+    try {
+      const file = await exportResults();
+      if (!file) {
+        addToast?.("Экспорт доступен при подключении к API", "info");
+        return;
+      }
+
+      downloadApiFile(file);
+      addToast?.("Экспорт результатов обходов сформирован", "success");
+    } catch (exportError) {
+      const message = exportError instanceof Error ? exportError.message : "не удалось сформировать экспорт";
+      addToast?.(`Не удалось сформировать экспорт результатов: ${message}`, "error");
+    } finally {
+      setExportInProgress(false);
     }
   };
 
@@ -392,12 +418,12 @@ export function ResultsWorkspace({
         >
           <strong>{contextGroup.route}</strong>
           <button type="button" role="menuitem" data-action="archive" onClick={() => hideGroup(contextGroup, "archive")}>
-            <Archive size={16} />
-            Архивировать
+            <EyeOff size={16} />
+            Скрыть на этом устройстве
           </button>
           <button type="button" role="menuitem" data-action="delete" className="is-danger" onClick={() => hideGroup(contextGroup, "delete")}>
-            <Trash2 size={16} />
-            Удалить из списка
+            <EyeOff size={16} />
+            Скрыть из списка на этом устройстве
           </button>
         </div>
       ) : null}
@@ -407,9 +433,11 @@ export function ResultsWorkspace({
           group={modalGroup}
           onClose={() => setOpenGroupId(null)}
           onCreateRequest={() => void createRequest(modalGroup)}
+          onExport={() => void exportPatrolResults()}
           onOpenRequest={() => onOpenRequest?.(modalGroup.results[0]?.id)}
           onOpenAttachment={openAttachment}
           photoLoadingResultId={photoLoadingResultId}
+          exportInProgress={exportInProgress}
         />
       ) : null}
       {mediaPreview ? (
@@ -422,6 +450,17 @@ export function ResultsWorkspace({
       ) : null}
     </div>
   );
+}
+
+function downloadApiFile(file: ApiFileResponse) {
+  const href = URL.createObjectURL(file.blob);
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = file.fileName || file.downloadName || "patrol-results.csv";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(href);
 }
 
 function MetricCard({
@@ -548,12 +587,12 @@ function ResultRow({
           {menuOpen ? (
             <div className="results-review-row-menu" role="menu">
               <button type="button" role="menuitem" data-action="archive" onClick={onArchive}>
-                <Archive size={16} />
-                Архивировать
+                <EyeOff size={16} />
+                Скрыть на этом устройстве
               </button>
               <button type="button" role="menuitem" data-action="delete" className="is-danger" onClick={onDelete}>
-                <Trash2 size={16} />
-                Удалить из списка
+                <EyeOff size={16} />
+                Скрыть из списка на этом устройстве
               </button>
             </div>
           ) : null}

@@ -16,11 +16,13 @@ public sealed class ResultsController(IPatrolResultQuery resultQuery) : Controll
         [FromQuery] Guid? routeId,
         [FromQuery] Guid? employeeId,
         [FromQuery] DateOnly? dateFrom,
-        [FromQuery] DateOnly? dateTo)
+        [FromQuery] DateOnly? dateTo,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 100)
     {
         var filter = new ResultFilterDto(status, routeId, employeeId, dateFrom, dateTo);
 
-        return Ok(resultQuery.GetResults(filter));
+        return Ok(resultQuery.GetResults(filter, page, pageSize));
     }
 
     [HttpGet("export")]
@@ -34,6 +36,9 @@ public sealed class ResultsController(IPatrolResultQuery resultQuery) : Controll
     {
         var filter = new ResultFilterDto(status, routeId, employeeId, dateFrom, dateTo);
         var export = resultQuery.ExportResults(filter);
+        Response.Headers["X-Patrol360-Export-Truncated"] = export.Truncated ? "true" : "false";
+        Response.Headers["X-Patrol360-Export-Row-Count"] = export.RowCount.ToString();
+        Response.Headers["X-Patrol360-Export-Max-Rows"] = export.MaxRows.ToString();
 
         return File(export.Content, export.ContentType, export.FileName);
     }

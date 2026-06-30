@@ -36,7 +36,9 @@ internal sealed partial class EfMobileAppService
 
             var existing = dbContext.MobileOutboxOperations
                 .AsNoTracking()
-                .FirstOrDefault(item => item.ClientOperationId == command.ClientOperationId);
+                .FirstOrDefault(item =>
+                    item.MobileAccountId == session.MobileAccountId
+                    && item.ClientOperationId == command.ClientOperationId);
             if (existing is not null)
             {
                 responses.Add(BuildRepeatedOutboxResponse(existing));

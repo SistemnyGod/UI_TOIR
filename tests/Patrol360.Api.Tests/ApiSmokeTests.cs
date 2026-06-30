@@ -493,6 +493,32 @@ public class ApiSmokeTests
     }
 
     [Fact]
+    public void PatrolRequestsControllerListReturnsRequestsFromService()
+    {
+        var request = CreatePatrolRequest();
+        var controller = new PatrolRequestsController(new FakePatrolRequestService(requests: [request]));
+
+        var result = controller.List();
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var requests = Assert.IsAssignableFrom<IReadOnlyList<PatrolRequestDto>>(ok.Value);
+        Assert.Single(requests);
+        Assert.Equal(request.Id, requests[0].Id);
+    }
+
+    [Fact]
+    public void PatrolRequestsControllerListPassesPagingToService()
+    {
+        var service = new FakePatrolRequestService();
+        var controller = new PatrolRequestsController(service);
+
+        _ = controller.List(3, 50);
+
+        Assert.Equal(3, service.LastPage);
+        Assert.Equal(50, service.LastPageSize);
+    }
+
+    [Fact]
     public void ResultsControllerListReturnsResultsFromQuery()
     {
         var resultItem = CreateResultListItem();
@@ -504,6 +530,18 @@ public class ApiSmokeTests
         var results = Assert.IsAssignableFrom<IReadOnlyList<ResultListItemDto>>(ok.Value);
         Assert.Single(results);
         Assert.Equal(resultItem.Id, results[0].Id);
+    }
+
+    [Fact]
+    public void ResultsControllerListPassesPagingToQuery()
+    {
+        var query = new FakePatrolResultQuery([]);
+        var controller = new ResultsController(query);
+
+        _ = controller.List(null, null, null, null, null, 3, 25);
+
+        Assert.Equal(3, query.LastPage);
+        Assert.Equal(25, query.LastPageSize);
     }
 
     [Fact]
@@ -528,6 +566,18 @@ public class ApiSmokeTests
         var assignments = Assert.IsAssignableFrom<IReadOnlyList<AssignmentDto>>(ok.Value);
         Assert.Single(assignments);
         Assert.Equal(assignment.Id, assignments[0].Id);
+    }
+
+    [Fact]
+    public void AssignmentsControllerListPassesPagingToService()
+    {
+        var service = new FakeAssignmentService();
+        var controller = new AssignmentsController(service);
+
+        _ = controller.List(4, 50);
+
+        Assert.Equal(4, service.LastPage);
+        Assert.Equal(50, service.LastPageSize);
     }
 
     [Fact]
@@ -639,6 +689,23 @@ public class ApiSmokeTests
             FinishedAt: null,
             ProgressPercent: 0,
             Eta: "12:00");
+
+    private static PatrolRequestDto CreatePatrolRequest() =>
+        new(
+            Guid.NewGuid(),
+            Number: "REQ-1",
+            EmployeeId: Guid.NewGuid(),
+            EmployeeName: "Employee One",
+            RouteId: Guid.NewGuid(),
+            RouteName: "North perimeter",
+            SourceResultId: null,
+            ScheduledDate: DateOnly.FromDateTime(DateTime.UtcNow.Date),
+            ScheduledTime: new TimeOnly(9, 0),
+            NotifyEmployee: false,
+            NotificationText: string.Empty,
+            Status: "РќР°Р·РЅР°С‡РµРЅР°",
+            CreatedAt: DateTimeOffset.UtcNow,
+            Description: "Daily route");
 
     private static AuthorizationFilterContext CreateAuthorizationContext(IAuthSessionService authSessionService, string? accessToken = null)
     {
@@ -909,7 +976,16 @@ public class ApiSmokeTests
 
     private sealed class FakePatrolResultQuery(IReadOnlyList<ResultListItemDto> results) : IPatrolResultQuery
     {
-        public IReadOnlyList<ResultListItemDto> GetResults(ResultFilterDto filter) => results;
+        public int? LastPage { get; private set; }
+
+        public int? LastPageSize { get; private set; }
+
+        public IReadOnlyList<ResultListItemDto> GetResults(ResultFilterDto filter, int page = 1, int pageSize = 100)
+        {
+            LastPage = page;
+            LastPageSize = pageSize;
+            return results;
+        }
 
         public ResultExportFileDto ExportResults(ResultFilterDto filter) =>
             new([], "text/csv; charset=utf-8", "patrol-results.csv");
@@ -924,7 +1000,16 @@ public class ApiSmokeTests
         CreateAssignmentResult? createResult = null,
         AssignmentCommandResult? startResult = null) : IAssignmentService
     {
-        public IReadOnlyList<AssignmentDto> GetAssignments() => assignments ?? [];
+        public int? LastPage { get; private set; }
+
+        public int? LastPageSize { get; private set; }
+
+        public IReadOnlyList<AssignmentDto> GetAssignments(int page = 1, int pageSize = 100)
+        {
+            LastPage = page;
+            LastPageSize = pageSize;
+            return assignments ?? [];
+        }
 
         public AssignmentSettingsDto GetSettings() =>
             new([], new AssignmentShiftSettingsDto("08:00", "20:00", "20:00", "08:00"));
@@ -940,6 +1025,25 @@ public class ApiSmokeTests
         public AssignmentCommandResult? Cancel(Guid id) => null;
 
         public AssignmentCommandResult? Complete(Guid id, CompleteAssignmentDto? request = null) => null;
+    }
+
+    private sealed class FakePatrolRequestService(
+        IReadOnlyList<PatrolRequestDto>? requests = null,
+        CreatePatrolRequestResult? createResult = null) : IPatrolRequestService
+    {
+        public int? LastPage { get; private set; }
+
+        public int? LastPageSize { get; private set; }
+
+        public IReadOnlyList<PatrolRequestDto> GetRequests(int page = 1, int pageSize = 100)
+        {
+            LastPage = page;
+            LastPageSize = pageSize;
+            return requests ?? [];
+        }
+
+        public CreatePatrolRequestResult Create(CreatePatrolRequestDto request) =>
+            createResult ?? new CreatePatrolRequestResult(CreatePatrolRequest(), new Dictionary<string, string[]>());
     }
 
     private sealed class FakeAuthSessionService(AuthLoginResult? loginResult = null, SessionUserDto? currentUser = null) : IAuthSessionService

@@ -172,6 +172,8 @@ export function PpeHistoryTable({ rows }: { rows: InventoryHistoryDto[] }) {
         <thead>
           <tr>
             <th>Дата</th>
+            <th>Сотрудник</th>
+            <th>СИЗ</th>
             <th>Действие</th>
             <th>Описание</th>
             <th>Автор</th>
@@ -181,6 +183,8 @@ export function PpeHistoryTable({ rows }: { rows: InventoryHistoryDto[] }) {
           {rows.map((row) => (
             <tr key={row.id}>
               <td>{formatDate(row.createdAt)}</td>
+              <td>{row.employeeName || "Не указан"}</td>
+              <td>{row.itemName || "Не указано"}</td>
               <td>{row.action}</td>
               <td>{row.description}</td>
               <td>{row.actor || "Система"}</td>
