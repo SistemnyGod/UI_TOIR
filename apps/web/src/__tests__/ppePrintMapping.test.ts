@@ -64,6 +64,22 @@ describe("ppe print mapping", () => {
     expect(html).not.toContain(notIssuedLine().printItemName);
   });
 
+  it("keeps written off issued PPE in the signature sheet with an act marker", () => {
+    const writtenOffLine = {
+      ...issuedLine(),
+      dueAt: "2026-07-02T00:00:00.000Z",
+      id: "ppe-line-written-off",
+      status: "written_off",
+    };
+    const data = printDataFromDetail(cardDetail({ lines: [sectionLine(), writtenOffLine, notIssuedLine()] }), inventoryItems());
+    const html = buildPrintHtml(data, "sheet");
+
+    expect(html).toContain(writtenOffLine.printItemName);
+    expect(html).toContain("02.07.2026");
+    expect(html).toContain("Требуется акт");
+    expect(html).not.toContain(notIssuedLine().printItemName);
+  });
+
   it("uses explicit issue method in the signature sheet when available", () => {
     const data = printDataFromDetail(cardDetail(), inventoryItems());
     data.lines = data.lines.map((line) =>
