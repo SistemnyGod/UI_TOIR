@@ -1097,7 +1097,11 @@ function PpeIssueModal({
 }) {
   const line = row.existingLine;
   const ppeItems = useMemo(() => items.filter(isPpeItem), [items]);
-  const initialItem = row.catalogItem ?? (line ? itemFromLine(line) : items.find((item) => item.id === row.norm?.itemId) ?? ppeItems[0] ?? null);
+  const normFallbackItem = row.norm ? toItemFromNorm(row.norm) : null;
+  const initialItem = row.catalogItem
+    ?? (line
+      ? itemFromLine(line)
+      : items.find((item) => item.id === row.norm?.itemId) ?? normFallbackItem ?? ppeItems[0] ?? null);
   const visibleItems = initialItem && !ppeItems.some((item) => item.id === initialItem.id)
     ? [initialItem, ...ppeItems]
     : ppeItems;
@@ -1107,7 +1111,7 @@ function PpeIssueModal({
     dueAt: line?.dueAt?.slice(0, 10) ?? (row.norm?.lifeMonths ? getDefaultDueDate(row.norm.lifeMonths) : ""),
     issueMethod: initialItem?.isConsumable ? "dispenser" : "personal",
     issuedAt: line?.issuedAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
-    itemId: initialItem?.id ?? row.norm?.itemId ?? ppeItems[0]?.id ?? "",
+    itemId: initialItem?.id ?? ppeItems[0]?.id ?? "",
     priceText: moneyMinorToInput(line?.unitPriceMinor ?? initialItem?.defaultUnitPriceMinor ?? 0),
     quantityText: line?.quantityText || row.quantityText,
     sizeText: initialItem ? defaultItemSize(initialItem) : "",
