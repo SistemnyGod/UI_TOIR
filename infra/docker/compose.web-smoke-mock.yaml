@@ -1,0 +1,4 @@
+services:
+  web:
+    volumes:
+      - ./infra/docker/patrol360-runtime-env.mock.js:/srv/patrol360-runtime-env.js:ro

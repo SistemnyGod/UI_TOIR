@@ -19,6 +19,7 @@
 	header /inventory-issue-mountains.webp Cache-Control "public, max-age=604800"
 	header /inventory-issue-mountains.png Cache-Control "public, max-age=604800"
 	header /favicon.svg Cache-Control "public, max-age=604800"
+	header /patrol360-runtime-env.js Cache-Control "no-cache, must-revalidate"
 	header /index.html Cache-Control "no-cache, must-revalidate"
 	header / Cache-Control "no-cache, must-revalidate"
 

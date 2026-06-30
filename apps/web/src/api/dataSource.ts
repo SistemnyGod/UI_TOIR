@@ -48,6 +48,9 @@ function canUseMockDataSource() {
 
   if (typeof window === "undefined") return true;
 
+  const explicitRuntimeEnv = (globalThis as typeof globalThis & RuntimeProcess).__PATROL360_RUNTIME_ENV__;
+  if (explicitRuntimeEnv?.VITE_DATA_SOURCE_MODE === "mock") return true;
+
   const host = window.location.hostname.toLowerCase();
   return host === "localhost" || host === "127.0.0.1" || host === "::1";
 }

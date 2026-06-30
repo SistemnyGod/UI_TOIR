@@ -1,0 +1,1 @@
+window.__PATROL360_RUNTIME_ENV__ = window.__PATROL360_RUNTIME_ENV__ || {};

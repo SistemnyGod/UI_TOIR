@@ -1,0 +1,4 @@
+window.__PATROL360_RUNTIME_ENV__ = {
+  VITE_ENABLE_MOCK_MODE: "true",
+  VITE_DATA_SOURCE_MODE: "mock",
+};
