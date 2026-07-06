@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { Tone } from "../../types";
 
 const toneByValue: Record<string, Tone> = {
@@ -58,6 +58,75 @@ export function toneFor(value: string): Tone {
 export function Chip({ children, tone }: { children: ReactNode; tone?: Tone }) {
   const label = String(children);
   return <span className={`chip ${tone ?? toneFor(label)}`}>{children}</span>;
+}
+
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type ButtonSize = "sm" | "md";
+
+export function Button({
+  children,
+  className = "",
+  isLoading = false,
+  size = "md",
+  variant = "secondary",
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  isLoading?: boolean;
+  size?: ButtonSize;
+  variant?: ButtonVariant;
+}) {
+  const disabled = props.disabled || isLoading;
+
+  return (
+    <button
+      {...props}
+      aria-busy={isLoading || undefined}
+      className={`ui-button is-${variant} is-${size} ${isLoading ? "is-loading" : ""} ${className}`.trim()}
+      disabled={disabled}
+      type={props.type ?? "button"}
+    >
+      {isLoading ? <span className="ui-button-spinner" aria-hidden="true" /> : null}
+      <span className="ui-button-label">{children}</span>
+    </button>
+  );
+}
+
+export function IconButton({
+  children,
+  className = "",
+  isLoading = false,
+  label,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  isLoading?: boolean;
+  label: string;
+}) {
+  const disabled = props.disabled || isLoading;
+
+  return (
+    <button
+      {...props}
+      aria-busy={isLoading || undefined}
+      aria-label={label}
+      className={`ui-icon-button ${className}`.trim()}
+      disabled={disabled}
+      title={props.title ?? label}
+      type={props.type ?? "button"}
+    >
+      {isLoading ? <span className="ui-button-spinner" aria-hidden="true" /> : children}
+    </button>
+  );
+}
+
+export function StatusBadge({
+  children,
+  tone,
+}: {
+  children: ReactNode;
+  tone?: Tone;
+}) {
+  const label = String(children);
+  return <span className={`ui-status-badge ${tone ?? toneFor(label)}`}>{children}</span>;
 }
 
 export function Panel({
@@ -223,15 +292,22 @@ export function EmptyState({
   title,
   description,
   action,
+  icon,
+  tone = "blue",
 }: {
   title: string;
   description?: string;
   action?: ReactNode;
+  icon?: ReactNode;
+  tone?: Tone;
 }) {
   return (
-    <div className="empty-state">
-      <strong>{title}</strong>
-      {description ? <span>{description}</span> : null}
+    <div className={`empty-state ${tone}`}>
+      {icon ? <div className="empty-state-icon" aria-hidden="true">{icon}</div> : null}
+      <div className="empty-state-copy">
+        <strong>{title}</strong>
+        {description ? <span>{description}</span> : null}
+      </div>
       {action ? <div className="empty-state-action">{action}</div> : null}
     </div>
   );

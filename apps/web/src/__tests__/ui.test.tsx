@@ -27,7 +27,7 @@ import { RequestModals } from "../features/patrol/components/requests/RequestMod
 import { EmployeeDirectoryPanel } from "../features/patrol/components/employees/EmployeeDirectoryPanel";
 import { EmployeeProfileDrawer } from "../features/patrol/components/employees/EmployeeProfileDrawer";
 import { InventoryPpeScreen } from "../screens/inventory/InventoryPpeScreen";
-import { CompactTable, KpiStrip, PaginationBar, RouteLoadingBar, SkeletonCards, SkeletonForm, SkeletonList, SkeletonPreview, SkeletonTable } from "../shared/ui";
+import { Button, CompactTable, IconButton, KpiStrip, PaginationBar, RouteLoadingBar, SkeletonCards, SkeletonForm, SkeletonList, SkeletonPreview, SkeletonTable, StatusBadge } from "../shared/ui";
 import { LoginScreen } from "../screens/LoginScreen";
 import type { PatrolResult, SiteUser } from "../types";
 import type { ResultGroup } from "../features/patrol/results/resultTypes";
@@ -97,10 +97,29 @@ describe("shared UI primitives", () => {
   });
 
   it("renders empty state description", () => {
-    render(<EmptyState title="No data" description="Create first record" />);
+    render(<EmptyState title="No data" description="Create first record" icon="i" tone="orange" />);
 
     expect(screen.getByText("No data")).toBeInTheDocument();
     expect(screen.getByText("Create first record")).toBeInTheDocument();
+    expect(screen.getByText("i")).toBeInTheDocument();
+  });
+
+  it("renders shared button states and status badge", () => {
+    render(
+      <>
+        <Button variant="primary">Save</Button>
+        <Button isLoading variant="danger">Delete</Button>
+        <IconButton label="Open menu">...</IconButton>
+        <StatusBadge tone="green">Issued</StatusBadge>
+      </>,
+    );
+
+    expect(screen.getByRole("button", { name: "Save" })).toHaveClass("ui-button", "is-primary");
+    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete" })).toHaveClass("is-loading");
+    expect(screen.getByRole("button", { name: "Delete" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Open menu" })).toHaveClass("ui-icon-button");
+    expect(screen.getByText("Issued")).toHaveClass("ui-status-badge", "green");
   });
 
   it("renders shared operational primitives", async () => {

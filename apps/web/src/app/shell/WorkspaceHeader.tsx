@@ -1,4 +1,5 @@
 import type { ScreenConfig, ScreenId } from "../../types";
+import { Button } from "../../shared/ui/primitives";
 
 export function WorkspaceHeader({
   canUsePrimaryAction = true,
@@ -27,24 +28,23 @@ export function WorkspaceHeader({
       </div>
       <div className="workspace-actions">
         {screen === "results" ? (
-          <button className="button ghost" onClick={onOpenRequest} type="button">
+          <Button variant="ghost" onClick={onOpenRequest}>
             Открыть заявку
-          </button>
+          </Button>
         ) : null}
         {screen === "assign" ? (
-          <button className="button ghost" onClick={onPrimaryAction} type="button">
+          <Button variant="ghost" onClick={onPrimaryAction}>
             Проверить маршрут
-          </button>
+          </Button>
         ) : null}
-        <button
-          className="button primary"
+        <Button
           disabled={!canUsePrimaryAction}
           onClick={onPrimaryAction}
           title={!canUsePrimaryAction ? primaryActionDisabledReason : undefined}
-          type="button"
+          variant="primary"
         >
           {screen === "results" ? "Создать заявку" : screen === "assign" ? "Создать заявку" : currentScreen.createLabel}
-        </button>
+        </Button>
       </div>
     </section>
   );

@@ -1,3 +1,5 @@
+import { Button } from "./primitives";
+
 export type PageSizeOption = 25 | 50 | 100 | 200;
 
 export function PaginationBar({
@@ -36,15 +38,15 @@ export function PaginationBar({
         </select>
       </label>
       <div className="pagination-bar-actions">
-        <button disabled={safePage <= 1} onClick={() => onPageChange(safePage - 1)} type="button">
+        <Button disabled={safePage <= 1} onClick={() => onPageChange(safePage - 1)} size="sm" variant="ghost">
           Назад
-        </button>
+        </Button>
         <strong>
           {safePage} / {pageCount}
         </strong>
-        <button disabled={safePage >= pageCount} onClick={() => onPageChange(safePage + 1)} type="button">
+        <Button disabled={safePage >= pageCount} onClick={() => onPageChange(safePage + 1)} size="sm" variant="ghost">
           Вперед
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -25974,6 +25974,9 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
   .button,
   .compact-button,
   .action-button,
+  .primary-button,
+  .secondary-button,
+  .danger-button,
   .primary-action,
   .secondary-action,
   .ghost-action,
@@ -25994,6 +25997,9 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
   .emu-danger-action,
   .site-user-primary,
   .modal-shell-close,
+  .modal-close,
+  .assign-am-picker-close,
+  .inventory-custody-icon-button,
   .inventory-ppe-icon-button,
   .results-review-row-more,
   .topbar-logout,
@@ -26009,6 +26015,9 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
   .button,
   .compact-button,
   .action-button,
+  .primary-button,
+  .secondary-button,
+  .danger-button,
   .primary-action,
   .secondary-action,
   .ghost-action,
@@ -26043,14 +26052,17 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
 ) {
   align-items: center;
   border-radius: var(--ui-control-radius);
+  cursor: pointer;
   display: inline-flex;
   font-size: 13px;
   font-weight: 850;
   gap: 8px;
   justify-content: center;
   line-height: 1.15;
+  max-width: 100%;
   min-height: var(--ui-control-height);
   padding: 9px 14px;
+  text-align: center;
   transition:
     background-color var(--ui-motion-fast) ease,
     border-color var(--ui-motion-fast) ease,
@@ -26062,6 +26074,7 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
 .workspace :where(
   .button.primary,
   .button.is-primary,
+  .ui-button.is-primary,
   .primary-button,
   .primary-action,
   .site-user-primary,
@@ -26082,6 +26095,8 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
   .button.ghost,
   .button.secondary,
   .button.is-secondary,
+  .ui-button.is-secondary,
+  .ui-button.is-ghost,
   .secondary-button,
   .secondary-action,
   .ghost-action,
@@ -26102,6 +26117,7 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
 .workspace :where(
   .button.danger,
   .button.ghost.danger,
+  .ui-button.is-danger,
   .danger-button,
   .emu-danger-button,
   .emu-danger-action,
@@ -26115,6 +26131,7 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
 
 .workspace :where(
   .button.small,
+  .ui-button.is-sm,
   .compact-button,
   .assign-am-mini-button,
   .site-user-inline-actions button,
@@ -26130,6 +26147,10 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
   .button,
   .compact-button,
   .action-button,
+  .primary-button,
+  .secondary-button,
+  .danger-button,
+  .ui-button,
   .primary-action,
   .secondary-action,
   .ghost-action,
@@ -26166,6 +26187,10 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
   .button,
   .compact-button,
   .action-button,
+  .primary-button,
+  .secondary-button,
+  .danger-button,
+  .ui-button,
   .primary-action,
   .secondary-action,
   .ghost-action,
@@ -26199,13 +26224,94 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
 }
 
 .workspace :where(
+  .button,
+  .compact-button,
+  .action-button,
+  .primary-button,
+  .secondary-button,
+  .danger-button,
+  .ui-button,
+  .primary-action,
+  .secondary-action,
+  .ghost-action,
+  .assign-am-mini-button,
+  .dashboard-am-panel-action,
+  .dashboard-am-card-link,
+  .link-button,
+  .perco-button,
+  .perco-link-button,
+  .perco-action-button,
+  .emu-primary-button,
+  .emu-secondary-button,
+  .emu-ghost-button,
+  .emu-danger-button,
+  .emu-command-button,
+  .emu-action-clear,
+  .emu-action-cancel,
+  .emu-danger-action,
+  .site-user-primary,
+  .results-review-row-actions button,
+  .inventory-ppe-command-actions button,
+  .inventory-ppe-panel-actions button,
+  .inventory-ppe-wizard-actions button,
+  .perco-actions button,
+  .emu-modal-actions button,
+  .dashboard-am-hero-actions button,
+  .workspace-actions button
+):disabled,
+.workspace :where(
+  .button,
+  .compact-button,
+  .action-button,
+  .primary-button,
+  .secondary-button,
+  .danger-button,
+  .ui-button,
+  .primary-action,
+  .secondary-action,
+  .ghost-action,
+  .assign-am-mini-button,
+  .dashboard-am-panel-action,
+  .dashboard-am-card-link,
+  .link-button,
+  .perco-button,
+  .perco-link-button,
+  .perco-action-button,
+  .emu-primary-button,
+  .emu-secondary-button,
+  .emu-ghost-button,
+  .emu-danger-button,
+  .emu-command-button,
+  .emu-action-clear,
+  .emu-action-cancel,
+  .emu-danger-action,
+  .site-user-primary,
+  .results-review-row-actions button,
+  .inventory-ppe-command-actions button,
+  .inventory-ppe-panel-actions button,
+  .inventory-ppe-wizard-actions button,
+  .perco-actions button,
+  .emu-modal-actions button,
+  .dashboard-am-hero-actions button,
+  .workspace-actions button
+)[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.56;
+  transform: none;
+}
+
+.workspace :where(
   .icon-button,
+  .ui-icon-button,
   .chrome-icon-button,
   .perco-icon-button,
+  .inventory-custody-icon-button,
   .inventory-ppe-icon-button,
   .inventory-ppe-more-button,
   .results-review-row-more,
   .modal-shell-close,
+  .modal-close,
+  .assign-am-picker-close,
   .dashboard-am-result-modal-close,
   .schedule-plan-close-button,
   .topbar-logout,
@@ -26234,12 +26340,16 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
 
 .workspace :where(
   .icon-button,
+  .ui-icon-button,
   .chrome-icon-button,
   .perco-icon-button,
+  .inventory-custody-icon-button,
   .inventory-ppe-icon-button,
   .inventory-ppe-more-button,
   .results-review-row-more,
   .modal-shell-close,
+  .modal-close,
+  .assign-am-picker-close,
   .dashboard-am-result-modal-close,
   .schedule-plan-close-button,
   .topbar-logout,
@@ -26278,6 +26388,213 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
 .workspace :where(.action-menu-list button:hover, .results-review-row-menu button:hover, .results-review-context-panel button:hover) {
   background: var(--ui-blue-soft);
   color: var(--ui-blue);
+}
+
+.workspace :where(.ui-button, .ui-icon-button) {
+  align-items: center;
+  border: 1px solid var(--ui-control-border);
+  border-radius: var(--ui-control-radius);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: inherit;
+  font-weight: 850;
+  gap: 8px;
+  justify-content: center;
+  letter-spacing: 0;
+  line-height: 1.15;
+  min-height: var(--ui-control-height);
+  text-decoration: none;
+  transition:
+    background-color var(--ui-motion-fast) ease,
+    border-color var(--ui-motion-fast) ease,
+    box-shadow var(--ui-motion-normal) ease,
+    color var(--ui-motion-fast) ease,
+    transform var(--ui-motion-fast) ease;
+}
+
+.workspace .ui-button {
+  font-size: 13px;
+  padding: 9px 14px;
+}
+
+.workspace .ui-button.is-sm {
+  min-height: var(--ui-control-height-sm);
+  padding: 6px 10px;
+}
+
+.workspace .ui-button.is-primary {
+  background: linear-gradient(180deg, #2476ff 0%, var(--ui-blue) 100%);
+  border-color: var(--ui-blue);
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(23, 105, 255, 0.2);
+}
+
+.workspace .ui-button.is-secondary,
+.workspace .ui-button.is-ghost {
+  background: var(--ui-control-bg);
+  border-color: var(--ui-control-border);
+  color: var(--ui-control-text);
+}
+
+.workspace .ui-button.is-ghost {
+  background: transparent;
+}
+
+.workspace .ui-button.is-danger {
+  background: var(--ui-danger-soft);
+  border-color: #ffc7c2;
+  color: #b42318;
+}
+
+.workspace .ui-icon-button {
+  background: var(--ui-control-bg);
+  color: var(--ui-control-text);
+  height: 38px;
+  min-width: 38px;
+  padding: 0;
+}
+
+.workspace :where(.ui-button, .ui-icon-button):not(:disabled):not([aria-disabled="true"]):hover {
+  box-shadow: var(--ui-shadow-control);
+  transform: translateY(-1px);
+}
+
+.workspace :where(.ui-button, .ui-icon-button):not(:disabled):not([aria-disabled="true"]):active {
+  box-shadow: none;
+  transform: translateY(0) scale(0.99);
+}
+
+.workspace :where(.ui-button, .ui-icon-button):disabled,
+.workspace :where(.ui-button, .ui-icon-button)[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.56;
+  transform: none;
+}
+
+.workspace .ui-button.is-loading {
+  opacity: 0.78;
+}
+
+.ui-button-spinner {
+  animation: ui-button-spin 760ms linear infinite;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 999px;
+  display: inline-block;
+  height: 14px;
+  width: 14px;
+}
+
+.ui-button-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ui-status-badge {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  justify-content: center;
+  letter-spacing: 0;
+  line-height: 1.1;
+  min-height: 24px;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+
+.ui-status-badge.blue,
+.ui-status-badge.neutral {
+  background: var(--ui-info-soft);
+  border-color: #c7dcfb;
+  color: #1554b8;
+}
+
+.ui-status-badge.green {
+  background: var(--ui-success-soft);
+  border-color: #b9efd0;
+  color: var(--ui-success);
+}
+
+.ui-status-badge.orange {
+  background: var(--ui-warning-soft);
+  border-color: #ffd89a;
+  color: var(--ui-warning);
+}
+
+.ui-status-badge.red {
+  background: var(--ui-danger-soft);
+  border-color: #ffc7c2;
+  color: var(--ui-danger);
+}
+
+.ui-status-badge.violet {
+  background: var(--violet-soft);
+  border-color: #ddd6fe;
+  color: #6d28d9;
+}
+
+.ui-status-badge.slate {
+  background: #f1f5f9;
+  border-color: #d8e3ef;
+  color: #475569;
+}
+
+.ui-status-badge.day {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #ea580c;
+}
+
+.ui-status-badge.night {
+  background: #e0e7ff;
+  border-color: #c7d2fe;
+  color: #1e3a8a;
+}
+
+.empty-state {
+  align-items: center;
+  gap: 12px;
+}
+
+.empty-state-icon {
+  align-items: center;
+  background: var(--ui-blue-soft);
+  border: 1px solid #c7dcfb;
+  border-radius: 10px;
+  color: var(--ui-blue);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-weight: 900;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.empty-state-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.empty-state.green .empty-state-icon {
+  background: var(--ui-success-soft);
+  border-color: #b9efd0;
+  color: var(--ui-success);
+}
+
+.empty-state.orange .empty-state-icon {
+  background: var(--ui-warning-soft);
+  border-color: #ffd89a;
+  color: var(--ui-warning);
+}
+
+.empty-state.red .empty-state-icon {
+  background: var(--ui-danger-soft);
+  border-color: #ffc7c2;
+  color: var(--ui-danger);
 }
 
 .workspace :where(
