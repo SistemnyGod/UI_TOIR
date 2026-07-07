@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   Archive,
   DatabaseZap,
@@ -80,11 +80,19 @@ export function InventorySettingsScreen({
   const [itemsLoading, setItemsLoading] = useState(false);
   const [health, setHealth] = useState<InventoryDbHealthDto | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
+  const mountedRef = useRef(true);
   const reloadSettings = useCallback(async () => {
     const nextSettings = await inventoryRepository.getSettings();
     setLocalSettings(nextSettings);
     await onReload?.();
   }, [inventoryRepository, onReload]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -121,11 +129,11 @@ export function InventorySettingsScreen({
     setItemsLoading(true);
     try {
       const response = await inventoryRepository.getItems({ pageSize: 2000, status: "active" });
-      setItemsForEditors(response.rows);
+      if (mountedRef.current) setItemsForEditors(response.rows);
     } catch (loadError) {
       onNotify(loadError instanceof Error ? loadError.message : "Не удалось загрузить номенклатуру для редактора");
     } finally {
-      setItemsLoading(false);
+      if (mountedRef.current) setItemsLoading(false);
     }
   }
 

@@ -1139,7 +1139,7 @@ function EmployeeHistoryPanel({
       };
     }),
     ...employeeRequests
-      .filter((request) => isRequestCurrent(request) && !assignmentRequestIds.has(request.id))
+      .filter((request) => isRequestCurrent(request) && !allAssignmentRequestIds.has(request.id))
       .map((request) => ({
         assignmentId: undefined,
         id: `request-${request.id}`,

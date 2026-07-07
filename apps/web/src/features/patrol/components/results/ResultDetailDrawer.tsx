@@ -37,7 +37,14 @@ export function ResultDetailDrawer({
       imageAttachments.map(async (attachment) => {
         try {
           const file = await downloadResultAttachment(attachment);
+          if (cancelled) return [attachment.id, ""] as const;
+
           const url = URL.createObjectURL(file.blob);
+          if (cancelled) {
+            URL.revokeObjectURL(url);
+            return [attachment.id, ""] as const;
+          }
+
           objectUrls.push(url);
           return [attachment.id, url] as const;
         } catch {

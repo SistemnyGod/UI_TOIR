@@ -472,6 +472,111 @@ describe("shared UI primitives", () => {
     expect(screen.getByText(/Действующая заявка/i)).toBeInTheDocument();
   });
 
+  it("counts a linked request and assignment as one active employee item", async () => {
+    window.localStorage.setItem("patrol360.patrolEmployees.favoriteIds.v1", JSON.stringify(["employee-1"]));
+
+    const { container } = render(
+      <AssignmentScreen
+        activePatrols={[
+          {
+            id: "assignment-1",
+            patrolRequestId: "request-1",
+            employee: "Employee One",
+            employeeId: "employee-1",
+            routeId: "route-1",
+            route: "Route One",
+            zone: "Zone",
+            shift: "Р”РµРЅСЊ",
+            currentPoint: "Start",
+            status: "РћР¶РёРґР°РµС‚",
+            progress: 0,
+            eta: "20:20",
+            deviation: "0",
+            plannedAt: "03.07.2026, 20:20",
+          } as never,
+        ]}
+        assignmentCreateIntent={0}
+        canManage={true}
+        dataSourceMode="api"
+        employeeDirectory={[
+          {
+            id: "employee-1",
+            fullName: "Employee One",
+            initials: "EO",
+            personnelNo: "001",
+            position: "Inspector",
+            department: "Patrol",
+            employeeGroup: "Primary",
+            birthDate: "",
+            zone: "Patrol",
+            status: "Active",
+            routesDone: 0,
+            routesTotal: 0,
+            mobileStatus: "Linked",
+            lastSeen: "",
+            phone: "",
+            hiredAt: "",
+            brigade: "",
+            shift: "day",
+            leader: "",
+            email: "",
+          } as never,
+        ]}
+        refreshPatrolData={vi.fn().mockResolvedValue(undefined)}
+        requestListStatus="ready"
+        requests={[
+          {
+            createdAt: "2026-07-02T11:32:15Z",
+            description: "Request",
+            dueAt: "20:20",
+            employee: "Employee One",
+            employeeId: "employee-1",
+            id: "request-1",
+            notificationText: "Notify",
+            notifyEmployee: true,
+            point: "",
+            priority: "РЎСЂРµРґРЅРёР№",
+            requestKind: "patrol-assignment",
+            responsible: "Employee One",
+            route: "Route One",
+            routeId: "route-1",
+            scheduledDate: "2026-07-03",
+            scheduledTime: "20:20",
+            source: "web",
+            sourceResultId: "",
+            status: "РќР°Р·РЅР°С‡РµРЅР°",
+            timeline: [],
+            title: "REQ-1",
+          } as never,
+        ]}
+        routeDirectory={[
+          {
+            id: "route-1",
+            name: "Route One",
+            territory: "Zone",
+            status: "Active",
+            description: "",
+            duration: "30 min",
+            distance: "0",
+            periodicity: "Daily",
+            points: [],
+          } as never,
+        ]}
+        selectedEmployeeId="employee-1"
+        selectedRouteId="route-1"
+        onCreatePatrolRequest={vi.fn()}
+        onNavigate={vi.fn()}
+        onNotify={vi.fn()}
+        onOpenRequestById={vi.fn()}
+        onRefreshRequests={vi.fn()}
+        onSelectEmployee={vi.fn()}
+        onSelectRoute={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(container.querySelector(".assign-am-history-stats strong")?.textContent).toBe("1"));
+  });
+
   it("uses assignment favorite employees in the patrol schedule grid", async () => {
     window.localStorage.setItem("patrol360.patrolEmployees.favoriteIds.v1", JSON.stringify(["employee-favorite"]));
     vi.stubGlobal(
