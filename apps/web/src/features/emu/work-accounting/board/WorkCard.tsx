@@ -56,6 +56,7 @@ export function WorkCard({
   const hasWorking = hasWorkingEmployees(work);
   const showAttention = cardState === "attention" && !hasWorking;
   const isCompleted = Boolean(work.completedAt);
+  const createdByLabel = work.createdByName?.trim() || (work.createdByUserId ? "пользователь" : "");
   const [quickMenu, setQuickMenu] = useState<{ x: number; y: number } | null>(null);
 
   function openQuickMenu(event: { clientX: number; clientY: number; preventDefault?: () => void }) {
@@ -80,6 +81,7 @@ export function WorkCard({
       <p>{work.taskDescription || "Задача не указана"}</p>
       <div className="emu-work-meta">
         <span>{work.workNumber}</span>
+        {createdByLabel ? <span>Автор: {createdByLabel}</span> : null}
         <span>👤 сотрудников: {work.employees.length}</span>
         <span>◷ работа {formatMinutes(liveMinutes.workMinutes)} · пауза {formatMinutes(liveMinutes.waitingMinutes + liveMinutes.otherWorkMinutes)}</span>
       </div>
@@ -119,4 +121,3 @@ export function WorkCard({
     </>
   );
 }
-

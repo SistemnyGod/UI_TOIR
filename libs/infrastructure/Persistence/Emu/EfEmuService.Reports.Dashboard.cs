@@ -10,22 +10,44 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfEmuService
 {
-    public EmuDashboardDto GetDashboard(IReadOnlyList<Guid>? allowedSectionIds = null)
+    public EmuDashboardDto GetDashboard(IReadOnlyList<Guid>? allowedSectionIds = null, Guid? createdByUserId = null)
     {
         var today = GetBusinessDate(DateTimeOffset.UtcNow);
-        var active = ApplySectionScope(LoadSessions(), allowedSectionIds)
+        var active = ApplyOwnerScope(ApplySectionScope(LoadSessions(), allowedSectionIds), createdByUserId)
             .Where(row => row.DeletedAt == null && row.CompletedAt == null)
             .OrderBy(row => row.CreatedAt)
             .Take(20)
             .ToList();
-        var completedToday = ApplySectionScope(dbContext.EmuWorkSessions.AsNoTracking(), allowedSectionIds)
+        var completedToday = ApplyOwnerScope(ApplySectionScope(dbContext.EmuWorkSessions.AsNoTracking(), allowedSectionIds), createdByUserId)
             .AsNoTracking()
             .Where(row => row.DeletedAt == null && row.CompletedAt != null)
             .AsEnumerable()
             .Count(row => GetBusinessDate(row.CompletedAt!.Value) == today);
         var waiting = active.Count(row => row.Employees.Any(employee => employee.Status == EmployeeWaiting || employee.Status == EmployeeOtherWork));
         var forgotten = active.Where(row => row.IsCarriedOver || row.WorkDate < today).ToList();
-        var recentEvents = dbContext.EmuWorkAuditEvents.AsNoTracking()
+        var recentEventsQuery = dbContext.EmuWorkAuditEvents.AsNoTracking()
+            .Include(row => row.WorkSession)
+            .AsQueryable();
+        if (allowedSectionIds is not null || createdByUserId is not null)
+        {
+            recentEventsQuery = recentEventsQuery.Where(row => row.WorkSession != null);
+            if (allowedSectionIds is { Count: 0 })
+            {
+                recentEventsQuery = recentEventsQuery.Where(_ => false);
+            }
+            else if (allowedSectionIds is { Count: > 0 })
+            {
+                var sectionIds = allowedSectionIds.Distinct().ToArray();
+                recentEventsQuery = recentEventsQuery.Where(row => row.WorkSession != null && sectionIds.Contains(row.WorkSession.SectionId));
+            }
+
+            if (createdByUserId is not null)
+            {
+                recentEventsQuery = recentEventsQuery.Where(row => row.WorkSession != null && row.WorkSession.CreatedByUserId == createdByUserId.Value);
+            }
+        }
+
+        var recentEvents = recentEventsQuery
             .OrderByDescending(row => row.CreatedAt)
             .Take(10)
             .Select(MapAuditEvent)

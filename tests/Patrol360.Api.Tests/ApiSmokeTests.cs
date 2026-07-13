@@ -159,6 +159,7 @@ public class ApiSmokeTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.IsType<EmuListResponseDto<EmuWorkSessionDto>>(ok.Value);
         Assert.NotNull(workService.LastQuery);
+        Assert.Equal(user.Id, workService.LastQuery!.CreatedByUserId);
         Assert.Equal(waitReasonId, workService.LastQuery!.WaitReasonId);
         Assert.Equal(notCompletedReasonId, workService.LastQuery.NotCompletedReasonId);
         Assert.Equal("Завершено", workService.LastQuery!.OperationalStatus);
@@ -199,7 +200,7 @@ public class ApiSmokeTests
     public void EmuWorkSessionsExportReturnsCsvWithCurrentFilters()
     {
         var workService = new FakeEmuWorkService();
-        var user = new SessionUserDto(Guid.NewGuid(), "emu", "EMU", ["emu_manager"], ["emu.view", "emu.reports.export"]);
+        var user = new SessionUserDto(Guid.NewGuid(), "emu", "EMU", ["emu_manager"], ["emu.view", "emu.reports.export", "emu.scope.all"]);
         var controller = CreateEmuController(workService, user);
         var dateFrom = new DateOnly(2026, 6, 1);
         var waitReasonId = Guid.NewGuid();
@@ -211,6 +212,7 @@ public class ApiSmokeTests
         Assert.StartsWith("emu-history-", file.FileDownloadName);
         Assert.NotEmpty(file.FileContents);
         Assert.NotNull(workService.LastQuery);
+        Assert.Null(workService.LastQuery!.CreatedByUserId);
         Assert.Equal(dateFrom, workService.LastQuery!.DateFrom);
         Assert.Equal(waitReasonId, workService.LastQuery.WaitReasonId);
         Assert.Equal("Завершено", workService.LastQuery.OperationalStatus);
@@ -796,7 +798,7 @@ public class ApiSmokeTests
 
         public EmuWorkSessionQueryDto? LastQuery { get; private set; }
 
-        public EmuDashboardDto GetDashboard(IReadOnlyList<Guid>? allowedSectionIds = null) => new([], [], [], [], []);
+        public EmuDashboardDto GetDashboard(IReadOnlyList<Guid>? allowedSectionIds = null, Guid? createdByUserId = null) => new([], [], [], [], []);
 
         public EmuListResponseDto<EmuWorkSessionDto> GetWorkSessions(EmuWorkSessionQueryDto query)
         {
@@ -827,7 +829,7 @@ public class ApiSmokeTests
                 new Dictionary<string, string[]>());
         }
 
-        public EmuWorkSessionChangesDto GetWorkSessionChanges(DateTimeOffset since, IReadOnlyList<Guid>? allowedSectionIds = null) => new(DateTimeOffset.UtcNow, [], []);
+        public EmuWorkSessionChangesDto GetWorkSessionChanges(DateTimeOffset since, IReadOnlyList<Guid>? allowedSectionIds = null, Guid? createdByUserId = null) => new(DateTimeOffset.UtcNow, [], []);
 
         public EmuCommandResult<EmuWorkSessionDto> GetWorkSession(Guid id) => new(null, new Dictionary<string, string[]>());
 

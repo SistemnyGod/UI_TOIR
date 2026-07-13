@@ -31,7 +31,7 @@ public interface IEmuCatalogService
 
 public interface IEmuWorkService
 {
-    EmuDashboardDto GetDashboard(IReadOnlyList<Guid>? allowedSectionIds = null);
+    EmuDashboardDto GetDashboard(IReadOnlyList<Guid>? allowedSectionIds = null, Guid? createdByUserId = null);
 
     EmuListResponseDto<EmuWorkSessionDto> GetWorkSessions(EmuWorkSessionQueryDto query);
 
@@ -39,7 +39,7 @@ public interface IEmuWorkService
 
     EmuCommandResult<EmuEmployeeWorkHistoryReportDto> GetEmployeeWorkHistoryReport(Guid employeeId, EmuWorkSessionQueryDto query);
 
-    EmuWorkSessionChangesDto GetWorkSessionChanges(DateTimeOffset since, IReadOnlyList<Guid>? allowedSectionIds = null);
+    EmuWorkSessionChangesDto GetWorkSessionChanges(DateTimeOffset since, IReadOnlyList<Guid>? allowedSectionIds = null, Guid? createdByUserId = null);
 
     EmuCommandResult<EmuWorkSessionDto> GetWorkSession(Guid id);
 

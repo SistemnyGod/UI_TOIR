@@ -68,6 +68,8 @@ public sealed record EmuWorkSessionDto(
     DateOnly WorkDate,
     Guid SectionId,
     string SectionName,
+    Guid? CreatedByUserId,
+    string CreatedByName,
     Guid? PlanTaskId,
     string TaskDescription,
     string Status,
@@ -337,7 +339,8 @@ public sealed record EmuWorkSessionQueryDto(
     string? SortBy = null,
     string? ShiftType = null,
     string? EmployeeSearch = null,
-    IReadOnlyList<Guid>? AllowedSectionIds = null);
+    IReadOnlyList<Guid>? AllowedSectionIds = null,
+    Guid? CreatedByUserId = null);
 
 public sealed record EmuWorkHistoryReportDto(
     EmuWorkSessionQueryDto AppliedQuery,

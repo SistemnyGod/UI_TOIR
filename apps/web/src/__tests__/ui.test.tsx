@@ -26,9 +26,11 @@ import {
 import { RequestModals } from "../features/patrol/components/requests/RequestModals";
 import { EmployeeDirectoryPanel } from "../features/patrol/components/employees/EmployeeDirectoryPanel";
 import { EmployeeProfileDrawer } from "../features/patrol/components/employees/EmployeeProfileDrawer";
+import { EmuWorkAccountingScreen } from "../features/emu/EmuWorkAccountingScreen";
 import { InventoryPpeScreen } from "../screens/inventory/InventoryPpeScreen";
 import { Button, CompactTable, IconButton, KpiStrip, PaginationBar, RouteLoadingBar, SkeletonCards, SkeletonForm, SkeletonList, SkeletonPreview, SkeletonTable, StatusBadge } from "../shared/ui";
 import { LoginScreen } from "../screens/LoginScreen";
+import type { EmuWorkspace } from "../hooks/useEmuWorkspace";
 import type { PatrolResult, SiteUser } from "../types";
 import type { ResultGroup } from "../features/patrol/results/resultTypes";
 
@@ -67,6 +69,41 @@ function createMemoryStorage(): Storage {
       rows.set(key, value);
     },
   };
+}
+
+function createEmuAccessWorkspace(sourceMode: "api" | "mock" = "api"): EmuWorkspace {
+  return {
+    actions: {} as EmuWorkspace["actions"],
+    auditEvents: [],
+    dashboard: {
+      activeWork: [],
+      forgottenWork: [],
+      metrics: [],
+      recentEvents: [],
+      weekPlan: [],
+    },
+    decisions: [],
+    loading: false,
+    planTasks: [],
+    refreshPlanBoard: vi.fn().mockResolvedValue(undefined),
+    refreshWorkBoard: vi.fn().mockResolvedValue(undefined),
+    reload: vi.fn().mockResolvedValue(undefined),
+    settings: {
+      favoriteEmployees: [],
+      notCompletedReasons: [],
+      sections: [],
+      waitReasons: [],
+      workTemplates: [],
+    },
+    sourceMode,
+    workSessions: {
+      page: 1,
+      pageCount: 1,
+      pageSize: 100,
+      rows: [],
+      total: 0,
+    },
+  } as EmuWorkspace;
 }
 
 describe("shared UI primitives", () => {
@@ -174,6 +211,47 @@ describe("shared UI primitives", () => {
     expect(container.querySelectorAll(".skeleton-table-row")).toHaveLength(8);
     expect(container.querySelectorAll(".skeleton-field")).toHaveLength(2);
     expect(container.querySelector(".skeleton-preview")).toBeInTheDocument();
+  });
+
+  it("explains EMU work ownership mode for regular and full-access users", () => {
+    const regularUser = {
+      displayName: "Operator",
+      id: "user-1",
+      login: "operator",
+      permissions: ["emu.work-accounting.view", "emu.work.create"],
+      roles: ["emu_operator"],
+    };
+    const managerUser = {
+      ...regularUser,
+      id: "manager-1",
+      login: "manager",
+      permissions: ["emu.work-accounting.view", "emu.scope.all"],
+      roles: ["manager"],
+    };
+
+    const { rerender } = render(
+      <EmuWorkAccountingScreen
+        currentUser={regularUser}
+        employeeDirectory={[]}
+        onNotify={vi.fn()}
+        workspace={createEmuAccessWorkspace("api")}
+      />,
+    );
+
+    expect(screen.getByText("Мои работы")).toBeInTheDocument();
+    expect(screen.getByText(/Показаны только карточки, созданные вашим аккаунтом/)).toBeInTheDocument();
+
+    rerender(
+      <EmuWorkAccountingScreen
+        currentUser={managerUser}
+        employeeDirectory={[]}
+        onNotify={vi.fn()}
+        workspace={createEmuAccessWorkspace("api")}
+      />,
+    );
+
+    expect(screen.getByText("Все доступные работы")).toBeInTheDocument();
+    expect(screen.getByText(/видят расширенный список/)).toBeInTheDocument();
   });
 
   it("requires matching initial password when creating a site user", async () => {

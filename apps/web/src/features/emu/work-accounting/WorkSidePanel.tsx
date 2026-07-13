@@ -113,6 +113,7 @@ export function WorkSidePanel({
           title="Требует решения"
         />
         <dl className="emu-kv">
+          <div><dt>Автор</dt><dd>{selectedWork.createdByName || (selectedWork.createdByUserId ? "пользователь" : "не указан")}</dd></div>
           <div><dt>Статус</dt><dd>{selectedWork.operationalStatus || selectedWork.status}</dd></div>
           <div><dt>Работа</dt><dd>{formatMinutes(liveMinutes.workMinutes)}</dd></div>
           <div><dt>Пауза</dt><dd>{formatMinutes(liveMinutes.waitingMinutes + liveMinutes.otherWorkMinutes)}</dd></div>
@@ -247,4 +248,3 @@ export function WorkSidePanel({
     </aside>
   );
 }
-

@@ -23,6 +23,8 @@ internal sealed partial class EfEmuService
             row.WorkDate,
             row.SectionId,
             row.Section?.Name ?? "Прочее",
+            row.CreatedByUserId,
+            row.CreatedByUser?.DisplayName ?? string.Empty,
             row.PlanTaskId,
             row.TaskDescription,
             row.Status,

@@ -347,6 +347,40 @@
   line-height: 1.35;
 }
 
+.emu-access-scope {
+  align-items: flex-start;
+  background: #f7fbff;
+  border: 1px solid #d7e5f8;
+  border-left: 4px solid var(--emu-blue);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 10px;
+  max-width: 720px;
+  padding: 9px 12px;
+}
+
+.emu-access-scope strong {
+  color: var(--emu-text);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.emu-access-scope span {
+  color: var(--emu-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.emu-access-scope.is-own {
+  border-left-color: #0ea5e9;
+}
+
+.emu-access-scope.is-wide {
+  border-left-color: #16a34a;
+}
+
 .emu-card-actions {
   gap: 6px;
 }
@@ -1139,4 +1173,3 @@
     width: 100%;
   }
 }
-

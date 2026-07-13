@@ -14,6 +14,7 @@ internal sealed partial class EfEmuService
     {
         var query = dbContext.EmuWorkSessions
             .Include(row => row.Section)
+            .Include(row => row.CreatedByUser)
             .Include(row => row.AuditEvents)
             .AsQueryable();
 

@@ -11,11 +11,11 @@ namespace Patrol360.Infrastructure.Persistence;
 internal sealed partial class EfEmuService
 {
     private static EmuWorkSessionQueryDto SanitizeAppliedQuery(EmuWorkSessionQueryDto query) =>
-        query with { AllowedSectionIds = null };
+        query with { AllowedSectionIds = null, CreatedByUserId = null };
 
     private IQueryable<EmuWorkSessionEntity> BuildWorkSessionQuery(EmuWorkSessionQueryDto query)
     {
-        var rowsQuery = ApplySectionScope(LoadSessions().AsQueryable(), query.AllowedSectionIds);
+        var rowsQuery = ApplyOwnerScope(ApplySectionScope(LoadSessions().AsQueryable(), query.AllowedSectionIds), query.CreatedByUserId);
 
         if (!query.IncludeDeleted)
         {
@@ -245,6 +245,15 @@ internal sealed partial class EfEmuService
 
         var ids = allowedSectionIds.Distinct().ToArray();
         return query.Where(row => ids.Contains(row.SectionId));
+    }
+
+    private static IQueryable<EmuWorkSessionEntity> ApplyOwnerScope(
+        IQueryable<EmuWorkSessionEntity> query,
+        Guid? createdByUserId)
+    {
+        return createdByUserId is null
+            ? query
+            : query.Where(row => row.CreatedByUserId == createdByUserId.Value);
     }
 
     private static IQueryable<EmuWorkPlanTaskEntity> ApplyPlanSectionScope(

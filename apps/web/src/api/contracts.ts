@@ -1206,6 +1206,8 @@ export interface EmuWorkSessionDto {
   workDate: string;
   sectionId: string;
   sectionName: string;
+  createdByUserId?: string | null;
+  createdByName?: string;
   planTaskId: string | null;
   taskDescription: string;
   status: string;

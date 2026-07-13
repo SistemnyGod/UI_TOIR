@@ -22,7 +22,7 @@ public sealed class EmuController(
     public ActionResult<EmuDashboardDto> Dashboard()
     {
         var actor = ReadCurrentUser();
-        return Ok(workService.GetDashboard(GetAllowedEmuSectionIds(actor)));
+        return Ok(workService.GetDashboard(GetAllowedEmuSectionIds(actor), GetRestrictedEmuWorkOwnerUserId(actor)));
     }
 
     [HttpGet("settings")]
@@ -402,7 +402,7 @@ public sealed class EmuController(
     public ActionResult<EmuWorkSessionChangesDto> WorkSessionChanges([FromQuery] DateTimeOffset since)
     {
         var actor = ReadCurrentUser();
-        return Ok(workService.GetWorkSessionChanges(since, GetAllowedEmuSectionIds(actor)));
+        return Ok(workService.GetWorkSessionChanges(since, GetAllowedEmuSectionIds(actor), GetRestrictedEmuWorkOwnerUserId(actor)));
     }
 
     [HttpGet("work-sessions/{id:guid}")]
@@ -416,7 +416,7 @@ public sealed class EmuController(
             return ToActionResult(current);
         }
 
-        return CanAccessEmuSection(actor, current.Value.SectionId)
+        return CanAccessEmuWork(actor, current.Value.SectionId, current.Value.CreatedByUserId)
             ? Ok(current.Value)
             : Forbidden("emu_section");
     }
@@ -506,7 +506,7 @@ public sealed class EmuController(
             return ToActionResult(current);
         }
 
-        if (!CanAccessEmuSection(actor, current.Value.SectionId))
+        if (!CanAccessEmuWork(actor, current.Value.SectionId, current.Value.CreatedByUserId))
         {
             return Forbidden("emu_section");
         }
@@ -592,7 +592,7 @@ public sealed class EmuController(
             return CommandValidationProblem(current.Errors);
         }
 
-        return CanAccessEmuSection(actor, current.Value.SectionId)
+        return CanAccessEmuWork(actor, current.Value.SectionId, current.Value.CreatedByUserId)
             ? Ok(workService.GetWorkSessionAudit(id, page, pageSize))
             : Forbidden("emu_section");
     }
@@ -700,7 +700,8 @@ public sealed class EmuController(
             SortBy: sortBy,
             ShiftType: shiftType,
             EmployeeSearch: employeeSearch,
-            AllowedSectionIds: GetAllowedEmuSectionIds(actor));
+            AllowedSectionIds: GetAllowedEmuSectionIds(actor),
+            CreatedByUserId: GetRestrictedEmuWorkOwnerUserId(actor));
 
     private static EmuSettingsDto FilterSettingsBySectionAccess(EmuSettingsDto settings, IReadOnlyList<Guid>? allowedSectionIds)
     {
@@ -790,6 +791,24 @@ public sealed class EmuController(
         return allowedSectionIds?.Contains(sectionId.Value) == true;
     }
 
+    private Guid? GetRestrictedEmuWorkOwnerUserId(
+        (Guid? UserId, string DisplayName, bool CanOverridePlanApproval, IReadOnlyList<string> Permissions, IReadOnlyList<string> Roles) actor) =>
+        actor.UserId is null || HasFullEmuSectionAccess(actor) ? null : actor.UserId;
+
+    private bool CanAccessEmuWork(
+        (Guid? UserId, string DisplayName, bool CanOverridePlanApproval, IReadOnlyList<string> Permissions, IReadOnlyList<string> Roles) actor,
+        Guid sectionId,
+        Guid? createdByUserId)
+    {
+        if (!CanAccessEmuSection(actor, sectionId))
+        {
+            return false;
+        }
+
+        var restrictedOwnerId = GetRestrictedEmuWorkOwnerUserId(actor);
+        return restrictedOwnerId is null || createdByUserId == restrictedOwnerId.Value;
+    }
+
     private ActionResult<EmuWorkSessionDto>? ValidateWorkSessionSectionAccess(
         Guid id,
         (Guid? UserId, string DisplayName, bool CanOverridePlanApproval, IReadOnlyList<string> Permissions, IReadOnlyList<string> Roles) actor)
@@ -800,7 +819,7 @@ public sealed class EmuController(
             return ToActionResult(current);
         }
 
-        if (CanAccessEmuSection(actor, current.Value.SectionId))
+        if (CanAccessEmuWork(actor, current.Value.SectionId, current.Value.CreatedByUserId))
         {
             return null;
         }
