@@ -447,6 +447,7 @@ export function MobileAccountLinkPanel({
           <label className="employee-binding-search">
             <AccountModalIcon name="search" />
             <input
+              autoFocus
               id="employee-binding-search"
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Поиск по ФИО, должности, отделу или участку"

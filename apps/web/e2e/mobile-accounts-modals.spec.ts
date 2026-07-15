@@ -28,8 +28,8 @@ test("mobile account action buttons open modal dialogs and backdrop closes them"
   await page.getByRole("button", { name: "Удалить" }).click();
   const deleteDialog = page.getByRole("dialog", { name: "Удаление мобильного аккаунта" });
   await expect(deleteDialog).toBeVisible();
-  await expect(deleteDialog.getByText(/Удалить мобильный аккаунт|Аккаунт не выбран/)).toBeVisible();
-  await expect(deleteDialog.getByRole("button", { name: "Удалить аккаунт" })).toBeVisible();
+  await expect(deleteDialog.getByText("Удалить аккаунт ?", { exact: true })).toBeVisible();
+  await expect(deleteDialog.getByRole("button", { name: "Удалить" })).toBeVisible();
 
   await deleteDialog.getByRole("button", { name: "Отмена" }).click();
   await expect(deleteDialog).toBeHidden();

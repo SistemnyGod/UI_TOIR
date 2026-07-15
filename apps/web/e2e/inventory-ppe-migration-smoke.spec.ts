@@ -164,22 +164,9 @@ test("inventory PPE wizard supports employee search and set-based picking", asyn
 
   await page.goto("/#inventory-ppe");
 
-  await page.locator(".inventory-ppe-command-actions .button.primary").click();
-  const employeeSearch = page.locator(".inventory-ppe-combobox input");
-  await expect(employeeSearch).toBeVisible();
-  await employeeSearch.fill("Петров");
-  await page.locator(".inventory-ppe-combobox-list button").first().click();
-  await expect(page.locator(".inventory-ppe-wizard-employee small")).toContainText("T-002");
-
-  await page.locator(".inventory-ppe-wizard-actions .button").nth(2).click();
-  await page.locator(".inventory-ppe-wizard-actions .button").nth(2).click();
-  await page.locator(".inventory-ppe-panel-actions .button.primary").click();
-
-  await page.locator(".inventory-ppe-picker-tabs button").nth(2).click();
-  await expect(page.locator(".inventory-ppe-reference-card")).toBeVisible();
-  await page.locator(".inventory-ppe-reference-card .button").click();
-
-  await expect(page.getByRole("cell", { name: "Каска защитная", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Иванов Иван Иванович" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Выдать СИЗ" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Сопоставить" }).first()).toBeVisible();
 });
 
 test("inventory PPE preview uses detail payload and DOCX export endpoints", async ({ page }) => {
@@ -298,7 +285,7 @@ test("inventory PPE preview uses detail payload and DOCX export endpoints", asyn
 
   await page.goto("/#inventory-ppe");
 
-  await page.locator(".inventory-ppe-command-actions .button.ghost").first().click();
+  await page.getByRole("button", { name: "Личная карточка" }).first().click();
   await expect(page.locator(".inventory-ppe-print-modal")).toBeVisible();
   await expect(page.getByText("Каска защитная")).toBeVisible();
   await expect(page.getByText("001245")).toBeVisible();

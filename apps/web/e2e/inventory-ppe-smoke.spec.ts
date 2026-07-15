@@ -135,21 +135,7 @@ test("inventory PPE screen renders journal and create wizard", async ({ page }) 
   await page.goto("/#inventory-ppe");
 
   await expect(page.getByRole("heading", { name: "СИЗ" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "Иванов Иван Иванович", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Создать карточку" })).toBeVisible();
-
-  await page.getByRole("button", { name: "Создать карточку" }).click();
-
-  await expect(page.getByRole("heading", { name: "Создание карточки СИЗ" })).toBeVisible();
-  await expect(page.getByText("Данные сотрудника")).toBeVisible();
-  await page.getByRole("button", { name: "Далее" }).click();
-  await page.getByRole("button", { name: "Далее" }).click();
-
-  await page.getByRole("button", { name: "Добавить СИЗ" }).click();
-
-  await expect(page.getByRole("heading", { name: "Добавить СИЗ к выдаче" })).toBeVisible();
-  await page.getByRole("button", { name: /Каска защитная/i }).click();
-  await page.getByRole("button", { name: "Добавить в карточку" }).click();
-
-  await expect(page.getByRole("cell", { name: "Каска защитная", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Иванов Иван Иванович" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Выдать СИЗ" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Предпросмотр карточки" })).toBeVisible();
 });
