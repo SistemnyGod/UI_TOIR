@@ -166,7 +166,7 @@ test("inventory issue screen uses dedicated options and posts issue documents", 
   expect(requests.some((url) => url.includes("/inventory/items?"))).toBeFalsy();
   expect(requests.some((url) => url.includes("/inventory/settings"))).toBeFalsy();
 
-  await page.getByRole("button", { name: "В черновик" }).click();
+  await page.getByRole("button", { name: /Выбрать позицию: Каска для issue smoke/ }).click();
   await page.getByLabel("Сотрудник").selectOption(employeeId);
   await page.locator(".inventory-issue-draft-lines article").getByLabel("Кол-во").fill("2");
   await page.getByLabel("Комментарий").fill("Smoke issue");

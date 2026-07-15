@@ -47,6 +47,74 @@ function Wait-Healthy {
     throw "Container '$Name' did not become healthy."
 }
 
+function Merge-PreviousWebAssets {
+    param(
+        [Parameter(Mandatory = $true)][string]$ContainerName,
+        [Parameter(Mandatory = $true)][string]$DistPath
+    )
+
+    $assetsPath = Join-Path $DistPath "assets"
+    if (-not (Test-Path $assetsPath)) {
+        throw "Fresh web build does not contain an assets directory: $assetsPath"
+    }
+
+    # Record the fresh generation before merging compatibility assets. The next
+    # deployment will retain exactly this generation, avoiding unbounded growth.
+    $currentAssets = @(Get-ChildItem -LiteralPath $assetsPath -File | Select-Object -ExpandProperty Name)
+    $manifestPath = Join-Path $DistPath "patrol360-assets-current.txt"
+    Set-Content -LiteralPath $manifestPath -Value $currentAssets -Encoding utf8
+
+    if (-not (Get-ContainerId -Name $ContainerName)) {
+        Write-Host "No running $ContainerName container; previous assets will not be retained."
+        return
+    }
+
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("patrol360-web-assets-" + [guid]::NewGuid().ToString("N"))
+    $previousAssetsPath = Join-Path $tempRoot "assets"
+    $previousManifestPath = Join-Path $tempRoot "patrol360-assets-current.txt"
+    New-Item -ItemType Directory -Path $previousAssetsPath -Force | Out-Null
+
+    try {
+        docker cp "${ContainerName}:/srv/assets/." $previousAssetsPath | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not copy the active web assets from $ContainerName."
+        }
+
+        docker exec $ContainerName test -f /srv/patrol360-assets-current.txt 2>$null
+        $hasPreviousManifest = $LASTEXITCODE -eq 0
+        if ($hasPreviousManifest) {
+            docker cp "${ContainerName}:/srv/patrol360-assets-current.txt" $previousManifestPath | Out-Null
+        }
+
+        if ($hasPreviousManifest -and (Test-Path $previousManifestPath)) {
+            $previousAssetNames = @(Get-Content -LiteralPath $previousManifestPath | Where-Object { $_ })
+        }
+        else {
+            # Compatibility with images built before the generation manifest existed.
+            $previousAssetNames = @(Get-ChildItem -LiteralPath $previousAssetsPath -File | Select-Object -ExpandProperty Name)
+        }
+
+        $retained = 0
+        foreach ($assetName in $previousAssetNames) {
+            if ([System.IO.Path]::GetFileName($assetName) -ne $assetName) {
+                continue
+            }
+
+            $source = Join-Path $previousAssetsPath $assetName
+            $destination = Join-Path $assetsPath $assetName
+            if ((Test-Path $source) -and -not (Test-Path $destination)) {
+                Copy-Item -LiteralPath $source -Destination $destination
+                $retained++
+            }
+        }
+
+        Write-Host "Retained $retained previous-generation web assets for open browser tabs."
+    }
+    finally {
+        Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $repoRoot
 
@@ -67,6 +135,8 @@ if ($webConfig -match "depends_on:") {
 if (-not $SkipNpmBuild) {
     npm run build --prefix apps\web
 }
+
+Merge-PreviousWebAssets -ContainerName "patrol360-web" -DistPath (Join-Path $repoRoot "apps\web\dist")
 
 docker compose @composeArgs build web
 docker compose @composeArgs up -d --no-deps web

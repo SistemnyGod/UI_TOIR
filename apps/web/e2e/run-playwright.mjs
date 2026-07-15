@@ -13,9 +13,6 @@ const e2eEnv = { ...process.env };
 if (!e2eEnv.VITE_ENABLE_MOCK_MODE) {
   e2eEnv.VITE_ENABLE_MOCK_MODE = "true";
 }
-if (!e2eEnv.VITE_DATA_SOURCE_MODE && (e2eEnv.VITE_ENABLE_MOCK_MODE === "true" || e2eEnv.VITE_ENABLE_MOCK_MODE === "1")) {
-  e2eEnv.VITE_DATA_SOURCE_MODE = "mock";
-}
 
 await runBuild();
 

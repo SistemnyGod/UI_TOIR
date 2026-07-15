@@ -77,6 +77,15 @@ test("inventory history and system log use server filters and show clean text", 
     requests.push(route.request().url());
     return route.fulfill({ contentType: "application/json", body: JSON.stringify(historyPayload) });
   });
+  await page.route("**/api/v1/inventory/documents**", (route) =>
+    route.fulfill({ contentType: "application/json", body: JSON.stringify({ rows: [], total: 0, page: 1, pageSize: 500, pageCount: 0 }) }),
+  );
+  await page.route("**/api/v1/inventory/custody/records**", (route) =>
+    route.fulfill({ contentType: "application/json", body: JSON.stringify({ rows: [], total: 0, page: 1, pageSize: 500, pageCount: 0 }) }),
+  );
+  await page.route("**/api/v1/inventory/items**", (route) =>
+    route.fulfill({ contentType: "application/json", body: JSON.stringify({ rows: [], total: 0, page: 1, pageSize: 500, pageCount: 0 }) }),
+  );
   await page.route("**/api/v1/inventory/system-log**", (route) => {
     requests.push(route.request().url());
     return route.fulfill({ contentType: "application/json", body: JSON.stringify(systemLogPayload) });
@@ -85,7 +94,7 @@ test("inventory history and system log use server filters and show clean text", 
   await page.goto("/#inventory-history");
   await expect(page.getByRole("heading", { name: "История" })).toBeVisible();
   await expect(page.getByText("Создана строка акта CUST-001")).toBeVisible();
-  await page.getByPlaceholder("Поиск по описанию, пользователю или действию").fill("каска");
+  await page.getByPlaceholder("Сотрудник, предмет, комментарий").fill("каска");
   await expect.poll(() => requests.some((url) => url.includes("/history") && url.includes("query=%D0%BA%D0%B0%D1%81%D0%BA%D0%B0"))).toBeTruthy();
   await page.getByRole("button", { name: "Открыть" }).first().click();
   await expect(page.locator(".inventory-history-drawer")).toContainText("Описание");
@@ -128,9 +137,18 @@ test("inventory audit endpoints are not available without audit permission", asy
     deniedUrls.push(route.request().url());
     return route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: "Forbidden" }) });
   });
+  await page.route("**/api/v1/inventory/documents**", (route) =>
+    route.fulfill({ contentType: "application/json", body: JSON.stringify({ rows: [], total: 0, page: 1, pageSize: 500, pageCount: 0 }) }),
+  );
+  await page.route("**/api/v1/inventory/custody/records**", (route) =>
+    route.fulfill({ contentType: "application/json", body: JSON.stringify({ rows: [], total: 0, page: 1, pageSize: 500, pageCount: 0 }) }),
+  );
+  await page.route("**/api/v1/inventory/items**", (route) =>
+    route.fulfill({ contentType: "application/json", body: JSON.stringify({ rows: [], total: 0, page: 1, pageSize: 500, pageCount: 0 }) }),
+  );
 
   await page.goto("/#inventory-history");
-  await expect(page.getByText("API истории не ответил")).toBeVisible();
+  await expect(page.locator(".inventory-history-state.is-error")).toBeVisible();
 
   await page.goto("/#inventory-system-log");
   await expect(page.getByText("API журнала не ответил")).toBeVisible();

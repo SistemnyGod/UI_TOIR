@@ -111,16 +111,17 @@ test("inventory employees import uses preview before database write", async ({ p
     buffer: Buffer.from("ФИО;Табельный;Должность\nПетров Петр Петрович;T-002;Электрик", "utf8"),
   });
 
-  await expect(page.getByRole("heading", { name: "Предпросмотр импорта" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "employees.csv" })).toBeVisible();
   await expect(page.locator(".inventory-employees-preview-table").getByText("Электрик").first()).toBeVisible();
   await expect.poll(() => previewRequests.length).toBe(1);
   await expect.poll(() => importRequests.length).toBe(0);
 
-  await page.getByRole("button", { name: /Импортировать 2 строк/ }).click();
-  await expect(page.getByRole("heading", { name: "Результат импорта" })).toBeVisible();
+  await page.getByRole("button", { name: "Импортировать" }).click();
+  await expect(page.getByRole("dialog", { name: "Результат импорта сотрудников" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "2 строк обработано" })).toBeVisible();
   await expect.poll(() => importRequests.length).toBe(1);
 
-  await page.getByRole("button", { name: "Готово" }).click();
+  await page.getByRole("dialog", { name: "Результат импорта сотрудников" }).getByRole("button", { name: "Закрыть" }).last().click();
   await page.getByRole("button", { name: "Архив" }).click();
   await expect(page.getByRole("heading", { name: /Архивировать Иванов Иван Иванович/ })).toBeVisible();
   await page.getByRole("button", { name: "Архивировать" }).click();

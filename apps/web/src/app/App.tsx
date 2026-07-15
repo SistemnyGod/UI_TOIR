@@ -47,6 +47,7 @@ export function App() {
   const [routeCreateIntent, setRouteCreateIntent] = useState(0);
   const [employeeCreateIntent, setEmployeeCreateIntent] = useState(0);
   const [assignmentCreateIntent, setAssignmentCreateIntent] = useState(0);
+  const [siteUserCreateIntent, setSiteUserCreateIntent] = useState(0);
   const [selectedRouteDirectoryId, setSelectedRouteDirectoryId] = useState(routesFallback[0]?.id ?? "");
   const [selectedPointId, setSelectedPointId] = useState(routesFallback[0]?.points[0]?.id ?? "");
   const [selectedUserId, setSelectedUserId] = useState("");
@@ -346,7 +347,7 @@ export function App() {
     }
 
     if (screen === "users") {
-      showToast("Заполните форму создания пользователя в панели слева");
+      setSiteUserCreateIntent((value) => value + 1);
       return;
     }
 
@@ -433,6 +434,7 @@ export function App() {
         <ScreenRouter
           accountCreateIntent={mobileAccounts.accountCreateIntent}
           assignmentCreateIntent={assignmentCreateIntent}
+          siteUserCreateIntent={siteUserCreateIntent}
           accountMode={mobileAccounts.accountMode}
           accountListErrorMessage={mobileAccounts.accountListErrorMessage}
           accountListStatus={mobileAccounts.accountListStatus}

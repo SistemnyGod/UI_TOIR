@@ -95,7 +95,7 @@ test("inventory employees and users use server filters and actions", async ({ pa
 
   await page.goto("/#inventory-employees");
   await expect(page.getByRole("heading", { name: "Сотрудники учета" })).toBeVisible();
-  await expect(page.getByText("Иванов Иван Иванович")).toBeVisible();
+  await expect(page.getByRole("table").getByText("Иванов Иван Иванович")).toBeVisible();
   await page.getByPlaceholder("Поиск по ФИО, табельному, должности или подразделению").fill("Иванов");
   await expect.poll(() => requests.some((url) => url.includes("/employees") && url.includes("query=%D0%98%D0%B2%D0%B0%D0%BD%D0%BE%D0%B2"))).toBeTruthy();
   await page.getByRole("button", { name: "Архив" }).first().click();

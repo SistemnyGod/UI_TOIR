@@ -65,7 +65,7 @@ test("EMU MVP work cycle, plan board, favorites and history smoke", async ({ pag
 
   await page.goto("/#emu-completed-work-history");
   await expect(page.getByRole("heading", { exact: true, name: "История выполненных работ" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Сводка/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Общий отч/ })).toBeVisible();
   await expect(page.getByText("Трудозатраты")).toBeVisible();
 
   await page.goto("/#emu-work-accounting");

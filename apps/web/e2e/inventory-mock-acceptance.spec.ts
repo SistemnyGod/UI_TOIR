@@ -5,7 +5,7 @@ const inventoryVisualRoutes = [
   { hash: "#inventory-employees", text: "Сотрудники учета" },
   { hash: "#inventory-items", text: "Номенклатура" },
   { hash: "#inventory-issue", text: "Выдача" },
-  { hash: "#inventory-operations", text: "Операции" },
+  { hash: "#inventory-operations", text: "Возврат и списание" },
   { hash: "#inventory-custody", text: "Под запись" },
   { hash: "#inventory-ppe", text: "СИЗ" },
   { hash: "#inventory-history", text: "История" },
@@ -30,7 +30,7 @@ test("inventory mock acceptance runs without Inventory API requests", async ({ p
 
   await page.goto("/#inventory-overview");
   await expect(page.getByRole("heading", { name: "Обзор учета" })).toBeVisible();
-  await expect(page.getByText("Остатки, операции, СИЗ, под запись")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Зоны внимания" })).toBeVisible();
 
   await page.goto("/#inventory-items");
   await expect(page.getByRole("heading", { name: "Номенклатура" })).toBeVisible();
@@ -59,7 +59,7 @@ test("inventory mock acceptance runs without Inventory API requests", async ({ p
 
   await page.goto("/#inventory-issue");
   await expect(page.getByRole("heading", { name: "Выдача" })).toBeVisible();
-  await page.getByRole("button", { name: "В черновик" }).first().click();
+  await page.getByRole("button", { name: /Выбрать позицию: Каска защитная/ }).click();
   await page.getByLabel("Сотрудник").selectOption("emp-1");
   await page.getByLabel("Комментарий").fill("Mock acceptance issue");
   await page.getByRole("button", { name: "Провести выдачу" }).last().click();
@@ -67,8 +67,8 @@ test("inventory mock acceptance runs without Inventory API requests", async ({ p
 
   await page.goto("/#inventory-ppe");
   await expect(page.getByRole("heading", { name: "СИЗ", exact: true })).toBeVisible();
-  await expect(page.getByText("Журнал карточек СИЗ")).toBeVisible();
-  await expect(page.locator(".inventory-ppe-table tbody tr").filter({ hasText: "Иванов Иван Иванович" }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Иванов Иван Иванович" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Предпросмотр карточки" })).toBeVisible();
 
   await page.goto("/#inventory-custody");
   await expect(page.getByRole("heading", { name: "Под запись" })).toBeVisible();

@@ -167,7 +167,7 @@ test("inventory custody screen supports journal, detail, history and print expor
 
   await expect(page.getByRole("heading", { name: "Под запись" })).toBeVisible();
   await expect(page.getByText("Открыть акт").first()).toBeVisible();
-  await expect(page.locator(".inventory-custody-lines-table").getByText("Ноутбук Lenovo")).toBeVisible();
+  await expect(page.getByText("Ноутбук Lenovo", { exact: true }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Открыть" }).first().click();
   await expect(page.getByText("История акта")).toBeVisible();
@@ -177,7 +177,10 @@ test("inventory custody screen supports journal, detail, history and print expor
 
   await page.locator(".inventory-custody-drawer-actions").getByRole("button", { name: "Закрыть" }).click();
   await page.locator(".inventory-custody-drawer").getByRole("button", { name: "Вернуть" }).click();
+  await page.getByRole("dialog", { name: "Вернуть предмет" }).getByRole("button", { name: "Провести возврат" }).click();
   await page.locator(".inventory-custody-drawer").getByRole("button", { name: "Списать" }).click();
+  await page.getByRole("dialog", { name: "Списать предмет" }).getByRole("textbox").fill("Smoke write-off");
+  await page.getByRole("dialog", { name: "Списать предмет" }).getByRole("button", { name: "Провести списание" }).click();
   await page.getByRole("button", { name: "Архив" }).last().click();
   await page.getByRole("button", { name: "PDF" }).last().click();
   await page.getByRole("button", { name: "DOCX" }).last().click();

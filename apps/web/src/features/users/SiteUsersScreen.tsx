@@ -10,6 +10,7 @@ import type { DataSourceMode, SiteUser } from "../../types";
 
 export function SiteUsersScreen({
   canManage = true,
+  createIntent = 0,
   dataSourceMode,
   selectedUserId,
   onNotify,
@@ -17,6 +18,7 @@ export function SiteUsersScreen({
   onShowTemporaryPassword,
 }: {
   canManage?: boolean;
+  createIntent?: number;
   dataSourceMode: DataSourceMode;
   selectedUserId: string;
   onNotify: (message: string) => void;
@@ -47,6 +49,13 @@ export function SiteUsersScreen({
       setProfileUserId(undefined);
     }
   }, [profileUser, profileUserId]);
+
+  useEffect(() => {
+    if (createIntent > 0 && canManage) {
+      setEditingUser(undefined);
+      setFormMode("create");
+    }
+  }, [canManage, createIntent]);
 
   function openCreateModal() {
     setEditingUser(undefined);

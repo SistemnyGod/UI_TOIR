@@ -60,12 +60,15 @@ test("site users API mode renders users and creates temporary password panel", a
 
   await page.goto("/#users");
 
-  await expect(page.getByRole("heading", { name: "Пользователи сайта" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "admin" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Управление пользователями" })).toBeVisible();
+  await expect(page.getByRole("article").getByText("admin", { exact: true })).toBeVisible();
 
-  await page.getByPlaceholder("Введите логин").fill("operator1");
-  await page.getByPlaceholder("Введите ФИО сотрудника").fill("Иванов Иван");
-  await page.getByRole("button", { name: "Сохранить" }).click();
+  await page.locator(".workspace-head").getByRole("button", { name: "Создать пользователя" }).click();
+  await page.getByPlaceholder("login").fill("operator1");
+  await page.getByPlaceholder("Фамилия Имя Отчество").fill("Иванов Иван");
+  await page.getByPlaceholder("Минимум 8 символов").fill("Patrol-123456!");
+  await page.getByPlaceholder("Повторите пароль").fill("Patrol-123456!");
+  await page.getByRole("button", { name: "Создать пользователя" }).last().click();
 
   await expect(page.getByText("Patrol-123456!")).toBeVisible();
 });

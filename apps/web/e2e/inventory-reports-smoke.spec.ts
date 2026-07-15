@@ -56,6 +56,11 @@ test("inventory reports screen filters reports and downloads export files", asyn
 
     return route.fulfill({ contentType: "application/json", body: JSON.stringify(reports) });
   });
+  for (const endpoint of ["documents", "custody/records", "history", "items"]) {
+    await page.route(`**/api/v1/inventory/${endpoint}**`, (route) =>
+      route.fulfill({ contentType: "application/json", body: JSON.stringify({ rows: [], total: 0, page: 1, pageSize: 500, pageCount: 0 }) }),
+    );
+  }
 
   await page.goto("/#inventory-reports");
 

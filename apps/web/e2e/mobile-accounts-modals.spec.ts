@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("mobile account action buttons open modal dialogs and backdrop closes them", async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem("patrol360.dataSourceMode", "mock");
+    localStorage.setItem("patrol360.dataSourceMode", JSON.stringify({ version: 1, value: "mock" }));
     localStorage.removeItem("patrol360.mobileAccounts.v2");
   });
   await page.goto("/#accounts");
@@ -13,14 +13,14 @@ test("mobile account action buttons open modal dialogs and backdrop closes them"
   await expect(createDialog.getByPlaceholder("Введите логин")).toBeFocused();
   await expect(page.locator("body")).toHaveCSS("overflow", "hidden");
 
-  await page.mouse.click(20, 20);
+  await page.mouse.click(300, 10);
   await expect(createDialog).toBeHidden();
   await expect(page.locator("body")).not.toHaveCSS("overflow", "hidden");
 
   await page.getByRole("button", { name: "Привязать сотрудника" }).click();
   const linkDialog = page.getByRole("dialog", { name: "Привязка сотрудника к мобильному аккаунту" });
   await expect(linkDialog).toBeVisible();
-  await expect(linkDialog.getByRole("combobox")).toBeFocused();
+  await expect(linkDialog.getByPlaceholder(/Поиск по ФИО/)).toBeFocused();
 
   await linkDialog.getByRole("button", { name: "Отмена" }).click();
   await expect(linkDialog).toBeHidden();

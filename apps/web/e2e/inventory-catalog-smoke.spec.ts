@@ -153,6 +153,6 @@ test("inventory catalog screen renders imported items and filters", async ({ pag
   await expect(page.locator(".inventory-items-kpis")).toContainText("1324");
   await expect(page.getByRole("table").getByText("Berger BG Long Socket Set", { exact: true })).toBeVisible();
   await expect(page.getByRole("table").getByText("PPE Release Smoke Gloves", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "PPE Smoke" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "PPE Smoke" })).toBeAttached();
   await expect(page.locator(".inventory-items-table .inventory-row-actions .inventory-icon-btn").first()).toBeVisible();
 });

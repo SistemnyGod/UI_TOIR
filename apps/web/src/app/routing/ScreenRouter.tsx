@@ -87,6 +87,7 @@ function ScreenSkeleton({ screen }: { screen: ScreenId }) {
 export function ScreenRouter({
   accountCreateIntent,
   assignmentCreateIntent,
+  siteUserCreateIntent,
   accountMode,
   accountListErrorMessage,
   accountListStatus,
@@ -167,6 +168,7 @@ export function ScreenRouter({
 }: {
   accountCreateIntent: number;
   assignmentCreateIntent: number;
+  siteUserCreateIntent: number;
   accountMode: AccountMode;
   accountListErrorMessage?: string;
   accountListStatus: DataSourceStatus;
@@ -406,6 +408,7 @@ export function ScreenRouter({
         {screen === "users" ? (
           <SiteUsersScreen
             canManage={hasPermission(currentUser, "site_users.write")}
+            createIntent={siteUserCreateIntent}
             dataSourceMode={dataSourceMode}
             selectedUserId={selectedUserId}
             onNotify={onNotify}
