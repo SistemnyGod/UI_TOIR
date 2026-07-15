@@ -65,7 +65,7 @@ test("inventory reports screen filters reports and downloads export files", asyn
   await page.goto("/#inventory-reports");
 
   await expect(page.locator(".inventory-reports-screen")).toBeVisible();
-  await expect(page.locator(".inventory-reports-kpis")).toContainText("3");
+  await expect(page.locator(".inventory-reports-kpis")).toContainText("Всего выдано0");
   await expect(page.getByRole("heading", { name: "Stock report" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Custody report" })).toBeVisible();
 

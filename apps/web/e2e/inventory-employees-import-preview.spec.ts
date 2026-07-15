@@ -122,7 +122,7 @@ test("inventory employees import uses preview before database write", async ({ p
   await expect.poll(() => importRequests.length).toBe(1);
 
   await page.getByRole("dialog", { name: "Результат импорта сотрудников" }).getByRole("button", { name: "Закрыть" }).last().click();
-  await page.getByRole("button", { name: "Архив" }).click();
+  await page.getByRole("button", { name: "Архив", exact: true }).click();
   await expect(page.getByRole("heading", { name: /Архивировать Иванов Иван Иванович/ })).toBeVisible();
   await page.getByRole("button", { name: "Архивировать" }).click();
   await expect.poll(() => archiveRequests.length).toBe(1);

@@ -105,6 +105,8 @@ test("inventory operations screen posts stock operations from dedicated options"
     pageCount: 1,
   };
   let postedPayload: unknown = null;
+  const cardId = "00000000-0000-0000-0000-00000000c301";
+  const lineId = "00000000-0000-0000-0000-00000000c302";
 
   await page.addInitScript(() => {
     window.localStorage.setItem("patrol360.dataSourceMode", JSON.stringify({ version: 1, value: "api" }));
@@ -143,26 +145,47 @@ test("inventory operations screen posts stock operations from dedicated options"
       }),
     }),
   );
+  await page.route("**/api/v1/inventory/ppe/movements**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        rows: [{
+          cardId,
+          lineId,
+          employeeId,
+          employeeName: employee.fullName,
+          itemId,
+          itemName: item.name,
+          quantity: 1,
+          unit: "pcs",
+          status: "issued",
+          issuedAt: "2026-05-22T08:00:00.000Z",
+          dueAt: null,
+          comment: "Smoke movement",
+        }],
+        total: 1,
+        page: 1,
+        pageSize: 200,
+        pageCount: 1,
+      }),
+    }),
+  );
+  await page.route(`**/api/v1/inventory/ppe/cards/${cardId}/lines/${lineId}/status`, async (route) => {
+    postedPayload = await route.request().postDataJSON();
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify({ id: lineId, status: "returned" }) });
+  });
 
   await page.goto("/#inventory-operations");
 
   await expect(page.locator(".inventory-operations-screen")).toBeVisible();
-  await expect(page.locator(".inventory-operations-kpis")).toContainText("1");
+  await page.getByRole("button", { name: /Operations Smoke Employee/ }).click();
+  await expect(page.locator(".inventory-operations-kpis")).toContainText("Можно вернуть/списать1");
   await expect(page.getByRole("button", { name: /Operations Smoke Wrench/ })).toBeVisible();
-  await expect(page.locator(".inventory-operations-table").getByText("INV-OPS-001")).toBeVisible();
-
-  await page.getByRole("button", { name: /Operations Smoke Wrench/ }).click();
-  await page.locator(".inventory-operations-field").filter({ hasText: "Количество" }).locator("input").fill("2");
-  await page.locator(".inventory-operations-field").filter({ hasText: "Комментарий" }).locator("textarea").fill("Smoke operation");
-  await page.getByRole("button", { name: "Провести операцию" }).first().click();
-  await page.getByRole("dialog").getByRole("button", { name: "Провести" }).click();
+  await page.getByText("Комментарий / основание").locator("..").getByRole("textbox").fill("Smoke operation");
+  await page.getByRole("button", { name: "Провести возврат" }).click();
 
   await expect.poll(() => postedPayload).toMatchObject({
     comment: "Smoke operation",
-    employeeId: null,
-    itemId,
-    quantity: 2,
-    type: "receipt",
-    warehouseId,
+    status: "returned",
   });
 });

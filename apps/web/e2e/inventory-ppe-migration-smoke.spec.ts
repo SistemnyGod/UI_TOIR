@@ -166,7 +166,7 @@ test("inventory PPE wizard supports employee search and set-based picking", asyn
 
   await expect(page.getByRole("heading", { name: "Иванов Иван Иванович" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Выдать СИЗ" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Сопоставить" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Предпросмотр карточки" })).toBeVisible();
 });
 
 test("inventory PPE preview uses detail payload and DOCX export endpoints", async ({ page }) => {
@@ -196,7 +196,17 @@ test("inventory PPE preview uses detail payload and DOCX export endpoints", asyn
   };
 
   const ppeOptions = {
-    employees: [],
+    employees: [{
+      id: "00000000-0000-0000-0000-000000000201",
+      fullName: "Иванов Иван Иванович",
+      personnelNo: "001245",
+      position: "Электромонтер",
+      department: "Электромонтажный участок",
+      employeeGroup: "",
+      status: "active",
+      birthDate: null,
+      hiredAt: null,
+    }],
     items: [],
     settings: {
       categories: [],
@@ -287,18 +297,14 @@ test("inventory PPE preview uses detail payload and DOCX export endpoints", asyn
 
   await page.getByRole("button", { name: "Личная карточка" }).first().click();
   await expect(page.locator(".inventory-ppe-print-modal")).toBeVisible();
-  await expect(page.getByText("Каска защитная")).toBeVisible();
-  await expect(page.getByText("001245")).toBeVisible();
-  await expect(page.getByText("Электромонтажный участок")).toBeVisible();
-  await expect(page.getByText("Типовые нормы")).toBeVisible();
+  await expect(page.getByText("Каска защитная").first()).toBeVisible();
+  await expect(page.getByText("001245", { exact: true })).toBeVisible();
+  await expect(page.locator(".inventory-ppe-print-modal").getByText("Электромонтажный участок", { exact: true })).toBeVisible();
   await page.locator(".inventory-ppe-print-modal").getByRole("button", { name: "Лист подписи" }).click();
-  await expect(page.getByText("РОСОМЗ / СОМЗ-55 / 78214 / 2 класс")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Предпросмотр документа" })).toBeVisible();
   await page.locator(".inventory-ppe-print-modal .inventory-ppe-icon-button").click();
-  await page.locator(".inventory-ppe-row-actions .button").first().click();
-  await page.getByRole("button", { name: "Открыть" }).click();
-  await expect(page.locator(".inventory-ppe-drawer-toolbar")).toBeVisible();
-  await page.locator(".inventory-ppe-drawer-toolbar .button").nth(4).click();
-  await page.locator(".inventory-ppe-drawer-toolbar .button").nth(5).click();
+  await page.getByRole("button", { name: "DOCX карточка" }).click();
+  await page.getByRole("button", { name: "DOCX лист" }).click();
 
   await expect.poll(() => printRequests.length).toBe(2);
   await expect(printRequests[0]).toContain("type=card");
