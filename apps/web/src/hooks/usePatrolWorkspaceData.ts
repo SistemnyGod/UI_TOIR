@@ -40,6 +40,7 @@ import {
 } from "../repositories/activePatrolsRepository";
 import { type RequestModalState } from "../domain/serviceRequests";
 import { buildLocalDashboardMetrics } from "../domain/dashboardMetrics";
+import { buildOperationalPatrolDateRange } from "../domain/patrolQueryWindow";
 import type {
   ActivePatrol,
   CreateServiceRequestPayload,
@@ -158,7 +159,7 @@ export function usePatrolWorkspaceData({
       setRequestListErrorMessage(undefined);
 
       try {
-        const nextRequests = await apiRequestsRepository.getPatrolRequests({}, { signal });
+        const nextRequests = await apiRequestsRepository.getPatrolRequests(buildOperationalPatrolDateRange(), { signal });
         setApiRequests(nextRequests);
         setRequestListStatus("ready");
       } catch (error) {

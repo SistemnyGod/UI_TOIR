@@ -334,6 +334,7 @@ export function ScreenRouter({
           <ScheduleScreen
             activePatrols={activePatrols}
             canManage={hasPermission(currentUser, "schedule.write")}
+            dataSourceMode={dataSourceMode}
             employeeDirectory={employeeDirectory}
             mode={scheduleMode}
             patrolResults={patrolResults}

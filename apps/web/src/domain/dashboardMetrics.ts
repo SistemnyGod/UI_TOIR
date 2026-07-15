@@ -1,4 +1,5 @@
 import type { ActivePatrol, Metric, RouteDirectoryItem, ServiceRequest } from "../types";
+import { isTerminalPatrolRequestStatus } from "./patrolRequestStatus";
 
 export function buildLocalDashboardMetrics({
   activePatrols,
@@ -10,7 +11,7 @@ export function buildLocalDashboardMetrics({
   routeDirectory: RouteDirectoryItem[];
 }): Metric[] {
   const assignedRequestIds = new Set(activePatrols.map((patrol) => patrol.patrolRequestId).filter(Boolean));
-  const waitingRequests = requests.filter((request) => !isClosedRequest(request.status) && !assignedRequestIds.has(request.id)).length;
+  const waitingRequests = requests.filter((request) => !isTerminalPatrolRequestStatus(request.status) && !assignedRequestIds.has(request.id)).length;
   const activeRoutes = routeDirectory.filter((route) => !isArchivedRoute(route.status)).length;
 
   return [
@@ -43,10 +44,6 @@ export function buildLocalDashboardMetrics({
       icon: "map",
     },
   ];
-}
-
-function isClosedRequest(status: string) {
-  return status.toLocaleLowerCase("ru-RU").includes("закрыт") || status.toLocaleLowerCase("ru-RU").includes("closed");
 }
 
 function isArchivedRoute(status: string) {

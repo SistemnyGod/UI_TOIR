@@ -21,9 +21,18 @@ public interface IAssignmentService
 
 public sealed record CreateAssignmentResult(
     AssignmentDto? Assignment,
-    IReadOnlyDictionary<string, string[]> Errors)
+    IReadOnlyDictionary<string, string[]> Errors,
+    CreateAssignmentOutcome Outcome = CreateAssignmentOutcome.Created)
 {
     public bool Succeeded => Assignment is not null && Errors.Count == 0;
+}
+
+public enum CreateAssignmentOutcome
+{
+    Created,
+    Reused,
+    Conflict,
+    ValidationFailed
 }
 
 public sealed record AssignmentCommandResult(

@@ -7,7 +7,7 @@ using Patrol360.Infrastructure.Persistence.Entities;
 
 namespace Patrol360.Infrastructure.Persistence;
 
-internal sealed partial class EfPatrolStore(Patrol360DbContext dbContext, IMemoryCache dashboardCache) :
+internal sealed partial class EfPatrolStore(Patrol360DbContext dbContext, IMemoryCache dashboardCache, IPatrolTimeZone patrolTimeZone) :
     IPatrolDashboardQuery,
     IRouteCatalogQuery,
     IEmployeeDirectoryQuery,

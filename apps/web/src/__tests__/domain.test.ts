@@ -5,12 +5,33 @@ import { moveRoutePoint } from "../domain/routes";
 import { createApiAssignmentsRepository } from "../repositories/assignmentsRepository";
 import { createApiPatrolRequestsRepository, resolveServiceRequests } from "../repositories/patrolRequestsRepository";
 import { createApiResultsRepository } from "../repositories/resultsRepository";
+import { isTerminalPatrolRequestStatus } from "../domain/patrolRequestStatus";
+import { buildOperationalPatrolDateRange } from "../domain/patrolQueryWindow";
+import { isAssignableRequest } from "../features/patrol/assignments/assignmentUtils";
 import { getPrimaryActionPermission } from "../security/permissions";
 import { shouldCreateAssignmentAfterRequest } from "../screens/AssignmentScreen";
 import type { ServiceRequest } from "../types";
 import type { RoutePoint } from "../types";
 
 describe("domain workflows", () => {
+  it("builds a bounded operational patrol date range", () => {
+    expect(buildOperationalPatrolDateRange(new Date(2026, 6, 15, 18, 30))).toEqual({
+      dateFrom: "2026-04-16",
+      dateTo: "2027-07-15",
+    });
+  });
+
+  it.each(["completed", "closed", "cancelled", "Завершена", "Закрыта", "Отменена", "Отменено"])(
+    "treats %s as a terminal patrol request status",
+    (status) => expect(isTerminalPatrolRequestStatus(status)).toBe(true),
+  );
+
+  it("does not offer cancelled or already linked requests for assignment", () => {
+    expect(isAssignableRequest({ ...createRequest("request-cancelled"), status: "Отменено" as never })).toBe(false);
+    expect(isAssignableRequest({ ...createRequest("request-linked"), assignmentId: "assignment-1" })).toBe(false);
+    expect(isAssignableRequest(createRequest("request-open"))).toBe(true);
+  });
+
   it("moves route points and recalculates order without mutating source list", () => {
     const points: RoutePoint[] = [createPoint("p1", 1), createPoint("p2", 2), createPoint("p3", 3)];
 
@@ -62,7 +83,7 @@ describe("domain workflows", () => {
     const repository = createApiResultsRepository({
       fetcher: async () =>
         new Response(
-          JSON.stringify([
+          JSON.stringify({ items: [
             {
               id: "result-1",
               status: "Замечание",
@@ -82,7 +103,7 @@ describe("domain workflows", () => {
               issueType: "Повреждение",
               severity: "Высокая",
             },
-          ]),
+          ], page: 1, pageSize: 100, total: 1, totalPages: 1, hasNext: false }),
           { headers: { "content-type": "application/json" } },
         ),
     });
@@ -106,26 +127,24 @@ describe("domain workflows", () => {
         const path = String(input);
         requestedPaths.push(path);
 
-        if (path.includes("page=1")) {
-          return jsonResponse(Array.from({ length: 500 }, (_, index) => createResultDto(`result-${index + 1}`)));
-        }
-
-        if (path.includes("page=2")) {
-          return jsonResponse([createResultDto("result-501")]);
-        }
-
-        return jsonResponse([]);
+        return jsonResponse({
+          items: Array.from({ length: 100 }, (_, index) => createResultDto(`result-${index + 1}`)),
+          page: 1,
+          pageSize: 100,
+          total: 101,
+          totalPages: 2,
+          hasNext: true,
+        });
       },
     });
 
     const resultPage = await repository.getResultPage({ status: "issue" });
 
-    expect(resultPage.results).toHaveLength(500);
-    expect(resultPage.results.at(-1)?.id).toBe("result-500");
+    expect(resultPage.results).toHaveLength(100);
+    expect(resultPage.results.at(-1)?.id).toBe("result-100");
     expect(resultPage.hasMore).toBe(true);
-    expect(requestedPaths).toHaveLength(2);
-    expect(requestedPaths[0]).toContain("/api/v1/results?status=issue&page=1&pageSize=500");
-    expect(requestedPaths[1]).toContain("/api/v1/results?status=issue&page=2&pageSize=500");
+    expect(requestedPaths).toHaveLength(1);
+    expect(requestedPaths[0]).toContain("/api/v2/results?status=issue&page=1&pageSize=100");
   });
 
   it("does not request API details for local mock result ids", async () => {
@@ -237,9 +256,9 @@ describe("domain workflows", () => {
     expect(requestedPaths.some((path) => path.endsWith("/api/v1/assignments/assignment-2/start"))).toBe(true);
   });
 
-  it("loads all API assignment pages", async () => {
+  it("loads one bounded API assignment page", async () => {
     const requestedPaths: string[] = [];
-    const firstPage = Array.from({ length: 500 }, (_, index) => createAssignmentDto(`assignment-${index + 1}`));
+    const firstPage = Array.from({ length: 200 }, (_, index) => createAssignmentDto(`assignment-${index + 1}`));
     const repository = createApiAssignmentsRepository({
       fetcher: async (input) => {
         const path = String(input);
@@ -249,21 +268,16 @@ describe("domain workflows", () => {
           return jsonResponse(firstPage);
         }
 
-        if (path.includes("page=2")) {
-          return jsonResponse([createAssignmentDto("assignment-501")]);
-        }
-
         return jsonResponse([]);
       },
     });
 
     const assignments = await repository.getAssignments();
 
-    expect(assignments).toHaveLength(501);
-    expect(assignments.at(-1)?.id).toBe("assignment-501");
-    expect(requestedPaths).toHaveLength(2);
-    expect(requestedPaths[0]).toContain("/api/v1/assignments?page=1&pageSize=500");
-    expect(requestedPaths[1]).toContain("/api/v1/assignments?page=2&pageSize=500");
+    expect(assignments).toHaveLength(200);
+    expect(assignments.at(-1)?.id).toBe("assignment-200");
+    expect(requestedPaths).toHaveLength(1);
+    expect(requestedPaths[0]).toContain("/api/v1/assignments?page=1&pageSize=200");
   });
 
   it("passes assignment filters to the API", async () => {

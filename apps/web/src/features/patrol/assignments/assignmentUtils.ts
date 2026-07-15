@@ -1,4 +1,5 @@
 import type { ActivePatrol, DataSourceMode, ServiceRequest } from "../../../types";
+import { isTerminalPatrolRequestStatus } from "../../../domain/patrolRequestStatus";
 
 export function assignmentStatusText(value: string) {
   const normalized = value.trim().toLowerCase();
@@ -23,8 +24,7 @@ export function isAssignmentCurrent(assignment: ActivePatrol) {
 }
 
 export function isRequestCurrent(request: ServiceRequest) {
-  const status = request.status.toLowerCase();
-  return !status.includes("закры") && !status.includes("отмен");
+  return !isTerminalPatrolRequestStatus(request.status);
 }
 
 export function priorityText(value: string) {
@@ -34,6 +34,10 @@ export function priorityText(value: string) {
 }
 
 export function isAssignableRequest(request: ServiceRequest) {
+  if (request.assignmentId || isTerminalPatrolRequestStatus(request.status)) {
+    return false;
+  }
+
   return request.status === "Новая" || request.status === "В работе";
 }
 

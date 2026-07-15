@@ -4,7 +4,7 @@ import type { ResultDetailDto, ResultListItemDto } from "../api/contracts";
 import type { PatrolResult, PatrolResultAttachment } from "../types";
 
 export const patrolResultsFallback = patrolResults;
-export const resultPageSize = 500;
+export const resultPageSize = 100;
 
 export function findPatrolResult(results: PatrolResult[], resultId: string) {
   return results.find((result) => result.id === resultId) ?? results[0];
@@ -30,6 +30,17 @@ export interface ResultPage {
   page: number;
   pageSize: number;
   results: PatrolResult[];
+  total: number;
+  totalPages: number;
+}
+
+interface ResultPageEnvelopeDto {
+  items: ResultListItemDto[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasNext: boolean;
 }
 
 export function createApiResultsRepository({
@@ -47,7 +58,7 @@ export function createApiResultsRepository({
       return page.results;
     },
 
-    async getResultPage(filters: ResultFilterOptions = {}, options: ApiRequestOptions = {}): Promise<ResultPage> {
+    async getResultPage(filters: ResultFilterOptions = {}, options: ApiRequestOptions & { page?: number } = {}): Promise<ResultPage> {
       return getResultPage(client, filters, options);
     },
 
@@ -71,22 +82,20 @@ export async function downloadResultAttachment(attachment: PatrolResultAttachmen
   return client.download(attachment.downloadUrl);
 }
 
-async function getResultPage(client: ApiClient, filters: ResultFilterOptions, options: ApiRequestOptions): Promise<ResultPage> {
-  const page = 1;
-  const pageResults = await client.get<ResultListItemDto[]>(
-    `/api/v1/results${buildResultQuery(filters, { page, pageSize: resultPageSize })}`,
-    options,
-  );
-  const nextPageResults = await client.get<ResultListItemDto[]>(
-    `/api/v1/results${buildResultQuery(filters, { page: page + 1, pageSize: resultPageSize })}`,
+async function getResultPage(client: ApiClient, filters: ResultFilterOptions, options: ApiRequestOptions & { page?: number }): Promise<ResultPage> {
+  const page = options.page ?? 1;
+  const envelope = await client.get<ResultPageEnvelopeDto>(
+    `/api/v2/results${buildResultQuery(filters, { page, pageSize: resultPageSize })}`,
     options,
   );
 
   return {
-    hasMore: nextPageResults.length > 0,
-    page,
-    pageSize: resultPageSize,
-    results: pageResults.map(mapResult),
+    hasMore: envelope.hasNext,
+    page: envelope.page,
+    pageSize: envelope.pageSize,
+    results: envelope.items.map(mapResult),
+    total: envelope.total,
+    totalPages: envelope.totalPages,
   };
 }
 

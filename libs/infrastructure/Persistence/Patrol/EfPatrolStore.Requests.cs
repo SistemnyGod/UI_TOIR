@@ -236,13 +236,10 @@ internal sealed partial class EfPatrolStore
         return $"REQ-{scheduledDate:yyyyMMdd}-{todayCount + 1:0000}";
     }
 
-    private static DateTimeOffset CombinePlannedAt(DateOnly date, TimeOnly? time)
-    {
-        var dateTime = date.ToDateTime(time ?? TimeOnly.MinValue);
-        return new DateTimeOffset(dateTime, TimeZoneInfo.Local.GetUtcOffset(dateTime)).ToUniversalTime();
-    }
+    private DateTimeOffset CombinePlannedAt(DateOnly date, TimeOnly? time) =>
+        patrolTimeZone.ToUtc(date, time ?? TimeOnly.MinValue);
 
-    private static DateTimeOffset? ResolveRequestPlannedAt(CreatePatrolRequestDto request)
+    private DateTimeOffset? ResolveRequestPlannedAt(CreatePatrolRequestDto request)
     {
         if (request.PlannedAt is not null && request.PlannedAt != default)
         {

@@ -22,7 +22,7 @@ import type {
 
 export const assignableEmployeesFallback = employees;
 export const assignableRoutesFallback = assignableRoutes;
-const assignmentPageSize = 500;
+const assignmentPageSize = 200;
 
 export interface AssignmentFilterOptions {
   employeeId?: string;
@@ -50,7 +50,7 @@ export function createApiAssignmentsRepository({
 
   return {
     async getAssignments(filters: AssignmentFilterOptions = {}, options: ApiRequestOptions = {}) {
-      const assignments = await getAllAssignments(client, filters, options);
+      const assignments = await getAssignmentPage(client, filters, options);
       return assignments.map(mapAssignment);
     },
 
@@ -97,23 +97,8 @@ export function createApiAssignmentsRepository({
   };
 }
 
-async function getAllAssignments(client: ApiClient, filters: AssignmentFilterOptions, options: ApiRequestOptions) {
-  const assignments: AssignmentDto[] = [];
-  let page = 1;
-
-  while (true) {
-    const pageAssignments = await client.get<AssignmentDto[]>(
-      `/api/v1/assignments${buildAssignmentQuery(filters, page)}`,
-      options,
-    );
-    assignments.push(...pageAssignments);
-
-    if (pageAssignments.length < assignmentPageSize) {
-      return assignments;
-    }
-
-    page += 1;
-  }
+async function getAssignmentPage(client: ApiClient, filters: AssignmentFilterOptions, options: ApiRequestOptions) {
+  return client.get<AssignmentDto[]>(`/api/v1/assignments${buildAssignmentQuery(filters, 1)}`, options);
 }
 
 function buildAssignmentQuery(filters: AssignmentFilterOptions, page: number) {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError } from "../api/client";
+import { buildOperationalPatrolDateRange } from "../domain/patrolQueryWindow";
 import type { AssignmentSettingsDto, UpdateAssignmentSettingsDto } from "../api/contracts";
 import {
   assignableEmployeesFallback,
@@ -134,7 +135,7 @@ export function useAssignmentsWorkspace({
       setErrorMessage(undefined);
 
       try {
-        const nextAssignments = await apiAssignments.getAssignments({}, { signal });
+        const nextAssignments = await apiAssignments.getAssignments(buildOperationalPatrolDateRange(), { signal });
         if (signal?.aborted) return;
         setAssignments(nextAssignments);
         setListStatus("ready");

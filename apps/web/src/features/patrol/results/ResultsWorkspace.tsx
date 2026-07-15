@@ -88,7 +88,7 @@ export function ResultsWorkspace({
   const apiResultsRepository = useMemo(() => createApiResultsRepository(), []);
   const resultApiFilters = useMemo(() => buildResultApiFilters(activeMode, routeFilter, query), [activeMode, query, routeFilter]);
 
-  const { results, selectedResult, listStatus, errorMessage, refreshResults, exportResults, hasMoreResults } = useResultsWorkspace({
+  const { results, selectedResult, listStatus, errorMessage, refreshResults, exportResults, hasMoreResults, loadMoreResults, loadMoreStatus } = useResultsWorkspace({
     dataSourceMode,
     selectedResultId,
     onSelectResult: onSelectResult ?? (() => undefined),
@@ -325,14 +325,15 @@ export function ResultsWorkspace({
       </section>
 
       <section className="results-review-layout">
-        <main className="results-review-main">
+        <div className="results-review-main">
           <div className="results-review-toolbar">
-            <div className="results-review-filter-tabs" role="tablist" aria-label="Фильтр результатов">
+            <div className="results-review-filter-tabs" aria-label="Фильтр результатов">
               {FILTERS.map((filter) => (
                 <button
                   key={filter.id}
                   type="button"
                   className={activeMode === filter.id ? "is-active" : ""}
+                  aria-pressed={activeMode === filter.id}
                   onClick={() => changeFilter(filter.id)}
                 >
                   {filter.label}
@@ -361,14 +362,6 @@ export function ResultsWorkspace({
               />
             </label>
           </div>
-
-          {hasMoreResults ? (
-            <section className="results-review-empty">
-              <FileText size={24} />
-              <h3>Показана первая страница журнала</h3>
-              <p>В истории есть более старые обходы. Уточните фильтр по маршруту, статусу или строке поиска, чтобы сузить выборку.</p>
-            </section>
-          ) : null}
 
           {loading && groups.length === 0 ? (
             <section className="results-review-empty">
@@ -406,7 +399,12 @@ export function ResultsWorkspace({
               ))}
             </div>
           )}
-        </main>
+          {hasMoreResults ? (
+            <button className="secondary-action" disabled={loadMoreStatus === "loading"} onClick={() => void loadMoreResults()} type="button">
+              {loadMoreStatus === "loading" ? "Загружаем…" : "Загрузить ещё"}
+            </button>
+          ) : null}
+        </div>
 
         {showResultInspector ? <aside className="results-review-panel results-review-inspector">
           {selectedGroup ? (
@@ -613,7 +611,7 @@ function ResultRow({
           <button
             type="button"
             className="results-review-row-more"
-            aria-label="Действия результата"
+            aria-label={`Действия результата: ${group.route}, ${group.employee}`}
             aria-expanded={menuOpen}
             onClick={onOpenMenu}
           >

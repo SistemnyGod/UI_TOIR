@@ -39,7 +39,22 @@ public sealed class AssignmentsController(IAssignmentService assignmentService) 
         var result = assignmentService.Create(request);
         if (!result.Succeeded)
         {
+            if (result.Outcome == CreateAssignmentOutcome.Conflict)
+            {
+                return Conflict(new ValidationProblemDetails(result.Errors.ToDictionary(item => item.Key, item => item.Value))
+                {
+                    Title = "Assignment conflicts with the existing request assignment",
+                    Detail = "The patrol request already has an assignment created with a different payload.",
+                    Status = StatusCodes.Status409Conflict
+                });
+            }
+
             return AssignmentValidationProblem(result.Errors);
+        }
+
+        if (result.Outcome == CreateAssignmentOutcome.Reused)
+        {
+            return Ok(result.Assignment);
         }
 
         return Created($"/api/v1/assignments/{result.Assignment!.Id}", result.Assignment);

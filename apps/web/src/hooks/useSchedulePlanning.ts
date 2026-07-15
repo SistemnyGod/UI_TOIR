@@ -6,6 +6,7 @@ import {
 } from "../repositories/scheduleRepository";
 import type {
   ActivePatrol,
+  DataSourceMode,
   DataSourceStatus,
   EmployeeDirectoryItem,
   RouteDirectoryItem,
@@ -17,6 +18,7 @@ import type {
 interface UseSchedulePlanningOptions {
   activePatrols: ActivePatrol[];
   anchorDate: string;
+  dataSourceMode: DataSourceMode;
   employeeDirectory: EmployeeDirectoryItem[];
   mode: ScheduleMode;
   requests: ServiceRequest[];
@@ -36,6 +38,7 @@ function isExceptionCell(cell: ScheduleCell) {
 export function useSchedulePlanning({
   activePatrols,
   anchorDate,
+  dataSourceMode,
   employeeDirectory,
   mode,
   requests,
@@ -51,6 +54,13 @@ export function useSchedulePlanning({
 
   const refreshScheduleReferences = useCallback(
     async ({ signal }: { signal?: AbortSignal } = {}) => {
+      if (dataSourceMode !== "api") {
+        setApiEmployees([]);
+        setApiRoutes([]);
+        setStatus("ready");
+        setErrorMessage(undefined);
+        return;
+      }
       setStatus("loading");
       setErrorMessage(undefined);
 
@@ -70,7 +80,7 @@ export function useSchedulePlanning({
         setErrorMessage(error instanceof Error ? error.message : "Не удалось загрузить сотрудников и маршруты для расписания");
       }
     },
-    [apiSchedule],
+    [apiSchedule, dataSourceMode],
   );
 
   useEffect(() => {

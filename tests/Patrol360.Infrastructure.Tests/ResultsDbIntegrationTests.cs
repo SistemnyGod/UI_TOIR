@@ -105,6 +105,18 @@ public sealed class ResultsDbIntegrationTests
         Assert.All(firstPage, item => Assert.Equal(FirstDemoAssignmentId, item.AssignmentId));
         Assert.Contains(firstPage, item => item.Point == "Paged point A");
         Assert.Contains(firstPage, item => item.Point == "Paged point B");
+
+        var envelope = UseResults(provider, query => query.GetResultsPage(
+            new ResultFilterDto(null, null, null, null, null),
+            page: 1,
+            pageSize: 1));
+
+        Assert.Equal(1, envelope.Page);
+        Assert.Equal(1, envelope.PageSize);
+        Assert.Equal(firstPage.Select(item => item.Id), envelope.Items.Select(item => item.Id));
+        Assert.True(envelope.Total >= 2);
+        Assert.True(envelope.TotalPages >= 2);
+        Assert.True(envelope.HasNext);
     }
 
     [DbIntegrationFact]

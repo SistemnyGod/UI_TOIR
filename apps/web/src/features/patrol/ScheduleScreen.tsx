@@ -13,6 +13,7 @@ import type {
   ActivePatrol,
   CompleteAssignmentPayload,
   CreateServiceRequestPayload,
+  DataSourceMode,
   EmployeeDirectoryItem,
   PatrolResult,
   RouteDirectoryItem,
@@ -25,6 +26,7 @@ type MaybePromise<T> = T | Promise<T>;
 export function ScheduleScreen({
   activePatrols,
   canManage = true,
+  dataSourceMode,
   employeeDirectory,
   mode,
   onModeChange,
@@ -40,6 +42,7 @@ export function ScheduleScreen({
 }: {
   activePatrols: ActivePatrol[];
   canManage?: boolean;
+  dataSourceMode: DataSourceMode;
   employeeDirectory: EmployeeDirectoryItem[];
   mode: ScheduleMode;
   onModeChange: (mode: ScheduleMode) => void;
@@ -76,6 +79,7 @@ export function ScheduleScreen({
   } = useSchedulePlanning({
     activePatrols,
     anchorDate,
+    dataSourceMode,
     employeeDirectory: scheduleEmployees,
     mode,
     requests,
@@ -91,9 +95,6 @@ export function ScheduleScreen({
   const selectedResultHistory = useMemo(() => {
     if (!selected) return [];
     const selectedDateKey = toDateInputKey(selected.date);
-    const defaultRoute = routeDirectory[0];
-    const selectedRouteId = selected.routeId || defaultRoute?.id;
-    const selectedRouteName = selected.route || defaultRoute?.name;
     const sortedResults = [...patrolResults].sort(
       (first, second) =>
         toSortableDate(second.actualAt || second.plannedAt).getTime() -
@@ -104,22 +105,19 @@ export function ScheduleScreen({
         selected.employeeId && (result.employeeId === selected.employeeId || result.employee === selected.employee),
       );
       const matchesRoute = Boolean(
-        selectedRouteId && (result.routeId === selectedRouteId || result.route === selectedRouteName),
+        selected.routeId && (result.routeId === selected.routeId || result.route === selected.route),
       );
-
-      return matchesEmployee && matchesRoute;
+      return matchesEmployee || matchesRoute;
     };
     const dayResults = sortedResults.filter(
       (result) => toDateInputKey(result.actualAt || result.plannedAt) === selectedDateKey,
     );
-    const matchingDayResults = dayResults.filter(matchesSelectedCell);
-
-    if (matchingDayResults.length > 0) {
-      return matchingDayResults;
+    if (dayResults.length > 0) {
+      return dayResults;
     }
 
     return sortedResults.filter(matchesSelectedCell);
-  }, [patrolResults, routeDirectory, selected]);
+  }, [patrolResults, selected]);
 
   return (
     <div className="screen-stack">

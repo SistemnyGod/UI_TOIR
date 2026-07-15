@@ -36,22 +36,28 @@ export function RoutePointTable({
             <tr
               className={`clickable ${selectedPointId === point.id ? "selected" : ""}`}
               key={point.id}
-              onClick={() => onSelectPoint(point.id)}
             >
               <td>{point.order}</td>
               <td>
-                <strong>{point.name}</strong>
+                <button
+                  aria-pressed={selectedPointId === point.id}
+                  className="route-point-select"
+                  onClick={() => onSelectPoint(point.id)}
+                  type="button"
+                >
+                  {point.name}
+                </button>
               </td>
               <td>{point.zone || "-"}</td>
               <td>{point.type}</td>
               <td>{point.tag || "-"}</td>
               <td>{point.requiresPhoto ? "Да" : "Нет"}</td>
               <td>
-                <div className="order-actions" onClick={(event) => event.stopPropagation()}>
-                  <button className="icon-button mini-icon" disabled={!canManage} onClick={() => onMovePoint(route.id, point.id, -1)} type="button">
+                <div className="order-actions">
+                  <button aria-label={`Переместить точку «${point.name}» выше`} className="icon-button mini-icon" disabled={!canManage} onClick={() => onMovePoint(route.id, point.id, -1)} type="button">
                     ↑
                   </button>
-                  <button className="icon-button mini-icon" disabled={!canManage} onClick={() => onMovePoint(route.id, point.id, 1)} type="button">
+                  <button aria-label={`Переместить точку «${point.name}» ниже`} className="icon-button mini-icon" disabled={!canManage} onClick={() => onMovePoint(route.id, point.id, 1)} type="button">
                     ↓
                   </button>
                 </div>

@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useResultsWorkspace } from "../../hooks/useResultsWorkspace";
+import { isTerminalPatrolRequestStatus } from "../../domain/patrolRequestStatus";
 import type {
   ActivePatrol,
   DataSourceMode,
@@ -91,6 +92,9 @@ export function DashboardScreen({
   const completedValue = getMetricValue(normalizedMetrics, ["Завершено", "Completed"]);
   const assignedRequestIds = new Set(activePatrols.map((patrol) => patrol.patrolRequestId).filter(Boolean));
   const dashboardRequests = requests.filter((request) => isOpenRequest(request) && !assignedRequestIds.has(request.id));
+  const upcomingDashboardRequests = dashboardRequests
+    .filter(isTodayOrFutureRequest)
+    .sort((left, right) => requestTimestamp(left) - requestTimestamp(right));
   const requestsCount = dashboardRequests.length;
   const routesCount = routeDirectory.filter((route) => !isArchivedRoute(route.status)).length;
   const problemCount = issueResults.length + activePatrols.filter(isProblemPatrol).length;
@@ -194,7 +198,7 @@ export function DashboardScreen({
       <section className="dashboard-am-lists">
         <ActivePatrolsList activePatrols={activePatrols} onNavigate={onNavigate} />
         <UpcomingAssignments
-          requests={dashboardRequests}
+          requests={upcomingDashboardRequests}
           onNavigate={onNavigate}
           onOpenRequestById={onOpenRequestById}
           onRetry={onRetryRequests}
@@ -880,7 +884,20 @@ function isProblemPatrol(patrol: ActivePatrol) {
 }
 
 function isOpenRequest(request: ServiceRequest) {
-  return !matchesAny(request.status, ["Закрыта", "closed"]);
+  return !isTerminalPatrolRequestStatus(request.status);
+}
+
+function isTodayOrFutureRequest(request: ServiceRequest) {
+  const timestamp = requestTimestamp(request);
+  if (!Number.isFinite(timestamp)) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return timestamp >= today.getTime();
+}
+
+function requestTimestamp(request: ServiceRequest) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(request.scheduledDate)) return Number.NaN;
+  return new Date(`${request.scheduledDate}T${request.scheduledTime || "00:00"}:00`).getTime();
 }
 
 function isArchivedRoute(status: string) {

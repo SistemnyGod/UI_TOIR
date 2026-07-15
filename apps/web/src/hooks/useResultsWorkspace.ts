@@ -32,6 +32,8 @@ export function useResultsWorkspace({
   const [detailStatus, setDetailStatus] = useState<DataSourceStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [hasMoreResults, setHasMoreResults] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [loadMoreStatus, setLoadMoreStatus] = useState<DataSourceStatus>("idle");
 
   const selectedListItem = useMemo(() => findPatrolResult(results, selectedResultId), [results, selectedResultId]);
   const exactSelectedListItem = useMemo(
@@ -45,6 +47,7 @@ export function useResultsWorkspace({
       if (dataSourceMode !== "api") {
         setResults(patrolResultsFallback);
         setHasMoreResults(false);
+        setCurrentPage(1);
         setListStatus("ready");
         setErrorMessage(undefined);
         return;
@@ -58,6 +61,7 @@ export function useResultsWorkspace({
         if (signal?.aborted) return;
         setResults(resultPage.results);
         setHasMoreResults(resultPage.hasMore);
+        setCurrentPage(resultPage.page);
         setListStatus(resultPage.results.length > 0 ? "ready" : "idle");
       } catch (error) {
         if (signal?.aborted) return;
@@ -71,6 +75,22 @@ export function useResultsWorkspace({
     },
     [apiResults, dataSourceMode, filters, showToast],
   );
+
+  const loadMoreResults = useCallback(async () => {
+    if (dataSourceMode !== "api" || !hasMoreResults || loadMoreStatus === "loading") return;
+    setLoadMoreStatus("loading");
+    try {
+      const resultPage = await apiResults.getResultPage(filters, { page: currentPage + 1 });
+      setResults((current) => mergePatrolResults(current, resultPage.results));
+      setCurrentPage(resultPage.page);
+      setHasMoreResults(resultPage.hasMore);
+      setLoadMoreStatus("ready");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Не удалось загрузить следующую страницу результатов";
+      setLoadMoreStatus("error");
+      showToast(`Не удалось загрузить следующую страницу результатов: ${message}`);
+    }
+  }, [apiResults, currentPage, dataSourceMode, filters, hasMoreResults, loadMoreStatus, showToast]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -144,6 +164,8 @@ export function useResultsWorkspace({
     errorMessage,
     exportResults,
     hasMoreResults,
+    loadMoreResults,
+    loadMoreStatus,
     listStatus,
     refreshResults,
     results,

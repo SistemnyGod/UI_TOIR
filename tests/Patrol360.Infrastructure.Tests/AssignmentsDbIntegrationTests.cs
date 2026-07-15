@@ -21,11 +21,12 @@ public sealed class AssignmentsDbIntegrationTests
 
         await provider.InitializePatrolDatabaseAsync();
 
+        var plannedAt = DateTimeOffset.UtcNow.AddDays(1);
         var created = UseAssignments(provider, assignments => assignments.Create(new CreateAssignmentDto(
             FreePatrolRequestId,
             SidorovEmployeeId,
             FuelDepotRouteId,
-            DateTimeOffset.UtcNow.AddDays(1),
+            plannedAt,
             "День")));
 
         Assert.True(created.Succeeded);
@@ -36,13 +37,23 @@ public sealed class AssignmentsDbIntegrationTests
             FreePatrolRequestId,
             SidorovEmployeeId,
             FuelDepotRouteId,
-            DateTimeOffset.UtcNow.AddDays(1),
+            plannedAt,
             "День")));
 
         Assert.True(duplicate.Succeeded);
         Assert.Empty(duplicate.Errors);
         Assert.NotNull(duplicate.Assignment);
         Assert.Equal(created.Assignment.Id, duplicate.Assignment!.Id);
+        Assert.Equal(CreateAssignmentOutcome.Reused, duplicate.Outcome);
+
+        var conflictingReplay = UseAssignments(provider, assignments => assignments.Create(new CreateAssignmentDto(
+            FreePatrolRequestId,
+            SidorovEmployeeId,
+            FuelDepotRouteId,
+            plannedAt.AddMinutes(30),
+            "Р”РµРЅСЊ")));
+        Assert.False(conflictingReplay.Succeeded);
+        Assert.Equal(CreateAssignmentOutcome.Conflict, conflictingReplay.Outcome);
 
         var started = UseAssignments(provider, assignments => assignments.Start(created.Assignment.Id));
         Assert.NotNull(started);
@@ -99,6 +110,48 @@ public sealed class AssignmentsDbIntegrationTests
         Assert.NotNull(created.Assignment);
         Assert.Equal(TimeSpan.Zero, created.Assignment!.PlannedAt.Offset);
         Assert.Equal(plannedAt.ToUniversalTime(), created.Assignment.PlannedAt);
+    }
+
+    [DbIntegrationFact]
+    public async Task ConcurrentIdenticalAssignmentCreatesOneAssignmentAndOneNotification()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var account = UseMobileAccounts(provider, service => service.CreateAccount(new CreateMobileAccountDto(
+            "Concurrent assignment",
+            "selected",
+            $"concurrent_{suffix}",
+            "Operator",
+            BindEmployee: false,
+            RestrictToBoundDevice: false,
+            TemporaryPassword: true)));
+        Assert.True(account.Succeeded);
+        var attached = UseMobileAccounts(provider, service => service.AttachEmployee(
+            account.Account!.Id,
+            new AttachMobileAccountEmployeeDto(SidorovEmployeeId, null)));
+        Assert.True(attached.Succeeded);
+
+        var request = new CreateAssignmentDto(
+            FreePatrolRequestId,
+            SidorovEmployeeId,
+            FuelDepotRouteId,
+            DateTimeOffset.UtcNow.AddDays(2),
+            "Day",
+            NotifyEmployee: true);
+        var attempts = Enumerable.Range(0, 10)
+            .Select(_ => Task.Run(() => UseAssignments(provider, service => service.Create(request))))
+            .ToArray();
+
+        var results = await Task.WhenAll(attempts);
+
+        Assert.All(results, result => Assert.True(result.Succeeded));
+        Assert.Single(results.Select(result => result.Assignment!.Id).Distinct());
+        Assert.Single(results, result => result.Outcome == CreateAssignmentOutcome.Created);
+        Assert.Equal(9, results.Count(result => result.Outcome == CreateAssignmentOutcome.Reused));
+        Assert.Equal(1, await CountMobileNotificationsAsync(database.ConnectionString, account.Account!.Id, $"patrol-request:{FreePatrolRequestId}"));
     }
 
     [DbIntegrationFact]
@@ -546,6 +599,17 @@ public sealed class AssignmentsDbIntegrationTests
             reader.GetString(1),
             reader.GetString(2),
             reader.GetString(3));
+    }
+
+    private static async Task<int> CountMobileNotificationsAsync(string connectionString, Guid accountId, string idempotencyKey)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "select count(*) from mobile_notifications where mobile_account_id = @account_id and idempotency_key = @idempotency_key";
+        command.Parameters.AddWithValue("account_id", accountId);
+        command.Parameters.AddWithValue("idempotency_key", idempotencyKey);
+        return Convert.ToInt32(await command.ExecuteScalarAsync());
     }
 
     private sealed record MobileNotificationRow(

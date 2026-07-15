@@ -284,11 +284,6 @@ export function AssignmentScreen({
   useEffect(() => {
     if (selectedRequestId && !assignableRequests.some((request) => request.id === selectedRequestId)) {
       setSelectedRequestId("");
-      return;
-    }
-
-    if (!selectedRequestId && assignableRequests[0]) {
-      setSelectedRequestId(assignableRequests[0].id);
     }
   }, [assignableRequests, selectedRequestId]);
 
@@ -382,6 +377,12 @@ export function AssignmentScreen({
 
     if (!selectedEmployee || !selectedRoute || !plannedDate || !plannedStart) {
       onNotify("Выберите сотрудника, маршрут и время старта.");
+      return;
+    }
+
+    if (selectedRequestId && !selectedRequest) {
+      setSelectedRequestId("");
+      onNotify("Выбранная заявка уже закрыта, отменена или назначена. Выберите другую заявку либо создайте новую.");
       return;
     }
 

@@ -670,6 +670,7 @@ describe("shared UI primitives", () => {
 
     render(
       <ScheduleScreen
+        dataSourceMode="mock"
         activePatrols={[]}
         canManage={true}
         employeeDirectory={[
@@ -762,6 +763,7 @@ describe("shared UI primitives", () => {
       const [selectedCellId, setSelectedCellId] = useState("");
       return (
         <ScheduleScreen
+          dataSourceMode="mock"
           activePatrols={[]}
           canManage={true}
           employeeDirectory={[
@@ -1179,7 +1181,7 @@ describe("shared UI primitives", () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalled());
 
     const requestedUrls = fetcher.mock.calls.map(([input]) => String(input));
-    expect(requestedUrls.some((url) => url.includes("/api/v1/results?page=1&pageSize=500"))).toBe(true);
+    expect(requestedUrls.some((url) => url.includes("/api/v2/results?page=1&pageSize=100"))).toBe(true);
     expect(requestedUrls.some((url) => url.includes("result-smoke-photo"))).toBe(false);
   });
 

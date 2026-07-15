@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Patrol360.Infrastructure.Persistence;
 
-internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatrolResultQuery
+internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolTimeZone patrolTimeZone) : IPatrolResultQuery
 {
     private const int DefaultPage = 1;
     private const int DefaultPageSize = 100;
@@ -46,6 +46,22 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
             .ThenBy(result => result.Id)
             .Select(MapListItem)
             .ToList();
+    }
+
+    public ResultPageDto GetResultsPage(ResultFilterDto filter, int page = DefaultPage, int pageSize = DefaultPageSize)
+    {
+        var paging = NormalizePaging(page, pageSize);
+        var total = GetResultGroupCount(filter);
+        var totalPages = total == 0 ? 0 : (int)Math.Ceiling(total / (double)paging.PageSize);
+        var items = GetResults(filter, paging.Page, paging.PageSize);
+
+        return new ResultPageDto(
+            items,
+            paging.Page,
+            paging.PageSize,
+            total,
+            totalPages,
+            paging.Page < totalPages);
     }
 
     public ResultDetailDto? GetResult(Guid id)
@@ -149,7 +165,7 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
         return new ResultAttachmentFileDto(fullPath, contentType, safeFileName);
     }
 
-    private static IQueryable<PatrolResultEntity> ApplyFilter(
+    private IQueryable<PatrolResultEntity> ApplyFilter(
         IQueryable<PatrolResultEntity> query,
         ResultFilterDto filter)
     {
@@ -171,13 +187,13 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
 
         if (filter.DateFrom is not null)
         {
-            var from = new DateTimeOffset(filter.DateFrom.Value.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            var from = patrolTimeZone.StartOfDayUtc(filter.DateFrom.Value);
             query = query.Where(result => result.ActualAt >= from);
         }
 
         if (filter.DateTo is not null)
         {
-            var to = new DateTimeOffset(filter.DateTo.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            var to = patrolTimeZone.StartOfNextDayUtc(filter.DateTo.Value);
             query = query.Where(result => result.ActualAt < to);
         }
 
@@ -212,7 +228,7 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
         return query;
     }
 
-    private static string BuildResultFilterSql(ResultFilterDto filter, List<object> parameters)
+    private string BuildResultFilterSql(ResultFilterDto filter, List<object> parameters)
     {
         var where = new StringBuilder("WHERE TRUE");
 
@@ -235,13 +251,13 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
 
         if (filter.DateFrom is not null)
         {
-            var from = new DateTimeOffset(filter.DateFrom.Value.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            var from = patrolTimeZone.StartOfDayUtc(filter.DateFrom.Value);
             where.Append(" AND actual_at >= ").Append(AddSqlParameter(parameters, from));
         }
 
         if (filter.DateTo is not null)
         {
-            var to = new DateTimeOffset(filter.DateTo.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            var to = patrolTimeZone.StartOfNextDayUtc(filter.DateTo.Value);
             where.Append(" AND actual_at < ").Append(AddSqlParameter(parameters, to));
         }
 
@@ -363,6 +379,37 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext) : IPatro
         return dbContext.Database
             .SqlQueryRaw<ResultPageGroup>(sql, parameters.ToArray())
             .ToList();
+    }
+
+    private int GetResultGroupCount(ResultFilterDto filter)
+    {
+        var parameters = new List<object>();
+        var whereClause = BuildResultFilterSql(filter, parameters);
+        var assignmentPhotoFilter = BuildAssignmentPhotoFilterSql(filter);
+        var standalonePhotoFilter = BuildStandalonePhotoFilterSql(filter);
+        var sql = $"""
+            WITH filtered AS (
+                SELECT assignment_id, id, actual_at, photos
+                FROM patrol_results
+                {whereClause}
+            ),
+            result_groups AS (
+                SELECT assignment_id
+                FROM filtered
+                WHERE assignment_id IS NOT NULL
+                GROUP BY assignment_id
+                {assignmentPhotoFilter}
+                UNION ALL
+                SELECT id
+                FROM filtered
+                WHERE assignment_id IS NULL
+                {standalonePhotoFilter}
+            )
+            SELECT COUNT(*)::int AS "Value"
+            FROM result_groups
+            """;
+
+        return dbContext.Database.SqlQueryRaw<int>(sql, parameters.ToArray()).Single();
     }
 
     private static string BuildAssignmentPhotoFilterSql(ResultFilterDto filter) =>

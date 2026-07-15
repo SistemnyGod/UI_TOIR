@@ -547,6 +547,22 @@ public class ApiSmokeTests
     }
 
     [Fact]
+    public void ResultsV2ControllerReturnsPagingEnvelope()
+    {
+        var resultItem = CreateResultListItem();
+        var query = new FakePatrolResultQuery([resultItem]);
+        var controller = new ResultsV2Controller(query);
+
+        var result = controller.List(null, null, null, null, null, null, 2, 25);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var page = Assert.IsType<ResultPageDto>(ok.Value);
+        Assert.Single(page.Items);
+        Assert.Equal(2, page.Page);
+        Assert.Equal(25, page.PageSize);
+    }
+
+    [Fact]
     public void ResultsControllerGetMapsMissingResultToNotFound()
     {
         var controller = new ResultsController(new FakePatrolResultQuery([]));
@@ -597,6 +613,35 @@ public class ApiSmokeTests
         var problem = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
         Assert.Equal(400, objectResult.StatusCode);
         Assert.Contains("patrolRequestId", problem.Errors.Keys);
+    }
+
+    [Fact]
+    public void AssignmentsControllerCreateReturnsOkForIdempotentReplay()
+    {
+        var assignment = CreateAssignment();
+        var controller = new AssignmentsController(new FakeAssignmentService(
+            createResult: new CreateAssignmentResult(assignment, new Dictionary<string, string[]>(), CreateAssignmentOutcome.Reused)));
+
+        var result = controller.Create(new CreateAssignmentDto(assignment.PatrolRequestId, assignment.EmployeeId, assignment.RouteId, assignment.PlannedAt, assignment.Shift));
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(assignment, ok.Value);
+    }
+
+    [Fact]
+    public void AssignmentsControllerCreateReturnsConflictForDifferentReplay()
+    {
+        var controller = new AssignmentsController(new FakeAssignmentService(
+            createResult: new CreateAssignmentResult(null, new Dictionary<string, string[]>
+            {
+                ["patrolRequestId"] = ["Different payload"]
+            }, CreateAssignmentOutcome.Conflict)));
+
+        var result = controller.Create(new CreateAssignmentDto(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow, "Day"));
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ValidationProblemDetails>(conflict.Value);
+        Assert.Equal(409, problem.Status);
     }
 
     [Fact]
@@ -987,6 +1032,13 @@ public class ApiSmokeTests
             LastPage = page;
             LastPageSize = pageSize;
             return results;
+        }
+
+        public ResultPageDto GetResultsPage(ResultFilterDto filter, int page = 1, int pageSize = 100)
+        {
+            LastPage = page;
+            LastPageSize = pageSize;
+            return new ResultPageDto(results, page, pageSize, results.Count, results.Count == 0 ? 0 : 1, false);
         }
 
         public ResultExportFileDto ExportResults(ResultFilterDto filter) =>

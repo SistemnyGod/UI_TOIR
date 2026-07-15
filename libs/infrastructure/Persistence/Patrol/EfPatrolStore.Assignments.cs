@@ -46,13 +46,13 @@ internal sealed partial class EfPatrolStore
 
         if (filter?.DateFrom is not null)
         {
-            var dateFrom = new DateTimeOffset(filter.DateFrom.Value.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            var dateFrom = patrolTimeZone.StartOfDayUtc(filter.DateFrom.Value);
             query = query.Where(assignment => assignment.PlannedAt >= dateFrom);
         }
 
         if (filter?.DateTo is not null)
         {
-            var dateToExclusive = new DateTimeOffset(filter.DateTo.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            var dateToExclusive = patrolTimeZone.StartOfNextDayUtc(filter.DateTo.Value);
             query = query.Where(assignment => assignment.PlannedAt < dateToExclusive);
         }
 
@@ -154,17 +154,23 @@ internal sealed partial class EfPatrolStore
         var route = request.RouteId is null
             ? null
             : dbContext.Routes.FirstOrDefault(item => item.Id == request.RouteId.Value && !item.IsArchived);
-        var existingAssignment = FindReusableAssignment(request, patrolRequest, employee, route);
+        var existingAssignment = FindAssignmentByPatrolRequest(request.PatrolRequestId);
         if (existingAssignment is not null)
         {
-            return new CreateAssignmentResult(MapAssignment(existingAssignment), new Dictionary<string, string[]>());
+            return BuildExistingAssignmentResult(request, existingAssignment);
         }
 
         var errors = ValidateCreateAssignment(request, patrolRequest, employee, route);
 
         if (errors.Count > 0)
         {
-            return new CreateAssignmentResult(null, errors);
+            var concurrentlyCreated = FindAssignmentByPatrolRequest(request.PatrolRequestId);
+            if (concurrentlyCreated is not null)
+            {
+                return BuildExistingAssignmentResult(request, concurrentlyCreated);
+            }
+
+            return new CreateAssignmentResult(null, errors, CreateAssignmentOutcome.ValidationFailed);
         }
 
         var confirmedPatrolRequest = patrolRequest!;
@@ -209,7 +215,21 @@ internal sealed partial class EfPatrolStore
                 "patrolRequest",
                 confirmedPatrolRequest.Id.ToString(),
                 $"patrol-request:{confirmedPatrolRequest.Id}");
-        SaveChangesAndInvalidateDashboardSummary();
+        try
+        {
+            SaveChangesAndInvalidateDashboardSummary();
+        }
+        catch (DbUpdateException) when (request.PatrolRequestId is not null)
+        {
+            dbContext.ChangeTracker.Clear();
+            var racedAssignment = FindAssignmentByPatrolRequest(request.PatrolRequestId);
+            if (racedAssignment is null)
+            {
+                throw;
+            }
+
+            return BuildExistingAssignmentResult(request, racedAssignment);
+        }
 
         assignment.PatrolRequest = confirmedPatrolRequest;
         assignment.Employee = confirmedEmployee;
@@ -389,32 +409,46 @@ internal sealed partial class EfPatrolStore
             .Include(assignment => assignment.PatrolRequest)
             .FirstOrDefault(assignment => assignment.Id == id);
 
-    private AssignmentEntity? FindReusableAssignment(
-        CreateAssignmentDto request,
-        PatrolRequestEntity? patrolRequest,
-        EmployeeEntity? employee,
-        RouteEntity? route)
+    private AssignmentEntity? FindAssignmentByPatrolRequest(Guid? patrolRequestId)
     {
-        if (request.PatrolRequestId is null || patrolRequest is null || employee is null || route is null)
+        if (patrolRequestId is null || patrolRequestId == Guid.Empty)
         {
             return null;
         }
 
-        var assignment = dbContext.Assignments
+        return dbContext.Assignments
             .Include(item => item.Employee)
             .Include(item => item.Route)
             .Include(item => item.PatrolRequest)
-            .FirstOrDefault(item =>
-                item.PatrolRequestId == request.PatrolRequestId.Value
-                && item.Status != AssignmentStatusValues.Completed
-                && item.Status != AssignmentStatusValues.Cancelled);
+            .FirstOrDefault(item => item.PatrolRequestId == patrolRequestId.Value);
+    }
 
-        if (assignment is null || assignment.EmployeeId != employee.Id || assignment.RouteId != route.Id)
+    private CreateAssignmentResult BuildExistingAssignmentResult(CreateAssignmentDto request, AssignmentEntity assignment)
+    {
+        var requestedShift = string.IsNullOrWhiteSpace(request.Shift)
+            ? assignment.Employee?.Shift?.Trim()
+            : request.Shift.Trim();
+        var isEquivalent = request.EmployeeId == assignment.EmployeeId
+            && request.RouteId == assignment.RouteId
+            && request.PlannedAt is not null
+            && Math.Abs((request.PlannedAt.Value.ToUniversalTime() - assignment.PlannedAt).Ticks) <= TimeSpan.TicksPerMillisecond
+            && string.Equals(requestedShift, assignment.Shift, StringComparison.OrdinalIgnoreCase);
+
+        if (isEquivalent)
         {
-            return null;
+            return new CreateAssignmentResult(
+                MapAssignment(assignment),
+                new Dictionary<string, string[]>(),
+                CreateAssignmentOutcome.Reused);
         }
 
-        return assignment;
+        return new CreateAssignmentResult(
+            null,
+            new Dictionary<string, string[]>
+            {
+                ["patrolRequestId"] = ["The patrol request already has an assignment with a different employee, route, planned time, or shift."]
+            },
+            CreateAssignmentOutcome.Conflict);
     }
 
     private Dictionary<string, string[]> ValidateCreateAssignment(
@@ -504,8 +538,9 @@ internal sealed partial class EfPatrolStore
         DateTimeOffset plannedAt,
         string shift)
     {
-        var plannedDateStart = new DateTimeOffset(plannedAt.Year, plannedAt.Month, plannedAt.Day, 0, 0, 0, plannedAt.Offset).ToUniversalTime();
-        var plannedDateEnd = plannedDateStart.AddDays(1);
+        var plannedDate = patrolTimeZone.GetDate(plannedAt);
+        var plannedDateStart = patrolTimeZone.StartOfDayUtc(plannedDate);
+        var plannedDateEnd = patrolTimeZone.StartOfNextDayUtc(plannedDate);
         var hasEmployeeConflict = dbContext.Assignments.Any(assignment =>
             assignment.EmployeeId == employeeId
             && assignment.Status != AssignmentStatusValues.Completed
@@ -532,7 +567,7 @@ internal sealed partial class EfPatrolStore
             || normalized == AssignmentStatusValues.Cancelled;
     }
 
-    private static bool IsCurrentAssignmentWindow(AssignmentEntity assignment, AssignmentSettingsEntity settings, DateTimeOffset now)
+    private bool IsCurrentAssignmentWindow(AssignmentEntity assignment, AssignmentSettingsEntity settings, DateTimeOffset now)
     {
         if (assignment.Status == AssignmentStatusValues.Completed || assignment.Status == AssignmentStatusValues.Cancelled)
         {
@@ -552,15 +587,14 @@ internal sealed partial class EfPatrolStore
         return GetAssignmentShiftEnd(assignment, settings).AddHours(1) >= now;
     }
 
-    private static DateTimeOffset GetAssignmentShiftEnd(AssignmentEntity assignment, AssignmentSettingsEntity settings)
+    private DateTimeOffset GetAssignmentShiftEnd(AssignmentEntity assignment, AssignmentSettingsEntity settings)
     {
         var isNight = assignment.Shift.Contains("ноч", StringComparison.OrdinalIgnoreCase)
             || assignment.Shift.Contains("night", StringComparison.OrdinalIgnoreCase);
         var start = ParseShiftTime(isNight ? settings.NightStart : settings.DayStart, isNight ? new TimeOnly(20, 0) : new TimeOnly(8, 0));
         var end = ParseShiftTime(isNight ? settings.NightEnd : settings.DayEnd, isNight ? new TimeOnly(8, 0) : new TimeOnly(20, 0));
-        var plannedLocal = assignment.PlannedAt.ToLocalTime();
-        var plannedDate = DateOnly.FromDateTime(plannedLocal.DateTime);
-        var plannedTime = TimeOnly.FromDateTime(plannedLocal.DateTime);
+        var plannedDate = patrolTimeZone.GetDate(assignment.PlannedAt);
+        var plannedTime = patrolTimeZone.GetTime(assignment.PlannedAt);
         var endDate = plannedDate;
 
         if (end <= start)
@@ -568,8 +602,7 @@ internal sealed partial class EfPatrolStore
             endDate = plannedTime < end ? plannedDate : plannedDate.AddDays(1);
         }
 
-        var endLocal = endDate.ToDateTime(end);
-        return new DateTimeOffset(endLocal, TimeZoneInfo.Local.GetUtcOffset(endLocal)).ToUniversalTime();
+        return patrolTimeZone.ToUtc(endDate, end);
     }
 
     private static TimeOnly ParseShiftTime(string value, TimeOnly fallback) =>

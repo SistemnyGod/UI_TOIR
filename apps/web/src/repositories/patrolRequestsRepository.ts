@@ -6,11 +6,12 @@ import {
   isServiceRequestList,
   type RequestModalState,
 } from "../domain/serviceRequests";
+import { isTerminalPatrolRequestStatus } from "../domain/patrolRequestStatus";
 import type { CreateServiceRequestPayload, DataSourceMode, ServiceRequest } from "../types";
 
 export const patrolRequestsStorageKey = "patrol360.patrolRequests";
 export const patrolRequestsFallback = serviceRequests;
-const patrolRequestPageSize = 500;
+const patrolRequestPageSize = 200;
 
 export interface PatrolRequestFilterOptions {
   employeeId?: string;
@@ -70,7 +71,7 @@ export function createApiPatrolRequestsRepository({
 
   return {
     async getPatrolRequests(filters: PatrolRequestFilterOptions = {}, options: ApiRequestOptions = {}) {
-      const requests = await getAllPatrolRequests(client, filters, options);
+      const requests = await getPatrolRequestPage(client, filters, options);
       return requests.map(mapPatrolRequest);
     },
 
@@ -95,23 +96,8 @@ export function createApiPatrolRequestsRepository({
   };
 }
 
-async function getAllPatrolRequests(client: ApiClient, filters: PatrolRequestFilterOptions, options: ApiRequestOptions) {
-  const requests: PatrolRequestDto[] = [];
-  let page = 1;
-
-  while (true) {
-    const pageRequests = await client.get<PatrolRequestDto[]>(
-      `/api/v1/patrol-requests${buildPatrolRequestQuery(filters, page)}`,
-      options,
-    );
-    requests.push(...pageRequests);
-
-    if (pageRequests.length < patrolRequestPageSize) {
-      return requests;
-    }
-
-    page += 1;
-  }
+async function getPatrolRequestPage(client: ApiClient, filters: PatrolRequestFilterOptions, options: ApiRequestOptions) {
+  return client.get<PatrolRequestDto[]>(`/api/v1/patrol-requests${buildPatrolRequestQuery(filters, 1)}`, options);
 }
 
 function mapPatrolRequest(request: PatrolRequestDto): ServiceRequest {
@@ -154,7 +140,7 @@ function buildPatrolRequestQuery(filters: PatrolRequestFilterOptions, page: numb
 
 function mapPatrolRequestStatus(status: string): ServiceRequest["status"] {
   const normalized = status.trim().toLowerCase();
-  if (normalized === "закрыта" || normalized === "закрыто" || normalized === "завершена" || normalized === "завершено" || normalized === "отменена" || normalized === "cancelled" || normalized === "completed" || normalized === "closed") {
+  if (isTerminalPatrolRequestStatus(status)) {
     return "Закрыта";
   }
 

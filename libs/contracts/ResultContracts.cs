@@ -32,6 +32,14 @@ public sealed record ResultListItemDto(
     string IssueType,
     string Severity);
 
+public sealed record ResultPageDto(
+    IReadOnlyList<ResultListItemDto> Items,
+    int Page,
+    int PageSize,
+    int Total,
+    int TotalPages,
+    bool HasNext);
+
 public sealed record ResultDetailDto(
     Guid Id,
     Guid? AssignmentId,

@@ -21,6 +21,7 @@ public static class DependencyInjection
             .UseNpgsql(connectionString)
             .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning)));
         services.AddMemoryCache();
+        services.AddSingleton<IPatrolTimeZone>(new PatrolTimeZone(ResolvePatrolTimeZone(configuration)));
 
         var dataProtection = services
             .AddDataProtection()
@@ -64,5 +65,34 @@ public static class DependencyInjection
         services.AddScoped<ISystemNotificationService, EfSystemNotificationService>();
 
         return services;
+    }
+
+    private static TimeZoneInfo ResolvePatrolTimeZone(IConfiguration configuration)
+    {
+        var configuredId = configuration["Patrol:TimeZone"];
+        var preferredId = string.IsNullOrWhiteSpace(configuredId) ? "Asia/Yekaterinburg" : configuredId.Trim();
+        var candidates = preferredId.Equals("Asia/Yekaterinburg", StringComparison.OrdinalIgnoreCase)
+            ? new[] { preferredId, "Ekaterinburg Standard Time" }
+            : new[] { preferredId };
+
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(candidate);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                // Try the platform-specific fallback, if configured.
+            }
+            catch (InvalidTimeZoneException)
+            {
+                // Fail below with a configuration-oriented message.
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Patrol:TimeZone '{preferredId}' is not a valid system time zone. " +
+            "Use an IANA or Windows time-zone identifier available on this host.");
     }
 }

@@ -19,11 +19,9 @@ internal sealed partial class EfPatrolStore
     private DashboardSummaryDto BuildSummary()
     {
         var onlineThreshold = DateTimeOffset.UtcNow.AddMinutes(-15);
-        var localToday = DateOnly.FromDateTime(DateTime.Now);
-        var localStartDateTime = localToday.ToDateTime(TimeOnly.MinValue);
-        var localEndDateTime = localToday.AddDays(1).ToDateTime(TimeOnly.MinValue);
-        var todayStart = new DateTimeOffset(localStartDateTime, TimeZoneInfo.Local.GetUtcOffset(localStartDateTime)).ToUniversalTime();
-        var todayEnd = new DateTimeOffset(localEndDateTime, TimeZoneInfo.Local.GetUtcOffset(localEndDateTime)).ToUniversalTime();
+        var localToday = patrolTimeZone.Today;
+        var todayStart = patrolTimeZone.StartOfDayUtc(localToday);
+        var todayEnd = patrolTimeZone.StartOfNextDayUtc(localToday);
         var totalPoints = dbContext.RoutePoints.Count(point => point.Route != null && !point.Route.IsArchived);
         var todayResults = dbContext.PatrolResults
             .AsNoTracking()

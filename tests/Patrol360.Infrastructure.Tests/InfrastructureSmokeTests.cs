@@ -32,12 +32,45 @@ public class InfrastructureSmokeTests
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IPatrolRequestService));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IAssignmentService));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IPatrolResultQuery));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IPatrolTimeZone));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IAuthSessionService));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(ISiteUserAdminService));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IEmuCatalogService));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IEmuWorkService));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IEmuPlanService));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IEmuMaintenanceService));
+    }
+
+    [Fact]
+    public void AddPatrolInfrastructureRejectsInvalidPatrolTimeZone()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Patrol:TimeZone"] = "Not/A-Time-Zone"
+            })
+            .Build();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => services.AddPatrolInfrastructure(configuration));
+
+        Assert.Contains("Patrol:TimeZone", exception.Message);
+    }
+
+    [Fact]
+    public void PatrolTimeZoneUsesYekaterinburgBusinessDayBoundaries()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder().Build();
+        services.AddPatrolInfrastructure(configuration);
+        using var provider = services.BuildServiceProvider();
+        var timeZone = provider.GetRequiredService<IPatrolTimeZone>();
+
+        var date = new DateOnly(2026, 12, 31);
+
+        Assert.Equal(new DateTimeOffset(2026, 12, 30, 19, 0, 0, TimeSpan.Zero), timeZone.StartOfDayUtc(date));
+        Assert.Equal(new DateTimeOffset(2026, 12, 31, 19, 0, 0, TimeSpan.Zero), timeZone.StartOfNextDayUtc(date));
+        Assert.Equal(date, timeZone.GetDate(new DateTimeOffset(2026, 12, 30, 21, 0, 0, TimeSpan.Zero)));
     }
 
     [Fact]

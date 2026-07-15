@@ -6,6 +6,8 @@ public interface IPatrolResultQuery
 {
     IReadOnlyList<ResultListItemDto> GetResults(ResultFilterDto filter, int page = 1, int pageSize = 100);
 
+    ResultPageDto GetResultsPage(ResultFilterDto filter, int page = 1, int pageSize = 100);
+
     ResultExportFileDto ExportResults(ResultFilterDto filter);
 
     ResultDetailDto? GetResult(Guid id);
