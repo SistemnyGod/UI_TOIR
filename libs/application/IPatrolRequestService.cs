@@ -4,7 +4,7 @@ namespace Patrol360.Application;
 
 public interface IPatrolRequestService
 {
-    IReadOnlyList<PatrolRequestDto> GetRequests(int page = 1, int pageSize = 100);
+    IReadOnlyList<PatrolRequestDto> GetRequests(int page = 1, int pageSize = 100, PatrolRequestFilterDto? filter = null);
 
     CreatePatrolRequestResult Create(CreatePatrolRequestDto request);
 }

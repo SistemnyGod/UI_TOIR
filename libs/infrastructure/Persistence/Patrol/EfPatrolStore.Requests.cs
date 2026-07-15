@@ -15,12 +15,52 @@ internal sealed partial class EfPatrolStore
 
     public IReadOnlyList<PatrolRequestDto> GetRequests(
         int page = DefaultPatrolRequestPage,
-        int pageSize = DefaultPatrolRequestPageSize)
+        int pageSize = DefaultPatrolRequestPageSize,
+        PatrolRequestFilterDto? filter = null)
     {
         var paging = NormalizePatrolRequestPaging(page, pageSize);
-
-        return dbContext.PatrolRequests
+        var query = dbContext.PatrolRequests
             .AsNoTracking()
+            .Include(request => request.Assignment)
+            .AsQueryable();
+
+        if (filter?.EmployeeId is not null)
+        {
+            query = query.Where(request => request.EmployeeId == filter.EmployeeId.Value);
+        }
+
+        if (filter?.RouteId is not null)
+        {
+            query = query.Where(request => request.RouteId == filter.RouteId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter?.Status))
+        {
+            var status = filter.Status.Trim();
+            query = query.Where(request => request.Status == status);
+        }
+
+        if (filter?.DateFrom is not null)
+        {
+            query = query.Where(request => request.ScheduledDate >= filter.DateFrom.Value);
+        }
+
+        if (filter?.DateTo is not null)
+        {
+            query = query.Where(request => request.ScheduledDate <= filter.DateTo.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter?.Query))
+        {
+            var search = filter.Query.Trim().ToLower();
+            query = query.Where(request =>
+                request.Number.ToLower().Contains(search)
+                || request.EmployeeName.ToLower().Contains(search)
+                || request.RouteName.ToLower().Contains(search)
+                || request.Description.ToLower().Contains(search));
+        }
+
+        return query
             .OrderByDescending(request => request.CreatedAt)
             .ThenByDescending(request => request.Id)
             .Skip((paging.Page - 1) * paging.PageSize)
@@ -63,9 +103,7 @@ internal sealed partial class EfPatrolStore
             Description = NormalizeOptionalText(request.Description)
         };
 
-        dbContext.PatrolRequests.Add(requestEntity);
-
-        dbContext.Assignments.Add(new AssignmentEntity
+        var assignmentEntity = new AssignmentEntity
         {
             Id = Guid.NewGuid(),
             PatrolRequestId = requestEntity.Id,
@@ -77,7 +115,11 @@ internal sealed partial class EfPatrolStore
             PlannedAt = plannedAt!.Value,
             ProgressPercent = 0,
             LockVersion = 0
-        });
+        };
+
+        requestEntity.Assignment = assignmentEntity;
+        dbContext.PatrolRequests.Add(requestEntity);
+        dbContext.Assignments.Add(assignmentEntity);
 
         AddMobileNotificationForEmployee(
                 employee.Id,
@@ -230,7 +272,8 @@ internal sealed partial class EfPatrolStore
             request.NotificationText,
             request.Status,
             request.CreatedAt,
-            request.Description);
+            request.Description,
+            request.Assignment?.Id);
 
     private static PatrolRequestPaging NormalizePatrolRequestPaging(int page, int pageSize)
     {

@@ -28,4 +28,13 @@ public sealed record PatrolRequestDto(
     string NotificationText,
     string Status,
     DateTimeOffset CreatedAt,
-    string Description);
+    string Description,
+    Guid? AssignmentId = null);
+
+public sealed record PatrolRequestFilterDto(
+    Guid? EmployeeId = null,
+    Guid? RouteId = null,
+    string? Status = null,
+    DateOnly? DateFrom = null,
+    DateOnly? DateTo = null,
+    string? Query = null);

@@ -407,7 +407,11 @@ export function AssignmentScreen({
         description: comment.trim(),
       });
 
-      if (shouldCreateAssignmentAfterRequest({ dataSourceMode, hasSelectedRequest: Boolean(selectedRequest) })) {
+       if (shouldCreateAssignmentAfterRequest({
+         dataSourceMode,
+         hasSelectedRequest: Boolean(selectedRequest),
+         hasLinkedAssignment: Boolean(request.assignmentId),
+       })) {
         await assignments.createAssignment({
           patrolRequestId: request.id,
           employeeId: selectedEmployee.id,

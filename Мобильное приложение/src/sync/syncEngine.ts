@@ -214,8 +214,11 @@ async function uploadFilesForCompleteCommands(commands: OutboxCommand[]) {
         message: `${mediaLabel} отправлено на сервер.`,
         payload: { clientFileId: file.clientFileId, serverFileId: response.serverFileId }
       }).catch(() => undefined);
-    } catch {
+    } catch (error) {
       await markFileUploadFailed(file.clientFileId);
+      if (error instanceof Error && error.message.includes("Mobile session is invalid")) {
+        throw error;
+      }
       throw new Error("Не удалось отправить файл на сервер. Отчет останется в очереди восстановления.");
     }
   }
@@ -288,6 +291,10 @@ function getReadableSyncError(error: unknown) {
 const authRequiredMessage = "Сессия истекла. Войдите в аккаунт повторно. Локальные данные и очередь отправки сохранены.";
 
 function isAuthRequiredError(error: unknown) {
+  if (error instanceof Error && error.message.includes("Mobile session is invalid")) {
+    return true;
+  }
+
   return error instanceof Error && (
     error.message.includes("Сессия истекла")
     || error.message.includes("Войдите в аккаунт повторно")

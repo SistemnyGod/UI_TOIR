@@ -7,7 +7,7 @@ const appIconFile = "./assets/app-icon.png";
 
 const androidConfig = {
   package: "ru.patrol360.mobile",
-  versionCode: 18,
+  versionCode: 19,
   usesCleartextTraffic: true,
   adaptiveIcon: {
     foregroundImage: appIconFile,
@@ -93,7 +93,7 @@ module.exports = {
     name: "Patrol360",
     slug: "patrol360-mobile",
     scheme: "patrol360",
-    version: "0.1.17",
+      version: "0.1.18",
     platforms: ["android"],
     orientation: "portrait",
     icon: appIconFile,

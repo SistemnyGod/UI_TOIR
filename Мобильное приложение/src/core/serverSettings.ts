@@ -106,7 +106,7 @@ export function normalizeServerBaseUrl(value: string) {
       throw new Error();
     }
 
-    if (parsedUrl.hostname === "192.168.2.194" && parsedUrl.port === "5000") {
+    if (parsedUrl.hostname === "192.168.2.194" && (!parsedUrl.port || parsedUrl.port === "5000")) {
       parsedUrl.protocol = "http:";
       parsedUrl.port = "5173";
     }

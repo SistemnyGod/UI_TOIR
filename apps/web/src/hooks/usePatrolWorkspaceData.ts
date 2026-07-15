@@ -158,7 +158,7 @@ export function usePatrolWorkspaceData({
       setRequestListErrorMessage(undefined);
 
       try {
-        const nextRequests = await apiRequestsRepository.getPatrolRequests({ signal });
+        const nextRequests = await apiRequestsRepository.getPatrolRequests({}, { signal });
         setApiRequests(nextRequests);
         setRequestListStatus("ready");
       } catch (error) {

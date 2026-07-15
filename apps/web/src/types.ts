@@ -140,6 +140,7 @@ export interface PatrolResult {
 
 export interface ServiceRequest {
   id: string;
+  assignmentId?: string;
   requestKind: "patrol-assignment";
   title: string;
   status: "Новая" | "В работе" | "Назначена" | "Закрыта";

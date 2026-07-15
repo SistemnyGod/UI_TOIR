@@ -12,6 +12,14 @@ public sealed record CreateAssignmentDto(
     string? NotificationText = null,
     string? Comment = null);
 
+public sealed record AssignmentFilterDto(
+    Guid? EmployeeId = null,
+    Guid? RouteId = null,
+    string? Status = null,
+    DateOnly? DateFrom = null,
+    DateOnly? DateTo = null,
+    string? Query = null);
+
 public sealed record CompleteAssignmentDto(
     DateTimeOffset? ActualAt,
     string? Status,

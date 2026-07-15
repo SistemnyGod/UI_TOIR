@@ -1006,7 +1006,7 @@ public class ApiSmokeTests
 
         public int? LastPageSize { get; private set; }
 
-        public IReadOnlyList<AssignmentDto> GetAssignments(int page = 1, int pageSize = 100)
+        public IReadOnlyList<AssignmentDto> GetAssignments(int page = 1, int pageSize = 100, AssignmentFilterDto? filter = null)
         {
             LastPage = page;
             LastPageSize = pageSize;
@@ -1037,7 +1037,7 @@ public class ApiSmokeTests
 
         public int? LastPageSize { get; private set; }
 
-        public IReadOnlyList<PatrolRequestDto> GetRequests(int page = 1, int pageSize = 100)
+        public IReadOnlyList<PatrolRequestDto> GetRequests(int page = 1, int pageSize = 100, PatrolRequestFilterDto? filter = null)
         {
             LastPage = page;
             LastPageSize = pageSize;

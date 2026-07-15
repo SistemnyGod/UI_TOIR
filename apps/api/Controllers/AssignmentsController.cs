@@ -14,8 +14,14 @@ public sealed class AssignmentsController(IAssignmentService assignmentService) 
     [RequirePermission("assignments.read")]
     public ActionResult<IReadOnlyList<AssignmentDto>> List(
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 100) =>
-        Ok(assignmentService.GetAssignments(page, pageSize));
+        [FromQuery] int pageSize = 100,
+        [FromQuery] Guid? employeeId = null,
+        [FromQuery] Guid? routeId = null,
+        [FromQuery] string? status = null,
+        [FromQuery] DateOnly? dateFrom = null,
+        [FromQuery] DateOnly? dateTo = null,
+        [FromQuery] string? query = null) =>
+        Ok(assignmentService.GetAssignments(page, pageSize, new AssignmentFilterDto(employeeId, routeId, status, dateFrom, dateTo, query)));
 
     [HttpGet("settings")]
     [RequirePermission("assignments.read")]

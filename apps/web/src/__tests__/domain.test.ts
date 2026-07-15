@@ -266,6 +266,34 @@ describe("domain workflows", () => {
     expect(requestedPaths[1]).toContain("/api/v1/assignments?page=2&pageSize=500");
   });
 
+  it("passes assignment filters to the API", async () => {
+    let requestedUrl = "";
+    const repository = createApiAssignmentsRepository({
+      baseUrl: "https://api.example.test",
+      fetcher: async (input) => {
+        requestedUrl = String(input);
+        return jsonResponse([]);
+      },
+    });
+
+    await repository.getAssignments({
+      employeeId: "employee-1",
+      routeId: "route-1",
+      status: "Assigned",
+      dateFrom: "2026-05-01",
+      dateTo: "2026-05-31",
+      query: "north route",
+    });
+
+    const query = new URL(requestedUrl).searchParams;
+    expect(query.get("employeeId")).toBe("employee-1");
+    expect(query.get("routeId")).toBe("route-1");
+    expect(query.get("status")).toBe("Assigned");
+    expect(query.get("dateFrom")).toBe("2026-05-01");
+    expect(query.get("dateTo")).toBe("2026-05-31");
+    expect(query.get("query")).toBe("north route");
+  });
+
   it("does not double count requests that already have active assignments in dashboard metrics", () => {
     const metrics = buildLocalDashboardMetrics({
       activePatrols: [
@@ -299,6 +327,7 @@ describe("domain workflows", () => {
   it("does not create a second assignment after creating a new API request", () => {
     expect(shouldCreateAssignmentAfterRequest({ dataSourceMode: "api", hasSelectedRequest: false })).toBe(false);
     expect(shouldCreateAssignmentAfterRequest({ dataSourceMode: "api", hasSelectedRequest: true })).toBe(true);
+    expect(shouldCreateAssignmentAfterRequest({ dataSourceMode: "api", hasSelectedRequest: true, hasLinkedAssignment: true })).toBe(false);
     expect(shouldCreateAssignmentAfterRequest({ dataSourceMode: "mock", hasSelectedRequest: false })).toBe(true);
   });
 });

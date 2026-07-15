@@ -53,6 +53,12 @@ function formatTestRuDate(date: Date) {
   return `${day}.${month}.${year}`;
 }
 
+function formatTestDateInput(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 function createMemoryStorage(): Storage {
   const rows = new Map<string, string>();
   return {
@@ -748,7 +754,9 @@ describe("shared UI primitives", () => {
       vi.fn(() => Promise.resolve(new Response("[]", { headers: { "content-type": "application/json" }, status: 200 }))),
     );
     const onCreateScheduledRequest = vi.fn().mockResolvedValue({ id: "request-1" } as never);
-    const resultDate = formatTestRuDate(new Date());
+    const today = new Date();
+    const resultDate = formatTestRuDate(today);
+    const resultDateInput = formatTestDateInput(today);
 
     function ScheduleHarness() {
       const [selectedCellId, setSelectedCellId] = useState("");
@@ -789,8 +797,8 @@ describe("shared UI primitives", () => {
               pointId: "point-7",
               employee: "Favorite Employee",
               employeeId: "employee-favorite",
-              routeId: "route-2",
-              route: "Route B",
+               routeId: "route-1",
+               route: "Route A",
               territory: "Patrol",
               shift: "День",
               plannedAt: `${resultDate}, 08:00`,
@@ -808,7 +816,31 @@ describe("shared UI primitives", () => {
           onCreateScheduledRequest={onCreateScheduledRequest}
           onOpenRequestById={vi.fn()}
           onRunAssignmentCommand={vi.fn()}
-          requests={[]}
+          requests={[
+            {
+              id: "request-schedule-history",
+              requestKind: "patrol-assignment",
+              title: "REQ-1",
+              status: "assigned",
+              priority: "normal",
+              sourceResultId: "",
+              source: "API",
+              employeeId: "employee-favorite",
+              routeId: "route-1",
+              route: "Route A",
+              point: "",
+              employee: "Favorite Employee",
+              scheduledDate: resultDateInput,
+              scheduledTime: "08:00",
+              notifyEmployee: true,
+              notificationText: "",
+              createdAt: `${resultDateInput}T08:00:00Z`,
+              dueAt: "",
+              responsible: "Favorite Employee",
+              description: "",
+              timeline: [],
+            } as never,
+          ]}
           routeDirectory={[
             {
               id: "route-1",
@@ -857,8 +889,8 @@ describe("shared UI primitives", () => {
       expect.objectContaining({
         employeeId: "employee-favorite",
         employee: "Favorite Employee",
-        routeId: "route-2",
-        route: "Route B",
+         routeId: "route-1",
+         route: "Route A",
         notifyEmployee: true,
         notificationText: expect.stringContaining("Point 7"),
       }),

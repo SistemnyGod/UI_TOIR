@@ -13,8 +13,14 @@ public sealed class PatrolRequestsController(IPatrolRequestService patrolRequest
     [RequirePermission("requests.read")]
     public ActionResult<IReadOnlyList<PatrolRequestDto>> List(
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 100) =>
-        Ok(patrolRequestService.GetRequests(page, pageSize));
+        [FromQuery] int pageSize = 100,
+        [FromQuery] Guid? employeeId = null,
+        [FromQuery] Guid? routeId = null,
+        [FromQuery] string? status = null,
+        [FromQuery] DateOnly? dateFrom = null,
+        [FromQuery] DateOnly? dateTo = null,
+        [FromQuery] string? query = null) =>
+        Ok(patrolRequestService.GetRequests(page, pageSize, new PatrolRequestFilterDto(employeeId, routeId, status, dateFrom, dateTo, query)));
 
     [HttpPost]
     [RequirePermission("requests.write")]

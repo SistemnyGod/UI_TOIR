@@ -21,6 +21,10 @@ export async function uploadMobileFile(file: LocalMobileFile) {
     ({ result } = await uploadFileWithFailover(apiBaseUrl, runtimeConfig.syncProtocolVersion, file, refreshedToken));
   }
 
+  if (result.status === 401) {
+    throw new Error(`Mobile session is invalid (${apiBaseUrl}). Sign in again before sending reports.`);
+  }
+
   if (result.status < 200 || result.status >= 300) {
     throw new Error(`Не удалось загрузить файл: ${result.status}`);
   }

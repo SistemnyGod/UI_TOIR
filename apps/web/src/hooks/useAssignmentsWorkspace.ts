@@ -134,7 +134,7 @@ export function useAssignmentsWorkspace({
       setErrorMessage(undefined);
 
       try {
-        const nextAssignments = await apiAssignments.getAssignments({ signal });
+        const nextAssignments = await apiAssignments.getAssignments({}, { signal });
         if (signal?.aborted) return;
         setAssignments(nextAssignments);
         setListStatus("ready");

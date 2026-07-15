@@ -11,6 +11,15 @@ import type { CreateServiceRequestPayload, DataSourceMode, ServiceRequest } from
 export const patrolRequestsStorageKey = "patrol360.patrolRequests";
 export const patrolRequestsFallback = serviceRequests;
 const patrolRequestPageSize = 500;
+
+export interface PatrolRequestFilterOptions {
+  employeeId?: string;
+  routeId?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  query?: string;
+}
 export { isServiceRequestList };
 
 export function resolveServiceRequests({
@@ -60,8 +69,8 @@ export function createApiPatrolRequestsRepository({
   const client = new ApiClient({ baseUrl, fetcher });
 
   return {
-    async getPatrolRequests(options: ApiRequestOptions = {}) {
-      const requests = await getAllPatrolRequests(client, options);
+    async getPatrolRequests(filters: PatrolRequestFilterOptions = {}, options: ApiRequestOptions = {}) {
+      const requests = await getAllPatrolRequests(client, filters, options);
       return requests.map(mapPatrolRequest);
     },
 
@@ -86,13 +95,13 @@ export function createApiPatrolRequestsRepository({
   };
 }
 
-async function getAllPatrolRequests(client: ApiClient, options: ApiRequestOptions) {
+async function getAllPatrolRequests(client: ApiClient, filters: PatrolRequestFilterOptions, options: ApiRequestOptions) {
   const requests: PatrolRequestDto[] = [];
   let page = 1;
 
   while (true) {
     const pageRequests = await client.get<PatrolRequestDto[]>(
-      `/api/v1/patrol-requests?page=${page}&pageSize=${patrolRequestPageSize}`,
+      `/api/v1/patrol-requests${buildPatrolRequestQuery(filters, page)}`,
       options,
     );
     requests.push(...pageRequests);
@@ -108,6 +117,7 @@ async function getAllPatrolRequests(client: ApiClient, options: ApiRequestOption
 function mapPatrolRequest(request: PatrolRequestDto): ServiceRequest {
   return {
     id: request.id,
+    assignmentId: request.assignmentId ?? undefined,
     requestKind: "patrol-assignment",
     title: request.number,
     status: mapPatrolRequestStatus(request.status),
@@ -129,6 +139,17 @@ function mapPatrolRequest(request: PatrolRequestDto): ServiceRequest {
     description: request.description,
     timeline: [`${request.number}: ${request.status}`],
   };
+}
+
+function buildPatrolRequestQuery(filters: PatrolRequestFilterOptions, page: number) {
+  const query = new URLSearchParams({ page: String(page), pageSize: String(patrolRequestPageSize) });
+  if (filters.employeeId) query.set("employeeId", filters.employeeId);
+  if (filters.routeId) query.set("routeId", filters.routeId);
+  if (filters.status) query.set("status", filters.status);
+  if (filters.dateFrom) query.set("dateFrom", filters.dateFrom);
+  if (filters.dateTo) query.set("dateTo", filters.dateTo);
+  if (filters.query) query.set("query", filters.query);
+  return `?${query.toString()}`;
 }
 
 function mapPatrolRequestStatus(status: string): ServiceRequest["status"] {

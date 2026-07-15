@@ -40,9 +40,12 @@ export function isAssignableRequest(request: ServiceRequest) {
 export function shouldCreateAssignmentAfterRequest({
   dataSourceMode,
   hasSelectedRequest,
+  hasLinkedAssignment,
 }: {
   dataSourceMode: DataSourceMode;
   hasSelectedRequest: boolean;
+  hasLinkedAssignment?: boolean;
 }) {
-  return dataSourceMode !== "api" || hasSelectedRequest;
+  if (dataSourceMode !== "api") return true;
+  return hasSelectedRequest && !hasLinkedAssignment;
 }

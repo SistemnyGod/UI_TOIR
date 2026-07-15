@@ -19,6 +19,7 @@ describe("patrol requests repository", () => {
           status: "Assigned",
           createdAt: "2026-05-18T08:00:00Z",
           description: "Daily route",
+          assignmentId: "assignment-1",
         },
       ]),
     );
@@ -64,7 +65,8 @@ describe("patrol requests repository", () => {
             notificationText: "",
             status: "Закрыта",
             createdAt: "2026-05-18T08:00:00Z",
-            description: "",
+      description: "",
+      assignmentId: null,
           },
         ]),
     });
@@ -102,6 +104,34 @@ describe("patrol requests repository", () => {
     expect(requestedUrls[0]).toContain("/api/v1/patrol-requests?page=1&pageSize=500");
     expect(requestedUrls[1]).toContain("/api/v1/patrol-requests?page=2&pageSize=500");
   });
+
+  it("passes request filters to the API", async () => {
+    let requestedUrl = "";
+    const repository = createApiPatrolRequestsRepository({
+      baseUrl: "https://api.example.test",
+      fetcher: async (input) => {
+        requestedUrl = String(input);
+        return jsonResponse([]);
+      },
+    });
+
+    await repository.getPatrolRequests({
+      employeeId: "employee-1",
+      routeId: "route-1",
+      status: "Assigned",
+      dateFrom: "2026-05-01",
+      dateTo: "2026-05-31",
+      query: "north route",
+    });
+
+    const query = new URL(requestedUrl).searchParams;
+    expect(query.get("employeeId")).toBe("employee-1");
+    expect(query.get("routeId")).toBe("route-1");
+    expect(query.get("status")).toBe("Assigned");
+    expect(query.get("dateFrom")).toBe("2026-05-01");
+    expect(query.get("dateTo")).toBe("2026-05-31");
+    expect(query.get("query")).toBe("north route");
+  });
 });
 
 function jsonResponse(body: unknown) {
@@ -125,6 +155,7 @@ function createPatrolRequestDto(id: string) {
     notificationText: "",
     status: "Assigned",
     createdAt: "2026-05-18T08:00:00Z",
-    description: "",
+      description: "",
+      assignmentId: null,
   };
 }

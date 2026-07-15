@@ -24,6 +24,15 @@ export const assignableEmployeesFallback = employees;
 export const assignableRoutesFallback = assignableRoutes;
 const assignmentPageSize = 500;
 
+export interface AssignmentFilterOptions {
+  employeeId?: string;
+  routeId?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  query?: string;
+}
+
 export interface AssignmentCommandResult {
   assignment: ActivePatrol;
   changed: boolean;
@@ -40,8 +49,8 @@ export function createApiAssignmentsRepository({
   const client = new ApiClient({ baseUrl, fetcher });
 
   return {
-    async getAssignments(options: ApiRequestOptions = {}) {
-      const assignments = await getAllAssignments(client, options);
+    async getAssignments(filters: AssignmentFilterOptions = {}, options: ApiRequestOptions = {}) {
+      const assignments = await getAllAssignments(client, filters, options);
       return assignments.map(mapAssignment);
     },
 
@@ -88,13 +97,13 @@ export function createApiAssignmentsRepository({
   };
 }
 
-async function getAllAssignments(client: ApiClient, options: ApiRequestOptions) {
+async function getAllAssignments(client: ApiClient, filters: AssignmentFilterOptions, options: ApiRequestOptions) {
   const assignments: AssignmentDto[] = [];
   let page = 1;
 
   while (true) {
     const pageAssignments = await client.get<AssignmentDto[]>(
-      `/api/v1/assignments?page=${page}&pageSize=${assignmentPageSize}`,
+      `/api/v1/assignments${buildAssignmentQuery(filters, page)}`,
       options,
     );
     assignments.push(...pageAssignments);
@@ -105,6 +114,17 @@ async function getAllAssignments(client: ApiClient, options: ApiRequestOptions) 
 
     page += 1;
   }
+}
+
+function buildAssignmentQuery(filters: AssignmentFilterOptions, page: number) {
+  const query = new URLSearchParams({ page: String(page), pageSize: String(assignmentPageSize) });
+  if (filters.employeeId) query.set("employeeId", filters.employeeId);
+  if (filters.routeId) query.set("routeId", filters.routeId);
+  if (filters.status) query.set("status", filters.status);
+  if (filters.dateFrom) query.set("dateFrom", filters.dateFrom);
+  if (filters.dateTo) query.set("dateTo", filters.dateTo);
+  if (filters.query) query.set("query", filters.query);
+  return `?${query.toString()}`;
 }
 
 function mapCreateAssignmentPayload(payload: CreateAssignmentPayload): CreateAssignmentDto {

@@ -409,6 +409,7 @@ export interface PatrolRequestDto {
   status: string;
   createdAt: string;
   description: string;
+  assignmentId: string | null;
 }
 
 export interface CreatePatrolRequestDto {

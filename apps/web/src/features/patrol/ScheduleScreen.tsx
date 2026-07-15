@@ -91,28 +91,35 @@ export function ScheduleScreen({
   const selectedResultHistory = useMemo(() => {
     if (!selected) return [];
     const selectedDateKey = toDateInputKey(selected.date);
+    const defaultRoute = routeDirectory[0];
+    const selectedRouteId = selected.routeId || defaultRoute?.id;
+    const selectedRouteName = selected.route || defaultRoute?.name;
     const sortedResults = [...patrolResults].sort(
       (first, second) =>
         toSortableDate(second.actualAt || second.plannedAt).getTime() -
         toSortableDate(first.actualAt || first.plannedAt).getTime(),
     );
-    const dayResults = sortedResults.filter((result) => toDateInputKey(result.actualAt || result.plannedAt) === selectedDateKey);
-
-    if (dayResults.length > 0) {
-      return dayResults;
-    }
-
-    return sortedResults.filter((result) => {
+    const matchesSelectedCell = (result: PatrolResult) => {
       const matchesEmployee = Boolean(
         selected.employeeId && (result.employeeId === selected.employeeId || result.employee === selected.employee),
       );
       const matchesRoute = Boolean(
-        selected.routeId && (result.routeId === selected.routeId || result.route === selected.route),
+        selectedRouteId && (result.routeId === selectedRouteId || result.route === selectedRouteName),
       );
 
-      return matchesEmployee || matchesRoute;
-    });
-  }, [patrolResults, selected]);
+      return matchesEmployee && matchesRoute;
+    };
+    const dayResults = sortedResults.filter(
+      (result) => toDateInputKey(result.actualAt || result.plannedAt) === selectedDateKey,
+    );
+    const matchingDayResults = dayResults.filter(matchesSelectedCell);
+
+    if (matchingDayResults.length > 0) {
+      return matchingDayResults;
+    }
+
+    return sortedResults.filter(matchesSelectedCell);
+  }, [patrolResults, routeDirectory, selected]);
 
   return (
     <div className="screen-stack">

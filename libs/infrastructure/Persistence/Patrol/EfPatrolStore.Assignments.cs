@@ -20,10 +20,52 @@ internal sealed partial class EfPatrolStore
             .Select(assignment => MapAssignment(assignment))
             .ToList();
 
-    public IReadOnlyList<AssignmentDto> GetAssignments(int page = DefaultAssignmentPage, int pageSize = DefaultAssignmentPageSize)
+    public IReadOnlyList<AssignmentDto> GetAssignments(
+        int page = DefaultAssignmentPage,
+        int pageSize = DefaultAssignmentPageSize,
+        AssignmentFilterDto? filter = null)
     {
         var paging = NormalizeAssignmentPaging(page, pageSize);
-        var assignments = GetAssignmentQuery()
+        var query = GetAssignmentQuery();
+
+        if (filter?.EmployeeId is not null)
+        {
+            query = query.Where(assignment => assignment.EmployeeId == filter.EmployeeId.Value);
+        }
+
+        if (filter?.RouteId is not null)
+        {
+            query = query.Where(assignment => assignment.RouteId == filter.RouteId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter?.Status))
+        {
+            var status = filter.Status.Trim();
+            query = query.Where(assignment => assignment.Status == status);
+        }
+
+        if (filter?.DateFrom is not null)
+        {
+            var dateFrom = new DateTimeOffset(filter.DateFrom.Value.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            query = query.Where(assignment => assignment.PlannedAt >= dateFrom);
+        }
+
+        if (filter?.DateTo is not null)
+        {
+            var dateToExclusive = new DateTimeOffset(filter.DateTo.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            query = query.Where(assignment => assignment.PlannedAt < dateToExclusive);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter?.Query))
+        {
+            var search = filter.Query.Trim().ToLower();
+            query = query.Where(assignment =>
+                assignment.Employee!.FullName.ToLower().Contains(search)
+                || assignment.Route!.Name.ToLower().Contains(search)
+                || assignment.PatrolRequest!.Number.ToLower().Contains(search));
+        }
+
+        var assignments = query
             .OrderByDescending(assignment => assignment.PlannedAt)
             .ThenByDescending(assignment => assignment.Id)
             .Skip((paging.Page - 1) * paging.PageSize)

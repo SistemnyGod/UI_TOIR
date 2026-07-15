@@ -4,7 +4,7 @@ namespace Patrol360.Application;
 
 public interface IAssignmentService
 {
-    IReadOnlyList<AssignmentDto> GetAssignments(int page = 1, int pageSize = 100);
+    IReadOnlyList<AssignmentDto> GetAssignments(int page = 1, int pageSize = 100, AssignmentFilterDto? filter = null);
 
     AssignmentSettingsDto GetSettings();
 

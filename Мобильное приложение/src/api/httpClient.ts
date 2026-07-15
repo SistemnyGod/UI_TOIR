@@ -25,6 +25,15 @@ export async function mobileRequest<TResponse>(path: string, options: RequestOpt
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      if (path.endsWith("/auth/login")) {
+        throw new Error(`Server is reachable (${apiBaseUrl}), but mobile login was rejected. Check login, password, and account binding.`);
+      }
+
+      await clearAuthTokens();
+      throw new Error(`Mobile session is invalid (${apiBaseUrl}). Sign in again before sending reports.`);
+    }
+
     const message = await readErrorMessage(response);
     throw new Error(message ?? `Ошибка mobile API: ${response.status}`);
   }
