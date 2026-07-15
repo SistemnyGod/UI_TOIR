@@ -101,6 +101,14 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
 
     public DbSet<InventoryPpeCardLineEventEntity> InventoryPpeCardLineEvents => Set<InventoryPpeCardLineEventEntity>();
 
+    public DbSet<InventoryPpeNormSetEntity> InventoryPpeNormSets => Set<InventoryPpeNormSetEntity>();
+
+    public DbSet<InventoryPpeNormRowEntity> InventoryPpeNormRows => Set<InventoryPpeNormRowEntity>();
+
+    public DbSet<InventoryPpeNormCatalogMappingEntity> InventoryPpeNormCatalogMappings => Set<InventoryPpeNormCatalogMappingEntity>();
+
+    public DbSet<InventoryPpeCardNormRowEntity> InventoryPpeCardNormRows => Set<InventoryPpeCardNormRowEntity>();
+
     public DbSet<InventoryPpeIssueTemplateEntity> InventoryPpeIssueTemplates => Set<InventoryPpeIssueTemplateEntity>();
 
     public DbSet<InventoryItemSetEntity> InventoryItemSets => Set<InventoryItemSetEntity>();
@@ -481,7 +489,9 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(result => result.AssignmentId)
-                .HasDatabaseName("ix_patrol_results_assignment_id");
+                .IsUnique()
+                .HasFilter("assignment_id IS NOT NULL")
+                .HasDatabaseName("ux_patrol_results_assignment_id");
 
             entity.HasOne(result => result.Route)
                 .WithMany()
@@ -1438,9 +1448,12 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(row => row.HeadSize).HasColumnName("head_size").HasMaxLength(80).IsRequired();
             entity.Property(row => row.RespiratorSize).HasColumnName("respirator_size").HasMaxLength(120).IsRequired();
             entity.Property(row => row.HandProtectionSize).HasColumnName("hand_protection_size").HasMaxLength(120).IsRequired();
+            entity.Property(row => row.Version).HasColumnName("version").IsConcurrencyToken();
+            entity.Property(row => row.NormSetId).HasColumnName("norm_set_id");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.ArchivedAt).HasColumnName("archived_at");
             entity.HasOne(row => row.Employee).WithMany().HasForeignKey(row => row.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(row => row.NormSet).WithMany().HasForeignKey(row => row.NormSetId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(row => new { row.EmployeeId, row.ArchivedAt }).HasDatabaseName("ix_inventory_ppe_cards_employee_archived");
             entity.HasIndex(row => row.LegacyId).HasDatabaseName("ix_inventory_ppe_cards_legacy_id");
         });
@@ -1452,6 +1465,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(row => row.Id).HasColumnName("id");
             entity.Property(row => row.LegacyId).HasColumnName("legacy_id");
             entity.Property(row => row.CardId).HasColumnName("card_id");
+            entity.Property(row => row.CardNormRowId).HasColumnName("card_norm_row_id");
             entity.Property(row => row.ItemId).HasColumnName("item_id");
             entity.Property(row => row.WarehouseId).HasColumnName("warehouse_id");
             entity.Property(row => row.Quantity).HasColumnName("quantity").HasPrecision(12, 3);
@@ -1460,17 +1474,114 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(row => row.IssuedAt).HasColumnName("issued_at");
             entity.Property(row => row.DueAt).HasColumnName("due_at");
             entity.Property(row => row.Comment).HasColumnName("comment").HasMaxLength(1200).IsRequired();
-            entity.Property(row => row.PrintItemName).HasColumnName("print_item_name").HasMaxLength(600).IsRequired();
-            entity.Property(row => row.NormPoint).HasColumnName("norm_point").HasMaxLength(240).IsRequired();
-            entity.Property(row => row.IssuePeriodText).HasColumnName("issue_period_text").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.PrintItemName).HasColumnName("print_item_name").HasMaxLength(4000).IsRequired();
+            entity.Property(row => row.NormPoint).HasColumnName("norm_point").HasMaxLength(4000).IsRequired();
+            entity.Property(row => row.IssuePeriodText).HasColumnName("issue_period_text").HasMaxLength(500).IsRequired();
             entity.Property(row => row.QuantityText).HasColumnName("quantity_text");
             entity.Property(row => row.IsSectionTitle).HasColumnName("is_section_title").HasDefaultValue(false);
             entity.Property(row => row.BrandModelArticle).HasColumnName("brand_model_article").HasMaxLength(600).IsRequired();
+            entity.Property(row => row.IssueMethod).HasColumnName("issue_method").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.SizeText).HasColumnName("size_text").HasMaxLength(120).IsRequired();
+            entity.Property(row => row.ReturnedAt).HasColumnName("returned_at");
+            entity.Property(row => row.ReturnedQuantity).HasColumnName("returned_quantity").HasPrecision(12, 3);
+            entity.Property(row => row.WriteOffActDate).HasColumnName("write_off_act_date");
+            entity.Property(row => row.WriteOffActNumber).HasColumnName("write_off_act_number").HasMaxLength(120).IsRequired();
             entity.HasOne(row => row.Card).WithMany(card => card.Lines).HasForeignKey(row => row.CardId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.CardNormRow).WithMany(row => row.Issues).HasForeignKey(row => row.CardNormRowId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(row => row.Item).WithMany().HasForeignKey(row => row.ItemId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(row => row.Warehouse).WithMany().HasForeignKey(row => row.WarehouseId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(row => new { row.CardId, row.Status }).HasDatabaseName("ix_inventory_ppe_lines_card_status");
+            entity.HasIndex(row => row.CardNormRowId).HasDatabaseName("ix_inventory_ppe_lines_card_norm_row");
             entity.HasIndex(row => row.LegacyId).HasDatabaseName("ix_inventory_ppe_lines_legacy_id");
+        });
+
+        modelBuilder.Entity<InventoryPpeNormSetEntity>(entity =>
+        {
+            entity.ToTable("ppe_norm_sets", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.PositionName).HasColumnName("position_name").HasMaxLength(200).IsRequired();
+            entity.Property(row => row.VersionName).HasColumnName("version_name").HasMaxLength(120).IsRequired();
+            entity.Property(row => row.EffectiveFrom).HasColumnName("effective_from");
+            entity.Property(row => row.EffectiveTo).HasColumnName("effective_to");
+            entity.Property(row => row.SourceName).HasColumnName("source_name").HasMaxLength(500).IsRequired();
+            entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.RequiresReview).HasColumnName("requires_review");
+            entity.Property(row => row.Version).HasColumnName("version").IsConcurrencyToken();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.Property(row => row.ArchivedAt).HasColumnName("archived_at");
+            entity.HasIndex(row => new { row.PositionName, row.Status }).HasDatabaseName("ix_inventory_ppe_norm_sets_position_status");
+            entity.HasIndex(row => new { row.PositionName, row.VersionName }).IsUnique().HasDatabaseName("ux_inventory_ppe_norm_sets_position_version");
+        });
+
+        modelBuilder.Entity<InventoryPpeNormRowEntity>(entity =>
+        {
+            entity.ToTable("ppe_norm_rows", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.NormSetId).HasColumnName("norm_set_id");
+            entity.Property(row => row.ParentRowId).HasColumnName("parent_row_id");
+            entity.Property(row => row.RowType).HasColumnName("row_type").HasMaxLength(20).IsRequired();
+            entity.Property(row => row.SortOrder).HasColumnName("sort_order");
+            entity.Property(row => row.NormItemName).HasColumnName("norm_item_name").HasMaxLength(4000).IsRequired();
+            entity.Property(row => row.NormPoint).HasColumnName("norm_point").HasMaxLength(4000).IsRequired();
+            entity.Property(row => row.IssuePeriodText).HasColumnName("issue_period_text").HasMaxLength(500).IsRequired();
+            entity.Property(row => row.Quantity).HasColumnName("quantity").HasPrecision(12, 3);
+            entity.Property(row => row.QuantityText).HasColumnName("quantity_text").HasMaxLength(120).IsRequired();
+            entity.Property(row => row.LifeMonths).HasColumnName("life_months");
+            entity.HasOne(row => row.NormSet).WithMany(set => set.Rows).HasForeignKey(row => row.NormSetId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.ParentRow).WithMany(row => row.Children).HasForeignKey(row => row.ParentRowId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.NormSetId, row.SortOrder }).IsUnique().HasDatabaseName("ux_inventory_ppe_norm_rows_set_order");
+            entity.HasIndex(row => row.ParentRowId).HasDatabaseName("ix_inventory_ppe_norm_rows_parent");
+        });
+
+        modelBuilder.Entity<InventoryPpeNormCatalogMappingEntity>(entity =>
+        {
+            entity.ToTable("ppe_norm_catalog_mappings", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.NormRowId).HasColumnName("norm_row_id");
+            entity.Property(row => row.ItemId).HasColumnName("item_id");
+            entity.Property(row => row.BrandModelArticle).HasColumnName("brand_model_article").HasMaxLength(600).IsRequired();
+            entity.Property(row => row.DefaultUnitPriceMinor).HasColumnName("default_unit_price_minor");
+            entity.Property(row => row.IsDefault).HasColumnName("is_default");
+            entity.Property(row => row.Comment).HasColumnName("comment").HasMaxLength(1200).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.Property(row => row.ArchivedAt).HasColumnName("archived_at");
+            entity.HasOne(row => row.NormRow).WithMany(row => row.Mappings).HasForeignKey(row => row.NormRowId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.Item).WithMany().HasForeignKey(row => row.ItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.NormRowId, row.ItemId }).IsUnique().HasDatabaseName("ux_inventory_ppe_norm_mapping_row_item");
+            entity.HasIndex(row => row.ItemId).HasDatabaseName("ix_inventory_ppe_norm_mapping_item");
+            entity.HasIndex(row => row.ArchivedAt).HasDatabaseName("ix_inventory_ppe_norm_mapping_archived");
+        });
+
+        modelBuilder.Entity<InventoryPpeCardNormRowEntity>(entity =>
+        {
+            entity.ToTable("ppe_card_norm_rows", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.CardId).HasColumnName("card_id");
+            entity.Property(row => row.SourceNormRowId).HasColumnName("source_norm_row_id");
+            entity.Property(row => row.ParentRowId).HasColumnName("parent_row_id");
+            entity.Property(row => row.MappedItemId).HasColumnName("mapped_item_id");
+            entity.Property(row => row.RowType).HasColumnName("row_type").HasMaxLength(20).IsRequired();
+            entity.Property(row => row.SortOrder).HasColumnName("sort_order");
+            entity.Property(row => row.NormItemName).HasColumnName("norm_item_name").HasMaxLength(4000).IsRequired();
+            entity.Property(row => row.NormPoint).HasColumnName("norm_point").HasMaxLength(4000).IsRequired();
+            entity.Property(row => row.IssuePeriodText).HasColumnName("issue_period_text").HasMaxLength(500).IsRequired();
+            entity.Property(row => row.Quantity).HasColumnName("quantity").HasPrecision(12, 3);
+            entity.Property(row => row.QuantityText).HasColumnName("quantity_text").HasMaxLength(120).IsRequired();
+            entity.Property(row => row.LifeMonths).HasColumnName("life_months");
+            entity.Property(row => row.BrandModelArticle).HasColumnName("brand_model_article").HasMaxLength(600).IsRequired();
+            entity.Property(row => row.DefaultUnitPriceMinor).HasColumnName("default_unit_price_minor");
+            entity.HasOne(row => row.Card).WithMany(card => card.NormRows).HasForeignKey(row => row.CardId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.SourceNormRow).WithMany().HasForeignKey(row => row.SourceNormRowId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(row => row.ParentRow).WithMany(row => row.Children).HasForeignKey(row => row.ParentRowId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(row => row.MappedItem).WithMany().HasForeignKey(row => row.MappedItemId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(row => new { row.CardId, row.SortOrder }).IsUnique().HasDatabaseName("ux_inventory_ppe_card_norm_rows_card_order");
+            entity.HasIndex(row => row.ParentRowId).HasDatabaseName("ix_inventory_ppe_card_norm_rows_parent");
         });
 
         modelBuilder.Entity<InventoryPpeCardLineEventEntity>(entity =>

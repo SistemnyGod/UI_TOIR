@@ -1,10 +1,13 @@
 import type {
+  ApplyInventoryPpeLineActionDto,
   CreateEmployeeDto,
   CreateInventoryCategoryDto,
   CreateInventoryCustodyRecordDto,
   CreateInventoryItemSetDto,
   CreateInventoryOperationDto,
   CreateInventoryPpeCardDto,
+  CreateInventoryPpeCardDraftDto,
+  CreateInventoryPpeIssueDto,
   CreateInventorySimpleReferenceDto,
   CreateInventoryUnitDto,
   CreateInventoryWarehouseDto,
@@ -34,6 +37,9 @@ import type {
   InventoryPpeEmployeeDetailsDto,
   InventoryPpeCardLineDto,
   InventoryPpeModuleOptionsDto,
+  InventoryPpeCardNormRowDto,
+  InventoryPpeHistoryRowDto,
+  InventoryPpeNormMappingDto,
   InventoryPpeSummaryDto,
   InventoryReferenceOptionDto,
   InventoryReportDto,
@@ -52,6 +58,8 @@ import type {
   UpsertInventoryItemDto,
   UpsertInventoryItemSetItemsDto,
   UpsertInventoryPpeCardLineDto,
+  UpdateInventoryPpeCardNormRowsDto,
+  UpsertInventoryPpeNormMappingDto,
   UpsertInventoryPositionNormDto,
 } from "../api/contracts";
 import type { ApiFileResponse } from "../api/client";
@@ -69,6 +77,7 @@ type InventoryMockStore = {
   items: InventoryItemDto[];
   legacyRuns: InventoryLegacyImportRunDto[];
   ppeCards: InventoryPpeCardDetailDto[];
+  ppeMappings: Record<string, InventoryPpeNormMappingDto[]>;
   settings: InventorySettingsDto;
   stock: InventoryStockBalanceDto[];
   systemLog: InventorySystemLogDto[];
@@ -353,6 +362,9 @@ export function createMockInventoryRepository(): InventoryRepository {
       const store = readStore();
       const allRows = store.ppeCards;
       let rows = allRows;
+      if (params.employeeId) {
+        rows = rows.filter((row) => row.employeeId === params.employeeId);
+      }
       if (params.status && params.status !== "all") {
         rows = rows.filter((row) => row.status === params.status || row.lines.some((line) => line.status === params.status));
       }
@@ -382,6 +394,224 @@ export function createMockInventoryRepository(): InventoryRepository {
       };
     },
 
+    async getPpeWorkspace(employeeId) {
+      const store = readStore();
+      const employee = required(store.employees.find((row) => row.id === employeeId), "Сотрудник не найден");
+      const card = store.ppeCards
+        .filter((row) => row.employeeId === employeeId && row.status !== "archived")
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null;
+      const normRows = buildMockPpeNormRows(store, employee.position, card);
+      if (card) card.normRows = normRows;
+      const issues = normRows.filter((row) => row.rowType === "item");
+      return {
+        activeNormSet: null,
+        card,
+        employee,
+        errors: issues.filter((row) => !row.mappedItemId).length,
+        issued: issues.filter((row) => row.coverageStatus === "issued").length,
+        normRows,
+        normsTotal: issues.length,
+        notIssued: issues.filter((row) => row.coverageStatus === "not_issued").length,
+        overdue: issues.filter((row) => row.coverageStatus === "overdue").length,
+        partial: issues.filter((row) => row.coverageStatus === "partial").length,
+        recentHistory: store.history
+          .filter((row) => row.entityId === card?.id || row.entityType === "ppe_line")
+          .slice(0, 12),
+      };
+    },
+
+    async getPpeHistory(params = {}) {
+      const store = readStore();
+      let rows: InventoryPpeHistoryRowDto[] = store.ppeCards.flatMap((card) =>
+        card.lines.map((line) => ({
+          action: line.status === "returned" ? "returned" : line.status === "written_off" ? "written_off" : line.status === "defective" ? "defective" : "issued",
+          actionLabel: line.status === "returned" ? "Возвращено" : line.status === "written_off" ? "Списано" : line.status === "defective" ? "Неисправно" : "Выдано",
+          actor: "Mock",
+          cardId: card.id,
+          cardNormRowId: line.cardNormRowId ?? null,
+          comment: line.normPoint || "",
+          createdAt: line.issuedAt ?? card.createdAt,
+          employeeId: card.employeeId,
+          employeeName: card.employeeName,
+          fromStatus: "",
+          id: `event-${line.id}-${line.status}`,
+          itemId: line.itemId,
+          itemName: line.itemName,
+          lineId: line.id,
+          normItemName: line.printItemName || line.itemName,
+          quantity: line.quantity,
+          toStatus: line.status,
+          unit: line.unit,
+        })),
+      );
+      if (params.employeeId) rows = rows.filter((row) => row.employeeId === params.employeeId);
+      if (params.itemId) rows = rows.filter((row) => row.itemId === params.itemId);
+      if (params.action) rows = rows.filter((row) => row.action === params.action);
+      if (params.status) rows = rows.filter((row) => row.toStatus === params.status);
+      if (params.query) rows = filterByQuery(rows, params.query, (row) => [row.employeeName, row.itemName, row.normItemName ?? ""]);
+      if (params.dateFrom) rows = rows.filter((row) => row.createdAt.slice(0, 10) >= params.dateFrom!);
+      if (params.dateTo) rows = rows.filter((row) => row.createdAt.slice(0, 10) <= params.dateTo!);
+      rows.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+      return pageRows(rows, params);
+    },
+
+    async createPpeCardDraft(payload: CreateInventoryPpeCardDraftDto) {
+      const store = readStore();
+      const employee = required(store.employees.find((row) => row.id === payload.employeeId), "Сотрудник не найден");
+      const sourceCard = payload.sourceCardId
+        ? required(store.ppeCards.find((row) => row.id === payload.sourceCardId), "Исходная карточка не найдена")
+        : store.ppeCards.find((row) => row.employeeId === employee.id);
+      const card: InventoryPpeCardDetailDto = {
+        comment: payload.comment ?? "",
+        createdAt: payload.cardDate,
+        employeeDepartment: employee.department,
+        employeeDetails: payload.employeeDetails ?? sourceCard?.employeeDetails ?? emptyPpeEmployeeDetails(),
+        employeeId: employee.id,
+        employeeName: employee.fullName,
+        employeePersonnelNo: employee.personnelNo,
+        id: id("ppe-card"),
+        lines: [],
+        normRows: [],
+        position: employee.position,
+        status: "draft",
+        version: 1,
+      };
+      if (payload.source === "previous_card" && sourceCard) {
+        card.normRows = buildMockPpeNormRows(store, employee.position, sourceCard).map((row, index) => ({
+          ...row,
+          id: id("ppe-norm-row"),
+          sortOrder: index,
+        }));
+      } else if (payload.source === "active_norms") {
+        card.normRows = buildMockPpeNormRows(store, employee.position, null);
+      }
+      store.ppeCards.unshift(card);
+      addHistory(store, "ppe_card", "created", `Создан черновик карточки СИЗ: ${employee.fullName}`, "Mock", card.id);
+      writeStore(store);
+      return card;
+    },
+
+    async updatePpeCardNormRows(cardId, payload: UpdateInventoryPpeCardNormRowsDto) {
+      const store = readStore();
+      const card = required(store.ppeCards.find((row) => row.id === cardId), "Карточка СИЗ не найдена");
+      if ((card.version ?? 1) !== payload.expectedVersion) throw new Error("Карточка была изменена другим пользователем");
+      card.normRows = payload.rows.map((row, index) => ({
+        brandModelArticle: row.brandModelArticle ?? "",
+        coverageStatus: "not_issued",
+        defaultUnitPriceMinor: row.defaultUnitPriceMinor ?? null,
+        id: row.id ?? id("ppe-norm-row"),
+        issuePeriodText: row.issuePeriodText,
+        issuedQuantity: 0,
+        lifeMonths: row.lifeMonths ?? null,
+        mappedItemId: row.mappedItemId ?? null,
+        mappedItemName: store.items.find((item) => item.id === row.mappedItemId)?.name ?? "",
+        mappings: [],
+        normItemName: row.normItemName,
+        normPoint: row.normPoint,
+        parentRowId: row.parentRowId ?? null,
+        quantity: row.quantity,
+        quantityText: row.quantityText,
+        rowType: row.rowType,
+        sortOrder: index,
+        sourceNormRowId: row.sourceNormRowId ?? null,
+      }));
+      card.version = (card.version ?? 1) + 1;
+      writeStore(store);
+      return card;
+    },
+
+    async createPpeIssue(cardId, payload: CreateInventoryPpeIssueDto) {
+      const store = readStore();
+      const card = required(store.ppeCards.find((row) => row.id === cardId), "Карточка СИЗ не найдена");
+      if (payload.expectedVersion != null && (card.version ?? 1) !== payload.expectedVersion) throw new Error("Карточка СИЗ была изменена другим пользователем");
+      const normRow = required(card.normRows?.find((row) => row.id === payload.cardNormRowId), "Строка нормы не найдена");
+      const item = required(store.items.find((row) => row.id === payload.itemId), "Номенклатура не найдена");
+      const unitPriceMinor = payload.unitPriceMinor ?? item.defaultUnitPriceMinor ?? 0;
+      const line: InventoryPpeCardLineDto = {
+        amountMinor: unitPriceMinor * payload.quantity,
+        brandModelArticle: payload.brandModelArticle ?? normRow.brandModelArticle,
+        cardNormRowId: normRow.id,
+        dueAt: normRow.lifeMonths ? addMonthsIso(payload.issuedAt, normRow.lifeMonths) : null,
+        id: id("ppe-line"),
+        issueMethod: payload.issueMethod,
+        issuedAt: payload.issuedAt,
+        issuePeriodText: normRow.issuePeriodText,
+        itemId: item.id,
+        itemName: item.name,
+        modelDescription: payload.brandModelArticle ?? "",
+        normPoint: normRow.normPoint,
+        printItemName: normRow.normItemName,
+        quantity: payload.quantity,
+        quantityText: normRow.quantityText,
+        sizeText: payload.sizeText ?? "",
+        status: "issued",
+        unit: item.unit,
+        unitPriceMinor,
+        warehouseId: payload.warehouseId ?? null,
+        warehouseName: "",
+      };
+      card.lines.push(line);
+      card.status = "active";
+      card.version = (card.version ?? 1) + 1;
+      addHistory(store, "ppe_line", "issued", `Выдано СИЗ: ${normRow.normItemName}`, "Mock", card.id);
+      writeStore(store);
+      return line;
+    },
+
+    async applyPpeLineAction(cardId, lineId, payload: ApplyInventoryPpeLineActionDto) {
+      const store = readStore();
+      const card = required(store.ppeCards.find((row) => row.id === cardId), "Карточка СИЗ не найдена");
+      if (payload.expectedVersion != null && (card.version ?? 1) !== payload.expectedVersion) throw new Error("Карточка СИЗ была изменена другим пользователем");
+      const line = required(card.lines.find((row) => row.id === lineId), "Факт выдачи не найден");
+      line.status = payload.action;
+      if (payload.action === "returned") {
+        line.returnedAt = payload.occurredAt;
+        line.returnedQuantity = payload.quantity ?? line.quantity;
+      }
+      if (payload.action === "written_off") {
+        line.writeOffActDate = payload.writeOffActDate ?? payload.occurredAt;
+        line.writeOffActNumber = payload.writeOffActNumber ?? "";
+      }
+      card.version = (card.version ?? 1) + 1;
+      addHistory(store, "ppe_line", payload.action, `${payload.action}: ${line.printItemName || line.itemName}`, "Mock", card.id);
+      writeStore(store);
+      return line;
+    },
+
+    async getPpeNormRowMappings(normRowId) {
+      return pageRows(readStore().ppeMappings[normRowId] ?? [], {});
+    },
+
+    async upsertPpeNormRowMapping(normRowId, payload: UpsertInventoryPpeNormMappingDto) {
+      const store = readStore();
+      const item = required(store.items.find((row) => row.id === payload.itemId), "Номенклатура не найдена");
+      const mappings = store.ppeMappings[normRowId] ?? [];
+      if (payload.isDefault !== false) mappings.forEach((row) => { row.isDefault = false; });
+      let mapping = mappings.find((row) => row.itemId === item.id);
+      if (!mapping) {
+        mapping = {
+          brandModelArticle: payload.brandModelArticle ?? "",
+          comment: payload.comment ?? "",
+          defaultUnitPriceMinor: payload.defaultUnitPriceMinor ?? item.defaultUnitPriceMinor ?? null,
+          id: id("ppe-mapping"),
+          isDefault: payload.isDefault !== false,
+          itemId: item.id,
+          itemName: item.name,
+          itemSku: item.sku,
+          normRowId,
+        };
+        mappings.push(mapping);
+      } else {
+        mapping.brandModelArticle = payload.brandModelArticle ?? mapping.brandModelArticle;
+        mapping.defaultUnitPriceMinor = payload.defaultUnitPriceMinor ?? mapping.defaultUnitPriceMinor;
+        mapping.isDefault = payload.isDefault !== false;
+        mapping.comment = payload.comment ?? mapping.comment;
+      }
+      store.ppeMappings[normRowId] = mappings;
+      writeStore(store);
+      return mapping;
+    },
+
     async getPpeCard(cardId) {
       return required(readStore().ppeCards.find((row) => row.id === cardId), "Карточка СИЗ не найдена");
     },
@@ -390,7 +620,9 @@ export function createMockInventoryRepository(): InventoryRepository {
       const store = readStore();
       const card = required(store.ppeCards.find((row) => row.id === cardId), "Карточка СИЗ не найдена");
       const employee = required(store.employees.find((row) => row.id === payload.employeeId), "Сотрудник не найден");
-      card.employeeId = employee.id;
+      if (card.employeeId !== employee.id) {
+        throw new Error("Нельзя изменить сотрудника существующей карточки СИЗ");
+      }
       card.employeeName = employee.fullName;
       card.employeePersonnelNo = employee.personnelNo;
       card.employeeDepartment = employee.department;
@@ -413,7 +645,7 @@ export function createMockInventoryRepository(): InventoryRepository {
       const store = readStore();
       return {
         employees: activeEmployees(store),
-        items: activeItems(store).slice(0, 50),
+        items: activeItems(store),
         settings: store.settings,
         statuses: ["draft", "issued", "closed", "problem"],
       };
@@ -444,6 +676,13 @@ export function createMockInventoryRepository(): InventoryRepository {
     async createPpeCard(payload) {
       const store = readStore();
       const employee = required(store.employees.find((row) => row.id === payload.employeeId), "Сотрудник не найден");
+      const existing = store.ppeCards.find((row) => row.employeeId === employee.id);
+      if (existing) {
+        existing.comment = payload.comment ?? existing.comment;
+        existing.employeeDetails = payload.employeeDetails ?? existing.employeeDetails;
+        writeStore(store);
+        return existing;
+      }
       const detail: InventoryPpeCardDetailDto = {
         createdAt: new Date().toISOString(),
         employeeDepartment: employee.department,
@@ -1045,7 +1284,13 @@ function readStore(): InventoryMockStore {
   }
 
   try {
-    return JSON.parse(raw) as InventoryMockStore;
+    const store = JSON.parse(raw) as InventoryMockStore;
+    store.ppeMappings ??= {};
+    store.ppeCards.forEach((card) => {
+      card.version ??= 1;
+      card.normRows ??= [];
+    });
+    return store;
   } catch {
     const seed = createSeedStore();
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
@@ -1153,6 +1398,7 @@ function createSeedStore(): InventoryMockStore {
     items,
     legacyRuns: [],
     ppeCards: [ppeCard],
+    ppeMappings: {},
     settings: {
       categories,
       custodyCategories: [ref("custody-tool", "Инструмент под запись", "tool")],
@@ -1669,6 +1915,99 @@ function cardSummary(card: InventoryPpeCardDetailDto): InventoryPpeCardDto {
     status: card.status,
     zeroPriceLines: activeLines.filter((line) => (line.unitPriceMinor ?? 0) <= 0).length,
   };
+}
+
+function buildMockPpeNormRows(
+  store: InventoryMockStore,
+  position: string,
+  card: InventoryPpeCardDetailDto | null,
+): InventoryPpeCardNormRowDto[] {
+  const sourceRows = card?.normRows?.length
+    ? card.normRows
+    : store.settings.positionNorms
+        .filter((row) => normalize(row.positionName) === normalize(position))
+        .map((row, index) => ({
+          brandModelArticle: "",
+          coverageStatus: "not_issued" as const,
+          defaultUnitPriceMinor: store.items.find((item) => item.id === row.itemId)?.defaultUnitPriceMinor ?? null,
+          id: `mock-norm-${row.id}`,
+          issuePeriodText: row.issuePeriodText ?? "",
+          issuedQuantity: 0,
+          lifeMonths: row.lifeMonths,
+          mappedItemId: row.isSectionTitle ? null : row.itemId,
+          mappedItemName: row.isSectionTitle ? "" : row.itemName,
+          mappings: [],
+          normItemName: row.normItemName || row.itemName,
+          normPoint: row.normPoint ?? "",
+          parentRowId: null,
+          quantity: row.quantity,
+          quantityText: row.quantityText ?? "",
+          rowType: row.isSectionTitle ? "group" as const : "item" as const,
+          sortOrder: index,
+          sourceNormRowId: row.id,
+        }));
+
+  if (!sourceRows.length && card?.lines.length) {
+    sourceRows.push(...card.lines.map((line, index) => ({
+      brandModelArticle: line.brandModelArticle ?? line.modelDescription ?? "",
+      coverageStatus: "not_issued" as const,
+      defaultUnitPriceMinor: line.unitPriceMinor ?? null,
+      id: line.cardNormRowId ?? `mock-legacy-norm-${line.id}`,
+      issuePeriodText: line.issuePeriodText ?? "",
+      issuedQuantity: 0,
+      lifeMonths: null,
+      mappedItemId: line.itemId,
+      mappedItemName: line.itemName,
+      mappings: [],
+      normItemName: line.printItemName || line.itemName,
+      normPoint: line.normPoint ?? "",
+      parentRowId: null,
+      quantity: line.quantity,
+      quantityText: line.quantityText ?? `${line.quantity} ${line.unit}`,
+      rowType: line.isSectionTitle ? "group" as const : "item" as const,
+      sortOrder: index,
+      sourceNormRowId: null,
+    })));
+  }
+
+  let currentGroupId: string | null = null;
+  return [...sourceRows]
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .map((row) => {
+      if (row.rowType === "group") currentGroupId = row.id;
+      const issues = card?.lines.filter((line) =>
+        line.cardNormRowId === row.id ||
+        (!line.cardNormRowId && line.itemId === row.mappedItemId),
+      ) ?? [];
+      const issuedQuantity = issues
+        .filter((line) => !["returned", "written_off", "archived"].includes(line.status))
+        .reduce((sum, line) => sum + line.quantity, 0);
+      const mappings = row.sourceNormRowId ? store.ppeMappings[row.sourceNormRowId] ?? [] : row.mappings;
+      const defaultMapping = mappings.find((mapping) => mapping.isDefault) ?? mappings[0];
+      return {
+        ...row,
+        brandModelArticle: defaultMapping?.brandModelArticle ?? row.brandModelArticle,
+        coverageStatus: row.rowType === "group"
+          ? "not_issued"
+          : issuedQuantity <= 0
+            ? "not_issued"
+            : issuedQuantity < row.quantity
+              ? "partial"
+              : "issued",
+        defaultUnitPriceMinor: defaultMapping?.defaultUnitPriceMinor ?? row.defaultUnitPriceMinor,
+        issuedQuantity,
+        mappedItemId: defaultMapping?.itemId ?? row.mappedItemId,
+        mappedItemName: defaultMapping?.itemName ?? row.mappedItemName,
+        mappings,
+        parentRowId: row.rowType === "item" && !row.parentRowId ? currentGroupId : row.parentRowId,
+      };
+    });
+}
+
+function addMonthsIso(value: string, months: number) {
+  const date = new Date(value);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  return date.toISOString();
 }
 
 function ppeSummary(cards: InventoryPpeCardDetailDto[]): InventoryPpeSummaryDto {

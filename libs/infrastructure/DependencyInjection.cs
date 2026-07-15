@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Patrol360.Application;
 using Patrol360.Infrastructure.Attachments;
 using Patrol360.Infrastructure.MobilePush;
+using Patrol360.Infrastructure.MobileDiagnostics;
 using Patrol360.Infrastructure.Persistence;
 
 namespace Patrol360.Infrastructure;
@@ -15,6 +16,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddPatrolInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        services.TryAddSingleton(configuration);
         var connectionString = configuration.GetConnectionString("Patrol360")
             ?? "Host=localhost;Port=5432;Database=patrol360;Username=patrol360;Password=patrol360_dev";
 
@@ -24,6 +26,7 @@ public static class DependencyInjection
         services.AddMemoryCache();
         services.AddSingleton<IAttachmentStore>(new LocalAttachmentStore(configuration));
         services.AddSingleton<IPatrolTimeZone>(new PatrolTimeZone(ResolvePatrolTimeZone(configuration)));
+        services.AddSingleton<IMobileDiagnosticReportStore, LocalMobileDiagnosticReportStore>();
 
         var dataProtection = services
             .AddDataProtection()

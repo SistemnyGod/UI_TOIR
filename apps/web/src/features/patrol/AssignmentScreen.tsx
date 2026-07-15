@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { buildNotificationText } from "./components/requests/requestModalUtils";
 import { AssignmentStatusBadge as StatusPill } from "./assignments/AssignmentStatusBadge";
 import {
@@ -890,7 +891,7 @@ function AssignmentEmployeePickerModal({
     onChange([...favoriteEmployeeIds, employeeId]);
   }
 
-  return (
+  return createPortal(
     <div className="assign-am-modal-backdrop" onClick={onClose}>
       <section className="assign-am-employee-picker" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
         <header>
@@ -928,7 +929,8 @@ function AssignmentEmployeePickerModal({
           <button className="button primary" onClick={onClose} type="button">Готово</button>
         </footer>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1279,7 +1281,7 @@ function RequestModal({
     };
   }, []);
 
-  return (
+  return createPortal(
     <div className="assign-am-modal-backdrop" onClick={onClose}>
       <section className="assign-am-request-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
         <header>
@@ -1322,7 +1324,8 @@ function RequestModal({
           <RequestPanel {...requestProps} />
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1471,37 +1474,31 @@ function FavoriteEmployeeQuickPicker({
   selectedEmployeeId?: string;
   shiftSettings: ShiftTimeSettings;
 }) {
+  const selectedValue = employees.some((employee) => employee.id === selectedEmployeeId) ? selectedEmployeeId : "";
+
   return (
-    <div className="assign-am-favorite-picker">
-      <div className="assign-am-favorite-picker-head">
-        <span>Избранные сотрудники</span>
+    <label className="assign-am-favorite-select">
+      <span>
+        Сотрудник из избранного
         <small>{employees.length}</small>
-      </div>
-      {employees.length > 0 ? (
-        <div className="assign-am-favorite-picker-list">
-          {employees.map((employee) => {
-            const active = employee.id === selectedEmployeeId;
-            return (
-              <button
-                className={`assign-am-favorite-employee ${active ? "active" : ""}`}
-                key={employee.id}
-                onClick={() => onSelect(employee.id)}
-                type="button"
-              >
-                <Avatar name={employee.name} />
-                <span>
-                  <strong>{employee.name}</strong>
-                  <small>{employee.role}</small>
-                </span>
-                <em>{shiftText(employee.shift)} · {shiftTime(employee.shift, shiftSettings)}</em>
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="assign-am-favorite-picker-empty">Добавьте сотрудников в избранные, чтобы выбирать их прямо из заявки.</div>
-      )}
-    </div>
+      </span>
+      <select
+        aria-label="Сотрудник из избранного списка для обходов"
+        disabled={employees.length === 0}
+        onChange={(event) => onSelect(event.currentTarget.value)}
+        value={selectedValue}
+      >
+        <option disabled value="">
+          {employees.length === 0 ? "Избранные сотрудники не настроены" : "Выберите сотрудника"}
+        </option>
+        {employees.map((employee) => (
+          <option key={employee.id} value={employee.id}>
+            {employee.name} · {shiftText(employee.shift)} · {shiftTime(employee.shift, shiftSettings)}
+          </option>
+        ))}
+      </select>
+      <small>Список формируется в разделе «Сотрудники».</small>
+    </label>
   );
 }
 

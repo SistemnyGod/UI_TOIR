@@ -29,6 +29,8 @@ infra/docker/certs/*.csr
 infra/docker/certs/*.srl
 infra/docker/certs/*.pfx
 infra/docker/secrets/
+infra/docker/mobile-diagnostics/
+mobile-diagnostics/
 Мобильное приложение/secrets/
 apps/mobile/secrets/
 *firebase-adminsdk*.json

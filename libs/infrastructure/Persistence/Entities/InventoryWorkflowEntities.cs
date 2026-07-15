@@ -73,9 +73,13 @@ internal sealed class InventoryPpeCardEntity
     public string HeadSize { get; set; } = string.Empty;
     public string RespiratorSize { get; set; } = string.Empty;
     public string HandProtectionSize { get; set; } = string.Empty;
+    public long Version { get; set; }
+    public Guid? NormSetId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? ArchivedAt { get; set; }
     public EmployeeEntity Employee { get; set; } = null!;
+    public InventoryPpeNormSetEntity? NormSet { get; set; }
+    public List<InventoryPpeCardNormRowEntity> NormRows { get; set; } = [];
     public List<InventoryPpeCardLineEntity> Lines { get; set; } = [];
 }
 
@@ -84,6 +88,7 @@ internal sealed class InventoryPpeCardLineEntity
     public Guid Id { get; set; }
     public int? LegacyId { get; set; }
     public Guid CardId { get; set; }
+    public Guid? CardNormRowId { get; set; }
     public Guid ItemId { get; set; }
     public Guid? WarehouseId { get; set; }
     public decimal Quantity { get; set; }
@@ -98,11 +103,95 @@ internal sealed class InventoryPpeCardLineEntity
     public string? QuantityText { get; set; }
     public bool IsSectionTitle { get; set; }
     public string BrandModelArticle { get; set; } = string.Empty;
+    public string IssueMethod { get; set; } = string.Empty;
+    public string SizeText { get; set; } = string.Empty;
+    public DateTimeOffset? ReturnedAt { get; set; }
+    public decimal? ReturnedQuantity { get; set; }
+    public DateTimeOffset? WriteOffActDate { get; set; }
+    public string WriteOffActNumber { get; set; } = string.Empty;
     public InventoryPpeCardEntity Card { get; set; } = null!;
+    public InventoryPpeCardNormRowEntity? CardNormRow { get; set; }
     public InventoryItemEntity Item { get; set; } = null!;
     public InventoryWarehouseEntity? Warehouse { get; set; }
     public List<InventoryPpeCardLineEventEntity> Events { get; set; } = [];
     public List<InventoryStockMoveEntity> StockMoves { get; set; } = [];
+}
+
+internal sealed class InventoryPpeNormSetEntity
+{
+    public Guid Id { get; set; }
+    public string PositionName { get; set; } = string.Empty;
+    public string VersionName { get; set; } = string.Empty;
+    public DateOnly? EffectiveFrom { get; set; }
+    public DateOnly? EffectiveTo { get; set; }
+    public string SourceName { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public bool RequiresReview { get; set; }
+    public long Version { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public DateTimeOffset? ArchivedAt { get; set; }
+    public List<InventoryPpeNormRowEntity> Rows { get; set; } = [];
+}
+
+internal sealed class InventoryPpeNormRowEntity
+{
+    public Guid Id { get; set; }
+    public Guid NormSetId { get; set; }
+    public Guid? ParentRowId { get; set; }
+    public string RowType { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+    public string NormItemName { get; set; } = string.Empty;
+    public string NormPoint { get; set; } = string.Empty;
+    public string IssuePeriodText { get; set; } = string.Empty;
+    public decimal Quantity { get; set; }
+    public string QuantityText { get; set; } = string.Empty;
+    public int? LifeMonths { get; set; }
+    public InventoryPpeNormSetEntity NormSet { get; set; } = null!;
+    public InventoryPpeNormRowEntity? ParentRow { get; set; }
+    public List<InventoryPpeNormRowEntity> Children { get; set; } = [];
+    public List<InventoryPpeNormCatalogMappingEntity> Mappings { get; set; } = [];
+}
+
+internal sealed class InventoryPpeNormCatalogMappingEntity
+{
+    public Guid Id { get; set; }
+    public Guid NormRowId { get; set; }
+    public Guid ItemId { get; set; }
+    public string BrandModelArticle { get; set; } = string.Empty;
+    public long? DefaultUnitPriceMinor { get; set; }
+    public bool IsDefault { get; set; }
+    public string Comment { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public DateTimeOffset? ArchivedAt { get; set; }
+    public InventoryPpeNormRowEntity NormRow { get; set; } = null!;
+    public InventoryItemEntity Item { get; set; } = null!;
+}
+
+internal sealed class InventoryPpeCardNormRowEntity
+{
+    public Guid Id { get; set; }
+    public Guid CardId { get; set; }
+    public Guid? SourceNormRowId { get; set; }
+    public Guid? ParentRowId { get; set; }
+    public Guid? MappedItemId { get; set; }
+    public string RowType { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+    public string NormItemName { get; set; } = string.Empty;
+    public string NormPoint { get; set; } = string.Empty;
+    public string IssuePeriodText { get; set; } = string.Empty;
+    public decimal Quantity { get; set; }
+    public string QuantityText { get; set; } = string.Empty;
+    public int? LifeMonths { get; set; }
+    public string BrandModelArticle { get; set; } = string.Empty;
+    public long? DefaultUnitPriceMinor { get; set; }
+    public InventoryPpeCardEntity Card { get; set; } = null!;
+    public InventoryPpeNormRowEntity? SourceNormRow { get; set; }
+    public InventoryPpeCardNormRowEntity? ParentRow { get; set; }
+    public List<InventoryPpeCardNormRowEntity> Children { get; set; } = [];
+    public InventoryItemEntity? MappedItem { get; set; }
+    public List<InventoryPpeCardLineEntity> Issues { get; set; } = [];
 }
 
 internal sealed class InventoryPpeCardLineEventEntity

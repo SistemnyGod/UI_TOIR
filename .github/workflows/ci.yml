@@ -25,7 +25,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: apps/web/package-lock.json
+          cache-dependency-path: |
+            apps/web/package-lock.json
+            Мобильное приложение/package-lock.json
 
       - name: Restore .NET
         run: dotnet restore .\Patrol360.slnx
@@ -54,6 +56,14 @@ jobs:
 
       - name: Verify frontend
         working-directory: apps/web
+        run: npm run verify
+
+      - name: Install mobile dependencies
+        working-directory: Мобильное приложение
+        run: npm ci
+
+      - name: Verify mobile offline, auth and sync safeguards
+        working-directory: Мобильное приложение
         run: npm run verify
 
       - name: Frontend structural tests

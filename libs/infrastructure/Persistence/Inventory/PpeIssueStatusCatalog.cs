@@ -46,7 +46,7 @@ internal static class PpeIssueStatusCatalog
         Normalize(status) is NotIssued or Issuing;
 
     public static bool IsSignatureStatus(string status) =>
-        Normalize(status) is Issued or Replacement or Reissued;
+        Normalize(status) is Issued or Partial or Replacement or Reissued or Returned or WrittenOff;
 
     public static string Label(string status) => Normalize(status) switch
     {

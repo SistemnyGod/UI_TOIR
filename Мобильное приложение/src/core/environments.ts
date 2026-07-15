@@ -1,3 +1,5 @@
+import Constants from "expo-constants";
+
 export type EnvironmentName = "dev" | "test" | "local-enterprise" | "production";
 
 export type MobileEnvironment = {
@@ -29,4 +31,15 @@ export const environments: Record<EnvironmentName, MobileEnvironment> = {
   }
 };
 
-export const defaultEnvironment = environments["local-enterprise"];
+export const defaultEnvironment = environments[resolveDefaultEnvironmentName(Constants.expoConfig?.extra?.defaultEnvironment)];
+
+function resolveDefaultEnvironmentName(value: unknown): EnvironmentName {
+  return typeof value === "string" && isEnvironmentName(value) ? value : "local-enterprise";
+}
+
+function isEnvironmentName(value: string): value is EnvironmentName {
+  return value === "dev"
+    || value === "test"
+    || value === "local-enterprise"
+    || value === "production";
+}

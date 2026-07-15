@@ -80,7 +80,7 @@ export function ActivePatrolScreen() {
   async function handleRetrySubmit() {
     await runAction(async () => {
       await reconcileAcceptedCompleteReports(assignmentId);
-      triggerForegroundSyncWithRetry();
+      await triggerForegroundSyncWithRetry({ forceRetry: true });
     });
   }
 

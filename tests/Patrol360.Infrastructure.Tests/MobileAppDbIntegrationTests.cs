@@ -50,6 +50,28 @@ public sealed class MobileAppDbIntegrationTests
         Assert.NotNull(login.Session);
         Assert.Equal("kenshi-c1s-test", login.Session!.Device.DeviceId);
 
+        var diagnosticReportId = Guid.NewGuid();
+        var diagnosticNow = DateTimeOffset.UtcNow;
+        var diagnosticReport = new MobileDiagnosticReportDto(
+            diagnosticReportId,
+            "kenshi-c1s-test",
+            "0.1.19",
+            "Android 16",
+            diagnosticNow.AddDays(-1),
+            diagnosticNow,
+            diagnosticNow,
+            1,
+            [new MobileDiagnosticEntryDto("sync.failed", "Server unavailable", 2, diagnosticNow.AddHours(-1), diagnosticNow)]);
+        var diagnosticStored = UseMobileApp(provider, mobile => mobile.SaveDiagnosticReport(login.Session.AccessToken, diagnosticReport));
+        var diagnosticRepeated = UseMobileApp(provider, mobile => mobile.SaveDiagnosticReport(login.Session.AccessToken, diagnosticReport));
+        Assert.NotNull(diagnosticStored);
+        Assert.Equal("stored", diagnosticStored!.Status);
+        Assert.NotNull(diagnosticRepeated);
+        Assert.Equal("duplicate", diagnosticRepeated!.Status);
+        Assert.Throws<ArgumentException>(() => UseMobileApp(provider, mobile => mobile.SaveDiagnosticReport(
+            login.Session.AccessToken,
+            diagnosticReport with { ReportId = Guid.NewGuid(), DeviceId = "other-device" })));
+
         var bootstrap = UseMobileApp(provider, mobile => mobile.GetBootstrap(login.Session.AccessToken));
         Assert.NotNull(bootstrap);
         Assert.NotEmpty(bootstrap!.RequestBoard);

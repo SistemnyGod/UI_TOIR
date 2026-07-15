@@ -49,6 +49,28 @@ describe("ppe print mapping", () => {
     expect(html).not.toContain("Перчатки диэлектрические");
   });
 
+  it("keeps personal-card source order but sorts signature rows by issue date", () => {
+    const later = {
+      ...issuedLine(),
+      id: "ppe-line-later",
+      issuedAt: "2026-06-20T00:00:00.000Z",
+      printItemName: "Поздняя выдача",
+    };
+    const earlier = {
+      ...issuedLine(),
+      id: "ppe-line-earlier",
+      issuedAt: "2026-06-01T00:00:00.000Z",
+      printItemName: "Ранняя выдача",
+    };
+    const data = printDataFromDetail(cardDetail({ lines: [later, earlier] }), inventoryItems());
+    const cardHtml = buildPrintHtml(data, "card");
+    const sheetHtml = buildPrintHtml(data, "sheet");
+
+    expect(data.lines.map((line) => line.printItemName)).toEqual(["Поздняя выдача", "Ранняя выдача"]);
+    expect(cardHtml.indexOf("Поздняя выдача")).toBeLessThan(cardHtml.indexOf("Ранняя выдача"));
+    expect(sheetHtml.indexOf("Ранняя выдача")).toBeLessThan(sheetHtml.indexOf("Поздняя выдача"));
+  });
+
   it("keeps returned issued PPE in the signature sheet return block", () => {
     const returnedLine = {
       ...issuedLine(),

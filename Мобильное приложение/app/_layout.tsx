@@ -11,6 +11,7 @@ import { ActivityIndicator, AppState, View } from "react-native";
 import { bootstrapApplication } from "@/core/bootstrap";
 import { ThemeProvider, useAppTheme } from "@/features/settings/themePreference";
 import { registerPushNotifications, refreshPushRegistrationIfAllowed, syncMobileNotifications, subscribeToMobilePushEvents } from "@/services/notificationService";
+import { installMobileErrorReporter, logMobileError } from "@/services/mobileErrorReporter";
 import { registerBackgroundSyncTask } from "@/sync/backgroundSyncTask";
 import { requestMobileDataRefresh, subscribeToNetworkSync, triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 
@@ -19,7 +20,10 @@ export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    void bootstrapApplication().finally(() => setIsReady(true));
+    void bootstrapApplication()
+      .then(() => installMobileErrorReporter())
+      .catch((error) => logMobileError("app.bootstrap.failed", error))
+      .finally(() => setIsReady(true));
   }, []);
 
   useEffect(() => {

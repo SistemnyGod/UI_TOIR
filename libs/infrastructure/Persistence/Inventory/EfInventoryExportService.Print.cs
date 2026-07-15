@@ -8,6 +8,9 @@ namespace Patrol360.Infrastructure.Persistence;
 internal sealed partial class EfInventoryExportService
 {
 
+    private static DateTimeOffset PpeLineCreatedAt(InventoryPpeCardLineEntity line) =>
+        line.Events.Count == 0 ? DateTimeOffset.MaxValue : line.Events.Min(row => row.CreatedAt);
+
     public InventoryCommandResult<InventoryGeneratedFileDto> PrintCustodyDocument(Guid documentId, string format)
     {
         var document = dbContext.InventoryCustodyDocuments
@@ -60,6 +63,8 @@ internal sealed partial class EfInventoryExportService
                     .ThenInclude(item => item.Unit)
             .Include(row => row.Lines)
                 .ThenInclude(line => line.Warehouse)
+            .Include(row => row.Lines)
+                .ThenInclude(line => line.Events)
             .FirstOrDefault(row => row.Id == cardId && row.ArchivedAt == null);
 
         if (card is null)
@@ -78,8 +83,9 @@ internal sealed partial class EfInventoryExportService
         var title = isSheet ? "Лист подписи по получению СИЗ" : "Личная карточка учета выдачи СИЗ";
         var orderedLines = card.Lines
             .Where(line => line.Status != "archived")
-            .OrderBy(line => isSheet ? line.IssuedAt ?? DateTimeOffset.MaxValue : DateTimeOffset.MinValue)
-            .ThenBy(line => line.Item.Name)
+            .OrderBy(line => isSheet ? line.IssuedAt ?? DateTimeOffset.MaxValue : PpeLineCreatedAt(line))
+            .ThenBy(PpeLineCreatedAt)
+            .ThenBy(line => line.Id)
             .ToList();
         var lines = orderedLines
             .Select(line => new PpePrintLine(

@@ -755,6 +755,9 @@ export interface InventoryPpeCardDetailDto {
   comment?: string;
   employeeDetails: InventoryPpeEmployeeDetailsDto;
   lines: InventoryPpeCardLineDto[];
+  version?: number;
+  normSetId?: string | null;
+  normRows?: InventoryPpeCardNormRowDto[];
 }
 
 export interface InventoryPpeEmployeeDetailsDto {
@@ -787,6 +790,158 @@ export interface InventoryPpeCardLineDto {
   issuePeriodText?: string;
   quantityText?: string;
   isSectionTitle?: boolean;
+  cardNormRowId?: string | null;
+  issueMethod?: string;
+  sizeText?: string;
+  returnedAt?: string | null;
+  returnedQuantity?: number | null;
+  writeOffActDate?: string | null;
+  writeOffActNumber?: string;
+}
+
+export interface InventoryPpeNormSetDto {
+  id: string;
+  positionName: string;
+  versionName: string;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+  sourceName: string;
+  status: "draft" | "active" | "archived";
+  requiresReview: boolean;
+  version: number;
+  rowsCount: number;
+}
+
+export interface InventoryPpeNormMappingDto {
+  id: string;
+  normRowId: string;
+  itemId: string;
+  itemName: string;
+  itemSku: string;
+  brandModelArticle: string;
+  defaultUnitPriceMinor: number | null;
+  isDefault: boolean;
+  comment: string;
+}
+
+export interface InventoryPpeCardNormRowDto {
+  id: string;
+  sourceNormRowId: string | null;
+  parentRowId: string | null;
+  rowType: "group" | "item";
+  sortOrder: number;
+  normItemName: string;
+  normPoint: string;
+  issuePeriodText: string;
+  quantity: number;
+  quantityText: string;
+  lifeMonths: number | null;
+  mappedItemId: string | null;
+  mappedItemName: string;
+  brandModelArticle: string;
+  defaultUnitPriceMinor: number | null;
+  coverageStatus: "not_issued" | "partial" | "issued" | "overdue";
+  issuedQuantity: number;
+  mappings: InventoryPpeNormMappingDto[];
+}
+
+export interface InventoryPpeWorkspaceDto {
+  employee: InventoryEmployeeDto;
+  card: InventoryPpeCardDetailDto | null;
+  activeNormSet: InventoryPpeNormSetDto | null;
+  normRows: InventoryPpeCardNormRowDto[];
+  recentHistory: InventoryHistoryDto[];
+  normsTotal: number;
+  issued: number;
+  notIssued: number;
+  partial: number;
+  overdue: number;
+  errors: number;
+}
+
+export interface CreateInventoryPpeCardDraftDto {
+  employeeId: string;
+  cardDate: string;
+  source: "active_norms" | "previous_card" | "empty";
+  sourceCardId?: string | null;
+  normSetId?: string | null;
+  comment?: string | null;
+  employeeDetails?: InventoryPpeEmployeeDetailsDto | null;
+}
+
+export interface UpsertInventoryPpeCardNormRowDto {
+  id?: string | null;
+  sourceNormRowId?: string | null;
+  parentRowId?: string | null;
+  rowType: "group" | "item";
+  sortOrder: number;
+  normItemName: string;
+  normPoint: string;
+  issuePeriodText: string;
+  quantity: number;
+  quantityText: string;
+  lifeMonths?: number | null;
+  mappedItemId?: string | null;
+  brandModelArticle?: string | null;
+  defaultUnitPriceMinor?: number | null;
+}
+
+export interface UpdateInventoryPpeCardNormRowsDto {
+  expectedVersion: number;
+  rows: UpsertInventoryPpeCardNormRowDto[];
+}
+
+export interface CreateInventoryPpeIssueDto {
+  cardNormRowId: string;
+  itemId: string;
+  issuedAt: string;
+  quantity: number;
+  unitPriceMinor?: number | null;
+  issueMethod: "personal" | "dispenser";
+  sizeText?: string | null;
+  brandModelArticle?: string | null;
+  comment?: string | null;
+  warehouseId?: string | null;
+  expectedVersion?: number | null;
+}
+
+export interface ApplyInventoryPpeLineActionDto {
+  action: "returned" | "written_off" | "defective";
+  occurredAt: string;
+  quantity?: number | null;
+  comment?: string | null;
+  writeOffActDate?: string | null;
+  writeOffActNumber?: string | null;
+  expectedVersion?: number | null;
+}
+
+export interface UpsertInventoryPpeNormMappingDto {
+  itemId: string;
+  brandModelArticle?: string | null;
+  defaultUnitPriceMinor?: number | null;
+  isDefault?: boolean;
+  comment?: string | null;
+}
+
+export interface InventoryPpeHistoryRowDto {
+  id: string;
+  cardId: string;
+  lineId: string;
+  employeeId: string;
+  employeeName: string;
+  itemId: string;
+  itemName: string;
+  action: string;
+  actionLabel: string;
+  fromStatus: string;
+  toStatus: string;
+  quantity: number;
+  unit: string;
+  comment: string;
+  actor: string;
+  createdAt: string;
+  cardNormRowId?: string | null;
+  normItemName?: string;
 }
 
 export interface InventoryPpeMovementDto {
@@ -839,6 +994,13 @@ export interface UpsertInventoryPpeCardLineDto {
   quantityText?: string | null;
   isSectionTitle?: boolean | null;
   brandModelArticle?: string | null;
+  cardNormRowId?: string | null;
+  issueMethod?: string | null;
+  sizeText?: string | null;
+  returnedAt?: string | null;
+  returnedQuantity?: number | null;
+  writeOffActDate?: string | null;
+  writeOffActNumber?: string | null;
 }
 
 export interface InventoryReportDto {

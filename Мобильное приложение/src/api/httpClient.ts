@@ -1,6 +1,7 @@
 import { fetchWithTimeout, serverUnavailableMessage } from "@/api/networkTimeout";
 import { getOrCreateDeviceId } from "@/auth/deviceRegistration";
-import { clearAuthTokens, getAccessToken, getRefreshToken, setTokens } from "@/auth/tokenStorage";
+import { assertSessionOwner } from "@/auth/sessionIdentity";
+import { clearAuthTokens, getAccessToken, getRefreshToken, getStoredOwnerUserId, setStoredOwnerUserId, setTokens } from "@/auth/tokenStorage";
 import { getMobileRuntimeConfig, getServerCandidateBaseUrls, setServerBaseUrl } from "@/core/serverSettings";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -19,8 +20,10 @@ export async function mobileRequest<TResponse>(path: string, options: RequestOpt
   const runtimeConfig = await getMobileRuntimeConfig();
   let { apiBaseUrl, response } = await sendMobileRequestWithFailover(runtimeConfig.apiBaseUrl, path, options, token);
 
+  let refreshedSession = false;
   if (response.status === 401 && token && !options.skipAuthRefresh) {
     const refreshedToken = await refreshAccessToken(apiBaseUrl);
+    refreshedSession = true;
     ({ response } = await sendMobileRequestWithFailover(apiBaseUrl, path, options, refreshedToken));
   }
 
@@ -30,8 +33,11 @@ export async function mobileRequest<TResponse>(path: string, options: RequestOpt
         throw new Error(`Server is reachable (${apiBaseUrl}), but mobile login was rejected. Check login, password, and account binding.`);
       }
 
-      await clearAuthTokens();
-      throw new Error(`Mobile session is invalid (${apiBaseUrl}). Sign in again before sending reports.`);
+      // A protected endpoint may return 401 during a server restart, a late response,
+      // or a temporary gateway inconsistency. Only the refresh endpoint can prove a
+      // session invalid; keep credentials and let the outbox retry the saved report.
+      const retryHint = refreshedSession ? " after token refresh" : "";
+      throw new Error(`Mobile API temporarily rejected the request${retryHint} (${apiBaseUrl}). The report is saved and will be retried automatically.`);
     }
 
     const message = await readErrorMessage(response);
@@ -168,7 +174,7 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
     throw new Error(`${serverUnavailableMessage} Проверенные адреса: ${apiBaseUrls.join(", ")}`);
   }
 
-  if (response.status === 401 || response.status === 403) {
+  if (response.status === 401) {
     await clearAuthTokens();
     throw new Error("Сессия истекла. Войдите в аккаунт повторно.");
   }
@@ -181,18 +187,33 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
   let session: {
     accessToken: string;
     refreshToken: string;
+    user: { serverUserId: string };
   };
 
   try {
     session = (await response.json()) as {
       accessToken: string;
       refreshToken: string;
+      user: { serverUserId: string };
     };
   } catch {
     throw new Error("Не удалось обновить сессию. Повторите позже.");
   }
 
+  const expectedOwnerUserId = await getStoredOwnerUserId();
+  try {
+    assertSessionOwner(expectedOwnerUserId, session.user?.serverUserId);
+  } catch (error) {
+    await clearAuthTokens();
+    throw error;
+  }
+
   await setTokens(session.accessToken, session.refreshToken);
+  // Bind legacy installations that have a valid refresh token but predate the
+  // stored owner id. This avoids an unnecessary sign-in while reports are queued.
+  if (!expectedOwnerUserId) {
+    await setStoredOwnerUserId(session.user.serverUserId);
+  }
 
   return session.accessToken;
 }

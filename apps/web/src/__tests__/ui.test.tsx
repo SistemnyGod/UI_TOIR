@@ -399,58 +399,43 @@ describe("shared UI primitives", () => {
 
   it("opens PPE as an employee-centered card with tabs and issue action", async () => {
     const user = userEvent.setup();
-    window.localStorage.removeItem("patrol360:inventory-ppe-norm-item-mapping:v1");
+    window.localStorage.setItem("patrol360.inventory.ppe.employee", "emp-1");
     const repository = createMockInventoryRepository();
-    const getPpeCard = vi.spyOn(repository, "getPpeCard");
-    const [cards, options] = await Promise.all([
-      repository.getPpeCards({ includeLines: false, page: 1, pageSize: 25 }),
-      repository.getPpeOptions(),
-    ]);
+    const getPpeWorkspace = vi.spyOn(repository, "getPpeWorkspace");
 
     render(
       <InventoryRepositoryProvider value={repository}>
         <InventoryPpeScreen
-          cards={cards}
           onNotify={vi.fn()}
-          onReload={vi.fn().mockResolvedValue(undefined)}
-          options={options}
         />
       </InventoryRepositoryProvider>,
     );
 
-    await waitFor(() => expect(getPpeCard).toHaveBeenCalledWith(cards.rows[0].id));
-
-    expect(screen.getByRole("navigation", { name: "Разделы карточки СИЗ" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Данные сотрудника" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Личная карточка" }).length).toBeGreaterThan(0);
+    await waitFor(() => expect(getPpeWorkspace).toHaveBeenCalledWith("emp-1"));
+    expect(screen.getByRole("navigation", { name: "Разделы СИЗ" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Карточки СИЗ" })).toBeInTheDocument();
     expect(screen.getAllByText("Каска защитная").length).toBeGreaterThan(0);
-    expect(screen.getByText("Нормы по должности")).toBeInTheDocument();
-    expect(screen.getByText("Норма, номенклатура и факт выдачи разделены. Сопоставление не создает выдачу.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Нормы/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Выдано/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Печать" })).toBeInTheDocument();
 
-    await user.click(screen.getAllByRole("button", { name: "Сопоставить" })[0]);
-    expect(await screen.findByRole("heading", { name: "Сопоставить норму" })).toBeInTheDocument();
-    expect(screen.getByText(/Найдено позиций:/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Каска защитная" }));
+    expect(await screen.findByRole("region", { name: "Сопоставить норму с номенклатурой" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Поиск номенклатуры")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Отмена" }));
 
-    await user.click(screen.getByRole("button", { name: "Выдать СИЗ" }));
-    expect(await screen.findByRole("heading", { name: /Выдать СИЗ|Редактировать выдачу/ })).toBeInTheDocument();
-    expect(screen.getByLabelText("Номенклатура")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Выдать" }));
+    expect(await screen.findByRole("region", { name: "Выдать СИЗ" })).toBeInTheDocument();
     expect(screen.getAllByText("Пункт норм").length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("Единица")).toBeInTheDocument();
-    expect(screen.getByLabelText("Размер")).toBeInTheDocument();
-    expect(screen.getByLabelText("Способ выдачи")).toBeInTheDocument();
-    expect(screen.getByLabelText("Комментарий")).toBeInTheDocument();
+    expect(screen.getByText("Способ выдачи")).toBeInTheDocument();
+    expect(screen.getByText("Комментарий")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Закрыть" }));
-    await user.click(screen.getAllByRole("button", { name: "Лист подписи" })[1]);
-    expect(screen.getByText("Модель / марка / артикул")).toBeInTheDocument();
-    expect(screen.getByText("Подпись получившего")).toBeInTheDocument();
-    expect(screen.getByText("Возврат: дата")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Проверка и печать" }));
-    expect(screen.getByText("Пустые поля сотрудника")).toBeInTheDocument();
-    expect(screen.getByText("Нормы без номенклатуры")).toBeInTheDocument();
-    expect(screen.getByText("Попадет в личную карточку")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Выдано/ }));
+    expect(screen.getByText("Модель / артикул")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Печать" }));
+    expect(screen.getByText("Личная карточка СИЗ")).toBeInTheDocument();
+    expect(screen.getByText("Лист подписи")).toBeInTheDocument();
   });
 
   it("shows a clear request fallback instead of an empty view modal", () => {

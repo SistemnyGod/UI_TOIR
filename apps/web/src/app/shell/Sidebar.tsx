@@ -53,7 +53,7 @@ export function Sidebar({
   const accountingScreens = useMemo(() => {
     const seen = new Set<string>();
     return screens.filter((item) => {
-      if (!isInventoryScreen(item.id) || seen.has(item.id)) {
+      if (!isInventoryScreen(item.id) || seen.has(item.id) || item.id === "inventory-ppe-history" || item.id === "inventory-ppe-create") {
         return false;
       }
 

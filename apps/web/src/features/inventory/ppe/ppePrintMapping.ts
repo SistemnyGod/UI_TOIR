@@ -5,7 +5,7 @@ import type {
   InventoryPpeCardLineDto,
   InventoryPositionNormDto,
 } from "../../../api/contracts";
-import { PPE_STATUS, defaultIssuePeriodText } from "./ppeStatusCatalog";
+import { defaultIssuePeriodText, isPpeSignatureStatus } from "./ppeStatusCatalog";
 import { moneyMinorToInput, parsePositiveQuantity } from "./ppeFormatters";
 import type { PickerLineInput, PpeWizardState, PrintData, PrintLine } from "./ppeTypes";
 
@@ -138,7 +138,7 @@ export function printDataFromWizard(wizard: PpeWizardState, employee: InventoryE
     employee,
     employeeDetails: wizard.employeeDetails,
     employeeName: employee?.fullName ?? "Сотрудник не выбран",
-    lines: sortPpePrintLines(wizard.lines.map((line) => {
+    lines: wizard.lines.map((line) => {
       const printItemName = line.printItemName || line.item.normItemName || line.item.name;
       const isSectionTitle = Boolean(line.isSectionTitle || isPrintSectionLine(printItemName, line.item.name));
       const quantity = parsePositiveQuantity(line.quantityText) ?? 1;
@@ -163,7 +163,7 @@ export function printDataFromWizard(wizard: PpeWizardState, employee: InventoryE
       unit: line.item.unit || "шт.",
       unitPrice: isSectionTitle ? 0 : parsePrice(line.priceText),
       };
-    })),
+    }),
     position: employee?.position ?? "",
   };
 }
@@ -187,7 +187,7 @@ export function printDataFromDetail(detail: InventoryPpeCardDetailDto, items: In
     },
     employeeDetails: detail.employeeDetails ?? {},
     employeeName: detail.employeeName,
-    lines: sortPpePrintLines(detail.lines.map((line) => {
+    lines: detail.lines.map((line) => {
       const printItemName = line.printItemName || itemsById.get(line.itemId)?.normItemName || line.itemName;
       const isSectionTitle = Boolean(line.isSectionTitle || isPrintSectionLine(printItemName, line.itemName));
       return {
@@ -209,7 +209,7 @@ export function printDataFromDetail(detail: InventoryPpeCardDetailDto, items: In
       unitPrice: isSectionTitle ? 0 : (line.unitPriceMinor ?? 0) / 100,
       amount: isSectionTitle ? 0 : (line.amountMinor ?? 0) / 100,
       };
-    })),
+    }),
     position: detail.position,
   };
 }
@@ -219,12 +219,18 @@ export function isConsumableLine(line: PrintLine) {
 }
 
 export function isPpeSignatureLineStatus(status?: string | null) {
-  return status === PPE_STATUS.issued
-    || status === PPE_STATUS.partial
-    || status === PPE_STATUS.replacement
-    || status === PPE_STATUS.reissued
-    || status === PPE_STATUS.returned
-    || status === PPE_STATUS.writtenOff;
+  return Boolean(status && isPpeSignatureStatus(status));
+}
+
+export function sortPpeSignatureLines(lines: PrintLine[]) {
+  return lines
+    .map((line, sourceIndex) => ({ line, sourceIndex }))
+    .sort((left, right) => {
+      const leftTime = parseSortDate(left.line.issuedAt);
+      const rightTime = parseSortDate(right.line.issuedAt);
+      return leftTime === rightTime ? left.sourceIndex - right.sourceIndex : leftTime - rightTime;
+    })
+    .map(({ line }) => line);
 }
 
 function itemModelDescriptionFromOptional(item?: InventoryItemDto | null) {
@@ -248,18 +254,6 @@ function isPrintSectionLine(printItemName: string, itemName: string) {
 
 function formatPrintQuantity(value: number) {
   return Number.isInteger(value) ? String(value) : String(value).replace(".", ",");
-}
-
-function sortPpePrintLines(lines: PrintLine[]) {
-  return [...lines].sort((left, right) => {
-    const leftTime = parseSortDate(left.issuedAt);
-    const rightTime = parseSortDate(right.issuedAt);
-    if (leftTime !== rightTime) {
-      return leftTime - rightTime;
-    }
-
-    return (left.printItemName || left.itemName).localeCompare(right.printItemName || right.itemName, "ru");
-  });
 }
 
 function parseSortDate(value?: string | null) {

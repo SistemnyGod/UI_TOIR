@@ -2,6 +2,7 @@ import * as BackgroundTask from "expo-background-task";
 import * as TaskManager from "expo-task-manager";
 
 import { initializeDatabase } from "@/db/database";
+import { triggerDailyDiagnosticReportUpload } from "@/services/diagnosticReportService";
 import { recoverStaleSendingOutboxCommands, runForegroundSync } from "@/sync/syncEngine";
 
 export const PATROL360_BACKGROUND_SYNC_TASK = "patrol360-background-sync";
@@ -12,6 +13,7 @@ if (!TaskManager.isTaskDefined(PATROL360_BACKGROUND_SYNC_TASK)) {
       await initializeDatabase();
       await recoverStaleSendingOutboxCommands();
       await runForegroundSync();
+      await triggerDailyDiagnosticReportUpload();
 
       return BackgroundTask.BackgroundTaskResult.Success;
     } catch {

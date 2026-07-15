@@ -400,6 +400,65 @@ describe("mock Inventory repository", () => {
       row.normItemName === "При использовании грузоподъемных механизмов и/или работе на высоте дополнительно:",
     )).toBe(true);
   });
+
+  it("reuses one active PPE card per employee and rejects owner changes", async () => {
+    const repository = createMockInventoryRepository();
+    const before = await repository.getPpeCards({ employeeId: "emp-1", pageSize: 10 });
+    const existing = before.rows[0];
+
+    const reused = await repository.createPpeCard({ employeeId: "emp-1", comment: "Updated card" });
+    const after = await repository.getPpeCards({ employeeId: "emp-1", pageSize: 10 });
+
+    expect(reused.id).toBe(existing.id);
+    expect(after.total).toBe(before.total);
+    await expect(repository.updatePpeCard(existing.id, { employeeId: "emp-2" })).rejects.toThrow(
+      "Нельзя изменить сотрудника",
+    );
+  });
+
+  it("keeps PPE mapping separate from issue facts and records one issued row", async () => {
+    const repository = createMockInventoryRepository();
+    const [employees, settings] = await Promise.all([
+      repository.getEmployees({ pageSize: 100 }),
+      repository.getSettings(),
+    ]);
+    const employee = employees.rows.find((candidate) =>
+      settings.positionNorms.some((norm) => norm.positionName.trim().toLocaleLowerCase("ru") === candidate.position.trim().toLocaleLowerCase("ru")),
+    );
+    expect(employee).toBeTruthy();
+
+    const draft = await repository.createPpeCardDraft({
+      cardDate: "2026-07-15T00:00:00.000Z",
+      employeeId: employee!.id,
+      source: "active_norms",
+    });
+    const normRow = draft.normRows?.find((row) => row.rowType === "item" && row.sourceNormRowId && row.mappedItemId);
+    expect(normRow).toBeTruthy();
+
+    const beforeMapping = await repository.getPpeHistory({ employeeId: employee!.id, pageSize: 100 });
+    await repository.upsertPpeNormRowMapping(normRow!.sourceNormRowId!, {
+      brandModelArticle: "Тестовая модель",
+      isDefault: true,
+      itemId: normRow!.mappedItemId!,
+    });
+    const afterMapping = await repository.getPpeHistory({ employeeId: employee!.id, pageSize: 100 });
+    expect(afterMapping.total).toBe(beforeMapping.total);
+
+    const line = await repository.createPpeIssue(draft.id, {
+      cardNormRowId: normRow!.id,
+      expectedVersion: draft.version,
+      issueMethod: "personal",
+      issuedAt: "2026-07-01T12:00:00.000Z",
+      itemId: normRow!.mappedItemId!,
+      quantity: normRow!.quantity,
+    });
+    const afterIssue = await repository.getPpeHistory({ employeeId: employee!.id, pageSize: 100 });
+    const issueEvents = afterIssue.rows.filter((row) => row.lineId === line.id);
+
+    expect(issueEvents).toHaveLength(1);
+    expect(issueEvents[0]).toMatchObject({ action: "issued", cardNormRowId: normRow!.id });
+    expect(new Set(afterIssue.rows.map((row) => row.id)).size).toBe(afterIssue.rows.length);
+  });
 });
 
 function createMemoryStorage(): Storage {

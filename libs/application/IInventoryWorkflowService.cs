@@ -54,6 +54,28 @@ public interface IInventoryWorkflowService
 
     InventoryListResponseDto<InventoryPpeMovementDto> GetPpeMovements(InventoryListQuery query, Guid? employeeId = null, Guid? itemId = null);
 
+    InventoryCommandResult<InventoryPpeWorkspaceDto> GetPpeWorkspace(Guid employeeId);
+
+    InventoryListResponseDto<InventoryPpeHistoryRowDto> GetPpeHistory(InventoryListQuery query);
+
+    InventoryCommandResult<InventoryPpeCardDetailDto> CreatePpeCardDraft(CreateInventoryPpeCardDraftDto request);
+
+    InventoryCommandResult<InventoryPpeCardDetailDto> UpdatePpeCardNormRows(Guid cardId, UpdateInventoryPpeCardNormRowsDto request);
+
+    InventoryCommandResult<InventoryPpeCardLineDto> CreatePpeIssue(Guid cardId, CreateInventoryPpeIssueDto request);
+
+    InventoryCommandResult<InventoryPpeCardLineDto> ApplyPpeLineAction(Guid cardId, Guid lineId, ApplyInventoryPpeLineActionDto request);
+
+    InventoryListResponseDto<InventoryPpeNormMappingDto> GetPpeNormRowMappings(Guid normRowId, InventoryListQuery query);
+
+    InventoryCommandResult<InventoryPpeNormMappingDto> UpsertPpeNormRowMapping(Guid normRowId, UpsertInventoryPpeNormMappingDto request);
+
+    InventoryListResponseDto<InventoryPpeNormSetDto> GetPpeNormSets(InventoryListQuery query);
+
+    InventoryCommandResult<InventoryPpeNormImportResultDto> ImportPpeNormSetsDraft(Stream source, string fileName);
+
+    InventoryCommandResult<InventoryPpeNormSetDto> PublishPpeNormSet(Guid normSetId, PublishInventoryPpeNormSetDto request);
+
     InventoryListResponseDto<InventoryHistoryDto> GetHistory(InventoryListQuery query);
 
     InventoryListResponseDto<InventoryReportDto> GetReports(InventoryListQuery query);

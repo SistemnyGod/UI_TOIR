@@ -381,7 +381,10 @@ public sealed record InventoryPpeCardDetailDto(
     DateTime CreatedAt,
     string Comment,
     InventoryPpeEmployeeDetailsDto EmployeeDetails,
-    IReadOnlyList<InventoryPpeCardLineDto> Lines);
+    IReadOnlyList<InventoryPpeCardLineDto> Lines,
+    long Version = 0,
+    Guid? NormSetId = null,
+    IReadOnlyList<InventoryPpeCardNormRowDto>? NormRows = null);
 
 public sealed record InventoryPpeEmployeeDetailsDto(
     string Gender = "",
@@ -411,7 +414,161 @@ public sealed record InventoryPpeCardLineDto(
     string PrintItemName = "",
     string IssuePeriodText = "",
     string QuantityText = "",
-    bool IsSectionTitle = false);
+    bool IsSectionTitle = false,
+    Guid? CardNormRowId = null,
+    string IssueMethod = "personal",
+    string SizeText = "",
+    DateTime? ReturnedAt = null,
+    decimal? ReturnedQuantity = null,
+    DateTime? WriteOffActDate = null,
+    string WriteOffActNumber = "");
+
+public sealed record InventoryPpeNormSetDto(
+    Guid Id,
+    string PositionName,
+    string VersionName,
+    DateOnly? EffectiveFrom,
+    DateOnly? EffectiveTo,
+    string SourceName,
+    string Status,
+    bool RequiresReview,
+    long Version,
+    int RowsCount);
+
+public sealed record InventoryPpeNormImportResultDto(
+    int SourceRows,
+    int NormSetsCreated,
+    int GroupsCreated,
+    int ItemsCreated,
+    int SkippedRows,
+    IReadOnlyList<string> Warnings,
+    IReadOnlyList<InventoryPpeNormSetDto> NormSets);
+
+public sealed record PublishInventoryPpeNormSetDto(
+    long ExpectedVersion,
+    bool ConfirmReviewed);
+
+public sealed record InventoryPpeNormMappingDto(
+    Guid Id,
+    Guid NormRowId,
+    Guid ItemId,
+    string ItemName,
+    string ItemSku,
+    string BrandModelArticle,
+    long? DefaultUnitPriceMinor,
+    bool IsDefault,
+    string Comment);
+
+public sealed record InventoryPpeCardNormRowDto(
+    Guid Id,
+    Guid? SourceNormRowId,
+    Guid? ParentRowId,
+    string RowType,
+    int SortOrder,
+    string NormItemName,
+    string NormPoint,
+    string IssuePeriodText,
+    decimal Quantity,
+    string QuantityText,
+    int? LifeMonths,
+    Guid? MappedItemId,
+    string MappedItemName,
+    string BrandModelArticle,
+    long? DefaultUnitPriceMinor,
+    string CoverageStatus,
+    decimal IssuedQuantity,
+    IReadOnlyList<InventoryPpeNormMappingDto> Mappings);
+
+public sealed record InventoryPpeWorkspaceDto(
+    InventoryEmployeeDto Employee,
+    InventoryPpeCardDetailDto? Card,
+    InventoryPpeNormSetDto? ActiveNormSet,
+    IReadOnlyList<InventoryPpeCardNormRowDto> NormRows,
+    IReadOnlyList<InventoryHistoryDto> RecentHistory,
+    int NormsTotal,
+    int Issued,
+    int NotIssued,
+    int Partial,
+    int Overdue,
+    int Errors);
+
+public sealed record CreateInventoryPpeCardDraftDto(
+    Guid EmployeeId,
+    DateTimeOffset CardDate,
+    string Source,
+    Guid? SourceCardId = null,
+    Guid? NormSetId = null,
+    string? Comment = null,
+    InventoryPpeEmployeeDetailsDto? EmployeeDetails = null);
+
+public sealed record UpsertInventoryPpeCardNormRowDto(
+    Guid? Id,
+    Guid? SourceNormRowId,
+    Guid? ParentRowId,
+    string RowType,
+    int SortOrder,
+    string NormItemName,
+    string NormPoint,
+    string IssuePeriodText,
+    decimal Quantity,
+    string QuantityText,
+    int? LifeMonths,
+    Guid? MappedItemId,
+    string? BrandModelArticle = null,
+    long? DefaultUnitPriceMinor = null);
+
+public sealed record UpdateInventoryPpeCardNormRowsDto(
+    long ExpectedVersion,
+    IReadOnlyList<UpsertInventoryPpeCardNormRowDto> Rows);
+
+public sealed record CreateInventoryPpeIssueDto(
+    Guid CardNormRowId,
+    Guid ItemId,
+    DateTimeOffset IssuedAt,
+    decimal Quantity,
+    long? UnitPriceMinor,
+    string IssueMethod,
+    string? SizeText = null,
+    string? BrandModelArticle = null,
+    string? Comment = null,
+    Guid? WarehouseId = null,
+    long? ExpectedVersion = null);
+
+public sealed record ApplyInventoryPpeLineActionDto(
+    string Action,
+    DateTimeOffset OccurredAt,
+    decimal? Quantity = null,
+    string? Comment = null,
+    DateTimeOffset? WriteOffActDate = null,
+    string? WriteOffActNumber = null,
+    long? ExpectedVersion = null);
+
+public sealed record UpsertInventoryPpeNormMappingDto(
+    Guid ItemId,
+    string? BrandModelArticle = null,
+    long? DefaultUnitPriceMinor = null,
+    bool IsDefault = true,
+    string? Comment = null);
+
+public sealed record InventoryPpeHistoryRowDto(
+    Guid Id,
+    Guid CardId,
+    Guid LineId,
+    Guid EmployeeId,
+    string EmployeeName,
+    Guid ItemId,
+    string ItemName,
+    string Action,
+    string ActionLabel,
+    string FromStatus,
+    string ToStatus,
+    decimal Quantity,
+    string Unit,
+    string Comment,
+    string Actor,
+    DateTime CreatedAt,
+    Guid? CardNormRowId = null,
+    string NormItemName = "");
 
 public sealed record InventoryPpeMovementDto(
     Guid CardId,
@@ -459,7 +616,14 @@ public sealed record UpsertInventoryPpeCardLineDto(
     DateTimeOffset? IssuedAt = null,
     string? BrandModelArticle = null,
     string? QuantityText = null,
-    bool? IsSectionTitle = null);
+    bool? IsSectionTitle = null,
+    Guid? CardNormRowId = null,
+    string? IssueMethod = null,
+    string? SizeText = null,
+    DateTimeOffset? ReturnedAt = null,
+    decimal? ReturnedQuantity = null,
+    DateTimeOffset? WriteOffActDate = null,
+    string? WriteOffActNumber = null);
 
 public sealed record InventoryReportDto(
     string Id,

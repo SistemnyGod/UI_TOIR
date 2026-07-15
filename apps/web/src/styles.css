@@ -10977,6 +10977,61 @@ body,
   padding: 10px;
 }
 
+.assign-am-favorite-select {
+  display: grid;
+  gap: 7px;
+  border: 1px solid #dbe8f7;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 10px;
+}
+
+.assign-am-favorite-select > span {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.assign-am-favorite-select > span small {
+  border-radius: 999px;
+  background: #eaf2ff;
+  color: #1766ff;
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+  padding: 5px 7px;
+}
+
+.assign-am-favorite-select select {
+  width: 100%;
+  height: 44px;
+  border: 1px solid #c5d7ee;
+  border-radius: 10px;
+  background: #fff;
+  color: #10213f;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0 38px 0 12px;
+}
+
+.assign-am-favorite-select select:focus {
+  border-color: #6ea5ff;
+  box-shadow: 0 0 0 3px rgba(11, 99, 246, 0.1);
+  outline: none;
+}
+
+.assign-am-favorite-select > small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 750;
+}
+
 .assign-am-field {
   display: block;
   min-width: 0;
@@ -26809,14 +26864,14 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
 }
 
 /* Assignment request modal: one predictable scroll container and compact layout. */
-.screen-area .assign-am-modal-backdrop {
+.assign-am-modal-backdrop {
   align-items: center;
   overflow: hidden;
   padding: clamp(12px, 2.5vh, 24px);
   z-index: 1200;
 }
 
-.screen-area .assign-am-request-modal {
+.assign-am-request-modal {
   width: min(1120px, 100%);
   height: min(760px, calc(100dvh - 32px));
   max-height: calc(100dvh - 32px);
@@ -26824,18 +26879,18 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
   border-radius: 16px;
 }
 
-.screen-area .assign-am-request-modal > header {
+.assign-am-request-modal > header {
   min-height: 68px;
   padding: 14px 18px;
   background: #fff;
 }
 
-.screen-area .assign-am-request-modal > header h2 {
+.assign-am-request-modal > header h2 {
   font-size: clamp(18px, 1.5vw, 21px);
   line-height: 1.2;
 }
 
-.screen-area .assign-am-request-modal-body {
+.assign-am-request-modal-body {
   align-items: start;
   grid-template-columns: minmax(240px, 290px) minmax(0, 1fr);
   gap: 14px;
@@ -26846,61 +26901,61 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
   padding: 14px;
 }
 
-.screen-area .assign-am-modal-route-picker,
-.screen-area .assign-am-request-modal .assign-am-panel.request {
+.assign-am-modal-route-picker,
+.assign-am-request-modal .assign-am-panel.request {
   max-height: none;
   overflow: visible;
 }
 
-.screen-area .assign-am-modal-route-picker {
+.assign-am-modal-route-picker {
   position: sticky;
   top: 0;
   padding: 12px;
 }
 
-.screen-area .assign-am-modal-route-picker .assign-am-list {
+.assign-am-modal-route-picker .assign-am-list {
   max-height: none;
   overflow: visible;
   padding-right: 0;
 }
 
-.screen-area .assign-am-request-modal .assign-am-panel.request {
+.assign-am-request-modal .assign-am-panel.request {
   padding: 14px;
 }
 
-.screen-area .assign-am-request-modal .assign-am-favorite-picker-list {
+.assign-am-request-modal .assign-am-favorite-picker-list {
   max-height: none;
   overflow: visible;
   padding-right: 0;
 }
 
-.screen-area .assign-am-request-modal .assign-am-form-actions {
+.assign-am-request-modal .assign-am-form-actions {
   bottom: -14px;
   margin: 12px -14px -14px;
   padding: 12px 14px;
 }
 
 @media (max-width: 1100px) {
-  .screen-area .assign-am-request-modal-body {
+  .assign-am-request-modal-body {
     grid-template-columns: 1fr;
   }
 
-  .screen-area .assign-am-modal-route-picker {
+  .assign-am-modal-route-picker {
     position: static;
   }
 
-  .screen-area .assign-am-modal-route-picker .assign-am-list.routes {
+  .assign-am-modal-route-picker .assign-am-list.routes {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   }
 }
 
 @media (max-width: 640px) {
-  .screen-area .assign-am-modal-backdrop {
+  .assign-am-modal-backdrop {
     padding: 0;
   }
 
-  .screen-area .assign-am-request-modal {
+  .assign-am-request-modal {
     width: 100%;
     height: 100dvh;
     max-height: 100dvh;
@@ -26908,19 +26963,19 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
     border-radius: 0;
   }
 
-  .screen-area .assign-am-request-modal > header {
+  .assign-am-request-modal > header {
     padding: 12px 14px;
   }
 
-  .screen-area .assign-am-request-modal > header p {
+  .assign-am-request-modal > header p {
     display: none;
   }
 
-  .screen-area .assign-am-request-modal-body {
+  .assign-am-request-modal-body {
     padding: 10px;
   }
 
-  .screen-area .assign-am-request-modal .assign-am-form-actions {
+  .assign-am-request-modal .assign-am-form-actions {
     align-items: stretch;
     display: grid;
     grid-template-columns: 1fr;

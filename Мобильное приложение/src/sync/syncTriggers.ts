@@ -1,7 +1,8 @@
 import NetInfo from "@react-native-community/netinfo";
 
 import { refreshMobileData } from "@/services/mobileDataRefreshService";
-import { runForegroundSync } from "@/sync/syncEngine";
+import { triggerDailyDiagnosticReportUpload } from "@/services/diagnosticReportService";
+import { ForegroundSyncResult, prepareManualSyncRetry, runForegroundSync } from "@/sync/syncEngine";
 
 const retryDelaysMs = [30_000, 60_000, 120_000, 300_000];
 const fallbackRefreshMs = 300_000;
@@ -25,6 +26,7 @@ export function subscribeToNetworkSync() {
     if (state.isConnected && state.isInternetReachable !== false) {
       requestMobileDataRefresh("network");
       triggerForegroundSyncWithRetry();
+      void triggerDailyDiagnosticReportUpload();
     }
   });
 
@@ -41,25 +43,35 @@ export function subscribeToNetworkSync() {
   };
 }
 
-export function triggerForegroundSyncWithRetry() {
+export type TriggerForegroundSyncResult = ForegroundSyncResult | {
+  sent: 0;
+  skipped: "failed";
+};
+
+export async function triggerForegroundSyncWithRetry(
+  options: { forceRetry?: boolean } = {}
+): Promise<TriggerForegroundSyncResult> {
   clearScheduledRetry();
   const pendingRefresh = activeRefreshPromise;
 
-  void (pendingRefresh ? pendingRefresh.catch(() => false) : Promise.resolve(false))
-    .then(() => runForegroundSync())
-    .then((result) => {
-      if (result.skipped === "serverUnavailable") {
-        scheduleRetry();
-        return;
-      }
-
-      if (result.skipped !== "busy") {
-        resetRetryBackoff();
-      }
-    })
-    .catch(() => {
+  try {
+    if (options.forceRetry) {
+      await prepareManualSyncRetry();
+    }
+    await (pendingRefresh ? pendingRefresh.catch(() => false) : Promise.resolve(false));
+    const result = await runForegroundSync();
+    if (result.skipped === "serverUnavailable") {
       scheduleRetry();
-    });
+      return result;
+    }
+
+    resetRetryBackoff();
+    void triggerDailyDiagnosticReportUpload();
+    return result;
+  } catch {
+    scheduleRetry();
+    return { sent: 0, skipped: "failed" };
+  }
 }
 
 export function triggerMobileDataRefresh() {

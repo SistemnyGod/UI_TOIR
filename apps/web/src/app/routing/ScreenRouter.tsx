@@ -52,6 +52,8 @@ const inventoryScreens = new Set<ScreenId>([
   "inventory-operations",
   "inventory-custody",
   "inventory-ppe",
+  "inventory-ppe-history",
+  "inventory-ppe-create",
   "inventory-history",
   "inventory-reports",
   "inventory-users",

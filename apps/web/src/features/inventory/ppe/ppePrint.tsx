@@ -1,7 +1,7 @@
 import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import { Printer, X } from "lucide-react";
-import { escapeHtml, formatDate, formatQuantity, isConsumableLine, isPpeSignatureLineStatus } from "./ppeCommon";
+import { escapeHtml, formatDate, formatQuantity, isConsumableLine, isPpeSignatureLineStatus, sortPpeSignatureLines } from "./ppeCommon";
 import { PPE_STATUS } from "./ppeStatusCatalog";
 import type { PrintData, PrintLine, PrintMode } from "./ppeTypes";
 
@@ -443,14 +443,9 @@ function buildSheetHtml(data: PrintData) {
 }
 
 function signatureLines(lines: PrintLine[]) {
-  return lines
-    .filter((line) => !line.isSectionTitle && isPpeSignatureLineStatus(line.status))
-    .sort((left, right) => {
-      const leftTime = parsePrintDate(left.issuedAt);
-      const rightTime = parsePrintDate(right.issuedAt);
-      if (leftTime !== rightTime) return leftTime - rightTime;
-      return printItemName(left).localeCompare(printItemName(right), "ru");
-    });
+  return sortPpeSignatureLines(
+    lines.filter((line) => !line.isSectionTitle && isPpeSignatureLineStatus(line.status)),
+  );
 }
 
 function signatureRows(lines: PrintLine[]) {
@@ -461,7 +456,7 @@ function signatureRows(lines: PrintLine[]) {
       const leftTime = parsePrintDate(left.line.issuedAt);
       const rightTime = parsePrintDate(right.line.issuedAt);
       if (leftTime !== rightTime) return leftTime - rightTime;
-      return printItemName(left.line).localeCompare(printItemName(right.line), "ru");
+      return left.sourceIndex - right.sourceIndex;
     });
 }
 

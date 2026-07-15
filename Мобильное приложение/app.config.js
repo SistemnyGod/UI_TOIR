@@ -4,11 +4,22 @@ const { AndroidConfig, withAndroidManifest, withDangerousMod } = require("expo/c
 
 const googleServicesFile = "./secrets/google-services.json";
 const appIconFile = "./assets/app-icon.png";
+const supportedDefaultEnvironments = new Set(["dev", "test", "local-enterprise", "production"]);
+const configuredDefaultEnvironment = process.env.PATROL360_ENVIRONMENT
+  ?? process.env.EXPO_PUBLIC_PATROL360_ENVIRONMENT
+  ?? "local-enterprise";
+
+if (!supportedDefaultEnvironments.has(configuredDefaultEnvironment)) {
+  throw new Error(`Unsupported PATROL360_ENVIRONMENT: ${configuredDefaultEnvironment}`);
+}
+
+const allowLocalCleartext = configuredDefaultEnvironment === "dev"
+  || configuredDefaultEnvironment === "local-enterprise";
 
 const androidConfig = {
   package: "ru.patrol360.mobile",
-  versionCode: 19,
-  usesCleartextTraffic: true,
+  versionCode: 24,
+  usesCleartextTraffic: false,
   adaptiveIcon: {
     foregroundImage: appIconFile,
     backgroundColor: "#061A3A"
@@ -34,7 +45,7 @@ function withPilotCleartextTraffic(config) {
     const application = modConfig.modResults.manifest.application?.[0];
 
     if (application?.$) {
-      application.$["android:usesCleartextTraffic"] = "true";
+      application.$["android:usesCleartextTraffic"] = "false";
       application.$["android:networkSecurityConfig"] = "@xml/network_security_config";
     }
 
@@ -55,18 +66,22 @@ function withPilotNetworkSecurityConfig(config) {
         "xml"
       );
       const configPath = path.join(resourcePath, "network_security_config.xml");
-      const securityConfig = `<?xml version="1.0" encoding="utf-8"?>
-<network-security-config>
-    <base-config cleartextTrafficPermitted="true">
-        <trust-anchors>
-            <certificates src="system" />
-        </trust-anchors>
-    </base-config>
-    <domain-config cleartextTrafficPermitted="true">
+      const localCleartextDomains = allowLocalCleartext
+        ? `    <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">192.168.2.194</domain>
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
     </domain-config>
+`
+        : "";
+      const securityConfig = `<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+${localCleartextDomains}
 </network-security-config>
 `;
 
@@ -93,7 +108,7 @@ module.exports = {
     name: "Patrol360",
     slug: "patrol360-mobile",
     scheme: "patrol360",
-      version: "0.1.18",
+    version: "0.1.23",
     platforms: ["android"],
     orientation: "portrait",
     icon: appIconFile,
@@ -127,7 +142,7 @@ module.exports = {
     },
     extra: {
       syncProtocolVersion: "1.0",
-      defaultEnvironment: "dev"
+      defaultEnvironment: configuredDefaultEnvironment
     }
   }
 };

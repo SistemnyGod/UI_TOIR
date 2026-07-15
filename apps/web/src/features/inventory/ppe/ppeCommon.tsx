@@ -26,6 +26,7 @@ import {
   itemModelDescription,
   printDataFromDetail,
   printDataFromWizard,
+  sortPpeSignatureLines,
   toItemFromNorm,
   toItemFromPpeLine,
   toLineFromNorm,
@@ -47,6 +48,7 @@ export {
   itemModelDescription,
   printDataFromDetail,
   printDataFromWizard,
+  sortPpeSignatureLines,
   toItemFromNorm,
   toItemFromPpeLine,
   toLineFromNorm,
@@ -148,4 +150,3 @@ export function getPpeCardCounts(rows: InventoryPpeCardDto[]): PpeCardCounts {
     { active: 0, amount: 0, closed: 0, issued: 0, problem: 0, total: 0, zeroPrice: 0 },
   );
 }
-

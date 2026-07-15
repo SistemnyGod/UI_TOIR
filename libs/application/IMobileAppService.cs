@@ -14,6 +14,8 @@ public interface IMobileAppService
 
     MobileDeviceRegistrationDto? RegisterPushToken(string accessToken, MobilePushTokenRegistrationDto request);
 
+    MobileDiagnosticReportReceiptDto? SaveDiagnosticReport(string accessToken, MobileDiagnosticReportDto request);
+
     IReadOnlyList<MobileNotificationDto> GetNotifications(string accessToken, bool unreadOnly);
 
     MobileNotificationDto? MarkNotificationRead(string accessToken, Guid notificationId);
@@ -40,3 +42,16 @@ public sealed record MobileFileUploadCommand(
     string FileName,
     string ContentType,
     Stream Content);
+
+public interface IMobileDiagnosticReportStore
+{
+    MobileDiagnosticReportReceiptDto Save(MobileStoredDiagnosticReport report);
+}
+
+public sealed record MobileStoredDiagnosticReport(
+    Guid MobileAccountId,
+    string AccountLogin,
+    string SessionDeviceId,
+    MobileDiagnosticReportDto Report,
+    DateTimeOffset ReceivedAt,
+    string IpAddress);

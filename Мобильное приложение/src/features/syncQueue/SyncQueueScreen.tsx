@@ -3,10 +3,11 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { listSyncQueueFiles, SyncQueueFileItem } from "@/db/repositories/filesRepository";
 import { listSyncQueueCommands, SyncQueueCommandItem } from "@/db/repositories/outboxRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
-import { requestMobileDataRefresh, triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -22,12 +23,22 @@ export function SyncQueueScreen() {
   const { colors } = useAppTheme();
   const [state, setState] = useState<SyncQueueState>({ commands: [], files: [] });
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const [expandedErrorId, setExpandedErrorId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [commands, files] = await Promise.all([listSyncQueueCommands(), listSyncQueueFiles()]);
+      const ownerUserId = await getStoredOwnerUserId();
+      if (!ownerUserId) {
+        setState({ commands: [], files: [] });
+        return;
+      }
+      const [commands, files] = await Promise.all([
+        listSyncQueueCommands(ownerUserId),
+        listSyncQueueFiles(ownerUserId)
+      ]);
       setState({ commands, files });
     } finally {
       setIsLoading(false);
@@ -40,75 +51,77 @@ export function SyncQueueScreen() {
     }, [load])
   );
 
-  function retryNow() {
-    triggerForegroundSyncWithRetry();
-    setTimeout(() => void load(), 1_000);
-  }
+  async function retryNow() {
+    if (isSyncing) {
+      return;
+    }
 
-  function refreshFromServer() {
-    requestMobileDataRefresh("manual", { force: true });
-    triggerForegroundSyncWithRetry();
-    setTimeout(() => void load(), 1_000);
+    setIsSyncing(true);
+    setFeedback(null);
+    try {
+      const result = await triggerForegroundSyncWithRetry({ forceRetry: true });
+      await load();
+      setFeedback(syncResultMessage(result.skipped));
+    } finally {
+      setIsSyncing(false);
+    }
   }
 
   const summary = useMemo(() => buildQueueSummary(state), [state]);
   const pendingCount = state.commands.length + state.files.length;
+  const retryableCount = state.commands.filter((command) => ["pending", "sending", "retryLater"].includes(command.status)).length
+    + state.files.filter((file) => file.status !== "failed").length;
 
   return (
-    <Screen
-      title="Не отправлено"
-      subtitle="Очередь восстановления отчетов, команд и вложений. Данные не удаляются до успешной отправки."
-    >
-      <Card>
-        <View style={styles.headerRow}>
-          <View style={styles.headerText}>
-            <Text style={[styles.title, { color: colors.text }]}>Синхронизация</Text>
-            <Text style={[styles.text, { color: colors.mutedText }]}>
-              Если сеть или сервер недоступны, отчет остается на телефоне. Приложение повторит отправку автоматически,
-              а здесь можно проверить причину и запустить повтор вручную.
-            </Text>
-          </View>
-          <StatusPill label={pendingCount > 0 ? `${pendingCount} в очереди` : "Пусто"} tone={pendingCount > 0 ? "warning" : "success"} />
-        </View>
-
-        <View style={styles.summaryGrid}>
-          <SummaryCell label="Отчеты" value={String(summary.reportCommands)} />
-          <SummaryCell label="Команды" value={String(summary.otherCommands)} />
-          <SummaryCell label="Фото" value={String(summary.photos)} />
-          <SummaryCell label="Видео" value={String(summary.videos)} />
-          <SummaryCell label="Ошибки" value={String(summary.errors)} danger={summary.errors > 0} />
-        </View>
-
-        {summary.reportCommands > 1 || summary.files > 0 ? (
-          <Text style={styles.notice}>
-            Будет отправлена вся очередь: {summary.reportCommands} отчет(ов), {summary.files} файл(ов). Это нормально:
-            старые сохраненные отчеты уходят вместе с новой синхронизацией без дублей.
-          </Text>
-        ) : null}
-
-        <View style={styles.actions}>
-          <PrimaryButton icon="refresh-outline" label="Повторить отправку" onPress={retryNow} />
-          <PrimaryButton icon="cloud-download-outline" label="Обновить с сервера" onPress={refreshFromServer} variant="secondary" />
-        </View>
-      </Card>
-
+    <Screen title="Очередь отправки">
       {isLoading ? <ActivityIndicator /> : null}
 
       {!isLoading && pendingCount === 0 ? (
         <Card>
-          <Text style={[styles.title, { color: colors.text }]}>Все отправлено</Text>
-          <Text style={[styles.text, { color: colors.mutedText }]}>Неотправленных отчетов, команд и файлов нет.</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Все данные отправлены</Text>
+          <Text style={[styles.text, { color: colors.mutedText }]}>Сервер подтвердил все отчеты, команды и вложения.</Text>
+          <PrimaryButton icon="refresh-outline" label="Проверить еще раз" onPress={() => void load()} variant="ghost" />
         </Card>
+      ) : null}
+
+      {!isLoading && pendingCount > 0 ? (
+        <Card>
+        <View style={styles.headerRow}>
+          <View style={styles.headerText}>
+            <Text style={[styles.title, { color: colors.text }]}>Данные ожидают отправки</Text>
+            <Text style={[styles.text, { color: colors.mutedText }]}>
+              Приложение повторит отправку автоматически после восстановления связи.
+            </Text>
+          </View>
+          <StatusPill label={`${pendingCount} в очереди`} tone="warning" />
+        </View>
+
+        {summary.errors > 0 ? (
+          <Text style={styles.notice}>
+            Требуют проверки: {summary.errors}. Откройте запись ниже, чтобы увидеть причину и исправить данные.
+          </Text>
+        ) : null}
+
+        {feedback ? <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text> : null}
+
+        {retryableCount > 0 ? (
+          <PrimaryButton
+            disabled={isSyncing}
+            icon="refresh-outline"
+            label={isSyncing ? "Проверяем отправку…" : "Отправить сейчас"}
+            onPress={() => void retryNow()}
+            size="large"
+          />
+        ) : null}
+      </Card>
       ) : null}
 
       {state.commands.length > 0 ? (
         <Card>
           <Text style={[styles.title, { color: colors.text }]}>Отчеты и команды</Text>
           {state.commands.map((command) => (
-            <Pressable
+            <View
               key={command.clientOperationId}
-              accessibilityRole="button"
-              onPress={() => setExpandedErrorId((current) => (current === command.clientOperationId ? null : command.clientOperationId))}
               style={[styles.queueItem, { borderColor: colors.border }]}
             >
               <View style={styles.itemTop}>
@@ -122,26 +135,35 @@ export function SyncQueueScreen() {
               </View>
               <View style={styles.metaGrid}>
                 <Meta label="Попытки" value={String(command.attemptCount)} />
-                <Meta label="Создано" value={formatDateTime(command.createdAtLocal)} />
                 <Meta label="Обновлено" value={formatDateTime(command.updatedAtLocal)} />
               </View>
               {command.lastError ? (
-                <Text
-                  style={expandedErrorId === command.clientOperationId ? styles.errorText : styles.errorPreview}
-                  numberOfLines={expandedErrorId === command.clientOperationId ? undefined : 2}
+                <Pressable
+                  accessibilityLabel={expandedErrorId === command.clientOperationId ? "Свернуть описание ошибки" : "Показать описание ошибки полностью"}
+                  accessibilityRole="button"
+                  onPress={() => setExpandedErrorId((current) => (current === command.clientOperationId ? null : command.clientOperationId))}
                 >
-                  {command.lastError}
-                </Text>
+                  <Text
+                    style={expandedErrorId === command.clientOperationId ? styles.errorText : styles.errorPreview}
+                    numberOfLines={expandedErrorId === command.clientOperationId ? undefined : 2}
+                  >
+                    {command.lastError}
+                  </Text>
+                </Pressable>
               ) : null}
               {command.commandType === "completePatrolAssignment" && command.entityLocalId ? (
                 <PrimaryButton
-                  icon="shield-checkmark-outline"
-                  label="Открыть обход"
-                  onPress={() => router.push(`/patrol/assignment/${command.entityLocalId}`)}
+                  icon={command.status === "rejected" || command.status === "conflict" ? "build-outline" : "shield-checkmark-outline"}
+                  label={command.status === "rejected" || command.status === "conflict" ? "Проверить и исправить отчет" : "Открыть обход"}
+                  onPress={() => router.push(
+                    command.status === "rejected" || command.status === "conflict"
+                      ? `/patrol/assignment/${command.entityLocalId}/all-points`
+                      : `/patrol/assignment/${command.entityLocalId}`
+                  )}
                   variant="secondary"
                 />
               ) : null}
-            </Pressable>
+            </View>
           ))}
         </Card>
       ) : null}
@@ -165,23 +187,13 @@ export function SyncQueueScreen() {
               </View>
               <View style={styles.metaGrid}>
                 <Meta label="Точка" value={file.pointId ?? "-"} />
-                <Meta label="Создано" value={formatDateTime(file.createdAtLocal)} />
-                <Meta label="Тип" value={file.mediaKind === "video" ? "Видео" : "Фото"} />
+                <Meta label="Добавлено" value={formatDateTime(file.createdAtLocal)} />
               </View>
             </View>
           ))}
         </Card>
       ) : null}
     </Screen>
-  );
-}
-
-function SummaryCell({ label, value, danger = false }: { label: string; value: string; danger?: boolean }) {
-  return (
-    <View style={[styles.summaryCell, danger ? styles.summaryDanger : null]}>
-      <Text style={styles.summaryLabel}>{label}</Text>
-      <Text style={styles.summaryValue}>{value}</Text>
-    </View>
   );
 }
 
@@ -195,18 +207,10 @@ function Meta({ label, value }: { label: string; value: string }) {
 }
 
 function buildQueueSummary(state: SyncQueueState) {
-  const reportCommands = state.commands.filter((command) => command.commandType === "completePatrolAssignment").length;
   const errors =
     state.commands.filter((command) => command.status === "conflict" || command.status === "rejected" || Boolean(command.lastError)).length +
     state.files.filter((file) => file.status === "failed").length;
-  return {
-    errors,
-    files: state.files.length,
-    otherCommands: state.commands.length - reportCommands,
-    photos: state.files.filter((file) => file.mediaKind !== "video").length,
-    reportCommands,
-    videos: state.files.filter((file) => file.mediaKind === "video").length
-  };
+  return { errors };
 }
 
 function commandTitle(command: SyncQueueCommandItem) {
@@ -310,10 +314,22 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function syncResultMessage(skipped: "offline" | "serverUnavailable" | "unauthenticated" | "failed" | null) {
+  switch (skipped) {
+    case "offline":
+      return "Нет подключения. Очередь сохранена и повторится автоматически после появления сети.";
+    case "serverUnavailable":
+      return "Сервер временно недоступен. Следующая попытка уже запланирована.";
+    case "unauthenticated":
+      return "Нужно войти повторно. Данные сохранены на телефоне.";
+    case "failed":
+      return "Отправка прервалась. Данные не потеряны — повтор можно запустить еще раз.";
+    default:
+      return "Проверка завершена. Список обновлен по подтверждениям сервера.";
+  }
+}
+
 const styles = StyleSheet.create({
-  actions: {
-    gap: 8
-  },
   errorPreview: {
     backgroundColor: "#fff7ed",
     borderColor: "#fed7aa",
@@ -341,6 +357,16 @@ const styles = StyleSheet.create({
     height: 42,
     justifyContent: "center",
     width: 42
+  },
+  feedback: {
+    backgroundColor: "#f8fafc",
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    borderWidth: 1,
+    color: "#334155",
+    fontSize: 13,
+    lineHeight: 18,
+    padding: 10
   },
   headerRow: {
     alignItems: "flex-start",
@@ -406,33 +432,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 10,
     padding: 12
-  },
-  summaryCell: {
-    backgroundColor: "#f6f9fe",
-    borderRadius: 12,
-    flex: 1,
-    gap: 2,
-    minWidth: 92,
-    padding: 10
-  },
-  summaryDanger: {
-    backgroundColor: "#fff1f1"
-  },
-  summaryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
-  },
-  summaryLabel: {
-    color: "#65758b",
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase"
-  },
-  summaryValue: {
-    color: "#0b1f3f",
-    fontSize: 18,
-    fontWeight: "900"
   },
   text: {
     fontSize: 14,

@@ -31,6 +31,8 @@ import { InventoryItemsScreen } from "./InventoryItemsScreen";
 import { InventoryOperationsScreen } from "./InventoryOperationsScreen";
 import { InventoryOverviewScreen } from "./InventoryOverviewScreen";
 import { InventoryPpeScreen } from "./InventoryPpeScreen";
+import { InventoryPpeCreateScreen } from "./InventoryPpeCreateScreen";
+import { InventoryPpeHistoryScreen } from "./InventoryPpeHistoryScreen";
 import { InventoryReportsScreen } from "./InventoryReportsScreen";
 import { InventorySettingsScreen } from "./InventorySettingsScreen";
 import { InventorySystemLogScreen } from "./InventorySystemLogScreen";
@@ -44,6 +46,8 @@ type InventorySectionKind =
   | "documents"
   | "custody"
   | "ppe"
+  | "ppeCreate"
+  | "ppeHistory"
   | "history"
   | "reports"
   | "settings"
@@ -83,6 +87,8 @@ const inventorySections: InventorySection[] = [
   { id: "inventory-operations", endpoint: "/api/v1/inventory/documents", kind: "documents" },
   { id: "inventory-custody", endpoint: "/api/v1/inventory/custody/records", kind: "custody" },
   { id: "inventory-ppe", endpoint: "/api/v1/inventory/ppe/cards", kind: "ppe" },
+  { id: "inventory-ppe-history", endpoint: "/api/v1/inventory/ppe/history", kind: "ppeHistory" },
+  { id: "inventory-ppe-create", endpoint: "/api/v1/inventory/ppe/cards/drafts", kind: "ppeCreate" },
   { id: "inventory-history", endpoint: "/api/v1/inventory/history", kind: "history" },
   { id: "inventory-reports", endpoint: "/api/v1/inventory/reports", kind: "reports" },
   { id: "inventory-users", endpoint: "/api/v1/inventory/users", kind: "users" },
@@ -233,13 +239,13 @@ export function InventoryScreen({
           />
         ) : current.id === "inventory-ppe" ? (
           <InventoryPpeScreen
-            cards={state.ppeCards}
-            error={state.error}
-            loading={state.loading}
+            onNavigate={onNavigate}
             onNotify={onNotify}
-            onReload={reload}
-            options={state.ppeOptions}
           />
+        ) : current.id === "inventory-ppe-history" ? (
+          <InventoryPpeHistoryScreen onNavigate={onNavigate} />
+        ) : current.id === "inventory-ppe-create" ? (
+          <InventoryPpeCreateScreen onNavigate={onNavigate} onNotify={onNotify} />
         ) : current.id === "inventory-custody" ? (
           <InventoryCustodyScreen
             documents={state.custodyDocuments}
@@ -319,12 +325,12 @@ async function fetchSection(current: InventorySection, inventoryRepository: Inve
     }
 
     case "ppe": {
-      const [ppeCards, ppeOptions] = await Promise.all([
-        inventoryRepository.getPpeCards({ includeLines: false, pageSize: 25 }),
-        inventoryRepository.getPpeOptions(),
-      ]);
-      return { loading: false, ppeCards, ppeOptions };
+      return { loading: false };
     }
+
+    case "ppeCreate":
+    case "ppeHistory":
+      return { loading: false };
 
     case "history": {
       return { loading: false };

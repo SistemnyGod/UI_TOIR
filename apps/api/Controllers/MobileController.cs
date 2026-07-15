@@ -91,6 +91,27 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
         return result is null ? Unauthorized() : Ok(result);
     }
 
+    [HttpPost("diagnostics/daily")]
+    [RequestSizeLimit(256 * 1024)]
+    public ActionResult<MobileDiagnosticReportReceiptDto> SaveDiagnosticReport(MobileDiagnosticReportDto request)
+    {
+        var token = ReadBearerToken();
+        if (token is null)
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var result = mobileAppService.SaveDiagnosticReport(token, request);
+            return result is null ? Unauthorized() : Ok(result);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(exception.Message);
+        }
+    }
+
     [HttpGet("notifications")]
     public ActionResult<IReadOnlyList<MobileNotificationDto>> Notifications([FromQuery] bool unreadOnly = false)
     {

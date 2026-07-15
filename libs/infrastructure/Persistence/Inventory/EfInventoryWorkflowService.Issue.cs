@@ -65,6 +65,19 @@ internal sealed partial class EfInventoryWorkflowService
             return Failure<InventoryPpeCardDetailDto>("employeeId", "Employee not found");
         }
 
+        var existingCard = dbContext.InventoryPpeCards
+            .Where(row => row.EmployeeId == employee.Id && row.ArchivedAt == null)
+            .OrderByDescending(row => row.CreatedAt)
+            .FirstOrDefault();
+        if (existingCard is not null)
+        {
+            existingCard.Comment = NormalizeOptional(request.Comment);
+            ApplyPpeEmployeeDetails(existingCard, request.EmployeeDetails);
+            AddSystemLog("ppe_card", existingCard.Id, "reused", "Использована существующая активная карточка СИЗ", DateTimeOffset.UtcNow);
+            dbContext.SaveChanges();
+            return Success(MapPpeCardDetail(LoadPpeCard(existingCard.Id)!));
+        }
+
         var now = DateTimeOffset.UtcNow;
         var card = new InventoryPpeCardEntity
         {
@@ -96,6 +109,11 @@ internal sealed partial class EfInventoryWorkflowService
         if (employee is null)
         {
             return Failure<InventoryPpeCardDetailDto>("employeeId", "Employee not found");
+        }
+
+        if (card.EmployeeId != employee.Id)
+        {
+            return Failure<InventoryPpeCardDetailDto>("employeeId", "PPE card owner cannot be changed");
         }
 
         card.EmployeeId = employee.Id;
@@ -157,7 +175,14 @@ internal sealed partial class EfInventoryWorkflowService
             IssuePeriodText = isSectionTitle ? NormalizePrintField(request.IssuePeriodText, string.Empty, 160) : NormalizePrintField(request.IssuePeriodText, DefaultIssuePeriodText(item.DefaultLifeMonths), 160),
             QuantityText = quantityText.Length == 0 ? null : quantityText,
             IsSectionTitle = isSectionTitle,
-            BrandModelArticle = NormalizePrintField(request.BrandModelArticle, PpeModelDescription(item), 600)
+            BrandModelArticle = NormalizePrintField(request.BrandModelArticle, PpeModelDescription(item), 600),
+            CardNormRowId = request.CardNormRowId,
+            IssueMethod = NormalizePpeIssueMethod(request.IssueMethod),
+            SizeText = NormalizeOptional(request.SizeText),
+            ReturnedAt = request.ReturnedAt,
+            ReturnedQuantity = request.ReturnedQuantity,
+            WriteOffActDate = request.WriteOffActDate,
+            WriteOffActNumber = NormalizeOptional(request.WriteOffActNumber)
         };
         if (IsPpeSignatureLineStatus(line.Status))
         {
@@ -226,6 +251,13 @@ internal sealed partial class EfInventoryWorkflowService
         line.QuantityText = quantityText.Length == 0 ? null : quantityText;
         line.IsSectionTitle = isSectionTitle;
         line.BrandModelArticle = NormalizePrintField(request.BrandModelArticle, PpeModelDescription(item), 600);
+        line.CardNormRowId = request.CardNormRowId ?? line.CardNormRowId;
+        line.IssueMethod = NormalizePpeIssueMethod(request.IssueMethod);
+        line.SizeText = NormalizeOptional(request.SizeText);
+        line.ReturnedAt = request.ReturnedAt;
+        line.ReturnedQuantity = request.ReturnedQuantity;
+        line.WriteOffActDate = request.WriteOffActDate;
+        line.WriteOffActNumber = NormalizeOptional(request.WriteOffActNumber);
         if (IsPpeSignatureLineStatus(NormalizePpeStatus(request.Status)))
         {
             line.IssuedAt = request.IssuedAt ?? line.IssuedAt ?? DateTimeOffset.UtcNow;
@@ -265,6 +297,18 @@ internal sealed partial class EfInventoryWorkflowService
                     .ThenInclude(item => item.Unit)
             .Include(card => card.Lines)
                 .ThenInclude(line => line.Warehouse)
+            .Include(card => card.Lines)
+                .ThenInclude(line => line.Events)
+            .Include(card => card.NormRows)
+                .ThenInclude(row => row.MappedItem)
+            .Include(card => card.NormRows)
+                .ThenInclude(row => row.SourceNormRow)
+                    .ThenInclude(row => row!.Mappings)
+                        .ThenInclude(mapping => mapping.Item)
+            .Include(card => card.NormRows)
+                .ThenInclude(row => row.Issues)
+                    .ThenInclude(issue => issue.Item)
+                        .ThenInclude(item => item.Unit)
             .FirstOrDefault(card => card.Id == id && card.ArchivedAt == null);
 
     private InventoryPpeCardLineEntity? LoadPpeLine(Guid id) =>
@@ -292,6 +336,11 @@ internal sealed partial class EfInventoryWorkflowService
         IQueryable<InventoryPpeCardEntity> query,
         InventoryListQuery filters)
     {
+        if (filters.EmployeeId is not null)
+        {
+            query = query.Where(card => card.EmployeeId == filters.EmployeeId.Value);
+        }
+
         var search = NormalizeQuery(filters.Query);
         if (search.Length > 0)
         {
@@ -428,7 +477,7 @@ internal sealed partial class EfInventoryWorkflowService
             query.SelectMany(card => card.Lines).Count(line => line.Status != "archived" && line.Status == "not_issued"));
     }
 
-    private static InventoryPpeCardDetailDto MapPpeCardDetail(InventoryPpeCardEntity card) =>
+    private InventoryPpeCardDetailDto MapPpeCardDetail(InventoryPpeCardEntity card) =>
         new(
             card.Id,
             card.EmployeeId,
@@ -447,7 +496,18 @@ internal sealed partial class EfInventoryWorkflowService
                 card.HeadSize,
                 card.RespiratorSize,
                 card.HandProtectionSize),
-            card.Lines.Where(line => line.Status != "archived").OrderBy(line => line.Item.Name).Select(MapPpeCardLine).ToList());
+            card.Lines
+                .Where(line => line.Status != "archived")
+                .OrderBy(PpeLineCreatedAt)
+                .ThenBy(line => line.Id)
+                .Select(MapPpeCardLine)
+                .ToList(),
+            card.Version,
+            card.NormSetId,
+            card.NormRows.OrderBy(row => row.SortOrder).Select(MapCardNormRow).ToList());
+
+    private static DateTimeOffset PpeLineCreatedAt(InventoryPpeCardLineEntity line) =>
+        line.Events.Count == 0 ? DateTimeOffset.MaxValue : line.Events.Min(row => row.CreatedAt);
 
     private static InventoryPpeCardLineDto MapPpeCardLine(InventoryPpeCardLineEntity line) =>
         new(
@@ -473,7 +533,17 @@ internal sealed partial class EfInventoryWorkflowService
             string.IsNullOrWhiteSpace(line.PrintItemName) ? line.Item.NormItemName ?? line.Item.Name : line.PrintItemName,
             IsPpeSectionLine(line) || string.IsNullOrWhiteSpace(line.IssuePeriodText) ? (IsPpeSectionLine(line) ? string.Empty : DefaultIssuePeriodText(line.Item.DefaultLifeMonths)) : line.IssuePeriodText,
             PpeQuantityText(line),
-            IsPpeSectionLine(line));
+            IsPpeSectionLine(line),
+            line.CardNormRowId,
+            string.IsNullOrWhiteSpace(line.IssueMethod) ? "personal" : line.IssueMethod,
+            line.SizeText,
+            line.ReturnedAt?.UtcDateTime,
+            line.ReturnedQuantity,
+            line.WriteOffActDate?.UtcDateTime,
+            line.WriteOffActNumber);
+
+    private static string NormalizePpeIssueMethod(string? value) =>
+        NormalizeStatus(value) == "dispenser" ? "dispenser" : "personal";
 
     private static bool IsPpeSectionLine(InventoryPpeCardLineEntity line) =>
         line.IsSectionTitle || IsPpeSectionTitle(line.PrintItemName);

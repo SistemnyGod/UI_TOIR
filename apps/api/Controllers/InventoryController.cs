@@ -211,6 +211,7 @@ public sealed class InventoryController(
         [FromQuery] DateTimeOffset? dateTo = null,
         [FromQuery] string? sort = null,
         [FromQuery] string? direction = null,
+        [FromQuery] Guid? employeeId = null,
         [FromQuery] bool includeLines = true) =>
         Ok(inventoryWorkflowService.GetPpeCards(new InventoryListQuery(
             page,
@@ -226,19 +227,38 @@ public sealed class InventoryController(
             Sort: sort,
             Direction: direction,
             PriceState: priceState,
-            IncludeLines: includeLines)));
+            IncludeLines: includeLines,
+            EmployeeId: employeeId)));
 
     [HttpGet("ppe/cards/{id:guid}")]
     public ActionResult<InventoryPpeCardDetailDto> PpeCard(Guid id) =>
         ToActionResult(inventoryWorkflowService.GetPpeCard(id));
+
+    [HttpGet("ppe/employees/{employeeId:guid}/workspace")]
+    public ActionResult<InventoryPpeWorkspaceDto> PpeWorkspace(Guid employeeId) =>
+        ToActionResult(inventoryWorkflowService.GetPpeWorkspace(employeeId));
+
+    [HttpGet("ppe/history")]
+    [RequirePermission("inventory.audit.view")]
+    public ActionResult<InventoryListResponseDto<InventoryPpeHistoryRowDto>> PpeHistory(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        [FromQuery] string? query = null,
+        [FromQuery] Guid? employeeId = null,
+        [FromQuery] Guid? itemId = null,
+        [FromQuery] string? action = null,
+        [FromQuery] string? status = null,
+        [FromQuery] DateTimeOffset? dateFrom = null,
+        [FromQuery] DateTimeOffset? dateTo = null) =>
+        Ok(inventoryWorkflowService.GetPpeHistory(new InventoryListQuery(
+            page, pageSize, query, status, ItemId: itemId, Action: action,
+            DateFrom: dateFrom, DateTo: dateTo, EmployeeId: employeeId)));
 
     [HttpGet("ppe/options")]
     public ActionResult<InventoryPpeModuleOptionsDto> PpeOptions()
     {
         var employees = LoadAllPages(page => inventoryWorkflowService.GetEmployees(new InventoryListQuery(Page: page, PageSize: 100)));
         var allPpeItems = LoadPpeItems(query: null, categoryId: null);
-        var items = allPpeItems.Take(50).ToList();
-        var itemIds = items.Select(item => item.Id).ToHashSet();
         var categoryIds = allPpeItems
             .Where(item => item.CategoryId is not null)
             .Select(item => item.CategoryId!.Value)
@@ -247,12 +267,12 @@ public sealed class InventoryController(
         var ppeSettings = settings with
         {
             Categories = settings.Categories.Where(category => categoryIds.Contains(category.Id)).ToList(),
-            PositionNorms = settings.PositionNorms.Where(norm => itemIds.Contains(norm.ItemId)).ToList()
+            PositionNorms = settings.PositionNorms
         };
 
         return Ok(new InventoryPpeModuleOptionsDto(
             employees,
-            items,
+            allPpeItems,
             ppeSettings,
             [
                 "active",
@@ -298,6 +318,74 @@ public sealed class InventoryController(
     public ActionResult<InventoryPpeCardDetailDto> CreatePpeCard(CreateInventoryPpeCardDto request) =>
         ToActionResult(inventoryWorkflowService.CreatePpeCard(request));
 
+    [HttpPost("ppe/cards/drafts")]
+    [RequirePermission("inventory.ppe.manage")]
+    public ActionResult<InventoryPpeCardDetailDto> CreatePpeCardDraft(CreateInventoryPpeCardDraftDto request) =>
+        ToActionResult(inventoryWorkflowService.CreatePpeCardDraft(request));
+
+    [HttpPut("ppe/cards/{id:guid}/norm-rows")]
+    [RequirePermission("inventory.ppe.manage")]
+    public ActionResult<InventoryPpeCardDetailDto> UpdatePpeCardNormRows(Guid id, UpdateInventoryPpeCardNormRowsDto request) =>
+        ToActionResult(inventoryWorkflowService.UpdatePpeCardNormRows(id, request));
+
+    [HttpPost("ppe/cards/{id:guid}/issues")]
+    [RequirePermission("inventory.ppe.manage")]
+    public ActionResult<InventoryPpeCardLineDto> CreatePpeIssue(Guid id, CreateInventoryPpeIssueDto request) =>
+        ToActionResult(inventoryWorkflowService.CreatePpeIssue(id, request));
+
+    [HttpGet("ppe/norm-rows/{normRowId:guid}/mappings")]
+    public ActionResult<InventoryListResponseDto<InventoryPpeNormMappingDto>> PpeNormRowMappings(
+        Guid normRowId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25) =>
+        Ok(inventoryWorkflowService.GetPpeNormRowMappings(normRowId, new InventoryListQuery(page, pageSize)));
+
+    [HttpPut("ppe/norm-rows/{normRowId:guid}/mappings")]
+    [RequirePermission("inventory.ppe.manage")]
+    public ActionResult<InventoryPpeNormMappingDto> UpsertPpeNormRowMapping(Guid normRowId, UpsertInventoryPpeNormMappingDto request) =>
+        ToActionResult(inventoryWorkflowService.UpsertPpeNormRowMapping(normRowId, request));
+
+    [HttpGet("ppe/norm-sets")]
+    public ActionResult<InventoryListResponseDto<InventoryPpeNormSetDto>> PpeNormSets(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        [FromQuery] string? query = null,
+        [FromQuery] string? position = null,
+        [FromQuery] string? status = null) =>
+        Ok(inventoryWorkflowService.GetPpeNormSets(new InventoryListQuery(
+            Page: page,
+            PageSize: pageSize,
+            Query: query,
+            Status: status,
+            Position: position)));
+
+    [HttpPost("ppe/norm-sets/import-draft")]
+    [RequirePermission("inventory.ppe.manage")]
+    [RequestSizeLimit(EmployeeImportMaxFileSizeBytes)]
+    public ActionResult<InventoryPpeNormImportResultDto> ImportPpeNormSetsDraft([FromForm] IFormFile? file)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return EmployeeImportValidationProblem("file", "PPE norm workbook is required");
+        }
+        if (file.Length > EmployeeImportMaxFileSizeBytes)
+        {
+            return EmployeeImportValidationProblem("file", "PPE norm workbook must be 10 MB or smaller");
+        }
+        if (!string.Equals(Path.GetExtension(file.FileName), ".xlsx", StringComparison.OrdinalIgnoreCase))
+        {
+            return EmployeeImportValidationProblem("file", "PPE norm import supports .xlsx files only");
+        }
+
+        using var stream = file.OpenReadStream();
+        return ToActionResult(inventoryWorkflowService.ImportPpeNormSetsDraft(stream, file.FileName));
+    }
+
+    [HttpPost("ppe/norm-sets/{normSetId:guid}/publish")]
+    [RequirePermission("inventory.ppe.manage")]
+    public ActionResult<InventoryPpeNormSetDto> PublishPpeNormSet(Guid normSetId, PublishInventoryPpeNormSetDto request) =>
+        ToActionResult(inventoryWorkflowService.PublishPpeNormSet(normSetId, request));
+
     [HttpPut("ppe/cards/{id:guid}")]
     [RequirePermission("inventory.ppe.manage")]
     public ActionResult<InventoryPpeCardDetailDto> UpdatePpeCard(Guid id, CreateInventoryPpeCardDto request) =>
@@ -322,6 +410,11 @@ public sealed class InventoryController(
     [RequirePermission("inventory.ppe.manage")]
     public ActionResult<InventoryPpeCardLineDto> UpdatePpeCardLineStatus(Guid id, Guid lineId, UpdateInventoryStatusDto request) =>
         ToActionResult(inventoryWorkflowService.UpdatePpeCardLineStatus(id, lineId, request));
+
+    [HttpPost("ppe/cards/{id:guid}/lines/{lineId:guid}/actions")]
+    [RequirePermission("inventory.ppe.manage")]
+    public ActionResult<InventoryPpeCardLineDto> ApplyPpeLineAction(Guid id, Guid lineId, ApplyInventoryPpeLineActionDto request) =>
+        ToActionResult(inventoryWorkflowService.ApplyPpeLineAction(id, lineId, request));
 
     [HttpPatch("ppe/cards/{id:guid}/lines/{lineId:guid}/archive")]
     [RequirePermission("inventory.ppe.manage")]
@@ -899,10 +992,14 @@ public sealed class InventoryController(
             return Ok(result.Value);
         }
 
-        return ValidationProblem(new ValidationProblemDetails(result.Errors.ToDictionary(error => error.Key, error => error.Value))
+        var statusCode = result.Errors.ContainsKey("conflict")
+            ? StatusCodes.Status409Conflict
+            : StatusCodes.Status400BadRequest;
+        var details = new ValidationProblemDetails(result.Errors.ToDictionary(error => error.Key, error => error.Value))
         {
             Title = "Inventory command validation failed",
-            Status = StatusCodes.Status400BadRequest
-        });
+            Status = statusCode
+        };
+        return new ObjectResult(details) { StatusCode = statusCode };
     }
 }

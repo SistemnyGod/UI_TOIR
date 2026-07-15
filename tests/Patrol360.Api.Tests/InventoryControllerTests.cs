@@ -114,6 +114,7 @@ public sealed class InventoryControllerTests
     [Fact]
     public void PpeCardsForwardsServerSideAccountingFilters()
     {
+        var employeeId = Guid.NewGuid();
         var workflow = new InventoryWorkflowServiceFake();
         var controller = CreateController(workflowService: workflow);
 
@@ -123,6 +124,7 @@ public sealed class InventoryControllerTests
             query: "авдеев",
             status: "issued",
             department: "Энерго",
+            employeeId: employeeId,
             priceState: "missing",
             includeLines: false);
 
@@ -134,6 +136,7 @@ public sealed class InventoryControllerTests
         Assert.Equal("авдеев", workflow.LastPpeCardsQuery.Query);
         Assert.Equal("issued", workflow.LastPpeCardsQuery.Status);
         Assert.Equal("Энерго", workflow.LastPpeCardsQuery.Department);
+        Assert.Equal(employeeId, workflow.LastPpeCardsQuery.EmployeeId);
         Assert.Equal("missing", workflow.LastPpeCardsQuery.PriceState);
         Assert.False(workflow.LastPpeCardsQuery.IncludeLines);
     }
@@ -400,6 +403,17 @@ public sealed class InventoryControllerTests
         public InventoryListResponseDto<InventoryHistoryDto> GetPpeCardLinesHistory(Guid cardId, InventoryListQuery query) => throw new NotImplementedException();
         public InventoryListResponseDto<InventoryHistoryDto> GetPpeCardLineHistory(Guid cardId, Guid lineId, InventoryListQuery query) => throw new NotImplementedException();
         public InventoryListResponseDto<InventoryPpeMovementDto> GetPpeMovements(InventoryListQuery query, Guid? employeeId = null, Guid? itemId = null) => throw new NotImplementedException();
+        public InventoryCommandResult<InventoryPpeWorkspaceDto> GetPpeWorkspace(Guid employeeId) => throw new NotImplementedException();
+        public InventoryListResponseDto<InventoryPpeHistoryRowDto> GetPpeHistory(InventoryListQuery query) => throw new NotImplementedException();
+        public InventoryCommandResult<InventoryPpeCardDetailDto> CreatePpeCardDraft(CreateInventoryPpeCardDraftDto request) => throw new NotImplementedException();
+        public InventoryCommandResult<InventoryPpeCardDetailDto> UpdatePpeCardNormRows(Guid cardId, UpdateInventoryPpeCardNormRowsDto request) => throw new NotImplementedException();
+        public InventoryCommandResult<InventoryPpeCardLineDto> CreatePpeIssue(Guid cardId, CreateInventoryPpeIssueDto request) => throw new NotImplementedException();
+        public InventoryCommandResult<InventoryPpeCardLineDto> ApplyPpeLineAction(Guid cardId, Guid lineId, ApplyInventoryPpeLineActionDto request) => throw new NotImplementedException();
+        public InventoryListResponseDto<InventoryPpeNormMappingDto> GetPpeNormRowMappings(Guid normRowId, InventoryListQuery query) => throw new NotImplementedException();
+        public InventoryCommandResult<InventoryPpeNormMappingDto> UpsertPpeNormRowMapping(Guid normRowId, UpsertInventoryPpeNormMappingDto request) => throw new NotImplementedException();
+        public InventoryListResponseDto<InventoryPpeNormSetDto> GetPpeNormSets(InventoryListQuery query) => throw new NotImplementedException();
+        public InventoryCommandResult<InventoryPpeNormImportResultDto> ImportPpeNormSetsDraft(Stream source, string fileName) => throw new NotImplementedException();
+        public InventoryCommandResult<InventoryPpeNormSetDto> PublishPpeNormSet(Guid normSetId, PublishInventoryPpeNormSetDto request) => throw new NotImplementedException();
         public InventoryListResponseDto<InventoryHistoryDto> GetHistory(InventoryListQuery query) => throw new NotImplementedException();
         public InventoryListResponseDto<InventoryReportDto> GetReports(InventoryListQuery query) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryExportJobDto> ExportReport(string reportId, string format) => throw new NotImplementedException();

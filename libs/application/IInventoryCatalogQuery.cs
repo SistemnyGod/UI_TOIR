@@ -47,4 +47,5 @@ public sealed record InventoryListQuery(
     string? Sort = null,
     string? Direction = null,
     string? PriceState = null,
-    bool IncludeLines = true);
+    bool IncludeLines = true,
+    Guid? EmployeeId = null);

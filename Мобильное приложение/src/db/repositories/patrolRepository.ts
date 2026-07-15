@@ -7,10 +7,11 @@ import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository"
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
+import { isPhotoEvidenceRequired } from "@/domain/patrol/photoEvidencePolicy";
 import { OutboxCommand } from "@/domain/sync/syncTypes";
 import { getNfcCodeCandidates, normalizeNfcCode } from "@/services/nfcService";
 
-type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getFirstAsync" | "runAsync">;
+type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "getFirstAsync" | "runAsync">;
 
 export type RequestBoardItem = {
   requestId: string;
@@ -1027,7 +1028,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
       });
     }
 
-    if (point.requiresPhoto && point.photoClientFileIds.length === 0) {
+    if (isPhotoEvidenceRequired(point.requiresPhoto, point.status) && point.photoClientFileIds.length === 0) {
       problems.push({
         pointId: point.pointId,
         pointName: point.name,
@@ -1053,27 +1054,6 @@ export async function completeAssignmentLocally(assignmentId: string) {
   const readiness = await getReportReadiness(assignmentId);
   if (!readiness.assignment || !readiness.ready) {
     throw new Error("Отчет еще не готов к отправке.");
-  }
-
-  const queuedCompleteCommand = await getQueuedCompleteAssignmentCommand(db, ownerUserId, assignmentId);
-  if (queuedCompleteCommand) {
-    const completedAtLocal = readiness.assignment.completedAtLocal ?? queuedCompleteCommand.createdAtLocal;
-    await db.runAsync(
-      `
-        UPDATE patrol_assignments
-        SET status = 'completedLocal',
-            completed_at_local = COALESCE(completed_at_local, ?)
-        WHERE owner_user_id = ?
-          AND assignment_id = ?
-      `,
-      [completedAtLocal, ownerUserId, assignmentId]
-    );
-
-    return {
-      completedAtLocal,
-      clientOperationId: queuedCompleteCommand.clientOperationId,
-      alreadyQueued: true as const
-    };
   }
 
   const completedAtLocal = new Date().toISOString();
@@ -1107,8 +1087,39 @@ export async function completeAssignmentLocally(assignmentId: string) {
     status: "pending"
   };
 
+  type CompletionResult = {
+    completedAtLocal: string;
+    clientOperationId: string;
+    alreadyQueued: boolean;
+  };
+  const completionResultRef: { current: CompletionResult | null } = { current: null };
+
   await withSqliteBusyRetry(() =>
     db.withExclusiveTransactionAsync(async (tx) => {
+      // The duplicate check must be inside the same exclusive transaction as
+      // the insert. This protects double taps and concurrent lifecycle callbacks
+      // from creating two completion commands for one assignment.
+      const queuedCompleteCommand = await getQueuedCompleteAssignmentCommand(tx, ownerUserId, assignmentId);
+      if (queuedCompleteCommand) {
+        const existingCompletedAt = readiness.assignment?.completedAtLocal ?? queuedCompleteCommand.createdAtLocal;
+        await tx.runAsync(
+          `
+            UPDATE patrol_assignments
+            SET status = 'completedLocal',
+                completed_at_local = COALESCE(completed_at_local, ?)
+            WHERE owner_user_id = ?
+              AND assignment_id = ?
+          `,
+          [existingCompletedAt, ownerUserId, assignmentId]
+        );
+        completionResultRef.current = {
+          completedAtLocal: existingCompletedAt,
+          clientOperationId: queuedCompleteCommand.clientOperationId,
+          alreadyQueued: true
+        };
+        return;
+      }
+
       await tx.runAsync(
       `
         UPDATE patrol_assignments
@@ -1120,8 +1131,22 @@ export async function completeAssignmentLocally(assignmentId: string) {
     );
 
       await insertOutboxCommandInTransaction(tx, command);
+      completionResultRef.current = {
+        completedAtLocal,
+        clientOperationId: command.clientOperationId,
+        alreadyQueued: false
+      };
     })
   );
+
+  const completionResult = completionResultRef.current;
+  if (!completionResult) {
+    throw new Error("Не удалось сохранить отчет в очередь отправки.");
+  }
+
+  if (completionResult.alreadyQueued) {
+    return { ...completionResult, alreadyQueued: true as const };
+  }
 
   void logMobileAction({
     eventType: "patrol.report.completedLocal",
@@ -1131,7 +1156,7 @@ export async function completeAssignmentLocally(assignmentId: string) {
     payload: { photoCount, pointCount: readiness.progress.total }
   }).catch(() => undefined);
 
-  return { completedAtLocal, clientOperationId: command.clientOperationId, alreadyQueued: false as const };
+  return { ...completionResult, alreadyQueued: false as const };
 }
 
 export async function getAssignmentProgress(assignmentId: string): Promise<AssignmentProgress> {
@@ -1429,22 +1454,23 @@ async function savePointResult({
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
     db.withExclusiveTransactionAsync(async (tx) => {
-    await upsertPointResultInTransaction(tx, {
-      ownerUserId,
-      assignmentId,
-      pointId,
-      status,
-      comment,
-      issueTypeId,
-      severity: status === "issue" ? "medium" : null,
-      deferredReason: null,
-      completedAtLocal,
-      syncStatus: "pending",
-      confirmationType: point.confirmationType ?? "manual",
-      nfcUidHash: point.nfcUidHash,
-      scannedAtLocal: point.scannedAtLocal ?? completedAtLocal,
-      photoClientFileIds: point.photoClientFileIds
-    });
+      await supersedePendingPointStatusCommands(tx, ownerUserId, assignmentId, pointId);
+      await upsertPointResultInTransaction(tx, {
+        ownerUserId,
+        assignmentId,
+        pointId,
+        status,
+        comment,
+        issueTypeId,
+        severity: status === "issue" ? "medium" : null,
+        deferredReason: null,
+        completedAtLocal,
+        syncStatus: "pending",
+        confirmationType: point.confirmationType ?? "manual",
+        nfcUidHash: point.nfcUidHash,
+        scannedAtLocal: point.scannedAtLocal ?? completedAtLocal,
+        photoClientFileIds: point.photoClientFileIds
+      });
 
       await insertOutboxCommandInTransaction(tx, command);
     })
@@ -1505,6 +1531,57 @@ async function updateLatestPendingMarkPhotoPayloadInTransaction(
       new Date().toISOString(),
       command.client_operation_id
     ]
+  );
+}
+
+async function supersedePendingPointStatusCommands(
+  executor: SqlExecutor,
+  ownerUserId: string,
+  assignmentId: string,
+  pointId: string
+) {
+  const commands = await executor.getAllAsync<{
+    clientOperationId: string;
+    payloadJson: string;
+  }>(
+    `
+      SELECT
+        client_operation_id AS clientOperationId,
+        payload_json AS payloadJson
+      FROM outbox_commands
+      WHERE owner_user_id = ?
+        AND entity_local_id = ?
+        AND command_type IN ('markPatrolPointOk', 'markPatrolPointIssue')
+        AND status IN ('pending', 'retryLater')
+    `,
+    [ownerUserId, pointId]
+  );
+  const supersededIds = commands
+    .filter((command) => {
+      try {
+        const payload = JSON.parse(command.payloadJson) as Record<string, unknown>;
+        return payload.assignmentId === assignmentId && payload.pointId === pointId;
+      } catch {
+        return false;
+      }
+    })
+    .map((command) => command.clientOperationId);
+
+  if (supersededIds.length === 0) {
+    return;
+  }
+
+  const placeholders = supersededIds.map(() => "?").join(", ");
+  await executor.runAsync(
+    `
+      UPDATE outbox_commands
+      SET status = 'superseded',
+          last_error = NULL,
+          updated_at_local = ?
+      WHERE client_operation_id IN (${placeholders})
+        AND status IN ('pending', 'retryLater')
+    `,
+    [new Date().toISOString(), ...supersededIds]
   );
 }
 

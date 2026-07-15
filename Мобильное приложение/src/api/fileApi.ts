@@ -22,7 +22,9 @@ export async function uploadMobileFile(file: LocalMobileFile) {
   }
 
   if (result.status === 401) {
-    throw new Error(`Mobile session is invalid (${apiBaseUrl}). Sign in again before sending reports.`);
+    // Keep the file and credentials intact. A temporary 401 after a refresh is
+    // retried by the outbox and must not become a forced sign-in.
+    throw new Error(`Mobile API temporarily rejected the file upload (${apiBaseUrl}). The report is saved and will be retried automatically.`);
   }
 
   if (result.status < 200 || result.status >= 300) {

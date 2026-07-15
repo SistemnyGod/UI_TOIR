@@ -42,9 +42,10 @@ export function refresh(payload: RefreshRequest) {
   });
 }
 
-export function logout() {
+export function logout(accessToken?: string) {
   return mobileRequest<void>("/api/v1/mobile/auth/logout", {
     method: "POST",
+    accessToken,
     skipAuthRefresh: true
   });
 }

@@ -19,9 +19,11 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Patrol360: Host=postgres;Port=5432;Database=${POSTGRES_DB:-patrol360};Username=${POSTGRES_USER:-patrol360};Password=${POSTGRES_PASSWORD:-patrol360_dev}
       DataProtection__KeyRingPath: /var/lib/patrol360/data-protection-keys
+      MobileDiagnostics__StoragePath: /app/mobile-diagnostics
     volumes:
       - ./secrets/data-protection-keys:/var/lib/patrol360/data-protection-keys
       - api-mobile-files:/app/mobile-files
+      - ./mobile-diagnostics:/app/mobile-diagnostics
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; grep -q \"200 OK\" <&3'"]
       interval: 10s

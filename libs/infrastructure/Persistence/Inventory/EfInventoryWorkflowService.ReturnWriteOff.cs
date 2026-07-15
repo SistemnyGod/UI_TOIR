@@ -73,6 +73,64 @@ internal sealed partial class EfInventoryWorkflowService
         return Success(MapPpeCardLine(LoadPpeLine(line.Id)!));
     }
 
+    public InventoryCommandResult<InventoryPpeCardLineDto> ApplyPpeLineAction(Guid cardId, Guid lineId, ApplyInventoryPpeLineActionDto request)
+    {
+        var action = NormalizeStatus(request.Action);
+        if (action is not ("returned" or "written_off" or "defective"))
+        {
+            return Failure<InventoryPpeCardLineDto>("action", "Unsupported PPE line action");
+        }
+
+        var line = dbContext.InventoryPpeCardLines.Include(row => row.Card)
+            .FirstOrDefault(row => row.Id == lineId && row.CardId == cardId && row.Status != "archived");
+        if (line is null) return Failure<InventoryPpeCardLineDto>("lineId", "PPE card line not found");
+        if (request.ExpectedVersion is not null && line.Card.Version != request.ExpectedVersion)
+        {
+            return Failure<InventoryPpeCardLineDto>("conflict", "PPE card was changed by another user");
+        }
+
+        if (action == "returned")
+        {
+            var quantity = request.Quantity ?? line.Quantity;
+            if (quantity <= 0 || quantity > line.Quantity)
+            {
+                return Failure<InventoryPpeCardLineDto>("quantity", "Returned quantity must be greater than zero and not exceed issued quantity");
+            }
+            line.ReturnedAt = request.OccurredAt.ToUniversalTime();
+            line.ReturnedQuantity = quantity;
+        }
+        else if (action == "written_off")
+        {
+            line.WriteOffActDate = (request.WriteOffActDate ?? request.OccurredAt).ToUniversalTime();
+            line.WriteOffActNumber = NormalizeOptional(request.WriteOffActNumber);
+        }
+
+        line.Card.Version += 1;
+        InventoryCommandResult<InventoryPpeCardLineDto> result;
+        try
+        {
+            result = UpdatePpeCardLineStatus(cardId, lineId, new UpdateInventoryStatusDto(action, request.Comment));
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Failure<InventoryPpeCardLineDto>("conflict", "PPE card was changed by another user");
+        }
+        if (!result.Succeeded) return result;
+
+        var latestEvent = dbContext.InventoryPpeCardLineEvents
+            .Where(row => row.LineId == lineId && row.ToStatus == action)
+            .OrderByDescending(row => row.CreatedAt)
+            .ThenByDescending(row => row.Id)
+            .FirstOrDefault();
+        if (latestEvent is not null)
+        {
+            latestEvent.CreatedAt = request.OccurredAt.ToUniversalTime();
+            dbContext.SaveChanges();
+        }
+
+        return Success(MapPpeCardLine(LoadPpeLine(lineId)!));
+    }
+
     public InventoryCommandResult<InventoryPpeCardLineDto> ArchivePpeCardLine(Guid cardId, Guid lineId)
     {
         var line = dbContext.InventoryPpeCardLines

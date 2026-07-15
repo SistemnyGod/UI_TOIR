@@ -133,8 +133,10 @@ async function clearLocalUserTablesInTransaction(executor: SqlExecutor) {
   await executor.runAsync("DELETE FROM work_tasks");
   await executor.runAsync("DELETE FROM mobile_notifications");
   await executor.runAsync("DELETE FROM shift_remarks");
-  await executor.runAsync("DELETE FROM mobile_action_log");
-}
+    await executor.runAsync("DELETE FROM mobile_action_log");
+    await executor.runAsync("DELETE FROM mobile_diagnostic_reports");
+    await executor.runAsync("DELETE FROM mobile_diagnostic_state");
+  }
 
 async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapDto) {
   const ownerUserId = bootstrap.user.serverUserId;

@@ -5,7 +5,8 @@ export type OutboxCommandStatus =
   | "duplicate"
   | "retryLater"
   | "rejected"
-  | "conflict";
+  | "conflict"
+  | "superseded";
 
 export type OutboxCommandType =
   | "takePatrolRequest"

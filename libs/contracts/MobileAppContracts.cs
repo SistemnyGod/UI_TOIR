@@ -42,6 +42,29 @@ public sealed record MobileDeviceRegistrationDto(
     bool PushEnabled,
     DateTimeOffset RegisteredAt);
 
+public sealed record MobileDiagnosticEntryDto(
+    string EventType,
+    string Message,
+    int Count,
+    DateTimeOffset FirstSeenAt,
+    DateTimeOffset LastSeenAt);
+
+public sealed record MobileDiagnosticReportDto(
+    Guid ReportId,
+    string DeviceId,
+    string AppVersion,
+    string Platform,
+    DateTimeOffset PeriodStart,
+    DateTimeOffset PeriodEnd,
+    DateTimeOffset GeneratedAt,
+    int PendingOutboxCount,
+    IReadOnlyList<MobileDiagnosticEntryDto> Entries);
+
+public sealed record MobileDiagnosticReportReceiptDto(
+    Guid ReportId,
+    string Status,
+    DateTimeOffset StoredAt);
+
 public sealed record MobileNotificationDto(
     Guid Id,
     string Type,

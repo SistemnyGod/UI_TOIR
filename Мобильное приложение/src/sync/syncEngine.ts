@@ -1,9 +1,11 @@
 import { uploadMobileFile } from "@/api/fileApi";
 import { getOutboxResult, postOutbox } from "@/api/mobileApi";
 import { checkServerConnection } from "@/api/serverHealthApi";
-import { getAccessToken } from "@/auth/tokenStorage";
+import { getAccessToken, getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { isReauthenticationRequiredError } from "@/auth/sessionErrors";
 import { hasUsableNetwork } from "@/core/network";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
+import { logMobileError } from "@/services/mobileErrorReporter";
 import {
   listFilesByClientIds,
   markFileUploaded,
@@ -18,37 +20,38 @@ import {
   markOutboxCommandsRetryLater,
   markOutboxCommandsSending,
   markPendingOutboxCommandsRetryLater,
+  resetSendingOutboxCommandsForManualRetry,
   resetStaleSendingOutboxCommands
 } from "@/db/repositories/outboxRepository";
 import { OutboxCommand, OutboxResponse } from "@/domain/sync/syncTypes";
 import { getPendingOutboxBatch } from "@/sync/outboxProcessor";
+import { findMissingClientFileIds } from "@/sync/fileReferenceIntegrity";
+import { SerializedTaskQueue } from "@/sync/serializedTaskQueue";
 import { emitSyncEvent } from "@/sync/syncEvents";
 
-type ForegroundSyncResult = {
+export type ForegroundSyncResult = {
   sent: number;
-  skipped: "offline" | "serverUnavailable" | "busy" | "unauthenticated" | null;
+  skipped: "offline" | "serverUnavailable" | "unauthenticated" | null;
 };
 
 const staleSendingTimeoutMs = 5 * 60 * 1000;
 const maxSyncBatchesPerRun = 4;
-let foregroundSyncPromise: Promise<ForegroundSyncResult> | null = null;
+const foregroundSyncQueue = new SerializedTaskQueue<ForegroundSyncResult>();
 
 export async function runForegroundSync(): Promise<ForegroundSyncResult> {
-  if (foregroundSyncPromise) {
-    return { sent: 0, skipped: "busy" };
-  }
-
-  foregroundSyncPromise = runForegroundSyncInternal();
-
-  try {
-    return await foregroundSyncPromise;
-  } finally {
-    foregroundSyncPromise = null;
-  }
+  // Never discard a sync request that arrives while another pass is running.
+  // The previous `busy` result could leave a newly queued report untouched until
+  // some later trigger (often the submission of the next report).
+  return foregroundSyncQueue.run(runForegroundSyncInternal);
 }
 
 async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
-  await finalizeAcceptedCompleteReportCommands();
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return { sent: 0, skipped: "unauthenticated" as const };
+  }
+
+  await finalizeAcceptedCompleteReportCommands(ownerUserId);
 
   if (!(await hasUsableNetwork())) {
     return { sent: 0, skipped: "offline" as const };
@@ -56,22 +59,22 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
 
   const serverCheck = await checkServerConnection();
   if (!serverCheck.ok) {
-    await markPendingOutboxCommandsRetryLater(serverCheck.message);
+    await markPendingOutboxCommandsRetryLater(ownerUserId, serverCheck.message);
     return { sent: 0, skipped: "serverUnavailable" as const };
   }
 
   if (!(await getAccessToken())) {
-    await markPendingOutboxCommandsAuthRequired(authRequiredMessage);
+    await markPendingOutboxCommandsAuthRequired(ownerUserId, authRequiredMessage);
     return { sent: 0, skipped: "unauthenticated" as const };
   }
 
-  await resetStaleSendingOutboxCommands(getStaleSendingBoundaryIso());
+  await resetStaleSendingOutboxCommands(ownerUserId, getStaleSendingBoundaryIso());
   await reconcileAcceptedCompleteReports();
 
   let sent = 0;
 
   for (let batchIndex = 0; batchIndex < maxSyncBatchesPerRun; batchIndex += 1) {
-    const commands = await getPendingOutboxBatch();
+    const commands = await getPendingOutboxBatch(ownerUserId);
 
     if (commands.length === 0) {
       break;
@@ -81,7 +84,7 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
     await markOutboxCommandsSending(commandIds);
 
     try {
-      await uploadFilesForCompleteCommands(commands);
+      await uploadFilesForCompleteCommands(ownerUserId, commands);
       const responses = await postOutboxWithServerReconciliation(commands);
       await applyOutboxResponses(responses);
       logAcceptedReports(commands, responses);
@@ -89,8 +92,9 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
       sent += responses.length;
     } catch (error) {
       const readableError = getReadableSyncError(error);
+      void logMobileError("sync.failed", error);
       if (isAuthRequiredError(error)) {
-        await markPendingOutboxCommandsAuthRequired(readableError);
+        await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError);
       } else {
         await markOutboxCommandsRetryLater(commandIds, readableError);
       }
@@ -167,12 +171,27 @@ function buildSyncEvent(commands: OutboxCommand[], responses: OutboxResponse[]) 
 }
 
 export async function recoverStaleSendingOutboxCommands() {
-  await resetStaleSendingOutboxCommands(getStaleSendingBoundaryIso());
+  const ownerUserId = await getStoredOwnerUserId();
+  if (ownerUserId) {
+    await resetStaleSendingOutboxCommands(ownerUserId, getStaleSendingBoundaryIso());
+  }
+}
+
+export async function prepareManualSyncRetry() {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (ownerUserId) {
+    await resetSendingOutboxCommandsForManualRetry(ownerUserId);
+  }
 }
 
 export async function reconcileAcceptedCompleteReports(assignmentId?: string) {
-  const localFinalized = await finalizeAcceptedCompleteReportCommands(assignmentId);
-  const commands = await listUnconfirmedCompleteReportCommands(assignmentId);
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return { reconciled: 0 };
+  }
+
+  const localFinalized = await finalizeAcceptedCompleteReportCommands(ownerUserId, assignmentId);
+  const commands = await listUnconfirmedCompleteReportCommands(ownerUserId, assignmentId);
   if (commands.length === 0) {
     return { reconciled: localFinalized.finalized };
   }
@@ -193,11 +212,25 @@ function getStaleSendingBoundaryIso() {
   return new Date(Date.now() - staleSendingTimeoutMs).toISOString();
 }
 
-async function uploadFilesForCompleteCommands(commands: OutboxCommand[]) {
+async function uploadFilesForCompleteCommands(ownerUserId: string, commands: OutboxCommand[]) {
   const clientFileIds = Array.from(new Set(commands.flatMap(extractUploadClientFileIds)));
   const files = await listFilesByClientIds(clientFileIds);
+  const missingClientFileIds = findMissingClientFileIds(
+    clientFileIds,
+    files.map((file) => file.clientFileId)
+  );
+
+  if (missingClientFileIds.length > 0) {
+    throw new Error(
+      `Не найдены локальные вложения: ${missingClientFileIds.length}. Добавьте фото или видео повторно перед отправкой отчета.`
+    );
+  }
 
   for (const file of files) {
+    if (file.ownerUserId !== ownerUserId) {
+      throw new Error("Локальный файл принадлежит другому пользователю и не будет отправлен.");
+    }
+
     if (file.status === "uploaded" || file.status === "linked") {
       continue;
     }
@@ -291,12 +324,5 @@ function getReadableSyncError(error: unknown) {
 const authRequiredMessage = "Сессия истекла. Войдите в аккаунт повторно. Локальные данные и очередь отправки сохранены.";
 
 function isAuthRequiredError(error: unknown) {
-  if (error instanceof Error && error.message.includes("Mobile session is invalid")) {
-    return true;
-  }
-
-  return error instanceof Error && (
-    error.message.includes("Сессия истекла")
-    || error.message.includes("Войдите в аккаунт повторно")
-  );
+  return error instanceof Error && isReauthenticationRequiredError(error.message);
 }

@@ -2,6 +2,7 @@ import * as Crypto from "expo-crypto";
 
 import { insertOutboxCommand, listPendingOutboxCommands } from "@/db/repositories/outboxRepository";
 import { MobileEntityType, OutboxCommand, OutboxCommandType } from "@/domain/sync/syncTypes";
+import { assertRecordsBelongToOwner } from "@/sync/ownerIsolation";
 
 type CreateOutboxCommandInput = {
   ownerUserId: string;
@@ -34,9 +35,12 @@ export async function enqueueOutboxCommand(input: CreateOutboxCommandInput) {
   return command;
 }
 
-export async function getPendingOutboxBatch(limit?: number) {
+export async function getPendingOutboxBatch(ownerUserId: string, limit?: number) {
   const batchLimit = limit ?? 25;
-  const commands = await listPendingOutboxCommands(Math.max(batchLimit * 4, 100));
+  const commands = assertRecordsBelongToOwner(
+    ownerUserId,
+    await listPendingOutboxCommands(ownerUserId, Math.max(batchLimit * 4, 100))
+  );
   const blockedCompleteAssignmentIds = new Set(
     commands
       .filter((command) => command.commandType !== "completePatrolAssignment")

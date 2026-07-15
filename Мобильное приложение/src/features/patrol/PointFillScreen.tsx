@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, TextInput
 
 import { listPointFiles } from "@/db/repositories/filesRepository";
 import { deferPoint, getPointForFill, PointForFill, savePointIssue, savePointOk, skipPoint } from "@/db/repositories/patrolRepository";
+import { isPhotoEvidenceRequired } from "@/domain/patrol/photoEvidencePolicy";
 import { useAppTheme } from "@/features/settings/themePreference";
 import {
   attachPointPhotoFromCamera,
@@ -92,7 +93,7 @@ export function PointFillScreen() {
 
   async function confirmSkipTag() {
     setError(null);
-    if (point?.requiresPhoto && !hasPhotoAttachment(attachments)) {
+    if (isPhotoEvidenceRequired(Boolean(point?.requiresPhoto), "skipped") && !hasPhotoAttachment(attachments)) {
       setError("Для этой метки требуется фотофиксация.");
       return;
     }
@@ -125,7 +126,7 @@ export function PointFillScreen() {
       return;
     }
 
-    if (point?.requiresPhoto && !hasPhotoAttachment(attachments)) {
+    if (isPhotoEvidenceRequired(Boolean(point?.requiresPhoto), selectedStatus) && !hasPhotoAttachment(attachments)) {
       setError("Для этой метки требуется фотофиксация.");
       return;
     }

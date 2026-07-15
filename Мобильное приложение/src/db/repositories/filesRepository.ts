@@ -161,7 +161,7 @@ export async function listKnownLocalFilePaths() {
   return rows.map((row) => row.local_path);
 }
 
-export async function listSyncQueueFiles(limit = 100) {
+export async function listSyncQueueFiles(ownerUserId: string, limit = 100) {
   const db = await getDatabase();
 
   return withSqliteBusyRetry(() =>
@@ -182,11 +182,12 @@ export async function listSyncQueueFiles(limit = 100) {
         FROM files file
         LEFT JOIN patrol_assignments assignment
           ON assignment.assignment_id = file.assignment_id
-        WHERE file.status NOT IN ('uploaded', 'linked')
+        WHERE file.owner_user_id = ?
+          AND file.status NOT IN ('uploaded', 'linked')
         ORDER BY file.created_at_local DESC
         LIMIT ?
       `,
-      [limit]
+      [ownerUserId, limit]
     )
   );
 }

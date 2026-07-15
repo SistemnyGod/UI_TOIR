@@ -455,7 +455,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.Equal(5, CountTableRows(cardDocument, tableIndex: 1));
         Assert.Equal(4, CountTableCells(cardDocument, tableIndex: 1, rowIndex: 0));
         Assert.Equal(1, CountTables(sheetDocument));
-        Assert.Equal(5, CountTableRows(sheetDocument, tableIndex: 0));
+        Assert.Equal(6, CountTableRows(sheetDocument, tableIndex: 0));
         Assert.Equal(10, CountTableCells(sheetDocument, tableIndex: 0, rowIndex: 1));
 
         Assert.Contains(employee.FullName.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0], cardXml, StringComparison.Ordinal);
@@ -477,7 +477,8 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.Contains("Форвард", sheetXml, StringComparison.Ordinal);
         Assert.Contains("1 шт.", sheetXml, StringComparison.Ordinal);
         Assert.DoesNotContain(issuedItem.Name, sheetXml, StringComparison.Ordinal);
-        Assert.DoesNotContain(returnedNormName, sheetXml, StringComparison.Ordinal);
+        Assert.Contains(returnedNormName, sheetXml, StringComparison.Ordinal);
+        Assert.Contains("Ansell", sheetXml, StringComparison.Ordinal);
         Assert.DoesNotContain(notIssuedNormName, sheetXml, StringComparison.Ordinal);
         Assert.DoesNotContain("Дата оформления", sheetXml, StringComparison.Ordinal);
         Assert.DoesNotContain("СИЗ выдал", sheetXml, StringComparison.Ordinal);

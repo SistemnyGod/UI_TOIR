@@ -2309,6 +2309,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("legacy_id");
 
+                    b.Property<Guid?>("NormSetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("norm_set_id");
+
                     b.Property<string>("Position")
                         .IsRequired()
                         .HasMaxLength(160)
@@ -2333,10 +2337,17 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("status");
 
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
                     b.HasKey("Id");
 
                     b.HasIndex("LegacyId")
                         .HasDatabaseName("ix_inventory_ppe_cards_legacy_id");
+
+                    b.HasIndex("NormSetId");
 
                     b.HasIndex("EmployeeId", "ArchivedAt")
                         .HasDatabaseName("ix_inventory_ppe_cards_employee_archived");
@@ -2361,6 +2372,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("card_id");
 
+                    b.Property<Guid?>("CardNormRowId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("card_norm_row_id");
+
                     b.Property<string>("Comment")
                         .IsRequired()
                         .HasMaxLength(1200)
@@ -2377,10 +2392,16 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_section_title");
 
+                    b.Property<string>("IssueMethod")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("issue_method");
+
                     b.Property<string>("IssuePeriodText")
                         .IsRequired()
-                        .HasMaxLength(160)
-                        .HasColumnType("character varying(160)")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
                         .HasColumnName("issue_period_text");
 
                     b.Property<DateTimeOffset?>("IssuedAt")
@@ -2397,14 +2418,14 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("NormPoint")
                         .IsRequired()
-                        .HasMaxLength(240)
-                        .HasColumnType("character varying(240)")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
                         .HasColumnName("norm_point");
 
                     b.Property<string>("PrintItemName")
                         .IsRequired()
-                        .HasMaxLength(600)
-                        .HasColumnType("character varying(600)")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
                         .HasColumnName("print_item_name");
 
                     b.Property<decimal>("Quantity")
@@ -2415,6 +2436,21 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Property<string>("QuantityText")
                         .HasColumnType("text")
                         .HasColumnName("quantity_text");
+
+                    b.Property<DateTimeOffset?>("ReturnedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("returned_at");
+
+                    b.Property<decimal?>("ReturnedQuantity")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("returned_quantity");
+
+                    b.Property<string>("SizeText")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("size_text");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -2430,7 +2466,20 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("warehouse_id");
 
+                    b.Property<DateTimeOffset?>("WriteOffActDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("write_off_act_date");
+
+                    b.Property<string>("WriteOffActNumber")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("write_off_act_number");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("CardNormRowId")
+                        .HasDatabaseName("ix_inventory_ppe_lines_card_norm_row");
 
                     b.HasIndex("ItemId");
 
@@ -2505,6 +2554,98 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.ToTable("ppe_card_line_events", "inventory");
                 });
 
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardNormRowEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BrandModelArticle")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)")
+                        .HasColumnName("brand_model_article");
+
+                    b.Property<Guid>("CardId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("card_id");
+
+                    b.Property<long?>("DefaultUnitPriceMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("default_unit_price_minor");
+
+                    b.Property<string>("IssuePeriodText")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("issue_period_text");
+
+                    b.Property<int?>("LifeMonths")
+                        .HasColumnType("integer")
+                        .HasColumnName("life_months");
+
+                    b.Property<Guid?>("MappedItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("mapped_item_id");
+
+                    b.Property<string>("NormItemName")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("norm_item_name");
+
+                    b.Property<string>("NormPoint")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("norm_point");
+
+                    b.Property<Guid?>("ParentRowId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_row_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("QuantityText")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("quantity_text");
+
+                    b.Property<string>("RowType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("row_type");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<Guid?>("SourceNormRowId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_norm_row_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MappedItemId");
+
+                    b.HasIndex("ParentRowId")
+                        .HasDatabaseName("ix_inventory_ppe_card_norm_rows_parent");
+
+                    b.HasIndex("SourceNormRowId");
+
+                    b.HasIndex("CardId", "SortOrder")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_ppe_card_norm_rows_card_order");
+
+                    b.ToTable("ppe_card_norm_rows", "inventory");
+                });
+
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeIssueTemplateEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2536,6 +2677,210 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ux_inventory_ppe_issue_templates_name");
 
                     b.ToTable("ppe_issue_templates", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeNormCatalogMappingEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
+                    b.Property<string>("BrandModelArticle")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)")
+                        .HasColumnName("brand_model_article");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("DefaultUnitPriceMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("default_unit_price_minor");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_default");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("item_id");
+
+                    b.Property<Guid>("NormRowId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("norm_row_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArchivedAt")
+                        .HasDatabaseName("ix_inventory_ppe_norm_mapping_archived");
+
+                    b.HasIndex("ItemId")
+                        .HasDatabaseName("ix_inventory_ppe_norm_mapping_item");
+
+                    b.HasIndex("NormRowId", "ItemId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_ppe_norm_mapping_row_item");
+
+                    b.ToTable("ppe_norm_catalog_mappings", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeNormRowEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("IssuePeriodText")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("issue_period_text");
+
+                    b.Property<int?>("LifeMonths")
+                        .HasColumnType("integer")
+                        .HasColumnName("life_months");
+
+                    b.Property<string>("NormItemName")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("norm_item_name");
+
+                    b.Property<string>("NormPoint")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("norm_point");
+
+                    b.Property<Guid>("NormSetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("norm_set_id");
+
+                    b.Property<Guid?>("ParentRowId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_row_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("QuantityText")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("quantity_text");
+
+                    b.Property<string>("RowType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("row_type");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentRowId")
+                        .HasDatabaseName("ix_inventory_ppe_norm_rows_parent");
+
+                    b.HasIndex("NormSetId", "SortOrder")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_ppe_norm_rows_set_order");
+
+                    b.ToTable("ppe_norm_rows", "inventory");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeNormSetEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly?>("EffectiveFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_from");
+
+                    b.Property<DateOnly?>("EffectiveTo")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_to");
+
+                    b.Property<string>("PositionName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("position_name");
+
+                    b.Property<bool>("RequiresReview")
+                        .HasColumnType("boolean")
+                        .HasColumnName("requires_review");
+
+                    b.Property<string>("SourceName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("source_name");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.Property<string>("VersionName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("version_name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PositionName", "Status")
+                        .HasDatabaseName("ix_inventory_ppe_norm_sets_position_status");
+
+                    b.HasIndex("PositionName", "VersionName")
+                        .IsUnique()
+                        .HasDatabaseName("ux_inventory_ppe_norm_sets_position_version");
+
+                    b.ToTable("ppe_norm_sets", "inventory");
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryReturnReasonEntity", b =>
@@ -3768,7 +4113,9 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_patrol_results_actual_at");
 
                     b.HasIndex("AssignmentId")
-                        .HasDatabaseName("ix_patrol_results_assignment_id");
+                        .IsUnique()
+                        .HasDatabaseName("ux_patrol_results_assignment_id")
+                        .HasFilter("assignment_id IS NOT NULL");
 
                     b.HasIndex("EmployeeId")
                         .HasDatabaseName("ix_patrol_results_employee_id");
@@ -5268,7 +5615,14 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeNormSetEntity", "NormSet")
+                        .WithMany()
+                        .HasForeignKey("NormSetId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Employee");
+
+                    b.Navigation("NormSet");
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardLineEntity", b =>
@@ -5278,6 +5632,11 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasForeignKey("CardId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardNormRowEntity", "CardNormRow")
+                        .WithMany("Issues")
+                        .HasForeignKey("CardNormRowId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryItemEntity", "Item")
                         .WithMany()
@@ -5291,6 +5650,8 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Card");
+
+                    b.Navigation("CardNormRow");
 
                     b.Navigation("Item");
 
@@ -5306,6 +5667,75 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Line");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardNormRowEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardEntity", "Card")
+                        .WithMany("NormRows")
+                        .HasForeignKey("CardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryItemEntity", "MappedItem")
+                        .WithMany()
+                        .HasForeignKey("MappedItemId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardNormRowEntity", "ParentRow")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentRowId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeNormRowEntity", "SourceNormRow")
+                        .WithMany()
+                        .HasForeignKey("SourceNormRowId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Card");
+
+                    b.Navigation("MappedItem");
+
+                    b.Navigation("ParentRow");
+
+                    b.Navigation("SourceNormRow");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeNormCatalogMappingEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryItemEntity", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeNormRowEntity", "NormRow")
+                        .WithMany("Mappings")
+                        .HasForeignKey("NormRowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Item");
+
+                    b.Navigation("NormRow");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeNormRowEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeNormSetEntity", "NormSet")
+                        .WithMany("Rows")
+                        .HasForeignKey("NormSetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeNormRowEntity", "ParentRow")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentRowId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("NormSet");
+
+                    b.Navigation("ParentRow");
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryStockMoveEntity", b =>
@@ -5763,6 +6193,8 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardEntity", b =>
                 {
                     b.Navigation("Lines");
+
+                    b.Navigation("NormRows");
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardLineEntity", b =>
@@ -5770,6 +6202,25 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Navigation("Events");
 
                     b.Navigation("StockMoves");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeCardNormRowEntity", b =>
+                {
+                    b.Navigation("Children");
+
+                    b.Navigation("Issues");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeNormRowEntity", b =>
+                {
+                    b.Navigation("Children");
+
+                    b.Navigation("Mappings");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeNormSetEntity", b =>
+                {
+                    b.Navigation("Rows");
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.InventoryUnitEntity", b =>

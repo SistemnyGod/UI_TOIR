@@ -1,5 +1,6 @@
 import { ApiClient } from "../api/client";
 import type {
+  ApplyInventoryPpeLineActionDto,
   CreateEmployeeDto,
   CreateInventoryCategoryDto,
   CreateInventoryCustodyRecordDto,
@@ -7,6 +8,8 @@ import type {
   CreateInventoryItemSetDto,
   CreateInventoryOperationDto,
   CreateInventoryPpeCardDto,
+  CreateInventoryPpeCardDraftDto,
+  CreateInventoryPpeIssueDto,
   CreateInventorySimpleReferenceDto,
   CreateInventoryUnitDto,
   CreateInventoryWarehouseDto,
@@ -34,6 +37,9 @@ import type {
   InventoryPpeCardDetailDto,
   InventoryPpeCardLineDto,
   InventoryPpeMovementDto,
+  InventoryPpeHistoryRowDto,
+  InventoryPpeNormMappingDto,
+  InventoryPpeWorkspaceDto,
   InventoryPpeModuleOptionsDto,
   InventoryPpeCardsResponseDto,
   InventoryPpeCardDto,
@@ -53,6 +59,8 @@ import type {
   UpdateInventoryWarehouseDto,
   UpsertInventoryItemSetItemsDto,
   UpsertInventoryPpeCardLineDto,
+  UpdateInventoryPpeCardNormRowsDto,
+  UpsertInventoryPpeNormMappingDto,
   UpsertInventoryPositionNormDto,
   UpsertInventoryItemDto,
 } from "../api/contracts";
@@ -217,6 +225,55 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
     getPpeCards(params: InventoryListParams = {}) {
       return client.get<InventoryPpeCardsResponseDto>(
         `/api/v1/inventory/ppe/cards${toQueryString(params)}`,
+      );
+    },
+
+    getPpeWorkspace(employeeId: string) {
+      return client.get<InventoryPpeWorkspaceDto>(`/api/v1/inventory/ppe/employees/${employeeId}/workspace`);
+    },
+
+    getPpeHistory(params: InventoryListParams = {}) {
+      return client.get<InventoryListResponseDto<InventoryPpeHistoryRowDto>>(
+        `/api/v1/inventory/ppe/history${toQueryString(params)}`,
+      );
+    },
+
+    createPpeCardDraft(payload: CreateInventoryPpeCardDraftDto) {
+      return client.post<InventoryPpeCardDetailDto, CreateInventoryPpeCardDraftDto>(
+        "/api/v1/inventory/ppe/cards/drafts",
+        payload,
+      );
+    },
+
+    updatePpeCardNormRows(cardId: string, payload: UpdateInventoryPpeCardNormRowsDto) {
+      return client.put<InventoryPpeCardDetailDto, UpdateInventoryPpeCardNormRowsDto>(
+        `/api/v1/inventory/ppe/cards/${cardId}/norm-rows`,
+        payload,
+      );
+    },
+
+    createPpeIssue(cardId: string, payload: CreateInventoryPpeIssueDto) {
+      return client.post<InventoryPpeCardLineDto, CreateInventoryPpeIssueDto>(
+        `/api/v1/inventory/ppe/cards/${cardId}/issues`,
+        payload,
+      );
+    },
+
+    applyPpeLineAction(cardId: string, lineId: string, payload: ApplyInventoryPpeLineActionDto) {
+      return client.post<InventoryPpeCardLineDto, ApplyInventoryPpeLineActionDto>(
+        `/api/v1/inventory/ppe/cards/${cardId}/lines/${lineId}/actions`,
+        payload,
+      );
+    },
+
+    getPpeNormRowMappings(normRowId: string) {
+      return client.get<InventoryListResponseDto<InventoryPpeNormMappingDto>>(`/api/v1/inventory/ppe/norm-rows/${normRowId}/mappings`);
+    },
+
+    upsertPpeNormRowMapping(normRowId: string, payload: UpsertInventoryPpeNormMappingDto) {
+      return client.put<InventoryPpeNormMappingDto, UpsertInventoryPpeNormMappingDto>(
+        `/api/v1/inventory/ppe/norm-rows/${normRowId}/mappings`,
+        payload,
       );
     },
 

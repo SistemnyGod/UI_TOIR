@@ -182,6 +182,23 @@ export async function initializeDatabase() {
       created_at_local TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS mobile_diagnostic_reports (
+      report_id TEXT PRIMARY KEY,
+      owner_user_id TEXT NOT NULL,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at_local TEXT NOT NULL,
+      sent_at_local TEXT,
+      last_error TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS mobile_diagnostic_state (
+      owner_user_id TEXT PRIMARY KEY,
+      last_period_end TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS work_tasks (
       task_id TEXT PRIMARY KEY,
       owner_user_id TEXT NOT NULL,
@@ -263,6 +280,14 @@ export async function initializeDatabase() {
 
   await runLocalMigration(db, "20260630_route_point_requires_photo", async () => {
     await ensureRoutePointRequiresPhoto(db);
+  });
+
+  await runLocalMigration(db, "20260715_daily_mobile_diagnostics", async () => {
+    await ensureDailyMobileDiagnostics(db);
+  });
+
+  await runLocalMigration(db, "20260715_unique_active_completion", async () => {
+    await ensureUniqueActiveCompletion(db);
   });
 }
 
@@ -387,6 +412,67 @@ async function ensureRoutePointRequiresPhoto(db: SQLite.SQLiteDatabase) {
   await ensureColumns(db, "assignment_route_points", [
     { name: "requires_photo", sql: "ALTER TABLE assignment_route_points ADD COLUMN requires_photo INTEGER NOT NULL DEFAULT 0" }
   ]);
+}
+
+async function ensureDailyMobileDiagnostics(db: SQLite.SQLiteDatabase) {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS mobile_diagnostic_reports (
+      report_id TEXT PRIMARY KEY,
+      owner_user_id TEXT NOT NULL,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at_local TEXT NOT NULL,
+      sent_at_local TEXT,
+      last_error TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS mobile_diagnostic_state (
+      owner_user_id TEXT PRIMARY KEY,
+      last_period_end TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS ix_mobile_diagnostic_reports_owner_status
+      ON mobile_diagnostic_reports (owner_user_id, status, created_at_local);
+  `);
+}
+
+async function ensureUniqueActiveCompletion(db: SQLite.SQLiteDatabase) {
+  await db.execAsync(`
+    UPDATE outbox_commands
+    SET status = 'superseded',
+        last_error = 'Операция заменена более новой версией отчета при восстановлении очереди.',
+        updated_at_local = COALESCE(updated_at_local, created_at_local)
+    WHERE rowid IN (
+      SELECT rowid
+      FROM (
+        SELECT
+          rowid,
+          ROW_NUMBER() OVER (
+            PARTITION BY owner_user_id, entity_local_id
+            ORDER BY
+              CASE status
+                WHEN 'accepted' THEN 0
+                WHEN 'duplicate' THEN 1
+                ELSE 2
+              END,
+              created_at_local DESC
+          ) AS duplicate_no
+        FROM outbox_commands
+        WHERE command_type = 'completePatrolAssignment'
+          AND entity_local_id IS NOT NULL
+          AND status IN ('pending', 'sending', 'retryLater', 'accepted', 'duplicate')
+      ) duplicates
+      WHERE duplicate_no > 1
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_outbox_active_completion_owner_assignment
+      ON outbox_commands (owner_user_id, entity_local_id)
+      WHERE command_type = 'completePatrolAssignment'
+        AND entity_local_id IS NOT NULL
+        AND status IN ('pending', 'sending', 'retryLater', 'accepted', 'duplicate');
+  `);
 }
 
 async function ensureAssignmentSnapshotAndOutboxRecovery(db: SQLite.SQLiteDatabase) {
