@@ -935,11 +935,9 @@ describe("shared UI primitives", () => {
         />
         <EmployeeProfileDrawer
           employee={employee}
-          progress={0}
           onDeleteEmployee={vi.fn()}
           onEditEmployee={vi.fn()}
           onNavigate={vi.fn()}
-          onNotify={vi.fn()}
         />
       </>,
     );
@@ -948,8 +946,8 @@ describe("shared UI primitives", () => {
     expect(container.querySelector("table")).toBeNull();
     expect(screen.getByText("Основные данные")).toBeInTheDocument();
     expect(screen.getByText("Кадровая информация")).toBeInTheDocument();
-    expect(screen.getAllByText("Маршруты сегодня").length).toBeGreaterThan(0);
-    expect(screen.getByText("Мобильный вход")).toBeInTheDocument();
+    expect(screen.queryByText("Маршруты сегодня")).not.toBeInTheDocument();
+    expect(screen.queryByText("Мобильный вход")).not.toBeInTheDocument();
   });
 
   it("opens patrol result details on result row double click", async () => {

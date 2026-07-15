@@ -1,24 +1,20 @@
-import { Chip, EmptyState, Field, ProgressBar } from "../../../../shared/ui";
+import { Chip, EmptyState, Field } from "../../../../shared/ui";
 import type { EmployeeDirectoryItem, ScreenId } from "../../../../types";
 
 interface EmployeeProfileDrawerProps {
   canManage?: boolean;
   employee?: EmployeeDirectoryItem;
-  progress: number;
   onDeleteEmployee: (id: string) => void;
   onEditEmployee: (employee: EmployeeDirectoryItem) => void;
   onNavigate: (screen: ScreenId) => void;
-  onNotify: (message: string) => void;
 }
 
 export function EmployeeProfileDrawer({
   employee,
   canManage = true,
-  progress,
   onDeleteEmployee,
   onEditEmployee,
   onNavigate,
-  onNotify,
 }: EmployeeProfileDrawerProps) {
   return (
     <aside className="side-drawer profile-drawer">
@@ -47,27 +43,6 @@ export function EmployeeProfileDrawer({
             <button className="button ghost danger-text" disabled={!canManage} onClick={() => onDeleteEmployee(employee.id)} type="button">
               Деактивировать
             </button>
-          </div>
-
-          <div className="employee-profile-summary">
-            <div>
-              <span>Маршруты сегодня</span>
-              <strong>{employee.routesDone} / {employee.routesTotal}</strong>
-              <ProgressBar value={progress} />
-              <em>{progress >= 70 ? "В процессе" : "На смене"}</em>
-            </div>
-            <div>
-              <span>Мобильный вход</span>
-              <strong>{employee.mobileStatus}</strong>
-              <em>{employee.lastSeen || "Последний вход не указан"}</em>
-              <button
-                className="link-button danger-text"
-                onClick={() => onNotify("Блокировка входа будет выполнена через модуль мобильных аккаунтов")}
-                type="button"
-              >
-                Заблокировать вход
-              </button>
-            </div>
           </div>
 
           <section className="employee-profile-section">

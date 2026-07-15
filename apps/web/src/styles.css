@@ -24759,6 +24759,91 @@ body .app-shell:not(.sidebar-collapsed) .sidebar-submenu {
   }
 }
 
+/* Employees: compact directory without operational counters. */
+.screen-area .employees-screen > .metric-grid {
+  display: none;
+}
+
+.screen-area .employees-workspace .employee-roster-row {
+  grid-template-columns: minmax(220px, 1.25fr) minmax(180px, 1fr) minmax(140px, auto);
+}
+
+@media (max-width: 1500px) {
+  .screen-area .employees-workspace.two-column.wide-left {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .screen-area .employees-workspace .profile-drawer {
+    position: static;
+    display: grid;
+    grid-template-columns: minmax(240px, 0.8fr) repeat(2, minmax(260px, 1fr));
+    gap: 12px;
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .screen-area .employees-workspace .employee-profile-head,
+  .screen-area .employees-workspace .employee-profile-actions {
+    grid-column: 1;
+  }
+
+  .screen-area .employees-workspace .employee-profile-section {
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 1050px) {
+  .screen-area .employees-screen .employee-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .screen-area .employees-screen .employee-filters .wide-filter {
+    grid-column: 1 / -1;
+  }
+
+  .screen-area .employees-workspace .employee-roster-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .screen-area .employees-workspace .employee-roster-meta {
+    grid-column: 1;
+  }
+
+  .screen-area .employees-workspace .employee-roster-badges {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+
+  .screen-area .employees-workspace .profile-drawer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .screen-area .employees-workspace .employee-profile-head,
+  .screen-area .employees-workspace .employee-profile-actions {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .screen-area .employees-screen .employee-filters,
+  .screen-area .employees-workspace .profile-drawer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .screen-area .employees-workspace .employee-roster-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .screen-area .employees-workspace .employee-roster-meta,
+  .screen-area .employees-workspace .employee-roster-badges {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
+
 /* Sidebar monitor readability pass: larger adaptive navigation targets. */
 body .app-shell:not(.sidebar-collapsed) {
   grid-template-columns: clamp(252px, 15vw, 292px) minmax(0, 1fr);
@@ -25811,6 +25896,67 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
   }
 }
 
+/* Assignments: focused search, stable profile and usable persisted drafts. */
+.screen-area .assign-am-filters.assign-am-search-only {
+  grid-template-columns: minmax(280px, 680px);
+  justify-content: start;
+}
+
+.screen-area .assign-am-filters.assign-am-search-only .assign-am-search {
+  grid-column: 1;
+  width: 100%;
+}
+
+.screen-area .assign-am-history-profile .assign-am-avatar {
+  align-self: center;
+  box-sizing: border-box;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  padding: 0;
+  line-height: 1;
+}
+
+.screen-area .assign-am-drafts > div {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.screen-area .assign-am-draft-main {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr) 70px 88px;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+}
+
+.screen-area .assign-am-draft-delete {
+  min-height: 30px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff;
+  color: #b91c1c;
+  padding: 0 9px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+@media (max-width: 760px) {
+  .screen-area .assign-am-filters.assign-am-search-only {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .screen-area .assign-am-draft-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @keyframes page-soft-enter {
   from {
     opacity: 0;
@@ -26660,4 +26806,123 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
 .route-point-select:focus-visible {
   outline: 2px solid var(--primary, #2563eb);
   outline-offset: 3px;
+}
+
+/* Assignment request modal: one predictable scroll container and compact layout. */
+.screen-area .assign-am-modal-backdrop {
+  align-items: center;
+  overflow: hidden;
+  padding: clamp(12px, 2.5vh, 24px);
+  z-index: 1200;
+}
+
+.screen-area .assign-am-request-modal {
+  width: min(1120px, 100%);
+  height: min(760px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
+  grid-template-rows: auto minmax(0, 1fr);
+  border-radius: 16px;
+}
+
+.screen-area .assign-am-request-modal > header {
+  min-height: 68px;
+  padding: 14px 18px;
+  background: #fff;
+}
+
+.screen-area .assign-am-request-modal > header h2 {
+  font-size: clamp(18px, 1.5vw, 21px);
+  line-height: 1.2;
+}
+
+.screen-area .assign-am-request-modal-body {
+  align-items: start;
+  grid-template-columns: minmax(240px, 290px) minmax(0, 1fr);
+  gap: 14px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 14px;
+}
+
+.screen-area .assign-am-modal-route-picker,
+.screen-area .assign-am-request-modal .assign-am-panel.request {
+  max-height: none;
+  overflow: visible;
+}
+
+.screen-area .assign-am-modal-route-picker {
+  position: sticky;
+  top: 0;
+  padding: 12px;
+}
+
+.screen-area .assign-am-modal-route-picker .assign-am-list {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+}
+
+.screen-area .assign-am-request-modal .assign-am-panel.request {
+  padding: 14px;
+}
+
+.screen-area .assign-am-request-modal .assign-am-favorite-picker-list {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+}
+
+.screen-area .assign-am-request-modal .assign-am-form-actions {
+  bottom: -14px;
+  margin: 12px -14px -14px;
+  padding: 12px 14px;
+}
+
+@media (max-width: 1100px) {
+  .screen-area .assign-am-request-modal-body {
+    grid-template-columns: 1fr;
+  }
+
+  .screen-area .assign-am-modal-route-picker {
+    position: static;
+  }
+
+  .screen-area .assign-am-modal-route-picker .assign-am-list.routes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .screen-area .assign-am-modal-backdrop {
+    padding: 0;
+  }
+
+  .screen-area .assign-am-request-modal {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .screen-area .assign-am-request-modal > header {
+    padding: 12px 14px;
+  }
+
+  .screen-area .assign-am-request-modal > header p {
+    display: none;
+  }
+
+  .screen-area .assign-am-request-modal-body {
+    padding: 10px;
+  }
+
+  .screen-area .assign-am-request-modal .assign-am-form-actions {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
 }

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Chip, EmptyState, Panel, ProgressBar } from "../../../../shared/ui";
+import { Chip, EmptyState, Panel } from "../../../../shared/ui";
 import type { EmployeeDirectoryItem } from "../../../../types";
 
 interface EmployeeDirectoryPanelProps {
@@ -111,9 +111,7 @@ export function EmployeeDirectoryPanel({
 
       {filteredEmployees.length > 0 ? (
         <div className="employee-roster-list">
-          {filteredEmployees.map((employee) => {
-            const rowProgress = Math.round((employee.routesDone / Math.max(1, employee.routesTotal)) * 100);
-            return (
+          {filteredEmployees.map((employee) => (
               <button
                 className={`employee-roster-row ${selectedEmployeeId === employee.id ? "selected" : ""}`}
                 key={employee.id}
@@ -128,22 +126,15 @@ export function EmployeeDirectoryPanel({
                   </div>
                 </div>
                 <div className="employee-roster-meta">
-                  <span>{employee.personnelNo}</span>
                   <span>{employee.department || employee.zone}</span>
                   <span>{employee.employeeGroup || "Без группы"}</span>
-                </div>
-                <div className="employee-roster-progress">
-                  <span>Маршруты сегодня</span>
-                  <ProgressBar value={rowProgress} />
-                  <strong>{employee.routesDone} / {employee.routesTotal}</strong>
                 </div>
                 <div className="employee-roster-badges">
                   <Chip>{employee.status}</Chip>
                   <Chip>{employee.mobileStatus}</Chip>
                 </div>
               </button>
-            );
-          })}
+          ))}
         </div>
       ) : (
         <EmptyState

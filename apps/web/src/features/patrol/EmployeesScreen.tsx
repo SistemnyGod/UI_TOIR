@@ -1,14 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { EmployeeDirectoryPanel } from "./components/employees/EmployeeDirectoryPanel";
 import { EmployeeFormModal } from "./components/employees/EmployeeFormModal";
-import { EmployeeMetricsBar } from "./components/employees/EmployeeMetricsBar";
 import { EmployeeMobileAccessPanel } from "./components/employees/EmployeeMobileAccessPanel";
 import { EmployeeProfileDrawer } from "./components/employees/EmployeeProfileDrawer";
 import {
   employeesFallback,
   findEmployee,
-  getEmployeeMetrics,
-  getEmployeeRouteProgress,
 } from "../../repositories/employeesRepository";
 import {
   loadAssignmentFavoriteEmployeeIds,
@@ -55,8 +52,6 @@ export function EmployeesScreen({
   );
   const selected = findEmployee(employeeDirectory, selectedEmployeeId);
   const editedEmployee = formState?.mode === "edit" ? findEmployee(allEmployees, formState.employeeId) : undefined;
-  const metrics = getEmployeeMetrics(employeeDirectory);
-  const progress = getEmployeeRouteProgress(selected);
   const referenceOptions = useMemo(
     () => ({
       departments: uniqueValues(allEmployees.map((employee) => employee.department)),
@@ -128,11 +123,10 @@ export function EmployeesScreen({
   }
 
   return (
-    <div className="screen-stack">
-      <EmployeeMetricsBar metrics={metrics} />
+    <div className="screen-stack employees-screen">
       <EmployeeMobileAccessPanel onNavigate={onNavigate} onNotify={onNotify} />
 
-      <div className="two-column wide-left">
+      <div className="two-column wide-left employees-workspace">
         <EmployeeDirectoryPanel
           employees={employeeDirectory}
           canManage={canManage}
@@ -162,8 +156,6 @@ export function EmployeesScreen({
             setFormState({ mode: "edit", employeeId: employee.id });
           }}
           onNavigate={onNavigate}
-          onNotify={onNotify}
-          progress={progress}
         />
       </div>
       {formState ? (

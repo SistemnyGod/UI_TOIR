@@ -105,10 +105,20 @@ interface AssignmentScreenProps {
 interface LocalDraft {
   id: string;
   title: string;
+  employeeId: string;
   employeeName: string;
+  routeId: string;
   routeName: string;
+  plannedDate: string;
+  plannedStart: string;
+  priority: "high" | "medium" | "low";
+  comment: string;
+  requestId?: string;
   changedAt: string;
 }
+
+const ASSIGNMENT_DRAFTS_STORAGE_KEY = "patrol360.assignment-drafts.v1";
+const HISTORY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface PointCompletionDraft {
   routePointId: string;
@@ -176,17 +186,11 @@ export function AssignmentScreen({
   const defaultPeriodDate = toDateInput(new Date());
   const [selectedRequestId, setSelectedRequestId] = useState("");
   const [plannedDate, setPlannedDate] = useState(defaultPeriodDate);
-  const [periodFrom, setPeriodFrom] = useState(defaultPeriodDate);
-  const [periodTo, setPeriodTo] = useState(defaultPeriodDate);
-  const [periodDraftFrom, setPeriodDraftFrom] = useState(defaultPeriodDate);
-  const [periodDraftTo, setPeriodDraftTo] = useState(defaultPeriodDate);
-  const [periodOpen, setPeriodOpen] = useState(false);
   const [plannedStart, setPlannedStart] = useState("08:00");
   const [priority, setPriority] = useState<"high" | "medium" | "low">("high");
   const [comment, setComment] = useState("");
-  const [onlyAvailable, setOnlyAvailable] = useState(true);
   const [search, setSearch] = useState("");
-  const [drafts, setDrafts] = useState<LocalDraft[]>([]);
+  const [drafts, setDrafts] = useState<LocalDraft[]>(loadAssignmentDrafts);
   const [isCreatingRequest, setIsCreatingRequest] = useState(false);
   const [completionTarget, setCompletionTarget] = useState<ActivePatrol | null>(null);
   const [completionErrors, setCompletionErrors] = useState<Record<string, string>>({});
@@ -226,8 +230,7 @@ export function AssignmentScreen({
       if (!favoriteEmployeeSet.has(employee.id)) return false;
 
       const matchesSearch = !normalizedSearch || [employee.name, employee.role, employee.zone].join(" ").toLowerCase().includes(normalizedSearch);
-      const matchesAvailability = !onlyAvailable || employeeStatusText(employee.status) !== "Офлайн";
-      return matchesSearch && matchesAvailability;
+      return matchesSearch;
     })
     .sort((left, right) => {
       const leftFavorite = favoriteEmployeeSet.has(left.id) ? 0 : 1;
@@ -235,9 +238,7 @@ export function AssignmentScreen({
       if (leftFavorite !== rightFavorite) return leftFavorite - rightFavorite;
       return left.name.localeCompare(right.name, "ru");
     });
-  const visibleRoutes = routes.filter((route) => {
-    return !normalizedSearch || [route.name, route.zone, route.priority].join(" ").toLowerCase().includes(normalizedSearch);
-  });
+  const visibleRoutes = routes;
   const assignableRequests = useMemo(() => requests.filter(isAssignableRequest), [requests]);
   const referencePanelStatus = assignments.referenceStatus === "idle" ? "loading" : assignments.referenceStatus;
   const selectedEmployee = visibleEmployees.find((employee) => employee.id === selectedEmployeeId) ?? visibleEmployees[0];
@@ -344,30 +345,6 @@ export function AssignmentScreen({
       favoriteEmployeeIds: nextIds,
       shiftSettings,
     });
-  }
-
-  function openPeriodPicker() {
-    setPeriodDraftFrom(periodFrom);
-    setPeriodDraftTo(periodTo);
-    setPeriodOpen(true);
-  }
-
-  function applyPeriodPicker() {
-    const range = normalizeDateRange(periodDraftFrom, periodDraftTo);
-    setPeriodFrom(range.from);
-    setPeriodTo(range.to);
-    setPeriodDraftFrom(range.from);
-    setPeriodDraftTo(range.to);
-    setPlannedDate(range.from || range.to || plannedDate);
-    setPeriodOpen(false);
-  }
-
-  function clearPeriodPicker() {
-    setPeriodDraftFrom("");
-    setPeriodDraftTo("");
-    setPeriodFrom("");
-    setPeriodTo("");
-    setPeriodOpen(false);
   }
 
   async function handleAssign() {
@@ -496,10 +473,17 @@ export function AssignmentScreen({
 
     setDrafts((current) => [
       {
-        id: crypto.randomUUID(),
+        id: createLocalDraftId(),
         title: selectedRequest?.title || "Новая заявка на обход",
+        employeeId: selectedEmployee.id,
         employeeName: selectedEmployee.name,
+        routeId: selectedRoute.id,
         routeName: selectedRoute.name,
+        plannedDate,
+        plannedStart,
+        priority,
+        comment,
+        requestId: selectedRequest?.id,
         changedAt: new Intl.DateTimeFormat("ru-RU", { day: "2-digit", hour: "2-digit", minute: "2-digit", month: "2-digit" }).format(new Date()),
       },
       ...current.slice(0, 3),
@@ -507,35 +491,36 @@ export function AssignmentScreen({
     onNotify("Черновик назначения сохранен локально.");
   }
 
+  function openDraft(draft: LocalDraft) {
+    onSelectEmployee(draft.employeeId);
+    onSelectRoute(draft.routeId);
+    setPlannedDate(draft.plannedDate);
+    setPlannedStart(draft.plannedStart);
+    setPriority(draft.priority);
+    setComment(draft.comment);
+    setSelectedRequestId(draft.requestId ?? "");
+    setRequestModalOpen(true);
+  }
+
+  function deleteDraft(draftId: string) {
+    setDrafts((current) => current.filter((draft) => draft.id !== draftId));
+    onNotify("Черновик удален.");
+  }
+
+  useEffect(() => {
+    localStorage.setItem(ASSIGNMENT_DRAFTS_STORAGE_KEY, JSON.stringify(drafts));
+  }, [drafts]);
+
   return (
     <div className="assign-am-screen">
-      <section className="assign-am-filters">
-        <PeriodFilter
-          dateFrom={periodFrom}
-          dateTo={periodTo}
-          draftFrom={periodDraftFrom}
-          draftTo={periodDraftTo}
-          isOpen={periodOpen}
-          onApply={applyPeriodPicker}
-          onClear={clearPeriodPicker}
-          onDraftFromChange={setPeriodDraftFrom}
-          onDraftToChange={setPeriodDraftTo}
-          onOpen={openPeriodPicker}
-        />
-        <FilterBox label="Территория" value="Все территории" />
-        <FilterBox label="Смена" value="Все смены" />
-        <FilterBox label="Приоритет" value="Все приоритеты" />
+      <section className="assign-am-filters assign-am-search-only">
         <label className="assign-am-search">
           <input
             onChange={(event) => setSearch(event.currentTarget.value)}
-            placeholder="Поиск сотрудника или маршрута..."
+            placeholder="Поиск сотрудника по ФИО, должности или подразделению..."
             value={search}
           />
           <Search size={19} />
-        </label>
-        <label className="assign-am-toggle">
-          Только доступные
-          <input checked={onlyAvailable} onChange={(event) => setOnlyAvailable(event.currentTarget.checked)} type="checkbox" />
         </label>
       </section>
 
@@ -617,7 +602,7 @@ export function AssignmentScreen({
             saving={assignments.savingAssignmentId === completionTarget.id}
           />
         ) : null}
-        <DraftsCard drafts={drafts} />
+        <DraftsCard drafts={drafts} onDelete={deleteDraft} onOpen={openDraft} />
         <ConflictsCard
           conflicts={[
             ...(hasConflict ? [{ id: "selection", type: "danger" as const, title: "Конфликт выбора", description: "Проверьте загрузку сотрудника и маршрута перед отправкой.", time: "сейчас" }] : []),
@@ -1124,6 +1109,11 @@ function EmployeeHistoryPanel({
   const employeeRequests = employee
     ? requests.filter((request) => request.employeeId === employee.id || request.employee === employee.name)
     : [];
+  const historyCutoff = Date.now() - HISTORY_WINDOW_MS;
+  const recentAssignments = employeeAssignments.filter((assignment) =>
+    createAssignmentHistoryEvents(assignment).some((event) => event.sortAt >= historyCutoff),
+  );
+  const recentRequests = employeeRequests.filter((request) => parseRequestScheduledAt(request) >= historyCutoff);
   const activeAssignments = employeeAssignments.filter(isAssignmentCurrent);
   const assignmentRequestIds = new Set(activeAssignments.map((assignment) => assignment.patrolRequestId).filter(Boolean));
   const allAssignmentRequestIds = new Set(employeeAssignments.map((assignment) => assignment.patrolRequestId).filter(Boolean));
@@ -1156,8 +1146,8 @@ function EmployeeHistoryPanel({
       })),
   ].slice(0, 8);
   const historyEvents = [
-    ...employeeAssignments.flatMap((assignment) => createAssignmentHistoryEvents(assignment)),
-    ...employeeRequests
+    ...recentAssignments.flatMap((assignment) => createAssignmentHistoryEvents(assignment)),
+    ...recentRequests
       .filter((request) => !allAssignmentRequestIds.has(request.id))
       .map((request) => ({
         id: `request-${request.id}`,
@@ -1167,10 +1157,10 @@ function EmployeeHistoryPanel({
         status: request.status,
         title: request.title || "Заявка на обход",
       })),
-  ].sort((left, right) => right.sortAt - left.sortAt).slice(0, 8);
+  ].filter((event) => event.sortAt >= historyCutoff).sort((left, right) => right.sortAt - left.sortAt).slice(0, 8);
   const routeCount = new Set([
-    ...employeeAssignments.map((assignment) => assignment.route),
-    ...employeeRequests.map((request) => request.route),
+    ...recentAssignments.map((assignment) => assignment.route),
+    ...recentRequests.map((request) => request.route),
   ].filter(Boolean)).size;
 
   return (
@@ -1188,8 +1178,8 @@ function EmployeeHistoryPanel({
           </div>
           <div className="assign-am-history-stats">
             <span><strong>{activeRequestItems.length}</strong><small>действующих</small></span>
-            <span><strong>{employeeRequests.length}</strong><small>заявок</small></span>
-            <span><strong>{routeCount}</strong><small>маршрутов</small></span>
+            <span><strong>{recentRequests.length}</strong><small>заявок за 7 дней</small></span>
+            <span><strong>{routeCount}</strong><small>маршрутов за 7 дней</small></span>
           </div>
           {activeRequestItems.length ? (
             <div className="assign-am-history-actions">
@@ -1229,7 +1219,7 @@ function EmployeeHistoryPanel({
           {historyEvents.length ? (
             <div className="assign-am-history-list">
               <div className="assign-am-history-section-title">
-                <strong>Последние события</strong>
+                <strong>События за последние 7 дней</strong>
                 <span>{historyEvents.length}</span>
               </div>
               {historyEvents.map((event) => (
@@ -1280,6 +1270,15 @@ function RequestModal({
   routes: RouteOption[];
   selectedRouteId?: string;
 }) {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
   return (
     <div className="assign-am-modal-backdrop" onClick={onClose}>
       <section className="assign-am-request-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
@@ -1288,7 +1287,7 @@ function RequestModal({
             <h2>Создание заявки на обход</h2>
             <p>Выберите маршрут и заполните параметры назначения в одном окне.</p>
           </div>
-          <button className="assign-am-picker-close" onClick={onClose} type="button">×</button>
+          <button aria-label="Закрыть окно создания заявки" className="assign-am-picker-close" onClick={onClose} type="button">×</button>
         </header>
         <div className="assign-am-request-modal-body">
           <section className="assign-am-modal-route-picker">
@@ -1814,7 +1813,7 @@ function CompleteAssignmentModal({
   );
 }
 
-function DraftsCard({ drafts }: { drafts: LocalDraft[] }) {
+function DraftsCard({ drafts, onDelete, onOpen }: { drafts: LocalDraft[]; onDelete: (draftId: string) => void; onOpen: (draft: LocalDraft) => void }) {
   return (
     <section className="assign-am-card">
       <PanelHeader count={drafts.length} icon={FileText} title="Черновики" />
@@ -1822,10 +1821,13 @@ function DraftsCard({ drafts }: { drafts: LocalDraft[] }) {
         <div className="assign-am-drafts">
           {drafts.map((draft) => (
             <div key={draft.id}>
-              <strong>{draft.title}</strong>
-              <span>{draft.employeeName}</span>
-              <span>{draft.routeName}</span>
-              <small>{draft.changedAt}</small>
+              <button className="assign-am-draft-main" onClick={() => onOpen(draft)} type="button">
+                <strong>{draft.title}</strong>
+                <span>{draft.employeeName}</span>
+                <span>{draft.routeName}</span>
+                <small>{draft.changedAt}</small>
+              </button>
+              <button className="assign-am-draft-delete" onClick={() => onDelete(draft.id)} type="button">Удалить</button>
             </div>
           ))}
         </div>
@@ -1834,6 +1836,25 @@ function DraftsCard({ drafts }: { drafts: LocalDraft[] }) {
       )}
     </section>
   );
+}
+
+function loadAssignmentDrafts(): LocalDraft[] {
+  try {
+    const value = localStorage.getItem(ASSIGNMENT_DRAFTS_STORAGE_KEY);
+    if (!value) return [];
+    const parsed = JSON.parse(value) as LocalDraft[];
+    return Array.isArray(parsed) ? parsed.filter((draft) => draft?.id && draft.employeeId && draft.routeId).slice(0, 4) : [];
+  } catch {
+    return [];
+  }
+}
+
+function createLocalDraftId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function ConflictsCard({ conflicts }: { conflicts: Array<{ id: string; type: "danger" | "warning" | "info"; title: string; description: string; time: string }> }) {

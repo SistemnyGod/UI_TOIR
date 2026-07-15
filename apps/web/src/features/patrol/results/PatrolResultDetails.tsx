@@ -1,15 +1,11 @@
 import { useMemo, useState } from "react";
-import type React from "react";
 import {
   AlertTriangle,
-  Camera,
   CheckCircle2,
   Download,
   ExternalLink,
-  MapPinned,
   PlusCircle,
   ScanLine,
-  Timer,
   X,
 } from "lucide-react";
 import type { PatrolResult } from "../../../types";
@@ -91,17 +87,6 @@ export function PatrolResultDetails({
             </button>
           </div>
         </header>
-
-        <div className="results-review-modal-kpis">
-          <ModalKpi icon={<Timer size={18} />} label="Итог времени" value={group.duration.label} />
-          <ModalKpi icon={<ScanLine size={18} />} label="План обхода" value={plannedAt} />
-          <ModalKpi icon={<ScanLine size={18} />} label="Начало обхода" value={startedAt} />
-          <ModalKpi icon={<ScanLine size={18} />} label="Окончание обхода" value={finishedAt} />
-          <ModalKpi icon={<MapPinned size={18} />} label="Точек" value={`${group.points} / ${group.points}`} />
-          <ModalKpi icon={<CheckCircle2 size={18} />} label="Исправно" value={String(group.okPoints)} />
-          <ModalKpi icon={<AlertTriangle size={18} />} label="Неисправно" value={String(group.issuePoints)} />
-          <ModalKpi icon={<Camera size={18} />} label="Фото/видео" value={String(group.photos)} />
-        </div>
 
         <div className="results-review-modal-toolbar">
           <div className="results-review-tabs">
@@ -217,18 +202,6 @@ export function PatrolResultDetails({
           </button>
         </footer>
       </section>
-    </div>
-  );
-}
-
-function ModalKpi({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="results-review-modal-kpi">
-      <span>{icon}</span>
-      <div>
-        <small>{label}</small>
-        <strong>{value}</strong>
-      </div>
     </div>
   );
 }
