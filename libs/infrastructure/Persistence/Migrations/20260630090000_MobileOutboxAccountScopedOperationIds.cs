@@ -27,28 +27,30 @@ public partial class MobileOutboxAccountScopedOperationIds : Migration
             ALTER TABLE mobile_sync_conflict_resolutions
                 ALTER COLUMN mobile_account_id SET NOT NULL;
 
+            -- Older installations used PostgreSQL-generated lowercase names,
+            -- while newer ones used EF names. Drop constraints by type rather
+            -- than by name so an interrupted/manual deployment is recoverable.
             DO $$
             DECLARE
-                constraint_name text;
+                constraint_row record;
             BEGIN
-                SELECT conname INTO constraint_name
-                FROM pg_constraint
-                WHERE conrelid = 'mobile_sync_conflict_resolutions'::regclass
-                  AND contype = 'f'
-                  AND confrelid = 'mobile_outbox_operations'::regclass
-                LIMIT 1;
-
-                IF constraint_name IS NOT NULL THEN
+                FOR constraint_row IN
+                    SELECT conrelid::regclass AS table_name, conname
+                    FROM pg_constraint
+                    WHERE (conrelid = 'mobile_sync_conflict_resolutions'::regclass
+                           AND contype = 'f'
+                           AND confrelid = 'mobile_outbox_operations'::regclass)
+                       OR (conrelid IN (
+                               'mobile_sync_conflict_resolutions'::regclass,
+                               'mobile_outbox_operations'::regclass)
+                           AND contype = 'p')
+                LOOP
                     EXECUTE format(
-                        'ALTER TABLE mobile_sync_conflict_resolutions DROP CONSTRAINT %I',
-                        constraint_name);
-                END IF;
+                        'ALTER TABLE %s DROP CONSTRAINT IF EXISTS %I CASCADE',
+                        constraint_row.table_name,
+                        constraint_row.conname);
+                END LOOP;
             END $$;
-
-            ALTER TABLE mobile_sync_conflict_resolutions
-                DROP CONSTRAINT IF EXISTS "PK_mobile_sync_conflict_resolutions";
-            ALTER TABLE mobile_outbox_operations
-                DROP CONSTRAINT IF EXISTS "PK_mobile_outbox_operations";
 
             ALTER TABLE mobile_outbox_operations
                 ADD CONSTRAINT "PK_mobile_outbox_operations"
