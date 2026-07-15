@@ -37,7 +37,10 @@ internal sealed partial class EfPatrolStore
         if (!string.IsNullOrWhiteSpace(filter?.Status))
         {
             var status = filter.Status.Trim();
-            query = query.Where(request => request.Status == status);
+            var statusCode = PatrolStatusCodeMapper.ToRequestCode(status);
+            query = statusCode is null
+                ? query.Where(request => request.Status == status)
+                : query.Where(request => request.StatusCode == statusCode || request.Status == status);
         }
 
         if (filter?.DateFrom is not null)

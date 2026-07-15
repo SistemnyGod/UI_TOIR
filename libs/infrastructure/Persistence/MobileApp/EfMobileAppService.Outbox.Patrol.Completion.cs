@@ -24,6 +24,8 @@ internal sealed partial class EfMobileAppService
             .Include(item => item.Employee)
             .Include(item => item.Route)
                 .ThenInclude(route => route!.Points)
+            .Include(item => item.RouteRevision)
+                .ThenInclude(revision => revision!.Points)
             .FirstOrDefault(item => item.Id == assignmentId.Value);
         if (assignment is null || assignment.Route is null || assignment.PatrolRequest is null)
         {
@@ -58,7 +60,7 @@ internal sealed partial class EfMobileAppService
         var resultsByPoint = pointResults
             .GroupBy(result => result.PointId)
             .ToDictionary(group => group.Key, group => group.Last());
-        var routePointsByIdForValidation = assignment.Route.Points
+        var routePointsByIdForValidation = GetAssignedRoutePoints(assignment)
             .Where(IsMobileRoutePointVisible)
             .ToDictionary(point => point.Id);
         foreach (var point in routePointsByIdForValidation.Values.Where(point => point.IsRequired))
@@ -155,7 +157,9 @@ internal sealed partial class EfMobileAppService
                 return Conflict(command.ClientOperationId, "Patrol assignment was changed after mobile sync.");
             }
 
-            if (assignment.RouteVersionNo > 0 && assignment.Route.VersionNo != assignment.RouteVersionNo)
+            if (assignment.RouteRevisionId is null
+                && assignment.RouteVersionNo > 0
+                && assignment.Route.VersionNo != assignment.RouteVersionNo)
             {
                 return Conflict(command.ClientOperationId, "Patrol route was changed after assignment sync.");
             }
@@ -339,7 +343,11 @@ internal sealed partial class EfMobileAppService
         dbContext.PatrolResultAttachments.RemoveRange(existingResults.SelectMany(result => result.Attachments));
         dbContext.PatrolResults.RemoveRange(existingResults);
 
-        var routePointsById = assignment.Route?.Points.ToDictionary(point => point.Id) ?? [];
+        var routePointsById = GetAssignedRoutePoints(assignment).ToDictionary(point => point.Id);
+        var currentRoutePointIds = dbContext.RoutePoints
+            .Where(point => point.RouteId == assignment.RouteId)
+            .Select(point => point.Id)
+            .ToHashSet();
         var uploadedFiles = dbContext.MobileUploadedFiles
             .Where(file => file.MobileAccountId == account.Id && file.AssignmentId == assignment.Id)
             .ToArray();
@@ -377,7 +385,7 @@ internal sealed partial class EfMobileAppService
                 AssignmentId = assignment.Id,
                 EmployeeId = assignment.EmployeeId,
                 RouteId = assignment.RouteId,
-                RoutePointId = routePoint?.Id,
+                RoutePointId = routePoint is not null && currentRoutePointIds.Contains(routePoint.Id) ? routePoint.Id : null,
                 Status = BuildMobilePointResultStatus(pointResult),
                 PointName = routePoint?.Name ?? pointResult.PointId.ToString(),
                 EmployeeName = assignment.Employee?.FullName ?? assignment.PatrolRequest?.EmployeeName ?? string.Empty,

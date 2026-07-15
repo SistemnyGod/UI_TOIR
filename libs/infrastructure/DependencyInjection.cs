@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Patrol360.Application;
+using Patrol360.Infrastructure.Attachments;
 using Patrol360.Infrastructure.MobilePush;
 using Patrol360.Infrastructure.Persistence;
 
@@ -21,6 +22,7 @@ public static class DependencyInjection
             .UseNpgsql(connectionString)
             .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning)));
         services.AddMemoryCache();
+        services.AddSingleton<IAttachmentStore>(new LocalAttachmentStore(configuration));
         services.AddSingleton<IPatrolTimeZone>(new PatrolTimeZone(ResolvePatrolTimeZone(configuration)));
 
         var dataProtection = services

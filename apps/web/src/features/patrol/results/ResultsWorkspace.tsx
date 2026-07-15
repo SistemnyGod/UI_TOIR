@@ -48,7 +48,8 @@ const FILTERS: Array<{ id: ResultMode; label: string }> = [
 ];
 
 const showResultInspector = false;
-const MAX_VALID_PATROL_DURATION_MINUTES = 24 * 60;
+const MIN_VALID_PATROL_DURATION_MINUTES = 1;
+const MAX_VALID_PATROL_DURATION_MINUTES = 12 * 60;
 const CONTEXT_PANEL_WIDTH = 220;
 const CONTEXT_PANEL_HEIGHT = 132;
 const RESULT_VISIBILITY_STORAGE_KEY = "patrol360.results.hiddenGroups.v1";
@@ -320,7 +321,7 @@ export function ResultsWorkspace({
         <MetricCard icon={FileText} title="Всего обходов" value={metrics.total} caption="По текущей выборке" />
         <MetricCard icon={AlertTriangle} title="С замечаниями" value={metrics.issues} caption="Есть неисправности или ручные исключения" tone="orange" />
         <MetricCard icon={Camera} title="С медиа" value={metrics.withPhotos} caption="Есть фото или видео" />
-        <MetricCard icon={Timer} title="Среднее время" value={metrics.averageDuration} caption="По валидным длительностям" />
+        <MetricCard icon={Timer} title="Среднее время" value={metrics.averageDuration} caption={metrics.durationQualityLabel} />
         <MetricCard icon={CheckCircle2} title="Без замечаний" value={metrics.clean} caption="Точки закрыты без проблем" tone="green" />
       </section>
 
@@ -714,16 +715,20 @@ function StatusPill({ issue }: { issue: boolean }) {
   );
 }
 
-function buildMetrics(groups: ResultGroup[]) {
+export function buildMetrics(groups: ResultGroup[]) {
   const total = groups.length;
   const issues = groups.filter((group) => group.issuePoints > 0 || group.issues > 0).length;
   const withPhotos = groups.filter((group) => group.photos > 0).length;
   const clean = total - issues;
   const validDurations = groups.map((group) => group.duration.minutes).filter((minutes): minutes is number => typeof minutes === "number");
+  const excludedDurations = total - validDurations.length;
   const averageDuration =
     validDurations.length > 0 ? formatDuration(Math.round(validDurations.reduce((sum, value) => sum + value, 0) / validDurations.length)) : "нет данных";
+  const durationQualityLabel = excludedDurations > 0
+    ? `${validDurations.length} из ${total}; исключено ${excludedDurations}`
+    : `${validDurations.length} из ${total} валидных длительностей`;
 
-  return { averageDuration, clean, issues, total, withPhotos };
+  return { averageDuration, clean, durationQualityLabel, excludedDurations, issues, total, validDurationCount: validDurations.length, withPhotos };
 }
 
 export function buildCounters(groups: ResultGroup[]): Record<ResultMode, number> {
@@ -878,7 +883,7 @@ export function summarizeDuration(start?: string, finish?: string): DurationSumm
     return { label: "нет данных", hint: "Нет времени начала или окончания", tone: "muted" };
   }
 
-  if (minutes > MAX_VALID_PATROL_DURATION_MINUTES) {
+  if (minutes < MIN_VALID_PATROL_DURATION_MINUTES || minutes > MAX_VALID_PATROL_DURATION_MINUTES) {
     return { label: "нет данных", hint: "Длительность вне допустимого диапазона", tone: "warning" };
   }
 

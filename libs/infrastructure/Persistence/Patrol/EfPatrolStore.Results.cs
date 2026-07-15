@@ -22,7 +22,7 @@ internal sealed partial class EfPatrolStore
         }
 
         var status = NormalizeResultStatus(request.Status);
-        var routePoints = assignment.Route?.Points
+        var routePoints = GetCompletionRoutePoints(assignment)
             .Where(IsRoutePointVisibleForCompletion)
             .OrderBy(point => point.SequenceNo)
             .ToList() ?? [];
@@ -48,6 +48,7 @@ internal sealed partial class EfPatrolStore
         }
         else
         {
+            TrackObsoleteAttachments(result.Attachments);
             dbContext.Set<PatrolResultIssueEntity>().RemoveRange(result.Issues);
             dbContext.Set<PatrolResultAttachmentEntity>().RemoveRange(result.Attachments);
         }
@@ -55,7 +56,9 @@ internal sealed partial class EfPatrolStore
         result.AssignmentId = assignment.Id;
         result.EmployeeId = assignment.EmployeeId;
         result.RouteId = assignment.RouteId;
-        result.RoutePointId = selectedPoint?.Id;
+        result.RoutePointId = selectedPoint is not null && dbContext.RoutePoints.Any(point => point.Id == selectedPoint.Id)
+            ? selectedPoint.Id
+            : null;
         result.Status = status;
         result.PointName = selectedPoint?.Name ?? assignment.Route?.Name ?? string.Empty;
         result.EmployeeName = assignment.Employee?.FullName ?? assignment.PatrolRequest?.EmployeeName ?? string.Empty;
@@ -93,12 +96,14 @@ internal sealed partial class EfPatrolStore
     {
         var existingResults = dbContext.PatrolResults
             .Include(item => item.Issues)
+            .Include(item => item.Attachments)
             .Where(item => item.AssignmentId == assignment.Id)
             .ToList();
+        TrackObsoleteAttachments(existingResults.SelectMany(result => result.Attachments));
         dbContext.Set<PatrolResultIssueEntity>().RemoveRange(existingResults.SelectMany(result => result.Issues));
         dbContext.PatrolResults.RemoveRange(existingResults);
 
-        var routePoints = assignment.Route?.Points
+        var routePoints = GetCompletionRoutePoints(assignment)
             .Where(IsRoutePointVisibleForCompletion)
             .OrderBy(point => point.SequenceNo)
             .ToDictionary(point => point.Id) ?? [];
@@ -116,7 +121,9 @@ internal sealed partial class EfPatrolStore
                 CreatedAt = operationAt,
                 EmployeeId = assignment.EmployeeId,
                 RouteId = assignment.RouteId,
-                RoutePointId = selectedPoint?.Id,
+                RoutePointId = selectedPoint is not null && dbContext.RoutePoints.Any(point => point.Id == selectedPoint.Id)
+                    ? selectedPoint.Id
+                    : null,
                 Status = status,
                 PointName = selectedPoint?.Name ?? assignment.Route?.Name ?? string.Empty,
                 EmployeeName = assignment.Employee?.FullName ?? assignment.PatrolRequest?.EmployeeName ?? string.Empty,
@@ -310,9 +317,6 @@ internal sealed partial class EfPatrolStore
             return;
         }
 
-        var storageDirectory = Path.Combine(AppContext.BaseDirectory, "mobile-files");
-        Directory.CreateDirectory(storageDirectory);
-
         foreach (var attachment in attachments)
         {
             if (!TryDecodePhotoBase64(attachment.DataBase64, out var bytes))
@@ -322,7 +326,7 @@ internal sealed partial class EfPatrolStore
 
             var fileName = SanitizeAttachmentFileName(attachment.FileName);
             var storageFileName = $"desktop-{result.Id:N}-{Guid.NewGuid():N}-{fileName}";
-            File.WriteAllBytes(Path.Combine(storageDirectory, storageFileName), bytes);
+            stagedAttachments.Add(attachmentStore.Stage(storageFileName, bytes));
 
             result.Attachments.Add(new PatrolResultAttachmentEntity
             {
@@ -332,6 +336,18 @@ internal sealed partial class EfPatrolStore
                 SizeBytes = bytes.LongLength,
                 CreatedAt = operationAt
             });
+        }
+    }
+
+    private void TrackObsoleteAttachments(IEnumerable<PatrolResultAttachmentEntity> attachments)
+    {
+        foreach (var attachment in attachments)
+        {
+            var storageKey = Path.GetFileName(attachment.FileName);
+            if (!string.IsNullOrWhiteSpace(storageKey))
+            {
+                obsoleteAttachmentKeys.Add(storageKey);
+            }
         }
     }
 

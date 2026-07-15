@@ -11,7 +11,7 @@ public sealed class ResultsV2Controller(IPatrolResultQuery resultQuery) : Contro
 {
     [HttpGet]
     [RequirePermission("results.read")]
-    public ActionResult<ResultPageDto> List(
+    public async Task<IActionResult> List(
         [FromQuery] string? status,
         [FromQuery] Guid? routeId,
         [FromQuery] Guid? employeeId,
@@ -21,9 +21,10 @@ public sealed class ResultsV2Controller(IPatrolResultQuery resultQuery) : Contro
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 100,
         [FromQuery] string? query = null,
-        [FromQuery] bool? hasPhotos = null)
+        [FromQuery] bool? hasPhotos = null,
+        CancellationToken cancellationToken = default)
     {
         var filter = new ResultFilterDto(status, routeId, employeeId, dateFrom, dateTo, assignmentId, query, hasPhotos);
-        return Ok(resultQuery.GetResultsPage(filter, page, pageSize));
+        return Ok(await resultQuery.GetResultsPageAsync(filter, page, pageSize, cancellationToken));
     }
 }

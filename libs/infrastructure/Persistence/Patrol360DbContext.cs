@@ -5,9 +5,25 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> options) : DbContext(options)
 {
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        SynchronizePatrolStatusCodes();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        SynchronizePatrolStatusCodes();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     public DbSet<RouteEntity> Routes => Set<RouteEntity>();
 
     public DbSet<RoutePointEntity> RoutePoints => Set<RoutePointEntity>();
+
+    public DbSet<RouteRevisionEntity> RouteRevisions => Set<RouteRevisionEntity>();
+
+    public DbSet<RouteRevisionPointEntity> RouteRevisionPoints => Set<RouteRevisionPointEntity>();
 
     public DbSet<EmployeeEntity> Employees => Set<EmployeeEntity>();
 
@@ -157,10 +173,32 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
 
     public DbSet<EmployeePresenceIntervalEntity> EmployeePresenceIntervals => Set<EmployeePresenceIntervalEntity>();
 
+    private void SynchronizePatrolStatusCodes()
+    {
+        foreach (var entry in ChangeTracker.Entries<AssignmentEntity>()
+                     .Where(entry => entry.State is EntityState.Added or EntityState.Modified))
+        {
+            entry.Entity.StatusCode = PatrolStatusCodeMapper.ToAssignmentCode(entry.Entity.Status);
+        }
+
+        foreach (var entry in ChangeTracker.Entries<PatrolRequestEntity>()
+                     .Where(entry => entry.State is EntityState.Added or EntityState.Modified))
+        {
+            entry.Entity.StatusCode = PatrolStatusCodeMapper.ToRequestCode(entry.Entity.Status);
+        }
+
+        foreach (var entry in ChangeTracker.Entries<PatrolResultEntity>()
+                     .Where(entry => entry.State is EntityState.Added or EntityState.Modified))
+        {
+            entry.Entity.StatusCode = PatrolStatusCodeMapper.ToResultCode(entry.Entity.Status);
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureRoutes(modelBuilder);
         ConfigureRoutePoints(modelBuilder);
+        ConfigureRouteRevisions(modelBuilder);
         ConfigureEmployees(modelBuilder);
         ConfigureAccountingEmployeeReferences(modelBuilder);
         ConfigurePatrolRequests(modelBuilder);
@@ -257,6 +295,56 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
         });
     }
 
+    private static void ConfigureRouteRevisions(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<RouteRevisionEntity>(entity =>
+        {
+            entity.ToTable("route_revisions");
+            entity.HasKey(revision => revision.Id);
+            entity.Property(revision => revision.Id).HasColumnName("id");
+            entity.Property(revision => revision.RouteId).HasColumnName("route_id");
+            entity.Property(revision => revision.VersionNo).HasColumnName("version_no");
+            entity.Property(revision => revision.Name).HasColumnName("name").HasMaxLength(160).IsRequired();
+            entity.Property(revision => revision.Territory).HasColumnName("territory").HasMaxLength(160).IsRequired();
+            entity.Property(revision => revision.CreatedAt).HasColumnName("created_at");
+            entity.HasOne(revision => revision.Route)
+                .WithMany(route => route.Revisions)
+                .HasForeignKey(revision => revision.RouteId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(revision => new { revision.RouteId, revision.VersionNo })
+                .IsUnique()
+                .HasDatabaseName("ux_route_revisions_route_version");
+        });
+
+        modelBuilder.Entity<RouteRevisionPointEntity>(entity =>
+        {
+            entity.ToTable("route_revision_points");
+            entity.HasKey(point => point.Id);
+            entity.Property(point => point.Id).HasColumnName("id");
+            entity.Property(point => point.RouteRevisionId).HasColumnName("route_revision_id");
+            entity.Property(point => point.SourceRoutePointId).HasColumnName("source_route_point_id");
+            entity.Property(point => point.SequenceNo).HasColumnName("seq_no");
+            entity.Property(point => point.Name).HasColumnName("name").HasMaxLength(160).IsRequired();
+            entity.Property(point => point.Zone).HasColumnName("zone").HasMaxLength(160).IsRequired();
+            entity.Property(point => point.Type).HasColumnName("point_type").HasMaxLength(80).IsRequired();
+            entity.Property(point => point.Tag).HasColumnName("tag").HasMaxLength(80).IsRequired();
+            entity.Property(point => point.NfcCode).HasColumnName("nfc_code").HasMaxLength(80);
+            entity.Property(point => point.IsRequired).HasColumnName("is_required");
+            entity.Property(point => point.RequiresPhoto).HasColumnName("requires_photo");
+            entity.Property(point => point.Status).HasColumnName("status").HasMaxLength(60).IsRequired();
+            entity.HasOne(point => point.RouteRevision)
+                .WithMany(revision => revision.Points)
+                .HasForeignKey(point => point.RouteRevisionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(point => new { point.RouteRevisionId, point.SequenceNo })
+                .IsUnique()
+                .HasDatabaseName("ux_route_revision_points_revision_seq");
+            entity.HasIndex(point => new { point.RouteRevisionId, point.SourceRoutePointId })
+                .IsUnique()
+                .HasDatabaseName("ux_route_revision_points_revision_source");
+        });
+    }
+
     private static void ConfigureEmployees(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<EmployeeEntity>(entity =>
@@ -327,6 +415,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(request => request.NotifyEmployee).HasColumnName("notify_employee");
             entity.Property(request => request.NotificationText).HasColumnName("notification_text").HasMaxLength(1000).IsRequired();
             entity.Property(request => request.Status).HasColumnName("status").HasMaxLength(60).IsRequired();
+            entity.Property(request => request.StatusCode).HasColumnName("status_code").HasMaxLength(40);
             entity.Property(request => request.CreatedAt).HasColumnName("created_at");
             entity.Property(request => request.Description).HasColumnName("description").HasMaxLength(1200).IsRequired();
 
@@ -350,6 +439,9 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
                 .HasDatabaseName("ux_patrol_requests_number");
 
             entity.HasIndex(request => request.Status).HasDatabaseName("ix_patrol_requests_status");
+            entity.HasIndex(request => request.StatusCode).HasDatabaseName("ix_patrol_requests_status_code");
+            entity.HasIndex(request => new { request.ScheduledDate, request.StatusCode })
+                .HasDatabaseName("ix_patrol_requests_scheduled_date_status_code");
             entity.HasIndex(request => request.ScheduledDate).HasDatabaseName("ix_patrol_requests_scheduled_date");
             entity.HasIndex(request => request.SourceResultId).HasDatabaseName("ix_patrol_requests_source_result_id");
         });
@@ -368,6 +460,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(result => result.EmployeeId).HasColumnName("employee_id");
             entity.Property(result => result.RoutePointId).HasColumnName("route_point_id");
             entity.Property(result => result.Status).HasColumnName("status").HasMaxLength(80).IsRequired();
+            entity.Property(result => result.StatusCode).HasColumnName("status_code").HasMaxLength(40);
             entity.Property(result => result.PointName).HasColumnName("point_name").HasMaxLength(160).IsRequired();
             entity.Property(result => result.EmployeeName).HasColumnName("employee_name").HasMaxLength(220).IsRequired();
             entity.Property(result => result.RouteName).HasColumnName("route_name").HasMaxLength(160).IsRequired();
@@ -406,9 +499,12 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(result => result.Status).HasDatabaseName("ix_patrol_results_status");
+            entity.HasIndex(result => result.StatusCode).HasDatabaseName("ix_patrol_results_status_code");
             entity.HasIndex(result => result.RouteId).HasDatabaseName("ix_patrol_results_route_id");
             entity.HasIndex(result => result.EmployeeId).HasDatabaseName("ix_patrol_results_employee_id");
             entity.HasIndex(result => result.ActualAt).HasDatabaseName("ix_patrol_results_actual_at");
+            entity.HasIndex(result => new { result.ActualAt, result.AssignmentId })
+                .HasDatabaseName("ix_patrol_results_actual_at_assignment_id");
         });
     }
 
@@ -471,9 +567,11 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(assignment => assignment.PatrolRequestId).HasColumnName("patrol_request_id");
             entity.Property(assignment => assignment.RouteId).HasColumnName("route_id");
             entity.Property(assignment => assignment.RouteVersionNo).HasColumnName("route_version_no");
+            entity.Property(assignment => assignment.RouteRevisionId).HasColumnName("route_revision_id");
             entity.Property(assignment => assignment.EmployeeId).HasColumnName("employee_id");
             entity.Property(assignment => assignment.Shift).HasColumnName("shift").HasMaxLength(40).IsRequired();
             entity.Property(assignment => assignment.Status).HasColumnName("status").HasMaxLength(60).IsRequired();
+            entity.Property(assignment => assignment.StatusCode).HasColumnName("status_code").HasMaxLength(40);
             entity.Property(assignment => assignment.PlannedAt).HasColumnName("planned_at");
             entity.Property(assignment => assignment.StartedAt).HasColumnName("started_at");
             entity.Property(assignment => assignment.FinishedAt).HasColumnName("finished_at");
@@ -490,6 +588,11 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
                 .HasForeignKey(assignment => assignment.RouteId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne(assignment => assignment.RouteRevision)
+                .WithMany()
+                .HasForeignKey(assignment => assignment.RouteRevisionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasOne(assignment => assignment.Employee)
                 .WithMany(employee => employee.Assignments)
                 .HasForeignKey(assignment => assignment.EmployeeId)
@@ -497,8 +600,13 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
 
             entity.HasIndex(assignment => new { assignment.EmployeeId, assignment.Status })
                 .HasDatabaseName("ix_assignments_employee_status");
+            entity.HasIndex(assignment => new { assignment.EmployeeId, assignment.StatusCode })
+                .HasDatabaseName("ix_assignments_employee_status_code");
+            entity.HasIndex(assignment => new { assignment.PlannedAt, assignment.StatusCode })
+                .HasDatabaseName("ix_assignments_planned_at_status_code");
 
             entity.HasIndex(assignment => assignment.RouteId).HasDatabaseName("ix_assignments_route_id");
+            entity.HasIndex(assignment => assignment.RouteRevisionId).HasDatabaseName("ix_assignments_route_revision_id");
             entity.HasIndex(assignment => assignment.PlannedAt).HasDatabaseName("ix_assignments_planned_at");
         });
     }

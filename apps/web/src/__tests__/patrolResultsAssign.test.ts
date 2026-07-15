@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAssignmentHistoryEvents, formatAssignmentActionTime } from "../features/patrol/assignments/assignmentDateUtils";
 import { assignmentStatusText, isAssignmentCurrent } from "../features/patrol/assignments/assignmentUtils";
-import { buildCounters, buildResultGroups, filterGroups, summarizeDuration } from "../features/patrol/results/ResultsWorkspace";
+import { buildCounters, buildMetrics, buildResultGroups, filterGroups, summarizeDuration } from "../features/patrol/results/ResultsWorkspace";
 import { isImageAttachment, isVideoAttachment } from "../features/patrol/results/ResultMediaViewer";
 import { applyLocalAssignmentCommand } from "../hooks/useAssignmentsWorkspace";
 import type { ActivePatrol, PatrolResult, PatrolResultAttachment } from "../types";
@@ -27,6 +27,22 @@ describe("patrol results and assignment stabilization", () => {
     expect(summarizeDuration("29.06.2026, 08:00", undefined).label).toBe("нет данных");
     expect(summarizeDuration(undefined, "29.06.2026, 09:00").label).toBe("нет данных");
     expect(summarizeDuration("29.06.2026, 08:00", "29.06.2026, 09:30").label).toBe("1 ч 30 мин");
+    expect(summarizeDuration("29.06.2026, 08:00", "29.06.2026, 08:00").tone).toBe("warning");
+    expect(summarizeDuration("29.06.2026, 08:00", "29.06.2026, 21:00").tone).toBe("warning");
+  });
+
+  it("reports the duration sample size and excluded outliers", () => {
+    const groups = buildResultGroups([
+      createResult("valid", { assignmentId: "assignment-valid", actualAt: "29.06.2026, 09:30", startedAt: "29.06.2026, 08:00", finishedAt: "29.06.2026, 09:30" }),
+      createResult("outlier", { assignmentId: "assignment-outlier", actualAt: "29.06.2026, 21:00", startedAt: "29.06.2026, 08:00", finishedAt: "29.06.2026, 21:00" }),
+    ]);
+
+    expect(buildMetrics(groups)).toEqual(expect.objectContaining({
+      averageDuration: "1 ч 30 мин",
+      durationQualityLabel: "1 из 2; исключено 1",
+      excludedDurations: 1,
+      validDurationCount: 1,
+    }));
   });
 
   it("detects image and video attachments without treating unknown files as previewable media", () => {

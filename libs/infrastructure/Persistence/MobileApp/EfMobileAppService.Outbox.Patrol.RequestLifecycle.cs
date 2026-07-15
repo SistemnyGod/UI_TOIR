@@ -63,6 +63,8 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Employee or route is no longer available.");
         }
 
+        var routeRevision = GetOrCreateCurrentRouteRevision(route);
+
         var startedAt = ReadDateTimeOffset(command.Payload, "takenAtLocal") ?? DateTimeOffset.UtcNow;
         var assignment = new AssignmentEntity
         {
@@ -71,6 +73,8 @@ internal sealed partial class EfMobileAppService
             EmployeeId = employee.Id,
             RouteId = route.Id,
             RouteVersionNo = route.VersionNo,
+            RouteRevisionId = routeRevision.Id,
+            RouteRevision = routeRevision,
             Shift = string.IsNullOrWhiteSpace(employee.Shift) ? "-" : employee.Shift,
             Status = AssignmentStatusValues.InProgress,
             PlannedAt = BuildPlannedStartAt(patrolRequest.ScheduledDate, patrolRequest.ScheduledTime),
@@ -174,6 +178,8 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Employee or route is no longer available.");
         }
 
+        var routeRevision = GetOrCreateCurrentRouteRevision(route);
+
         var assignment = new AssignmentEntity
         {
             Id = clientAssignmentId,
@@ -181,6 +187,8 @@ internal sealed partial class EfMobileAppService
             EmployeeId = employee.Id,
             RouteId = route.Id,
             RouteVersionNo = route.VersionNo,
+            RouteRevisionId = routeRevision.Id,
+            RouteRevision = routeRevision,
             Shift = string.IsNullOrWhiteSpace(employee.Shift) ? "-" : employee.Shift,
             Status = AssignmentStatusValues.Accepted,
             PlannedAt = BuildPlannedStartAt(patrolRequest.ScheduledDate, patrolRequest.ScheduledTime),

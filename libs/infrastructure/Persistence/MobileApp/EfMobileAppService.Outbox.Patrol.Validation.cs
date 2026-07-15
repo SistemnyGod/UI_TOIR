@@ -47,6 +47,8 @@ internal sealed partial class EfMobileAppService
         var assignment = dbContext.Assignments
             .Include(item => item.Route)
                 .ThenInclude(route => route!.Points)
+            .Include(item => item.RouteRevision)
+                .ThenInclude(revision => revision!.Points)
             .FirstOrDefault(item => item.Id == assignmentId);
 
         if (assignment is null || assignment.Route is null)
@@ -59,7 +61,7 @@ internal sealed partial class EfMobileAppService
             return AssignmentPointValidation.Fail(Conflict(clientOperationId, "Assignment belongs to another employee."));
         }
 
-        var point = assignment.Route.Points.FirstOrDefault(item => item.Id == pointId);
+        var point = GetAssignedRoutePoints(assignment).FirstOrDefault(item => item.Id == pointId);
         if (point is null)
         {
             return AssignmentPointValidation.Fail(Conflict(clientOperationId, "Patrol point is not part of assignment route."));

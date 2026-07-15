@@ -41,7 +41,10 @@ internal sealed partial class EfPatrolStore
         if (!string.IsNullOrWhiteSpace(filter?.Status))
         {
             var status = filter.Status.Trim();
-            query = query.Where(assignment => assignment.Status == status);
+            var statusCode = PatrolStatusCodeMapper.ToAssignmentCode(status);
+            query = statusCode is null
+                ? query.Where(assignment => assignment.Status == status)
+                : query.Where(assignment => assignment.StatusCode == statusCode || assignment.Status == status);
         }
 
         if (filter?.DateFrom is not null)
@@ -179,6 +182,7 @@ internal sealed partial class EfPatrolStore
         var plannedAt = request.PlannedAt!.Value.ToUniversalTime();
         var shouldNotify = request.NotifyEmployee || confirmedPatrolRequest.NotifyEmployee;
         var notificationText = NormalizeOptionalText(request.NotificationText, confirmedPatrolRequest.NotificationText);
+        var routeRevision = GetOrCreateCurrentRouteRevision(confirmedRoute);
 
         confirmedPatrolRequest.Status = AssignmentStatusValues.Assigned;
         confirmedPatrolRequest.NotifyEmployee = shouldNotify;
@@ -197,6 +201,8 @@ internal sealed partial class EfPatrolStore
             EmployeeId = confirmedEmployee.Id,
             RouteId = confirmedRoute.Id,
             RouteVersionNo = confirmedRoute.VersionNo,
+            RouteRevisionId = routeRevision.Id,
+            RouteRevision = routeRevision,
             Shift = string.IsNullOrWhiteSpace(request.Shift) ? confirmedEmployee.Shift : request.Shift!.Trim(),
             Status = shouldNotify ? AssignmentStatusValues.Waiting : AssignmentStatusValues.Assigned,
             PlannedAt = plannedAt,
@@ -324,7 +330,7 @@ internal sealed partial class EfPatrolStore
                     return new AssignmentCommandResult(MapAssignment(assignment), false, "Результат обхода не сохранен.", BuildRouteVersionConflictErrors());
                 }
 
-                var backfillErrors = ValidateCompleteAssignment(request, assignment.Route?.Points);
+                var backfillErrors = ValidateCompleteAssignment(request, GetCompletionRoutePoints(assignment));
                 if (backfillErrors.Count > 0)
                 {
                     return new AssignmentCommandResult(MapAssignment(assignment), false, "Результат обхода не сохранен.", backfillErrors);
@@ -356,7 +362,7 @@ internal sealed partial class EfPatrolStore
             return new AssignmentCommandResult(MapAssignment(assignment), false, "Результат обхода не сохранен.", BuildRouteVersionConflictErrors());
         }
 
-        var errors = ValidateCompleteAssignment(request, assignment.Route?.Points);
+        var errors = ValidateCompleteAssignment(request, GetCompletionRoutePoints(assignment));
         if (errors.Count > 0)
         {
             return new AssignmentCommandResult(MapAssignment(assignment), false, "Результат обхода не сохранен.", errors);
@@ -406,6 +412,8 @@ internal sealed partial class EfPatrolStore
             .Include(assignment => assignment.Employee)
             .Include(assignment => assignment.Route)
             .ThenInclude(route => route!.Points)
+            .Include(assignment => assignment.RouteRevision)
+            .ThenInclude(revision => revision!.Points)
             .Include(assignment => assignment.PatrolRequest)
             .FirstOrDefault(assignment => assignment.Id == id);
 
@@ -617,7 +625,8 @@ internal sealed partial class EfPatrolStore
     }
 
     private static bool HasRouteVersionConflict(AssignmentEntity assignment) =>
-        assignment.Route is not null
+        assignment.RouteRevisionId is null
+        && assignment.Route is not null
         && assignment.RouteVersionNo > 0
         && assignment.Route.VersionNo != assignment.RouteVersionNo;
 

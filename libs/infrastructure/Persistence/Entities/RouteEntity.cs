@@ -25,4 +25,6 @@ internal sealed class RouteEntity
     public DateTimeOffset CreatedAt { get; set; }
 
     public List<RoutePointEntity> Points { get; set; } = [];
+
+    public List<RouteRevisionEntity> Revisions { get; set; } = [];
 }

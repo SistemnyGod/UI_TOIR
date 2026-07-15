@@ -8,6 +8,12 @@ public interface IPatrolResultQuery
 
     ResultPageDto GetResultsPage(ResultFilterDto filter, int page = 1, int pageSize = 100);
 
+    Task<ResultPageDto> GetResultsPageAsync(ResultFilterDto filter, int page = 1, int pageSize = 100, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetResultsPage(filter, page, pageSize));
+    }
+
     ResultExportFileDto ExportResults(ResultFilterDto filter);
 
     ResultDetailDto? GetResult(Guid id);

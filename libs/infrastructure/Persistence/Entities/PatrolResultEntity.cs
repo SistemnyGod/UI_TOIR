@@ -14,6 +14,8 @@ internal sealed class PatrolResultEntity
 
     public string Status { get; set; } = string.Empty;
 
+    public string? StatusCode { get; set; }
+
     public string PointName { get; set; } = string.Empty;
 
     public string EmployeeName { get; set; } = string.Empty;

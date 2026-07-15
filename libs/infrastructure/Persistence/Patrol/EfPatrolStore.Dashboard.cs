@@ -81,7 +81,34 @@ internal sealed partial class EfPatrolStore
 
     private void SaveChangesAndInvalidateDashboardSummary()
     {
-        dbContext.SaveChanges();
-        dashboardCache.Remove(DashboardSummaryCacheKey);
+        try
+        {
+            foreach (var attachment in stagedAttachments)
+            {
+                attachmentStore.Commit(attachment);
+            }
+
+            dbContext.SaveChanges();
+            foreach (var storageKey in obsoleteAttachmentKeys)
+            {
+                attachmentStore.Delete(storageKey);
+            }
+
+            dashboardCache.Remove(DashboardSummaryCacheKey);
+        }
+        catch
+        {
+            foreach (var attachment in stagedAttachments)
+            {
+                attachmentStore.Rollback(attachment);
+            }
+
+            throw;
+        }
+        finally
+        {
+            stagedAttachments.Clear();
+            obsoleteAttachmentKeys.Clear();
+        }
     }
 }

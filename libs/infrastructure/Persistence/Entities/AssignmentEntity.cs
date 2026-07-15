@@ -10,11 +10,15 @@ internal sealed class AssignmentEntity
 
     public int RouteVersionNo { get; set; }
 
+    public Guid? RouteRevisionId { get; set; }
+
     public Guid EmployeeId { get; set; }
 
     public string Shift { get; set; } = string.Empty;
 
     public string Status { get; set; } = string.Empty;
+
+    public string? StatusCode { get; set; }
 
     public DateTimeOffset PlannedAt { get; set; }
 
@@ -29,6 +33,8 @@ internal sealed class AssignmentEntity
     public PatrolRequestEntity? PatrolRequest { get; set; }
 
     public RouteEntity? Route { get; set; }
+
+    public RouteRevisionEntity? RouteRevision { get; set; }
 
     public EmployeeEntity? Employee { get; set; }
 }

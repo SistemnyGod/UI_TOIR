@@ -403,6 +403,43 @@ public sealed class AssignmentsDbIntegrationTests
     }
 
     [DbIntegrationFact]
+    public async Task CompleteAssignmentUsesImmutableRouteRevisionAfterRouteChanges()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var created = UseAssignments(provider, assignments => assignments.Create(new CreateAssignmentDto(
+            FreePatrolRequestId,
+            SidorovEmployeeId,
+            FuelDepotRouteId,
+            DateTimeOffset.UtcNow.AddDays(1),
+            "Day")));
+        Assert.True(created.Succeeded);
+
+        var assignedPointResults = await ReadRoutePointResultsAsync(database.ConnectionString, FuelDepotRouteId);
+        var revisionId = await ReadAssignmentRouteRevisionIdAsync(database.ConnectionString, created.Assignment!.Id);
+        Assert.NotNull(revisionId);
+
+        await ChangeRouteAfterAssignmentAsync(database.ConnectionString, FuelDepotRouteId);
+
+        var completed = UseAssignments(provider, assignments => assignments.Complete(created.Assignment.Id, new CompleteAssignmentDto(
+            DateTimeOffset.UtcNow,
+            "ok",
+            null,
+            "Offline checklist from assigned revision",
+            null,
+            null,
+            0,
+            assignedPointResults)));
+
+        Assert.NotNull(completed);
+        Assert.True(completed!.Changed);
+        Assert.DoesNotContain("routeVersion", completed.Errors?.Keys ?? []);
+        Assert.Equal(assignedPointResults.Count, await CountPatrolResultsAsync(database.ConnectionString, created.Assignment.Id));
+    }
+
+    [DbIntegrationFact]
     public async Task CompleteAssignmentValidatesPointChecklistWithReadableMessagesAndIssues()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
@@ -669,6 +706,32 @@ public sealed class AssignmentsDbIntegrationTests
         command.CommandText = "select count(*) from patrol_results where assignment_id = @assignment_id;";
         command.Parameters.AddWithValue("assignment_id", assignmentId);
         return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task<Guid?> ReadAssignmentRouteRevisionIdAsync(string connectionString, Guid assignmentId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "select route_revision_id from assignments where id = @assignment_id;";
+        command.Parameters.AddWithValue("assignment_id", assignmentId);
+        var value = await command.ExecuteScalarAsync();
+        return value is null or DBNull ? null : (Guid)value;
+    }
+
+    private static async Task ChangeRouteAfterAssignmentAsync(string connectionString, Guid routeId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            update route_points
+            set name = name || ' (changed)', is_required = false, requires_photo = false
+            where route_id = @route_id;
+            update routes set version_no = version_no + 1 where id = @route_id;
+            """;
+        command.Parameters.AddWithValue("route_id", routeId);
+        await command.ExecuteNonQueryAsync();
     }
 
     private static async Task<int> CountPatrolResultIssuesAsync(string connectionString, Guid assignmentId)

@@ -1,12 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Patrol360.Application;
 using Patrol360.Contracts;
+using Patrol360.Infrastructure.Attachments;
 using Patrol360.Infrastructure.Persistence.Entities;
 using System.Text;
 
 namespace Patrol360.Infrastructure.Persistence;
 
-internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolTimeZone patrolTimeZone) : IPatrolResultQuery
+internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolTimeZone patrolTimeZone, IAttachmentStore attachmentStore) : IPatrolResultQuery
 {
     private const int DefaultPage = 1;
     private const int DefaultPageSize = 100;
@@ -62,6 +63,35 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
             total,
             totalPages,
             paging.Page < totalPages);
+    }
+
+    public async Task<ResultPageDto> GetResultsPageAsync(
+        ResultFilterDto filter,
+        int page = DefaultPage,
+        int pageSize = DefaultPageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var paging = NormalizePaging(page, pageSize);
+        var total = await GetResultGroupCountAsync(filter, cancellationToken);
+        var totalPages = total == 0 ? 0 : (int)Math.Ceiling(total / (double)paging.PageSize);
+        var pageGroups = await GetResultPageGroupsAsync(filter, paging, cancellationToken);
+        if (pageGroups.Count == 0)
+        {
+            return new ResultPageDto([], paging.Page, paging.PageSize, total, totalPages, paging.Page < totalPages);
+        }
+
+        var assignmentIds = pageGroups.Where(group => group.AssignmentId is not null).Select(group => group.AssignmentId!.Value).ToArray();
+        var standaloneResultIds = pageGroups.Where(group => group.AssignmentId is null && group.ResultId is not null).Select(group => group.ResultId!.Value).ToArray();
+        var groupOrder = pageGroups.Select((group, index) => new { Key = BuildResultGroupKey(group.AssignmentId, group.ResultId), Index = index })
+            .ToDictionary(group => group.Key, group => group.Index);
+        var rows = await dbContext.PatrolResults.AsNoTracking().Include(result => result.Assignment)
+            .Where(result => (result.AssignmentId.HasValue && assignmentIds.Contains(result.AssignmentId.Value))
+                || (!result.AssignmentId.HasValue && standaloneResultIds.Contains(result.Id)))
+            .ToListAsync(cancellationToken);
+        var items = rows.OrderBy(result => groupOrder[BuildResultGroupKey(result.AssignmentId, result.Id)])
+            .ThenBy(result => result.ActualAt).ThenBy(result => result.Id).Select(MapListItem).ToList();
+
+        return new ResultPageDto(items, paging.Page, paging.PageSize, total, totalPages, paging.Page < totalPages);
     }
 
     public ResultDetailDto? GetResult(Guid id)
@@ -150,10 +180,8 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
             return null;
         }
 
-        var storageDirectory = Path.Combine(AppContext.BaseDirectory, "mobile-files");
-        var fullPath = Path.GetFullPath(Path.Combine(storageDirectory, safeFileName));
-        var storageRoot = Path.GetFullPath(storageDirectory);
-        if (!fullPath.StartsWith(storageRoot, StringComparison.OrdinalIgnoreCase) || !File.Exists(fullPath))
+        var fullPath = attachmentStore.GetLocalPath(safeFileName);
+        if (fullPath is null)
         {
             return null;
         }
@@ -172,7 +200,10 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
         if (!string.IsNullOrWhiteSpace(filter.Status))
         {
             var statusValues = GetStatusFilterValues(filter.Status);
-            query = query.Where(result => statusValues.Contains(result.Status));
+            var statusCode = PatrolStatusCodeMapper.ToResultCode(filter.Status);
+            query = statusCode is null
+                ? query.Where(result => statusValues.Contains(result.Status))
+                : query.Where(result => result.StatusCode == statusCode || statusValues.Contains(result.Status));
         }
 
         if (filter.RouteId is not null)
@@ -236,7 +267,17 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
         {
             var statusValues = GetStatusFilterValues(filter.Status)
                 .Select(value => AddSqlParameter(parameters, value));
-            where.Append(" AND status IN (").Append(string.Join(", ", statusValues)).Append(')');
+            var statusCode = PatrolStatusCodeMapper.ToResultCode(filter.Status);
+            if (statusCode is null)
+            {
+                where.Append(" AND status IN (").Append(string.Join(", ", statusValues)).Append(')');
+            }
+            else
+            {
+                var statusCodeParameter = AddSqlParameter(parameters, statusCode);
+                where.Append(" AND (status_code = ").Append(statusCodeParameter)
+                    .Append(" OR status IN (").Append(string.Join(", ", statusValues)).Append("))");
+            }
         }
 
         if (filter.RouteId is not null)
@@ -410,6 +451,48 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
             """;
 
         return dbContext.Database.SqlQueryRaw<int>(sql, parameters.ToArray()).Single();
+    }
+
+    private async Task<IReadOnlyList<ResultPageGroup>> GetResultPageGroupsAsync(
+        ResultFilterDto filter,
+        PatrolPaging paging,
+        CancellationToken cancellationToken)
+    {
+        var parameters = new List<object>();
+        var whereClause = BuildResultFilterSql(filter, parameters);
+        var assignmentPhotoFilter = BuildAssignmentPhotoFilterSql(filter);
+        var standalonePhotoFilter = BuildStandalonePhotoFilterSql(filter);
+        var offset = AddSqlParameter(parameters, (paging.Page - 1) * paging.PageSize);
+        var limit = AddSqlParameter(parameters, paging.PageSize);
+        var sql = $"""
+            WITH filtered AS (SELECT assignment_id, id, actual_at, photos FROM patrol_results {whereClause}),
+            page_groups AS (
+                SELECT assignment_id AS "AssignmentId", NULL::uuid AS "ResultId", MAX(actual_at) AS "LastActualAt", assignment_id AS "SortId"
+                FROM filtered WHERE assignment_id IS NOT NULL GROUP BY assignment_id {assignmentPhotoFilter}
+                UNION ALL
+                SELECT NULL::uuid AS "AssignmentId", id AS "ResultId", actual_at AS "LastActualAt", id AS "SortId"
+                FROM filtered WHERE assignment_id IS NULL {standalonePhotoFilter})
+            SELECT "AssignmentId", "ResultId", "LastActualAt" FROM page_groups
+            ORDER BY "LastActualAt" DESC, "SortId" DESC OFFSET {offset} LIMIT {limit}
+            """;
+        return await dbContext.Database.SqlQueryRaw<ResultPageGroup>(sql, parameters.ToArray()).ToListAsync(cancellationToken);
+    }
+
+    private async Task<int> GetResultGroupCountAsync(ResultFilterDto filter, CancellationToken cancellationToken)
+    {
+        var parameters = new List<object>();
+        var whereClause = BuildResultFilterSql(filter, parameters);
+        var assignmentPhotoFilter = BuildAssignmentPhotoFilterSql(filter);
+        var standalonePhotoFilter = BuildStandalonePhotoFilterSql(filter);
+        var sql = $"""
+            WITH filtered AS (SELECT assignment_id, id, actual_at, photos FROM patrol_results {whereClause}),
+            result_groups AS (
+                SELECT assignment_id FROM filtered WHERE assignment_id IS NOT NULL GROUP BY assignment_id {assignmentPhotoFilter}
+                UNION ALL
+                SELECT id FROM filtered WHERE assignment_id IS NULL {standalonePhotoFilter})
+            SELECT COUNT(*)::int AS "Value" FROM result_groups
+            """;
+        return await dbContext.Database.SqlQueryRaw<int>(sql, parameters.ToArray()).SingleAsync(cancellationToken);
     }
 
     private static string BuildAssignmentPhotoFilterSql(ResultFilterDto filter) =>

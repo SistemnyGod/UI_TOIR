@@ -3,11 +3,12 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Caching.Memory;
 using Patrol360.Application;
 using Patrol360.Contracts;
+using Patrol360.Infrastructure.Attachments;
 using Patrol360.Infrastructure.Persistence.Entities;
 
 namespace Patrol360.Infrastructure.Persistence;
 
-internal sealed partial class EfPatrolStore(Patrol360DbContext dbContext, IMemoryCache dashboardCache, IPatrolTimeZone patrolTimeZone) :
+internal sealed partial class EfPatrolStore(Patrol360DbContext dbContext, IMemoryCache dashboardCache, IPatrolTimeZone patrolTimeZone, IAttachmentStore attachmentStore) :
     IPatrolDashboardQuery,
     IRouteCatalogQuery,
     IEmployeeDirectoryQuery,
@@ -17,6 +18,8 @@ internal sealed partial class EfPatrolStore(Patrol360DbContext dbContext, IMemor
     IAssignmentService,
     IRouteCatalogService
 {
+    private readonly List<StagedAttachment> stagedAttachments = [];
+    private readonly HashSet<string> obsoleteAttachmentKeys = new(StringComparer.Ordinal);
     private static readonly PasswordHasher<MobileAccountEntity> MobilePasswordHasher = new();
     private static readonly string[] EditableMobileAccountStatuses = ["Активен", "Не привязан", "Заблокирован"];
     private static readonly string[] AllowedPatrolPhotoContentTypes = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
