@@ -15,7 +15,7 @@ import { useResultsWorkspace } from "../hooks/useResultsWorkspace";
 import { InventoryRepositoryProvider } from "../repositories/inventoryRepositoryContext";
 import { createMockInventoryRepository } from "../repositories/mockInventoryRepository";
 import { PointResultTable } from "../features/patrol/results/PointResultTable";
-import { filterGroups, ResultsWorkspace } from "../features/patrol/results/ResultsWorkspace";
+import { filterGroups, mapWithConcurrency, ResultsWorkspace } from "../features/patrol/results/ResultsWorkspace";
 import { AssignmentScreen } from "../features/patrol/AssignmentScreen";
 import { ScheduleScreen } from "../features/patrol/ScheduleScreen";
 import {
@@ -741,8 +741,9 @@ describe("shared UI primitives", () => {
     );
     const onCreateScheduledRequest = vi.fn().mockResolvedValue({ id: "request-1" } as never);
     const today = new Date();
-    const resultDate = formatTestRuDate(today);
-    const resultDateInput = formatTestDateInput(today);
+    const resultDay = new Date(today);
+    resultDay.setDate(resultDay.getDate() - ((resultDay.getDay() + 6) % 7));
+    const resultDate = formatTestRuDate(resultDay);
 
     function ScheduleHarness() {
       const [selectedCellId, setSelectedCellId] = useState("");
@@ -803,31 +804,7 @@ describe("shared UI primitives", () => {
           onCreateScheduledRequest={onCreateScheduledRequest}
           onOpenRequestById={vi.fn()}
           onRunAssignmentCommand={vi.fn()}
-          requests={[
-            {
-              id: "request-schedule-history",
-              requestKind: "patrol-assignment",
-              title: "REQ-1",
-              status: "assigned",
-              priority: "normal",
-              sourceResultId: "",
-              source: "API",
-              employeeId: "employee-favorite",
-              routeId: "route-1",
-              route: "Route A",
-              point: "",
-              employee: "Favorite Employee",
-              scheduledDate: resultDateInput,
-              scheduledTime: "08:00",
-              notifyEmployee: true,
-              notificationText: "",
-              createdAt: `${resultDateInput}T08:00:00Z`,
-              dueAt: "",
-              responsible: "Favorite Employee",
-              description: "",
-              timeline: [],
-            } as never,
-          ]}
+          requests={[]}
           routeDirectory={[
             {
               id: "route-1",
@@ -998,6 +975,34 @@ describe("shared UI primitives", () => {
     expect(screen.getByLabelText("Маршрут")).toBeInTheDocument();
   });
 
+  it("debounces API result search and labels metrics as a loaded sample", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ items: [], page: 1, pageSize: 100, total: 250, totalPages: 3, hasNext: true }), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+
+    render(
+      <ResultsWorkspace
+        dataSourceMode="api"
+        onSelectResult={vi.fn()}
+        onCreateRequest={vi.fn()}
+        onOpenRequest={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getAllByText("По 0 загруженным из 250").length).toBeGreaterThan(0));
+
+    fireEvent.change(screen.getByPlaceholderText(/Поиск по маршруту/), { target: { value: "печи" } });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => window.setTimeout(resolve, 350));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    expect(String(fetcher.mock.calls[1]?.[0])).toContain("query=%D0%BF%D0%B5%D1%87%D0%B8");
+  });
+
   it("opens a dedicated patrol result context panel from right click and hides the row on this device", async () => {
     const addToast = vi.fn();
     const user = userEvent.setup();
@@ -1164,8 +1169,43 @@ describe("shared UI primitives", () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalled());
 
     const requestedUrls = fetcher.mock.calls.map(([input]) => String(input));
-    expect(requestedUrls.some((url) => url.includes("/api/v2/results?page=1&pageSize=100"))).toBe(true);
+    expect(requestedUrls.some((url) => url.includes("/api/v3/results?page=1&pageSize=100"))).toBe(true);
     expect(requestedUrls.some((url) => url.includes("result-smoke-photo"))).toBe(false);
+  });
+
+  it("does not fetch a disabled results workspace", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetcher);
+
+    function Probe() {
+      useResultsWorkspace({
+        dataSourceMode: "api",
+        enabled: false,
+        selectedResultId: "",
+        onSelectResult: vi.fn(),
+        showToast: vi.fn(),
+      });
+      return <div>results probe</div>;
+    }
+
+    render(<Probe />);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("bounds concurrent result detail loads", async () => {
+    let running = 0;
+    let peak = 0;
+
+    await mapWithConcurrency([1, 2, 3, 4, 5, 6, 7], 3, async () => {
+      running += 1;
+      peak = Math.max(peak, running);
+      await new Promise((resolve) => window.setTimeout(resolve, 1));
+      running -= 1;
+    });
+
+    expect(peak).toBe(3);
   });
 
   it("renders request list loading state", () => {

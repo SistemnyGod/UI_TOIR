@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Patrol360.Application;
 using Patrol360.Contracts;
 using Patrol360.Infrastructure.Persistence.Entities;
@@ -30,6 +31,12 @@ internal sealed partial class EfMobileAppService
     }
 
     public MobileFileUploadResponseDto? UploadFile(string accessToken, MobileFileUploadCommand command)
+        => UploadFileAsync(accessToken, command).GetAwaiter().GetResult();
+
+    public async Task<MobileFileUploadResponseDto?> UploadFileAsync(
+        string accessToken,
+        MobileFileUploadCommand command,
+        CancellationToken cancellationToken = default)
     {
         var session = FindActiveSession(accessToken);
         if (session?.MobileAccount is null)
@@ -49,10 +56,10 @@ internal sealed partial class EfMobileAppService
             return null;
         }
 
-        var existing = dbContext.MobileUploadedFiles
+        var existing = await dbContext.MobileUploadedFiles
             .AsNoTracking()
-            .FirstOrDefault(file => file.MobileAccountId == session.MobileAccountId
-                && file.ClientFileId == clientFileId);
+            .FirstOrDefaultAsync(file => file.MobileAccountId == session.MobileAccountId
+                && file.ClientFileId == clientFileId, cancellationToken);
         if (existing is not null)
         {
             return new MobileFileUploadResponseDto(existing.ClientFileId, existing.Id, "duplicate", existing.UploadedAt);
@@ -85,11 +92,12 @@ internal sealed partial class EfMobileAppService
         var storageFileName = $"{serverFileId:N}.{extension}";
         var storageDirectory = Path.Combine(AppContext.BaseDirectory, "mobile-files");
         var storagePath = Path.Combine(storageDirectory, storageFileName);
+        var temporaryStoragePath = Path.Combine(storageDirectory, $".{serverFileId:N}.uploading");
         Directory.CreateDirectory(storageDirectory);
-        var uploadResult = TryWriteUploadedFile(command.Content, storagePath, maxBytes);
+        var uploadResult = await TryWriteUploadedFileAsync(command.Content, temporaryStoragePath, maxBytes, cancellationToken);
         if (uploadResult is null)
         {
-            TryDeleteFile(storagePath);
+            TryDeleteFile(temporaryStoragePath);
             return null;
         }
 
@@ -98,8 +106,18 @@ internal sealed partial class EfMobileAppService
             || (!string.IsNullOrWhiteSpace(expectedSha256)
                 && !uploadResult.Sha256.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase)))
         {
-            TryDeleteFile(storagePath);
+            TryDeleteFile(temporaryStoragePath);
             return null;
+        }
+
+        try
+        {
+            File.Move(temporaryStoragePath, storagePath);
+        }
+        catch
+        {
+            TryDeleteFile(temporaryStoragePath);
+            throw;
         }
 
         var entity = new MobileUploadedFileEntity
@@ -121,7 +139,26 @@ internal sealed partial class EfMobileAppService
         try
         {
             dbContext.MobileUploadedFiles.Add(entity);
-            dbContext.SaveChanges();
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (IsUniqueFileConstraintViolation(exception))
+        {
+            TryDeleteFile(storagePath);
+            dbContext.ChangeTracker.Clear();
+            var racedUpload = await dbContext.MobileUploadedFiles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(file => file.MobileAccountId == session.MobileAccountId
+                    && file.ClientFileId == clientFileId, cancellationToken);
+            if (racedUpload is not null)
+            {
+                return new MobileFileUploadResponseDto(
+                    racedUpload.ClientFileId,
+                    racedUpload.Id,
+                    "duplicate",
+                    racedUpload.UploadedAt);
+            }
+
+            throw;
         }
         catch
         {
@@ -132,14 +169,18 @@ internal sealed partial class EfMobileAppService
         return new MobileFileUploadResponseDto(clientFileId, serverFileId, "uploaded", uploadedAt);
     }
 
-    private static MobileUploadedFileWriteResult? TryWriteUploadedFile(Stream content, string storagePath, long maxBytes)
+    private static async Task<MobileUploadedFileWriteResult?> TryWriteUploadedFileAsync(
+        Stream content,
+        string storagePath,
+        long maxBytes,
+        CancellationToken cancellationToken)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        using var output = File.Create(storagePath);
+        await using var output = File.Create(storagePath);
         var buffer = new byte[81920];
         long totalBytes = 0;
         int read;
-        while ((read = content.Read(buffer, 0, buffer.Length)) > 0)
+        while ((read = await content.ReadAsync(buffer.AsMemory(), cancellationToken)) > 0)
         {
             totalBytes += read;
             if (totalBytes > maxBytes)
@@ -147,7 +188,7 @@ internal sealed partial class EfMobileAppService
                 return null;
             }
 
-            output.Write(buffer, 0, read);
+            await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
             hash.AppendData(buffer, 0, read);
         }
 
@@ -169,6 +210,9 @@ internal sealed partial class EfMobileAppService
             // The original database error is more important than cleanup failure here.
         }
     }
+
+    private static bool IsUniqueFileConstraintViolation(DbUpdateException exception) =>
+        exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
     private sealed record MobileUploadedFileWriteResult(long SizeBytes, string Sha256);
 }

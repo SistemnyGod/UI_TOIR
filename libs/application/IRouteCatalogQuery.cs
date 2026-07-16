@@ -37,7 +37,8 @@ public sealed record CreateRouteResult(
 
 public sealed record UpdateRouteResult(
     RouteDto? Route,
-    IReadOnlyDictionary<string, string[]> Errors)
+    IReadOnlyDictionary<string, string[]> Errors,
+    bool IsVersionConflict = false)
 {
     public bool Succeeded => Route is not null && Errors.Count == 0;
 }
@@ -53,7 +54,8 @@ public sealed record CreateRoutePointResult(
 public sealed record UpdateRoutePointResult(
     RouteDto? Route,
     RoutePointDto? Point,
-    IReadOnlyDictionary<string, string[]> Errors)
+    IReadOnlyDictionary<string, string[]> Errors,
+    bool IsVersionConflict = false)
 {
     public bool Succeeded => Route is not null && Point is not null && Errors.Count == 0;
 }

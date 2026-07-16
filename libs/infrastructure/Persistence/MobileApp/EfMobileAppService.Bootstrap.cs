@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Patrol360.Application;
@@ -73,17 +75,23 @@ internal sealed partial class EfMobileAppService
             dbContext.SaveChanges();
         }
 
+        var user = MapUser(account);
+        var device = MapDevice(account, session);
+        var employees = BuildMobileEmployees(boundEmployeeIds);
+        var emuSections = BuildMobileEmuSections();
+        var syncCursor = BuildBootstrapCursor(user, device, employees, emuSections, requestBoard, assignments, routeDtos, pointDtos);
+
         return new MobileBootstrapDto(
-            MapUser(account),
-            MapDevice(account, session),
-            BuildMobileEmployees(boundEmployeeIds),
-            BuildMobileEmuSections(),
+            user,
+            device,
+            employees,
+            emuSections,
             requestBoard,
             assignments,
             routeDtos,
             pointDtos,
             DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString());
+            syncCursor);
     }
 
     public MobileDeviceRegistrationDto? RegisterPushToken(string accessToken, MobilePushTokenRegistrationDto request)
@@ -210,6 +218,17 @@ internal sealed partial class EfMobileAppService
 
     private IReadOnlyList<MobilePatrolRequestBoardItemDto> BuildRequestBoard(IReadOnlySet<Guid> boundEmployeeIds)
     {
+        // Filter persisted terminal states before materialising requests and their
+        // navigation properties. The legacy free-form status guard remains below.
+        var closedPersistedStatuses = new[]
+        {
+            AssignmentStatusValues.Completed,
+            AssignmentStatusValues.Cancelled,
+            "completed",
+            "cancelled",
+            "canceled"
+        };
+
         return dbContext.PatrolRequests
             .AsNoTracking()
             .Include(request => request.Assignment)
@@ -224,6 +243,8 @@ internal sealed partial class EfMobileAppService
                 request.Assignment == null
                 || request.EmployeeId == null
                 || request.Assignment.EmployeeId == request.EmployeeId)
+            .Where(request => !closedPersistedStatuses.Contains(request.Status))
+            .Where(request => request.Assignment == null || !closedPersistedStatuses.Contains(request.Assignment.Status))
             .AsEnumerable()
             .Where(request => !IsClosedRequestStatus(request.Status))
             .Where(request => request.Assignment is null || !IsClosedRequestStatus(request.Assignment.Status))
@@ -239,6 +260,32 @@ internal sealed partial class EfMobileAppService
                 MapRequestStatus(request),
                 request.CreatedAt.ToUnixTimeMilliseconds()))
             .ToArray();
+    }
+
+    private static string BuildBootstrapCursor(
+        MobileUserDto user,
+        MobileDeviceDto device,
+        IReadOnlyList<MobileEmployeeDto> employees,
+        IReadOnlyList<MobileEmuSectionDto> emuSections,
+        IReadOnlyList<MobilePatrolRequestBoardItemDto> requestBoard,
+        IReadOnlyList<MobilePatrolAssignmentDto> assignments,
+        IReadOnlyList<MobilePatrolRouteDto> routes,
+        IReadOnlyList<MobilePatrolPointDto> points)
+    {
+        // Do not include server time: an unchanged snapshot must keep the same
+        // cursor so the client can skip a costly SQLite rewrite safely.
+        var snapshot = JsonSerializer.Serialize(new
+        {
+            user,
+            device,
+            employees,
+            emuSections,
+            requestBoard,
+            assignments,
+            routes,
+            points
+        }, JsonOptions);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshot))).ToLowerInvariant();
     }
 
     private IReadOnlyList<MobilePatrolAssignmentDto> BuildAssignments(IReadOnlySet<Guid> boundEmployeeIds)

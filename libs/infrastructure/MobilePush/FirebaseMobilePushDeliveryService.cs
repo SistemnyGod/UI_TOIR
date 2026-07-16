@@ -18,6 +18,7 @@ internal sealed class EfMobilePushDeliveryService(
     private const int BatchSize = 50;
     private const int MaxAttempts = 3;
     private static readonly TimeSpan SendingTimeout = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan ProviderTimeout = TimeSpan.FromSeconds(20);
 
     public async Task<int> SendQueuedAsync(CancellationToken cancellationToken)
     {
@@ -45,7 +46,9 @@ internal sealed class EfMobilePushDeliveryService(
 
             try
             {
-                await sender.SendAsync(CreateMessage(notification), cancellationToken);
+                using var providerTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                providerTimeout.CancelAfter(ProviderTimeout);
+                await sender.SendAsync(CreateMessage(notification), providerTimeout.Token);
                 notification.PushStatus = "sent";
                 notification.PushSentAt = DateTimeOffset.UtcNow;
                 notification.PushClaimedAt = null;

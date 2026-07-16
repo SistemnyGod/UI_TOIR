@@ -17,6 +17,7 @@ import type {
   EmployeeDirectoryItem,
   PatrolResult,
   RouteDirectoryItem,
+  ScheduleCell,
   ScheduleMode,
   ServiceRequest,
 } from "../../types";
@@ -92,32 +93,10 @@ export function ScheduleScreen({
     setSyncedFavoriteEmployeeIds(favoriteEmployeeIds);
     return subscribeAssignmentFavoriteEmployeeIds(setSyncedFavoriteEmployeeIds);
   }, [favoriteEmployeeIds]);
-  const selectedResultHistory = useMemo(() => {
-    if (!selected) return [];
-    const selectedDateKey = toDateInputKey(selected.date);
-    const sortedResults = [...patrolResults].sort(
-      (first, second) =>
-        toSortableDate(second.actualAt || second.plannedAt).getTime() -
-        toSortableDate(first.actualAt || first.plannedAt).getTime(),
-    );
-    const matchesSelectedCell = (result: PatrolResult) => {
-      const matchesEmployee = Boolean(
-        selected.employeeId && (result.employeeId === selected.employeeId || result.employee === selected.employee),
-      );
-      const matchesRoute = Boolean(
-        selected.routeId && (result.routeId === selected.routeId || result.route === selected.route),
-      );
-      return matchesEmployee || matchesRoute;
-    };
-    const dayResults = sortedResults.filter(
-      (result) => toDateInputKey(result.actualAt || result.plannedAt) === selectedDateKey,
-    );
-    if (dayResults.length > 0) {
-      return dayResults;
-    }
-
-    return sortedResults.filter(matchesSelectedCell);
-  }, [patrolResults, selected]);
+  const selectedResultHistory = useMemo(
+    () => selectScheduleResultHistory(patrolResults, selected),
+    [patrolResults, selected],
+  );
 
   return (
     <div className="screen-stack">
@@ -176,7 +155,8 @@ export function ScheduleScreen({
           <ScheduleEditPanel
             canManage={canManage}
             employees={scheduleEmployees}
-            resultHistory={selectedResultHistory}
+            resultHistory={selectedResultHistory.results}
+            resultHistoryMode={selectedResultHistory.mode}
             routes={routeDirectory}
             selected={selected}
             onClose={() => onSelectCell("")}
@@ -189,6 +169,47 @@ export function ScheduleScreen({
       ) : null}
     </div>
   );
+}
+
+const recentHistoryDays = 90;
+const recentHistoryLimit = 10;
+
+export function selectScheduleResultHistory(results: PatrolResult[], selected?: ScheduleCell) {
+  if (!selected) return { mode: "day" as const, results: [] };
+  const selectedDateKey = toDateInputKey(selected.date);
+  const sortedResults = [...results].sort(
+    (first, second) =>
+      toSortableDate(second.actualAt || second.plannedAt).getTime() -
+      toSortableDate(first.actualAt || first.plannedAt).getTime(),
+  );
+  const dayResults = sortedResults.filter(
+    (result) => toDateInputKey(result.actualAt || result.plannedAt) === selectedDateKey,
+  );
+  if (dayResults.length > 0) return { mode: "day" as const, results: dayResults };
+
+  const cutoff = toSortableDate(selected.date);
+  cutoff.setDate(cutoff.getDate() - recentHistoryDays);
+  const cutoffKey = toDateInput(cutoff);
+  const candidates = sortedResults
+    .filter((result) => {
+      const resultDateKey = toDateInputKey(result.actualAt || result.plannedAt);
+      return resultDateKey >= cutoffKey && resultDateKey <= selectedDateKey;
+    })
+    .map((result) => {
+      const matchesEmployee = Boolean(
+        selected.employeeId && (result.employeeId === selected.employeeId || result.employee === selected.employee),
+      );
+      const matchesRoute = Boolean(
+        selected.routeId && (result.routeId === selected.routeId || result.route === selected.route),
+      );
+      return { result, rank: matchesEmployee && matchesRoute ? 0 : matchesEmployee || matchesRoute ? 1 : 2 };
+    })
+    .filter(({ rank }) => rank < 2)
+    .sort((left, right) => left.rank - right.rank)
+    .slice(0, recentHistoryLimit)
+    .map(({ result }) => result);
+
+  return { mode: "recent" as const, results: candidates };
 }
 
 function toDateInput(date: Date) {

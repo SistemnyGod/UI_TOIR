@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { AlertTriangle, CheckCircle2, Image as ImageIcon, Video } from "lucide-react";
-import { downloadResultAttachment } from "../../../repositories/resultsRepository";
 import type { PatrolResult, PatrolResultAttachment } from "../../../types";
 import type { ResultGroup } from "./resultTypes";
 
@@ -12,6 +11,11 @@ interface PointResultTableProps {
 }
 
 export function PointResultTable({ group, results, onOpenAttachment, photoLoadingResultId }: PointResultTableProps) {
+  const pointOrderByResultId = useMemo(
+    () => new Map(group.results.map((result, index) => [result.id, index + 1])),
+    [group.results],
+  );
+
   return (
     <section className="results-review-modal-points">
       <div className="results-review-point-list">
@@ -30,7 +34,8 @@ export function PointResultTable({ group, results, onOpenAttachment, photoLoadin
           const isManual = isManualPointResult(result);
           const hasComment = isUsefulText(result.comment);
           const StateIcon = statusMeta.key === "ok" ? CheckCircle2 : AlertTriangle;
-          const pointOrder = Math.max(1, group.results.findIndex((item) => item.id === result.id) + 1) || index + 1;
+          const pointOrder = pointOrderByResultId.get(result.id) ?? index + 1;
+          const firstMedia = result.attachments?.find((attachment) => isImageAttachment(attachment) || isVideoAttachment(attachment)) ?? result.attachments?.[0];
 
           return (
             <article key={result.id} className={`is-${statusMeta.key} results-review-point-row`}>
@@ -59,6 +64,7 @@ export function PointResultTable({ group, results, onOpenAttachment, photoLoadin
                 {photoCount > 0 ? (
                   <PointPhotoThumb
                     isLoading={photoLoadingResultId === result.id}
+                    isVideo={firstMedia ? isVideoAttachment(firstMedia) : false}
                     onOpen={() => onOpenAttachment(result, pointOrder)}
                     photoCount={photoCount}
                     result={result}
@@ -77,41 +83,20 @@ export function PointResultTable({ group, results, onOpenAttachment, photoLoadin
 
 function PointPhotoThumb({
   isLoading,
+  isVideo,
   onOpen,
   photoCount,
   result,
 }: {
   isLoading: boolean;
+  isVideo: boolean;
   onOpen: () => void;
   photoCount: number;
   result: PatrolResult;
 }) {
-  const firstMedia = result.attachments?.find((attachment) => isImageAttachment(attachment) || isVideoAttachment(attachment)) ?? result.attachments?.[0];
-  const isVideo = firstMedia ? isVideoAttachment(firstMedia) : false;
-  const [previewUrl, setPreviewUrl] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    let objectUrl = "";
-    setPreviewUrl("");
-
-    if (!firstMedia || isVideo || !isImageAttachment(firstMedia)) return undefined;
-
-    void downloadResultAttachment(firstMedia)
-      .then((file) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(file.blob);
-        setPreviewUrl(objectUrl);
-      })
-      .catch(() => {
-        if (!cancelled) setPreviewUrl("");
-      });
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [firstMedia, isVideo]);
+  // Result media is downloaded only after an explicit click. Rendering a long
+  // patrol must not issue one network request per point merely for thumbnails.
+  const previewUrl: string | undefined = undefined;
 
   return (
     <button type="button" onClick={onOpen} disabled={isLoading} aria-label="Открыть вложения точки">

@@ -1,16 +1,57 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAssignmentHistoryEvents, formatAssignmentActionTime } from "../features/patrol/assignments/assignmentDateUtils";
 import { assignmentStatusText, isAssignmentCurrent } from "../features/patrol/assignments/assignmentUtils";
-import { buildCounters, buildMetrics, buildResultGroups, filterGroups, summarizeDuration } from "../features/patrol/results/ResultsWorkspace";
+import { buildCounters, buildMetrics, buildResultApiFilters, buildResultGroups, filterGroups, summarizeDuration } from "../features/patrol/results/ResultsWorkspace";
+import { selectScheduleResultHistory } from "../features/patrol/ScheduleScreen";
 import { isImageAttachment, isVideoAttachment } from "../features/patrol/results/ResultMediaViewer";
 import { applyLocalAssignmentCommand } from "../hooks/useAssignmentsWorkspace";
-import type { ActivePatrol, PatrolResult, PatrolResultAttachment } from "../types";
+import type { ActivePatrol, PatrolResult, PatrolResultAttachment, ScheduleCell } from "../types";
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
 describe("patrol results and assignment stabilization", () => {
+  it("keeps same-day schedule history authoritative and bounds recent fallback", () => {
+    const selected = {
+      id: "cell-1",
+      employee: "Employee A",
+      employeeId: "employee-a",
+      route: "Route A",
+      routeId: "route-a",
+      date: "2026-07-15",
+      day: "15",
+      shift: "Дневная",
+      state: "empty",
+      zone: "Zone",
+    } as ScheduleCell;
+    const sameDay = createResult("same-day", { actualAt: "2026-07-15T08:00:00Z", employeeId: "other", routeId: "other" });
+    const authoritative = selectScheduleResultHistory([sameDay], selected);
+    expect(authoritative).toMatchObject({ mode: "day", results: [{ id: "same-day" }] });
+
+    const recent = Array.from({ length: 12 }, (_, index) =>
+      createResult(`recent-${index}`, {
+        actualAt: `2026-07-${String(14 - index).padStart(2, "0")}T08:00:00Z`,
+        employee: index === 0 ? "Employee B" : "Employee A",
+        employeeId: index === 0 ? "employee-b" : "employee-a",
+        route: "Route A",
+        routeId: "route-a",
+      }),
+    );
+    const old = createResult("old", { actualAt: "2026-03-01T08:00:00Z", employeeId: "employee-a", routeId: "route-a" });
+    const fallback = selectScheduleResultHistory([...recent, old], selected);
+
+    expect(fallback.mode).toBe("recent");
+    expect(fallback.results).toHaveLength(10);
+    expect(fallback.results[0].id).toBe("recent-1");
+    expect(fallback.results.map((result) => result.id)).not.toContain("old");
+  });
+
+  it("maps both photo filters to the results API", () => {
+    expect(buildResultApiFilters("photos", "all", "")).toMatchObject({ hasPhotos: true });
+    expect(buildResultApiFilters("noPhotos", "all", "")).toMatchObject({ hasPhotos: false });
+  });
+
   it("filters late result groups by normalized status and deviation", () => {
     const groups = buildResultGroups([
       createResult("late-status", { assignmentId: "assignment-late", deviation: "+12 мин", status: "Просрочено" }),

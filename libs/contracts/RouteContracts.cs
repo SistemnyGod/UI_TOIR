@@ -46,7 +46,8 @@ public sealed record UpdateRouteDto(
     string? Status,
     string? Duration,
     string? Distance,
-    string? Periodicity);
+    string? Periodicity,
+    int? ExpectedVersionNo = null);
 
 public sealed record CreateRoutePointDto(
     string Name,
@@ -69,4 +70,5 @@ public sealed record UpdateRoutePointDto(
     bool RequiresPhoto);
 
 public sealed record ReorderRoutePointDto(
-    int SequenceNo);
+    int SequenceNo,
+    int? ExpectedVersionNo = null);

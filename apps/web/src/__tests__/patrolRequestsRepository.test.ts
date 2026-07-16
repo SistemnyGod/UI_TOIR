@@ -76,7 +76,7 @@ describe("patrol requests repository", () => {
     expect(requests[0].status).toBe("Закрыта");
   });
 
-  it("loads one bounded patrol request page", async () => {
+  it("loads all patrol request pages", async () => {
     const requestedUrls: string[] = [];
     const firstPage = Array.from({ length: 200 }, (_, index) => createPatrolRequestDto(`request-${index + 1}`));
     const repository = createApiPatrolRequestsRepository({
@@ -88,16 +88,19 @@ describe("patrol requests repository", () => {
           return jsonResponse(firstPage);
         }
 
+        if (url.includes("page=2")) return jsonResponse([createPatrolRequestDto("request-201")]);
+
         return jsonResponse([]);
       },
     });
 
     const requests = await repository.getPatrolRequests();
 
-    expect(requests).toHaveLength(200);
-    expect(requests.at(-1)?.id).toBe("request-200");
-    expect(requestedUrls).toHaveLength(1);
+    expect(requests).toHaveLength(201);
+    expect(requests.at(-1)?.id).toBe("request-201");
+    expect(requestedUrls).toHaveLength(2);
     expect(requestedUrls[0]).toContain("/api/v1/patrol-requests?page=1&pageSize=200");
+    expect(requestedUrls[1]).toContain("/api/v1/patrol-requests?page=2&pageSize=200");
   });
 
   it("passes request filters to the API", async () => {

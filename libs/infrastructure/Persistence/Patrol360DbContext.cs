@@ -257,7 +257,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(route => route.Duration).HasColumnName("duration").HasMaxLength(40).IsRequired();
             entity.Property(route => route.Distance).HasColumnName("distance").HasMaxLength(40).IsRequired();
             entity.Property(route => route.Periodicity).HasColumnName("periodicity").HasMaxLength(120).IsRequired();
-            entity.Property(route => route.VersionNo).HasColumnName("version_no");
+            entity.Property(route => route.VersionNo).HasColumnName("version_no").IsConcurrencyToken();
             entity.Property(route => route.IsArchived).HasColumnName("is_archived");
             entity.Property(route => route.CreatedAt).HasColumnName("created_at");
 
@@ -489,9 +489,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(result => result.AssignmentId)
-                .IsUnique()
-                .HasFilter("assignment_id IS NOT NULL")
-                .HasDatabaseName("ux_patrol_results_assignment_id");
+                .HasDatabaseName("ix_patrol_results_assignment_id");
 
             entity.HasOne(result => result.Route)
                 .WithMany()
@@ -837,6 +835,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(operation => operation.EntityLocalId).HasColumnName("entity_local_id").HasMaxLength(120);
             entity.Property(operation => operation.EntityServerId).HasColumnName("entity_server_id").HasMaxLength(120);
             entity.Property(operation => operation.PayloadJson).HasColumnName("payload_json").HasColumnType("jsonb").IsRequired();
+            entity.Property(operation => operation.PayloadFingerprint).HasColumnName("payload_fingerprint").HasMaxLength(64);
             entity.Property(operation => operation.CreatedAtLocal).HasColumnName("created_at_local");
             entity.Property(operation => operation.CreatedAtServer).HasColumnName("created_at_server");
             entity.Property(operation => operation.AttemptCount).HasColumnName("attempt_count");
@@ -854,6 +853,16 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
                 .HasDatabaseName("ix_mobile_outbox_operations_client_operation_id");
             entity.HasIndex(operation => operation.Status)
                 .HasDatabaseName("ix_mobile_outbox_operations_status");
+            entity.HasIndex(operation => new
+                {
+                    operation.MobileAccountId,
+                    operation.CommandType,
+                    operation.EntityServerId,
+                    operation.Status,
+                    operation.PayloadFingerprint,
+                })
+                .HasFilter("payload_fingerprint IS NOT NULL")
+                .HasDatabaseName("ix_mobile_outbox_operations_complete_fingerprint");
         });
     }
 

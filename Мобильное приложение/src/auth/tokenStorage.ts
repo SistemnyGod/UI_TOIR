@@ -1,18 +1,49 @@
 import * as SecureStore from "expo-secure-store";
 
+import type { OfflineSessionState } from "@/auth/offlineSession";
+
 const accessTokenKey = "patrol360.accessToken";
 const refreshTokenKey = "patrol360.refreshToken";
 const ownerUserIdKey = "patrol360.ownerUserId";
+const offlineSessionKey = "patrol360.offlineSession";
 
 export type StoredSessionSnapshot = {
   accessToken: string | null;
   refreshToken: string | null;
   ownerUserId: string | null;
+  offlineSession: OfflineSessionState | null;
 };
 
 export async function setTokens(accessToken: string, refreshToken: string) {
   await SecureStore.setItemAsync(accessTokenKey, accessToken);
   await SecureStore.setItemAsync(refreshTokenKey, refreshToken);
+}
+
+export function setOfflineSession(session: OfflineSessionState) {
+  return SecureStore.setItemAsync(offlineSessionKey, JSON.stringify(session));
+}
+
+export async function getOfflineSession(): Promise<OfflineSessionState | null> {
+  const raw = await SecureStore.getItemAsync(offlineSessionKey);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<OfflineSessionState>;
+    if (!parsed.userId || !parsed.fullName || !parsed.lastOnlineLoginAt || !parsed.expiresAt) {
+      return null;
+    }
+
+    return {
+      userId: parsed.userId,
+      fullName: parsed.fullName,
+      lastOnlineLoginAt: parsed.lastOnlineLoginAt,
+      expiresAt: parsed.expiresAt
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function getAccessToken() {
@@ -32,13 +63,14 @@ export function getStoredOwnerUserId() {
 }
 
 export async function getStoredSessionSnapshot(): Promise<StoredSessionSnapshot> {
-  const [accessToken, refreshToken, ownerUserId] = await Promise.all([
+  const [accessToken, refreshToken, ownerUserId, offlineSession] = await Promise.all([
     getAccessToken(),
     getRefreshToken(),
-    getStoredOwnerUserId()
+    getStoredOwnerUserId(),
+    getOfflineSession()
   ]);
 
-  return { accessToken, refreshToken, ownerUserId };
+  return { accessToken, refreshToken, ownerUserId, offlineSession };
 }
 
 export async function restoreStoredSessionSnapshot(snapshot: StoredSessionSnapshot) {
@@ -51,6 +83,10 @@ export async function restoreStoredSessionSnapshot(snapshot: StoredSessionSnapsh
   if (snapshot.ownerUserId) {
     await setStoredOwnerUserId(snapshot.ownerUserId);
   }
+
+  if (snapshot.offlineSession) {
+    await setOfflineSession(snapshot.offlineSession);
+  }
 }
 
 export async function clearAuthTokens() {
@@ -60,5 +96,8 @@ export async function clearAuthTokens() {
 
 export async function clearTokens() {
   await clearAuthTokens();
-  await SecureStore.deleteItemAsync(ownerUserIdKey);
+  await Promise.all([
+    SecureStore.deleteItemAsync(ownerUserIdKey),
+    SecureStore.deleteItemAsync(offlineSessionKey)
+  ]);
 }

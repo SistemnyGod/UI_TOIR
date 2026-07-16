@@ -1,7 +1,8 @@
 import { fetchWithTimeout, serverUnavailableMessage } from "@/api/networkTimeout";
+import { shouldTryNextMobileServer } from "@/api/serverFailoverPolicy";
 import { getOrCreateDeviceId } from "@/auth/deviceRegistration";
 import { assertSessionOwner } from "@/auth/sessionIdentity";
-import { clearAuthTokens, getAccessToken, getRefreshToken, getStoredOwnerUserId, setStoredOwnerUserId, setTokens } from "@/auth/tokenStorage";
+import { clearAuthTokens, getAccessToken, getRefreshToken, getStoredOwnerUserId, setOfflineSession, setStoredOwnerUserId, setTokens } from "@/auth/tokenStorage";
 import { getMobileRuntimeConfig, getServerCandidateBaseUrls, setServerBaseUrl } from "@/core/serverSettings";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -89,18 +90,7 @@ async function sendMobileRequestWithFailover(
 
 function shouldTryNextServer(response: Response, path: string) {
   if (path.startsWith("/api/v1/mobile/")) {
-    const contentType = response.headers.get("content-type") ?? "";
-    const unexpectedOkResponse = response.ok && response.status !== 204 && !contentType.includes("application/json");
-
-    return (
-      unexpectedOkResponse ||
-      response.status === 404 ||
-      response.status === 405 ||
-      response.status === 501 ||
-      response.status === 502 ||
-      response.status === 503 ||
-      response.status === 504
-    );
+    return shouldTryNextMobileServer(response.status, response.headers.get("content-type"));
   }
 
   return false;
@@ -144,6 +134,7 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
   const deviceId = await getOrCreateDeviceId();
   const apiBaseUrls = await getServerCandidateBaseUrls(apiBaseUrl);
   let response: Response | null = null;
+  let lastResponse: Response | null = null;
   let activeApiBaseUrl = apiBaseUrl;
   let lastError: unknown = null;
 
@@ -158,6 +149,13 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
         },
         body: JSON.stringify({ deviceId, refreshToken })
       });
+      if (shouldTryNextMobileServer(response.status, response.headers.get("content-type"))
+          && candidateApiBaseUrl !== apiBaseUrls[apiBaseUrls.length - 1]) {
+        lastResponse = response;
+        response = null;
+        continue;
+      }
+
       activeApiBaseUrl = candidateApiBaseUrl;
       await setServerBaseUrl(candidateApiBaseUrl).catch(() => undefined);
       break;
@@ -166,12 +164,16 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
     }
   }
 
-  if (!response) {
+  if (!response && !lastResponse) {
     if (lastError instanceof Error) {
       throw new Error(`${lastError.message} Проверенные адреса: ${apiBaseUrls.join(", ")}`);
     }
 
     throw new Error(`${serverUnavailableMessage} Проверенные адреса: ${apiBaseUrls.join(", ")}`);
+  }
+
+  if (!response) {
+    response = lastResponse!;
   }
 
   if (response.status === 401) {
@@ -187,14 +189,16 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
   let session: {
     accessToken: string;
     refreshToken: string;
-    user: { serverUserId: string };
+    refreshExpiresAt: string;
+    user: { serverUserId: string; fullName: string };
   };
 
   try {
     session = (await response.json()) as {
       accessToken: string;
       refreshToken: string;
-      user: { serverUserId: string };
+      refreshExpiresAt: string;
+      user: { serverUserId: string; fullName: string };
     };
   } catch {
     throw new Error("Не удалось обновить сессию. Повторите позже.");
@@ -209,6 +213,12 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
   }
 
   await setTokens(session.accessToken, session.refreshToken);
+  await setOfflineSession({
+    userId: session.user.serverUserId,
+    fullName: session.user.fullName,
+    lastOnlineLoginAt: new Date().toISOString(),
+    expiresAt: session.refreshExpiresAt
+  });
   // Bind legacy installations that have a valid refresh token but predate the
   // stored owner id. This avoids an unnecessary sign-in while reports are queued.
   if (!expectedOwnerUserId) {

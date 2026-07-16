@@ -50,7 +50,7 @@ export function createApiAssignmentsRepository({
 
   return {
     async getAssignments(filters: AssignmentFilterOptions = {}, options: ApiRequestOptions = {}) {
-      const assignments = await getAssignmentPage(client, filters, options);
+      const assignments = await getAllAssignmentPages(client, filters, options);
       return assignments.map(mapAssignment);
     },
 
@@ -97,8 +97,13 @@ export function createApiAssignmentsRepository({
   };
 }
 
-async function getAssignmentPage(client: ApiClient, filters: AssignmentFilterOptions, options: ApiRequestOptions) {
-  return client.get<AssignmentDto[]>(`/api/v1/assignments${buildAssignmentQuery(filters, 1)}`, options);
+async function getAllAssignmentPages(client: ApiClient, filters: AssignmentFilterOptions, options: ApiRequestOptions) {
+  const assignments: AssignmentDto[] = [];
+  for (let page = 1; ; page += 1) {
+    const batch = await client.get<AssignmentDto[]>(`/api/v1/assignments${buildAssignmentQuery(filters, page)}`, options);
+    assignments.push(...batch);
+    if (batch.length < assignmentPageSize) return assignments;
+  }
 }
 
 function buildAssignmentQuery(filters: AssignmentFilterOptions, page: number) {

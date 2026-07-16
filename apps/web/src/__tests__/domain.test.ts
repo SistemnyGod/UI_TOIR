@@ -83,8 +83,10 @@ describe("domain workflows", () => {
     const repository = createApiResultsRepository({
       fetcher: async () =>
         new Response(
-          JSON.stringify({ items: [
-            {
+          JSON.stringify({ items: [{
+            assignmentId: "assignment-1",
+            resultId: null,
+            results: [{
               id: "result-1",
               status: "Замечание",
               pointId: "point-1",
@@ -102,8 +104,8 @@ describe("domain workflows", () => {
               photos: 2,
               issueType: "Повреждение",
               severity: "Высокая",
-            },
-          ], page: 1, pageSize: 100, total: 1, totalPages: 1, hasNext: false }),
+            }],
+          }], page: 1, pageSize: 100, total: 1, totalPages: 1, hasNext: false }),
           { headers: { "content-type": "application/json" } },
         ),
     });
@@ -128,7 +130,11 @@ describe("domain workflows", () => {
         requestedPaths.push(path);
 
         return jsonResponse({
-          items: Array.from({ length: 100 }, (_, index) => createResultDto(`result-${index + 1}`)),
+          items: Array.from({ length: 100 }, (_, index) => ({
+            assignmentId: `assignment-${index + 1}`,
+            resultId: null,
+            results: [createResultDto(`result-${index + 1}`)],
+          })),
           page: 1,
           pageSize: 100,
           total: 101,
@@ -144,7 +150,7 @@ describe("domain workflows", () => {
     expect(resultPage.results.at(-1)?.id).toBe("result-100");
     expect(resultPage.hasMore).toBe(true);
     expect(requestedPaths).toHaveLength(1);
-    expect(requestedPaths[0]).toContain("/api/v2/results?status=issue&page=1&pageSize=100");
+    expect(requestedPaths[0]).toContain("/api/v3/results?status=issue&page=1&pageSize=100");
   });
 
   it("does not request API details for local mock result ids", async () => {
@@ -256,7 +262,7 @@ describe("domain workflows", () => {
     expect(requestedPaths.some((path) => path.endsWith("/api/v1/assignments/assignment-2/start"))).toBe(true);
   });
 
-  it("loads one bounded API assignment page", async () => {
+  it("loads all API assignment pages", async () => {
     const requestedPaths: string[] = [];
     const firstPage = Array.from({ length: 200 }, (_, index) => createAssignmentDto(`assignment-${index + 1}`));
     const repository = createApiAssignmentsRepository({
@@ -268,16 +274,19 @@ describe("domain workflows", () => {
           return jsonResponse(firstPage);
         }
 
+        if (path.includes("page=2")) return jsonResponse([createAssignmentDto("assignment-201")]);
+
         return jsonResponse([]);
       },
     });
 
     const assignments = await repository.getAssignments();
 
-    expect(assignments).toHaveLength(200);
-    expect(assignments.at(-1)?.id).toBe("assignment-200");
-    expect(requestedPaths).toHaveLength(1);
+    expect(assignments).toHaveLength(201);
+    expect(assignments.at(-1)?.id).toBe("assignment-201");
+    expect(requestedPaths).toHaveLength(2);
     expect(requestedPaths[0]).toContain("/api/v1/assignments?page=1&pageSize=200");
+    expect(requestedPaths[1]).toContain("/api/v1/assignments?page=2&pageSize=200");
   });
 
   it("passes assignment filters to the API", async () => {

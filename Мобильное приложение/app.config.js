@@ -18,7 +18,7 @@ const allowLocalCleartext = configuredDefaultEnvironment === "dev"
 
 const androidConfig = {
   package: "ru.patrol360.mobile",
-  versionCode: 24,
+  versionCode: 25,
   usesCleartextTraffic: false,
   adaptiveIcon: {
     foregroundImage: appIconFile,
@@ -108,7 +108,7 @@ module.exports = {
     name: "Patrol360",
     slug: "patrol360-mobile",
     scheme: "patrol360",
-    version: "0.1.23",
+    version: "0.1.24",
     platforms: ["android"],
     orientation: "portrait",
     icon: appIconFile,

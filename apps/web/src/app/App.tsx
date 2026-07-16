@@ -66,9 +66,13 @@ export function App() {
     session.user !== null &&
     session.user.id !== "mock-session-user";
   const dataAccessMode = dataSourceMode === "api" && !hasApiSession ? "mock" : dataSourceMode;
+  const requestsEnabled = requestModal !== null || screen === "dashboard" || screen === "assign" || screen === "schedule";
+  const scheduleResultsEnabled = screen === "schedule";
+  const mobileAccountsEnabled = screen === "accounts";
   const patrolData = usePatrolDataSource(dataAccessMode);
   const scheduleResultHistory = useResultsWorkspace({
     dataSourceMode: dataAccessMode,
+    enabled: scheduleResultsEnabled,
     selectedResultId,
     onSelectResult: setSelectedResultId,
     showToast,
@@ -77,6 +81,7 @@ export function App() {
   const [temporaryPasswordNotice, setTemporaryPasswordNotice] = useState<TemporaryPasswordNotice | null>(null);
   const mobileAccounts = useMobileAccountsWorkspace({
     dataSourceMode: dataAccessMode,
+    enabled: mobileAccountsEnabled,
     showTemporaryPassword,
     showToast,
   });
@@ -113,6 +118,7 @@ export function App() {
   } = usePatrolWorkspaceData({
     dataSourceMode: dataAccessMode,
     patrolSnapshot: patrolData.snapshot,
+    requestsEnabled,
     requestModal,
     refreshPatrolData: () => patrolData.refresh({ silent: true }),
     selectedPointId,
@@ -164,7 +170,7 @@ export function App() {
       });
     }
 
-    const latestSecurityEvent = mobileAccounts.mobileAccountSecurityEvents[0];
+    const latestSecurityEvent = mobileAccountsEnabled ? mobileAccounts.mobileAccountSecurityEvents[0] : undefined;
     if (latestSecurityEvent) {
       const eventType = latestSecurityEvent.eventType.toLowerCase();
       const tone = eventType.includes("failed") || eventType.includes("blocked") ? "danger" : "warning";
@@ -225,6 +231,7 @@ export function App() {
     return next.slice(0, 6);
   }, [
     activePatrols.length,
+    mobileAccountsEnabled,
     mobileAccounts.mobileAccountSecurityEvents,
     navigate,
     refreshRequests,

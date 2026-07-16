@@ -40,6 +40,21 @@ public sealed record ResultPageDto(
     int TotalPages,
     bool HasNext);
 
+// v3 makes the existing paging unit explicit: a page contains complete patrol
+// groups, not a misleading flat row collection with a group-based total.
+public sealed record ResultGroupPageItemDto(
+    Guid? AssignmentId,
+    Guid? ResultId,
+    IReadOnlyList<ResultListItemDto> Results);
+
+public sealed record ResultGroupPageDto(
+    IReadOnlyList<ResultGroupPageItemDto> Items,
+    int Page,
+    int PageSize,
+    int Total,
+    int TotalPages,
+    bool HasNext);
+
 public sealed record ResultDetailDto(
     Guid Id,
     Guid? AssignmentId,

@@ -95,12 +95,26 @@ export async function getLocalUserProfile(ownerUserId: string) {
 }
 
 export async function saveBootstrap(bootstrap: BootstrapDto) {
+  const currentCursor = await getBootstrapSyncCursor();
+  if (bootstrap.syncCursor && bootstrap.syncCursor === currentCursor) {
+    return false;
+  }
+
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
     db.withExclusiveTransactionAsync(async (tx) => {
       await saveBootstrapInTransaction(tx, bootstrap);
     })
   );
+  return true;
+}
+
+export async function getBootstrapSyncCursor() {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ cursor_value: string | null }>(
+    "SELECT cursor_value FROM sync_cursors WHERE scope = 'bootstrap' LIMIT 1"
+  );
+  return row?.cursor_value ?? null;
 }
 
 export async function replaceLocalUserDataWithBootstrap(bootstrap: BootstrapDto) {

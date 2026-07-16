@@ -2,6 +2,7 @@ import * as Crypto from "expo-crypto";
 
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { getLocalFileInfo, persistMobileMedia, persistPatrolPhoto, readFileAsBase64 } from "@/services/fileStorageService";
+import { bytesToHex, decodeBase64Bytes } from "@/sync/fileHash";
 
 type RegisterLocalPhotoInput = {
   ownerUserId: string;
@@ -34,7 +35,8 @@ export async function prepareLocalMedia(input: RegisterLocalMediaInput) {
     : await persistPatrolPhoto(input.localPath, clientFileId);
   const info = await getLocalFileInfo(localPath);
   const base64 = await readFileAsBase64(localPath);
-  const sha256 = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, base64);
+  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, decodeBase64Bytes(base64));
+  const sha256 = bytesToHex(digest);
 
   return {
     clientFileId,

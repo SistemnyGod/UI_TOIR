@@ -34,7 +34,7 @@ async function refreshMobileDataInternal() {
   await refreshPushRegistrationIfAllowed().catch(() => null);
 
   const bootstrap = await getBootstrap(accessToken);
-  await saveBootstrap(bootstrap);
+  const snapshotUpdated = await saveBootstrap(bootstrap);
   await Promise.all([
     syncMobileNotifications().catch(() => []),
     syncWorkTasks().catch(() => [])
@@ -47,7 +47,8 @@ async function refreshMobileDataInternal() {
     payload: {
       requestCount: bootstrap.requestBoard.length,
       assignmentCount: bootstrap.assignments.length,
-      routeCount: bootstrap.routes.length
+      routeCount: bootstrap.routes.length,
+      snapshotUpdated
     }
   }).catch(() => undefined);
 

@@ -155,6 +155,35 @@ public sealed class AssignmentsDbIntegrationTests
     }
 
     [DbIntegrationFact]
+    public async Task ConcurrentDifferentRequestsCannotDoubleBookEmployeeShift()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var firstRequestId = Guid.NewGuid();
+        var secondRequestId = Guid.NewGuid();
+        await InsertOpenPatrolRequestAsync(database.ConnectionString, firstRequestId, "CONCURRENT-1");
+        await InsertOpenPatrolRequestAsync(database.ConnectionString, secondRequestId, "CONCURRENT-2");
+        var plannedAt = new DateTimeOffset(2032, 4, 12, 9, 0, 0, TimeSpan.FromHours(5));
+
+        var attempts = new[] { firstRequestId, secondRequestId }
+            .Select(requestId => Task.Run(() => UseAssignments(provider, service => service.Create(new CreateAssignmentDto(
+                requestId,
+                SidorovEmployeeId,
+                FuelDepotRouteId,
+                plannedAt,
+                "Day")))))
+            .ToArray();
+        var results = await Task.WhenAll(attempts);
+
+        Assert.Single(results, result => result.Succeeded);
+        var rejected = Assert.Single(results, result => !result.Succeeded);
+        Assert.Contains("employeeId", rejected.Errors.Keys);
+        Assert.Equal(1, await CountAssignmentsForRequestsAsync(database.ConnectionString, firstRequestId, secondRequestId));
+    }
+
+    [DbIntegrationFact]
     public async Task CreatePatrolRequestUsesClientPlannedAtAndRejectsShiftConflict()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
@@ -461,7 +490,15 @@ public sealed class AssignmentsDbIntegrationTests
         var firstPhotoIndex = routePointResults.FindIndex(point => point.Photos > 0);
         Assert.True(firstPhotoIndex >= 0);
         var missingPhoto = routePointResults
-            .Select((point, index) => index == firstPhotoIndex ? point with { Photos = 0, PhotoAttachments = [] } : point)
+            .Select((point, index) => index == firstPhotoIndex
+                ? point with
+                {
+                    Status = "Р—Р°РјРµС‡Р°РЅРёРµ",
+                    IssueType = "РџРѕРІСЂРµР¶РґРµРЅРёРµ",
+                    Photos = 0,
+                    PhotoAttachments = []
+                }
+                : point)
             .ToList();
 
         var rejected = UseAssignments(provider, assignments => assignments.Complete(created.Assignment!.Id, new CompleteAssignmentDto(
@@ -504,6 +541,39 @@ public sealed class AssignmentsDbIntegrationTests
         Assert.Equal(1, savedIssueCount);
         var savedAttachmentCount = await CountPatrolResultAttachmentsAsync(database.ConnectionString, created.Assignment.Id);
         Assert.Equal(routePointResults.Count, savedAttachmentCount);
+    }
+
+    [DbIntegrationFact]
+    public async Task CompleteAssignmentDoesNotRequirePhotoForSuccessfulPoint()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var created = UseAssignments(provider, assignments => assignments.Create(new CreateAssignmentDto(
+            FreePatrolRequestId,
+            SidorovEmployeeId,
+            FuelDepotRouteId,
+            DateTimeOffset.UtcNow.AddDays(1),
+            "Day")));
+        Assert.True(created.Succeeded);
+
+        var successfulPointsWithoutPhotos = (await ReadRoutePointResultsAsync(database.ConnectionString, FuelDepotRouteId))
+            .Select(point => point with { Status = "ok", Photos = 0, PhotoAttachments = [] })
+            .ToList();
+        var completed = UseAssignments(provider, assignments => assignments.Complete(created.Assignment!.Id, new CompleteAssignmentDto(
+            DateTimeOffset.UtcNow,
+            "ok",
+            null,
+            "Successful checklist without issue photos",
+            null,
+            null,
+            0,
+            successfulPointsWithoutPhotos)));
+
+        Assert.NotNull(completed);
+        Assert.True(completed!.Changed);
+        Assert.False(completed.Errors?.ContainsKey("photos") ?? false);
     }
 
     [DbIntegrationFact]
@@ -555,6 +625,35 @@ public sealed class AssignmentsDbIntegrationTests
         Assert.False(duplicate.Succeeded);
         Assert.Contains("tag", duplicate.Errors.Keys);
         Assert.Contains("NFC-метка уже используется", duplicate.Errors["tag"][0]);
+    }
+
+    [DbIntegrationFact]
+    public async Task RouteUpdateAndReorderRejectStaleVersion()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var route = UseRouteQuery(provider, routes => routes.GetRoute(FuelDepotRouteId));
+        Assert.NotNull(route);
+        var originalVersion = route!.VersionNo;
+        var updated = UseRouteService(provider, routes => routes.UpdateRoute(FuelDepotRouteId, new UpdateRouteDto(
+            route.Name + " updated", route.Description, route.Territory, route.Status, route.Duration, route.Distance,
+            route.Periodicity, originalVersion)));
+        Assert.True(updated.Succeeded);
+
+        var staleUpdate = UseRouteService(provider, routes => routes.UpdateRoute(FuelDepotRouteId, new UpdateRouteDto(
+            route.Name + " stale", route.Description, route.Territory, route.Status, route.Duration, route.Distance,
+            route.Periodicity, originalVersion)));
+        Assert.False(staleUpdate.Succeeded);
+        Assert.True(staleUpdate.IsVersionConflict);
+        Assert.Contains("versionNo", staleUpdate.Errors.Keys);
+
+        var point = route.Points.First();
+        var staleReorder = UseRouteService(provider, routes => routes.ReorderRoutePoint(
+            FuelDepotRouteId, point.Id, new ReorderRoutePointDto(point.SequenceNo, originalVersion)));
+        Assert.False(staleReorder.Succeeded);
+        Assert.True(staleReorder.IsVersionConflict);
     }
 
     private static ServiceProvider BuildProvider(string connectionString)
@@ -705,6 +804,36 @@ public sealed class AssignmentsDbIntegrationTests
         await using var command = connection.CreateCommand();
         command.CommandText = "select count(*) from patrol_results where assignment_id = @assignment_id;";
         command.Parameters.AddWithValue("assignment_id", assignmentId);
+        return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task InsertOpenPatrolRequestAsync(string connectionString, Guid requestId, string number)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            insert into patrol_requests
+                (id, number, employee_id, employee_name, route_id, route_name, scheduled_date, scheduled_time,
+                 notify_employee, notification_text, status, status_code, created_at, description)
+            values
+                (@id, @number, @employee_id, 'Concurrent employee', @route_id, 'Concurrent route',
+                 date '2032-04-12', time '09:00', false, '', 'Новая', 'new', now(), 'Concurrency test');
+            """;
+        command.Parameters.AddWithValue("id", requestId);
+        command.Parameters.AddWithValue("number", number + "-" + requestId.ToString("N")[..8]);
+        command.Parameters.AddWithValue("employee_id", SidorovEmployeeId);
+        command.Parameters.AddWithValue("route_id", FuelDepotRouteId);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<int> CountAssignmentsForRequestsAsync(string connectionString, params Guid[] requestIds)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "select count(*) from assignments where patrol_request_id = any(@request_ids);";
+        command.Parameters.AddWithValue("request_ids", requestIds);
         return Convert.ToInt32(await command.ExecuteScalarAsync());
     }
 

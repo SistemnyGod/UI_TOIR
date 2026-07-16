@@ -3,6 +3,10 @@ import * as Crypto from "expo-crypto";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getDatabase } from "@/db/database";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
+import {
+  getMobileActionLogRetentionCutoff,
+  maxMobileActionLogEntriesPerOwner
+} from "@/services/mobileActionLogRetention";
 
 export type MobileActionLogEvent = {
   eventType: string;
@@ -97,6 +101,33 @@ export async function listMobileActionLog(limit = 20): Promise<MobileActionLogIt
     payloadJson: row.payload_json,
     createdAtLocal: row.created_at_local
   }));
+}
+
+/**
+ * Called on application bootstrap, not on every log write.  Retaining a short
+ * history keeps daily diagnostics useful without allowing an old device's
+ * SQLite database to grow forever.
+ */
+export async function pruneMobileActionLog(ownerUserId: string, now = new Date()) {
+  const db = await getDatabase();
+  const cutoff = getMobileActionLogRetentionCutoff(now);
+
+  await withSqliteBusyRetry(async () => {
+    await db.runAsync("DELETE FROM mobile_action_log WHERE created_at_local < ?", [cutoff]);
+    await db.runAsync(
+      `
+        DELETE FROM mobile_action_log
+        WHERE id IN (
+          SELECT id
+          FROM mobile_action_log
+          WHERE owner_user_id = ?
+          ORDER BY created_at_local DESC
+          LIMIT -1 OFFSET ?
+        )
+      `,
+      [ownerUserId, maxMobileActionLogEntriesPerOwner]
+    );
+  });
 }
 
 function safeStringify(value: unknown) {

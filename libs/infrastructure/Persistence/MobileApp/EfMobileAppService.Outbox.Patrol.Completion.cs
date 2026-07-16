@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Patrol360.Contracts;
 using Patrol360.Infrastructure.Persistence.Entities;
@@ -60,6 +62,29 @@ internal sealed partial class EfMobileAppService
         var resultsByPoint = pointResults
             .GroupBy(result => result.PointId)
             .ToDictionary(group => group.Key, group => group.Last());
+        var requestedFileIds = pointResults
+            .SelectMany(result => result.PhotoClientFileIds)
+            .Select(fileId => NormalizeOptionalText(fileId))
+            .Where(fileId => !string.IsNullOrWhiteSpace(fileId))
+            .ToHashSet(StringComparer.Ordinal);
+        var requestedPointIds = pointResults
+            .Select(result => result.PointId)
+            .ToHashSet();
+        var uploadedFilesByPoint = requestedFileIds.Count == 0
+            ? new Dictionary<Guid, IReadOnlyList<MobileUploadedFileEntity>>()
+            : dbContext.MobileUploadedFiles
+                .AsNoTracking()
+                .Where(file =>
+                    file.MobileAccountId == account.Id
+                    && file.AssignmentId == assignment.Id
+                    && file.PointId.HasValue
+                    && requestedPointIds.Contains(file.PointId.Value)
+                    && requestedFileIds.Contains(file.ClientFileId))
+                .ToList()
+                .GroupBy(file => file.PointId!.Value)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (IReadOnlyList<MobileUploadedFileEntity>)group.ToArray());
         var routePointsByIdForValidation = GetAssignedRoutePoints(assignment)
             .Where(IsMobileRoutePointVisible)
             .ToDictionary(point => point.Id);
@@ -97,17 +122,19 @@ internal sealed partial class EfMobileAppService
                 return Rejected(command.ClientOperationId, "Issue point result requires an issue type.");
             }
 
-            if (!wasCancelledByDispatcher && routePoint.RequiresPhoto && result.PhotoClientFileIds.Count == 0)
+            if (IsManualPointResult(result) && string.IsNullOrWhiteSpace(result.Comment))
+            {
+                return Rejected(command.ClientOperationId, "Manual point result requires a reason.");
+            }
+
+            var requiresPhoto = routePoint.RequiresPhoto
+                && (result.Status.Equals("issue", StringComparison.OrdinalIgnoreCase) || IsSkippedPointResult(result));
+            if (!wasCancelledByDispatcher && requiresPhoto && result.PhotoClientFileIds.Count == 0)
             {
                 return Rejected(command.ClientOperationId, "Required photo point result must include at least one photo.");
             }
 
-            var uploadedFilesForPoint = dbContext.MobileUploadedFiles
-                .Where(file =>
-                    file.MobileAccountId == account.Id
-                    && file.AssignmentId == assignment.Id
-                    && file.PointId == result.PointId)
-                .ToArray();
+            var uploadedFilesForPoint = uploadedFilesByPoint.GetValueOrDefault(result.PointId, []);
             foreach (var clientFileId in result.PhotoClientFileIds)
             {
                 var uploaded = uploadedFilesForPoint.Any(file => file.ClientFileId == clientFileId);
@@ -118,7 +145,7 @@ internal sealed partial class EfMobileAppService
             }
 
             if (!wasCancelledByDispatcher
-                && routePoint.RequiresPhoto
+                && requiresPhoto
                 && !result.PhotoClientFileIds.Any(clientFileId => uploadedFilesForPoint.Any(file =>
                     file.ClientFileId == clientFileId
                     && file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))))
@@ -166,7 +193,13 @@ internal sealed partial class EfMobileAppService
         }
 
         var now = DateTimeOffset.UtcNow;
-        SaveMobilePointResults(account, assignment, pointResults, completedAtLocal, now);
+        SaveMobilePointResults(
+            account,
+            assignment,
+            pointResults,
+            completedAtLocal,
+            now,
+            uploadedFilesByPoint.SelectMany(pair => pair.Value).ToArray());
         var startedAt = InferCompletedPatrolStartedAt(assignment, pointResults, completedAtLocal);
 
         if (wasCancelledByDispatcher)
@@ -229,16 +262,15 @@ internal sealed partial class EfMobileAppService
         AssignmentEntity assignment,
         IReadOnlyList<MobilePointResultPayload> pointResults)
     {
-        var existingResults = dbContext.PatrolResults
-            .Include(item => item.Attachments)
-            .Where(item => item.AssignmentId == assignment.Id)
-            .ToList();
-        if (existingResults.Count == 0)
+        var hasExistingResults = dbContext.PatrolResults
+            .AsNoTracking()
+            .Any(item => item.AssignmentId == assignment.Id);
+        if (!hasExistingResults)
         {
             return new ExistingCompleteReportValidation(false, true);
         }
 
-        var submittedSnapshots = BuildCompleteReportPayloadSnapshots(pointResults);
+        var payloadFingerprint = GetCompleteReportPayloadFingerprint(pointResults);
         var payloadMatches = dbContext.MobileOutboxOperations
             .AsNoTracking()
             .Where(operation =>
@@ -246,9 +278,26 @@ internal sealed partial class EfMobileAppService
                 && operation.CommandType == "completePatrolAssignment"
                 && operation.EntityServerId == assignment.Id.ToString()
                 && (operation.Status == "accepted" || operation.Status == "duplicate"))
-            .Select(operation => operation.PayloadJson)
-            .AsEnumerable()
-            .Any(payloadJson => CompleteReportPayloadMatches(submittedSnapshots, payloadJson));
+            .Any(operation => operation.PayloadFingerprint == payloadFingerprint);
+
+        // Rows created before payload_fingerprint was introduced remain replay-safe.
+        // The compatibility path is bounded to legacy rows for this single assignment;
+        // all new commands take the indexed comparison above.
+        if (!payloadMatches)
+        {
+            var submittedSnapshots = BuildCompleteReportPayloadSnapshots(pointResults);
+            payloadMatches = dbContext.MobileOutboxOperations
+                .AsNoTracking()
+                .Where(operation =>
+                    operation.MobileAccountId == account.Id
+                    && operation.CommandType == "completePatrolAssignment"
+                    && operation.EntityServerId == assignment.Id.ToString()
+                    && operation.PayloadFingerprint == null
+                    && (operation.Status == "accepted" || operation.Status == "duplicate"))
+                .Select(operation => operation.PayloadJson)
+                .AsEnumerable()
+                .Any(payloadJson => CompleteReportPayloadMatches(submittedSnapshots, payloadJson));
+        }
 
         return new ExistingCompleteReportValidation(
             true,
@@ -299,6 +348,15 @@ internal sealed partial class EfMobileAppService
             .ThenBy(snapshot => snapshot.NfcUidHash, StringComparer.Ordinal)
             .ToArray();
 
+    private static string GetCompleteReportPayloadFingerprint(Dictionary<string, object?> payload) =>
+        GetCompleteReportPayloadFingerprint(ReadPointResults(payload));
+
+    private static string GetCompleteReportPayloadFingerprint(IReadOnlyList<MobilePointResultPayload> pointResults)
+    {
+        var canonicalPayload = JsonSerializer.Serialize(BuildCompleteReportPayloadSnapshots(pointResults), JsonOptions);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalPayload))).ToLowerInvariant();
+    }
+
     private static bool CompleteReportPayloadSnapshotsMatch(
         IReadOnlyList<CompletePointResultPayloadSnapshot> submittedSnapshots,
         IReadOnlyList<CompletePointResultPayloadSnapshot> existingSnapshots)
@@ -332,7 +390,8 @@ internal sealed partial class EfMobileAppService
         AssignmentEntity assignment,
         IReadOnlyList<MobilePointResultPayload> pointResults,
         DateTimeOffset completedAtLocal,
-        DateTimeOffset operationAt)
+        DateTimeOffset operationAt,
+        IReadOnlyList<MobileUploadedFileEntity> uploadedFiles)
     {
         var existingResults = dbContext.PatrolResults
             .Include(item => item.Issues)
@@ -348,10 +407,6 @@ internal sealed partial class EfMobileAppService
             .Where(point => point.RouteId == assignment.RouteId)
             .Select(point => point.Id)
             .ToHashSet();
-        var uploadedFiles = dbContext.MobileUploadedFiles
-            .Where(file => file.MobileAccountId == account.Id && file.AssignmentId == assignment.Id)
-            .ToArray();
-
         foreach (var pointResult in pointResults)
         {
             routePointsById.TryGetValue(pointResult.PointId, out var routePoint);

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { assertSessionOwner } from "../src/auth/sessionIdentity.ts";
 import { isReauthenticationRequiredError, isSessionExpiredError } from "../src/auth/sessionErrors.ts";
+import { isOfflineSessionValid } from "../src/auth/offlineSession.ts";
 import { assertRecordsBelongToOwner } from "../src/sync/ownerIsolation.ts";
 
 test("refresh accepts the stored account and binds a legacy session once", () => {
@@ -33,4 +34,16 @@ test("sync refuses a mixed-owner batch", () => {
     ]),
     /другого пользователя/
   );
+});
+
+test("offline access expires at the last server-approved refresh deadline", () => {
+  const session = {
+    userId: "user-a",
+    fullName: "Илья",
+    lastOnlineLoginAt: "2026-07-01T00:00:00.000Z",
+    expiresAt: "2026-07-08T00:00:00.000Z"
+  };
+
+  assert.equal(isOfflineSessionValid(session, new Date("2026-07-07T23:59:59.000Z")), true);
+  assert.equal(isOfflineSessionValid(session, new Date("2026-07-08T00:00:00.000Z")), false);
 });

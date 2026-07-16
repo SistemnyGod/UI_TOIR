@@ -6,6 +6,7 @@ import { isReauthenticationRequiredError } from "@/auth/sessionErrors";
 import { hasUsableNetwork } from "@/core/network";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { logMobileError } from "@/services/mobileErrorReporter";
+import { reclaimAcceptedLocalMedia } from "@/services/localMediaReclamationService";
 import {
   listFilesByClientIds,
   markFileUploaded,
@@ -27,45 +28,66 @@ import { OutboxCommand, OutboxResponse } from "@/domain/sync/syncTypes";
 import { getPendingOutboxBatch } from "@/sync/outboxProcessor";
 import { findMissingClientFileIds } from "@/sync/fileReferenceIntegrity";
 import { SerializedTaskQueue } from "@/sync/serializedTaskQueue";
+import { processOrderedOutboxBatch } from "@/sync/orderedOutboxBatch";
+import { mapWithConcurrency } from "@/sync/boundedAsync";
+import { shouldContinueOutboxSync } from "@/sync/outboxContinuationPolicy";
 import { emitSyncEvent } from "@/sync/syncEvents";
 
 export type ForegroundSyncResult = {
   sent: number;
   skipped: "offline" | "serverUnavailable" | "unauthenticated" | null;
+  hasMore: boolean;
 };
 
 const staleSendingTimeoutMs = 5 * 60 * 1000;
 const maxSyncBatchesPerRun = 4;
+const reconciliationPageSize = 24;
+const reconciliationConcurrency = 4;
 const foregroundSyncQueue = new SerializedTaskQueue<ForegroundSyncResult>();
 
 export async function runForegroundSync(): Promise<ForegroundSyncResult> {
   // Never discard a sync request that arrives while another pass is running.
   // The previous `busy` result could leave a newly queued report untouched until
   // some later trigger (often the submission of the next report).
-  return foregroundSyncQueue.run(runForegroundSyncInternal);
+  const result = await foregroundSyncQueue.run(runForegroundSyncInternal);
+  if (result.hasMore) {
+    scheduleOutboxContinuation();
+  }
+  return result;
+}
+
+function scheduleOutboxContinuation() {
+  void foregroundSyncQueue.run(runForegroundSyncInternal).then((result) => {
+    if (result.hasMore) {
+      scheduleOutboxContinuation();
+    }
+  }).catch((error) => {
+    void logMobileError("sync.continuation.failed", error);
+  });
 }
 
 async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
-    return { sent: 0, skipped: "unauthenticated" as const };
+    return { sent: 0, skipped: "unauthenticated" as const, hasMore: false };
   }
 
   await finalizeAcceptedCompleteReportCommands(ownerUserId);
+  await reclaimAcceptedLocalMedia(ownerUserId);
 
   if (!(await hasUsableNetwork())) {
-    return { sent: 0, skipped: "offline" as const };
+    return { sent: 0, skipped: "offline" as const, hasMore: false };
   }
 
   const serverCheck = await checkServerConnection();
   if (!serverCheck.ok) {
     await markPendingOutboxCommandsRetryLater(ownerUserId, serverCheck.message);
-    return { sent: 0, skipped: "serverUnavailable" as const };
+    return { sent: 0, skipped: "serverUnavailable" as const, hasMore: false };
   }
 
   if (!(await getAccessToken())) {
     await markPendingOutboxCommandsAuthRequired(ownerUserId, authRequiredMessage);
-    return { sent: 0, skipped: "unauthenticated" as const };
+    return { sent: 0, skipped: "unauthenticated" as const, hasMore: false };
   }
 
   await resetStaleSendingOutboxCommands(ownerUserId, getStaleSendingBoundaryIso());
@@ -73,6 +95,8 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
 
   let sent = 0;
 
+  let processedBatches = 0;
+  const attemptedOperationIds = new Set<string>();
   for (let batchIndex = 0; batchIndex < maxSyncBatchesPerRun; batchIndex += 1) {
     const commands = await getPendingOutboxBatch(ownerUserId);
 
@@ -80,32 +104,62 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
       break;
     }
 
-    const commandIds = commands.map((command) => command.clientOperationId);
-    await markOutboxCommandsSending(commandIds);
+    processedBatches += 1;
+    commands.forEach((command) => attemptedOperationIds.add(command.clientOperationId));
 
-    try {
-      await uploadFilesForCompleteCommands(ownerUserId, commands);
-      const responses = await postOutboxWithServerReconciliation(commands);
-      await applyOutboxResponses(responses);
-      logAcceptedReports(commands, responses);
-      emitSyncEvent(buildSyncEvent(commands, responses));
-      sent += responses.length;
-    } catch (error) {
-      const readableError = getReadableSyncError(error);
-      void logMobileError("sync.failed", error);
-      if (isAuthRequiredError(error)) {
-        await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError);
-      } else {
-        await markOutboxCommandsRetryLater(commandIds, readableError);
+    const batchResult = await processOrderedOutboxBatch(commands, {
+      getDependencyKey: getCommandDependencyKey,
+      isFatal: isAuthRequiredError,
+      process: async (command) => {
+        const commandIds = [command.clientOperationId];
+        await markOutboxCommandsSending(commandIds);
+        try {
+          await uploadFilesForCompleteCommands(ownerUserId, [command]);
+          const responses = await postOutboxWithServerReconciliation(ownerUserId, [command]);
+          await applyOutboxResponses(responses);
+          await reclaimAcceptedLocalMedia(ownerUserId, getAcceptedCompletionFileIds([command], responses));
+          logAcceptedReports([command], responses);
+          emitSyncEvent(buildSyncEvent([command], responses));
+          sent += responses.length;
+        } catch (error) {
+          const readableError = getReadableSyncError(error);
+          void logMobileError("sync.failed", error);
+          if (isAuthRequiredError(error)) {
+            await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError);
+          } else {
+            await markOutboxCommandsRetryLater(commandIds, readableError);
+          }
+          throw error;
+        }
       }
-      throw error;
+    });
+
+    if (batchResult.firstError) {
+      throw batchResult.firstError;
     }
   }
 
-  return { sent, skipped: null };
+  const hasMore = shouldContinueOutboxSync(
+    processedBatches,
+    maxSyncBatchesPerRun,
+    (await getPendingOutboxBatch(ownerUserId)).some(
+      (command) => !attemptedOperationIds.has(command.clientOperationId)
+    )
+  );
+
+  return { sent, skipped: null, hasMore };
 }
 
-async function postOutboxWithServerReconciliation(commands: OutboxCommand[]) {
+function getCommandDependencyKey(command: OutboxCommand) {
+  const assignmentId = command.payload.assignmentId;
+  if (typeof assignmentId === "string" && assignmentId) {
+    return `patrolAssignment:${assignmentId}`;
+  }
+
+  return `${command.entityType}:${command.entityLocalId ?? command.entityServerId ?? command.clientOperationId}`;
+}
+
+async function postOutboxWithServerReconciliation(ownerUserId: string, commands: OutboxCommand[]) {
   try {
     return await postOutbox(commands);
   } catch (error) {
@@ -122,6 +176,7 @@ async function postOutboxWithServerReconciliation(commands: OutboxCommand[]) {
 
     if (reconciledResponses.length > 0) {
       await applyOutboxResponses(reconciledResponses);
+      await reclaimAcceptedLocalMedia(ownerUserId, getAcceptedCompletionFileIds(commands, reconciledResponses));
       logAcceptedReports(commands, reconciledResponses);
       emitSyncEvent(buildSyncEvent(commands, reconciledResponses));
     }
@@ -133,15 +188,13 @@ async function postOutboxWithServerReconciliation(commands: OutboxCommand[]) {
 }
 
 async function getAcceptedOutboxResults(commands: OutboxCommand[]): Promise<OutboxResponse[]> {
-  const responses = await Promise.all(
-    commands.map(async (command) => {
+  const responses = await mapWithConcurrency(commands, reconciliationConcurrency, async (command) => {
       try {
         return await getOutboxResult(command.clientOperationId);
       } catch {
         return null;
       }
-    })
-  );
+    });
 
   return responses.filter(isAcceptedOutboxResponse);
 }
@@ -191,7 +244,7 @@ export async function reconcileAcceptedCompleteReports(assignmentId?: string) {
   }
 
   const localFinalized = await finalizeAcceptedCompleteReportCommands(ownerUserId, assignmentId);
-  const commands = await listUnconfirmedCompleteReportCommands(ownerUserId, assignmentId);
+  const commands = await listUnconfirmedCompleteReportCommands(ownerUserId, assignmentId, reconciliationPageSize);
   if (commands.length === 0) {
     return { reconciled: localFinalized.finalized };
   }
@@ -202,6 +255,7 @@ export async function reconcileAcceptedCompleteReports(assignmentId?: string) {
   }
 
   await applyOutboxResponses(responses);
+  await reclaimAcceptedLocalMedia(ownerUserId, getAcceptedCompletionFileIds(commands, responses));
   logAcceptedReports(commands, responses);
   emitSyncEvent(buildSyncEvent(commands, responses));
 
@@ -285,6 +339,25 @@ function extractPatrolPhotoClientFileIds(command: OutboxCommand) {
 
     return result.photoClientFileIds.filter((item): item is string => typeof item === "string");
   });
+}
+
+function getAcceptedCompletionFileIds(commands: OutboxCommand[], responses: OutboxResponse[]) {
+  const acceptedOperationIds = new Set(
+    responses
+      .filter((response) => response.status === "accepted" || response.status === "duplicate")
+      .map((response) => response.clientOperationId)
+  );
+
+  return Array.from(
+    new Set(
+      commands
+        .filter(
+          (command) =>
+            command.commandType === "completePatrolAssignment" && acceptedOperationIds.has(command.clientOperationId)
+        )
+        .flatMap(extractPatrolPhotoClientFileIds)
+    )
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

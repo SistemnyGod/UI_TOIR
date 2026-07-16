@@ -10,6 +10,7 @@ import {
   getStoredOwnerUserId,
   getStoredSessionSnapshot,
   restoreStoredSessionSnapshot,
+  setOfflineSession,
   setStoredOwnerUserId,
   setTokens
 } from "@/auth/tokenStorage";
@@ -57,6 +58,12 @@ export async function signIn(loginName: string, password: string) {
 
     await setTokens(result.accessToken, result.refreshToken);
     await setStoredOwnerUserId(result.user.serverUserId);
+    await setOfflineSession({
+      userId: result.user.serverUserId,
+      fullName: result.user.fullName,
+      lastOnlineLoginAt: new Date().toISOString(),
+      expiresAt: result.refreshExpiresAt
+    });
   } catch (error) {
     await logout(result.accessToken).catch(() => undefined);
     await restoreStoredSessionSnapshot(previousSession);

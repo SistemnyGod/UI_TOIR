@@ -289,6 +289,14 @@ export async function initializeDatabase() {
   await runLocalMigration(db, "20260715_unique_active_completion", async () => {
     await ensureUniqueActiveCompletion(db);
   });
+
+  await runLocalMigration(db, "20260715_unique_point_results", async () => {
+    await ensureUniquePointResults(db);
+  });
+
+  await runLocalMigration(db, "20260715_mobile_action_log_retention", async () => {
+    await ensureMobileActionLogRetention(db);
+  });
 }
 
 async function runLocalMigration(db: SQLite.SQLiteDatabase, id: string, action: () => Promise<void>) {
@@ -475,6 +483,70 @@ async function ensureUniqueActiveCompletion(db: SQLite.SQLiteDatabase) {
   `);
 }
 
+async function ensureUniquePointResults(db: SQLite.SQLiteDatabase) {
+  await db.execAsync(`
+    -- Keep the most recently completed result for a point, but preserve a photo
+    -- that was attached to an older duplicate record before removing duplicates.
+    UPDATE point_results AS canonical
+    SET photo_client_file_ids_json = (
+      SELECT duplicate.photo_client_file_ids_json
+      FROM point_results duplicate
+      WHERE duplicate.owner_user_id = canonical.owner_user_id
+        AND duplicate.assignment_id = canonical.assignment_id
+        AND duplicate.point_id = canonical.point_id
+        AND COALESCE(duplicate.photo_client_file_ids_json, '[]') <> '[]'
+      ORDER BY COALESCE(duplicate.completed_at_local, duplicate.scanned_at_local, '') DESC, duplicate.rowid DESC
+      LIMIT 1
+    )
+    WHERE rowid IN (
+      SELECT rowid
+      FROM (
+        SELECT
+          rowid,
+          ROW_NUMBER() OVER (
+            PARTITION BY owner_user_id, assignment_id, point_id
+            ORDER BY
+              CASE WHEN completed_at_local IS NULL THEN 1 ELSE 0 END,
+              COALESCE(completed_at_local, scanned_at_local, '') DESC,
+              rowid DESC
+          ) AS duplicate_no
+        FROM point_results
+      ) ranked
+      WHERE duplicate_no = 1
+    )
+      AND COALESCE(photo_client_file_ids_json, '[]') = '[]'
+      AND EXISTS (
+        SELECT 1
+        FROM point_results duplicate
+        WHERE duplicate.owner_user_id = canonical.owner_user_id
+          AND duplicate.assignment_id = canonical.assignment_id
+          AND duplicate.point_id = canonical.point_id
+          AND COALESCE(duplicate.photo_client_file_ids_json, '[]') <> '[]'
+      );
+
+    DELETE FROM point_results
+    WHERE rowid IN (
+      SELECT rowid
+      FROM (
+        SELECT
+          rowid,
+          ROW_NUMBER() OVER (
+            PARTITION BY owner_user_id, assignment_id, point_id
+            ORDER BY
+              CASE WHEN completed_at_local IS NULL THEN 1 ELSE 0 END,
+              COALESCE(completed_at_local, scanned_at_local, '') DESC,
+              rowid DESC
+          ) AS duplicate_no
+        FROM point_results
+      ) ranked
+      WHERE duplicate_no > 1
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_point_results_owner_assignment_point
+      ON point_results (owner_user_id, assignment_id, point_id);
+  `);
+}
+
 async function ensureAssignmentSnapshotAndOutboxRecovery(db: SQLite.SQLiteDatabase) {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS assignment_route_points (
@@ -618,6 +690,13 @@ async function ensureMobileActionLog(db: SQLite.SQLiteDatabase) {
     { name: "entity_id", sql: "ALTER TABLE mobile_action_log ADD COLUMN entity_id TEXT" },
     { name: "payload_json", sql: "ALTER TABLE mobile_action_log ADD COLUMN payload_json TEXT" }
   ]);
+}
+
+async function ensureMobileActionLogRetention(db: SQLite.SQLiteDatabase) {
+  await db.execAsync(`
+    CREATE INDEX IF NOT EXISTS ix_mobile_action_log_owner_created
+      ON mobile_action_log (owner_user_id, created_at_local DESC);
+  `);
 }
 
 async function ensureColumns(db: SQLite.SQLiteDatabase, tableName: string, additions: { name: string; sql: string }[]) {

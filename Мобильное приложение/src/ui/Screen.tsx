@@ -17,6 +17,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAppTheme } from "@/features/settings/themePreference";
+import { canAttemptServerConnection } from "@/core/networkPolicy";
 
 type ScreenProps = {
   title: string;
@@ -98,7 +99,7 @@ function useScreenShell() {
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
-      setIsOnline(Boolean(state.isConnected && state.isInternetReachable !== false));
+      setIsOnline(canAttemptServerConnection(state));
     });
 
     return unsubscribe;

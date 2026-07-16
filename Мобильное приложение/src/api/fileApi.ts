@@ -2,11 +2,12 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import { refreshStoredAccessToken } from "@/api/httpClient";
 import { photoUploadTimeoutMs, serverUnavailableMessage, videoUploadTimeoutMs, withTimeout } from "@/api/networkTimeout";
+import { shouldTryNextMobileServer } from "@/api/serverFailoverPolicy";
 import { getAccessToken } from "@/auth/tokenStorage";
 import { getMobileRuntimeConfig, getServerCandidateBaseUrls, setServerBaseUrl } from "@/core/serverSettings";
 import { LocalMobileFile, MobileFileUploadResponse } from "@/domain/files/fileTypes";
 
-const maxPhotoBytes = 8 * 1024 * 1024;
+const maxPhotoBytes = 6 * 1024 * 1024;
 const maxVideoBytes = 25 * 1024 * 1024;
 
 export async function uploadMobileFile(file: LocalMobileFile) {
@@ -54,6 +55,9 @@ async function validateMobileFileBeforeUpload(file: LocalMobileFile) {
 
   const maxSize = file.contentType === "video/mp4" || file.mediaKind === "video" ? maxVideoBytes : maxPhotoBytes;
   if (file.sizeBytes <= 0 || file.sizeBytes > maxSize) {
+    if (file.mediaKind !== "video" && file.contentType !== "video/mp4") {
+      throw new Error("Фото слишком большое. Максимум 6 МБ.");
+    }
     throw new Error(file.mediaKind === "video" ? "Видео слишком большое. Максимум 25 МБ." : "Фото слишком большое. Максимум 8 МБ.");
   }
 
@@ -71,15 +75,26 @@ async function uploadFileWithFailover(
 ) {
   const apiBaseUrls = await getServerCandidateBaseUrls(preferredApiBaseUrl);
   let lastError: unknown = null;
+  let lastResult: Awaited<ReturnType<typeof uploadFileWithToken>> | null = null;
 
   for (const apiBaseUrl of apiBaseUrls) {
     try {
       const result = await uploadFileWithToken(apiBaseUrl, syncProtocolVersion, file, token);
+      if (shouldTryNextMobileServer(result.status, null, Boolean(result.body))
+          && apiBaseUrl !== apiBaseUrls[apiBaseUrls.length - 1]) {
+        lastResult = result;
+        continue;
+      }
+
       await setServerBaseUrl(apiBaseUrl).catch(() => undefined);
       return { apiBaseUrl, result };
     } catch (error) {
       lastError = error;
     }
+  }
+
+  if (lastResult) {
+    return { apiBaseUrl: apiBaseUrls[apiBaseUrls.length - 1], result: lastResult };
   }
 
   if (lastError instanceof Error) {

@@ -217,8 +217,13 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
   }));
 }
 
-export async function listUnconfirmedCompleteReportCommands(ownerUserId: string, assignmentId?: string) {
+export async function listUnconfirmedCompleteReportCommands(
+  ownerUserId: string,
+  assignmentId?: string,
+  limit = 24
+) {
   const db = await getDatabase();
+  const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
   const assignmentFilter = assignmentId ? "AND entity_local_id = ?" : "";
   const params = assignmentId ? [ownerUserId, assignmentId] : [ownerUserId];
   const rows = await db.getAllAsync<{
@@ -242,8 +247,9 @@ export async function listUnconfirmedCompleteReportCommands(ownerUserId: string,
         AND status IN ('pending', 'sending', 'retryLater')
         ${assignmentFilter}
       ORDER BY updated_at_local ASC, created_at_local ASC
+      LIMIT ?
     `,
-    params
+    [...params, boundedLimit]
   );
 
   return rows.map((row) => ({
@@ -502,9 +508,10 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
           owner_user_id: string;
           command_type: string;
           entity_local_id: string | null;
+          payload_json: string;
         }>(
           `
-            SELECT owner_user_id, command_type, entity_local_id
+            SELECT owner_user_id, command_type, entity_local_id, payload_json
             FROM outbox_commands
             WHERE client_operation_id = ?
           `,
@@ -512,6 +519,13 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
         );
 
         if (command?.command_type === "completePatrolAssignment" && command.entity_local_id) {
+          for (const clientFileId of extractCompletionFileIds(command.payload_json)) {
+            await tx.runAsync(
+              "UPDATE files SET status = 'linked' WHERE owner_user_id = ? AND client_file_id = ? AND status = 'uploaded'",
+              [command.owner_user_id, clientFileId]
+            );
+          }
+
           const terminalStatus = isCancelledCompletionResponse(response) ? "cancelledServer" : "completedServer";
           const requestStatus = isCancelledCompletionResponse(response) ? "cancelledServer" : "completed";
 
@@ -795,6 +809,21 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
       message: response.status === "conflict" ? "Команда требует проверки оператора." : "Команда отклонена сервером.",
       payload: response
     }).catch(() => undefined);
+  }
+}
+
+function extractCompletionFileIds(payloadJson: string) {
+  try {
+    const payload = JSON.parse(payloadJson) as { pointResults?: { photoClientFileIds?: unknown }[] };
+    return Array.from(new Set(
+      (payload.pointResults ?? []).flatMap((point) =>
+        Array.isArray(point.photoClientFileIds)
+          ? point.photoClientFileIds.filter((value): value is string => typeof value === "string")
+          : []
+      )
+    ));
+  } catch {
+    return [];
   }
 }
 

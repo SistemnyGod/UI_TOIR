@@ -231,7 +231,8 @@ internal sealed partial class EfPatrolStore
             var missingRequiredPhotos = routePointList
                 .Where(point => point.RequiresPhoto)
                 .Join(request.PointResults, point => point.Id, pointResult => pointResult.RoutePointId, (point, pointResult) => new { point, pointResult })
-                .Where(item => item.pointResult.PhotoAttachments is not { Count: > 0 })
+                .Where(item => RequiresPhotoForPointResult(item.pointResult)
+                    && item.pointResult.PhotoAttachments is not { Count: > 0 })
                 .Select(item => item.point.Name)
                 .ToList();
             if (missingRequiredPhotos.Count > 0)
@@ -403,6 +404,10 @@ internal sealed partial class EfPatrolStore
             ? "Подтверждено"
             : value;
     }
+
+    private static bool RequiresPhotoForPointResult(CompleteAssignmentPointDto pointResult) =>
+        NormalizeResultStatus(pointResult.Status) == "Р—Р°РјРµС‡Р°РЅРёРµ"
+        || string.Equals(pointResult.Status, "skipped", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsRoutePointVisibleForCompletion(RoutePointEntity point) =>
         !point.Status.Equals("Черновик", StringComparison.OrdinalIgnoreCase)

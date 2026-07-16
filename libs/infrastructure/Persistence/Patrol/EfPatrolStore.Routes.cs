@@ -124,6 +124,11 @@ internal sealed partial class EfPatrolStore
             return new UpdateRouteResult(null, new Dictionary<string, string[]> { ["route"] = ["Маршрут не найден."] });
         }
 
+        if (request.ExpectedVersionNo is not null && request.ExpectedVersionNo != route.VersionNo)
+        {
+            return new UpdateRouteResult(null, BuildRouteVersionErrors(), true);
+        }
+
         var errors = ValidateRoute(request.Name);
         if (errors.Count > 0)
         {
@@ -260,6 +265,11 @@ internal sealed partial class EfPatrolStore
             return new UpdateRoutePointResult(null, null, new Dictionary<string, string[]> { ["point"] = ["Точка маршрута не найдена."] });
         }
 
+        if (request.ExpectedVersionNo is not null && request.ExpectedVersionNo != route.VersionNo)
+        {
+            return new UpdateRoutePointResult(null, null, BuildRouteVersionErrors(), true);
+        }
+
         var ordered = route.Points.OrderBy(item => item.SequenceNo).ToList();
         ordered.Remove(point);
         var nextIndex = Math.Clamp(request.SequenceNo, 1, ordered.Count + 1) - 1;
@@ -271,6 +281,9 @@ internal sealed partial class EfPatrolStore
 
         return new UpdateRoutePointResult(MapRoute(route), MapRoutePoint(point), new Dictionary<string, string[]>());
     }
+
+    private static Dictionary<string, string[]> BuildRouteVersionErrors() =>
+        new() { ["versionNo"] = ["Маршрут уже изменён другим пользователем. Обновите данные и повторите действие."] };
 
     private static Dictionary<string, string[]> ValidateRoute(string? name)
     {

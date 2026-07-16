@@ -402,6 +402,11 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("payload_json");
 
+                    b.Property<string>("PayloadFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("payload_fingerprint");
+
                     b.Property<string>("Resolution")
                         .IsRequired()
                         .HasMaxLength(80)
@@ -3670,6 +3675,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.HasIndex("MobileAccountId", "CreatedAtServer")
                         .HasDatabaseName("ix_mobile_outbox_operations_account_created");
 
+                    b.HasIndex("MobileAccountId", "CommandType", "EntityServerId", "Status", "PayloadFingerprint")
+                        .HasFilter("payload_fingerprint IS NOT NULL")
+                        .HasDatabaseName("ix_mobile_outbox_operations_complete_fingerprint");
+
                     b.ToTable("mobile_outbox_operations", (string)null);
                 });
 
@@ -4113,9 +4122,7 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_patrol_results_actual_at");
 
                     b.HasIndex("AssignmentId")
-                        .IsUnique()
-                        .HasDatabaseName("ux_patrol_results_assignment_id")
-                        .HasFilter("assignment_id IS NOT NULL");
+                        .HasDatabaseName("ix_patrol_results_assignment_id");
 
                     b.HasIndex("EmployeeId")
                         .HasDatabaseName("ix_patrol_results_employee_id");
@@ -4717,6 +4724,7 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnName("territory");
 
                     b.Property<int>("VersionNo")
+                        .IsConcurrencyToken()
                         .HasColumnType("integer")
                         .HasColumnName("version_no");
 

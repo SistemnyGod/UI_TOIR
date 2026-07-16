@@ -18,6 +18,11 @@ internal sealed class MobileOutboxOperationEntity
 
     public string PayloadJson { get; set; } = string.Empty;
 
+    // Canonical SHA-256 fingerprint for completePatrolAssignment payloads.  This keeps
+    // report replay detection on an indexed scalar instead of deserializing every
+    // historical JSON payload for the assignment.
+    public string? PayloadFingerprint { get; set; }
+
     public DateTimeOffset CreatedAtLocal { get; set; }
 
     public DateTimeOffset CreatedAtServer { get; set; }

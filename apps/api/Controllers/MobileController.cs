@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Net.Http.Headers;
 using Patrol360.Application;
 using Patrol360.Contracts;
@@ -15,21 +16,11 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
         {
             status = "ok",
             serverTime = DateTimeOffset.UtcNow,
-            syncProtocolVersion = "1.0",
-            request = new
-            {
-                host = Request.Host.Value,
-                scheme = Request.Scheme,
-                path = Request.Path.Value,
-                remoteIp = GetIpAddress(),
-                userAgent = Request.Headers.UserAgent.ToString(),
-                mobileClient = Request.Headers.TryGetValue("X-Patrol360-Client", out var clientHeader)
-                    ? clientHeader.ToString()
-                    : null,
-            },
+            syncProtocolVersion = "1.0"
         });
 
     [HttpPost("auth/login")]
+    [EnableRateLimiting("mobile-auth")]
     public ActionResult<MobileAuthSessionDto> Login(MobileLoginRequestDto request)
     {
         var result = mobileAppService.Login(request, GetIpAddress());
@@ -42,6 +33,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
     }
 
     [HttpPost("auth/refresh")]
+    [EnableRateLimiting("mobile-auth")]
     public ActionResult<MobileAuthSessionDto> Refresh(MobileRefreshRequestDto request)
     {
         var result = mobileAppService.Refresh(request, GetIpAddress());
@@ -165,6 +157,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
     }
 
     [HttpPost("outbox")]
+    [RequestSizeLimit(1024 * 1024)]
     public ActionResult<IReadOnlyList<MobileOutboxResponseDto>> Outbox(MobileOutboxBatchDto request)
     {
         var token = ReadBearerToken();
@@ -173,13 +166,18 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
             return Unauthorized();
         }
 
+        if (request.Commands is null || request.Commands.Count > 100)
+        {
+            return BadRequest("Outbox batch must contain from 1 to 100 commands.");
+        }
+
         var result = mobileAppService.SaveOutbox(token, request);
         return result.Count == 0 ? Unauthorized() : Ok(result);
     }
 
     [HttpPost("files")]
     [RequestSizeLimit(32 * 1024 * 1024)]
-    public ActionResult<MobileFileUploadResponseDto> UploadFile(
+    public async Task<ActionResult<MobileFileUploadResponseDto>> UploadFile(
         [FromForm] string clientFileId,
         [FromForm] Guid? assignmentId,
         [FromForm] Guid? pointId,
@@ -201,7 +199,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
         }
 
         using var stream = file.OpenReadStream();
-        var result = mobileAppService.UploadFile(
+        var result = await mobileAppService.UploadFileAsync(
             token,
             new MobileFileUploadCommand(
                 clientFileId,
@@ -213,7 +211,8 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
                 capturedAtLocal,
                 file.FileName,
                 file.ContentType,
-                stream));
+                stream),
+            HttpContext.RequestAborted);
 
         return result is null ? Unauthorized() : Ok(result);
     }

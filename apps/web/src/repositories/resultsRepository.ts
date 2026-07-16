@@ -35,7 +35,11 @@ export interface ResultPage {
 }
 
 interface ResultPageEnvelopeDto {
-  items: ResultListItemDto[];
+  items: Array<{
+    assignmentId: string | null;
+    resultId: string | null;
+    results: ResultListItemDto[];
+  }>;
   page: number;
   pageSize: number;
   total: number;
@@ -85,7 +89,7 @@ export async function downloadResultAttachment(attachment: PatrolResultAttachmen
 async function getResultPage(client: ApiClient, filters: ResultFilterOptions, options: ApiRequestOptions & { page?: number }): Promise<ResultPage> {
   const page = options.page ?? 1;
   const envelope = await client.get<ResultPageEnvelopeDto>(
-    `/api/v2/results${buildResultQuery(filters, { page, pageSize: resultPageSize })}`,
+    `/api/v3/results${buildResultQuery(filters, { page, pageSize: resultPageSize })}`,
     options,
   );
 
@@ -93,7 +97,9 @@ async function getResultPage(client: ApiClient, filters: ResultFilterOptions, op
     hasMore: envelope.hasNext,
     page: envelope.page,
     pageSize: envelope.pageSize,
-    results: envelope.items.map(mapResult),
+    // v3 preserves the server's group page boundary. Flatten only after the
+    // complete group response has arrived, so a load-more never splits a patrol.
+    results: envelope.items.flatMap((group) => group.results.map(mapResult)),
     total: envelope.total,
     totalPages: envelope.totalPages,
   };

@@ -2,16 +2,21 @@ import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 
-import { getAccessToken, getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { isOfflineSessionValid } from "@/auth/offlineSession";
+import { clearAuthTokens, getAccessToken, getOfflineSession, getStoredOwnerUserId } from "@/auth/tokenStorage";
 
 export default function IndexRoute() {
   const [target, setTarget] = useState<"/(auth)/login" | "/(auth)/offline-login" | "/(tabs)/patrol" | null>(null);
 
   useEffect(() => {
-    void Promise.all([getAccessToken(), getStoredOwnerUserId()]).then(([token, ownerUserId]) => {
-      if (token) {
+    void Promise.all([getAccessToken(), getStoredOwnerUserId(), getOfflineSession()]).then(async ([token, ownerUserId, offlineSession]) => {
+      if (token && offlineSession && offlineSession.userId === ownerUserId && isOfflineSessionValid(offlineSession)) {
         setTarget("/(tabs)/patrol");
         return;
+      }
+
+      if (token && offlineSession && !isOfflineSessionValid(offlineSession)) {
+        await clearAuthTokens();
       }
 
       setTarget(ownerUserId ? "/(auth)/offline-login" : "/(auth)/login");

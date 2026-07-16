@@ -18,6 +18,7 @@ interface ScheduleEditPanelProps {
   canManage?: boolean;
   employees: EmployeeDirectoryItem[];
   resultHistory?: PatrolResult[];
+  resultHistoryMode?: "day" | "recent";
   routes: RouteDirectoryItem[];
   selected?: ScheduleCell;
   onClose: () => void;
@@ -31,6 +32,7 @@ export function ScheduleEditPanel({
   canManage = true,
   employees,
   resultHistory = [],
+  resultHistoryMode = "day",
   routes,
   selected,
   onClose,
@@ -347,6 +349,7 @@ export function ScheduleEditPanel({
       <ScheduleResultHistory
         canManage={canManage}
         resultHistory={resultHistory}
+        resultHistoryMode={resultHistoryMode}
         selectedResult={selectedResult}
         selectedResultId={selectedResultId}
         onApplyResult={applyResultToPlan}
@@ -392,6 +395,7 @@ function SchedulePlanField({ children, icon, label }: { children: ReactNode; ico
 function ScheduleResultHistory({
   canManage,
   resultHistory,
+  resultHistoryMode,
   selectedResult,
   selectedResultId,
   onApplyResult,
@@ -399,6 +403,7 @@ function ScheduleResultHistory({
 }: {
   canManage: boolean;
   resultHistory: PatrolResult[];
+  resultHistoryMode: "day" | "recent";
   selectedResult?: PatrolResult;
   selectedResultId: string;
   onApplyResult: (result: PatrolResult) => void;
@@ -410,12 +415,17 @@ function ScheduleResultHistory({
     return null;
   }
 
+  const title = resultHistoryMode === "recent" ? "Недавние результаты за 90 дней" : "История результатов за день";
+  const note = resultHistoryMode === "recent"
+    ? `${resultHistory.length} последних результатов по сотруднику или маршруту`
+    : `${resultHistory.length} результатов для быстрого назначения`;
+
   return (
-    <section className="schedule-result-history" aria-label="История результатов за день">
+    <section className="schedule-result-history" aria-label={title}>
       <div className="schedule-result-history-head">
         <div>
-          <strong>История результатов за день</strong>
-          <span>{resultHistory.length} результатов для быстрого назначения</span>
+          <strong>{title}</strong>
+          <span>{note}</span>
         </div>
       </div>
 

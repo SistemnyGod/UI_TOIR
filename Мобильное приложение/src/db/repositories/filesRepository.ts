@@ -231,3 +231,31 @@ export async function markFileUploadFailed(clientFileId: string) {
     [clientFileId]
   );
 }
+
+export async function listLinkedLocalFiles(ownerUserId: string, clientFileIds?: readonly string[]) {
+  const db = await getDatabase();
+  if (clientFileIds && clientFileIds.length === 0) {
+    return [];
+  }
+
+  const clientFileFilter = clientFileIds
+    ? ` AND client_file_id IN (${clientFileIds.map(() => "?").join(", ")})`
+    : "";
+  return db.getAllAsync<Pick<LocalMobileFile, "clientFileId" | "localPath" | "status">>(
+    `
+      SELECT client_file_id AS clientFileId, local_path AS localPath, status
+      FROM files
+      WHERE owner_user_id = ? AND status = 'linked'${clientFileFilter}
+      ORDER BY created_at_local ASC
+    `,
+    [ownerUserId, ...(clientFileIds ?? [])]
+  );
+}
+
+export async function deleteLinkedLocalFileRecord(ownerUserId: string, clientFileId: string) {
+  const db = await getDatabase();
+  await db.runAsync(
+    "DELETE FROM files WHERE owner_user_id = ? AND client_file_id = ? AND status = 'linked'",
+    [ownerUserId, clientFileId]
+  );
+}

@@ -98,6 +98,11 @@ export function PointFillScreen() {
       return;
     }
 
+    if (comment.trim().length === 0) {
+      setError("Для ручного подтверждения укажите причину, почему метку не удалось отсканировать.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await skipPoint(assignmentId, pointId, {

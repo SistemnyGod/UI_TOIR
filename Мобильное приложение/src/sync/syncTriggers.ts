@@ -1,4 +1,5 @@
 import NetInfo from "@react-native-community/netinfo";
+import { canAttemptServerConnection } from "@/core/networkPolicy";
 
 import { refreshMobileData } from "@/services/mobileDataRefreshService";
 import { triggerDailyDiagnosticReportUpload } from "@/services/diagnosticReportService";
@@ -23,7 +24,7 @@ export function subscribeToNetworkSync() {
   }, fallbackRefreshMs);
 
   const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
-    if (state.isConnected && state.isInternetReachable !== false) {
+    if (canAttemptServerConnection(state)) {
       requestMobileDataRefresh("network");
       triggerForegroundSyncWithRetry();
       void triggerDailyDiagnosticReportUpload();
@@ -46,6 +47,7 @@ export function subscribeToNetworkSync() {
 export type TriggerForegroundSyncResult = ForegroundSyncResult | {
   sent: 0;
   skipped: "failed";
+  hasMore: false;
 };
 
 export async function triggerForegroundSyncWithRetry(
@@ -70,7 +72,7 @@ export async function triggerForegroundSyncWithRetry(
     return result;
   } catch {
     scheduleRetry();
-    return { sent: 0, skipped: "failed" };
+    return { sent: 0, skipped: "failed", hasMore: false };
   }
 }
 

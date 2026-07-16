@@ -71,7 +71,7 @@ export function createApiPatrolRequestsRepository({
 
   return {
     async getPatrolRequests(filters: PatrolRequestFilterOptions = {}, options: ApiRequestOptions = {}) {
-      const requests = await getPatrolRequestPage(client, filters, options);
+      const requests = await getAllPatrolRequestPages(client, filters, options);
       return requests.map(mapPatrolRequest);
     },
 
@@ -96,8 +96,13 @@ export function createApiPatrolRequestsRepository({
   };
 }
 
-async function getPatrolRequestPage(client: ApiClient, filters: PatrolRequestFilterOptions, options: ApiRequestOptions) {
-  return client.get<PatrolRequestDto[]>(`/api/v1/patrol-requests${buildPatrolRequestQuery(filters, 1)}`, options);
+async function getAllPatrolRequestPages(client: ApiClient, filters: PatrolRequestFilterOptions, options: ApiRequestOptions) {
+  const requests: PatrolRequestDto[] = [];
+  for (let page = 1; ; page += 1) {
+    const batch = await client.get<PatrolRequestDto[]>(`/api/v1/patrol-requests${buildPatrolRequestQuery(filters, page)}`, options);
+    requests.push(...batch);
+    if (batch.length < patrolRequestPageSize) return requests;
+  }
 }
 
 function mapPatrolRequest(request: PatrolRequestDto): ServiceRequest {

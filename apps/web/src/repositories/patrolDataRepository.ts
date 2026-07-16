@@ -110,6 +110,7 @@ function mapDashboardMetrics(summary: DashboardSummaryDto, routeCount: number): 
 export function mapRoute(route: RouteDto): RouteDirectoryItem {
   return {
     id: route.id,
+    versionNo: route.versionNo,
     name: route.name,
     territory: route.territory,
     status: route.status as RouteDirectoryItem["status"],

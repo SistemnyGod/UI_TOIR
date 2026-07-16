@@ -14,6 +14,30 @@ public interface IPatrolResultQuery
         return Task.FromResult(GetResultsPage(filter, page, pageSize));
     }
 
+    async Task<ResultGroupPageDto> GetResultGroupsPageAsync(
+        ResultFilterDto filter,
+        int page = 1,
+        int pageSize = 100,
+        CancellationToken cancellationToken = default)
+    {
+        var resultPage = await GetResultsPageAsync(filter, page, pageSize, cancellationToken);
+        var groups = resultPage.Items
+            .GroupBy(item => item.AssignmentId is { } assignmentId ? $"assignment:{assignmentId:N}" : $"result:{item.Id:N}")
+            .Select(group => new ResultGroupPageItemDto(
+                group.First().AssignmentId,
+                group.First().AssignmentId is null ? group.First().Id : null,
+                group.ToArray()))
+            .ToArray();
+
+        return new ResultGroupPageDto(
+            groups,
+            resultPage.Page,
+            resultPage.PageSize,
+            resultPage.Total,
+            resultPage.TotalPages,
+            resultPage.HasNext);
+    }
+
     ResultExportFileDto ExportResults(ResultFilterDto filter);
 
     ResultDetailDto? GetResult(Guid id);

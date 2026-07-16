@@ -163,6 +163,18 @@ internal sealed partial class EfPatrolStore
             return BuildExistingAssignmentResult(request, existingAssignment);
         }
 
+        var requestedShift = string.IsNullOrWhiteSpace(request.Shift) ? employee?.Shift : request.Shift;
+        using var employeeShiftTransaction = employee is not null
+            && request.PlannedAt is not null
+            && request.PlannedAt != default
+            && !string.IsNullOrWhiteSpace(requestedShift)
+                ? dbContext.Database.BeginTransaction()
+                : null;
+        if (employeeShiftTransaction is not null)
+        {
+            AcquireEmployeeShiftAssignmentLock(employee!.Id, request.PlannedAt!.Value, requestedShift!);
+        }
+
         var errors = ValidateCreateAssignment(request, patrolRequest, employee, route);
 
         if (errors.Count > 0)
@@ -224,9 +236,11 @@ internal sealed partial class EfPatrolStore
         try
         {
             SaveChangesAndInvalidateDashboardSummary();
+            employeeShiftTransaction?.Commit();
         }
         catch (DbUpdateException) when (request.PatrolRequestId is not null)
         {
+            employeeShiftTransaction?.Rollback();
             dbContext.ChangeTracker.Clear();
             var racedAssignment = FindAssignmentByPatrolRequest(request.PatrolRequestId);
             if (racedAssignment is null)
@@ -561,6 +575,14 @@ internal sealed partial class EfPatrolStore
         {
             errors[fieldName] = ["У сотрудника уже есть активное назначение на эту смену."];
         }
+    }
+
+    private void AcquireEmployeeShiftAssignmentLock(Guid employeeId, DateTimeOffset plannedAt, string shift)
+    {
+        var businessDate = patrolTimeZone.GetDate(plannedAt).ToString("yyyy-MM-dd");
+        var normalizedShift = shift.Trim().ToUpperInvariant();
+        var lockKey = $"patrol-assignment:{employeeId:N}:{businessDate}:{normalizedShift}";
+        dbContext.Database.ExecuteSqlInterpolated($"SELECT pg_advisory_xact_lock(hashtextextended({lockKey}, 0))");
     }
 
     private static bool IsClosedPatrolRequestStatus(string status)

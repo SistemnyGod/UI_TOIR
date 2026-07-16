@@ -10,6 +10,10 @@ param(
 
   [string]$ReactNativeArchitectures = "arm64-v8a",
 
+  [string]$ReleaseKeystore = $env:PATROL360_ANDROID_KEYSTORE,
+
+  [string]$ReleaseKeyAlias = $env:PATROL360_ANDROID_KEY_ALIAS,
+
   [switch]$KeepBuildRoot
 )
 
@@ -106,7 +110,11 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $OutputDir = Join-Path $ProjectRoot "build-output"
 
 if ([string]::IsNullOrWhiteSpace($BuildRoot)) {
-  $BuildRoot = Join-Path (Join-Path $env:SystemDrive "p") "patrol360"
+  # Expo's package-refactor glob can fail on Windows paths containing Cyrillic
+  # characters. Native CMake paths are even more restrictive, so use a short
+  # ASCII directory under the current user's profile instead of C:\p (which
+  # may be inaccessible) or the project path.
+  $BuildRoot = Join-Path $env:USERPROFILE ".tmp\patrol360"
 }
 
 if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot "package.json"))) {
@@ -131,6 +139,18 @@ if (-not (Test-Path -LiteralPath $AndroidSdk)) {
 
 if (-not (Test-Path -LiteralPath $JavaHome)) {
   throw "JAVA_HOME not found: $JavaHome"
+}
+
+if ($Configuration -eq "Release") {
+  $missingReleaseSigning = [string]::IsNullOrWhiteSpace($ReleaseKeystore) `
+    -or -not (Test-Path -LiteralPath $ReleaseKeystore) `
+    -or [string]::IsNullOrWhiteSpace($ReleaseKeyAlias) `
+    -or [string]::IsNullOrWhiteSpace($env:PATROL360_ANDROID_KEYSTORE_PASSWORD) `
+    -or [string]::IsNullOrWhiteSpace($env:PATROL360_ANDROID_KEY_PASSWORD)
+
+  if ($missingReleaseSigning) {
+    throw "Release signing is required. Set PATROL360_ANDROID_KEYSTORE, PATROL360_ANDROID_KEY_ALIAS, PATROL360_ANDROID_KEYSTORE_PASSWORD and PATROL360_ANDROID_KEY_PASSWORD."
+  }
 }
 
 $buildLeaf = Split-Path -Leaf $BuildRoot
@@ -212,7 +232,35 @@ try {
 
   $destName = if ($Configuration -eq "Release") { "patrol360-mobile-release.apk" } else { "patrol360-mobile-debug.apk" }
   $destPath = Join-Path $OutputDir $destName
-  Copy-Item -LiteralPath $apk.FullName -Destination $destPath -Force
+
+  if ($Configuration -eq "Release") {
+    $buildToolsRoot = Join-Path $AndroidSdk "build-tools"
+    $buildTools = Get-ChildItem -LiteralPath $buildToolsRoot -Directory |
+      Sort-Object { [version]$_.Name } -Descending |
+      Select-Object -First 1
+    if (-not $buildTools) {
+      throw "Android build-tools not found under $buildToolsRoot"
+    }
+
+    $zipAlign = Join-Path $buildTools.FullName "zipalign.exe"
+    $apkSigner = Join-Path $buildTools.FullName "apksigner.bat"
+    if (-not (Test-Path -LiteralPath $zipAlign) -or -not (Test-Path -LiteralPath $apkSigner)) {
+      throw "zipalign or apksigner is missing from $($buildTools.FullName)"
+    }
+
+    $alignedPath = Join-Path $OutputDir "patrol360-mobile-release-aligned.apk"
+    try {
+      Invoke-Checked $zipAlign "-f" "-p" "4" $apk.FullName $alignedPath
+      Invoke-Checked $apkSigner "sign" "--ks" $ReleaseKeystore "--ks-key-alias" $ReleaseKeyAlias "--ks-pass" "env:PATROL360_ANDROID_KEYSTORE_PASSWORD" "--key-pass" "env:PATROL360_ANDROID_KEY_PASSWORD" "--out" $destPath $alignedPath
+      Invoke-Checked $apkSigner "verify" "--verbose" $destPath
+    }
+    finally {
+      Remove-Item -LiteralPath $alignedPath -Force -ErrorAction SilentlyContinue
+    }
+  }
+  else {
+    Copy-Item -LiteralPath $apk.FullName -Destination $destPath -Force
+  }
 
   $result = Get-Item -LiteralPath $destPath
   Write-Host "APK ready: $($result.FullName)"

@@ -496,6 +496,9 @@ public sealed class MobileAppDbIntegrationTests
         Assert.DoesNotContain($"{upload.ServerFileId:N}.jpg", photoSnapshot.AttachmentFileNames);
         Assert.Equal("manual", ReadPatrolResultStatus(database.ConnectionString, assignmentId, manualPoint.PointId));
         Assert.Equal(allPointResults.Length, CountPatrolResults(database.ConnectionString, assignmentId));
+        var payloadFingerprint = ReadOutboxPayloadFingerprint(database.ConnectionString, "op-complete-accepted");
+        Assert.NotNull(payloadFingerprint);
+        Assert.Matches("^[0-9a-f]{64}$", payloadFingerprint);
         Assert.Single(completeDuplicate);
         Assert.Equal("duplicate", completeDuplicate[0].Status);
 
@@ -1338,6 +1341,18 @@ public sealed class MobileAppDbIntegrationTests
         command.Parameters.AddWithValue("assignment_id", assignmentId);
 
         return Convert.ToInt32(command.ExecuteScalar());
+    }
+
+    private static string? ReadOutboxPayloadFingerprint(string connectionString, string clientOperationId)
+    {
+        using var connection = new NpgsqlConnection(connectionString);
+        connection.Open();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT payload_fingerprint FROM mobile_outbox_operations WHERE client_operation_id = @client_operation_id;";
+        command.Parameters.AddWithValue("client_operation_id", clientOperationId);
+
+        return command.ExecuteScalar() as string;
     }
 
     private sealed record SkippedPatrolResult(

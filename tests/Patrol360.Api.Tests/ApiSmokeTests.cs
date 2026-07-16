@@ -563,6 +563,24 @@ public class ApiSmokeTests
     }
 
     [Fact]
+    public async Task ResultsV3ControllerReturnsCompleteGroups()
+    {
+        var resultItem = CreateResultListItem();
+        var query = new FakePatrolResultQuery([resultItem]);
+        var controller = new ResultsV3Controller(query);
+
+        var result = await controller.List(null, null, null, null, null, null, 2, 25);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var page = Assert.IsType<ResultGroupPageDto>(ok.Value);
+        var group = Assert.Single(page.Items);
+        Assert.Single(group.Results);
+        Assert.Equal(resultItem.Id, group.Results[0].Id);
+        Assert.Equal(2, page.Page);
+        Assert.Equal(25, page.PageSize);
+    }
+
+    [Fact]
     public void ResultsControllerGetMapsMissingResultToNotFound()
     {
         var controller = new ResultsController(new FakePatrolResultQuery([]));

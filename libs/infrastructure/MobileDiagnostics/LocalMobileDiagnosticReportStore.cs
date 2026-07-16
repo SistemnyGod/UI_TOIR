@@ -13,6 +13,7 @@ internal sealed class LocalMobileDiagnosticReportStore : IMobileDiagnosticReport
     };
 
     private readonly string storagePath;
+    private readonly TimeSpan retention;
 
     public LocalMobileDiagnosticReportStore(IConfiguration configuration)
     {
@@ -21,10 +22,12 @@ internal sealed class LocalMobileDiagnosticReportStore : IMobileDiagnosticReport
             ? Path.Combine(Directory.GetCurrentDirectory(), "mobile-diagnostics")
             : configuredPath);
         Directory.CreateDirectory(storagePath);
+        retention = TimeSpan.FromDays(Math.Clamp(configuration.GetValue("MobileDiagnostics:RetentionDays", 90), 7, 365));
     }
 
     public MobileDiagnosticReportReceiptDto Save(MobileStoredDiagnosticReport report)
     {
+        DeleteExpiredReports();
         var reportId = report.Report.ReportId;
         var reportDate = report.Report.GeneratedAt.UtcDateTime;
         var directory = Path.Combine(
@@ -61,6 +64,20 @@ internal sealed class LocalMobileDiagnosticReportStore : IMobileDiagnosticReport
             {
                 File.Delete(tempPath);
             }
+        }
+    }
+
+    private void DeleteExpiredReports()
+    {
+        var cutoff = DateTime.UtcNow.Subtract(retention);
+        foreach (var file in Directory.EnumerateFiles(storagePath, "*.json", SearchOption.AllDirectories))
+        {
+            try
+            {
+                if (File.GetLastWriteTimeUtc(file) < cutoff) File.Delete(file);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
     }
 }

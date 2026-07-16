@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -53,6 +53,7 @@ const MAX_VALID_PATROL_DURATION_MINUTES = 12 * 60;
 const CONTEXT_PANEL_WIDTH = 220;
 const CONTEXT_PANEL_HEIGHT = 132;
 const RESULT_VISIBILITY_STORAGE_KEY = "patrol360.results.hiddenGroups.v1";
+const RESULT_DETAIL_CONCURRENCY = 4;
 
 interface ResultVisibilityState {
   archived: string[];
@@ -60,6 +61,7 @@ interface ResultVisibilityState {
 }
 
 const emptyResultVisibilityState: ResultVisibilityState = { archived: [], deleted: [] };
+const noop = () => undefined;
 
 export function ResultsWorkspace({
   canCreateRequest = true,
@@ -76,6 +78,7 @@ export function ResultsWorkspace({
 }: ResultsScreenProps) {
   const [activeMode, setActiveMode] = useState<ResultMode>(mode);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [routeFilter, setRouteFilter] = useState("all");
   const [openGroupId, setOpenGroupId] = useState<string | null>(null);
   const [actionMenuGroupId, setActionMenuGroupId] = useState<string | null>(null);
@@ -83,17 +86,23 @@ export function ResultsWorkspace({
   const [archivedGroupIds, setArchivedGroupIds] = useState<string[]>(() => readResultVisibilityState().archived);
   const [deletedGroupIds, setDeletedGroupIds] = useState<string[]>(() => readResultVisibilityState().deleted);
   const [detailedResults, setDetailedResults] = useState<Record<string, PatrolResult>>({});
+  const detailRequestsRef = useRef(new Map<string, Promise<PatrolResult>>());
   const [photoLoadingResultId, setPhotoLoadingResultId] = useState<string | null>(null);
   const [mediaPreview, setMediaPreview] = useState<ResultMediaPreviewState | null>(null);
   const [exportInProgress, setExportInProgress] = useState(false);
   const apiResultsRepository = useMemo(() => createApiResultsRepository(), []);
-  const resultApiFilters = useMemo(() => buildResultApiFilters(activeMode, routeFilter, query), [activeMode, query, routeFilter]);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedQuery(query), 300);
+    return () => window.clearTimeout(timeout);
+  }, [query]);
+  const apiQuery = dataSourceMode === "api" ? debouncedQuery : query;
+  const resultApiFilters = useMemo(() => buildResultApiFilters(activeMode, routeFilter, apiQuery), [activeMode, apiQuery, routeFilter]);
 
-  const { results, selectedResult, listStatus, errorMessage, refreshResults, exportResults, hasMoreResults, loadMoreResults, loadMoreStatus } = useResultsWorkspace({
+  const { results, selectedResult, listStatus, errorMessage, refreshResults, exportResults, hasMoreResults, loadMoreResults, loadMoreStatus, totalResults } = useResultsWorkspace({
     dataSourceMode,
     selectedResultId,
-    onSelectResult: onSelectResult ?? (() => undefined),
-    showToast: onNotify ?? (() => undefined),
+    onSelectResult: onSelectResult ?? noop,
+    showToast: onNotify ?? noop,
     filters: resultApiFilters,
   });
 
@@ -111,6 +120,9 @@ export function ResultsWorkspace({
   const filteredGroups = useMemo(() => filterGroups(visibleGroups, activeMode, clientQuery, routeFilter), [visibleGroups, activeMode, clientQuery, routeFilter]);
   const counters = useMemo(() => buildCounters(visibleGroups), [visibleGroups]);
   const metrics = useMemo(() => buildMetrics(visibleGroups), [visibleGroups]);
+  const loadedSampleCaption = dataSourceMode === "api" && totalResults > results.length
+    ? `По ${results.length} загруженным из ${totalResults}`
+    : "По текущей выборке";
   const loading = listStatus === "loading";
   const error = listStatus === "error" ? errorMessage : undefined;
 
@@ -183,7 +195,7 @@ export function ResultsWorkspace({
     setOpenGroupId(group.id);
 
     if (dataSourceMode === "api") {
-      void Promise.all(group.results.map((result) => loadResultDetails(result))).catch((detailsError) => {
+      void mapWithConcurrency(group.results, RESULT_DETAIL_CONCURRENCY, loadResultDetails).catch((detailsError) => {
         const message = detailsError instanceof Error ? detailsError.message : "не удалось загрузить детали обхода";
         addToast?.(`Не удалось загрузить детали обхода: ${message}`, "error");
       });
@@ -197,9 +209,20 @@ export function ResultsWorkspace({
     if (dataSourceMode !== "api") return result;
     if (!isBackendResultId(result.id)) return result;
 
-    const detailed = await apiResultsRepository.getResult(result.id);
-    setDetailedResults((current) => ({ ...current, [detailed.id]: detailed }));
-    return detailed;
+    const inFlight = detailRequestsRef.current.get(result.id);
+    if (inFlight) return inFlight;
+
+    const request = apiResultsRepository
+      .getResult(result.id)
+      .then((detailed) => {
+        setDetailedResults((current) => ({ ...current, [detailed.id]: detailed }));
+        return detailed;
+      })
+      .finally(() => {
+        detailRequestsRef.current.delete(result.id);
+      });
+    detailRequestsRef.current.set(result.id, request);
+    return request;
   };
 
   const openAttachment = async (result: PatrolResult, order?: number) => {
@@ -318,9 +341,9 @@ export function ResultsWorkspace({
       </div>
 
       <section className="results-review-metrics" aria-label="Сводка результатов обходов">
-        <MetricCard icon={FileText} title="Всего обходов" value={metrics.total} caption="По текущей выборке" />
-        <MetricCard icon={AlertTriangle} title="С замечаниями" value={metrics.issues} caption="Есть неисправности или ручные исключения" tone="orange" />
-        <MetricCard icon={Camera} title="С медиа" value={metrics.withPhotos} caption="Есть фото или видео" />
+        <MetricCard icon={FileText} title="Всего обходов" value={metrics.total} caption={loadedSampleCaption} />
+        <MetricCard icon={AlertTriangle} title="С замечаниями" value={metrics.issues} caption={loadedSampleCaption} tone="orange" />
+        <MetricCard icon={Camera} title="С медиа" value={metrics.withPhotos} caption={loadedSampleCaption} />
         <MetricCard icon={Timer} title="Среднее время" value={metrics.averageDuration} caption={metrics.durationQualityLabel} />
         <MetricCard icon={CheckCircle2} title="Без замечаний" value={metrics.clean} caption="Точки закрыты без проблем" tone="green" />
       </section>
@@ -757,7 +780,7 @@ export function filterGroups(groups: ResultGroup[], mode: ResultMode, query: str
   });
 }
 
-function buildResultApiFilters(mode: ResultMode, route: string, query: string): ResultFilterOptions {
+export function buildResultApiFilters(mode: ResultMode, route: string, query: string): ResultFilterOptions {
   const filters: ResultFilterOptions = {};
   if (mode === "issues") {
     filters.status = "issue";
@@ -765,6 +788,8 @@ function buildResultApiFilters(mode: ResultMode, route: string, query: string): 
     filters.status = "late";
   } else if (mode === "noPhotos") {
     filters.hasPhotos = false;
+  } else if (mode === "photos") {
+    filters.hasPhotos = true;
   }
 
   if (route !== "all") {
@@ -888,6 +913,35 @@ export function summarizeDuration(start?: string, finish?: string): DurationSumm
   }
 
   return { label: formatDuration(minutes), hint: "По времени первой и последней фиксации", minutes, tone: "ok" };
+}
+
+/**
+ * Keeps a detail view responsive without turning a 20-point route into 20
+ * simultaneous HTTP requests. Failed items do not stop other point details.
+ */
+export async function mapWithConcurrency<T>(
+  items: readonly T[],
+  concurrency: number,
+  load: (item: T) => Promise<unknown>,
+): Promise<void> {
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  let cursor = 0;
+  let firstError: unknown;
+
+  async function worker() {
+    while (cursor < items.length) {
+      const item = items[cursor];
+      cursor += 1;
+      try {
+        await load(item);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: limit }, () => worker()));
+  if (firstError) throw firstError;
 }
 
 function formatDuration(totalMinutes: number) {

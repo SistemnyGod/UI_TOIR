@@ -397,6 +397,7 @@ export interface RoutePoint {
 
 export interface RouteDirectoryItem {
   id: string;
+  versionNo?: number;
   name: string;
   territory: string;
   status: "Активен" | "Черновик" | "Архив";

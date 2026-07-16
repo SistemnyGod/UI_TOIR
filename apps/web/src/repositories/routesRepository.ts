@@ -126,8 +126,11 @@ export function createApiRoutesRepository({ baseUrl }: { baseUrl?: string } = {}
       return mapRoute(route);
     },
 
-    async updateRoute(routeId: string, payload: RouteFormPayload) {
-      const route = await client.put<RouteDto, UpdateRouteDto>(`/api/v1/routes/${routeId}`, mapRoutePayload(payload));
+    async updateRoute(routeId: string, payload: RouteFormPayload, expectedVersionNo?: number) {
+      const route = await client.put<RouteDto, UpdateRouteDto>(`/api/v1/routes/${routeId}`, {
+        ...mapRoutePayload(payload),
+        expectedVersionNo,
+      });
       return mapRoute(route);
     },
 
@@ -148,8 +151,8 @@ export function createApiRoutesRepository({ baseUrl }: { baseUrl?: string } = {}
       await client.delete(`/api/v1/routes/${routeId}/points/${pointId}`);
     },
 
-    async reorderRoutePoint(routeId: string, pointId: string, sequenceNo: number) {
-      await client.put(`/api/v1/routes/${routeId}/points/${pointId}/order`, { sequenceNo });
+    async reorderRoutePoint(routeId: string, pointId: string, sequenceNo: number, expectedVersionNo?: number) {
+      await client.put(`/api/v1/routes/${routeId}/points/${pointId}/order`, { sequenceNo, expectedVersionNo });
     },
   };
 }

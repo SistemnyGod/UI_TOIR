@@ -3,7 +3,8 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text } from "react-native";
 
-import { getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { isOfflineSessionValid } from "@/auth/offlineSession";
+import { getOfflineSession, getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getLocalUserProfile } from "@/db/repositories/bootstrapRepository";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -24,8 +25,14 @@ export default function OfflineLoginRoute() {
   useEffect(() => {
     let isMounted = true;
 
-    void getStoredOwnerUserId()
-      .then((ownerUserId) => (ownerUserId ? getLocalUserProfile(ownerUserId) : null))
+    void Promise.all([getStoredOwnerUserId(), getOfflineSession()])
+      .then(([ownerUserId, offlineSession]) => {
+        if (!ownerUserId || !offlineSession || offlineSession.userId !== ownerUserId || !isOfflineSessionValid(offlineSession)) {
+          return null;
+        }
+
+        return getLocalUserProfile(ownerUserId);
+      })
       .then((loaded) => {
         if (isMounted) {
           setProfile(loaded);

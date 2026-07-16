@@ -23,21 +23,16 @@ internal sealed partial class EfPatrolStore
         var todayStart = patrolTimeZone.StartOfDayUtc(localToday);
         var todayEnd = patrolTimeZone.StartOfNextDayUtc(localToday);
         var totalPoints = dbContext.RoutePoints.Count(point => point.Route != null && !point.Route.IsArchived);
+        // Aggregate in PostgreSQL instead of materialising every point result of
+        // the current shift in the API process.
         var todayResults = dbContext.PatrolResults
             .AsNoTracking()
-            .Where(result => result.ActualAt >= todayStart && result.ActualAt < todayEnd)
-            .Select(result => new
-            {
-                result.AssignmentId,
-                result.RoutePointId,
-                result.Status,
-                result.IssueType
-            })
-            .ToList();
+            .Where(result => result.ActualAt >= todayStart && result.ActualAt < todayEnd);
+        var totalTodayResults = todayResults.Count();
         var completedPoints = todayResults.Count(result => result.RoutePointId != null);
         if (completedPoints == 0)
         {
-            completedPoints = todayResults.Count();
+            completedPoints = totalTodayResults;
         }
         var completedToday = todayResults
             .Where(result => result.AssignmentId != null)

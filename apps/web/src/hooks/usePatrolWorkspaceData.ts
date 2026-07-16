@@ -58,6 +58,8 @@ import { useStoredState } from "./useStoredState";
 
 interface UsePatrolWorkspaceDataOptions {
   dataSourceMode: DataSourceMode;
+  /** Requests are fetched only by screens that render or edit them. */
+  requestsEnabled?: boolean;
   patrolSnapshot: PatrolDataSnapshot;
   requestModal: RequestModalState;
   refreshPatrolData: () => Promise<void>;
@@ -71,6 +73,7 @@ interface UsePatrolWorkspaceDataOptions {
 
 export function usePatrolWorkspaceData({
   dataSourceMode,
+  requestsEnabled = true,
   patrolSnapshot,
   requestModal,
   refreshPatrolData,
@@ -196,7 +199,7 @@ export function usePatrolWorkspaceData({
   }, [routeDirectory, selectedPointId, selectedRouteDirectoryId, setSelectedPointId, setSelectedRouteDirectoryId]);
 
   useEffect(() => {
-    if (dataSourceMode !== "api") {
+    if (dataSourceMode !== "api" || !requestsEnabled) {
       setRequestListStatus("idle");
       setRequestListErrorMessage(undefined);
       return;
@@ -207,7 +210,7 @@ export function usePatrolWorkspaceData({
     void refreshRequests({ signal: controller.signal });
 
     return () => controller.abort();
-  }, [dataSourceMode, refreshRequests]);
+  }, [dataSourceMode, refreshRequests, requestsEnabled]);
 
   async function submitRequestDraft(payload: CreateServiceRequestPayload) {
     if (dataSourceMode === "api") {
@@ -307,7 +310,8 @@ export function usePatrolWorkspaceData({
 
   async function updateRoute(routeId: string, payload: RouteFormPayload) {
     if (dataSourceMode === "api") {
-      await apiRoutes.updateRoute(routeId, payload);
+      const expectedVersionNo = routeDirectory.find((item) => item.id === routeId)?.versionNo;
+      await apiRoutes.updateRoute(routeId, payload, expectedVersionNo);
       await refreshPatrolData();
       showToast("Маршрут сохранен через API");
       return;
@@ -390,7 +394,7 @@ export function usePatrolWorkspaceData({
       const point = route?.points.find((item) => item.id === pointId);
       if (!point) return;
 
-      await apiRoutes.reorderRoutePoint(routeId, pointId, point.order + direction);
+      await apiRoutes.reorderRoutePoint(routeId, pointId, point.order + direction, route?.versionNo);
       await refreshPatrolData();
       return;
     }

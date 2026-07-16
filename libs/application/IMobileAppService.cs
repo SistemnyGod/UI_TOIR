@@ -29,6 +29,12 @@ public interface IMobileAppService
     MobileOutboxResponseDto? GetOutboxResult(string accessToken, string clientOperationId);
 
     MobileFileUploadResponseDto? UploadFile(string accessToken, MobileFileUploadCommand command);
+
+    Task<MobileFileUploadResponseDto?> UploadFileAsync(
+        string accessToken,
+        MobileFileUploadCommand command,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(UploadFile(accessToken, command));
 }
 
 public sealed record MobileFileUploadCommand(

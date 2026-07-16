@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Patrol360.Api.Authorization;
 using Patrol360.Application;
 using Patrol360.Contracts;
@@ -54,9 +55,18 @@ public sealed class RoutesController(
     [RequirePermission("routes.write")]
     public ActionResult<RouteDto> Update(Guid id, UpdateRouteDto request)
     {
-        var result = routeCatalogService.UpdateRoute(id, request);
+        UpdateRouteResult result;
+        try
+        {
+            result = routeCatalogService.UpdateRoute(id, request);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return RouteVersionConflict();
+        }
         if (!result.Succeeded)
         {
+            if (result.IsVersionConflict) return RouteVersionConflict();
             return RouteValidationProblem(result.Errors);
         }
 
@@ -98,9 +108,18 @@ public sealed class RoutesController(
     [RequirePermission("routes.write")]
     public ActionResult<RoutePointDto> ReorderPoint(Guid routeId, Guid pointId, ReorderRoutePointDto request)
     {
-        var result = routeCatalogService.ReorderRoutePoint(routeId, pointId, request);
+        UpdateRoutePointResult result;
+        try
+        {
+            result = routeCatalogService.ReorderRoutePoint(routeId, pointId, request);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return RouteVersionConflict();
+        }
         if (!result.Succeeded)
         {
+            if (result.IsVersionConflict) return RouteVersionConflict();
             return RouteValidationProblem(result.Errors);
         }
 
@@ -119,4 +138,11 @@ public sealed class RoutesController(
             Detail = "Проверьте обязательные поля маршрута или точки.",
             Status = StatusCodes.Status400BadRequest
         });
+
+    private ActionResult RouteVersionConflict() => Conflict(new ProblemDetails
+    {
+        Title = "Маршрут уже изменён",
+        Detail = "Обновите маршрут и повторите действие.",
+        Status = StatusCodes.Status409Conflict
+    });
 }

@@ -80,6 +80,17 @@ internal sealed partial class EfPatrolStore
         var sourceResultExists = request.SourceResultId is null
             || dbContext.PatrolResults.Any(result => result.Id == request.SourceResultId.Value);
         var plannedAt = ResolveRequestPlannedAt(request);
+        var requestedShift = NormalizeOptionalText(request.Shift, employee?.Shift ?? string.Empty);
+        using var employeeShiftTransaction = employee is not null
+            && plannedAt is not null
+            && !string.IsNullOrWhiteSpace(requestedShift)
+                ? dbContext.Database.BeginTransaction()
+                : null;
+        if (employeeShiftTransaction is not null)
+        {
+            AcquireEmployeeShiftAssignmentLock(employee!.Id, plannedAt!.Value, requestedShift);
+        }
+
         var errors = ValidateCreateRequest(request, employee, route, sourceResultExists, plannedAt);
 
         if (errors.Count > 0)
@@ -113,7 +124,7 @@ internal sealed partial class EfPatrolStore
             EmployeeId = employee.Id,
             RouteId = route.Id,
             RouteVersionNo = route.VersionNo,
-            Shift = NormalizeOptionalText(request.Shift, employee.Shift),
+            Shift = requestedShift,
             Status = request.NotifyEmployee ? AssignmentStatusValues.Waiting : AssignmentStatusValues.Assigned,
             PlannedAt = plannedAt!.Value,
             ProgressPercent = 0,
@@ -136,6 +147,7 @@ internal sealed partial class EfPatrolStore
                 $"patrol-request:{requestEntity.Id}");
 
         SaveChangesAndInvalidateDashboardSummary();
+        employeeShiftTransaction?.Commit();
 
         return new CreatePatrolRequestResult(MapPatrolRequest(requestEntity), new Dictionary<string, string[]>());
     }

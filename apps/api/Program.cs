@@ -1,5 +1,7 @@
 using Patrol360.Infrastructure;
 using Patrol360.Infrastructure.Persistence;
+using Microsoft.AspNetCore.HttpOverrides;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +13,28 @@ builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogL
 
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    // The API is only exposed behind the Caddy container in the supported
+    // deployment. Trust its forwarded client address for rate limiting.
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("mobile-auth", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+});
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(WebCorsPolicy, policy =>
@@ -50,7 +74,9 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler();
 }
 
+app.UseForwardedHeaders();
 app.UseCors(WebCorsPolicy);
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapControllers();

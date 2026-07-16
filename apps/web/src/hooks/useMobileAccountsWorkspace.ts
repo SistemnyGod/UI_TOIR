@@ -35,12 +35,15 @@ export interface TemporaryPasswordNotice {
 
 export interface UseMobileAccountsWorkspaceParams {
   dataSourceMode: DataSourceMode;
+  /** Account and security endpoints are only needed on the accounts screen. */
+  enabled?: boolean;
   showTemporaryPassword: (notice: TemporaryPasswordNotice) => void;
   showToast: (message: string) => void;
 }
 
 export function useMobileAccountsWorkspace({
   dataSourceMode,
+  enabled = true,
   showTemporaryPassword,
   showToast,
 }: UseMobileAccountsWorkspaceParams) {
@@ -98,10 +101,10 @@ export function useMobileAccountsWorkspace({
 
   const refreshMobileAccountSecurity = useCallback(
     async ({ signal }: { signal?: AbortSignal } = {}) => {
-      if (dataSourceMode !== "api") {
-        setMobileAccountSessions([]);
-        setMobileAccountSecurityEvents(mapFallbackSecurityEvents());
-        setMobileAccountSecurityStatus("idle");
+    if (dataSourceMode !== "api" || !enabled) {
+      setMobileAccountSessions([]);
+      setMobileAccountSecurityEvents(dataSourceMode === "mock" && enabled ? mapFallbackSecurityEvents() : []);
+      setMobileAccountSecurityStatus("idle");
         setMobileAccountSecurityErrorMessage(undefined);
         return;
       }
@@ -137,10 +140,12 @@ export function useMobileAccountsWorkspace({
         setMobileAccountSecurityErrorMessage(message);
       }
     },
-    [apiMobileAccounts, dataSourceMode, selectedAccountId],
+    [apiMobileAccounts, dataSourceMode, enabled, selectedAccountId],
   );
 
   useEffect(() => {
+    if (dataSourceMode === "api" && !enabled) return;
+
     if (visibleAccounts.length === 0) {
       if (selectedAccountId) setSelectedAccountId("");
       return;
@@ -149,10 +154,10 @@ export function useMobileAccountsWorkspace({
     if (!visibleAccounts.some((account) => account.id === selectedAccountId)) {
       setSelectedAccountId(visibleAccounts[0].id);
     }
-  }, [selectedAccountId, visibleAccounts]);
+  }, [dataSourceMode, enabled, selectedAccountId, visibleAccounts]);
 
   useEffect(() => {
-    if (dataSourceMode !== "api") {
+    if (dataSourceMode !== "api" || !enabled) {
       setAccountListStatus("idle");
       setAccountListErrorMessage(undefined);
       return;
@@ -161,13 +166,15 @@ export function useMobileAccountsWorkspace({
     const controller = new AbortController();
     void refreshMobileAccounts({ signal: controller.signal });
     return () => controller.abort();
-  }, [dataSourceMode, refreshMobileAccounts]);
+  }, [dataSourceMode, enabled, refreshMobileAccounts]);
 
   useEffect(() => {
+    if (!enabled) return;
+
     const controller = new AbortController();
     void refreshMobileAccountSecurity({ signal: controller.signal });
     return () => controller.abort();
-  }, [refreshMobileAccountSecurity]);
+  }, [enabled, refreshMobileAccountSecurity]);
 
   function openCreateAccountPanel() {
     setAccountMode("accounts");

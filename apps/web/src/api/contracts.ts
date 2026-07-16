@@ -241,7 +241,7 @@ export interface CreateRouteWithPointsDto {
   points: CreateRoutePointDto[];
 }
 
-export type UpdateRouteDto = CreateRouteDto;
+export type UpdateRouteDto = CreateRouteDto & { expectedVersionNo?: number };
 
 export interface CreateRoutePointDto {
   name: string;
@@ -258,6 +258,7 @@ export type UpdateRoutePointDto = CreateRoutePointDto;
 
 export interface ReorderRoutePointDto {
   sequenceNo: number;
+  expectedVersionNo?: number;
 }
 
 export interface EmployeeDto {

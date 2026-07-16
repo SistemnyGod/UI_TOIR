@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createApiResultsRepository,
   findPatrolResult,
@@ -10,6 +10,8 @@ import type { DataSourceMode, DataSourceStatus, PatrolResult } from "../types";
 
 interface UseResultsWorkspaceOptions {
   dataSourceMode: DataSourceMode;
+  /** Keep the workspace mounted without starting its list/detail requests. */
+  enabled?: boolean;
   selectedResultId: string;
   filters?: ResultFilterOptions;
   onSelectResult: (id: string) => void;
@@ -20,6 +22,7 @@ const emptyResultFilters: ResultFilterOptions = {};
 
 export function useResultsWorkspace({
   dataSourceMode,
+  enabled = true,
   filters = emptyResultFilters,
   selectedResultId,
   onSelectResult,
@@ -34,6 +37,11 @@ export function useResultsWorkspace({
   const [hasMoreResults, setHasMoreResults] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [loadMoreStatus, setLoadMoreStatus] = useState<DataSourceStatus>("idle");
+  const [totalResults, setTotalResults] = useState(dataSourceMode === "mock" ? patrolResultsFallback.length : 0);
+  const loadMoreControllerRef = useRef<AbortController | null>(null);
+  const filterIdentity = JSON.stringify(filters);
+  const filterIdentityRef = useRef(filterIdentity);
+  filterIdentityRef.current = filterIdentity;
 
   const selectedListItem = useMemo(() => findPatrolResult(results, selectedResultId), [results, selectedResultId]);
   const exactSelectedListItem = useMemo(
@@ -48,6 +56,7 @@ export function useResultsWorkspace({
         setResults(patrolResultsFallback);
         setHasMoreResults(false);
         setCurrentPage(1);
+        setTotalResults(patrolResultsFallback.length);
         setListStatus("ready");
         setErrorMessage(undefined);
         return;
@@ -62,12 +71,14 @@ export function useResultsWorkspace({
         setResults(resultPage.results);
         setHasMoreResults(resultPage.hasMore);
         setCurrentPage(resultPage.page);
+        setTotalResults(resultPage.total);
         setListStatus(resultPage.results.length > 0 ? "ready" : "idle");
       } catch (error) {
         if (signal?.aborted) return;
         const message = error instanceof Error ? error.message : "Не удалось загрузить результаты API";
         setResults([]);
         setHasMoreResults(false);
+        setTotalResults(0);
         setListStatus("error");
         setErrorMessage(message);
         showToast(`Не удалось загрузить результаты API: ${message}`);
@@ -77,29 +88,51 @@ export function useResultsWorkspace({
   );
 
   const loadMoreResults = useCallback(async () => {
-    if (dataSourceMode !== "api" || !hasMoreResults || loadMoreStatus === "loading") return;
+    if (!enabled || dataSourceMode !== "api" || !hasMoreResults || loadMoreStatus === "loading") return;
+    const controller = new AbortController();
+    const requestedFilterIdentity = filterIdentity;
+    loadMoreControllerRef.current = controller;
     setLoadMoreStatus("loading");
     try {
-      const resultPage = await apiResults.getResultPage(filters, { page: currentPage + 1 });
+      const resultPage = await apiResults.getResultPage(filters, { page: currentPage + 1, signal: controller.signal });
+      if (controller.signal.aborted || filterIdentityRef.current !== requestedFilterIdentity) return;
       setResults((current) => mergePatrolResults(current, resultPage.results));
       setCurrentPage(resultPage.page);
       setHasMoreResults(resultPage.hasMore);
+      setTotalResults(resultPage.total);
       setLoadMoreStatus("ready");
     } catch (error) {
+      if (controller.signal.aborted) return;
       const message = error instanceof Error ? error.message : "Не удалось загрузить следующую страницу результатов";
       setLoadMoreStatus("error");
       showToast(`Не удалось загрузить следующую страницу результатов: ${message}`);
+    } finally {
+      if (loadMoreControllerRef.current === controller) loadMoreControllerRef.current = null;
     }
-  }, [apiResults, currentPage, dataSourceMode, filters, hasMoreResults, loadMoreStatus, showToast]);
+  }, [apiResults, currentPage, dataSourceMode, enabled, filterIdentity, filters, hasMoreResults, loadMoreStatus, showToast]);
+
+  useEffect(() => {
+    loadMoreControllerRef.current?.abort();
+    loadMoreControllerRef.current = null;
+    setLoadMoreStatus("idle");
+  }, [dataSourceMode, filterIdentity]);
 
   useEffect(() => {
     const controller = new AbortController();
+    if (!enabled) {
+      setListStatus(dataSourceMode === "mock" ? "ready" : "idle");
+      setErrorMessage(undefined);
+      return () => controller.abort();
+    }
+
     void refreshResults({ signal: controller.signal });
 
     return () => controller.abort();
-  }, [refreshResults]);
+  }, [dataSourceMode, enabled, refreshResults]);
 
   useEffect(() => {
+    if (!enabled) return;
+
     if (results.length === 0) {
       if (selectedResultId) onSelectResult("");
       return;
@@ -112,12 +145,12 @@ export function useResultsWorkspace({
     if (!selectedResultId || !results.some((result) => result.id === selectedResultId)) {
       onSelectResult(results[0].id);
     }
-  }, [dataSourceMode, onSelectResult, results, selectedResultId]);
+  }, [dataSourceMode, enabled, onSelectResult, results, selectedResultId]);
 
   useEffect(() => {
     setSelectedDetail(undefined);
 
-    if (!selectedResultId || dataSourceMode !== "api" || !isBackendResultId(selectedResultId)) {
+    if (!enabled || !selectedResultId || dataSourceMode !== "api" || !isBackendResultId(selectedResultId)) {
       setDetailStatus("idle");
       return;
     }
@@ -149,7 +182,7 @@ export function useResultsWorkspace({
       });
 
     return () => controller.abort();
-  }, [apiResults, dataSourceMode, exactSelectedListItem, selectedResultId, showToast]);
+  }, [apiResults, dataSourceMode, enabled, exactSelectedListItem, selectedResultId, showToast]);
 
   const exportResults = useCallback(async (exportFilters: ResultFilterOptions = emptyResultFilters) => {
     if (dataSourceMode !== "api") {
@@ -170,6 +203,7 @@ export function useResultsWorkspace({
     refreshResults,
     results,
     selectedResult,
+    totalResults,
   };
 }
 

@@ -521,7 +521,8 @@ export async function listAssignmentPoints(assignmentId: string) {
       FROM patrol_assignments assignment
       JOIN assignment_route_points point ON point.assignment_id = assignment.assignment_id
       LEFT JOIN point_results result
-        ON result.assignment_id = assignment.assignment_id
+        ON result.owner_user_id = assignment.owner_user_id
+       AND result.assignment_id = assignment.assignment_id
        AND result.point_id = point.point_id
       WHERE assignment.assignment_id = ?
       ORDER BY point.order_index ASC
@@ -803,7 +804,8 @@ export async function getPointForFill(assignmentId: string, pointId: string) {
       FROM patrol_assignments assignment
       JOIN assignment_route_points point ON point.assignment_id = assignment.assignment_id
       LEFT JOIN point_results result
-        ON result.assignment_id = assignment.assignment_id
+        ON result.owner_user_id = assignment.owner_user_id
+       AND result.assignment_id = assignment.assignment_id
        AND result.point_id = point.point_id
       WHERE assignment.assignment_id = ?
         AND point.point_id = ?
@@ -1357,7 +1359,8 @@ async function buildCompletedPointResults(assignmentId: string) {
       FROM patrol_assignments assignment
       JOIN assignment_route_points point ON point.assignment_id = assignment.assignment_id
       JOIN point_results result
-        ON result.assignment_id = assignment.assignment_id
+        ON result.owner_user_id = assignment.owner_user_id
+       AND result.assignment_id = assignment.assignment_id
        AND result.point_id = point.point_id
       WHERE assignment.assignment_id = ?
         AND result.status IN ('ok', 'issue', 'skipped')
@@ -1430,6 +1433,10 @@ async function savePointResult({
   }
 
   const completedAtLocal = new Date().toISOString();
+  if (point.confirmationType !== "nfc" && point.confirmationType !== "qr" && !comment.trim()) {
+    throw new Error("Для ручного подтверждения укажите причину, почему метку не удалось отсканировать.");
+  }
+
   const commandType = status === "issue" ? "markPatrolPointIssue" : "markPatrolPointOk";
   const command: OutboxCommand = {
     clientOperationId: Crypto.randomUUID(),
@@ -1625,11 +1632,12 @@ async function upsertPointResultInTransaction(executor: SqlExecutor, input: {
     `
       SELECT local_result_id AS localResultId
       FROM point_results
-      WHERE assignment_id = ?
+      WHERE owner_user_id = ?
+        AND assignment_id = ?
         AND point_id = ?
       LIMIT 1
     `,
-    [input.assignmentId, input.pointId]
+    [input.ownerUserId, input.assignmentId, input.pointId]
   );
   const localResultId = existing?.localResultId ?? Crypto.randomUUID();
 
