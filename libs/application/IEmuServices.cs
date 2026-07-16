@@ -43,6 +43,8 @@ public interface IEmuWorkService
 
     EmuCommandResult<EmuWorkSessionDto> GetWorkSession(Guid id);
 
+    ResultAttachmentFileDto? GetWorkAttachmentFile(Guid workSessionId, Guid attachmentId);
+
     EmuCommandResult<EmuWorkSessionDto> CreateWorkSession(EmuCreateWorkSessionDto request, Guid? actorUserId, string actorName, bool canOverridePlanApproval = false);
 
     EmuCommandResult<EmuWorkSessionDto> UpdateWorkSession(Guid id, EmuUpdateWorkSessionDto request, Guid? actorUserId, string actorName);

@@ -1,6 +1,7 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
-import { ActivityIndicator, Alert, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
   acceptRequestLocally,
@@ -12,6 +13,8 @@ import {
   startAssignmentLocally
 } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
+import { subscribeToSyncEvents } from "@/sync/syncEvents";
+import { ActionSheet } from "@/ui/ActionSheet";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -25,6 +28,7 @@ export function PatrolRequestScreen() {
   const [assignment, setAssignment] = useState<ActiveAssignment | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const load = useCallback(async () => {
     const [item, existing] = await Promise.all([getRequestBoardItem(requestId), getAssignmentByRequestId(requestId)]);
@@ -46,6 +50,10 @@ export function PatrolRequestScreen() {
       };
     }, [load])
   );
+
+  useEffect(() => subscribeToSyncEvents(() => {
+    void load();
+  }), [load]);
 
   async function runAction(action: () => Promise<void>) {
     setIsSubmitting(true);
@@ -134,12 +142,7 @@ export function PatrolRequestScreen() {
   const canOpen = assignment && !canStart;
 
   return (
-    <Screen title="Проверка заявки" subtitle="Сначала проверьте маршрут. Заявка принимается только после подтверждения.">
-      <Card style={styles.guideCard}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Что делать дальше</Text>
-        <Text style={[styles.text, { color: colors.mutedText }]}>{actionHint(assignment?.status ?? request.status)}</Text>
-      </Card>
-
+    <Screen title="Проверка заявки" subtitle="Проверьте маршрут и выполните следующий шаг.">
       <Card>
         <View style={styles.headerRow}>
           <StatusPill label={statusLabel(assignment?.status ?? request.status)} tone={statusTone(assignment?.status ?? request.status)} />
@@ -149,32 +152,37 @@ export function PatrolRequestScreen() {
         <Text style={[styles.text, { color: colors.mutedText }]}>{request.assignedFullName ?? "Свободная заявка"}</Text>
         <View style={styles.infoGrid}>
           <Info label="Начало" value={formatDateTime(request.plannedStartAt)} />
-          <Info label="Версия" value={String(request.revision)} />
           <Info label="Состояние" value={statusLabel(assignment?.status ?? request.status)} />
         </View>
+        <View style={styles.nextStepBox}>
+          <Text style={styles.nextStepLabel}>Следующий шаг</Text>
+          <Text style={[styles.text, { color: colors.text }]}>{actionHint(assignment?.status ?? request.status)}</Text>
+        </View>
       </Card>
-
-      {assignment ? (
-        <Card style={styles.existingCard}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Заявка уже у вас</Text>
-          <Text style={[styles.text, { color: colors.mutedText }]}>
-            {assignment.status === "accepted"
-              ? "Обход еще не начат. Можно начать обход или вернуть заявку в список."
-              : assignment.status === "paused"
-                ? "Обход приостановлен. Можно продолжить с того же места."
-                : "Откройте обход, чтобы продолжить работу или проверить отправку."}
-          </Text>
-        </Card>
-      ) : null}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {isSubmitting ? <ActivityIndicator /> : null}
 
-      {canAccept ? <PrimaryButton disabled={isSubmitting} icon="checkmark-circle-outline" label="Принять эту заявку" onPress={handleAccept} /> : null}
+      {canAccept ? <PrimaryButton disabled={isSubmitting} icon="checkmark-circle-outline" label="Принять заявку" onPress={handleAccept} size="large" /> : null}
       {canStart ? <PrimaryButton disabled={isSubmitting} icon="play-outline" label={assignment?.status === "paused" ? "Продолжить обход" : "Начать обход"} onPress={handleStart} /> : null}
       {canOpen ? <PrimaryButton disabled={isSubmitting} icon="shield-checkmark-outline" label="Открыть обход" onPress={() => router.replace(`/patrol/assignment/${assignment.assignmentId}`)} /> : null}
-      {canRelease ? <PrimaryButton disabled={isSubmitting} icon="return-up-back-outline" label="Вернуть заявку" onPress={handleRelease} variant="danger" /> : null}
-      <PrimaryButton disabled={isSubmitting} icon="swap-horizontal-outline" label="Назад к списку" onPress={() => router.replace("/patrol/request-board")} variant="secondary" />
+      <View style={styles.secondaryRow}>
+        <Pressable accessibilityRole="button" onPress={() => router.replace("/patrol/request-board")} style={styles.linkButton}>
+          <Ionicons color={colors.primary} name="arrow-back-outline" size={18} />
+          <Text style={[styles.linkLabel, { color: colors.primary }]}>К списку заявок</Text>
+        </Pressable>
+        {canRelease ? (
+          <Pressable accessibilityLabel="Дополнительные действия" accessibilityRole="button" onPress={() => setIsMenuOpen(true)} style={styles.iconButton}>
+            <Ionicons color={colors.primary} name="ellipsis-horizontal" size={22} />
+          </Pressable>
+        ) : null}
+      </View>
+      <ActionSheet
+        actions={canRelease ? [{ label: "Вернуть заявку", icon: "return-up-back-outline", danger: true, onPress: handleRelease }] : []}
+        onClose={() => setIsMenuOpen(false)}
+        title="Действия с заявкой"
+        visible={isMenuOpen}
+      />
     </Screen>
   );
 }
@@ -319,12 +327,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900"
   },
-  existingCard: {
-    borderColor: "#bfdbfe"
+  nextStepBox: {
+    backgroundColor: "#eef4ff",
+    borderRadius: 12,
+    gap: 4,
+    padding: 12
   },
-  guideCard: {
-    backgroundColor: "#f8fbff",
-    borderColor: "#bfdbfe"
+  nextStepLabel: {
+    color: "#1e5bff",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  secondaryRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  linkButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 48,
+    paddingHorizontal: 4
+  },
+  linkLabel: {
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  iconButton: {
+    alignItems: "center",
+    borderColor: "#dbe5f2",
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 48,
+    justifyContent: "center",
+    width: 48
   },
   error: {
     color: "#ef4444",

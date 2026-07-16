@@ -87,7 +87,19 @@ public sealed record EmuWorkSessionDto(
     int OtherWorkMinutes,
     int RowVersion,
     bool IsCarriedOver,
-    IReadOnlyList<EmuWorkSessionEmployeeDto> Employees);
+    string Source,
+    IReadOnlyList<EmuWorkSessionEmployeeDto> Employees)
+{
+    public IReadOnlyList<EmuWorkAttachmentDto> Attachments { get; init; } = [];
+}
+
+public sealed record EmuWorkAttachmentDto(
+    Guid FileId,
+    string FileName,
+    string ContentType,
+    long SizeBytes,
+    DateTimeOffset UploadedAt,
+    string DownloadUrl);
 
 public sealed record EmuWorkSessionChangesDto(
     DateTimeOffset ServerTime,

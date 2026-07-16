@@ -271,6 +271,7 @@ public sealed class MobileAppDbIntegrationTests
                 assignmentId,
                 routePoint.PointId,
                 null,
+                null,
                 testFileSha256,
                 3,
                 capturedAtLocal,
@@ -283,6 +284,7 @@ public sealed class MobileAppDbIntegrationTests
                 "file-test-1",
                 assignmentId,
                 routePoint.PointId,
+                null,
                 null,
                 testFileSha256,
                 3,
@@ -301,6 +303,7 @@ public sealed class MobileAppDbIntegrationTests
                 "file-test-2",
                 assignmentId,
                 routePoint.PointId,
+                null,
                 null,
                 selectedFileSha256,
                 3,
@@ -331,6 +334,7 @@ public sealed class MobileAppDbIntegrationTests
                     clientFileId,
                     assignmentId,
                     point.PointId,
+                    null,
                     null,
                     testFileSha256,
                     3,
@@ -644,6 +648,8 @@ public sealed class MobileAppDbIntegrationTests
         Assert.NotNull(cancelledByDispatcher);
         Assert.True(cancelledByDispatcher!.Changed);
         var cancelledServerStatus = cancelledByDispatcher.Assignment.Status;
+        var bootstrapAfterCancellation = UseMobileApp(provider, mobile => mobile.GetBootstrap(login.Session.AccessToken));
+        Assert.Contains(cancelledAssignmentId, bootstrapAfterCancellation!.CancelledAssignmentIds);
 
         var cancelledPointResults = cancelledBootstrap.Points
             .Where(point => point.RouteId == cancelledBoardItem.RouteId)
@@ -796,6 +802,53 @@ public sealed class MobileAppDbIntegrationTests
         Assert.Equal("first account only", resolvedFirst.ResolutionComment);
         Assert.Equal("open", unresolvedSecond!.Status);
         Assert.Null(unresolvedSecond.ResolutionComment);
+    }
+
+    [DbIntegrationFact]
+    public async Task AssignedPatrolRequestRemainsUnacceptedUntilMobileConfirmation()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var account = UseMobileAccounts(provider, accounts => accounts.CreateAccount(new CreateMobileAccountDto(
+            "Петров Иван Александрович", "selected", $"assigned_{Guid.NewGuid():N}"[..18], "Маршрутный обходчик",
+            BindEmployee: true, RestrictToBoundDevice: false, TemporaryPassword: false,
+            Password: "Patrol360!", ConfirmPassword: "Patrol360!", RequirePasswordChange: false)));
+        Assert.True(account.Succeeded);
+        var employeeId = account.Account!.BoundEmployeeIds[0];
+        var route = UseRoutes(provider, routes => routes.GetRoutes().First(item => item.Points.Any()));
+        ClearInProgressAssignments(database.ConnectionString, employeeId);
+        var requestId = CreateUnassignedPatrolRequest(database.ConnectionString, employeeId, account.Account.BoundEmployees[0], route.Id, route.Name);
+        var created = UseAssignments(provider, assignments => assignments.Create(new CreateAssignmentDto(
+            requestId, employeeId, route.Id, DateTimeOffset.UtcNow, "День")));
+        Assert.True(created.Succeeded);
+
+        var login = Login(provider, account.Account.Login, "Patrol360!");
+        var bootstrap = UseMobileApp(provider, mobile => mobile.GetBootstrap(login.Session!.AccessToken));
+        var boardItem = Assert.Single(bootstrap!.RequestBoard, item => item.RequestId == requestId);
+        Assert.Equal("assigned", boardItem.Status);
+        Assert.DoesNotContain(bootstrap.Assignments, item => item.RequestId == requestId);
+
+        var accepted = UseMobileApp(provider, mobile => mobile.SaveOutbox(login.Session.AccessToken, new MobileOutboxBatchDto([
+            BuildLifecycleCommand(
+                "op-assigned-explicit-accept",
+                "acceptPatrolRequest",
+                Guid.NewGuid(),
+                requestId,
+                new Dictionary<string, object?>
+                {
+                    ["requestId"] = requestId,
+                    ["routeId"] = route.Id,
+                    ["requestRevision"] = boardItem.Revision,
+                    ["acceptedAtLocal"] = DateTimeOffset.UtcNow,
+                })
+        ])));
+        Assert.Single(accepted);
+        Assert.Equal("accepted", accepted[0].Status);
+
+        var afterAccept = UseMobileApp(provider, mobile => mobile.GetBootstrap(login.Session.AccessToken));
+        Assert.Contains(afterAccept!.Assignments, item => item.RequestId == requestId && item.Status == "accepted");
     }
 
     [DbIntegrationFact]

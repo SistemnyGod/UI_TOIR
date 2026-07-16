@@ -100,6 +100,48 @@ public sealed record MobileWorkTaskDto(
     DateTimeOffset CreatedAtLocal,
     string SyncStatus);
 
+public sealed record MobileWorkParticipantDto(
+    Guid EmployeeId,
+    string FullName,
+    string Status,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? FinishedAt,
+    bool IsCurrentMobileEmployee);
+
+public sealed record MobileWorkItemCapabilitiesDto(
+    bool CanStart,
+    bool CanJoin,
+    bool CanReplace,
+    bool CanPause,
+    bool CanResume,
+    bool CanComplete);
+
+public sealed record MobileWorkAttachmentDto(
+    Guid FileId,
+    string FileName,
+    string ContentType,
+    long SizeBytes,
+    DateTimeOffset UploadedAt);
+
+public sealed record MobileWorkItemDto(
+    Guid ItemId,
+    string Kind,
+    Guid? WorkSessionId,
+    Guid? PlanTaskId,
+    string Title,
+    string Description,
+    Guid? SectionId,
+    string SectionName,
+    DateTimeOffset? PlannedAt,
+    string Status,
+    string ApprovalStatus,
+    long Revision,
+    string Source,
+    IReadOnlyList<MobileWorkParticipantDto> AssignedEmployees,
+    IReadOnlyList<MobileWorkParticipantDto> ActualParticipants,
+    IReadOnlyList<MobileWorkAttachmentDto> Attachments,
+    MobileWorkItemCapabilitiesDto Capabilities);
+
 public sealed record MobileBootstrapDto(
     MobileUserDto User,
     MobileDeviceDto Device,
@@ -110,7 +152,10 @@ public sealed record MobileBootstrapDto(
     IReadOnlyList<MobilePatrolRouteDto> Routes,
     IReadOnlyList<MobilePatrolPointDto> Points,
     DateTimeOffset ServerTime,
-    string? SyncCursor);
+    string? SyncCursor)
+{
+    public IReadOnlyList<Guid> CancelledAssignmentIds { get; init; } = [];
+}
 
 public sealed record MobilePatrolRequestBoardItemDto(
     Guid RequestId,
@@ -172,7 +217,8 @@ public sealed record MobileOutboxResponseDto(
     long? ServerRevision,
     string Message,
     string? ConflictId,
-    int? RetryAfterSeconds);
+    int? RetryAfterSeconds,
+    string? ReasonCode = null);
 
 public sealed record MobileFileUploadResponseDto(
     string ClientFileId,

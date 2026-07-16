@@ -124,6 +124,7 @@ export async function initializeDatabase() {
       assignment_id TEXT,
       point_id TEXT,
       remark_id TEXT,
+      work_task_id TEXT,
       created_at_local TEXT NOT NULL
     );
 
@@ -356,7 +357,8 @@ async function ensureMobileColumns(db: SQLite.SQLiteDatabase) {
     { name: "media_kind", sql: "ALTER TABLE files ADD COLUMN media_kind TEXT" },
     { name: "assignment_id", sql: "ALTER TABLE files ADD COLUMN assignment_id TEXT" },
     { name: "point_id", sql: "ALTER TABLE files ADD COLUMN point_id TEXT" },
-    { name: "remark_id", sql: "ALTER TABLE files ADD COLUMN remark_id TEXT" }
+    { name: "remark_id", sql: "ALTER TABLE files ADD COLUMN remark_id TEXT" },
+    { name: "work_task_id", sql: "ALTER TABLE files ADD COLUMN work_task_id TEXT" }
   ]);
 
   await ensureColumns(db, "outbox_commands", [
@@ -409,6 +411,9 @@ async function ensureMobileHotPathIndexes(db: SQLite.SQLiteDatabase) {
 
     CREATE INDEX IF NOT EXISTS ix_files_status_assignment_point
       ON files (status, assignment_id, point_id);
+
+    CREATE INDEX IF NOT EXISTS ix_files_status_work_task
+      ON files (status, work_task_id);
   `);
 }
 
@@ -631,7 +636,8 @@ async function ensureMobileFileScopes(db: SQLite.SQLiteDatabase) {
   await ensureColumns(db, "files", [
     { name: "content_type", sql: "ALTER TABLE files ADD COLUMN content_type TEXT" },
     { name: "media_kind", sql: "ALTER TABLE files ADD COLUMN media_kind TEXT" },
-    { name: "remark_id", sql: "ALTER TABLE files ADD COLUMN remark_id TEXT" }
+    { name: "remark_id", sql: "ALTER TABLE files ADD COLUMN remark_id TEXT" },
+    { name: "work_task_id", sql: "ALTER TABLE files ADD COLUMN work_task_id TEXT" }
   ]);
 }
 
@@ -658,7 +664,17 @@ async function ensureMobileWorkBoard(db: SQLite.SQLiteDatabase) {
     { name: "employee_id", sql: "ALTER TABLE work_tasks ADD COLUMN employee_id TEXT" },
     { name: "employee_name", sql: "ALTER TABLE work_tasks ADD COLUMN employee_name TEXT" },
     { name: "created_at_local", sql: "ALTER TABLE work_tasks ADD COLUMN created_at_local TEXT" },
-    { name: "sync_status", sql: "ALTER TABLE work_tasks ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'synced'" }
+    { name: "sync_status", sql: "ALTER TABLE work_tasks ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'synced'" },
+    { name: "item_kind", sql: "ALTER TABLE work_tasks ADD COLUMN item_kind TEXT NOT NULL DEFAULT 'workSession'" },
+    { name: "work_session_id", sql: "ALTER TABLE work_tasks ADD COLUMN work_session_id TEXT" },
+    { name: "plan_task_id", sql: "ALTER TABLE work_tasks ADD COLUMN plan_task_id TEXT" },
+    { name: "description", sql: "ALTER TABLE work_tasks ADD COLUMN description TEXT" },
+    { name: "approval_status", sql: "ALTER TABLE work_tasks ADD COLUMN approval_status TEXT" },
+    { name: "source", sql: "ALTER TABLE work_tasks ADD COLUMN source TEXT NOT NULL DEFAULT 'web'" },
+    { name: "assigned_employees_json", sql: "ALTER TABLE work_tasks ADD COLUMN assigned_employees_json TEXT NOT NULL DEFAULT '[]'" },
+    { name: "actual_participants_json", sql: "ALTER TABLE work_tasks ADD COLUMN actual_participants_json TEXT NOT NULL DEFAULT '[]'" },
+    { name: "attachments_json", sql: "ALTER TABLE work_tasks ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'" },
+    { name: "capabilities_json", sql: "ALTER TABLE work_tasks ADD COLUMN capabilities_json TEXT NOT NULL DEFAULT '{}'" }
   ]);
 
   await ensureColumns(db, "shift_remarks", [

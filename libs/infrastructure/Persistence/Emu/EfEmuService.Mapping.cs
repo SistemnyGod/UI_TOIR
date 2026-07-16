@@ -16,7 +16,7 @@ internal sealed partial class EfEmuService
         return $"ЭМУ-{workDate:yyyy}-{count + 1:000000}";
     }
 
-    private static EmuWorkSessionDto MapWorkSession(EmuWorkSessionEntity row) =>
+    private EmuWorkSessionDto MapWorkSession(EmuWorkSessionEntity row) =>
         new(
             row.Id,
             row.WorkNumber,
@@ -42,7 +42,22 @@ internal sealed partial class EfEmuService
             row.OtherWorkMinutes,
             row.RowVersion,
             row.IsCarriedOver,
-            row.Employees.OrderBy(employee => employee.FullNameSnapshot).Select(MapParticipant).ToList());
+            row.Source,
+            row.Employees.OrderBy(employee => employee.FullNameSnapshot).Select(MapParticipant).ToList())
+        {
+            Attachments = dbContext.MobileUploadedFiles
+                .AsNoTracking()
+                .Where(file => file.WorkTaskId == row.Id)
+                .OrderBy(file => file.UploadedAt)
+                .Select(file => new EmuWorkAttachmentDto(
+                    file.Id,
+                    file.OriginalFileName,
+                    file.ContentType,
+                    file.SizeBytes,
+                    file.UploadedAt,
+                    $"/api/v1/emu/work-sessions/{row.Id}/attachments/{file.Id}"))
+                .ToList()
+        };
 
     private static EmuWorkSessionEmployeeDto MapParticipant(EmuWorkSessionEmployeeEntity row)
     {

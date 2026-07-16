@@ -1389,7 +1389,18 @@ export interface EmuWorkSessionDto {
   otherWorkMinutes: number;
   rowVersion: number;
   isCarriedOver: boolean;
+  source?: string;
   employees: EmuWorkSessionEmployeeDto[];
+  attachments?: EmuWorkAttachmentDto[];
+}
+
+export interface EmuWorkAttachmentDto {
+  fileId: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+  downloadUrl: string;
 }
 
 export interface EmuWorkSessionChangesDto {

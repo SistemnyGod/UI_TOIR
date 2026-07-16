@@ -119,6 +119,7 @@ export type BootstrapDto = {
   emuSections: MobileEmuSectionDto[];
   requestBoard: PatrolRequestBoardItemDto[];
   assignments: PatrolAssignmentDto[];
+  cancelledAssignmentIds?: string[];
   routes: PatrolRouteDto[];
   points: PatrolPointDto[];
   serverTime: string;

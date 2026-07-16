@@ -1,18 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { listPointFiles } from "@/db/repositories/filesRepository";
-import { deferPoint, getPointForFill, PointForFill, savePointIssue, savePointOk, skipPoint } from "@/db/repositories/patrolRepository";
+import { deferPoint, getPointForFill, getReportReadiness, PointForFill, savePointIssue, savePointOk, skipPoint } from "@/db/repositories/patrolRepository";
 import { isPhotoEvidenceRequired } from "@/domain/patrol/photoEvidencePolicy";
 import { useAppTheme } from "@/features/settings/themePreference";
 import {
   attachPointPhotoFromCamera,
-  attachPointPhotoFromGallery,
+  attachPointMediaFromGallery,
   attachPointVideoFromCamera,
-  attachPointVideoFromGallery
 } from "@/services/mediaAttachmentService";
+import { ActionSheet } from "@/ui/ActionSheet";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -32,6 +32,7 @@ export function PointFillScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMediaBusy, setIsMediaBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<"attachments" | "more" | null>(null);
 
   const reload = useCallback(async () => {
     const [loaded, files] = await Promise.all([getPointForFill(assignmentId, pointId), listPointFiles(assignmentId, pointId)]);
@@ -75,48 +76,7 @@ export function PointFillScreen() {
   }
 
   function handleSkipTag() {
-    Alert.alert(
-      "Метка недоступна",
-      "Подтвердите, что физическую метку нельзя просканировать. В отчете будет видно, что точка закрыта вручную как недоступная.",
-      [
-        { text: "Отмена", style: "cancel" },
-        {
-          text: "Подтвердить",
-          style: "destructive",
-          onPress: () => {
-            void confirmSkipTag();
-          }
-        }
-      ]
-    );
-  }
-
-  async function confirmSkipTag() {
-    setError(null);
-    if (isPhotoEvidenceRequired(Boolean(point?.requiresPhoto), "skipped") && !hasPhotoAttachment(attachments)) {
-      setError("Для этой метки требуется фотофиксация.");
-      return;
-    }
-
-    if (comment.trim().length === 0) {
-      setError("Для ручного подтверждения укажите причину, почему метку не удалось отсканировать.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      await skipPoint(assignmentId, pointId, {
-        comment: comment.trim(),
-        photoClientFileIds: attachments.map((attachment) => attachment.clientFileId)
-      });
-      setSelectedStatus("skipped");
-      setPhase("details");
-      await reload();
-    } catch {
-      setError("Не удалось отметить метку как недоступную.");
-    } finally {
-      setIsSubmitting(false);
-    }
+    selectStatus("skipped");
   }
 
   async function handleSave() {
@@ -128,6 +88,11 @@ export function PointFillScreen() {
 
     if (selectedStatus === "issue" && comment.trim().length === 0) {
       setError("Для неисправности нужен комментарий.");
+      return;
+    }
+
+    if (selectedStatus === "skipped" && comment.trim().length === 0) {
+      setError("Укажите, почему метка недоступна.");
       return;
     }
 
@@ -148,7 +113,7 @@ export function PointFillScreen() {
       } else {
         await savePointOk(assignmentId, pointId, comment.trim());
       }
-      router.replace(`/patrol/assignment/${assignmentId}`);
+      await continuePatrolFlow();
     } catch {
       setError("Не удалось сохранить метку.");
     } finally {
@@ -166,7 +131,7 @@ export function PointFillScreen() {
         issueTypeId: issueTypeId.trim() || "Неисправность",
         photoClientFileIds: attachments.map((attachment) => attachment.clientFileId)
       });
-      router.replace(`/patrol/assignment/${assignmentId}`);
+      await continuePatrolFlow();
     } catch {
       setError("Не удалось отложить метку.");
     } finally {
@@ -174,13 +139,11 @@ export function PointFillScreen() {
     }
   }
 
-  async function handleAddPhoto(source: "camera" | "gallery") {
+  async function handleAddPhoto() {
     setError(null);
     setIsMediaBusy(true);
     try {
-      const result = source === "camera"
-        ? await attachPointPhotoFromCamera(assignmentId, pointId)
-        : await attachPointPhotoFromGallery(assignmentId, pointId);
+      const result = await attachPointPhotoFromCamera(assignmentId, pointId);
 
       if (result === "attached") {
         await reloadPointAndAttachments();
@@ -192,13 +155,11 @@ export function PointFillScreen() {
     }
   }
 
-  async function handleAddVideo(source: "camera" | "gallery") {
+  async function handleAddVideo() {
     setError(null);
     setIsMediaBusy(true);
     try {
-      const result = source === "camera"
-        ? await attachPointVideoFromCamera(assignmentId, pointId)
-        : await attachPointVideoFromGallery(assignmentId, pointId);
+      const result = await attachPointVideoFromCamera(assignmentId, pointId);
 
       if (result === "attached") {
         await reloadPointAndAttachments();
@@ -208,6 +169,31 @@ export function PointFillScreen() {
     } finally {
       setIsMediaBusy(false);
     }
+  }
+
+  async function handleAddFromGallery() {
+    setError(null);
+    setIsMediaBusy(true);
+    try {
+      const result = await attachPointMediaFromGallery(assignmentId, pointId);
+      if (result.status === "attached") {
+        await reloadPointAndAttachments();
+      }
+      if (result.errors.length > 0) {
+        setError(`Добавлено: ${result.attachedCount}. Не удалось: ${result.errors.length}. ${result.errors[0]}`);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Не удалось добавить вложения.");
+    } finally {
+      setIsMediaBusy(false);
+    }
+  }
+
+  async function continuePatrolFlow() {
+    const readiness = await getReportReadiness(assignmentId);
+    router.replace(readiness.ready
+      ? `/patrol/assignment/${assignmentId}/submit`
+      : `/patrol/assignment/${assignmentId}/scan-nfc`);
   }
 
   async function reloadPointAndAttachments() {
@@ -239,6 +225,10 @@ export function PointFillScreen() {
             </Text>
             <StatusPill label={confirmationLabel(point)} tone={point.confirmationType === "nfc" ? "success" : "neutral"} />
           </View>
+          <View style={styles.scanMeta}>
+            <Ionicons color={colors.mutedText} name="time-outline" size={17} />
+            <Text style={[styles.scanMetaText, { color: colors.mutedText }]}>Сканирование: {formatScanTime(point.scannedAtLocal)}</Text>
+          </View>
         </Card>
 
         <View style={styles.statusGrid}>
@@ -266,13 +256,16 @@ export function PointFillScreen() {
           </View>
           <Ionicons color="#b45309" name="chevron-forward" size={18} />
         </Pressable>
-        <PrimaryButton label="Все метки" onPress={() => router.replace(`/patrol/assignment/${assignmentId}/all-points`)} variant="secondary" />
+        <Pressable accessibilityRole="button" onPress={() => router.replace(`/patrol/assignment/${assignmentId}/all-points`)} style={styles.inlineLink}>
+          <Ionicons color={colors.primary} name="list-outline" size={19} />
+          <Text style={[styles.inlineLinkText, { color: colors.primary }]}>Все метки</Text>
+        </Pressable>
       </Screen>
     );
   }
 
   return (
-    <Screen title="Комментарий и вложения" subtitle="Фото и видео не обязательны, но помогают подтвердить состояние точки.">
+    <Screen title="Результат точки" subtitle="Заполните только необходимые сведения.">
       <Card>
         <View style={styles.row}>
           <Text style={[styles.title, { color: colors.text }]}>
@@ -315,7 +308,7 @@ export function PointFillScreen() {
       <Card>
         <View style={styles.photoHeader}>
           <Text style={[styles.label, { color: colors.text }]}>Фото и видео</Text>
-          <Text style={styles.photoNote}>Необязательно</Text>
+          <Text style={styles.photoNote}>{isPhotoEvidenceRequired(Boolean(point.requiresPhoto), selectedStatus) ? "Обязательно" : "Необязательно"}</Text>
         </View>
         {attachments.length > 0 ? (
           <View style={styles.photoGrid}>
@@ -338,21 +331,39 @@ export function PointFillScreen() {
             <Text style={styles.photoNote}>Вложения пока не добавлены</Text>
           </View>
         )}
+        {attachments.length > 0 ? (
+          <Text style={styles.photoNote}>
+            Фото: {attachments.filter((item) => item.mediaKind !== "video").length} · Видео: {attachments.filter((item) => item.mediaKind === "video").length}
+          </Text>
+        ) : null}
         {isMediaBusy ? <ActivityIndicator /> : null}
-        <View style={styles.photoActions}>
-          <PrimaryButton disabled={isSubmitting || isMediaBusy} icon="camera-outline" label="Сделать фото" onPress={() => handleAddPhoto("camera")} variant="secondary" />
-          <PrimaryButton disabled={isSubmitting || isMediaBusy} icon="images-outline" label="Фото из галереи" onPress={() => handleAddPhoto("gallery")} variant="secondary" />
-          <PrimaryButton disabled={isSubmitting || isMediaBusy} icon="videocam-outline" label="Снять видео" onPress={() => handleAddVideo("camera")} variant="secondary" />
-          <PrimaryButton disabled={isSubmitting || isMediaBusy} icon="film-outline" label="Видео из галереи" onPress={() => handleAddVideo("gallery")} variant="secondary" />
-        </View>
+        <PrimaryButton disabled={isSubmitting || isMediaBusy} icon="attach-outline" label="Добавить вложение" onPress={() => setOpenMenu("attachments")} variant="secondary" />
       </Card>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {isSubmitting ? <ActivityIndicator /> : null}
+      <PrimaryButton disabled={isSubmitting || isMediaBusy} icon="save-outline" label="Сохранить и продолжить" onPress={handleSave} size="large" />
       <View style={styles.bottomActions}>
-        <PrimaryButton disabled={isSubmitting || isMediaBusy} icon="time-outline" label="Отложить" onPress={handleDefer} variant="danger" />
-        <PrimaryButton disabled={isSubmitting || isMediaBusy} icon="save-outline" label="Сохранить" onPress={handleSave} />
+        <Pressable accessibilityRole="button" onPress={() => setPhase("status")} style={styles.inlineLink}>
+          <Ionicons color={colors.primary} name="swap-horizontal-outline" size={19} />
+          <Text style={[styles.inlineLinkText, { color: colors.primary }]}>Изменить состояние</Text>
+        </Pressable>
+        <Pressable accessibilityLabel="Дополнительные действия" accessibilityRole="button" onPress={() => setOpenMenu("more")} style={styles.moreButton}>
+          <Ionicons color={colors.primary} name="ellipsis-horizontal" size={22} />
+        </Pressable>
       </View>
+      <ActionSheet
+        actions={openMenu === "attachments" ? [
+          { label: "Сделать фото", icon: "camera-outline", onPress: () => void handleAddPhoto() },
+          { label: "Снять видео", icon: "videocam-outline", onPress: () => void handleAddVideo() },
+          { label: "Выбрать из галереи", icon: "images-outline", onPress: () => void handleAddFromGallery() }
+        ] : [
+          { label: "Отложить точку", icon: "time-outline", danger: true, onPress: () => void handleDefer() }
+        ]}
+        onClose={() => setOpenMenu(null)}
+        title={openMenu === "attachments" ? "Добавить вложение" : "Действия с точкой"}
+        visible={openMenu !== null}
+      />
     </Screen>
   );
 }
@@ -467,6 +478,14 @@ function hasPhotoAttachment(attachments: PointAttachment[]) {
   return attachments.some((attachment) => attachment.mediaKind !== "video");
 }
 
+function formatScanTime(value: string | null) {
+  if (!value) {
+    return "вручную";
+  }
+
+  return new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
 const styles = StyleSheet.create({
   row: {
     alignItems: "center",
@@ -483,6 +502,15 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 15,
     lineHeight: 21
+  },
+  scanMeta: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 7
+  },
+  scanMetaText: {
+    fontSize: 13,
+    fontWeight: "700"
   },
   label: {
     fontSize: 14,
@@ -560,9 +588,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: "row",
     gap: 10,
-    minHeight: 50,
-    paddingHorizontal: 12,
-    paddingVertical: 8
+    minHeight: 88,
+    paddingHorizontal: 14,
+    paddingVertical: 12
   },
   skipButtonPressed: {
     backgroundColor: "#fef3c7"
@@ -576,9 +604,9 @@ const styles = StyleSheet.create({
     borderColor: "#fbbf24",
     borderWidth: 1,
     borderRadius: 999,
-    height: 32,
+    height: 44,
     justifyContent: "center",
-    width: 32
+    width: 44
   },
   skipTextBlock: {
     flex: 1,
@@ -586,9 +614,9 @@ const styles = StyleSheet.create({
   },
   skipTitle: {
     color: "#78350f",
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "800",
-    lineHeight: 18
+    lineHeight: 21
   },
   skipDescription: {
     color: "#92400e",
@@ -637,10 +665,6 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     fontSize: 11
   },
-  photoActions: {
-    flexDirection: "column",
-    gap: 10
-  },
   videoTile: {
     alignItems: "center",
     aspectRatio: 1,
@@ -658,7 +682,30 @@ const styles = StyleSheet.create({
     marginTop: 4
   },
   bottomActions: {
-    gap: 10
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  inlineLink: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 48,
+    paddingHorizontal: 4
+  },
+  inlineLinkText: {
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  moreButton: {
+    alignItems: "center",
+    borderColor: "#dbe5f2",
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 48,
+    justifyContent: "center",
+    width: 48
   },
   error: {
     color: "#ef4444",

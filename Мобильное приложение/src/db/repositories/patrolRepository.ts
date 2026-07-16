@@ -546,6 +546,7 @@ export async function listAssignmentPoints(assignmentId: string) {
 export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
+  await assertPointActionAllowed(assignmentId);
   const scannedCandidates = getNfcCodeCandidates(nfcCode);
   const points = await db.getAllAsync<{
     pointId: string;
@@ -670,6 +671,7 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
 export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
+  await assertPointActionAllowed(assignmentId);
   const normalizedQr = qrCodeHash.trim();
   const point = await db.getFirstAsync<{
     pointId: string;
@@ -861,6 +863,7 @@ export async function savePointIssue(assignmentId: string, pointId: string, comm
 
 export async function deferPoint(assignmentId: string, pointId: string, input: DeferPointInput = {}) {
   const ownerUserId = await requireOwnerUserId();
+  await assertPointActionAllowed(assignmentId);
   const point = await getPointForFill(assignmentId, pointId);
   if (!point) {
     throw new Error("Метка не загружена на телефон.");
@@ -899,6 +902,7 @@ export async function deferPoint(assignmentId: string, pointId: string, input: D
 
 export async function skipPoint(assignmentId: string, pointId: string, input: Pick<DeferPointInput, "comment" | "photoClientFileIds"> = {}) {
   const ownerUserId = await requireOwnerUserId();
+  await assertPointActionAllowed(assignmentId);
   const point = await getPointForFill(assignmentId, pointId);
   if (!point) {
     throw new Error("Метка не загружена на телефон.");
@@ -933,6 +937,7 @@ export async function skipPoint(assignmentId: string, pointId: string, input: Pi
 
 export async function attachPhotoToPoint(assignmentId: string, pointId: string, file: LocalMobileFile) {
   const ownerUserId = await requireOwnerUserId();
+  await assertPointActionAllowed(assignmentId);
   const point = await getPointForFill(assignmentId, pointId);
   if (!point) {
     throw new Error("Метка не загружена на телефон.");
@@ -1053,6 +1058,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
 export async function completeAssignmentLocally(assignmentId: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
+  await assertPointActionAllowed(assignmentId);
   const readiness = await getReportReadiness(assignmentId);
   if (!readiness.assignment || !readiness.ready) {
     throw new Error("Отчет еще не готов к отправке.");
@@ -1227,6 +1233,23 @@ async function updateAssignmentLifecycleLocally(
 
   if (commandType === "startPatrolAssignment" && !["accepted", "paused", "inProgress"].includes(assignment.status)) {
     throw new Error("Начать можно только принятую или приостановленную заявку.");
+  }
+
+  if (commandType === "startPatrolAssignment" || commandType === "resumePatrolAssignment") {
+    const competing = await db.getFirstAsync<{ assignmentId: string }>(
+      `
+        SELECT assignment_id AS assignmentId
+        FROM patrol_assignments
+        WHERE owner_user_id = ?
+          AND assignment_id <> ?
+          AND status IN ('inProgress', 'paused')
+        LIMIT 1
+      `,
+      [ownerUserId, assignment.assignmentId]
+    );
+    if (competing) {
+      throw new Error("Сначала завершите или передайте текущий обход.");
+    }
   }
 
   if (commandType === "pausePatrolAssignment" && assignment.status !== "inProgress") {
@@ -1413,6 +1436,25 @@ async function requireOwnerUserId() {
   return ownerUserId;
 }
 
+async function assertPointActionAllowed(assignmentId: string) {
+  const assignment = await getAssignmentById(assignmentId);
+  if (!assignment) {
+    throw new Error("Назначение не найдено на телефоне.");
+  }
+
+  if (assignment.status === "cancelled" || assignment.status === "cancelledServer") {
+    throw new Error("Заявка отменена диспетчером. Действия по обходу заблокированы.");
+  }
+
+  if (["completed", "completedServer", "completedLocal"].includes(assignment.status)) {
+    throw new Error("Обход уже завершён. Изменение точек недоступно.");
+  }
+
+  if (assignment.status !== "inProgress") {
+    throw new Error("Действия с метками доступны только после начала обхода.");
+  }
+}
+
 async function savePointResult({
   assignmentId,
   pointId,
@@ -1427,6 +1469,7 @@ async function savePointResult({
   issueTypeId: string | null;
 }) {
   const ownerUserId = await requireOwnerUserId();
+  await assertPointActionAllowed(assignmentId);
   const point = await getPointForFill(assignmentId, pointId);
   if (!point) {
     throw new Error("Метка не загружена на телефон.");

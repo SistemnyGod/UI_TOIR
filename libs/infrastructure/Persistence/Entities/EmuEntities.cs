@@ -145,6 +145,7 @@ internal sealed class EmuWorkSessionEntity
     public DateTimeOffset? CompletedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+    public string Source { get; set; } = "web";
     public Guid? CreatedByUserId { get; set; }
     public SiteUserEntity? CreatedByUser { get; set; }
     public DateTimeOffset? DeletedAt { get; set; }

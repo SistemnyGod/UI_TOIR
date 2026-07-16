@@ -41,7 +41,10 @@ export function ProfileScreen() {
       await signOut();
       router.replace("/(auth)/login");
     } catch (error) {
-      Alert.alert("Нельзя сменить пользователя", error instanceof Error ? error.message : "Сначала отправьте все локальные отчеты и действия.");
+      Alert.alert(
+        "Нельзя сменить пользователя",
+        error instanceof Error ? error.message : "Сначала отправьте все локальные отчёты и действия."
+      );
     }
   }
 
@@ -51,7 +54,7 @@ export function ProfileScreen() {
   }
 
   return (
-    <Screen title="Профиль" subtitle="Устройство, настройки и смена пользователя.">
+    <Screen title="Профиль" subtitle="Устройство, настройки, диагностика и смена пользователя.">
       <Card>
         <View style={styles.row}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Устройство</Text>
@@ -70,6 +73,7 @@ export function ProfileScreen() {
         </View>
         <View style={styles.settingsGrid}>
           <PrimaryButton icon="server-outline" label="Сервер" onPress={() => router.push("/(auth)/server-settings")} variant="secondary" />
+          <PrimaryButton icon="bug-outline" label="Диагностика" onPress={() => router.push("/settings/diagnostics" as never)} variant="secondary" />
           <PrimaryButton icon="color-palette-outline" label="Тема" onPress={() => router.push("/settings/theme")} variant="secondary" />
           <PrimaryButton icon="settings-outline" label="Все настройки" onPress={() => router.push("/settings")} variant="secondary" />
         </View>

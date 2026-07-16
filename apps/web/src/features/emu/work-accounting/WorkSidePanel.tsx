@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { EmuDecisionDto, EmuEmployeeShiftSummaryDto, EmuWorkSessionDto } from "../../../api/contracts";
+import { buildApiUrl } from "../../../api/client";
 import type { EmuWorkspace } from "../../../hooks/useEmuWorkspace";
 import { calculateLiveWorkSessionMinutes } from "../../../domain/emuWorkTime";
 import type { EmuEmployeeWorkload } from "../../../domain/emuWorkBoard";
@@ -115,9 +116,21 @@ export function WorkSidePanel({
         <dl className="emu-kv">
           <div><dt>Автор</dt><dd>{selectedWork.createdByName || (selectedWork.createdByUserId ? "пользователь" : "не указан")}</dd></div>
           <div><dt>Статус</dt><dd>{selectedWork.operationalStatus || selectedWork.status}</dd></div>
+          <div><dt>Источник</dt><dd>{selectedWork.source === "mobile" ? "Мобильное приложение" : "Web ЭМУ"}</dd></div>
           <div><dt>Работа</dt><dd>{formatMinutes(liveMinutes.workMinutes)}</dd></div>
           <div><dt>Пауза</dt><dd>{formatMinutes(liveMinutes.waitingMinutes + liveMinutes.otherWorkMinutes)}</dd></div>
         </dl>
+        {selectedWork.attachments?.length ? (
+          <div className="emu-side-list">
+            <strong>Вложения</strong>
+            {selectedWork.attachments.map((attachment) => (
+              <a href={buildApiUrl(attachment.downloadUrl)} key={attachment.fileId} rel="noreferrer" target="_blank">
+                <span>{attachment.fileName}</span>
+                <small>{attachment.contentType} · {formatBytes(attachment.sizeBytes)}</small>
+              </a>
+            ))}
+          </div>
+        ) : null}
         {canUpdate && !selectedWork.completedAt ? (
           <button className="emu-secondary-button" onClick={() => onAddEmployee(selectedWork.id)} type="button">+ Добавить сотрудника</button>
         ) : null}
@@ -247,4 +260,14 @@ export function WorkSidePanel({
       </div>
     </aside>
   );
+}
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "0 Б";
+  }
+  if (value < 1024 * 1024) {
+    return `${Math.max(1, Math.round(value / 1024))} КБ`;
+  }
+  return `${(value / 1024 / 1024).toFixed(1)} МБ`;
 }

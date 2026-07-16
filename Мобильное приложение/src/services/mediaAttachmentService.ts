@@ -4,6 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { attachPhotoToPoint } from "@/db/repositories/patrolRepository";
 import { attachMediaToShiftRemark } from "@/db/repositories/shiftRemarkRepository";
+import { attachMediaToWorkTask } from "@/db/repositories/workTaskRepository";
 import { getLocalFileInfo, hasEnoughStorageForPhoto } from "@/services/fileStorageService";
 import { prepareLocalMedia, prepareLocalPhoto } from "@/sync/fileUploadQueue";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
@@ -13,108 +14,183 @@ const maxVideoBytes = 25 * 1024 * 1024;
 
 export type MediaAttachResult = "attached" | "cancelled";
 
+export type MediaAttachSummary = {
+  status: MediaAttachResult;
+  attachedCount: number;
+  photoCount: number;
+  videoCount: number;
+  errors: string[];
+};
+
 export async function attachPointPhotoFromCamera(assignmentId: string, pointId: string) {
   const ownerUserId = await prepareOwnerAndStorage();
   const assets = await pickImages("camera");
-  if (!assets?.length) {
-    return "cancelled" satisfies MediaAttachResult;
-  }
+  if (!assets?.length) return "cancelled" satisfies MediaAttachResult;
 
   await attachPointPhotoAssets(ownerUserId, assignmentId, pointId, assets);
-
   return "attached" satisfies MediaAttachResult;
 }
 
 export async function attachPointPhotoFromGallery(assignmentId: string, pointId: string) {
   const ownerUserId = await prepareOwnerAndStorage();
   const assets = await pickImages("library");
-  if (!assets?.length) {
-    return "cancelled" satisfies MediaAttachResult;
-  }
+  if (!assets?.length) return "cancelled" satisfies MediaAttachResult;
 
   await attachPointPhotoAssets(ownerUserId, assignmentId, pointId, assets);
-
   return "attached" satisfies MediaAttachResult;
 }
 
 export async function attachPointVideoFromCamera(assignmentId: string, pointId: string) {
   const ownerUserId = await prepareOwnerAndStorage();
   const asset = await pickVideo("camera");
-  if (!asset) {
-    return "cancelled" satisfies MediaAttachResult;
-  }
+  if (!asset) return "cancelled" satisfies MediaAttachResult;
 
   const file = await preparePointVideo(ownerUserId, assignmentId, pointId, asset);
   await attachPhotoToPoint(assignmentId, pointId, file);
-
   return "attached" satisfies MediaAttachResult;
 }
 
 export async function attachPointVideoFromGallery(assignmentId: string, pointId: string) {
   const ownerUserId = await prepareOwnerAndStorage();
   const asset = await pickVideo("library");
-  if (!asset) {
-    return "cancelled" satisfies MediaAttachResult;
-  }
+  if (!asset) return "cancelled" satisfies MediaAttachResult;
 
   const file = await preparePointVideo(ownerUserId, assignmentId, pointId, asset);
   await attachPhotoToPoint(assignmentId, pointId, file);
-
   return "attached" satisfies MediaAttachResult;
+}
+
+export async function attachPointMediaFromGallery(assignmentId: string, pointId: string): Promise<MediaAttachSummary> {
+  const ownerUserId = await prepareOwnerAndStorage();
+  const assets = await pickMixedMediaFromGallery();
+  return attachMixedMediaAssets(assets, async (asset) => {
+    if (isVideoAsset(asset)) {
+      const file = await preparePointVideo(ownerUserId, assignmentId, pointId, asset);
+      await attachPhotoToPoint(assignmentId, pointId, file);
+      return "video";
+    }
+
+    await attachPointPhotoAssets(ownerUserId, assignmentId, pointId, [asset]);
+    return "photo";
+  });
 }
 
 export async function attachRemarkPhotoFromCamera(remarkId: string) {
   const ownerUserId = await prepareOwnerAndStorage();
   const assets = await pickImages("camera");
-  if (!assets?.length) {
-    return "cancelled" satisfies MediaAttachResult;
-  }
+  if (!assets?.length) return "cancelled" satisfies MediaAttachResult;
 
   await attachRemarkPhotoAssets(ownerUserId, remarkId, assets);
   triggerForegroundSyncWithRetry();
-
   return "attached" satisfies MediaAttachResult;
 }
 
 export async function attachRemarkPhotoFromGallery(remarkId: string) {
   const ownerUserId = await prepareOwnerAndStorage();
   const assets = await pickImages("library");
-  if (!assets?.length) {
-    return "cancelled" satisfies MediaAttachResult;
-  }
+  if (!assets?.length) return "cancelled" satisfies MediaAttachResult;
 
   await attachRemarkPhotoAssets(ownerUserId, remarkId, assets);
   triggerForegroundSyncWithRetry();
-
   return "attached" satisfies MediaAttachResult;
 }
 
 export async function attachRemarkVideoFromCamera(remarkId: string) {
   const ownerUserId = await prepareOwnerAndStorage();
   const asset = await pickVideo("camera");
-  if (!asset) {
-    return "cancelled" satisfies MediaAttachResult;
-  }
+  if (!asset) return "cancelled" satisfies MediaAttachResult;
 
   const file = await prepareRemarkVideo(ownerUserId, remarkId, asset);
   await attachMediaToShiftRemark(remarkId, file);
   triggerForegroundSyncWithRetry();
-
   return "attached" satisfies MediaAttachResult;
 }
 
 export async function attachRemarkVideoFromGallery(remarkId: string) {
   const ownerUserId = await prepareOwnerAndStorage();
   const asset = await pickVideo("library");
-  if (!asset) {
-    return "cancelled" satisfies MediaAttachResult;
-  }
+  if (!asset) return "cancelled" satisfies MediaAttachResult;
 
   const file = await prepareRemarkVideo(ownerUserId, remarkId, asset);
   await attachMediaToShiftRemark(remarkId, file);
   triggerForegroundSyncWithRetry();
-
   return "attached" satisfies MediaAttachResult;
+}
+
+export async function attachWorkPhotoFromCamera(workTaskId: string) {
+  const ownerUserId = await prepareOwnerAndStorage();
+  const assets = await pickImages("camera");
+  if (!assets?.length) return "cancelled" satisfies MediaAttachResult;
+
+  await attachWorkPhotoAssets(ownerUserId, workTaskId, assets);
+  triggerForegroundSyncWithRetry();
+  return "attached" satisfies MediaAttachResult;
+}
+
+export async function attachWorkVideoFromCamera(workTaskId: string) {
+  const ownerUserId = await prepareOwnerAndStorage();
+  const asset = await pickVideo("camera");
+  if (!asset) return "cancelled" satisfies MediaAttachResult;
+
+  const file = await prepareWorkVideo(ownerUserId, workTaskId, asset);
+  await attachMediaToWorkTask(workTaskId, file);
+  triggerForegroundSyncWithRetry();
+  return "attached" satisfies MediaAttachResult;
+}
+
+export async function attachWorkMediaFromGallery(workTaskId: string): Promise<MediaAttachSummary> {
+  const ownerUserId = await prepareOwnerAndStorage();
+  const assets = await pickMixedMediaFromGallery();
+  const summary = await attachMixedMediaAssets(assets, async (asset) => {
+    if (isVideoAsset(asset)) {
+      const file = await prepareWorkVideo(ownerUserId, workTaskId, asset);
+      await attachMediaToWorkTask(workTaskId, file);
+      return "video";
+    }
+
+    await attachWorkPhotoAssets(ownerUserId, workTaskId, [asset]);
+    return "photo";
+  });
+
+  if (summary.attachedCount > 0) {
+    triggerForegroundSyncWithRetry();
+  }
+  return summary;
+}
+
+async function attachMixedMediaAssets(
+  assets: ImagePicker.ImagePickerAsset[] | null,
+  attachAsset: (asset: ImagePicker.ImagePickerAsset) => Promise<"photo" | "video">
+): Promise<MediaAttachSummary> {
+  if (!assets?.length) {
+    return { status: "cancelled", attachedCount: 0, photoCount: 0, videoCount: 0, errors: [] };
+  }
+
+  let photoCount = 0;
+  let videoCount = 0;
+  const errors: string[] = [];
+
+  for (const [index, asset] of assets.entries()) {
+    try {
+      const kind = await attachAsset(asset);
+      if (kind === "video") {
+        videoCount += 1;
+      } else {
+        photoCount += 1;
+      }
+    } catch (error) {
+      errors.push(`Файл ${index + 1}: ${error instanceof Error ? error.message : "не удалось подготовить"}`);
+    }
+  }
+
+  const attachedCount = photoCount + videoCount;
+  return {
+    status: attachedCount > 0 ? "attached" : "cancelled",
+    attachedCount,
+    photoCount,
+    videoCount,
+    errors
+  };
 }
 
 async function prepareOwnerAndStorage() {
@@ -174,6 +250,22 @@ async function pickVideo(source: "camera" | "library") {
   return result.canceled ? null : result.assets[0] ?? null;
 }
 
+async function pickMixedMediaFromGallery() {
+  if (!(await ensureLibraryPermission())) {
+    throw new Error("Нет доступа к галерее.");
+  }
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    allowsEditing: false,
+    allowsMultipleSelection: true,
+    selectionLimit: 0,
+    mediaTypes: ["images", "videos"],
+    quality: 0.55
+  });
+
+  return result.canceled ? null : result.assets;
+}
+
 async function ensureCameraPermission() {
   const current = await ImagePicker.getCameraPermissionsAsync();
   if (current.granted) {
@@ -231,6 +323,18 @@ async function attachRemarkPhotoAssets(ownerUserId: string, remarkId: string, as
   }
 }
 
+async function attachWorkPhotoAssets(ownerUserId: string, workTaskId: string, assets: ImagePicker.ImagePickerAsset[]) {
+  for (const asset of assets) {
+    const optimizedPhoto = await optimizePhoto(asset);
+    const file = await prepareLocalPhoto({
+      ownerUserId,
+      localPath: optimizedPhoto.uri,
+      workTaskId
+    });
+    await attachMediaToWorkTask(workTaskId, file);
+  }
+}
+
 async function preparePointVideo(
   ownerUserId: string,
   assignmentId: string,
@@ -261,6 +365,18 @@ async function prepareRemarkVideo(ownerUserId: string, remarkId: string, asset: 
   });
 }
 
+async function prepareWorkVideo(ownerUserId: string, workTaskId: string, asset: ImagePicker.ImagePickerAsset) {
+  const sizeBytes = await getValidatedVideoSize(asset);
+  return prepareLocalMedia({
+    ownerUserId,
+    localPath: asset.uri,
+    workTaskId,
+    contentType: "video/mp4",
+    mediaKind: "video",
+    sizeBytes
+  });
+}
+
 function buildResizeActions(width?: number, height?: number): ImageManipulator.Action[] {
   if (!width || !height || Math.max(width, height) <= maxPhotoSidePx) {
     return [];
@@ -277,4 +393,8 @@ async function getValidatedVideoSize(asset: ImagePicker.ImagePickerAsset) {
   }
 
   return sizeBytes ?? null;
+}
+
+function isVideoAsset(asset: ImagePicker.ImagePickerAsset) {
+  return asset.type === "video" || asset.mimeType?.toLowerCase().startsWith("video/") === true;
 }

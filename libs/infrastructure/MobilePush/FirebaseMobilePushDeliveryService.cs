@@ -130,7 +130,9 @@ internal sealed class EfMobilePushDeliveryService(
                 ["notificationId"] = notification.Id.ToString(),
                 ["type"] = notification.Type,
                 ["entityType"] = notification.EntityType ?? string.Empty,
-                ["entityId"] = notification.EntityId ?? string.Empty
+                ["entityId"] = notification.EntityId ?? string.Empty,
+                ["title"] = notification.Title,
+                ["body"] = notification.Message
             },
             "patrol360");
 
@@ -191,19 +193,10 @@ internal sealed class FirebaseMobilePushSender(
         new()
         {
             Token = message.Token,
-            Notification = new Notification
-            {
-                Title = message.Title,
-                Body = message.Body
-            },
             Data = message.Data.ToDictionary(item => item.Key, item => item.Value),
             Android = new AndroidConfig
             {
-                Priority = Priority.High,
-                Notification = new AndroidNotification
-                {
-                    ChannelId = message.ChannelId
-                }
+                Priority = Priority.High
             }
         };
 }

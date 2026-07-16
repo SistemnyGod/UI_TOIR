@@ -24,6 +24,8 @@ public interface IMobileAppService
 
     MobileWorkTaskDto? GetWorkTask(string accessToken, Guid taskId);
 
+    IReadOnlyList<MobileWorkItemDto> GetWorkItemsV2(string accessToken);
+
     IReadOnlyList<MobileOutboxResponseDto> SaveOutbox(string accessToken, MobileOutboxBatchDto request);
 
     MobileOutboxResponseDto? GetOutboxResult(string accessToken, string clientOperationId);
@@ -42,6 +44,7 @@ public sealed record MobileFileUploadCommand(
     Guid? AssignmentId,
     Guid? PointId,
     string? RemarkId,
+    Guid? WorkTaskId,
     string Sha256,
     long SizeBytes,
     DateTimeOffset CapturedAtLocal,

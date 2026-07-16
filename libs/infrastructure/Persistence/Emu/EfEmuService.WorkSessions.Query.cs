@@ -40,6 +40,22 @@ internal sealed partial class EfEmuService
             : Success(MapWorkSession(RecalculateSession(entity, DateTimeOffset.UtcNow)));
     }
 
+    public ResultAttachmentFileDto? GetWorkAttachmentFile(Guid workSessionId, Guid attachmentId)
+    {
+        var file = dbContext.MobileUploadedFiles
+            .AsNoTracking()
+            .FirstOrDefault(row => row.Id == attachmentId && row.WorkTaskId == workSessionId);
+        if (file is null)
+        {
+            return null;
+        }
+
+        var storagePath = Path.Combine(AppContext.BaseDirectory, "mobile-files", file.StorageFileName);
+        return File.Exists(storagePath)
+            ? new ResultAttachmentFileDto(storagePath, file.ContentType, file.OriginalFileName)
+            : null;
+    }
+
     public EmuListResponseDto<EmuAuditEventDto> GetWorkSessionAudit(Guid id, int page = 1, int pageSize = 100)
     {
         var paging = NormalizePaging(page, pageSize);

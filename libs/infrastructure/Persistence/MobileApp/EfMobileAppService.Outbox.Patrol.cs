@@ -100,6 +100,12 @@ internal sealed partial class EfMobileAppService
                     ProcessResumeWorkTask(account, command),
                 var type when type.Equals("completeWorkTask", StringComparison.OrdinalIgnoreCase) =>
                     ProcessCompleteWorkTask(account, command),
+                var type when type.Equals("startPlannedWork", StringComparison.OrdinalIgnoreCase) =>
+                    ProcessStartPlannedWork(account, command),
+                var type when type.Equals("joinWorkTask", StringComparison.OrdinalIgnoreCase) =>
+                    ProcessJoinWorkTask(account, command),
+                var type when type.Equals("replaceWorkTaskParticipant", StringComparison.OrdinalIgnoreCase) =>
+                    ProcessReplaceWorkTaskParticipant(account, command),
                 var type when type.Equals("createShiftRemark", StringComparison.OrdinalIgnoreCase) =>
                     ProcessCreateShiftRemark(account, command),
                 var type when type.Equals("attachShiftRemarkMedia", StringComparison.OrdinalIgnoreCase) =>

@@ -421,6 +421,28 @@ public sealed class EmuController(
             : Forbidden("emu_section");
     }
 
+    [HttpGet("work-sessions/{id:guid}/attachments/{attachmentId:guid}")]
+    [RequirePermission("emu.view")]
+    public ActionResult DownloadWorkAttachment(Guid id, Guid attachmentId)
+    {
+        var actor = ReadCurrentUser();
+        var current = workService.GetWorkSession(id);
+        if (!current.Succeeded || current.Value is null)
+        {
+            return NotFound();
+        }
+
+        if (!CanAccessEmuWork(actor, current.Value.SectionId, current.Value.CreatedByUserId))
+        {
+            return Forbidden("emu_section");
+        }
+
+        var attachment = workService.GetWorkAttachmentFile(id, attachmentId);
+        return attachment is null
+            ? NotFound()
+            : PhysicalFile(attachment.Path, attachment.ContentType, attachment.FileName);
+    }
+
     [HttpPost("work-sessions")]
     [RequirePermission("emu.work.create")]
     public ActionResult<EmuWorkSessionDto> CreateWorkSession(EmuCreateWorkSessionDto request)

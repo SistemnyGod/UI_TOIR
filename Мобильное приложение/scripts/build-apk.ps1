@@ -166,6 +166,33 @@ if (Test-Path -LiteralPath $BuildRoot) {
   Remove-BuildRoot -Path $BuildRoot -Retries 8 -ThrowOnFailure
 }
 
+$GradleUserHome = Join-Path (Split-Path -Parent $BuildRoot) "gradle-home"
+$GradleWrapperDists = Join-Path $GradleUserHome "wrapper\dists"
+$HostGradleWrapperDists = Join-Path $env:USERPROFILE ".gradle\wrapper\dists"
+$GradleModuleCache = Join-Path $GradleUserHome "caches\modules-2"
+$HostGradleModuleCache = Join-Path $env:USERPROFILE ".gradle\caches\modules-2"
+$HostGradleBin = Get-ChildItem -Path (Join-Path $HostGradleWrapperDists "gradle-9.3.1-bin") -Recurse -Filter "gradle.bat" -ErrorAction SilentlyContinue |
+  Where-Object { $_.FullName -match "\\gradle-9\.3\.1\\bin\\gradle\.bat$" } |
+  Select-Object -First 1
+
+New-Item -ItemType Directory -Path $GradleWrapperDists -Force | Out-Null
+
+if (Test-Path -LiteralPath (Join-Path $HostGradleWrapperDists "gradle-9.3.1-bin")) {
+  Copy-Item `
+    -LiteralPath (Join-Path $HostGradleWrapperDists "gradle-9.3.1-bin") `
+    -Destination $GradleWrapperDists `
+    -Recurse `
+    -Force
+}
+
+if ((Test-Path -LiteralPath $HostGradleModuleCache) -and -not (Test-Path -LiteralPath $GradleModuleCache)) {
+  New-Item -ItemType Directory -Path (Split-Path -Parent $GradleModuleCache) -Force | Out-Null
+  robocopy $HostGradleModuleCache $GradleModuleCache /E /NFL /NDL /NJH /NJS /NP /R:1 /W:1 | Out-Null
+  if ($LASTEXITCODE -gt 7) {
+    throw "Gradle module cache copy failed with exit code $LASTEXITCODE"
+  }
+}
+
 $buildSucceeded = $false
 
 try {
@@ -192,12 +219,26 @@ try {
   $env:JAVA_HOME = $JavaHome
   $env:ANDROID_HOME = $AndroidSdk
   $env:ANDROID_SDK_ROOT = $AndroidSdk
+  $env:GRADLE_USER_HOME = $GradleUserHome
   $env:GRADLE_OPTS = "-Xmx4096m -Dfile.encoding=UTF-8"
   $env:NODE_ENV = if ($Configuration -eq "Release") { "production" } else { "development" }
   $env:Path = "$JavaHome\bin;$AndroidSdk\platform-tools;$env:Path"
 
   Write-Host "Generating Android project..."
   Invoke-Checked "npx" "expo" "prebuild" "--platform" "android" "--clean" "--no-install"
+
+  if ($Configuration -eq "Debug") {
+    # React Native treats the debug variant as a Metro-powered development
+    # client by default and does not embed JavaScript. The APK distributed to
+    # test phones must be standalone, otherwise TypeScript fixes never reach
+    # the installed application when Metro is not running.
+    $appBuildGradle = Join-Path $BuildRoot "android\app\build.gradle"
+    $appBuildGradleContent = Get-Content -LiteralPath $appBuildGradle -Raw
+    if ($appBuildGradleContent -notmatch '(?m)^\s*debuggableVariants\s*=') {
+      $appBuildGradleContent = $appBuildGradleContent -replace 'react \{', "react {`r`n    debuggableVariants = []"
+      Set-Content -LiteralPath $appBuildGradle -Value $appBuildGradleContent -NoNewline
+    }
+  }
 
   $gradlePluginSettings = Join-Path $BuildRoot "node_modules\@react-native\gradle-plugin\settings.gradle.kts"
   if (Test-Path -LiteralPath $gradlePluginSettings) {
@@ -218,7 +259,12 @@ try {
   try {
     $task = if ($Configuration -eq "Release") { "assembleRelease" } else { "assembleDebug" }
     Write-Host "Running Gradle task: $task"
-    Invoke-Checked ".\gradlew.bat" $task "--no-daemon" "--console=plain" "-PreactNativeArchitectures=$ReactNativeArchitectures"
+    if ($HostGradleBin) {
+      Invoke-Checked $HostGradleBin.FullName $task "--no-daemon" "--console=plain" "-PreactNativeArchitectures=$ReactNativeArchitectures"
+    }
+    else {
+      Invoke-Checked ".\gradlew.bat" $task "--no-daemon" "--console=plain" "-PreactNativeArchitectures=$ReactNativeArchitectures"
+    }
   }
   finally {
     Pop-Location

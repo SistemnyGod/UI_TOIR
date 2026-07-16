@@ -197,6 +197,17 @@ internal sealed partial class EfMobileAppService
 
     private static string MapRequestStatus(PatrolRequestEntity request)
     {
+        if (request.Assignment?.Status == AssignmentStatusValues.Assigned
+            || request.Assignment?.Status == AssignmentStatusValues.Waiting)
+        {
+            return "assigned";
+        }
+
+        if (request.Assignment?.Status == AssignmentStatusValues.Accepted)
+        {
+            return "accepted";
+        }
+
         if (request.Assignment?.Status == AssignmentStatusValues.InProgress)
         {
             return "inProgress";
@@ -217,17 +228,12 @@ internal sealed partial class EfMobileAppService
             return "cancelledServer";
         }
 
-        if (request.Assignment is not null)
-        {
-            return "accepted";
-        }
-
         return request.EmployeeId is null ? "available" : "assigned";
     }
 
     private static string MapAssignmentStatus(string status)
     {
-        if (status == AssignmentStatusValues.Accepted || status == AssignmentStatusValues.Assigned || status == AssignmentStatusValues.Waiting)
+        if (status == AssignmentStatusValues.Accepted)
         {
             return "accepted";
         }
@@ -277,8 +283,8 @@ internal sealed partial class EfMobileAppService
     private static MobileOutboxResponseDto Rejected(string clientOperationId, string message) =>
         new(clientOperationId, "rejected", null, null, message, null, null);
 
-    private static MobileOutboxResponseDto Conflict(string clientOperationId, string message) =>
-        new(clientOperationId, "conflict", null, null, message, Guid.NewGuid().ToString(), null);
+    private static MobileOutboxResponseDto Conflict(string clientOperationId, string message, string? reasonCode = null) =>
+        new(clientOperationId, "conflict", null, null, message, Guid.NewGuid().ToString(), null, reasonCode);
 
     private static MobileOutboxResponseDto AcceptedPoint(string clientOperationId, Guid pointId, long revision, string message) =>
         new(clientOperationId, "accepted", pointId.ToString(), revision, message, null, null);

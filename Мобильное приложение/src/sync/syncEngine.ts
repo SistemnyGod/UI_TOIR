@@ -9,6 +9,7 @@ import { logMobileError } from "@/services/mobileErrorReporter";
 import { reclaimAcceptedLocalMedia } from "@/services/localMediaReclamationService";
 import {
   listFilesByClientIds,
+  listWorkTaskFiles,
   markFileUploaded,
   markFileUploadFailed,
   markFileUploading
@@ -269,9 +270,11 @@ function getStaleSendingBoundaryIso() {
 async function uploadFilesForCompleteCommands(ownerUserId: string, commands: OutboxCommand[]) {
   const clientFileIds = Array.from(new Set(commands.flatMap(extractUploadClientFileIds)));
   const files = await listFilesByClientIds(clientFileIds);
+  const workFiles = await listWorkFilesForCommands(commands);
+  const allFilesById = new Map([...files, ...workFiles].map((file) => [file.clientFileId, file]));
   const missingClientFileIds = findMissingClientFileIds(
     clientFileIds,
-    files.map((file) => file.clientFileId)
+    Array.from(allFilesById.keys())
   );
 
   if (missingClientFileIds.length > 0) {
@@ -280,7 +283,7 @@ async function uploadFilesForCompleteCommands(ownerUserId: string, commands: Out
     );
   }
 
-  for (const file of files) {
+  for (const file of allFilesById.values()) {
     if (file.ownerUserId !== ownerUserId) {
       throw new Error("Локальный файл принадлежит другому пользователю и не будет отправлен.");
     }
@@ -294,10 +297,12 @@ async function uploadFilesForCompleteCommands(ownerUserId: string, commands: Out
       const response = await uploadMobileFile(file);
       await markFileUploaded(file.clientFileId, response.serverFileId);
       const mediaLabel = file.mediaKind === "video" ? "Видео" : "Фото";
+      const entityType = file.workTaskId ? "workTask" : file.remarkId ? "shiftRemark" : "patrolPoint";
+      const entityId = file.workTaskId ?? file.remarkId ?? file.pointId ?? file.assignmentId ?? file.clientFileId;
       void logMobileAction({
         eventType: file.mediaKind === "video" ? "sync.video.uploaded" : "sync.photo.uploaded",
-        entityType: file.remarkId ? "shiftRemark" : "patrolPoint",
-        entityId: file.remarkId ?? file.pointId ?? file.assignmentId ?? file.clientFileId,
+        entityType,
+        entityId,
         message: `${mediaLabel} отправлено на сервер.`,
         payload: { clientFileId: file.clientFileId, serverFileId: response.serverFileId }
       }).catch(() => undefined);
@@ -309,6 +314,15 @@ async function uploadFilesForCompleteCommands(ownerUserId: string, commands: Out
       throw new Error("Не удалось отправить файл на сервер. Отчет останется в очереди восстановления.");
     }
   }
+}
+
+async function listWorkFilesForCommands(commands: OutboxCommand[]) {
+  const workTaskIds = Array.from(new Set(commands
+    .filter((command) => command.entityType === "workTask")
+    .map((command) => command.entityLocalId ?? command.entityServerId)
+    .filter((value): value is string => Boolean(value))));
+  const files = await Promise.all(workTaskIds.map((workTaskId) => listWorkTaskFiles(workTaskId)));
+  return files.flat();
 }
 
 function extractUploadClientFileIds(command: OutboxCommand) {

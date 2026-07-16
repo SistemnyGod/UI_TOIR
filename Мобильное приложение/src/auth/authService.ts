@@ -24,6 +24,7 @@ import {
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { registerPushNotifications, syncMobileNotifications } from "@/services/notificationService";
 import { syncWorkTasks } from "@/services/workTaskService";
+import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 
 const defaultDeviceName = "Kenshi Armor C1s";
 const appVersion = Constants.expoConfig?.version ?? "unknown";
@@ -73,6 +74,9 @@ export async function signIn(loginName: string, password: string) {
   await syncWorkTasks().catch(() => []);
   await registerPushNotifications().catch(() => null);
   await syncMobileNotifications().catch(() => []);
+  // Resume reports and patrol actions that were safely retained while the
+  // session was expired.  This is intentionally non-blocking for login UI.
+  void triggerForegroundSyncWithRetry({ forceRetry: true });
 
   void logMobileAction({
     eventType: "auth.signIn",
@@ -107,6 +111,7 @@ export async function restoreSessionWithRefreshToken() {
   await syncWorkTasks().catch(() => []);
   await registerPushNotifications().catch(() => null);
   await syncMobileNotifications().catch(() => []);
+  void triggerForegroundSyncWithRetry({ forceRetry: true });
 
   void logMobileAction({
     eventType: "auth.restore",

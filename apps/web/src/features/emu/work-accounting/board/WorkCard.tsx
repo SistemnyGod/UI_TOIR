@@ -77,6 +77,7 @@ export function WorkCard({
         <small>{formatTime(work.arrivedAt)}</small>
       </div>
       {requiresDecision ? <span className="emu-decision-badge">Требует решения</span> : null}
+      {work.source === "mobile" ? <span className="emu-decision-badge">Мобильное приложение</span> : null}
       <h4>{work.sectionName || "Прочее"}</h4>
       <p>{work.taskDescription || "Задача не указана"}</p>
       <div className="emu-work-meta">

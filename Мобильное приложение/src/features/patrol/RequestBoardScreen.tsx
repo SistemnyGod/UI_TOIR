@@ -1,20 +1,20 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ListRenderItem, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { listRequestBoard, RequestBoardItem } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { refreshMobileData } from "@/services/mobileDataRefreshService";
+import { subscribeToSyncEvents } from "@/sync/syncEvents";
 import { Card } from "@/ui/Card";
-import { MetricCard } from "@/ui/MetricCard";
-import { PrimaryButton } from "@/ui/PrimaryButton";
 import { ScreenList } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
 
 type RequestTab = "available" | "mine" | "unsent" | "history";
 
 const activeStatuses = new Set(["accepted", "inProgress", "paused"]);
-const unsentStatuses = new Set(["completedLocal", "syncing", "syncError", "authRequired", "needsDispatcherDecision", "cancelledServer"]);
+const unsentStatuses = new Set(["completedLocal", "syncing", "syncError", "authRequired", "needsDispatcherDecision"]);
 const historyStatuses = new Set(["completed", "completedServer", "cancelled", "cancelledServer"]);
 
 export function RequestBoardScreen() {
@@ -42,6 +42,10 @@ export function RequestBoardScreen() {
       };
     }, [])
   );
+
+  useEffect(() => subscribeToSyncEvents(() => {
+    void loadLocal();
+  }), [loadLocal]);
 
   async function handleRefresh() {
     setIsRefreshing(true);
@@ -89,31 +93,19 @@ export function RequestBoardScreen() {
     <ScreenList
       data={filteredItems}
       keyExtractor={(item) => item.requestId}
+      onRefresh={() => void handleRefresh()}
+      refreshing={isRefreshing}
       ListEmptyComponent={
         <Card>
           <Text style={[styles.title, { color: colors.text }]}>В этой вкладке пока пусто</Text>
-          <Text style={[styles.text, { color: colors.mutedText }]}>Обновите список или выберите другую вкладку. Локальные заявки и неотправленные отчеты не удаляются при потере связи.</Text>
+          <Text style={[styles.text, { color: colors.mutedText }]}>Потяните экран вниз для обновления или выберите другую вкладку.</Text>
         </Card>
       }
       renderItem={renderItem}
       title="Заявки на обход"
-      subtitle="Выберите заявку, проверьте детали и только потом подтвердите принятие."
+      subtitle="Откройте заявку, чтобы проверить маршрут."
       headerContent={
         <>
-          <Card style={styles.guideCard}>
-            <Text style={[styles.guideTitle, { color: colors.text }]}>Как начать обход</Text>
-            <Text style={[styles.text, { color: colors.mutedText }]}>
-              1. Откройте заявку из списка. 2. Проверьте маршрут и время. 3. Нажмите «Принять заявку», затем «Начать обход».
-            </Text>
-          </Card>
-
-          <View style={styles.summaryGrid}>
-            <MetricCard label="Доступные" style={styles.metricCompact} value={summary.available} tone="success" />
-            <MetricCard label="Мои" style={styles.metricCompact} value={summary.mine} tone={summary.mine > 0 ? "warning" : "neutral"} />
-            <MetricCard label="Не отправлено" style={styles.metricCompact} value={summary.unsent} tone={summary.unsent > 0 ? "danger" : "neutral"} />
-            <MetricCard label="История" style={styles.metricCompact} value={summary.history} />
-          </View>
-
           <View style={styles.tabBar}>
             <RequestTabButton active={activeTab === "available"} count={summary.available} label="Доступные" onPress={() => setActiveTab("available")} />
             <RequestTabButton active={activeTab === "mine"} count={summary.mine} label="Мои" onPress={() => setActiveTab("mine")} />
@@ -121,8 +113,6 @@ export function RequestBoardScreen() {
             <RequestTabButton active={activeTab === "history"} count={summary.history} label="История" onPress={() => setActiveTab("history")} />
           </View>
 
-          <PrimaryButton disabled={isRefreshing} icon="refresh-outline" label={isRefreshing ? "Обновляем..." : "Обновить заявки"} onPress={handleRefresh} variant="secondary" />
-          <Text style={[styles.tabHint, { color: colors.mutedText }]}>{tabHint(activeTab)}</Text>
           {message ? <Text style={[styles.message, { color: colors.mutedText }]}>{message}</Text> : null}
         </>
       }
@@ -148,9 +138,8 @@ function RequestCard({ item, onPress }: { item: RequestBoardItem; onPress: () =>
           <Text style={[styles.text, { color: colors.mutedText }]}>{item.assignedFullName ?? "Свободная заявка"}</Text>
           <View style={styles.metaRow}>
             <Text style={[styles.meta, { color: colors.mutedText }]}>План: {formatDateTime(item.plannedStartAt)}</Text>
-            <Text style={[styles.meta, { color: colors.mutedText }]}>{nextStepLabel(item.status)}</Text>
+            <Ionicons color={colors.primary} name="chevron-forward" size={20} />
           </View>
-          <Text style={[styles.openHint, { color: colors.mutedText }]}>Нажмите, чтобы открыть карточку. Принятие будет на следующем экране.</Text>
         </View>
       </Card>
     </Pressable>
@@ -225,44 +214,6 @@ function shortRequestId(requestId: string) {
   return `#${requestId.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
 }
 
-function tabHint(tab: RequestTab) {
-  switch (tab) {
-    case "mine":
-      return "Здесь ваши принятые и начатые обходы. Откройте карточку, чтобы продолжить.";
-    case "unsent":
-      return "Здесь отчеты и команды, которые сохранены на телефоне и ждут отправки.";
-    case "history":
-      return "Здесь завершенные и отмененные заявки. Они не мешают текущей работе.";
-    default:
-      return "Доступные заявки не принимаются одним касанием: сначала откройте и проверьте маршрут.";
-  }
-}
-
-function nextStepLabel(status: string) {
-  switch (status) {
-    case "accepted":
-      return "Следующий шаг: начать обход";
-    case "inProgress":
-      return "Следующий шаг: продолжить";
-    case "paused":
-      return "Следующий шаг: продолжить с паузы";
-    case "completedLocal":
-    case "syncing":
-      return "Ждет отправки";
-    case "syncError":
-      return "Нужно повторить отправку";
-    case "authRequired":
-      return "Нужно войти снова";
-    case "needsDispatcherDecision":
-      return "Ждет решения диспетчера";
-    case "cancelledServer":
-    case "cancelled":
-      return "Отменена диспетчером";
-    default:
-      return "Следующий шаг: открыть и принять";
-  }
-}
-
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("ru-RU", {
     day: "2-digit",
@@ -273,15 +224,6 @@ function formatDateTime(value: string) {
 }
 
 const styles = StyleSheet.create({
-  summaryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
-  },
-  metricCompact: {
-    flexBasis: "22%",
-    flexGrow: 1
-  },
   tabBar: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -295,7 +237,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: "row",
     gap: 6,
-    minHeight: 38,
+    minHeight: 48,
     paddingHorizontal: 12,
     paddingVertical: 8
   },
@@ -371,32 +313,16 @@ const styles = StyleSheet.create({
     lineHeight: 19
   },
   metaRow: {
+    alignItems: "center",
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12
+    justifyContent: "space-between"
   },
   meta: {
     fontSize: 12,
     fontWeight: "800"
   },
-  openHint: {
-    fontSize: 12,
-    fontWeight: "900"
-  },
   message: {
     fontSize: 13,
-    lineHeight: 18
-  },
-  guideCard: {
-    gap: 6
-  },
-  guideTitle: {
-    fontSize: 16,
-    fontWeight: "900"
-  },
-  tabHint: {
-    fontSize: 13,
-    fontWeight: "700",
     lineHeight: 18
   }
 });

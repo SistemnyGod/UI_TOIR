@@ -9,6 +9,145 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfMobileAppService
 {
+    private MobileOutboxResponseDto ProcessStartPlannedWork(MobileAccountEntity account, MobileOutboxCommandDto command)
+    {
+        var planTaskId = ReadGuid(command.Payload, "planTaskId");
+        var workSessionId = ReadGuid(command.Payload, "taskId") ?? ReadGuid(command.Payload, "workSessionId");
+        var employeeId = ReadGuid(command.Payload, "employeeId");
+        var baseRevision = ReadLong(command.Payload, "baseRevision");
+        var startedAt = ReadDateTimeOffset(command.Payload, "startedAtLocal") ?? DateTimeOffset.UtcNow;
+        if (planTaskId is null || workSessionId is null || employeeId is null || baseRevision is null)
+        {
+            return Rejected(command.ClientOperationId, "startPlannedWork payload is incomplete.");
+        }
+
+        if (!GetBoundEmployeeIds(account).Contains(employeeId.Value))
+        {
+            return Conflict(command.ClientOperationId, "Selected employee is not linked to this mobile account.");
+        }
+
+        var planTask = dbContext.EmuWorkPlanTasks
+            .AsNoTracking()
+            .FirstOrDefault(row => row.Id == planTaskId.Value);
+        if (planTask is null || planTask.ApprovalStatus != "Согласовано" || planTask.Status != "Запланировано")
+        {
+            return Conflict(command.ClientOperationId, "Planned work is no longer available.");
+        }
+
+        if (planTask.RowVersion != baseRevision.Value)
+        {
+            return Conflict(command.ClientOperationId, "Planned work was changed after mobile sync.");
+        }
+
+        var result = emuWorkService.CreateWorkSession(
+            new EmuCreateWorkSessionDto(
+                DateOnly.FromDateTime(startedAt.LocalDateTime),
+                planTask.SectionId ?? Guid.Empty,
+                startedAt,
+                [employeeId.Value],
+                string.IsNullOrWhiteSpace(planTask.Description) ? planTask.Title : planTask.Description,
+                PlanTaskId: planTask.Id,
+                ClientWorkSessionId: workSessionId.Value),
+            null,
+            $"mobile:{account.Login}");
+
+        return MapEmuOutboxResult(command.ClientOperationId, result, "Planned work started.");
+    }
+
+    private MobileOutboxResponseDto ProcessJoinWorkTask(MobileAccountEntity account, MobileOutboxCommandDto command)
+    {
+        var taskId = ReadGuid(command.Payload, "taskId");
+        var employeeId = ReadGuid(command.Payload, "employeeId");
+        var baseRevision = ReadLong(command.Payload, "baseRevision");
+        var startedAt = ReadDateTimeOffset(command.Payload, "startedAtLocal") ?? DateTimeOffset.UtcNow;
+        var comment = NormalizeOptionalText(ReadString(command.Payload, "comment"), "Присоединение с мобильного устройства");
+        if (taskId is null || employeeId is null || baseRevision is null)
+        {
+            return Rejected(command.ClientOperationId, "joinWorkTask payload is incomplete.");
+        }
+
+        if (!GetBoundEmployeeIds(account).Contains(employeeId.Value))
+        {
+            return Conflict(command.ClientOperationId, "Selected employee is not linked to this mobile account.");
+        }
+
+        var result = emuWorkService.AddWorkSessionEmployee(
+            taskId.Value,
+            new EmuAddWorkSessionEmployeeDto(employeeId.Value, startedAt, comment, (int)baseRevision.Value),
+            null,
+            $"mobile:{account.Login}");
+        return MapEmuOutboxResult(command.ClientOperationId, result, "Employee joined work task.");
+    }
+
+    private MobileOutboxResponseDto ProcessReplaceWorkTaskParticipant(MobileAccountEntity account, MobileOutboxCommandDto command)
+    {
+        var taskId = ReadGuid(command.Payload, "taskId");
+        var previousEmployeeId = ReadGuid(command.Payload, "previousEmployeeId");
+        var employeeId = ReadGuid(command.Payload, "employeeId");
+        var baseRevision = ReadLong(command.Payload, "baseRevision");
+        var changedAt = ReadDateTimeOffset(command.Payload, "changedAtLocal") ?? DateTimeOffset.UtcNow;
+        var reason = NormalizeOptionalText(ReadString(command.Payload, "reason"));
+        if (taskId is null || previousEmployeeId is null || employeeId is null || baseRevision is null || string.IsNullOrWhiteSpace(reason))
+        {
+            return Rejected(command.ClientOperationId, "replaceWorkTaskParticipant payload is incomplete.");
+        }
+
+        if (!GetBoundEmployeeIds(account).Contains(employeeId.Value))
+        {
+            return Conflict(command.ClientOperationId, "Selected employee is not linked to this mobile account.");
+        }
+
+        var session = dbContext.EmuWorkSessions
+            .AsNoTracking()
+            .Include(row => row.Employees)
+            .FirstOrDefault(row => row.Id == taskId.Value && row.DeletedAt == null);
+        if (session is null || session.CompletedAt is not null || session.RowVersion != baseRevision.Value)
+        {
+            return Conflict(command.ClientOperationId, "Work task was changed or completed.");
+        }
+
+        if (!session.Employees.Any(row => row.EmployeeId == previousEmployeeId.Value && row.FinishedAt == null))
+        {
+            return Conflict(command.ClientOperationId, "Previous active employee was not found.");
+        }
+
+        if (session.Employees.Any(row => row.EmployeeId == employeeId.Value && row.FinishedAt == null))
+        {
+            return Conflict(command.ClientOperationId, "Selected employee already participates in this work.");
+        }
+
+        var finish = emuWorkService.FinishWorkSessionEmployee(
+            session.Id,
+            previousEmployeeId.Value,
+            new EmuFinishWorkSessionEmployeeDto(
+                changedAt,
+                "Частично выполнено",
+                $"Передано другому исполнителю: {reason}",
+                session.RowVersion),
+            null,
+            $"mobile:{account.Login}");
+        if (!finish.Succeeded || finish.Value is null)
+        {
+            return MapEmuOutboxResult(command.ClientOperationId, finish, string.Empty);
+        }
+
+        var add = emuWorkService.AddWorkSessionEmployee(
+            session.Id,
+            new EmuAddWorkSessionEmployeeDto(
+                employeeId.Value,
+                changedAt,
+                $"Принял вместо другого исполнителя: {reason}",
+                finish.Value.RowVersion),
+            null,
+            $"mobile:{account.Login}");
+        if (!add.Succeeded || add.Value is null)
+        {
+            throw new InvalidOperationException("Atomic mobile work participant replacement failed after validation.");
+        }
+
+        return MapEmuOutboxResult(command.ClientOperationId, add, "Work task participant replaced.");
+    }
+
     private MobileOutboxResponseDto ProcessCompleteWorkTask(MobileAccountEntity account, MobileOutboxCommandDto command)
     {
         var taskId = ReadGuid(command.Payload, "taskId");

@@ -2,6 +2,7 @@ import * as Crypto from "expo-crypto";
 
 import { insertOutboxCommand, listPendingOutboxCommands } from "@/db/repositories/outboxRepository";
 import { MobileEntityType, OutboxCommand, OutboxCommandType } from "@/domain/sync/syncTypes";
+import { selectNextOutboxCommands as selectNextByAssignment } from "@/sync/outboxOrderingPolicy";
 import { assertRecordsBelongToOwner } from "@/sync/ownerIsolation";
 
 type CreateOutboxCommandInput = {
@@ -41,51 +42,23 @@ export async function getPendingOutboxBatch(ownerUserId: string, limit?: number)
     ownerUserId,
     await listPendingOutboxCommands(ownerUserId, Math.max(batchLimit * 4, 100))
   );
-  const blockedCompleteAssignmentIds = new Set(
-    commands
-      .filter((command) => command.commandType !== "completePatrolAssignment")
-      .map(getCommandAssignmentId)
-      .filter((assignmentId): assignmentId is string => Boolean(assignmentId))
-  );
-
-  return commands
-    .sort(compareOutboxCommands)
-    .filter((command) => {
-      if (command.commandType !== "completePatrolAssignment") {
-        return true;
-      }
-
-      const assignmentId = getCommandAssignmentId(command);
-      return !assignmentId || !blockedCompleteAssignmentIds.has(assignmentId);
-    })
-    .slice(0, batchLimit);
+  return selectNextByAssignment(
+    commands.map((command) => ({ command, assignmentId: getCommandAssignmentId(command), createdAtLocal: command.createdAtLocal })),
+    batchLimit
+  ).map((item) => item.command);
 }
 
-function compareOutboxCommands(left: OutboxCommand, right: OutboxCommand) {
-  const priorityDiff = getCommandPriority(left.commandType) - getCommandPriority(right.commandType);
-  if (priorityDiff !== 0) {
-    return priorityDiff;
-  }
-
-  return left.createdAtLocal.localeCompare(right.createdAtLocal);
-}
-
-function getCommandPriority(commandType: OutboxCommandType) {
-  switch (commandType) {
-    case "takePatrolRequest":
-    case "startPatrolAssignment":
-      return 0;
-    case "scanPatrolPointNfc":
-    case "scanPatrolPointQr":
-      return 1;
-    case "markPatrolPointOk":
-    case "markPatrolPointIssue":
-      return 2;
-    case "completePatrolAssignment":
-      return 4;
-    default:
-      return 3;
-  }
+/* Legacy export retained for callers that operate on full command objects. */
+export function selectNextOutboxCommands(commands: OutboxCommand[], batchLimit: number) {
+  // A patrol is a state machine, not an independently sortable set of jobs.
+  // Sending `start` before the preceding `accept` used to be possible because
+  // of global command priorities.  Select only the oldest pending command per
+  // patrol in a pass; after its server acknowledgement the next pass advances
+  // that same patrol.  Commands from different patrols remain independent.
+  return selectNextByAssignment(
+    commands.map((command) => ({ command, assignmentId: getCommandAssignmentId(command), createdAtLocal: command.createdAtLocal })),
+    batchLimit
+  ).map((item) => item.command);
 }
 
 function getCommandAssignmentId(command: OutboxCommand) {

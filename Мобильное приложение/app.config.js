@@ -32,7 +32,8 @@ const androidConfig = {
     "android.permission.NFC"
   ],
   blockedPermissions: [
-    "android.permission.RECORD_AUDIO"
+    "android.permission.RECORD_AUDIO",
+    "android.permission.SYSTEM_ALERT_WINDOW"
   ]
 };
 

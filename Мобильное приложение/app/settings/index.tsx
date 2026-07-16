@@ -11,18 +11,18 @@ export default function SettingsRoute() {
   const { colors, effectiveScheme, preference } = useAppTheme();
 
   return (
-    <Screen title="Настройки" subtitle="Персонализация, аккаунт, сервер и восстановление отправки.">
+    <Screen title="Настройки" subtitle="Персонализация, аккаунт, сервер, диагностика и восстановление отправки.">
       <Card>
         <View style={styles.headerRow}>
           <View style={styles.headerText}>
             <Text style={[styles.title, { color: colors.text }]}>Внешний вид</Text>
             <Text style={[styles.text, { color: colors.mutedText }]}>
-              Сейчас: {themeLabel(preference)}. Активная схема: {effectiveScheme === "dark" ? "темная" : "светлая"}.
+              Сейчас: {themeLabel(preference)}. Активная схема: {effectiveScheme === "dark" ? "тёмная" : "светлая"}.
             </Text>
           </View>
-          <StatusPill label={effectiveScheme === "dark" ? "Темная" : "Светлая"} tone="neutral" />
+          <StatusPill label={effectiveScheme === "dark" ? "Тёмная" : "Светлая"} tone="neutral" />
         </View>
-        <SettingsRow label="Тема" value="Системная, светлая или темная" onPress={() => router.push("/settings/theme")} />
+        <SettingsRow label="Тема" value="Системная, светлая или тёмная" onPress={() => router.push("/settings/theme")} />
       </Card>
 
       <Card>
@@ -36,7 +36,7 @@ export default function SettingsRoute() {
       <Card>
         <Text style={[styles.title, { color: colors.text }]}>Синхронизация</Text>
         <Text style={[styles.text, { color: colors.mutedText }]}>
-          Проверьте отчеты, команды и файлы, которые еще не приняты сервером.
+          Проверьте отчёты, команды и файлы, которые ещё не приняты сервером.
         </Text>
         <SettingsRow
           label="Не отправлено"
@@ -46,9 +46,21 @@ export default function SettingsRoute() {
       </Card>
 
       <Card>
+        <Text style={[styles.title, { color: colors.text }]}>Диагностика</Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>
+          Автоматический отчёт об ошибках, ручная отправка логов и безопасная проверка канала диагностики.
+        </Text>
+        <SettingsRow
+          label="Ошибки и логи"
+          value="Автоотправка, ручной отчёт и тест диагностики"
+          onPress={() => router.push("/settings/diagnostics" as never)}
+        />
+      </Card>
+
+      <Card>
         <Text style={[styles.title, { color: colors.text }]}>Сервер</Text>
         <Text style={[styles.text, { color: colors.mutedText }]}>
-          Адрес backend API для входа, загрузки заявок, отправки отчетов и файлов.
+          Адрес backend API для входа, загрузки заявок, отправки отчётов и файлов.
         </Text>
         <SettingsRow
           label="Адрес сервера"
@@ -60,7 +72,7 @@ export default function SettingsRoute() {
       <Card>
         <Text style={[styles.title, { color: colors.text }]}>Режим работы</Text>
         <Text style={[styles.text, { color: colors.mutedText }]}>
-          Приложение хранит обходы локально и отправляет отчет автоматически после появления интернета.
+          Приложение хранит обходы локально и отправляет отчёт автоматически после появления интернета.
         </Text>
         <View style={styles.pills}>
           <StatusPill label="Offline-first" tone="success" />
@@ -96,7 +108,7 @@ function SettingsRow({ label, value, onPress }: { label: string; value: string; 
 
 function themeLabel(preference: string) {
   if (preference === "dark") {
-    return "темная";
+    return "тёмная";
   }
 
   if (preference === "light") {

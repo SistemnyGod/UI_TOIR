@@ -13,6 +13,7 @@ import { ThemeProvider, useAppTheme } from "@/features/settings/themePreference"
 import { registerPushNotifications, refreshPushRegistrationIfAllowed, syncMobileNotifications, subscribeToMobilePushEvents } from "@/services/notificationService";
 import { installMobileErrorReporter, logMobileError } from "@/services/mobileErrorReporter";
 import { registerBackgroundSyncTask } from "@/sync/backgroundSyncTask";
+import { registerBackgroundNotificationTask } from "@/services/backgroundNotificationTask";
 import { requestMobileDataRefresh, subscribeToNetworkSync, triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 
 export default function RootLayout() {
@@ -33,6 +34,7 @@ export default function RootLayout() {
 
     const unsubscribeNetworkSync = subscribeToNetworkSync();
     void registerBackgroundSyncTask().catch(() => undefined);
+    void registerBackgroundNotificationTask().catch(() => undefined);
     const unsubscribePushEvents = subscribeToMobilePushEvents({
       onNotification: () => {
         void syncMobileNotifications().catch(() => []);

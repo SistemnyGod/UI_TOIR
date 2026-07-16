@@ -11,6 +11,7 @@ type RegisterLocalPhotoInput = {
   assignmentId?: string | null;
   pointId?: string | null;
   remarkId?: string | null;
+  workTaskId?: string | null;
   sizeBytes?: number | null;
   sha256?: string | null;
 };
@@ -51,6 +52,7 @@ export async function prepareLocalMedia(input: RegisterLocalMediaInput) {
     assignmentId: input.assignmentId ?? null,
     pointId: input.pointId ?? null,
     remarkId: input.remarkId ?? null,
+    workTaskId: input.workTaskId ?? null,
     createdAtLocal: new Date().toISOString()
   } satisfies LocalMobileFile;
 }

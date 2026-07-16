@@ -66,9 +66,11 @@ internal sealed partial class EfMobileAppService
         }
 
         var remarkId = NormalizeOptionalText(command.RemarkId);
+        var workTaskId = command.WorkTaskId;
         var isPatrolPointFile = command.AssignmentId is not null && command.PointId is not null;
         var isRemarkFile = !string.IsNullOrWhiteSpace(remarkId);
-        if (!isPatrolPointFile && !isRemarkFile)
+        var isWorkTaskFile = workTaskId is not null;
+        if (!isPatrolPointFile && !isRemarkFile && !isWorkTaskFile)
         {
             return null;
         }
@@ -128,6 +130,7 @@ internal sealed partial class EfMobileAppService
             AssignmentId = command.AssignmentId,
             PointId = command.PointId,
             RemarkId = isRemarkFile ? remarkId : null,
+            WorkTaskId = workTaskId,
             StorageFileName = storageFileName,
             OriginalFileName = NormalizeOptionalText(command.FileName, $"{clientFileId}.{extension}"),
             ContentType = normalizedContentType,

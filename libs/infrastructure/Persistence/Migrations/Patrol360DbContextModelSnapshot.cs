@@ -143,6 +143,11 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.HasIndex("EmployeeId", "Status")
                         .HasDatabaseName("ix_assignments_employee_status");
 
+                    b.HasIndex("EmployeeId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_assignments_employee_started")
+                        .HasFilter("status IN ('В пути', 'Приостановлена')");
+
                     b.HasIndex("EmployeeId", "StatusCode")
                         .HasDatabaseName("ix_assignments_employee_status_code");
 
@@ -1387,6 +1392,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(80)")
                         .HasColumnName("status");
 
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("source");
+
                     b.Property<string>("TaskDescription")
                         .IsRequired()
                         .HasMaxLength(2400)
@@ -1432,6 +1443,9 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_emu_work_sessions_status");
+
+                    b.HasIndex("Source")
+                        .HasDatabaseName("ix_emu_work_sessions_source");
 
                     b.HasIndex("WorkDate")
                         .HasDatabaseName("ix_emu_work_sessions_work_date");
@@ -3852,6 +3866,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("uploaded_at");
 
+                    b.Property<Guid?>("WorkTaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("work_task_id");
+
                     b.HasKey("Id");
 
                     b.HasIndex("PointId");
@@ -3865,6 +3883,9 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("MobileAccountId", "RemarkId")
                         .HasDatabaseName("ix_mobile_uploaded_files_account_remark");
+
+                    b.HasIndex("MobileAccountId", "WorkTaskId")
+                        .HasDatabaseName("ix_mobile_uploaded_files_account_work_task");
 
                     b.ToTable("mobile_uploaded_files", (string)null);
                 });

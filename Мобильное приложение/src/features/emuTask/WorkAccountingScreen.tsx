@@ -8,30 +8,38 @@ import { createShiftRemarkLocally, listShiftRemarks, ShiftRemark } from "@/db/re
 import {
   completeWorkTaskLocally,
   createWorkTaskLocally,
+  joinWorkTaskLocally,
   listEmuSections,
-  listLocalWorkTasks,
+  listLocalWorkItems,
   listMobileEmployees,
   pauseWorkTaskLocally,
+  replaceWorkTaskParticipantLocally,
   resumeWorkTaskLocally,
+  startPlannedWorkLocally,
   updateWorkTaskLocally
 } from "@/db/repositories/workTaskRepository";
-import { MobileEmployeeDto, MobileEmuSectionDto, WorkTaskDto, WorkTaskStatus } from "@/domain/emu/emuTypes";
+import { MobileEmployeeDto, MobileEmuSectionDto, WorkItemDto, WorkTaskDto, WorkTaskStatus } from "@/domain/emu/emuTypes";
 import { useAppTheme } from "@/features/settings/themePreference";
-import { loadWorkTasksOfflineFirst } from "@/services/workTaskService";
+import { attachWorkMediaFromGallery, attachWorkPhotoFromCamera, attachWorkVideoFromCamera } from "@/services/mediaAttachmentService";
+import { loadWorkItemsOfflineFirst } from "@/services/workTaskService";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { ActionSheet } from "@/ui/ActionSheet";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
 
 type WorkTab = "tasks" | "remarks";
+type TaskFilter = "mine" | "available" | "history";
+type ParticipationAction = { mode: "start" | "join" | "replace"; item: WorkItemDto };
 type PhotoAfterSave = "none" | "camera" | "gallery";
 
 export function WorkAccountingScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const [tab, setTab] = useState<WorkTab>("tasks");
-  const [tasks, setTasks] = useState<WorkTaskDto[]>([]);
+  const [taskFilter, setTaskFilter] = useState<TaskFilter>("mine");
+  const [tasks, setTasks] = useState<WorkItemDto[]>([]);
   const [remarks, setRemarks] = useState<ShiftRemark[]>([]);
   const [employees, setEmployees] = useState<MobileEmployeeDto[]>([]);
   const [sections, setSections] = useState<MobileEmuSectionDto[]>([]);
@@ -39,7 +47,7 @@ export function WorkAccountingScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [taskModal, setTaskModal] = useState<{ mode: "create" | "edit"; task?: WorkTaskDto } | null>(null);
   const [remarkModalOpen, setRemarkModalOpen] = useState(false);
-  const [menuTask, setMenuTask] = useState<WorkTaskDto | null>(null);
+  const [menuTask, setMenuTask] = useState<WorkItemDto | null>(null);
   const [completeTask, setCompleteTask] = useState<WorkTaskDto | null>(null);
   const [completeComment, setCompleteComment] = useState("");
   const [taskEmployeeId, setTaskEmployeeId] = useState("");
@@ -49,10 +57,15 @@ export function WorkAccountingScreen() {
   const [remarkSectionId, setRemarkSectionId] = useState("");
   const [remarkComment, setRemarkComment] = useState("");
   const [remarkPhoto, setRemarkPhoto] = useState<PhotoAfterSave>("none");
+  const [participationAction, setParticipationAction] = useState<ParticipationAction | null>(null);
+  const [participationEmployeeId, setParticipationEmployeeId] = useState("");
+  const [participationPreviousEmployeeId, setParticipationPreviousEmployeeId] = useState("");
+  const [participationReason, setParticipationReason] = useState("");
+  const [attachmentTask, setAttachmentTask] = useState<WorkItemDto | null>(null);
 
   const reloadLocal = useCallback(async () => {
     const [nextTasks, nextRemarks, nextEmployees, nextSections] = await Promise.all([
-      listLocalWorkTasks(),
+      listLocalWorkItems(),
       listShiftRemarks(),
       listMobileEmployees(),
       listEmuSections()
@@ -68,7 +81,7 @@ export function WorkAccountingScreen() {
       let isMounted = true;
       setLoading(true);
 
-      void Promise.all([loadWorkTasksOfflineFirst(), listShiftRemarks(), listMobileEmployees(), listEmuSections()])
+      void Promise.all([loadWorkItemsOfflineFirst(), listShiftRemarks(), listMobileEmployees(), listEmuSections()])
         .then(([nextTasks, nextRemarks, nextEmployees, nextSections]) => {
           if (isMounted) {
             setTasks(nextTasks);
@@ -243,6 +256,102 @@ export function WorkAccountingScreen() {
     return sections[0]?.sectionId ?? "";
   }
 
+  const filteredTasks = tasks.filter((task) => {
+    const belongsToCurrentEmployee = task.actualParticipants.some((item) => item.isCurrentMobileEmployee)
+      || task.assignedEmployees.some((item) => item.isCurrentMobileEmployee);
+    const completed = task.status === "completedLocal" || task.status === "completedServer" || task.status === "cancelled";
+    if (taskFilter === "history") {
+      return completed && belongsToCurrentEmployee;
+    }
+    if (taskFilter === "available") {
+      return !completed && !belongsToCurrentEmployee;
+    }
+    return !completed && belongsToCurrentEmployee;
+  });
+
+  function openParticipationAction(mode: ParticipationAction["mode"], item: WorkItemDto) {
+    const defaultEmployee = employees.length === 1 ? employees[0].employeeId : "";
+    const previous = item.actualParticipants.find((participant) => !participant.isCurrentMobileEmployee && !participant.finishedAt);
+    setParticipationEmployeeId(defaultEmployee);
+    setParticipationPreviousEmployeeId(previous?.employeeId ?? "");
+    setParticipationReason("");
+    setMenuTask(null);
+    setParticipationAction({ mode, item });
+  }
+
+  async function handleParticipationAction() {
+    if (!participationAction) {
+      return;
+    }
+    const employee = employees.find((item) => item.employeeId === participationEmployeeId);
+    if (!employee) {
+      setMessage("Выберите фактического исполнителя.");
+      return;
+    }
+    if (participationAction.mode === "replace" && (!participationPreviousEmployeeId || !participationReason.trim())) {
+      setMessage("Выберите прежнего исполнителя и укажите причину замены.");
+      return;
+    }
+
+    setLoading(true);
+    setMessage(null);
+    try {
+      if (participationAction.mode === "start") {
+        await startPlannedWorkLocally(participationAction.item, employee);
+      } else if (participationAction.mode === "join") {
+        await joinWorkTaskLocally(participationAction.item, employee, participationReason);
+      } else {
+        await replaceWorkTaskParticipantLocally(
+          participationAction.item,
+          participationPreviousEmployeeId,
+          employee,
+          participationReason
+        );
+      }
+      setParticipationAction(null);
+      await reloadLocal();
+      setTaskFilter("mine");
+      setMessage("Действие сохранено на телефоне и будет отправлено в ЭМУ.");
+      triggerForegroundSyncWithRetry();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Не удалось изменить исполнителя работы.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAttachWorkMedia(kind: "photo" | "video" | "gallery") {
+    const workTaskId = attachmentTask?.workSessionId ?? attachmentTask?.itemId ?? null;
+    if (!workTaskId || attachmentTask?.kind === "planTask") {
+      setMessage("Сначала начните работу, затем добавьте вложения.");
+      return;
+    }
+
+    setLoading(true);
+    setMessage(null);
+    try {
+      if (kind === "photo") {
+        await attachWorkPhotoFromCamera(workTaskId);
+        setMessage("Фото сохранено на телефоне и будет отправлено в ЭМУ.");
+      } else if (kind === "video") {
+        await attachWorkVideoFromCamera(workTaskId);
+        setMessage("Видео сохранено на телефоне и будет отправлено в ЭМУ.");
+      } else {
+        const result = await attachWorkMediaFromGallery(workTaskId);
+        if (result.status === "attached") {
+          const suffix = result.errors.length ? ` Отклонено: ${result.errors.join("; ")}` : "";
+          setMessage(`Добавлено вложений: ${result.attachedCount}. Фото: ${result.photoCount}, видео: ${result.videoCount}.${suffix}`);
+        }
+      }
+      setAttachmentTask(null);
+      await reloadLocal();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Не удалось добавить вложение к работе.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <Screen title="Работы" subtitle="Учет работ и замечания по смене доступны оффлайн.">
       <View style={styles.segment}>
@@ -254,11 +363,16 @@ export function WorkAccountingScreen() {
 
       {tab === "tasks" ? (
         <>
-          <PrimaryButton disabled={loading} icon="add-circle-outline" label="+ Работа" onPress={openCreateTask} />
-          {tasks.length === 0 ? (
+          <PrimaryButton disabled={loading} icon="add-circle-outline" label="Создать и начать" onPress={openCreateTask} />
+          <View style={styles.segment}>
+            <SegmentButton active={taskFilter === "mine"} label="Мои" onPress={() => setTaskFilter("mine")} />
+            <SegmentButton active={taskFilter === "available"} label="Доступные" onPress={() => setTaskFilter("available")} />
+            <SegmentButton active={taskFilter === "history"} label="История" onPress={() => setTaskFilter("history")} />
+          </View>
+          {filteredTasks.length === 0 ? (
             <EmptyCard title="Работ нет" text="Создайте работу на телефоне или дождитесь назначения из ЭМУ." />
           ) : (
-            tasks.map((task) => (
+            filteredTasks.map((task) => (
               <Card key={task.taskId}>
                 <View style={styles.row}>
                   <View style={styles.titleBox}>
@@ -273,7 +387,8 @@ export function WorkAccountingScreen() {
                   <StatusPill label={statusLabel(task.status)} tone={statusTone(task.status)} />
                   <StatusPill label={task.syncStatus === "synced" ? "Синхронизировано" : "Ожидает отправки"} tone={task.syncStatus === "synced" ? "success" : "warning"} />
                 </View>
-                <Text style={[styles.text, { color: colors.mutedText }]}>Исполнитель: {task.employeeName ? formatShortName(task.employeeName) : "не указан"}</Text>
+                <Text style={[styles.text, { color: colors.mutedText }]}>Исполнители: {formatParticipants(task)}</Text>
+                <Text style={[styles.muted, { color: colors.mutedText }]}>{formatWorkAttachments(task)}</Text>
                 <Text style={[styles.muted, { color: colors.mutedText }]}>Создано: {formatDateTime(task.createdAtLocal)}</Text>
               </Card>
             ))
@@ -358,7 +473,28 @@ export function WorkAccountingScreen() {
             "Не удалось продолжить работу."
           )
         }
+        onJoin={(task) => openParticipationAction("join", task)}
+        onAttach={(task) => {
+          setMenuTask(null);
+          setAttachmentTask(task);
+        }}
+        onReplace={(task) => openParticipationAction("replace", task)}
+        onStart={(task) => openParticipationAction("start", task)}
         task={menuTask}
+      />
+
+      <ParticipationModal
+        action={participationAction}
+        employeeId={participationEmployeeId}
+        employees={employees}
+        loading={loading}
+        onClose={() => setParticipationAction(null)}
+        onSave={handleParticipationAction}
+        previousEmployeeId={participationPreviousEmployeeId}
+        reason={participationReason}
+        setEmployeeId={setParticipationEmployeeId}
+        setPreviousEmployeeId={setParticipationPreviousEmployeeId}
+        setReason={setParticipationReason}
       />
 
       <CompleteTaskModal
@@ -368,6 +504,16 @@ export function WorkAccountingScreen() {
         onClose={() => setCompleteTask(null)}
         onSave={handleCompleteTask}
         task={completeTask}
+      />
+      <ActionSheet
+        actions={[
+          { icon: "camera-outline", label: "Сделать фото", onPress: () => void handleAttachWorkMedia("photo") },
+          { icon: "videocam-outline", label: "Снять видео", onPress: () => void handleAttachWorkMedia("video") },
+          { icon: "images-outline", label: "Выбрать из галереи", onPress: () => void handleAttachWorkMedia("gallery") }
+        ]}
+        onClose={() => setAttachmentTask(null)}
+        title="Вложение к работе"
+        visible={Boolean(attachmentTask)}
       />
     </Screen>
   );
@@ -577,15 +723,23 @@ function TaskMenu({
   onEdit,
   onPause,
   onResume,
+  onJoin,
+  onAttach,
+  onReplace,
+  onStart,
   task
 }: {
   loading: boolean;
   onClose: () => void;
-  onComplete: (task: WorkTaskDto) => void;
-  onEdit: (task: WorkTaskDto) => void;
-  onPause: (task: WorkTaskDto) => void;
-  onResume: (task: WorkTaskDto) => void;
-  task: WorkTaskDto | null;
+  onComplete: (task: WorkItemDto) => void;
+  onEdit: (task: WorkItemDto) => void;
+  onPause: (task: WorkItemDto) => void;
+  onResume: (task: WorkItemDto) => void;
+  onJoin: (task: WorkItemDto) => void;
+  onAttach: (task: WorkItemDto) => void;
+  onReplace: (task: WorkItemDto) => void;
+  onStart: (task: WorkItemDto) => void;
+  task: WorkItemDto | null;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -594,16 +748,101 @@ function TaskMenu({
       <View style={[styles.menuBackdrop, { paddingBottom: Math.max(insets.bottom + 12, 22) }]}>
         <View style={styles.menuCard}>
           <Text style={styles.modalTitle}>{task?.title ?? "Работа"}</Text>
-          {task && task.status === "paused" ? (
+          {task?.capabilities.canStart ? (
+            <PrimaryButton disabled={loading} icon="play-outline" label="Начать работу" onPress={() => onStart(task)} />
+          ) : null}
+          {task?.capabilities.canJoin ? (
+            <PrimaryButton disabled={loading} icon="person-add-outline" label="Присоединиться" onPress={() => onJoin(task)} />
+          ) : null}
+          {task?.capabilities.canReplace ? (
+            <PrimaryButton disabled={loading} icon="swap-horizontal-outline" label="Принять вместо исполнителя" onPress={() => onReplace(task)} variant="secondary" />
+          ) : null}
+          {task && task.capabilities.canResume ? (
             <PrimaryButton disabled={loading} icon="play-outline" label="Продолжить" onPress={() => onResume(task)} />
-          ) : task ? (
+          ) : task?.capabilities.canPause ? (
             <PrimaryButton disabled={loading} icon="pause-outline" label="Остановить" onPress={() => onPause(task)} variant="secondary" />
           ) : null}
-          {task ? <PrimaryButton disabled={loading} icon="create-outline" label="Изменить" onPress={() => onEdit(task)} variant="secondary" /> : null}
-          {task ? <PrimaryButton disabled={loading} icon="checkmark-circle-outline" label="Завершить" onPress={() => onComplete(task)} /> : null}
+          {task?.capabilities.canComplete ? <PrimaryButton disabled={loading} icon="create-outline" label="Изменить" onPress={() => onEdit(task)} variant="secondary" /> : null}
+          {task?.kind === "workSession" ? <PrimaryButton disabled={loading} icon="attach-outline" label="Добавить вложение" onPress={() => onAttach(task)} variant="secondary" /> : null}
+          {task?.capabilities.canComplete ? <PrimaryButton disabled={loading} icon="checkmark-circle-outline" label="Завершить" onPress={() => onComplete(task)} /> : null}
           <PrimaryButton disabled={loading} label="Закрыть" onPress={onClose} variant="ghost" />
         </View>
       </View>
+    </Modal>
+  );
+}
+
+function ParticipationModal({
+  action,
+  employeeId,
+  employees,
+  loading,
+  onClose,
+  onSave,
+  previousEmployeeId,
+  reason,
+  setEmployeeId,
+  setPreviousEmployeeId,
+  setReason
+}: {
+  action: ParticipationAction | null;
+  employeeId: string;
+  employees: MobileEmployeeDto[];
+  loading: boolean;
+  onClose: () => void;
+  onSave: () => void;
+  previousEmployeeId: string;
+  reason: string;
+  setEmployeeId: (value: string) => void;
+  setPreviousEmployeeId: (value: string) => void;
+  setReason: (value: string) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const previousOptions = action?.item.actualParticipants
+    .filter((participant) => !participant.finishedAt && !participant.isCurrentMobileEmployee)
+    .map((participant) => ({ id: participant.employeeId, label: formatShortName(participant.fullName) })) ?? [];
+  const title = action?.mode === "replace"
+    ? "Принять вместо исполнителя"
+    : action?.mode === "join"
+      ? "Присоединиться к работе"
+      : "Начать работу";
+
+  return (
+    <Modal animationType="slide" onRequestClose={onClose} transparent visible={Boolean(action)}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>{title}</Text>
+          <ScrollView contentContainerStyle={styles.modalScrollContent} keyboardShouldPersistTaps="handled">
+            <Text style={styles.readOnlyValue}>{action?.item.title ?? "-"}</Text>
+            <OptionPicker
+              label="Фактический исполнитель"
+              onSelect={setEmployeeId}
+              options={employees.map((employee) => ({ id: employee.employeeId, label: formatShortName(employee.fullName) }))}
+              selectedId={employeeId}
+            />
+            {action?.mode === "replace" ? (
+              <OptionPicker label="Прежний исполнитель" onSelect={setPreviousEmployeeId} options={previousOptions} selectedId={previousEmployeeId} />
+            ) : null}
+            {action?.mode !== "start" ? (
+              <>
+                <Text style={styles.label}>{action?.mode === "replace" ? "Причина замены" : "Примечание"}</Text>
+                <TextInput
+                  multiline
+                  onChangeText={setReason}
+                  placeholder={action?.mode === "replace" ? "Почему меняется исполнитель?" : "Что будете выполнять?"}
+                  placeholderTextColor="#9ca3af"
+                  style={[styles.input, styles.textarea]}
+                  value={reason}
+                />
+              </>
+            ) : null}
+          </ScrollView>
+          <View style={[styles.modalActions, { paddingBottom: Math.max(insets.bottom + 12, 22) }]}>
+            <PrimaryButton disabled={loading} label="Отмена" onPress={onClose} variant="secondary" />
+            <PrimaryButton disabled={loading} label={action?.mode === "replace" ? "Подтвердить замену" : "Продолжить"} onPress={onSave} />
+          </View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -650,6 +889,8 @@ function EmptyCard({ text, title }: { text: string; title: string }) {
 
 function statusLabel(status: WorkTaskStatus) {
   const labels: Record<WorkTaskStatus, string> = {
+    available: "Доступна",
+    assigned: "Назначена",
     new: "Новая",
     accepted: "Назначена",
     inProgress: "В работе",
@@ -661,6 +902,27 @@ function statusLabel(status: WorkTaskStatus) {
   };
 
   return labels[status] ?? status;
+}
+
+function formatParticipants(task: WorkItemDto) {
+  const participants = task.actualParticipants.length > 0 ? task.actualParticipants : task.assignedEmployees;
+  return participants.length > 0
+    ? participants.map((participant) => formatShortName(participant.fullName)).join(", ")
+    : "не указаны";
+}
+
+function formatWorkAttachments(task: WorkItemDto) {
+  const serverCount = task.attachments?.length ?? 0;
+  const localCount = task.localAttachmentCount ?? 0;
+  const photoCount = task.localPhotoCount ?? task.attachments?.filter((item) => item.contentType.startsWith("image/")).length ?? 0;
+  const videoCount = task.localVideoCount ?? task.attachments?.filter((item) => item.contentType.startsWith("video/")).length ?? 0;
+  const total = Math.max(serverCount, localCount);
+  if (total === 0) {
+    return "Вложения: нет";
+  }
+
+  const pendingLabel = localCount > serverCount ? `, ожидают отправки: ${localCount - serverCount}` : "";
+  return `Вложения: ${total}. Фото: ${photoCount}, видео: ${videoCount}${pendingLabel}`;
 }
 
 function statusTone(status: WorkTaskStatus) {

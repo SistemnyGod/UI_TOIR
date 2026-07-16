@@ -253,15 +253,25 @@ internal sealed partial class EfMobileAppService
 
         if (assignment.Status == AssignmentStatusValues.Cancelled || assignment.Status == AssignmentStatusValues.Completed)
         {
-            return Conflict(command.ClientOperationId, "Closed patrol assignment cannot be started.");
+            return assignment.Status == AssignmentStatusValues.Cancelled
+                ? Conflict(command.ClientOperationId, "Closed patrol assignment cannot be started.", "assignmentCancelled")
+                : Conflict(command.ClientOperationId, "Closed patrol assignment cannot be started.");
+        }
+
+        if (dbContext.Database.IsNpgsql())
+        {
+            var employeeStartLock = $"patrol-start:{assignment.EmployeeId:N}";
+            dbContext.Database.ExecuteSqlInterpolated(
+                $"SELECT pg_advisory_xact_lock(hashtextextended({employeeStartLock}, 0))");
         }
 
         if (dbContext.Assignments.Any(item =>
             item.EmployeeId == assignment.EmployeeId
             && item.Id != assignment.Id
-            && item.Status == AssignmentStatusValues.InProgress))
+            && (item.Status == AssignmentStatusValues.InProgress
+                || item.Status == AssignmentStatusValues.Paused)))
         {
-            return Conflict(command.ClientOperationId, "Employee already has another patrol in progress.");
+            return Conflict(command.ClientOperationId, "Employee already has another started or paused patrol.");
         }
 
         var startedAt = ReadDateTimeOffset(command.Payload, "startedAtLocal") ?? DateTimeOffset.UtcNow;

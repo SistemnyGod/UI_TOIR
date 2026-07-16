@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Caching.Memory;
 using Patrol360.Application;
@@ -406,7 +406,7 @@ internal sealed partial class EfPatrolStore
     }
 
     private static bool RequiresPhotoForPointResult(CompleteAssignmentPointDto pointResult) =>
-        NormalizeResultStatus(pointResult.Status) == "Р—Р°РјРµС‡Р°РЅРёРµ"
+        NormalizeResultStatus(pointResult.Status) == "Замечание"
         || string.Equals(pointResult.Status, "skipped", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsRoutePointVisibleForCompletion(RoutePointEntity point) =>
@@ -425,3 +425,5 @@ internal sealed partial class EfPatrolStore
         return $"{sign}{Math.Abs(minutes)} мин";
     }
 }
+
+

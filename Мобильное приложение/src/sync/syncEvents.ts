@@ -1,6 +1,7 @@
 type SyncEvent = {
   acceptedOperationIds: string[];
   completedAssignmentIds: string[];
+  cancelledAssignmentIds?: string[];
 };
 
 type SyncEventListener = (event: SyncEvent) => void;

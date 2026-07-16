@@ -30,10 +30,22 @@ export type MobileDiagnosticReport = {
   entries: MobileDiagnosticEntry[];
 };
 
+export type MobileDiagnosticReportRow = {
+  reportId: string;
+  status: "pending" | "sent";
+  periodStart: string;
+  periodEnd: string;
+  createdAtLocal: string;
+  sentAtLocal: string | null;
+  lastError: string | null;
+  entryCount: number;
+};
+
 export async function getOrCreatePendingDiagnosticReport(
   ownerUserId: string,
   device: { deviceId: string; appVersion: string; platform: string },
-  now = new Date()
+  now = new Date(),
+  options: { force?: boolean; includeEmpty?: boolean } = {}
 ): Promise<MobileDiagnosticReport | null> {
   const db = await getDatabase();
   const pending = await db.getFirstAsync<{ payload_json: string }>(
@@ -51,7 +63,7 @@ export async function getOrCreatePendingDiagnosticReport(
   const periodStart = state?.last_period_end
     ? new Date(state.last_period_end)
     : new Date(now.getTime() - diagnosticReportIntervalMs);
-  if (!isDailyDiagnosticReportDue(periodStart, now)) {
+  if (!options.force && !isDailyDiagnosticReportDue(periodStart, now)) {
     return null;
   }
 
@@ -87,7 +99,7 @@ export async function getOrCreatePendingDiagnosticReport(
     [periodStart.toISOString(), now.toISOString(), ownerUserId]
   );
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && !options.includeEmpty) {
     await advanceDiagnosticPeriod(ownerUserId, now.toISOString());
     return null;
   }
@@ -101,13 +113,21 @@ export async function getOrCreatePendingDiagnosticReport(
     periodEnd: now.toISOString(),
     generatedAt: now.toISOString(),
     pendingOutboxCount: await countPendingOutboxCommands(ownerUserId),
-    entries: rows.map((row) => ({
-      eventType: truncateDiagnosticValue(row.event_type, 120),
-      message: sanitizeDiagnosticMessage(row.message),
-      count: row.event_count,
-      firstSeenAt: row.first_seen_at,
-      lastSeenAt: row.last_seen_at
-    }))
+    entries: rows.length > 0
+      ? rows.map((row) => ({
+          eventType: truncateDiagnosticValue(row.event_type, 120),
+          message: sanitizeDiagnosticMessage(row.message),
+          count: row.event_count,
+          firstSeenAt: row.first_seen_at,
+          lastSeenAt: row.last_seen_at
+        }))
+      : [{
+          eventType: "diagnostic.manual",
+          message: "Ручной диагностический отчет без критических ошибок за период.",
+          count: 1,
+          firstSeenAt: now.toISOString(),
+          lastSeenAt: now.toISOString()
+        }]
   };
 
   await withSqliteBusyRetry(() =>
@@ -122,6 +142,48 @@ export async function getOrCreatePendingDiagnosticReport(
   );
 
   return report;
+}
+
+export async function listDiagnosticReports(limit = 10): Promise<MobileDiagnosticReportRow[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{
+    report_id: string;
+    status: "pending" | "sent";
+    period_start: string;
+    period_end: string;
+    created_at_local: string;
+    sent_at_local: string | null;
+    last_error: string | null;
+    payload_json: string;
+  }>(
+    `
+      SELECT report_id, status, period_start, period_end, created_at_local, sent_at_local, last_error, payload_json
+      FROM mobile_diagnostic_reports
+      ORDER BY created_at_local DESC
+      LIMIT ?
+    `,
+    [limit]
+  );
+
+  return rows.map((row) => {
+    let entryCount = 0;
+    try {
+      entryCount = (JSON.parse(row.payload_json) as MobileDiagnosticReport).entries.length;
+    } catch {
+      entryCount = 0;
+    }
+
+    return {
+      reportId: row.report_id,
+      status: row.status,
+      periodStart: row.period_start,
+      periodEnd: row.period_end,
+      createdAtLocal: row.created_at_local,
+      sentAtLocal: row.sent_at_local,
+      lastError: row.last_error,
+      entryCount
+    };
+  });
 }
 
 export async function markDiagnosticReportSent(report: MobileDiagnosticReport) {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+﻿import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -245,7 +245,7 @@ describe("shared UI primitives", () => {
     );
 
     expect(screen.getByText("Мои работы")).toBeInTheDocument();
-    expect(screen.getByText(/Показаны только карточки, созданные вашим аккаунтом/)).toBeInTheDocument();
+    expect(screen.getByText(/РџРѕРєР°Р·Р°РЅС‹ С‚РѕР»СЊРєРѕ РєР°СЂС‚РѕС‡РєРё, СЃРѕР·РґР°РЅРЅС‹Рµ РІР°С€РёРј Р°РєРєР°СѓРЅС‚РѕРј/)).toBeInTheDocument();
 
     rerender(
       <EmuWorkAccountingScreen
@@ -257,7 +257,7 @@ describe("shared UI primitives", () => {
     );
 
     expect(screen.getByText("Все доступные работы")).toBeInTheDocument();
-    expect(screen.getByText(/видят расширенный список/)).toBeInTheDocument();
+    expect(screen.getByText(/РІРёРґСЏС‚ СЂР°СЃС€РёСЂРµРЅРЅС‹Р№ СЃРїРёСЃРѕРє/)).toBeInTheDocument();
   });
 
   it("requires matching initial password when creating a site user", async () => {
@@ -318,7 +318,7 @@ describe("shared UI primitives", () => {
         fullName: "Оператор ЭМУ",
         role: "Оператор ЭМУ",
         status: "Заблокирован",
-        lastLogin: "—",
+        lastLogin: "вЂ”",
         createdAt: "01.06.2026",
         access: ["emu.work-accounting.view"],
         directPermissions: ["emu.work.create"],
@@ -415,8 +415,8 @@ describe("shared UI primitives", () => {
     expect(screen.getByRole("navigation", { name: "Разделы СИЗ" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Карточки СИЗ" })).toBeInTheDocument();
     expect(screen.getAllByText("Каска защитная").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: /Нормы/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Выдано/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /РќРѕСЂРјС‹/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Р’С‹РґР°РЅРѕ/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Печать" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Каска защитная" }));
@@ -431,7 +431,7 @@ describe("shared UI primitives", () => {
     expect(screen.getByText("Комментарий")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Закрыть" }));
-    await user.click(screen.getByRole("button", { name: /Выдано/ }));
+    await user.click(screen.getByRole("button", { name: /Р’С‹РґР°РЅРѕ/ }));
     expect(screen.getByText("Модель / артикул")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Печать" }));
     expect(screen.getByText("Личная карточка СИЗ")).toBeInTheDocument();
@@ -454,7 +454,7 @@ describe("shared UI primitives", () => {
     );
 
     expect(screen.getByText("Заявка не найдена")).toBeInTheDocument();
-    expect(screen.getByText(/отсутствует в текущем списке заявок/i)).toBeInTheDocument();
+    expect(screen.getByText(/РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚ РІ С‚РµРєСѓС‰РµРј СЃРїРёСЃРєРµ Р·Р°СЏРІРѕРє/i)).toBeInTheDocument();
   });
 
   it("does not show request view action for an assignment with a missing request", async () => {
@@ -538,7 +538,7 @@ describe("shared UI primitives", () => {
     await waitFor(() => expect(screen.getAllByText("Костарев Илья Сергеевич").length).toBeGreaterThan(0));
 
     expect(screen.queryByText("Просмотр")).not.toBeInTheDocument();
-    expect(screen.getByText(/Действующая заявка/i)).toBeInTheDocument();
+    expect(screen.getByText(/Р”РµР№СЃС‚РІСѓСЋС‰Р°СЏ Р·Р°СЏРІРєР°/i)).toBeInTheDocument();
   });
 
   it("counts a linked request and assignment as one active employee item", async () => {
@@ -996,7 +996,7 @@ describe("shared UI primitives", () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getAllByText("По 0 загруженным из 250").length).toBeGreaterThan(0));
 
-    fireEvent.change(screen.getByPlaceholderText(/Поиск по маршруту/), { target: { value: "печи" } });
+    fireEvent.change(screen.getByPlaceholderText(/РџРѕРёСЃРє РїРѕ РјР°СЂС€СЂСѓС‚Сѓ/), { target: { value: "печи" } });
     expect(fetcher).toHaveBeenCalledTimes(1);
     await new Promise((resolve) => window.setTimeout(resolve, 350));
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
@@ -1480,7 +1480,7 @@ describe("shared UI primitives", () => {
     await user.type(screen.getByPlaceholderText("Введите логин (например, ivan.petrov)"), "mobile.test");
     await user.type(screen.getByPlaceholderText("Введите пароль"), "Password1");
     await user.type(screen.getByPlaceholderText("Повторите пароль"), "Password1");
-    await user.selectOptions(screen.getByRole("combobox", { name: /Роль/ }), "Инспектор");
+    await user.selectOptions(screen.getByRole("combobox", { name: /Р РѕР»СЊ/ }), "Инспектор");
     await user.click(screen.getByRole("button", { name: "Создать аккаунт" }));
 
     expect(onCreateAccount).toHaveBeenCalledWith(
@@ -1604,3 +1604,4 @@ describe("shared UI primitives", () => {
     expect(screen.getByText("mobile_02")).toBeInTheDocument();
   });
 });
+

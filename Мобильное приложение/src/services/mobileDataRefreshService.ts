@@ -5,6 +5,7 @@ import { saveBootstrap } from "@/db/repositories/bootstrapRepository";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { refreshPushRegistrationIfAllowed, syncMobileNotifications } from "@/services/notificationService";
 import { syncWorkTasks } from "@/services/workTaskService";
+import { emitSyncEvent } from "@/sync/syncEvents";
 
 let refreshPromise: Promise<boolean> | null = null;
 
@@ -35,6 +36,11 @@ async function refreshMobileDataInternal() {
 
   const bootstrap = await getBootstrap(accessToken);
   const snapshotUpdated = await saveBootstrap(bootstrap);
+  emitSyncEvent({
+    acceptedOperationIds: [],
+    completedAssignmentIds: [],
+    cancelledAssignmentIds: bootstrap.cancelledAssignmentIds ?? []
+  });
   await Promise.all([
     syncMobileNotifications().catch(() => []),
     syncWorkTasks().catch(() => [])

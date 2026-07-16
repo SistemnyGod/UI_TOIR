@@ -1,6 +1,7 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
   ActiveAssignment,
@@ -16,6 +17,7 @@ import { useAppTheme } from "@/features/settings/themePreference";
 import { reconcileAcceptedCompleteReports } from "@/sync/syncEngine";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { ActionSheet } from "@/ui/ActionSheet";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -28,6 +30,7 @@ export function ActivePatrolScreen() {
   const [assignment, setAssignment] = useState<ActiveAssignment | null>(null);
   const [progress, setProgress] = useState<AssignmentProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const loadAssignment = useCallback(async () => {
     const [loadedAssignment, loadedProgress] = await Promise.all([
@@ -54,7 +57,7 @@ export function ActivePatrolScreen() {
   );
 
   useEffect(() => subscribeToSyncEvents((event) => {
-    if (event.completedAssignmentIds.includes(assignmentId)) {
+    if (event.completedAssignmentIds.includes(assignmentId) || event.cancelledAssignmentIds?.includes(assignmentId)) {
       void loadAssignment();
     }
   }), [assignmentId, loadAssignment]);
@@ -102,9 +105,10 @@ export function ActivePatrolScreen() {
   const isCompletedLocal = assignment.status === "completedLocal";
   const isCompletedServer = assignment.status === "completedServer";
   const isBlocked = ["needsDispatcherDecision", "cancelledServer", "authRequired", "syncError", "conflict"].includes(assignment.status);
+  const isReadyForReview = progress.total > 0 && progress.completed >= progress.total;
 
   return (
-    <Screen title={assignment.routeName} subtitle="Все действия сохраняются на телефоне и уходят на сервер через очередь.">
+    <Screen title={assignment.routeName} subtitle="Следуйте следующему действию — прогресс сохраняется автоматически.">
       <Card>
         <View style={styles.routeHeader}>
           <View style={styles.routeTextBox}>
@@ -134,61 +138,17 @@ export function ActivePatrolScreen() {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      {isAccepted || isPaused ? (
-        <Card>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>{isPaused ? "Обход приостановлен" : "Обход еще не начат"}</Text>
-          <Text style={[styles.text, { color: colors.mutedText }]}>
-            {isPaused
-              ? "Можно продолжить с того же места. Уже заполненные точки сохранены."
-              : "Нажмите старт только когда готовы начать. До старта заявку можно вернуть из карточки заявки."}
-          </Text>
-          <PrimaryButton
-            icon="play-outline"
-            label={isPaused ? "Продолжить обход" : "Начать обход"}
-            onPress={() => runAction(async () => {
-              if (isPaused) {
-                await resumeAssignmentLocally(assignment.assignmentId);
-              } else {
-                await startAssignmentLocally(assignment.assignmentId);
-              }
-            })}
-          />
-        </Card>
-      ) : null}
-
-      {isInProgress ? (
-        <Card>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Сканирование меток</Text>
-          <Text style={[styles.text, { color: colors.mutedText }]}>Сначала попробуйте NFC. Если NFC недоступен, используйте QR или откройте точку вручную из списка.</Text>
-          <View style={styles.primaryScanAction}>
-            <PrimaryButton icon="scan-outline" label="Сканировать NFC" onPress={() => router.push(`/patrol/assignment/${assignment.assignmentId}/scan-nfc`)} />
-          </View>
-          <View style={styles.secondaryActions}>
-            <PrimaryButton icon="qr-code-outline" label="QR резерв" onPress={() => router.push(`/patrol/assignment/${assignment.assignmentId}/scan-qr`)} variant="secondary" />
-            <PrimaryButton icon="list-outline" label="Все метки" onPress={() => router.push(`/patrol/assignment/${assignment.assignmentId}/all-points`)} variant="secondary" />
-          </View>
-          <View style={styles.secondaryActions}>
-            <PrimaryButton icon="pause-outline" label="Приостановить" onPress={() => runAction(async () => { await pauseAssignmentLocally(assignment.assignmentId); })} variant="secondary" />
-            <PrimaryButton icon="alert-circle-outline" label="Передать диспетчеру" onPress={() => runAction(async () => { await handoffAssignmentLocally(assignment.assignmentId); })} variant="danger" />
-          </View>
-        </Card>
-      ) : null}
-
       {isBlocked ? (
-        <Card>
+        <Card style={styles.stateCard}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Нужна проверка</Text>
           <Text style={[styles.text, { color: colors.mutedText }]}>Локальные данные сохранены. Откройте очередь синхронизации или дождитесь решения диспетчера.</Text>
         </Card>
       ) : null}
 
       {isCompletedLocal ? (
-        <Card>
+        <Card style={styles.stateCard}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Отчет сохранен на телефоне</Text>
           <Text style={[styles.text, { color: colors.mutedText }]}>Отправка продолжится автоматически при связи. Можно повторить вручную из очереди.</Text>
-          <View style={styles.secondaryActions}>
-            <PrimaryButton icon="refresh-outline" label="Повторить отправку" onPress={handleRetrySubmit} variant="secondary" />
-            <PrimaryButton icon="cloud-upload-outline" label="Очередь" onPress={() => router.push("/settings/sync-queue" as never)} variant="secondary" />
-          </View>
         </Card>
       ) : null}
 
@@ -199,11 +159,57 @@ export function ActivePatrolScreen() {
         </Card>
       ) : null}
 
-      <View style={styles.secondaryActions}>
-        <PrimaryButton icon="list-outline" label="Все метки" onPress={() => router.push(`/patrol/assignment/${assignment.assignmentId}/all-points`)} variant="secondary" />
-        <PrimaryButton icon="swap-horizontal-outline" label="К заявкам" onPress={() => router.replace("/patrol/request-board")} variant="secondary" />
+      {isAccepted || isPaused ? (
+        <PrimaryButton
+          icon="play-outline"
+          label={isPaused ? "Продолжить обход" : "Начать обход"}
+          onPress={() => runAction(async () => {
+            if (isPaused) {
+              await resumeAssignmentLocally(assignment.assignmentId);
+            } else {
+              await startAssignmentLocally(assignment.assignmentId);
+            }
+          })}
+          size="large"
+        />
+      ) : null}
+      {isInProgress ? (
+        <PrimaryButton
+          icon={isReadyForReview ? "document-text-outline" : "scan-outline"}
+          label={isReadyForReview ? "Проверить отчёт" : "Сканировать NFC"}
+          onPress={() => router.push(isReadyForReview
+            ? `/patrol/assignment/${assignment.assignmentId}/submit`
+            : `/patrol/assignment/${assignment.assignmentId}/scan-nfc`)}
+          size="large"
+        />
+      ) : null}
+      {isCompletedLocal ? <PrimaryButton icon="refresh-outline" label="Повторить отправку" onPress={handleRetrySubmit} size="large" /> : null}
+      {isBlocked ? <PrimaryButton icon="cloud-upload-outline" label="Открыть очередь" onPress={() => router.push("/settings/sync-queue" as never)} size="large" /> : null}
+      {isCompletedServer ? <PrimaryButton icon="checkmark-circle-outline" label="К новым заявкам" onPress={() => router.replace("/patrol/request-board")} size="large" /> : null}
+
+      <View style={styles.secondaryBar}>
+        {!isCompletedServer ? (
+          <Pressable accessibilityRole="button" onPress={() => router.push(`/patrol/assignment/${assignment.assignmentId}/all-points`)} style={styles.linkButton}>
+            <Ionicons color={colors.primary} name="list-outline" size={19} />
+            <Text style={[styles.linkLabel, { color: colors.primary }]}>Все метки</Text>
+          </Pressable>
+        ) : <View />}
+        {isInProgress ? (
+          <Pressable accessibilityLabel="Дополнительные действия" accessibilityRole="button" onPress={() => setIsMenuOpen(true)} style={styles.iconButton}>
+            <Ionicons color={colors.primary} name="ellipsis-horizontal" size={22} />
+          </Pressable>
+        ) : null}
       </View>
-      {isInProgress ? <PrimaryButton icon="send-outline" label="Отправить отчет" onPress={() => router.push(`/patrol/assignment/${assignment.assignmentId}/submit`)} /> : null}
+      <ActionSheet
+        actions={[
+          { label: "QR-резерв", icon: "qr-code-outline", onPress: () => router.push(`/patrol/assignment/${assignment.assignmentId}/scan-qr`) },
+          { label: "Приостановить", icon: "pause-outline", onPress: () => void runAction(async () => { await pauseAssignmentLocally(assignment.assignmentId); }) },
+          { label: "Передать диспетчеру", icon: "alert-circle-outline", danger: true, onPress: () => void runAction(async () => { await handoffAssignmentLocally(assignment.assignmentId); }) }
+        ]}
+        onClose={() => setIsMenuOpen(false)}
+        title="Действия с обходом"
+        visible={isMenuOpen}
+      />
     </Screen>
   );
 }
@@ -363,13 +369,33 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     lineHeight: 19
   },
-  primaryScanAction: {
-    gap: 10
+  stateCard: {
+    gap: 8
   },
-  secondaryActions: {
+  secondaryBar: {
+    alignItems: "center",
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10
+    justifyContent: "space-between"
+  },
+  linkButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 48,
+    paddingHorizontal: 4
+  },
+  linkLabel: {
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  iconButton: {
+    alignItems: "center",
+    borderColor: "#dbe5f2",
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 48,
+    justifyContent: "center",
+    width: 48
   },
   error: {
     color: "#ef4444",

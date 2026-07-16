@@ -114,6 +114,15 @@ export function SubmitReportScreen() {
     router.push(`/patrol/assignment/${assignmentId}/point/${problem.pointId}/fill`);
   }
 
+  function handleScreenPrimaryAction() {
+    if (!readiness?.ready && problemGroups[0]) {
+      openProblem(problemGroups[0]);
+      return;
+    }
+
+    void handlePrimaryAction();
+  }
+
   if (!readiness) {
     return (
       <Screen title="Отправка отчета" subtitle="Проверяем точки и локально сохраненные данные.">
@@ -122,11 +131,14 @@ export function SubmitReportScreen() {
     );
   }
 
-  const actionDisabled = isSubmitting
-    || ((presentation.action === "submit" || presentation.action === "resubmit") && !readiness.ready);
+  const actionDisabled = isSubmitting || (!readiness.ready && problemGroups.length === 0);
+  const primaryLabel = !readiness.ready && problemGroups[0]
+    ? problemGroups[0].pointId === "route-empty" ? "Открыть список точек" : `Перейти к точке ${problemGroups[0].orderIndex}`
+    : presentation.buttonLabel;
+  const primaryIcon = !readiness.ready ? "arrow-forward-outline" : actionIcon(presentation.action);
 
   return (
-    <Screen title="Отправка отчета" subtitle="Одно действие — один понятный результат. Данные не удаляются до подтверждения сервера.">
+    <Screen title="Проверка отчёта" subtitle="Исправьте незаполненные точки или завершите обход.">
       <Card>
         <View style={styles.row}>
           <Text style={[styles.title, { color: colors.text }]}>{readiness.assignment?.routeName ?? "Обход"}</Text>
@@ -167,30 +179,25 @@ export function SubmitReportScreen() {
       <View style={styles.primaryAction}>
         <PrimaryButton
           disabled={actionDisabled}
-          icon={actionIcon(presentation.action)}
-          label={isSubmitting ? "Проверяем доставку…" : presentation.buttonLabel}
-          onPress={() => void handlePrimaryAction()}
+          icon={primaryIcon}
+          label={isSubmitting ? "Проверяем доставку…" : primaryLabel}
+          onPress={handleScreenPrimaryAction}
           size="large"
         />
       </View>
 
-      {presentation.action === "submit" || presentation.action === "resubmit" ? (
-        <PrimaryButton
-          disabled={isSubmitting}
-          icon="list-outline"
-          label="Проверить все точки"
-          onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)}
-          variant="ghost"
-        />
-      ) : presentation.action !== "done" ? (
-        <PrimaryButton
-          disabled={isSubmitting}
-          icon="cloud-upload-outline"
-          label="Подробнее об отправке"
-          onPress={() => router.push("/settings/sync-queue" as never)}
-          variant="ghost"
-        />
-      ) : null}
+      <View style={styles.secondaryLinks}>
+        <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} style={styles.secondaryLink}>
+          <Ionicons color={colors.primary} name="list-outline" size={18} />
+          <Text style={[styles.secondaryLinkText, { color: colors.primary }]}>Все точки</Text>
+        </Pressable>
+        {presentation.action !== "done" ? (
+          <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push("/settings/sync-queue" as never)} style={styles.secondaryLink}>
+            <Ionicons color={colors.primary} name="cloud-upload-outline" size={18} />
+            <Text style={[styles.secondaryLinkText, { color: colors.primary }]}>Подробнее об отправке</Text>
+          </Pressable>
+        ) : null}
+      </View>
     </Screen>
   );
 }
@@ -352,6 +359,21 @@ const styles = StyleSheet.create({
   },
   primaryAction: {
     marginTop: 2
+  },
+  secondaryLinks: {
+    alignItems: "flex-start",
+    gap: 2
+  },
+  secondaryLink: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 48,
+    paddingHorizontal: 4
+  },
+  secondaryLinkText: {
+    fontSize: 14,
+    fontWeight: "800"
   },
   problemButton: {
     borderRadius: 12,

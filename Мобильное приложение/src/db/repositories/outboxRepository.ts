@@ -330,66 +330,21 @@ export async function markPendingOutboxCommandsAuthRequired(ownerUserId: string,
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
 
-  await db.withExclusiveTransactionAsync(async (tx) => {
-    await tx.runAsync(
-      `
-        UPDATE outbox_commands
-        SET status = 'retryLater',
-            last_error = ?,
-            updated_at_local = ?
-        WHERE owner_user_id = ?
-          AND status IN ('pending', 'sending', 'retryLater')
-      `,
-      [lastError, updatedAtLocal, ownerUserId]
-    );
-
-    await tx.runAsync(
-      `
-        UPDATE patrol_assignments
-        SET status = 'authRequired'
-        WHERE owner_user_id = ?
-          AND status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError')
-          AND EXISTS (
-            SELECT 1
-            FROM outbox_commands command
-            WHERE command.entity_local_id = patrol_assignments.assignment_id
-              AND command.status = 'retryLater'
-          )
-      `,
-      [ownerUserId]
-    );
-
-    await tx.runAsync(
-      `
-        UPDATE patrol_assignments
-        SET status = 'authRequired'
-        WHERE owner_user_id = ?
-          AND status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError')
-          AND EXISTS (
-            SELECT 1
-            FROM point_results result
-            WHERE result.assignment_id = patrol_assignments.assignment_id
-              AND result.sync_status <> 'synced'
-          )
-      `,
-      [ownerUserId]
-    );
-
-    await tx.runAsync(
-      `
-        UPDATE patrol_request_board
-        SET status = 'authRequired'
-        WHERE owner_user_id = ?
-          AND EXISTS (
-          SELECT 1
-          FROM patrol_assignments assignment
-          WHERE assignment.request_id = patrol_request_board.request_id
-            AND assignment.status = 'authRequired'
-        )
-      `,
-      [ownerUserId]
-    );
-  });
+  // Authentication is a delivery condition, not a patrol lifecycle state.
+  // Replacing `inProgress` with `authRequired` stranded a patrol after a user
+  // signed back in.  Keep its operational state intact and surface the sign-in
+  // requirement from the pending outbox command instead.
+  await db.runAsync(
+    `
+      UPDATE outbox_commands
+      SET status = 'retryLater',
+          last_error = ?,
+          updated_at_local = ?
+      WHERE owner_user_id = ?
+        AND status IN ('pending', 'sending', 'retryLater')
+    `,
+    [lastError, updatedAtLocal, ownerUserId]
+  );
 }
 
 export async function resetStaleSendingOutboxCommands(ownerUserId: string, staleBeforeIso: string) {
@@ -626,6 +581,15 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
             `,
             [nextStatus, command.entity_local_id]
           );
+
+          if (response.serverRevision !== null) {
+            await updatePendingCompleteReportBaseRevisionInTransaction(
+              tx,
+              command.owner_user_id,
+              command.entity_local_id,
+              response.serverRevision
+            );
+          }
         }
 
         if (command?.command_type === "completeWorkTask" && command.entity_local_id) {
@@ -667,7 +631,11 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
           );
         }
 
-        if ((command?.command_type === "createWorkTask" || command?.command_type === "updateWorkTask") && command.entity_local_id) {
+        if ((command?.command_type === "createWorkTask"
+          || command?.command_type === "updateWorkTask"
+          || command?.command_type === "startPlannedWork"
+          || command?.command_type === "joinWorkTask"
+          || command?.command_type === "replaceWorkTaskParticipant") && command.entity_local_id) {
           await tx.runAsync(
             `
               UPDATE work_tasks
@@ -706,11 +674,12 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
       }
 
       if (response.status === "conflict" || response.status === "rejected") {
-        const command = await tx.getFirstAsync<{
-          owner_user_id: string;
-          entity_type: string;
-          entity_local_id: string | null;
-          payload_json: string;
+          const command = await tx.getFirstAsync<{
+            owner_user_id: string;
+            command_type: string;
+            entity_type: string;
+            entity_local_id: string | null;
+            payload_json: string;
         }>(
           `
             SELECT owner_user_id, entity_type, entity_local_id, payload_json
@@ -768,8 +737,14 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
             );
           }
 
-          if (command.entity_type === "patrolAssignment" && command.entity_local_id) {
-            const nextStatus = response.status === "conflict" ? "needsDispatcherDecision" : "syncError";
+          if (
+            command.entity_local_id
+            && (command.entity_type === "patrolAssignment" || command.command_type === "acceptPatrolRequest")
+          ) {
+            const isCancelledByServer = response.reasonCode === "assignmentCancelled";
+            const nextStatus = isCancelledByServer
+              ? "cancelledServer"
+              : response.status === "conflict" ? "needsDispatcherDecision" : "syncError";
             await tx.runAsync(
               `
                 UPDATE patrol_assignments
@@ -789,7 +764,7 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
                   LIMIT 1
                 )
               `,
-              [nextStatus, command.entity_local_id]
+              [nextStatus === "cancelledServer" ? "cancelledServer" : nextStatus, command.entity_local_id]
             );
           }
         }
@@ -824,6 +799,42 @@ function extractCompletionFileIds(payloadJson: string) {
     ));
   } catch {
     return [];
+  }
+}
+
+async function updatePendingCompleteReportBaseRevisionInTransaction(
+  tx: Awaited<ReturnType<typeof getDatabase>>,
+  ownerUserId: string,
+  assignmentId: string,
+  baseRevision: number
+) {
+  const commands = await tx.getAllAsync<{
+    client_operation_id: string;
+    payload_json: string;
+  }>(
+    `
+      SELECT client_operation_id, payload_json
+      FROM outbox_commands
+      WHERE owner_user_id = ?
+        AND command_type = 'completePatrolAssignment'
+        AND entity_local_id = ?
+        AND status IN ('pending', 'retryLater')
+    `,
+    [ownerUserId, assignmentId]
+  );
+
+  for (const command of commands) {
+    try {
+      const payload = JSON.parse(command.payload_json) as Record<string, unknown>;
+      payload.baseRevision = baseRevision;
+      await tx.runAsync(
+        "UPDATE outbox_commands SET payload_json = ?, updated_at_local = ? WHERE client_operation_id = ?",
+        [JSON.stringify(payload), new Date().toISOString(), command.client_operation_id]
+      );
+    } catch {
+      // The report command will be rejected by its normal payload validation;
+      // never replace an unreadable payload with a partial one.
+    }
   }
 }
 

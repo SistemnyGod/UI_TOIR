@@ -4,7 +4,7 @@ import { LocalMobileFile } from "@/domain/files/fileTypes";
 
 export type SyncQueueFileItem = Pick<
   LocalMobileFile,
-  "clientFileId" | "localPath" | "serverFileId" | "status" | "contentType" | "mediaKind" | "assignmentId" | "pointId" | "remarkId" | "createdAtLocal"
+  "clientFileId" | "localPath" | "serverFileId" | "status" | "contentType" | "mediaKind" | "assignmentId" | "pointId" | "remarkId" | "workTaskId" | "createdAtLocal"
 > & {
   assignmentRouteName: string | null;
 };
@@ -32,9 +32,10 @@ export async function insertLocalFileInTransaction(executor: Pick<Awaited<Return
         assignment_id,
         point_id,
         remark_id,
+        work_task_id,
         created_at_local
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       file.clientFileId,
@@ -50,6 +51,7 @@ export async function insertLocalFileInTransaction(executor: Pick<Awaited<Return
       file.assignmentId ?? null,
       file.pointId ?? null,
       file.remarkId ?? null,
+      file.workTaskId ?? null,
       file.createdAtLocal
     ]
   );
@@ -75,6 +77,7 @@ export async function listPointFiles(assignmentId: string, pointId: string) {
           assignment_id AS assignmentId,
           point_id AS pointId,
           remark_id AS remarkId,
+          work_task_id AS workTaskId,
           created_at_local AS createdAtLocal
         FROM files
         WHERE assignment_id = ?
@@ -110,6 +113,7 @@ export async function listFilesByClientIds(clientFileIds: string[]) {
         assignment_id AS assignmentId,
         point_id AS pointId,
         remark_id AS remarkId,
+        work_task_id AS workTaskId,
         created_at_local AS createdAtLocal
       FROM files
       WHERE client_file_id IN (${placeholders})
@@ -138,12 +142,42 @@ export async function listRemarkFiles(remarkId: string) {
         assignment_id AS assignmentId,
         point_id AS pointId,
         remark_id AS remarkId,
+        work_task_id AS workTaskId,
         created_at_local AS createdAtLocal
       FROM files
       WHERE remark_id = ?
       ORDER BY created_at_local ASC
     `,
     [remarkId]
+  );
+}
+
+export async function listWorkTaskFiles(workTaskId: string) {
+  const db = await getDatabase();
+
+  return db.getAllAsync<LocalMobileFile>(
+    `
+      SELECT
+        client_file_id AS clientFileId,
+        owner_user_id AS ownerUserId,
+        local_path AS localPath,
+        preview_path AS previewPath,
+        server_file_id AS serverFileId,
+        status,
+        sha256,
+        size_bytes AS sizeBytes,
+        content_type AS contentType,
+        media_kind AS mediaKind,
+        assignment_id AS assignmentId,
+        point_id AS pointId,
+        remark_id AS remarkId,
+        work_task_id AS workTaskId,
+        created_at_local AS createdAtLocal
+      FROM files
+      WHERE work_task_id = ?
+      ORDER BY created_at_local ASC
+    `,
+    [workTaskId]
   );
 }
 
@@ -177,6 +211,7 @@ export async function listSyncQueueFiles(ownerUserId: string, limit = 100) {
           file.assignment_id AS assignmentId,
           file.point_id AS pointId,
           file.remark_id AS remarkId,
+          file.work_task_id AS workTaskId,
           file.created_at_local AS createdAtLocal,
           assignment.route_name AS assignmentRouteName
         FROM files file

@@ -27,6 +27,9 @@ export type OutboxCommandType =
   | "pauseWorkTask"
   | "resumeWorkTask"
   | "completeWorkTask"
+  | "startPlannedWork"
+  | "joinWorkTask"
+  | "replaceWorkTaskParticipant"
   | "createShiftRemark"
   | "attachShiftRemarkMedia";
 
@@ -66,6 +69,7 @@ export type OutboxResponse = {
   message: string;
   conflictId: string | null;
   retryAfterSeconds: number | null;
+  reasonCode?: string | null;
 };
 
 export type SyncConflict = {

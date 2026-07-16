@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
@@ -42,10 +42,16 @@ internal sealed partial class EfMobileAppService
         var wasCancelledByDispatcher = assignment.Status == AssignmentStatusValues.Cancelled
             || assignment.PatrolRequest.Status == AssignmentStatusValues.Cancelled;
 
-        if (!wasCancelledByDispatcher
-            && (assignment.Status == AssignmentStatusValues.NeedsDispatcherDecision
+        if (wasCancelledByDispatcher)
+        {
+            return Conflict(
+                command.ClientOperationId,
+                "Patrol assignment was cancelled by dispatcher and cannot accept a report.",
+                "assignmentCancelled");
+        }
+
+        if (assignment.Status == AssignmentStatusValues.NeedsDispatcherDecision
             || assignment.PatrolRequest.Status == AssignmentStatusValues.NeedsDispatcherDecision)
-        )
         {
             return Conflict(command.ClientOperationId, "Patrol request requires dispatcher decision.");
         }
@@ -129,7 +135,7 @@ internal sealed partial class EfMobileAppService
 
             var requiresPhoto = routePoint.RequiresPhoto
                 && (result.Status.Equals("issue", StringComparison.OrdinalIgnoreCase) || IsSkippedPointResult(result));
-            if (!wasCancelledByDispatcher && requiresPhoto && result.PhotoClientFileIds.Count == 0)
+            if (requiresPhoto && result.PhotoClientFileIds.Count == 0)
             {
                 return Rejected(command.ClientOperationId, "Required photo point result must include at least one photo.");
             }
@@ -144,8 +150,7 @@ internal sealed partial class EfMobileAppService
                 }
             }
 
-            if (!wasCancelledByDispatcher
-                && requiresPhoto
+            if (requiresPhoto
                 && !result.PhotoClientFileIds.Any(clientFileId => uploadedFilesForPoint.Any(file =>
                     file.ClientFileId == clientFileId
                     && file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))))
@@ -172,24 +177,21 @@ internal sealed partial class EfMobileAppService
                 null);
         }
 
-        if (!wasCancelledByDispatcher)
+        if (baseRevision is null)
         {
-            if (baseRevision is null)
-            {
-                return Rejected(command.ClientOperationId, "completePatrolAssignment baseRevision is required.");
-            }
+            return Rejected(command.ClientOperationId, "completePatrolAssignment baseRevision is required.");
+        }
 
-            if (baseRevision.Value != assignment.LockVersion)
-            {
-                return Conflict(command.ClientOperationId, "Patrol assignment was changed after mobile sync.");
-            }
+        if (baseRevision.Value != assignment.LockVersion)
+        {
+            return Conflict(command.ClientOperationId, "Patrol assignment was changed after mobile sync.");
+        }
 
-            if (assignment.RouteRevisionId is null
-                && assignment.RouteVersionNo > 0
-                && assignment.Route.VersionNo != assignment.RouteVersionNo)
-            {
-                return Conflict(command.ClientOperationId, "Patrol route was changed after assignment sync.");
-            }
+        if (assignment.RouteRevisionId is null
+            && assignment.RouteVersionNo > 0
+            && assignment.Route.VersionNo != assignment.RouteVersionNo)
+        {
+            return Conflict(command.ClientOperationId, "Patrol route was changed after assignment sync.");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -201,25 +203,6 @@ internal sealed partial class EfMobileAppService
             now,
             uploadedFilesByPoint.SelectMany(pair => pair.Value).ToArray());
         var startedAt = InferCompletedPatrolStartedAt(assignment, pointResults, completedAtLocal);
-
-        if (wasCancelledByDispatcher)
-        {
-            assignment.Status = AssignmentStatusValues.Cancelled;
-            assignment.StartedAt ??= startedAt;
-            assignment.FinishedAt = completedAtLocal.ToUniversalTime();
-            assignment.ProgressPercent = 100;
-            assignment.LockVersion += 1;
-            assignment.PatrolRequest.Status = AssignmentStatusValues.Cancelled;
-
-            return new MobileOutboxResponseDto(
-                command.ClientOperationId,
-                "accepted",
-                assignment.Id.ToString(),
-                assignment.LockVersion,
-                "Patrol assignment completed after dispatcher cancellation.",
-                null,
-                null);
-        }
 
         assignment.Status = AssignmentStatusValues.Completed;
         assignment.StartedAt ??= startedAt;
@@ -504,15 +487,15 @@ internal sealed partial class EfMobileAppService
         if (IsSkippedPointResult(pointResult))
         {
             return string.IsNullOrWhiteSpace(comment)
-                ? "РњРµС‚РєР° РЅРµРґРѕСЃС‚СѓРїРЅР°"
-                : $"РњРµС‚РєР° РЅРµРґРѕСЃС‚СѓРїРЅР°: {comment}";
+                ? "Метка недоступна"
+                : $"Метка недоступна: {comment}";
         }
 
         if (IsManualPointResult(pointResult))
         {
             return string.IsNullOrWhiteSpace(comment)
-                ? "Р—Р°РїРѕР»РЅРµРЅРѕ РІСЂСѓС‡РЅСѓСЋ Р±РµР· СЃРєР°РЅРёСЂРѕРІР°РЅРёСЏ"
-                : $"Р—Р°РїРѕР»РЅРµРЅРѕ РІСЂСѓС‡РЅСѓСЋ Р±РµР· СЃРєР°РЅРёСЂРѕРІР°РЅРёСЏ: {comment}";
+                ? "Заполнено вручную без сканирования"
+                : $"Заполнено вручную без сканирования: {comment}";
         }
 
         return string.IsNullOrWhiteSpace(comment) ? "-" : comment;
@@ -522,7 +505,7 @@ internal sealed partial class EfMobileAppService
     {
         if (IsSkippedPointResult(pointResult))
         {
-            return "РњРµС‚РєР° РЅРµРґРѕСЃС‚СѓРїРЅР°";
+            return "Метка недоступна";
         }
 
         return pointResult.Status.Equals("issue", StringComparison.OrdinalIgnoreCase)
@@ -539,7 +522,7 @@ internal sealed partial class EfMobileAppService
     {
         if (IsSkippedPointResult(pointResult))
         {
-            return "skipped";
+            return "Метка недоступна";
         }
 
         if (pointResult.Status.Equals("issue", StringComparison.OrdinalIgnoreCase))
@@ -574,3 +557,5 @@ internal sealed partial class EfMobileAppService
         string Severity,
         IReadOnlyList<string> AttachmentFileNames);
 }
+
+

@@ -40,8 +40,9 @@ export const uploadPatrolPhoto = uploadMobileFile;
 async function validateMobileFileBeforeUpload(file: LocalMobileFile) {
   const hasPatrolPointScope = Boolean(file.assignmentId && file.pointId);
   const hasRemarkScope = Boolean(file.remarkId);
+  const hasWorkTaskScope = Boolean(file.workTaskId);
 
-  if (!hasPatrolPointScope && !hasRemarkScope) {
+  if (!hasPatrolPointScope && !hasRemarkScope && !hasWorkTaskScope) {
     throw new Error("Файл не привязан к точке обхода или замечанию смены.");
   }
 
@@ -130,6 +131,7 @@ async function uploadFileWithToken(
           clientFileId: file.clientFileId,
           pointId: file.pointId ?? "",
           remarkId: file.remarkId ?? "",
+          workTaskId: file.workTaskId ?? "",
           sha256: file.sha256 ?? "",
           sizeBytes: String(file.sizeBytes ?? 0)
         },

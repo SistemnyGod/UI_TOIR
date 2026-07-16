@@ -29,6 +29,7 @@ internal sealed partial class EfMobileAppService
 
         var requestBoard = BuildRequestBoard(boundEmployeeIds);
         var assignments = BuildAssignments(boundEmployeeIds);
+        var cancelledAssignmentIds = BuildCancelledAssignmentIds(boundEmployeeIds);
         var routeIds = requestBoard.Select(item => item.RouteId)
             .Concat(assignments.Select(item => item.RouteId))
             .ToHashSet();
@@ -79,7 +80,7 @@ internal sealed partial class EfMobileAppService
         var device = MapDevice(account, session);
         var employees = BuildMobileEmployees(boundEmployeeIds);
         var emuSections = BuildMobileEmuSections();
-        var syncCursor = BuildBootstrapCursor(user, device, employees, emuSections, requestBoard, assignments, routeDtos, pointDtos);
+        var syncCursor = BuildBootstrapCursor(user, device, employees, emuSections, requestBoard, assignments, cancelledAssignmentIds, routeDtos, pointDtos);
 
         return new MobileBootstrapDto(
             user,
@@ -91,7 +92,10 @@ internal sealed partial class EfMobileAppService
             routeDtos,
             pointDtos,
             DateTimeOffset.UtcNow,
-            syncCursor);
+            syncCursor)
+        {
+            CancelledAssignmentIds = cancelledAssignmentIds
+        };
     }
 
     public MobileDeviceRegistrationDto? RegisterPushToken(string accessToken, MobilePushTokenRegistrationDto request)
@@ -215,6 +219,161 @@ internal sealed partial class EfMobileAppService
         return task;
     }
 
+    public IReadOnlyList<MobileWorkItemDto> GetWorkItemsV2(string accessToken)
+    {
+        var session = FindActiveSession(accessToken);
+        if (session?.MobileAccount is null)
+        {
+            return [];
+        }
+
+        TouchSession(session);
+        var boundEmployeeIds = GetBoundEmployeeIds(session.MobileAccount);
+        var mobilePlanTaskIds = dbContext.EmuWorkAuditEvents
+            .AsNoTracking()
+            .Where(row => row.PlanTaskId != null && row.Actor.StartsWith("mobile:"))
+            .Select(row => row.PlanTaskId!.Value)
+            .ToHashSet();
+
+        var sessionRows = dbContext.EmuWorkSessions
+            .AsNoTracking()
+            .Include(row => row.Section)
+            .Include(row => row.Employees)
+            .Where(row => row.DeletedAt == null)
+            .Where(row => row.CompletedAt == null || row.Employees.Any(employee => boundEmployeeIds.Contains(employee.EmployeeId)))
+            .OrderByDescending(row => row.UpdatedAt)
+            .Take(200)
+            .ToList();
+        var sessionIds = sessionRows.Select(row => row.Id).ToArray();
+        var attachmentsByWorkTaskId = sessionIds.Length == 0
+            ? new Dictionary<Guid, IReadOnlyList<MobileUploadedFileEntity>>()
+            : dbContext.MobileUploadedFiles
+                .AsNoTracking()
+                .Where(file => file.MobileAccountId == session.MobileAccountId
+                    && file.WorkTaskId != null
+                    && sessionIds.Contains(file.WorkTaskId.Value))
+                .AsEnumerable()
+                .GroupBy(file => file.WorkTaskId!.Value)
+                .ToDictionary(group => group.Key, group => (IReadOnlyList<MobileUploadedFileEntity>)group.OrderBy(file => file.UploadedAt).ToArray());
+        var sessions = sessionRows
+            .Select(row => MapMobileWorkSessionItem(
+                row,
+                boundEmployeeIds,
+                attachmentsByWorkTaskId.GetValueOrDefault(row.Id, [])))
+            .ToList();
+
+        var startedPlanTaskIds = sessions
+            .Where(row => row.PlanTaskId is not null)
+            .Select(row => row.PlanTaskId!.Value)
+            .ToHashSet();
+        var plans = dbContext.EmuWorkPlanTasks
+            .AsNoTracking()
+            .Include(row => row.Section)
+            .Include(row => row.Employees)
+                .ThenInclude(row => row.Employee)
+            .Where(row => row.ApprovalStatus == "Согласовано" && row.Status == "Запланировано")
+            .Where(row => !startedPlanTaskIds.Contains(row.Id))
+            .OrderBy(row => row.PlannedDate)
+            .Take(200)
+            .AsEnumerable()
+            .Select(row => MapMobilePlanItem(row, boundEmployeeIds, mobilePlanTaskIds.Contains(row.Id)));
+
+        dbContext.SaveChanges();
+        return sessions.Concat(plans)
+            .OrderBy(item => item.PlannedAt ?? DateTimeOffset.MaxValue)
+            .ThenBy(item => item.Title)
+            .ToArray();
+    }
+
+    private static MobileWorkItemDto MapMobileWorkSessionItem(
+        EmuWorkSessionEntity row,
+        IReadOnlySet<Guid> boundEmployeeIds,
+        IReadOnlyList<MobileUploadedFileEntity> attachments)
+    {
+        var participants = row.Employees
+            .OrderBy(employee => employee.ArrivedAt)
+            .Select(employee => new MobileWorkParticipantDto(
+                employee.EmployeeId,
+                employee.FullNameSnapshot,
+                employee.Status,
+                employee.ArrivedAt,
+                employee.FinishedAt,
+                boundEmployeeIds.Contains(employee.EmployeeId)))
+            .ToArray();
+        var hasCurrentParticipant = participants.Any(item => item.IsCurrentMobileEmployee && item.FinishedAt is null);
+        var hasOtherActiveParticipant = participants.Any(item => !item.IsCurrentMobileEmployee && item.FinishedAt is null);
+        var completed = row.CompletedAt is not null;
+        var paused = row.Status == "В ожидании";
+
+        return new MobileWorkItemDto(
+            row.Id,
+            "workSession",
+            row.Id,
+            row.PlanTaskId,
+            row.TaskDescription,
+            row.TaskDescription,
+            row.SectionId,
+            row.Section.Name,
+            row.ArrivedAt,
+            completed ? "completedServer" : paused ? "paused" : hasCurrentParticipant ? "inProgress" : "available",
+            string.Empty,
+            row.RowVersion,
+            row.Source,
+            participants,
+            participants,
+            attachments.Select(MapMobileWorkAttachment).ToArray(),
+            new MobileWorkItemCapabilitiesDto(
+                CanStart: false,
+                CanJoin: !completed && !hasCurrentParticipant,
+                CanReplace: !completed && !hasCurrentParticipant && hasOtherActiveParticipant,
+                CanPause: !completed && hasCurrentParticipant && !paused,
+                CanResume: !completed && hasCurrentParticipant && paused,
+                CanComplete: !completed && hasCurrentParticipant));
+    }
+
+    private static MobileWorkAttachmentDto MapMobileWorkAttachment(MobileUploadedFileEntity row) =>
+        new(row.Id, row.OriginalFileName, row.ContentType, row.SizeBytes, row.UploadedAt);
+
+    private static MobileWorkItemDto MapMobilePlanItem(
+        EmuWorkPlanTaskEntity row,
+        IReadOnlySet<Guid> boundEmployeeIds,
+        bool createdFromMobile)
+    {
+        var assigned = row.Employees
+            .Select(link => new MobileWorkParticipantDto(
+                link.EmployeeId,
+                link.Employee.FullName,
+                "Назначен",
+                null,
+                null,
+                boundEmployeeIds.Contains(link.EmployeeId)))
+            .ToArray();
+        return new MobileWorkItemDto(
+            row.Id,
+            "planTask",
+            null,
+            row.Id,
+            row.Title,
+            string.IsNullOrWhiteSpace(row.Description) ? row.Title : row.Description,
+            row.SectionId,
+            row.Section?.Name ?? "Без участка",
+            new DateTimeOffset(row.PlannedDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
+            assigned.Any(item => item.IsCurrentMobileEmployee) ? "assigned" : "available",
+            row.ApprovalStatus,
+            row.RowVersion,
+            createdFromMobile ? "mobile" : "web",
+            assigned,
+            [],
+            [],
+            new MobileWorkItemCapabilitiesDto(
+                CanStart: true,
+                CanJoin: false,
+                CanReplace: false,
+                CanPause: false,
+                CanResume: false,
+                CanComplete: false));
+    }
+
 
     private IReadOnlyList<MobilePatrolRequestBoardItemDto> BuildRequestBoard(IReadOnlySet<Guid> boundEmployeeIds)
     {
@@ -269,6 +428,7 @@ internal sealed partial class EfMobileAppService
         IReadOnlyList<MobileEmuSectionDto> emuSections,
         IReadOnlyList<MobilePatrolRequestBoardItemDto> requestBoard,
         IReadOnlyList<MobilePatrolAssignmentDto> assignments,
+        IReadOnlyList<Guid> cancelledAssignmentIds,
         IReadOnlyList<MobilePatrolRouteDto> routes,
         IReadOnlyList<MobilePatrolPointDto> points)
     {
@@ -282,6 +442,7 @@ internal sealed partial class EfMobileAppService
             emuSections,
             requestBoard,
             assignments,
+            cancelledAssignmentIds,
             routes,
             points
         }, JsonOptions);
@@ -293,6 +454,8 @@ internal sealed partial class EfMobileAppService
         return dbContext.Assignments
             .AsNoTracking()
             .Where(assignment => boundEmployeeIds.Contains(assignment.EmployeeId))
+            .Where(assignment => assignment.Status != AssignmentStatusValues.Assigned
+                && assignment.Status != AssignmentStatusValues.Waiting)
             .Where(assignment => assignment.Status != AssignmentStatusValues.Completed
                 && assignment.Status != AssignmentStatusValues.Cancelled)
             .OrderBy(assignment => assignment.PlannedAt)
@@ -307,6 +470,14 @@ internal sealed partial class EfMobileAppService
                 assignment.RouteVersionNo))
             .ToArray();
     }
+
+    private Guid[] BuildCancelledAssignmentIds(IReadOnlySet<Guid> boundEmployeeIds) =>
+        dbContext.Assignments
+            .AsNoTracking()
+            .Where(assignment => boundEmployeeIds.Contains(assignment.EmployeeId))
+            .Where(assignment => assignment.Status == AssignmentStatusValues.Cancelled)
+            .Select(assignment => assignment.Id)
+            .ToArray();
 
     private IReadOnlyList<MobileWorkTaskDto> BuildWorkTasks(IReadOnlyCollection<Guid> boundEmployeeIds)
     {

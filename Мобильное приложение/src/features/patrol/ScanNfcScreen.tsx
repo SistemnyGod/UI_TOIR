@@ -4,13 +4,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { scanPointByNfc } from "@/db/repositories/patrolRepository";
-import { getNfcCode, initializeNfc, readNfcTag } from "@/services/nfcService";
+import { cancelNfcRead, getNfcCode, initializeNfc, readNfcTag } from "@/services/nfcService";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
 
-type NfcStatus = "idle" | "reading" | "matched" | "error";
+type NfcStatus = "idle" | "reading" | "matched" | "unsupported" | "disabled" | "error";
 
 export function ScanNfcScreen() {
   const router = useRouter();
@@ -25,8 +25,14 @@ export function ScanNfcScreen() {
     try {
       const nfc = await initializeNfc();
       if (!nfc.supported) {
-        setStatus("error");
+        setStatus("unsupported");
         setMessage("Телефон не поддерживает NFC.");
+        return;
+      }
+
+      if (!nfc.enabled) {
+        setStatus("disabled");
+        setMessage("Включите NFC в настройках телефона.");
         return;
       }
 
@@ -61,6 +67,10 @@ export function ScanNfcScreen() {
 
     autoScanStartedRef.current = true;
     void handleScan();
+
+    return () => {
+      void cancelNfcRead();
+    };
   }, [handleScan]);
 
   return (
@@ -70,7 +80,7 @@ export function ScanNfcScreen() {
           <Ionicons color="#1e5bff" name="scan-outline" size={44} />
         </View>
         <Text style={styles.title}>{message}</Text>
-        {status === "error" ? (
+        {status === "error" || status === "unsupported" || status === "disabled" ? (
           <>
           <StatusPill label={statusLabel(status)} tone={statusTone(status)} />
           <Text style={styles.text}>
@@ -81,7 +91,7 @@ export function ScanNfcScreen() {
       </Card>
 
       {status === "reading" ? <ActivityIndicator /> : null}
-      {status === "error" ? (
+      {status === "error" || status === "disabled" ? (
         <PrimaryButton icon="scan-outline" label={scanButtonLabel(status)} onPress={handleScan} />
       ) : null}
       <PrimaryButton icon="list-outline" label="Все метки" onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} variant="secondary" />
@@ -109,6 +119,10 @@ function statusLabel(status: NfcStatus) {
       return "NFC подтвержден";
     case "error":
       return "Ошибка NFC";
+    case "unsupported":
+      return "NFC не поддерживается";
+    case "disabled":
+      return "NFC выключен";
     default:
       return "Готово";
   }
@@ -119,7 +133,7 @@ function statusTone(status: NfcStatus) {
     return "success";
   }
 
-  if (status === "error") {
+  if (status === "error" || status === "unsupported" || status === "disabled") {
     return "danger";
   }
 

@@ -154,6 +154,7 @@ async function clearLocalUserTablesInTransaction(executor: SqlExecutor) {
 
 async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapDto) {
   const ownerUserId = bootstrap.user.serverUserId;
+  const cancelledAssignmentIds = bootstrap.cancelledAssignmentIds ?? [];
   const serverRouteIds = bootstrap.routes.map((route) => route.routeId);
   const serverPointIdsByRoute = new Map<string, string[]>();
   for (const point of bootstrap.points) {
@@ -365,6 +366,20 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
       `,
       [ownerUserId]
     );
+
+    if (cancelledAssignmentIds.length > 0) {
+      const placeholders = cancelledAssignmentIds.map(() => "?").join(", ");
+      await tx.runAsync(
+        `
+          UPDATE patrol_assignments
+          SET status = 'cancelledServer'
+          WHERE owner_user_id = ?
+            AND assignment_id IN (${placeholders})
+            AND status NOT IN ('completed', 'completedServer', 'cancelled', 'cancelledServer')
+        `,
+        [ownerUserId, ...cancelledAssignmentIds]
+      );
+    }
 
     await tx.runAsync(
       `

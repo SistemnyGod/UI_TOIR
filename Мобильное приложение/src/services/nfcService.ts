@@ -12,12 +12,18 @@ export async function initializeNfc() {
   const isSupported = await NfcManager.isSupported();
 
   if (!isSupported) {
-    return { supported: false };
+    return { supported: false, enabled: false };
   }
 
   await NfcManager.start();
 
-  return { supported: true };
+  const enabled = await NfcManager.isEnabled().catch(() => true);
+
+  return { supported: true, enabled };
+}
+
+export async function cancelNfcRead() {
+  await NfcManager.cancelTechnologyRequest().catch(() => undefined);
 }
 
 export async function readNfcTag() {

@@ -22,6 +22,7 @@ export type LocalMobileFile = {
   assignmentId?: string | null;
   pointId?: string | null;
   remarkId?: string | null;
+  workTaskId?: string | null;
   createdAtLocal: string;
 };
 
@@ -33,6 +34,7 @@ export type MobileFileUploadRequest = {
   assignmentId?: string | null;
   pointId?: string | null;
   remarkId?: string | null;
+  workTaskId?: string | null;
 };
 
 export type MobileFileUploadResponse = {

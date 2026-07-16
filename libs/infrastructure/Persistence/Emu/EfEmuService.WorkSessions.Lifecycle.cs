@@ -98,6 +98,7 @@ internal sealed partial class EfEmuService
             ArrivedAt = arrivedAt,
             CreatedAt = now,
             UpdatedAt = now,
+            Source = actorName.StartsWith("mobile:", StringComparison.OrdinalIgnoreCase) ? "mobile" : "web",
             CreatedByUserId = actorUserId,
             Employees = participants
         };

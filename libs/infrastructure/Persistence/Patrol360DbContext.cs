@@ -608,6 +608,10 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
 
             entity.HasIndex(assignment => new { assignment.EmployeeId, assignment.Status })
                 .HasDatabaseName("ix_assignments_employee_status");
+            entity.HasIndex(assignment => assignment.EmployeeId)
+                .IsUnique()
+                .HasFilter("status IN ('В пути', 'Приостановлена')")
+                .HasDatabaseName("ux_assignments_employee_started");
             entity.HasIndex(assignment => new { assignment.EmployeeId, assignment.StatusCode })
                 .HasDatabaseName("ix_assignments_employee_status_code");
             entity.HasIndex(assignment => new { assignment.PlannedAt, assignment.StatusCode })
@@ -879,6 +883,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(file => file.AssignmentId).HasColumnName("assignment_id");
             entity.Property(file => file.PointId).HasColumnName("point_id");
             entity.Property(file => file.RemarkId).HasColumnName("remark_id").HasMaxLength(80);
+            entity.Property(file => file.WorkTaskId).HasColumnName("work_task_id");
             entity.Property(file => file.StorageFileName).HasColumnName("storage_file_name").HasMaxLength(260).IsRequired();
             entity.Property(file => file.OriginalFileName).HasColumnName("original_file_name").HasMaxLength(260).IsRequired();
             entity.Property(file => file.ContentType).HasColumnName("content_type").HasMaxLength(120).IsRequired();
@@ -909,6 +914,8 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
                 .HasDatabaseName("ix_mobile_uploaded_files_assignment_point");
             entity.HasIndex(file => new { file.MobileAccountId, file.RemarkId })
                 .HasDatabaseName("ix_mobile_uploaded_files_account_remark");
+            entity.HasIndex(file => new { file.MobileAccountId, file.WorkTaskId })
+                .HasDatabaseName("ix_mobile_uploaded_files_account_work_task");
         });
     }
 
@@ -1933,6 +1940,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(row => row.CompletedAt).HasColumnName("completed_at");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.Property(row => row.Source).HasColumnName("source").HasMaxLength(40).IsRequired();
             entity.Property(row => row.CreatedByUserId).HasColumnName("created_by_user_id");
             entity.Property(row => row.DeletedAt).HasColumnName("deleted_at");
             entity.Property(row => row.DeletedByUserId).HasColumnName("deleted_by_user_id");
@@ -1950,6 +1958,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.HasIndex(row => row.WorkNumber).IsUnique().HasDatabaseName("ux_emu_work_sessions_number");
             entity.HasIndex(row => row.WorkDate).HasDatabaseName("ix_emu_work_sessions_work_date");
             entity.HasIndex(row => row.Status).HasDatabaseName("ix_emu_work_sessions_status");
+            entity.HasIndex(row => row.Source).HasDatabaseName("ix_emu_work_sessions_source");
             entity.HasIndex(row => row.DeletedAt).HasDatabaseName("ix_emu_work_sessions_deleted_at");
         });
 

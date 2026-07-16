@@ -896,6 +896,8 @@ public class ApiSmokeTests
 
         public EmuCommandResult<EmuWorkSessionDto> GetWorkSession(Guid id) => new(null, new Dictionary<string, string[]>());
 
+        public ResultAttachmentFileDto? GetWorkAttachmentFile(Guid workSessionId, Guid attachmentId) => null;
+
         public EmuCommandResult<EmuWorkSessionDto> CreateWorkSession(EmuCreateWorkSessionDto request, Guid? actorUserId, string actorName, bool canOverridePlanApproval = false)
         {
             CreatedRequest = request;
