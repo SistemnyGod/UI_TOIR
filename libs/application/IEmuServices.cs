@@ -43,6 +43,12 @@ public interface IEmuWorkService
 
     EmuCommandResult<EmuWorkSessionDto> GetWorkSession(Guid id);
 
+    EmuListResponseDto<EmuShiftRemarkDto> GetShiftRemarks(int page = 1, int pageSize = 50, Guid? sectionId = null, Guid? employeeId = null, IReadOnlyList<Guid>? allowedSectionIds = null);
+
+    EmuCommandResult<EmuShiftRemarkDto> GetShiftRemark(Guid id);
+
+    ResultAttachmentFileDto? GetShiftRemarkAttachmentFile(Guid remarkId, Guid attachmentId);
+
     ResultAttachmentFileDto? GetWorkAttachmentFile(Guid workSessionId, Guid attachmentId);
 
     EmuCommandResult<EmuWorkSessionDto> CreateWorkSession(EmuCreateWorkSessionDto request, Guid? actorUserId, string actorName, bool canOverridePlanApproval = false);

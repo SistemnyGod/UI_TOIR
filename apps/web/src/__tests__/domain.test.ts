@@ -432,6 +432,8 @@ function createPoint(id: string, order: number): RoutePoint {
     zone: "North",
     type: "NFC",
     tag: `NFC-${order}`,
+    description: "",
+    instruction: "",
     interval: "00:10",
     expectedTime: "00:05",
     status: "Активна",

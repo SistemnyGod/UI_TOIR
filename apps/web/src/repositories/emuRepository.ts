@@ -29,6 +29,7 @@ import type {
   EmuReschedulePlanTaskDto,
   EmuResumeWorkSessionDto,
   EmuSettingsDto,
+  EmuShiftRemarkDto,
   EmuShiftTemplateDto,
   EmuUpdateEmployeeShiftDto,
   EmuUpdateReferenceDto,
@@ -153,6 +154,10 @@ export function createEmuRepository({ baseUrl }: { baseUrl?: string } = {}) {
 
     getWorkSessions(params: EmuWorkSessionParams = {}) {
       return client.get<EmuListResponseDto<EmuWorkSessionDto>>(`/api/v1/emu/work-sessions${toQueryString(params)}`);
+    },
+
+    getShiftRemarks(params: { employeeId?: string; page?: number; pageSize?: number; sectionId?: string } = {}) {
+      return client.get<EmuListResponseDto<EmuShiftRemarkDto>>(`/api/v1/emu/shift-remarks${toQueryString(params)}`);
     },
 
     getWorkHistoryReport(params: EmuWorkSessionParams = {}) {

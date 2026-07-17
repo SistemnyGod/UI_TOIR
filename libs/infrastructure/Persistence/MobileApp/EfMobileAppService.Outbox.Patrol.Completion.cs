@@ -177,6 +177,12 @@ internal sealed partial class EfMobileAppService
                 null);
         }
 
+        if (assignment.Status != AssignmentStatusValues.InProgress
+            || assignment.PatrolRequest.Status != AssignmentStatusValues.InProgress)
+        {
+            return Rejected(command.ClientOperationId, "Patrol assignment must be in progress before report submit.");
+        }
+
         if (baseRevision is null)
         {
             return Rejected(command.ClientOperationId, "completePatrolAssignment baseRevision is required.");
@@ -477,9 +483,11 @@ internal sealed partial class EfMobileAppService
     }
 
     private static string BuildPersistedMobilePointStatus(MobilePointResultPayload pointResult) =>
-        pointResult.Status.Equals("issue", StringComparison.OrdinalIgnoreCase) || IsSkippedPointResult(pointResult)
-            ? "issue"
-            : "ok";
+        IsSkippedPointResult(pointResult)
+            ? "skipped"
+            : pointResult.Status.Equals("issue", StringComparison.OrdinalIgnoreCase)
+                ? "issue"
+                : "ok";
 
     private static string BuildPersistedMobilePointComment(MobilePointResultPayload pointResult)
     {
@@ -514,7 +522,8 @@ internal sealed partial class EfMobileAppService
     }
 
     private static string BuildPersistedMobilePointSeverity(MobilePointResultPayload pointResult) =>
-        BuildPersistedMobilePointStatus(pointResult).Equals("issue", StringComparison.Ordinal)
+        (BuildPersistedMobilePointStatus(pointResult).Equals("issue", StringComparison.Ordinal)
+            || BuildPersistedMobilePointStatus(pointResult).Equals("skipped", StringComparison.Ordinal))
             ? "medium"
             : "-";
 
@@ -522,7 +531,7 @@ internal sealed partial class EfMobileAppService
     {
         if (IsSkippedPointResult(pointResult))
         {
-            return "Метка недоступна";
+            return "skipped";
         }
 
         if (pointResult.Status.Equals("issue", StringComparison.OrdinalIgnoreCase))

@@ -68,7 +68,9 @@ internal sealed partial class EfMobileAppService
                     string.IsNullOrWhiteSpace(point.Tag) ? null : point.Tag,
                     point.IsRequired,
                     point.RequiresPhoto,
-                    route.VersionNo)))
+                    route.VersionNo,
+                    point.Description,
+                    point.Instruction)))
             .ToArray();
 
         if (sessionTouched)
@@ -458,6 +460,9 @@ internal sealed partial class EfMobileAppService
                 && assignment.Status != AssignmentStatusValues.Waiting)
             .Where(assignment => assignment.Status != AssignmentStatusValues.Completed
                 && assignment.Status != AssignmentStatusValues.Cancelled)
+            .Where(assignment => assignment.PatrolRequest != null
+                && assignment.PatrolRequest.Status != AssignmentStatusValues.Completed
+                && assignment.PatrolRequest.Status != AssignmentStatusValues.Cancelled)
             .OrderBy(assignment => assignment.PlannedAt)
             .Select(assignment => new MobilePatrolAssignmentDto(
                 assignment.Id,
@@ -475,7 +480,9 @@ internal sealed partial class EfMobileAppService
         dbContext.Assignments
             .AsNoTracking()
             .Where(assignment => boundEmployeeIds.Contains(assignment.EmployeeId))
-            .Where(assignment => assignment.Status == AssignmentStatusValues.Cancelled)
+            .Where(assignment => assignment.Status == AssignmentStatusValues.Cancelled
+                || (assignment.PatrolRequest != null
+                    && assignment.PatrolRequest.Status == AssignmentStatusValues.Cancelled))
             .Select(assignment => assignment.Id)
             .ToArray();
 

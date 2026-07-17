@@ -53,6 +53,11 @@ internal sealed partial class EfMobileAppService
         account.Device = request.DeviceName;
         account.Version = request.AppVersion;
 
+        AddMobileSessionAuditEvent(
+            account,
+            "mobile_account.login",
+            $"Вход с устройства {session.Device}; платформа {session.Platform}; версия {session.AppVersion}.");
+
         dbContext.SaveChanges();
 
         return new MobileAuthResult(MapAuthSession(account, session, sessionBundle.AccessToken, sessionBundle.RefreshToken), false, EmptyErrors());
@@ -112,11 +117,40 @@ internal sealed partial class EfMobileAppService
             return false;
         }
 
-        session.RevokedAt = DateTimeOffset.UtcNow;
-        session.PushTokenRevokedAt = DateTimeOffset.UtcNow;
+        var now = DateTimeOffset.UtcNow;
+        session.RevokedAt = now;
+        session.PushTokenRevokedAt = now;
         session.Status = "Завершена";
+        if (session.MobileAccount is not null)
+        {
+            session.MobileAccount.LastSeenAt = now;
+            session.MobileAccount.Session = dbContext.MobileAccountSessions.Any(item =>
+                item.MobileAccountId == session.MobileAccountId
+                && item.Id != session.Id
+                && item.RevokedAt == null
+                && item.ExpiresAt > now)
+                    ? "Онлайн"
+                    : "Офлайн";
+            AddMobileSessionAuditEvent(
+                session.MobileAccount,
+                "mobile_account.logout",
+                $"Выход с устройства {session.Device}; сессия {session.Id}.");
+        }
         dbContext.SaveChanges();
         return true;
+    }
+
+    private void AddMobileSessionAuditEvent(MobileAccountEntity account, string action, string details)
+    {
+        dbContext.MobileAccountAuditEvents.Add(new MobileAccountAuditEventEntity
+        {
+            Id = Guid.NewGuid(),
+            MobileAccountId = account.Id,
+            Action = action,
+            Details = details,
+            Actor = account.Login,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
     }
 
 

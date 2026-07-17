@@ -194,7 +194,9 @@ public sealed record MobilePatrolPointDto(
     string? QrCodeHash,
     bool Required,
     bool RequiresPhoto,
-    long Revision);
+    long Revision,
+    string? Description,
+    string? Instruction);
 
 public sealed record MobileOutboxBatchDto(
     IReadOnlyList<MobileOutboxCommandDto> Commands);

@@ -1,3 +1,5 @@
+import { isReauthenticationRequiredError } from "../../auth/sessionErrors.ts";
+
 export type ReportDeliveryStatus =
   | "pending"
   | "sending"
@@ -71,13 +73,5 @@ export function getReportDeliveryPresentation(status: ReportDeliveryStatus | nul
 }
 
 export function isAuthenticationError(message: string | null) {
-  if (!message) {
-    return false;
-  }
-
-  const normalized = message.toLocaleLowerCase("ru-RU");
-  return normalized.includes("mobile session is invalid")
-    || normalized.includes("сессия истекла")
-    || normalized.includes("сессию другого пользователя")
-    || normalized.includes("авторизация сброшена");
+  return isReauthenticationRequiredError(message);
 }

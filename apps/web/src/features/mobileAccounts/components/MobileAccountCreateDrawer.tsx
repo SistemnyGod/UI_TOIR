@@ -24,9 +24,10 @@ export function MobileAccountCreateDrawer({
     login: "",
     password: "",
     confirmPassword: "",
-    role: "",
-    status: "Активен" as MobileAccount["status"],
+    role: "Маршрутный обходчик",
+    status: "Не привязан" as MobileAccount["status"],
     language: "ru",
+    credentialMode: "temporary" as "temporary" | "custom",
     requirePasswordChange: false,
     restrictToLinkedDevices: false,
   });
@@ -43,10 +44,10 @@ export function MobileAccountCreateDrawer({
   }
 
   function validateForm() {
-    if (!form.login.trim()) return "Введите логин";
-    if (!form.password.trim()) return "Введите пароль";
-    if (form.password.length < 8) return "Пароль должен содержать минимум 8 символов";
-    if (form.password !== form.confirmPassword) return "Пароли должны совпадать";
+    if (form.login.trim().length < 3) return "Логин должен содержать минимум 3 символа";
+    if (form.credentialMode === "custom" && !form.password.trim()) return "Введите пароль";
+    if (form.credentialMode === "custom" && form.password.length < 8) return "Пароль должен содержать минимум 8 символов";
+    if (form.credentialMode === "custom" && form.password !== form.confirmPassword) return "Пароли должны совпадать";
     if (!form.role.trim()) return "Выберите роль";
     return "";
   }
@@ -71,9 +72,9 @@ export function MobileAccountCreateDrawer({
         role: form.role,
         bindEmployee: false,
         restrictToBoundDevice: form.restrictToLinkedDevices,
-        temporaryPassword: false,
-        password: form.password,
-        confirmPassword: form.confirmPassword,
+        temporaryPassword: form.credentialMode === "temporary",
+        password: form.credentialMode === "custom" ? form.password : undefined,
+        confirmPassword: form.credentialMode === "custom" ? form.confirmPassword : undefined,
         status: form.status,
         language: form.language,
         requirePasswordChange: form.requirePasswordChange,
@@ -85,8 +86,9 @@ export function MobileAccountCreateDrawer({
         password: "",
         confirmPassword: "",
         role: "",
-        status: "Активен",
+        status: "Не привязан",
         language: "ru",
+        credentialMode: "temporary",
         requirePasswordChange: false,
         restrictToLinkedDevices: false,
       });
@@ -108,43 +110,30 @@ export function MobileAccountCreateDrawer({
   return (
     <section className="account-create-modal-card">
       <form onSubmit={submitCreateAccount}>
-        <header className="account-create-head">
+        <header className="account-create-head account-create-head-compact">
           <div>
-            <AtomLogo />
-            <h3>Создание аккаунта</h3>
-            <p>Создайте новый аккаунт для сотрудника или нового пользователя системы.</p>
+            <span className="account-create-eyebrow">Мобильный доступ · шаг 1 из 2</span>
+            <h3>Создать мобильный аккаунт</h3>
+            <p>Заполните данные входа, затем отдельно привяжите сотрудников и устройства.</p>
           </div>
           <button aria-label="Закрыть окно" className="account-create-close" onClick={onClose} type="button">
             <CloseIcon />
           </button>
         </header>
 
-        <div className="account-create-grid">
-          <FieldGroup label="Логин (email)" hint="Используется для входа в мобильное приложение.">
+        <section className="account-create-section account-create-identity">
+          <div className="account-create-section-head">
+            <div>
+              <strong>Данные аккаунта</strong>
+              <span>Минимум для создания мобильного доступа</span>
+            </div>
+            <span className="account-create-step-badge">1</span>
+          </div>
+
+          <div className="account-create-grid">
+          <FieldGroup label="Логин" hint="Используется для входа в мобильное приложение.">
             <TextField autoFocus icon="user" onChange={(value) => patchForm({ login: value })} placeholder="Введите логин (например, ivan.petrov)" value={form.login} />
             <FieldError errors={fieldErrors.login} />
-          </FieldGroup>
-
-          <FieldGroup label="Пароль" hint="Минимум 8 символов.">
-            <TextField
-              icon="lock"
-              onChange={(value) => patchForm({ password: value })}
-              placeholder="Введите пароль"
-              right={<button aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"} className="account-create-eye" onClick={() => setShowPassword((value) => !value)} type="button"><EyeIcon hidden={showPassword} /></button>}
-              type={showPassword ? "text" : "password"}
-              value={form.password}
-            />
-          </FieldGroup>
-
-          <FieldGroup label="Подтвердите пароль" hint="Пароли должны совпадать.">
-            <TextField
-              icon="lock"
-              onChange={(value) => patchForm({ confirmPassword: value })}
-              placeholder="Повторите пароль"
-              right={<button aria-label={showConfirmPassword ? "Скрыть подтверждение пароля" : "Показать подтверждение пароля"} className="account-create-eye" onClick={() => setShowConfirmPassword((value) => !value)} type="button"><EyeIcon hidden={showConfirmPassword} /></button>}
-              type={showConfirmPassword ? "text" : "password"}
-              value={form.confirmPassword}
-            />
           </FieldGroup>
 
           <FieldGroup label="Роль" hint="Определяет права и доступ в системе.">
@@ -157,7 +146,6 @@ export function MobileAccountCreateDrawer({
                 { label: "Оператор", value: "Оператор" },
                 { label: "Администратор", value: "Администратор" },
               ]}
-              placeholder="Выберите роль"
               value={form.role}
             />
             <FieldError errors={fieldErrors.role} />
@@ -168,7 +156,7 @@ export function MobileAccountCreateDrawer({
               onChange={(value) => patchForm({ status: value as MobileAccount["status"] })}
               options={[
                 { label: "Активен", value: "Активен" },
-                { label: "Неактивен", value: "Не привязан" },
+                { label: "Не привязан", value: "Не привязан" },
                 { label: "Заблокирован", value: "Заблокирован" },
               ]}
               statusDot
@@ -179,10 +167,69 @@ export function MobileAccountCreateDrawer({
           <FieldGroup label="Язык интерфейса (опционально)" hint="Язык по умолчанию для интерфейса приложения.">
             <SelectField icon="globe" onChange={(value) => patchForm({ language: value })} options={[{ label: "Русский", value: "ru" }, { label: "English", value: "en" }]} value={form.language} />
           </FieldGroup>
-        </div>
+          </div>
+        </section>
+
+        <section className="account-create-section account-create-credentials">
+          <div className="account-create-section-head">
+            <div>
+              <strong>Способ выдачи пароля</strong>
+              <span>Выберите удобный вариант для сотрудника</span>
+            </div>
+            <span className="account-create-step-badge">2</span>
+          </div>
+
+          <div className="account-credential-toggle" role="radiogroup" aria-label="Способ выдачи пароля">
+            <label className={form.credentialMode === "temporary" ? "selected" : ""}>
+              <input checked={form.credentialMode === "temporary"} onChange={() => patchForm({ credentialMode: "temporary" })} type="radio" />
+              <span className="account-radio-mark" aria-hidden="true" />
+              <span><strong>Сгенерировать временный пароль</strong><small>Пароль появится один раз после создания и будет готов для передачи сотруднику.</small></span>
+            </label>
+            <label className={form.credentialMode === "custom" ? "selected" : ""}>
+              <input checked={form.credentialMode === "custom"} onChange={() => patchForm({ credentialMode: "custom" })} type="radio" />
+              <span className="account-radio-mark" aria-hidden="true" />
+              <span><strong>Задать пароль вручную</strong><small>Подходит, если пароль уже согласован с сотрудником.</small></span>
+            </label>
+          </div>
+
+          {form.credentialMode === "custom" ? (
+            <div className="account-create-grid account-create-password-grid">
+              <FieldGroup label="Пароль" hint="Минимум 8 символов.">
+                <TextField
+                  icon="lock"
+                  onChange={(value) => patchForm({ password: value })}
+                  placeholder="Введите пароль"
+                  right={<button aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"} className="account-create-eye" onClick={() => setShowPassword((value) => !value)} type="button"><EyeIcon hidden={showPassword} /></button>}
+                  type={showPassword ? "text" : "password"}
+                  value={form.password}
+                />
+              </FieldGroup>
+              <FieldGroup label="Подтвердите пароль" hint="Пароли должны совпадать.">
+                <TextField
+                  icon="lock"
+                  onChange={(value) => patchForm({ confirmPassword: value })}
+                  placeholder="Повторите пароль"
+                  right={<button aria-label={showConfirmPassword ? "Скрыть подтверждение пароля" : "Показать подтверждение пароля"} className="account-create-eye" onClick={() => setShowConfirmPassword((value) => !value)} type="button"><EyeIcon hidden={showConfirmPassword} /></button>}
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={form.confirmPassword}
+                />
+              </FieldGroup>
+            </div>
+          ) : (
+            <div className="account-create-credential-note">
+              <AccountCreateIcon name="shield" />
+              <span>После сохранения временный пароль будет показан один раз. Скопируйте его и передайте сотруднику безопасным способом.</span>
+            </div>
+          )}
+        </section>
 
         <section className="account-create-options">
-          <h4>Дополнительные настройки (опционально)</h4>
+          <div className="account-create-section-head">
+            <div>
+              <strong>Ограничения доступа</strong>
+              <span>Можно изменить позже в карточке аккаунта</span>
+            </div>
+          </div>
           <OptionRow checked={form.requirePasswordChange} icon="shield" onChange={(value) => patchForm({ requirePasswordChange: value })} text="Пользователь должен будет установить новый пароль." title="Требовать смену пароля при первом входе" />
           <OptionRow checked={form.restrictToLinkedDevices} icon="phone" onChange={(value) => patchForm({ restrictToLinkedDevices: value })} text="Вход возможен только с заранее привязанных устройств." title="Ограничить вход только с привязанных устройств" />
         </section>
@@ -190,16 +237,19 @@ export function MobileAccountCreateDrawer({
         <section className="account-create-info">
           <AccountCreateIcon name="info" />
           <div>
-            <strong>Привязка сотрудников к аккаунту выполняется отдельно.</strong>
-            <span>После создания аккаунта его можно привязать к сотруднику в разделе «Сотрудники».</span>
+            <strong>Следующий шаг — привязать сотрудника</strong>
+            <span>После создания аккаунт появится в таблице. Откройте «Привязать сотрудника», чтобы выдать доступ конкретному сотруднику.</span>
           </div>
         </section>
 
         {errorMessage ? <div className="account-create-error">{errorMessage}</div> : null}
 
         <footer className="account-create-actions">
-          <button className="button ghost" onClick={onClose} type="button">Отмена</button>
-          <button className="button primary" disabled={isSubmitting} type="submit"><AccountCreateIcon name="plus" />{isSubmitting ? "Создание..." : "Создать аккаунт"}</button>
+          <span className="account-create-action-hint">{form.credentialMode === "temporary" ? "Временный пароль будет показан после создания" : "Пароль сохранится в зашифрованном виде"}</span>
+          <div>
+            <button className="button ghost" onClick={onClose} type="button">Отмена</button>
+            <button className="button primary" disabled={isSubmitting} type="submit"><AccountCreateIcon name="plus" />{isSubmitting ? "Создание..." : "Создать аккаунт"}</button>
+          </div>
         </footer>
       </form>
     </section>
@@ -571,6 +621,28 @@ export function MobileAccountEditPanel({
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+  const [form, setForm] = useState({
+    login: selected?.login ?? "",
+    role: displayKnownValue(selected?.role) || "Маршрутный обходчик",
+    status: (displayKnownValue(selected?.status) || "Активен") as MobileAccount["status"],
+  });
+
+  useEffect(() => {
+    setForm({
+      login: selected?.login ?? "",
+      role: displayKnownValue(selected?.role) || "Маршрутный обходчик",
+      status: (displayKnownValue(selected?.status) || "Активен") as MobileAccount["status"],
+    });
+    setFieldErrors({});
+  }, [selected?.id, selected?.login, selected?.role, selected?.status]);
+
+  const normalizedLogin = form.login.trim();
+  const isValid = normalizedLogin.length >= 3 && Boolean(form.role) && Boolean(form.status);
+  const hasChanges = selected
+    ? normalizedLogin !== selected.login ||
+      form.role !== displayKnownValue(selected.role) ||
+      form.status !== displayKnownValue(selected.status)
+    : false;
 
   async function submitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -580,15 +652,13 @@ export function MobileAccountEditPanel({
       return;
     }
 
-    const formData = new FormData(event.currentTarget);
-
     setIsSubmitting(true);
     try {
       setFieldErrors({});
       await onUpdateAccount({
-        login: String(formData.get("login") ?? selected.login),
-        role: String(formData.get("role") ?? selected.role),
-        status: String(formData.get("status") ?? selected.status) as MobileAccount["status"],
+        login: normalizedLogin,
+        role: form.role,
+        status: form.status,
       });
       onClose?.();
     } catch (error) {
@@ -604,52 +674,108 @@ export function MobileAccountEditPanel({
       note="Измените логин, роль, статус и список привязанных сотрудников."
       onClose={onClose}
     >
-      <form className="account-panel-form" onSubmit={submitEdit}>
-        <div className="account-form-grid two">
-          <label>
-            Логин *
-            <input defaultValue={selected?.login ?? ""} name="login" placeholder="Логин аккаунта" />
-            <FieldError errors={fieldErrors.login} />
-          </label>
-          <label>
-            Роль *
-            <select defaultValue={displayKnownValue(selected?.role) || "Маршрутный обходчик"} name="role">
-              <option>Маршрутный обходчик</option>
-              <option>Оператор</option>
-              <option>Администратор мобильного доступа</option>
+      <form className="account-panel-form account-edit-form" onSubmit={submitEdit}>
+        <section className="account-edit-section">
+          <div className="account-edit-section-head">
+            <div>
+              <strong>Основные параметры</strong>
+              <span>Настройки входа и уровня доступа</span>
+            </div>
+            <span className={`account-edit-status ${form.status === "Заблокирован" ? "blocked" : "active"}`}>
+              {form.status}
+            </span>
+          </div>
+
+          <div className="account-form-grid two">
+            <label className="account-edit-field">
+              <span>Логин <b>*</b></span>
+              <input
+                autoComplete="username"
+                autoFocus
+                onChange={(event) => {
+                  const login = event.currentTarget.value;
+                  setForm((current) => ({ ...current, login }));
+                }}
+                placeholder="Логин аккаунта"
+                value={form.login}
+              />
+              <small>Не менее трёх символов, без пробелов по краям</small>
+              <FieldError errors={fieldErrors.login} />
+            </label>
+            <label className="account-edit-field">
+              <span>Роль <b>*</b></span>
+              <select
+                onChange={(event) => {
+                  const role = event.currentTarget.value;
+                  setForm((current) => ({ ...current, role }));
+                }}
+                value={form.role}
+              >
+                <option>Маршрутный обходчик</option>
+                <option>Оператор</option>
+                <option>Администратор мобильного доступа</option>
+              </select>
+              <small>Определяет доступные функции мобильного приложения</small>
+              <FieldError errors={fieldErrors.role} />
+            </label>
+          </div>
+
+          <label className="account-edit-field account-edit-field-wide">
+            <span>Статус аккаунта <b>*</b></span>
+            <select
+              onChange={(event) => {
+                const status = event.currentTarget.value as MobileAccount["status"];
+                setForm((current) => ({ ...current, status }));
+              }}
+              value={form.status}
+            >
+              <option>Активен</option>
+              <option>Не привязан</option>
+              <option>Заблокирован</option>
             </select>
-            <FieldError errors={fieldErrors.role} />
+            <small>{statusHelpText(form.status)}</small>
+            <FieldError errors={fieldErrors.status} />
           </label>
-        </div>
+        </section>
 
-        <label>
-          Статус *
-          <select defaultValue={displayKnownValue(selected?.status) || "Активен"} name="status">
-            <option>Активен</option>
-            <option>Не привязан</option>
-            <option>Заблокирован</option>
-          </select>
-          <FieldError errors={fieldErrors.status} />
-        </label>
-
-        <div className="selected-employee-block">
-          <div>
-            <strong>Привязанные сотрудники ({selected?.boundEmployees.length ?? 0}/{MAX_BOUND_EMPLOYEES})</strong>
-            <span>Редактируются в отдельной модалке привязки</span>
+        <section className="selected-employee-block account-edit-section">
+          <div className="account-edit-section-head">
+            <div>
+              <strong>Привязанные сотрудники</strong>
+              <span>{selected?.boundEmployees.length ?? 0} из {MAX_BOUND_EMPLOYEES}</span>
+            </div>
+            <button
+              className="button ghost account-edit-link-button"
+              disabled={hasChanges}
+              onClick={onOpenLink}
+              title={hasChanges ? "Сначала сохраните изменения аккаунта" : undefined}
+              type="button"
+            >
+              Управлять привязками
+            </button>
           </div>
           <EmployeeTokenList employees={selected?.boundEmployees ?? []} />
-          <button className="button ghost" onClick={onOpenLink} type="button">
-            + Добавить сотрудника
-          </button>
-        </div>
+          <p className="account-edit-help">
+            {hasChanges
+              ? "Сначала сохраните изменения аккаунта, затем откройте управление привязками."
+              : "Добавление и удаление сотрудников выполняется в отдельном окне управления привязками."}
+          </p>
+        </section>
 
-        <div className="account-panel-actions">
-          <button className="button ghost" onClick={onClose} type="button">
-            Отмена
-          </button>
-          <button className="button primary" disabled={isSubmitting || !selected} type="submit">
-            {isSubmitting ? "Сохранение..." : "Сохранить"}
-          </button>
+        {!isValid && form.login.length > 0 ? (
+          <div className="account-edit-validation" role="alert">Логин должен содержать не менее трёх символов.</div>
+        ) : null}
+
+        <div className="account-panel-actions account-edit-actions">
+          <span>{hasChanges ? "Есть несохранённые изменения" : "Изменений пока нет"}</span>
+          <div>
+            <button className="button ghost" onClick={onClose} type="button">
+              Отмена
+            </button>
+            <button className="button primary" disabled={isSubmitting || !selected || !isValid || !hasChanges} type="submit">
+              {isSubmitting ? "Сохранение..." : "Сохранить изменения"}
+            </button>
+          </div>
         </div>
       </form>
     </AccountPanelCard>
@@ -980,14 +1106,18 @@ function EmployeeTokenList({ employees }: { employees: string[] }) {
     <div className="employee-token-list">
       {employees.map((employee) => (
         <span className="employee-token" key={employee}>
-          <span>{employee}</span>
-          <span className="employee-token-remove" aria-hidden="true">
-            ×
-          </span>
+          <span className="employee-token-avatar" aria-hidden="true">{getInitials(employee)}</span>
+          <strong>{employee}</strong>
         </span>
       ))}
     </div>
   );
+}
+
+function statusHelpText(status: MobileAccount["status"]) {
+  if (status === "Заблокирован") return "Вход будет закрыт, а активные сессии потребуется завершить.";
+  if (status === "Не привязан") return "Аккаунт нельзя использовать, пока к нему не привязан сотрудник.";
+  return "Аккаунт доступен для входа привязанным сотрудникам.";
 }
 
 function AccountModalIcon({ name }: { name: "phone" | "info" | "search" }) {

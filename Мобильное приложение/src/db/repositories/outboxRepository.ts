@@ -107,7 +107,7 @@ export async function countPendingOutboxCommands(ownerUserId: string) {
   return row?.count ?? 0;
 }
 
-export async function getOutboxCommandDeliveryState(clientOperationId: string) {
+export async function getOutboxCommandDeliveryState(ownerUserId: string, clientOperationId: string) {
   const db = await getDatabase();
   return db.getFirstAsync<{
     status: OutboxCommandStatus;
@@ -118,9 +118,9 @@ export async function getOutboxCommandDeliveryState(clientOperationId: string) {
         status,
         last_error AS lastError
       FROM outbox_commands
-      WHERE client_operation_id = ?
+      WHERE owner_user_id = ? AND client_operation_id = ?
     `,
-    [clientOperationId]
+    [ownerUserId, clientOperationId]
   );
 }
 
@@ -266,7 +266,7 @@ export async function listUnconfirmedCompleteReportCommands(
   }));
 }
 
-export async function markOutboxCommandsSending(clientOperationIds: string[]) {
+export async function markOutboxCommandsSending(ownerUserId: string, clientOperationIds: string[]) {
   if (clientOperationIds.length === 0) {
     return;
   }
@@ -281,14 +281,15 @@ export async function markOutboxCommandsSending(clientOperationIds: string[]) {
           attempt_count = attempt_count + 1,
           last_error = NULL,
           updated_at_local = ?
-      WHERE client_operation_id IN (${placeholders})
+      WHERE owner_user_id = ?
+        AND client_operation_id IN (${placeholders})
         AND status IN ('pending', 'retryLater')
     `,
-    [updatedAtLocal, ...clientOperationIds]
+    [updatedAtLocal, ownerUserId, ...clientOperationIds]
   );
 }
 
-export async function markOutboxCommandsRetryLater(clientOperationIds: string[], lastError?: string) {
+export async function markOutboxCommandsRetryLater(ownerUserId: string, clientOperationIds: string[], lastError?: string) {
   if (clientOperationIds.length === 0) {
     return;
   }
@@ -302,10 +303,11 @@ export async function markOutboxCommandsRetryLater(clientOperationIds: string[],
       SET status = 'retryLater',
           last_error = COALESCE(?, last_error),
           updated_at_local = ?
-      WHERE client_operation_id IN (${placeholders})
+      WHERE owner_user_id = ?
+        AND client_operation_id IN (${placeholders})
         AND status = 'sending'
     `,
-    [lastError ?? null, updatedAtLocal, ...clientOperationIds]
+    [lastError ?? null, updatedAtLocal, ownerUserId, ...clientOperationIds]
   );
 }
 
@@ -410,22 +412,22 @@ export async function finalizeAcceptedCompleteReportCommands(ownerUserId: string
         `
           UPDATE patrol_assignments
           SET status = 'completedServer'
-          WHERE assignment_id = ?
+          WHERE owner_user_id = ? AND assignment_id = ?
         `,
-        [row.assignment_id]
+        [ownerUserId, row.assignment_id]
       );
       await tx.runAsync(
         `
           UPDATE patrol_request_board
           SET status = 'completed'
-          WHERE request_id = (
+          WHERE owner_user_id = ? AND request_id = (
             SELECT request_id
             FROM patrol_assignments
-            WHERE assignment_id = ?
+            WHERE owner_user_id = ? AND assignment_id = ?
             LIMIT 1
           )
         `,
-        [row.assignment_id]
+        [ownerUserId, ownerUserId, row.assignment_id]
       );
     }
 
@@ -435,7 +437,7 @@ export async function finalizeAcceptedCompleteReportCommands(ownerUserId: string
   return { finalized };
 }
 
-export async function applyOutboxResponses(responses: OutboxResponse[]) {
+export async function applyOutboxResponses(ownerUserId: string, responses: OutboxResponse[]) {
   const db = await getDatabase();
 
   await db.withExclusiveTransactionAsync(async (tx) => {
@@ -447,13 +449,14 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
               entity_server_id = COALESCE(?, entity_server_id),
               last_error = ?,
               updated_at_local = ?
-          WHERE client_operation_id = ?
+          WHERE owner_user_id = ? AND client_operation_id = ?
         `,
         [
           response.status,
           response.serverEntityId,
           isProblemResponse(response.status) ? response.message : null,
           new Date().toISOString(),
+          ownerUserId,
           response.clientOperationId
         ]
       );
@@ -468,9 +471,9 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
           `
             SELECT owner_user_id, command_type, entity_local_id, payload_json
             FROM outbox_commands
-            WHERE client_operation_id = ?
+            WHERE owner_user_id = ? AND client_operation_id = ?
           `,
-          [response.clientOperationId]
+          [ownerUserId, response.clientOperationId]
         );
 
         if (command?.command_type === "completePatrolAssignment" && command.entity_local_id) {
@@ -521,9 +524,9 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
             `
               UPDATE patrol_assignments
               SET status = ?
-              WHERE assignment_id = ?
+              WHERE owner_user_id = ? AND assignment_id = ?
             `,
-            [terminalStatus, command.entity_local_id]
+            [terminalStatus, command.owner_user_id, command.entity_local_id]
           );
           await tx.runAsync(
             `
@@ -532,12 +535,39 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
               WHERE request_id = (
                 SELECT request_id
                 FROM patrol_assignments
-                WHERE assignment_id = ?
+                WHERE owner_user_id = ? AND assignment_id = ?
                 LIMIT 1
                 )
             `,
-            [requestStatus, command.entity_local_id]
+            [requestStatus, command.owner_user_id, command.entity_local_id]
           );
+        }
+
+        if (command?.command_type === "releasePatrolRequest" && command.entity_local_id) {
+          const request = await tx.getFirstAsync<{ request_id: string }>(
+            `
+              SELECT request_id
+              FROM patrol_assignments
+              WHERE owner_user_id = ? AND assignment_id = ?
+              LIMIT 1
+            `,
+            [command.owner_user_id, command.entity_local_id]
+          );
+
+          if (request?.request_id) {
+            await tx.runAsync(
+              `
+                UPDATE patrol_request_board
+                SET status = CASE WHEN assigned_full_name IS NULL THEN 'available' ELSE 'assigned' END
+                WHERE owner_user_id = ? AND request_id = ?
+              `,
+              [command.owner_user_id, request.request_id]
+            );
+          }
+
+          await tx.runAsync("DELETE FROM point_results WHERE owner_user_id = ? AND assignment_id = ?", [command.owner_user_id, command.entity_local_id]);
+          await tx.runAsync("DELETE FROM assignment_route_points WHERE assignment_id = ?", [command.entity_local_id]);
+          await tx.runAsync("DELETE FROM patrol_assignments WHERE owner_user_id = ? AND assignment_id = ?", [command.owner_user_id, command.entity_local_id]);
         }
 
         if (
@@ -564,9 +594,9 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
               UPDATE patrol_assignments
               SET status = ?,
                   revision = COALESCE(?, revision)
-              WHERE assignment_id = ?
+              WHERE owner_user_id = ? AND assignment_id = ?
             `,
-            [nextStatus, response.serverRevision, command.entity_local_id]
+            [nextStatus, response.serverRevision, command.owner_user_id, command.entity_local_id]
           );
           await tx.runAsync(
             `
@@ -575,11 +605,11 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
               WHERE request_id = (
                 SELECT request_id
                 FROM patrol_assignments
-                WHERE assignment_id = ?
+                WHERE owner_user_id = ? AND assignment_id = ?
                 LIMIT 1
               )
             `,
-            [nextStatus, command.entity_local_id]
+            [nextStatus, command.owner_user_id, command.entity_local_id]
           );
 
           if (response.serverRevision !== null) {
@@ -599,9 +629,9 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
               SET status = 'completedServer',
                   sync_status = 'synced',
                   revision = COALESCE(?, revision)
-              WHERE task_id = ?
+              WHERE owner_user_id = ? AND task_id = ?
             `,
-            [response.serverRevision, command.entity_local_id]
+            [response.serverRevision, command.owner_user_id, command.entity_local_id]
           );
         }
 
@@ -612,9 +642,9 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
               SET status = 'paused',
                   sync_status = 'synced',
                   revision = COALESCE(?, revision)
-              WHERE task_id = ?
+              WHERE owner_user_id = ? AND task_id = ?
             `,
-            [response.serverRevision, command.entity_local_id]
+            [response.serverRevision, command.owner_user_id, command.entity_local_id]
           );
         }
 
@@ -625,9 +655,9 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
               SET status = 'inProgress',
                   sync_status = 'synced',
                   revision = COALESCE(?, revision)
-              WHERE task_id = ?
+              WHERE owner_user_id = ? AND task_id = ?
             `,
-            [response.serverRevision, command.entity_local_id]
+            [response.serverRevision, command.owner_user_id, command.entity_local_id]
           );
         }
 
@@ -641,9 +671,9 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
               UPDATE work_tasks
               SET sync_status = 'synced',
                   revision = COALESCE(?, revision)
-              WHERE task_id = ?
+              WHERE owner_user_id = ? AND task_id = ?
             `,
-            [response.serverRevision, command.entity_local_id]
+            [response.serverRevision, command.owner_user_id, command.entity_local_id]
           );
         }
 
@@ -654,9 +684,9 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
               SET status = ?,
                   server_remark_id = COALESCE(?, server_remark_id),
                   sync_status = 'synced'
-              WHERE remark_id = ?
+              WHERE owner_user_id = ? AND remark_id = ?
             `,
-            [response.status, response.serverEntityId, command.entity_local_id]
+            [response.status, response.serverEntityId, command.owner_user_id, command.entity_local_id]
           );
         }
 
@@ -666,9 +696,9 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
               UPDATE shift_remarks
               SET status = ?,
                   sync_status = 'synced'
-              WHERE remark_id = ?
+              WHERE owner_user_id = ? AND remark_id = ?
             `,
-            [response.status, command.entity_local_id]
+            [response.status, command.owner_user_id, command.entity_local_id]
           );
         }
       }
@@ -682,11 +712,11 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
             payload_json: string;
         }>(
           `
-            SELECT owner_user_id, entity_type, entity_local_id, payload_json
+            SELECT owner_user_id, command_type, entity_type, entity_local_id, payload_json
             FROM outbox_commands
-            WHERE client_operation_id = ?
+            WHERE owner_user_id = ? AND client_operation_id = ?
           `,
-          [response.clientOperationId]
+          [ownerUserId, response.clientOperationId]
         );
 
         if (command) {
@@ -720,9 +750,9 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
                 UPDATE shift_remarks
                 SET status = ?,
                     sync_status = ?
-                WHERE remark_id = ?
+                WHERE owner_user_id = ? AND remark_id = ?
               `,
-              [response.status, response.status, command.entity_local_id]
+              [response.status, response.status, command.owner_user_id, command.entity_local_id]
             );
           }
 
@@ -731,40 +761,51 @@ export async function applyOutboxResponses(responses: OutboxResponse[]) {
               `
                 UPDATE work_tasks
                 SET sync_status = ?
-                WHERE task_id = ?
+                WHERE owner_user_id = ? AND task_id = ?
               `,
-              [response.status, command.entity_local_id]
+              [response.status, command.owner_user_id, command.entity_local_id]
             );
           }
 
-          if (
-            command.entity_local_id
-            && (command.entity_type === "patrolAssignment" || command.command_type === "acceptPatrolRequest")
-          ) {
-            const isCancelledByServer = response.reasonCode === "assignmentCancelled";
+          const isCancelledByServer = response.reasonCode === "assignmentCancelled";
+          // A validation rejection is repairable locally: keep the point
+          // results and let the employee edit them before creating a new
+          // completion command. Conflicts and dispatcher cancellations stay
+          // blocked and require an explicit resolution.
+          const isRepairableCompletionRejection =
+            response.status === "rejected"
+            && command.command_type === "completePatrolAssignment"
+            && response.reasonCode !== "assignmentCancelled";
+          const assignmentId = command.entity_type === "patrolAssignment" || command.command_type === "acceptPatrolRequest"
+            ? command.entity_local_id
+            : isCancelledByServer ? extractAssignmentId(command.payload_json) : null;
+          if (assignmentId) {
             const nextStatus = isCancelledByServer
               ? "cancelledServer"
-              : response.status === "conflict" ? "needsDispatcherDecision" : "syncError";
+              : response.status === "conflict"
+                ? "needsDispatcherDecision"
+                : isRepairableCompletionRejection ? "inProgress" : "syncError";
             await tx.runAsync(
               `
                 UPDATE patrol_assignments
-                SET status = ?
-                WHERE assignment_id = ?
+                SET status = ?,
+                    completed_at_local = CASE WHEN ? = 'inProgress' THEN NULL ELSE completed_at_local END
+                WHERE owner_user_id = ? AND assignment_id = ?
               `,
-              [nextStatus, command.entity_local_id]
+              [nextStatus, nextStatus, command.owner_user_id, assignmentId]
             );
             await tx.runAsync(
               `
                 UPDATE patrol_request_board
                 SET status = ?
-                WHERE request_id = (
+                WHERE owner_user_id = ? AND request_id = (
                   SELECT request_id
                   FROM patrol_assignments
-                  WHERE assignment_id = ?
+                  WHERE owner_user_id = ? AND assignment_id = ?
                   LIMIT 1
                 )
               `,
-              [nextStatus === "cancelledServer" ? "cancelledServer" : nextStatus, command.entity_local_id]
+              [nextStatus === "cancelledServer" ? "cancelledServer" : nextStatus, command.owner_user_id, command.owner_user_id, assignmentId]
             );
           }
         }
@@ -802,6 +843,17 @@ function extractCompletionFileIds(payloadJson: string) {
   }
 }
 
+function extractAssignmentId(payloadJson: string) {
+  try {
+    const payload = JSON.parse(payloadJson) as { assignmentId?: unknown };
+    return typeof payload.assignmentId === "string" && payload.assignmentId.trim()
+      ? payload.assignmentId
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 async function updatePendingCompleteReportBaseRevisionInTransaction(
   tx: Awaited<ReturnType<typeof getDatabase>>,
   ownerUserId: string,
@@ -828,8 +880,8 @@ async function updatePendingCompleteReportBaseRevisionInTransaction(
       const payload = JSON.parse(command.payload_json) as Record<string, unknown>;
       payload.baseRevision = baseRevision;
       await tx.runAsync(
-        "UPDATE outbox_commands SET payload_json = ?, updated_at_local = ? WHERE client_operation_id = ?",
-        [JSON.stringify(payload), new Date().toISOString(), command.client_operation_id]
+        "UPDATE outbox_commands SET payload_json = ?, updated_at_local = ? WHERE owner_user_id = ? AND client_operation_id = ?",
+        [JSON.stringify(payload), new Date().toISOString(), ownerUserId, command.client_operation_id]
       );
     } catch {
       // The report command will be rejected by its normal payload validation;

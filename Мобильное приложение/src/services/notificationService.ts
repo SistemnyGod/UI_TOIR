@@ -5,6 +5,7 @@ import { listNotifications, markNotificationRead, registerPushToken } from "@/ap
 import { getOrCreateDeviceId } from "@/auth/deviceRegistration";
 import { getAccessToken } from "@/auth/tokenStorage";
 import {
+  listPendingNotificationReads,
   markLocalNotificationRead,
   saveDevicePushToken,
   saveNotifications
@@ -53,12 +54,27 @@ export async function refreshPushRegistrationIfAllowed() {
 export async function syncMobileNotifications() {
   const notifications = await listNotifications(false);
   await saveNotifications(notifications);
+  const pendingReads = await listPendingNotificationReads();
+  for (const pendingRead of pendingReads) {
+    try {
+      const updated = await markNotificationRead(pendingRead.notificationId);
+      await markLocalNotificationRead(
+        pendingRead.notificationId,
+        updated.readAt ?? pendingRead.readAt,
+        false
+      );
+    } catch {
+      // Keep the local read marker and retry on the next connected refresh.
+    }
+  }
   return notifications;
 }
 
 export async function markMobileNotificationRead(notificationId: string) {
+  const localReadAt = new Date().toISOString();
+  await markLocalNotificationRead(notificationId, localReadAt, true);
   const notification = await markNotificationRead(notificationId);
-  await markLocalNotificationRead(notificationId, notification.readAt ?? new Date().toISOString());
+  await markLocalNotificationRead(notificationId, notification.readAt ?? localReadAt, false);
   return notification;
 }
 

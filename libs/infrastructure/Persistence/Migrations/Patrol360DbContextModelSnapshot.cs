@@ -4762,6 +4762,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.RoutePointEntity", b =>
                 {
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("description");
+
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
@@ -4778,6 +4784,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
                         .HasColumnName("interval");
+
+                    b.Property<string>("Instruction")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("instruction");
 
                     b.Property<bool>("IsRequired")
                         .HasColumnType("boolean")
@@ -4886,6 +4898,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.RouteRevisionPointEntity", b =>
                 {
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("description");
+
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
@@ -4894,6 +4912,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsRequired")
                         .HasColumnType("boolean")
                         .HasColumnName("is_required");
+
+                    b.Property<string>("Instruction")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("instruction");
 
                     b.Property<string>("Name")
                         .IsRequired()

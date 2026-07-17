@@ -98,12 +98,14 @@ internal sealed partial class EfPatrolStore
                 Zone = NormalizeOptionalText(pointRequest.Zone, route.Territory),
                 Type = NormalizeOptionalText(pointRequest.Type, "NFC"),
                 Tag = NormalizeOptionalText(pointRequest.Tag),
+                Description = NormalizeOptionalText(pointRequest.Description),
+                Instruction = NormalizeOptionalText(pointRequest.Instruction),
                 Interval = NormalizeOptionalText(pointRequest.Interval, "00:10"),
                 ExpectedTime = NormalizeOptionalText(pointRequest.ExpectedTime, "00:05"),
                 Status = NormalizeOptionalText(pointRequest.Status, "Активна"),
                 NfcCode = NormalizeOptionalText(pointRequest.Tag),
                 IsRequired = IsActivePointStatus(pointRequest.Status),
-                RequiresPhoto = pointRequest.RequiresPhoto
+                RequiresPhoto = false
             };
 
             route.Points.Add(point);
@@ -190,12 +192,14 @@ internal sealed partial class EfPatrolStore
             Zone = NormalizeOptionalText(request.Zone, route.Territory),
             Type = NormalizeOptionalText(request.Type, "NFC"),
             Tag = NormalizeOptionalText(request.Tag),
+            Description = NormalizeOptionalText(request.Description),
+            Instruction = NormalizeOptionalText(request.Instruction),
             Interval = NormalizeOptionalText(request.Interval, "00:10"),
             ExpectedTime = NormalizeOptionalText(request.ExpectedTime, "00:05"),
             Status = NormalizeOptionalText(request.Status, "Активна"),
             NfcCode = NormalizeOptionalText(request.Tag),
             IsRequired = IsActivePointStatus(request.Status),
-            RequiresPhoto = request.RequiresPhoto
+            RequiresPhoto = false
         };
 
         dbContext.RoutePoints.Add(point);
@@ -225,12 +229,14 @@ internal sealed partial class EfPatrolStore
         point.Zone = NormalizeOptionalText(request.Zone, route.Territory);
         point.Type = NormalizeOptionalText(request.Type, "NFC");
         point.Tag = NormalizeOptionalText(request.Tag);
+        point.Description = NormalizeOptionalText(request.Description);
+        point.Instruction = NormalizeOptionalText(request.Instruction);
         point.Interval = NormalizeOptionalText(request.Interval, "00:10");
         point.ExpectedTime = NormalizeOptionalText(request.ExpectedTime, "00:05");
         point.Status = NormalizeOptionalText(request.Status, "Активна");
         point.NfcCode = NormalizeOptionalText(request.Tag);
         point.IsRequired = IsActivePointStatus(request.Status);
-        point.RequiresPhoto = request.RequiresPhoto;
+        point.RequiresPhoto = false;
         route.VersionNo += 1;
 
         SaveChangesAndInvalidateDashboardSummary();
@@ -387,7 +393,9 @@ internal sealed partial class EfPatrolStore
             NormalizeOptionalText(point.Status, point.IsRequired ? "Активна" : "Черновик"),
             point.NfcCode,
             point.IsRequired,
-            point.RequiresPhoto);
+            point.RequiresPhoto,
+            NormalizeOptionalText(point.Description),
+            NormalizeOptionalText(point.Instruction));
 
     private static void ReorderPoints(IEnumerable<RoutePointEntity> points)
     {

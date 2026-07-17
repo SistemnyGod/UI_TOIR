@@ -8,7 +8,6 @@ import {
   MobileAccountViewPanel,
 } from "./components/MobileAccountCreateDrawer";
 import { MobileAccountListPanel, type MobileAccountWorkspacePanel } from "./components/MobileAccountListPanel";
-import { MobileAccountMetrics } from "./components/MobileAccountMetrics";
 import { MobileAccountSecurityPanels } from "./components/MobileAccountSecurityPanels";
 import { createApiMobileAccountsRepository } from "../../repositories/mobileAccountsRepository";
 import type {
@@ -230,8 +229,6 @@ export function MobileAccountsScreen({
         </div>
       </header>
 
-      <MobileAccountMetrics accounts={accounts} />
-
       <MobileAccountListPanel
         activePanel={activePanel}
         accounts={accounts}
@@ -253,7 +250,7 @@ export function MobileAccountsScreen({
       {activePanel ? (
         <div
           aria-label="Окно управления мобильным аккаунтом"
-          className="account-panel-dock"
+          className={`account-panel-dock ${activePanel === "create" ? "account-panel-dock-create" : ""}`}
           onMouseDown={closePanel}
           role="presentation"
         >

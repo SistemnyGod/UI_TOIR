@@ -628,6 +628,37 @@ public sealed class AssignmentsDbIntegrationTests
     }
 
     [DbIntegrationFact]
+    public async Task RoutePointGuidanceIsPersistedAndPhotoIsOptional()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+
+        await provider.InitializePatrolDatabaseAsync();
+
+        var created = UseRouteService(provider, routes => routes.CreateRoutePoint(FuelDepotRouteId, new CreateRoutePointDto(
+            "Motor bearing",
+            "Drive unit",
+            "NFC",
+            "NFC-GUIDANCE-001",
+            "00:10",
+            "00:05",
+            "Active",
+            RequiresPhoto: true,
+            Description: "Main conveyor motor bearing",
+            Instruction: "Scan the tag, check temperature and listen for abnormal noise")));
+
+        Assert.True(created.Succeeded);
+        Assert.NotNull(created.Point);
+
+        var persisted = UseRouteQuery(provider, routes => routes.GetRoute(FuelDepotRouteId))!
+            .Points.Single(point => point.Id == created.Point!.Id);
+
+        Assert.Equal("Main conveyor motor bearing", persisted.Description);
+        Assert.Equal("Scan the tag, check temperature and listen for abnormal noise", persisted.Instruction);
+        Assert.False(persisted.RequiresPhoto);
+    }
+
+    [DbIntegrationFact]
     public async Task RouteUpdateAndReorderRejectStaleVersion()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();

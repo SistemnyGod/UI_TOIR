@@ -266,6 +266,8 @@ function mapMobileAccountSession(session: MobileAccountSessionDto): MobileAccoun
     appVersion: session.appVersion,
     ipAddress: session.ipAddress,
     lastSeenAt: session.lastSeenAt,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
   };
 }
 

@@ -27,7 +27,7 @@ export function RoutePointTable({
             <th>Зона</th>
             <th>Тип</th>
             <th>NFC / тег</th>
-            <th>Фото</th>
+            <th>Описание</th>
             <th>Порядок</th>
           </tr>
         </thead>
@@ -51,7 +51,7 @@ export function RoutePointTable({
               <td>{point.zone || "-"}</td>
               <td>{point.type}</td>
               <td>{point.tag || "-"}</td>
-              <td>{point.requiresPhoto ? "Да" : "Нет"}</td>
+              <td className="route-point-description-cell">{point.description || point.instruction || "—"}</td>
               <td>
                 <div className="order-actions">
                   <button aria-label={`Переместить точку «${point.name}» выше`} className="icon-button mini-icon" disabled={!canManage} onClick={() => onMovePoint(route.id, point.id, -1)} type="button">

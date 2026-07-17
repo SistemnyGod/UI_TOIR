@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,7 +20,14 @@ import {
 } from "@/db/repositories/workTaskRepository";
 import { MobileEmployeeDto, MobileEmuSectionDto, WorkItemDto, WorkTaskDto, WorkTaskStatus } from "@/domain/emu/emuTypes";
 import { useAppTheme } from "@/features/settings/themePreference";
-import { attachWorkMediaFromGallery, attachWorkPhotoFromCamera, attachWorkVideoFromCamera } from "@/services/mediaAttachmentService";
+import {
+  attachRemarkMediaFromGallery,
+  attachRemarkPhotoFromCamera,
+  attachRemarkVideoFromCamera,
+  attachWorkMediaFromGallery,
+  attachWorkPhotoFromCamera,
+  attachWorkVideoFromCamera
+} from "@/services/mediaAttachmentService";
 import { loadWorkItemsOfflineFirst } from "@/services/workTaskService";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import { ActionSheet } from "@/ui/ActionSheet";
@@ -32,10 +39,10 @@ import { StatusPill } from "@/ui/StatusPill";
 type WorkTab = "tasks" | "remarks";
 type TaskFilter = "mine" | "available" | "history";
 type ParticipationAction = { mode: "start" | "join" | "replace"; item: WorkItemDto };
-type PhotoAfterSave = "none" | "camera" | "gallery";
+type RemarkAttachmentAfterSave = "later" | "now";
+type RemarkAttachmentTarget = { remarkId: string; title: string } | null;
 
 export function WorkAccountingScreen() {
-  const router = useRouter();
   const { colors } = useAppTheme();
   const [tab, setTab] = useState<WorkTab>("tasks");
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("mine");
@@ -56,12 +63,13 @@ export function WorkAccountingScreen() {
   const [remarkEmployeeId, setRemarkEmployeeId] = useState("");
   const [remarkSectionId, setRemarkSectionId] = useState("");
   const [remarkComment, setRemarkComment] = useState("");
-  const [remarkPhoto, setRemarkPhoto] = useState<PhotoAfterSave>("none");
+  const [remarkAttachmentAfterSave, setRemarkAttachmentAfterSave] = useState<RemarkAttachmentAfterSave>("later");
   const [participationAction, setParticipationAction] = useState<ParticipationAction | null>(null);
   const [participationEmployeeId, setParticipationEmployeeId] = useState("");
   const [participationPreviousEmployeeId, setParticipationPreviousEmployeeId] = useState("");
   const [participationReason, setParticipationReason] = useState("");
   const [attachmentTask, setAttachmentTask] = useState<WorkItemDto | null>(null);
+  const [attachmentRemark, setAttachmentRemark] = useState<RemarkAttachmentTarget>(null);
 
   const reloadLocal = useCallback(async () => {
     const [nextTasks, nextRemarks, nextEmployees, nextSections] = await Promise.all([
@@ -128,7 +136,7 @@ export function WorkAccountingScreen() {
     setRemarkEmployeeId(defaultEmployeeId());
     setRemarkSectionId(defaultSectionId());
     setRemarkComment("");
-    setRemarkPhoto("none");
+    setRemarkAttachmentAfterSave("later");
     setRemarkModalOpen(true);
   }
 
@@ -194,8 +202,8 @@ export function WorkAccountingScreen() {
       await reloadLocal();
       setMessage("Замечание сохранено на телефоне и будет отправлено на сервер.");
 
-      if (remarkPhoto !== "none") {
-        router.push(`/camera/capture?remarkId=${remarkId}&mediaKind=photo&source=${remarkPhoto}`);
+      if (remarkAttachmentAfterSave === "now") {
+        setAttachmentRemark({ remarkId, title: section.name });
       } else {
         triggerForegroundSyncWithRetry();
       }
@@ -352,6 +360,36 @@ export function WorkAccountingScreen() {
     }
   }
 
+  async function handleAttachRemarkMedia(kind: "photo" | "video" | "gallery") {
+    if (!attachmentRemark) {
+      return;
+    }
+
+    setLoading(true);
+    setMessage(null);
+    try {
+      if (kind === "photo") {
+        await attachRemarkPhotoFromCamera(attachmentRemark.remarkId);
+        setMessage("Фото замечания сохранено на телефоне и будет отправлено на сервер.");
+      } else if (kind === "video") {
+        await attachRemarkVideoFromCamera(attachmentRemark.remarkId);
+        setMessage("Видео замечания сохранено на телефоне и будет отправлено на сервер.");
+      } else {
+        const result = await attachRemarkMediaFromGallery(attachmentRemark.remarkId);
+        if (result.status === "attached") {
+          const suffix = result.errors.length ? ` Отклонено: ${result.errors.join("; ")}` : "";
+          setMessage(`Добавлено вложений к замечанию: ${result.attachedCount}. Фото: ${result.photoCount}, видео: ${result.videoCount}.${suffix}`);
+        }
+      }
+      setAttachmentRemark(null);
+      await reloadLocal();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Не удалось добавить вложение к замечанию.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <Screen title="Работы" subtitle="Учет работ и замечания по смене доступны оффлайн.">
       <View style={styles.segment}>
@@ -396,7 +434,7 @@ export function WorkAccountingScreen() {
         </>
       ) : (
         <>
-          <PrimaryButton disabled={loading} icon="add-circle-outline" label="+ Замечание" onPress={openCreateRemark} />
+          <PrimaryButton disabled={loading} icon="add-circle-outline" label="Создать замечание" onPress={openCreateRemark} />
           {remarks.length === 0 ? (
             <EmptyCard title="Замечаний нет" text="Добавьте замечание по смене, участку и приложите фото при необходимости." />
           ) : (
@@ -411,11 +449,14 @@ export function WorkAccountingScreen() {
                 </View>
                 <Text style={[styles.text, { color: colors.mutedText }]}>Исполнитель: {remark.employeeName ? formatShortName(remark.employeeName) : "не указан"}</Text>
                 <Text style={[styles.muted, { color: colors.mutedText }]}>Дата: {formatDateTime(remark.createdAtLocal)}</Text>
-                <Text style={[styles.muted, { color: colors.mutedText }]}>Фото: {remark.mediaClientFileIds.length}</Text>
-                <View style={styles.inlineActions}>
-                  <PrimaryButton disabled={loading} icon="camera-outline" label="Сделать фото" onPress={() => router.push(`/camera/capture?remarkId=${remark.remarkId}&mediaKind=photo`)} variant="secondary" />
-                  <PrimaryButton disabled={loading} icon="images-outline" label="Из галереи" onPress={() => router.push(`/camera/capture?remarkId=${remark.remarkId}&mediaKind=photo&source=gallery`)} variant="secondary" />
-                </View>
+                <Text style={[styles.muted, { color: colors.mutedText }]}>Вложения: {remark.mediaClientFileIds.length}</Text>
+                <PrimaryButton
+                  disabled={loading}
+                  icon="attach-outline"
+                  label="Добавить вложение"
+                  onPress={() => setAttachmentRemark({ remarkId: remark.remarkId, title: remark.sectionName ?? "Замечание" })}
+                  variant="secondary"
+                />
               </Card>
             ))
           )}
@@ -445,12 +486,12 @@ export function WorkAccountingScreen() {
         open={remarkModalOpen}
         remarkComment={remarkComment}
         remarkEmployeeId={remarkEmployeeId}
-        remarkPhoto={remarkPhoto}
+        remarkAttachmentAfterSave={remarkAttachmentAfterSave}
         remarkSectionId={remarkSectionId}
         sections={sections}
         setRemarkComment={setRemarkComment}
         setRemarkEmployeeId={setRemarkEmployeeId}
-        setRemarkPhoto={setRemarkPhoto}
+        setRemarkAttachmentAfterSave={setRemarkAttachmentAfterSave}
         setRemarkSectionId={setRemarkSectionId}
       />
 
@@ -514,6 +555,16 @@ export function WorkAccountingScreen() {
         onClose={() => setAttachmentTask(null)}
         title="Вложение к работе"
         visible={Boolean(attachmentTask)}
+      />
+      <ActionSheet
+        actions={[
+          { icon: "camera-outline", label: "Сделать фото", onPress: () => void handleAttachRemarkMedia("photo") },
+          { icon: "videocam-outline", label: "Снять видео", onPress: () => void handleAttachRemarkMedia("video") },
+          { icon: "images-outline", label: "Выбрать из галереи", onPress: () => void handleAttachRemarkMedia("gallery") }
+        ]}
+        onClose={() => setAttachmentRemark(null)}
+        title={attachmentRemark ? `Вложение: ${attachmentRemark.title}` : "Вложение к замечанию"}
+        visible={Boolean(attachmentRemark)}
       />
     </Screen>
   );
@@ -594,14 +645,14 @@ function RemarkModal({
   onClose,
   onSave,
   open,
+  remarkAttachmentAfterSave,
   remarkComment,
   remarkEmployeeId,
-  remarkPhoto,
   remarkSectionId,
   sections,
+  setRemarkAttachmentAfterSave,
   setRemarkComment,
   setRemarkEmployeeId,
-  setRemarkPhoto,
   setRemarkSectionId
 }: {
   employees: MobileEmployeeDto[];
@@ -609,14 +660,14 @@ function RemarkModal({
   onClose: () => void;
   onSave: () => void;
   open: boolean;
+  remarkAttachmentAfterSave: RemarkAttachmentAfterSave;
   remarkComment: string;
   remarkEmployeeId: string;
-  remarkPhoto: PhotoAfterSave;
   remarkSectionId: string;
   sections: MobileEmuSectionDto[];
+  setRemarkAttachmentAfterSave: (value: RemarkAttachmentAfterSave) => void;
   setRemarkComment: (value: string) => void;
   setRemarkEmployeeId: (value: string) => void;
-  setRemarkPhoto: (value: PhotoAfterSave) => void;
   setRemarkSectionId: (value: string) => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -642,12 +693,12 @@ function RemarkModal({
             <Text style={styles.readOnlyValue}>Автоматически при сохранении</Text>
             <Text style={styles.label}>Описание замечания</Text>
             <TextInput multiline onChangeText={setRemarkComment} placeholder="Опишите замечание" placeholderTextColor="#9ca3af" style={[styles.input, styles.textarea]} textAlignVertical="top" value={remarkComment} />
-            <Text style={styles.label}>Фото после сохранения</Text>
+            <Text style={styles.label}>Вложения</Text>
             <View style={styles.inlineActions}>
-              <ChoiceButton active={remarkPhoto === "none"} label="Без фото" onPress={() => setRemarkPhoto("none")} />
-              <ChoiceButton active={remarkPhoto === "camera"} label="Камера" onPress={() => setRemarkPhoto("camera")} />
-              <ChoiceButton active={remarkPhoto === "gallery"} label="Галерея" onPress={() => setRemarkPhoto("gallery")} />
+              <ChoiceButton active={remarkAttachmentAfterSave === "later"} label="Добавить позже" onPress={() => setRemarkAttachmentAfterSave("later")} />
+              <ChoiceButton active={remarkAttachmentAfterSave === "now"} label="Добавить сейчас" onPress={() => setRemarkAttachmentAfterSave("now")} />
             </View>
+            <Text style={styles.helperText}>После сохранения можно добавить фото, видео или выбрать несколько файлов из галереи.</Text>
           </ScrollView>
           <View style={[styles.modalActions, { paddingBottom: Math.max(insets.bottom + 12, 22) }]}>
             <PrimaryButton disabled={loading} label="Отмена" onPress={onClose} variant="secondary" />
@@ -742,33 +793,132 @@ function TaskMenu({
   task: WorkItemDto | null;
 }) {
   const insets = useSafeAreaInsets();
+  const primaryAction = task ? getTaskPrimaryAction(task, {
+    onComplete,
+    onJoin,
+    onResume,
+    onStart
+  }) : null;
+  const secondaryActions = task ? getTaskSecondaryActions(task, {
+    onAttach,
+    onEdit,
+    onPause,
+    onReplace
+  }) : [];
 
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={Boolean(task)}>
       <View style={[styles.menuBackdrop, { paddingBottom: Math.max(insets.bottom + 12, 22) }]}>
         <View style={styles.menuCard}>
           <Text style={styles.modalTitle}>{task?.title ?? "Работа"}</Text>
-          {task?.capabilities.canStart ? (
-            <PrimaryButton disabled={loading} icon="play-outline" label="Начать работу" onPress={() => onStart(task)} />
+          {task ? <Text style={styles.menuSubtitle}>{task.sectionName ?? "Участок не указан"} · {statusLabel(task.status)}</Text> : null}
+          {primaryAction ? (
+            <PrimaryButton disabled={loading} icon={primaryAction.icon} label={primaryAction.label} onPress={primaryAction.onPress} />
           ) : null}
-          {task?.capabilities.canJoin ? (
-            <PrimaryButton disabled={loading} icon="person-add-outline" label="Присоединиться" onPress={() => onJoin(task)} />
+          {secondaryActions.length > 0 ? (
+            <View style={styles.menuSecondaryList}>
+              {secondaryActions.map((action) => (
+                <MenuSecondaryAction
+                  disabled={loading}
+                  icon={action.icon}
+                  key={action.label}
+                  label={action.label}
+                  onPress={action.onPress}
+                  danger={action.danger}
+                />
+              ))}
+            </View>
           ) : null}
-          {task?.capabilities.canReplace ? (
-            <PrimaryButton disabled={loading} icon="swap-horizontal-outline" label="Принять вместо исполнителя" onPress={() => onReplace(task)} variant="secondary" />
-          ) : null}
-          {task && task.capabilities.canResume ? (
-            <PrimaryButton disabled={loading} icon="play-outline" label="Продолжить" onPress={() => onResume(task)} />
-          ) : task?.capabilities.canPause ? (
-            <PrimaryButton disabled={loading} icon="pause-outline" label="Остановить" onPress={() => onPause(task)} variant="secondary" />
-          ) : null}
-          {task?.capabilities.canComplete ? <PrimaryButton disabled={loading} icon="create-outline" label="Изменить" onPress={() => onEdit(task)} variant="secondary" /> : null}
-          {task?.kind === "workSession" ? <PrimaryButton disabled={loading} icon="attach-outline" label="Добавить вложение" onPress={() => onAttach(task)} variant="secondary" /> : null}
-          {task?.capabilities.canComplete ? <PrimaryButton disabled={loading} icon="checkmark-circle-outline" label="Завершить" onPress={() => onComplete(task)} /> : null}
           <PrimaryButton disabled={loading} label="Закрыть" onPress={onClose} variant="ghost" />
         </View>
       </View>
     </Modal>
+  );
+}
+
+type TaskMenuCallbackMap = {
+  onAttach: (task: WorkItemDto) => void;
+  onComplete: (task: WorkItemDto) => void;
+  onEdit: (task: WorkItemDto) => void;
+  onJoin: (task: WorkItemDto) => void;
+  onPause: (task: WorkItemDto) => void;
+  onReplace: (task: WorkItemDto) => void;
+  onResume: (task: WorkItemDto) => void;
+  onStart: (task: WorkItemDto) => void;
+};
+
+function getTaskPrimaryAction(
+  task: WorkItemDto,
+  handlers: Pick<TaskMenuCallbackMap, "onComplete" | "onJoin" | "onResume" | "onStart">
+) {
+  if (task.capabilities.canStart) {
+    return { icon: "play-outline" as const, label: "Начать работу", onPress: () => handlers.onStart(task) };
+  }
+  if (task.capabilities.canJoin) {
+    return { icon: "person-add-outline" as const, label: "Присоединиться", onPress: () => handlers.onJoin(task) };
+  }
+  if (task.capabilities.canResume) {
+    return { icon: "play-outline" as const, label: "Продолжить", onPress: () => handlers.onResume(task) };
+  }
+  if (task.capabilities.canComplete) {
+    return { icon: "checkmark-circle-outline" as const, label: "Завершить", onPress: () => handlers.onComplete(task) };
+  }
+  return null;
+}
+
+function getTaskSecondaryActions(
+  task: WorkItemDto,
+  handlers: Pick<TaskMenuCallbackMap, "onAttach" | "onEdit" | "onPause" | "onReplace">
+) {
+  const actions: {
+    danger?: boolean;
+    icon: keyof typeof Ionicons.glyphMap;
+    label: string;
+    onPress: () => void;
+  }[] = [];
+
+  if (task.capabilities.canReplace) {
+    actions.push({ icon: "swap-horizontal-outline", label: "Принять вместо исполнителя", onPress: () => handlers.onReplace(task) });
+  }
+  if (task.capabilities.canPause) {
+    actions.push({ icon: "pause-outline", label: "Остановить", onPress: () => handlers.onPause(task), danger: true });
+  }
+  if (task.capabilities.canComplete) {
+    actions.push({ icon: "create-outline", label: "Изменить", onPress: () => handlers.onEdit(task) });
+  }
+  if (task.kind === "workSession") {
+    actions.push({ icon: "attach-outline", label: "Добавить вложение", onPress: () => handlers.onAttach(task) });
+  }
+  return actions;
+}
+
+function MenuSecondaryAction({
+  danger,
+  disabled,
+  icon,
+  label,
+  onPress
+}: {
+  danger?: boolean;
+  disabled?: boolean;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.menuSecondaryAction,
+        disabled ? styles.disabledAction : null,
+        pressed && !disabled ? styles.menuSecondaryPressed : null
+      ]}
+    >
+      <Ionicons color={danger ? "#ef4444" : "#1e5bff"} name={icon} size={18} />
+      <Text style={[styles.menuSecondaryText, danger ? styles.menuSecondaryDanger : null]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -1032,6 +1182,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 42
   },
+  helperText: {
+    color: "#6b7280",
+    fontSize: 13,
+    lineHeight: 18
+  },
   inlineActions: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1051,6 +1206,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800"
   },
+  disabledAction: {
+    opacity: 0.45
+  },
   menuBackdrop: {
     backgroundColor: "rgba(15, 26, 43, 0.22)",
     flex: 1,
@@ -1062,6 +1220,40 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     gap: 10,
     padding: 16
+  },
+  menuSecondaryAction: {
+    alignItems: "center",
+    borderColor: "#e5edf7",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 9,
+    minHeight: 46,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  menuSecondaryDanger: {
+    color: "#ef4444"
+  },
+  menuSecondaryList: {
+    gap: 8
+  },
+  menuSecondaryPressed: {
+    opacity: 0.72
+  },
+  menuSecondaryText: {
+    color: "#1e5bff",
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  menuSubtitle: {
+    color: "#6b7280",
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
+    marginHorizontal: 18,
+    marginTop: -8
   },
   message: {
     fontSize: 14,

@@ -24,7 +24,9 @@ public sealed record RoutePointDto(
     string Status,
     string? NfcCode,
     bool IsRequired,
-    bool RequiresPhoto);
+    bool RequiresPhoto,
+    string Description,
+    string Instruction);
 
 public sealed record CreateRouteDto(
     string Name,
@@ -57,7 +59,9 @@ public sealed record CreateRoutePointDto(
     string? Interval,
     string? ExpectedTime,
     string? Status,
-    bool RequiresPhoto);
+    bool RequiresPhoto = false,
+    string? Description = null,
+    string? Instruction = null);
 
 public sealed record UpdateRoutePointDto(
     string Name,
@@ -67,7 +71,9 @@ public sealed record UpdateRoutePointDto(
     string? Interval,
     string? ExpectedTime,
     string? Status,
-    bool RequiresPhoto);
+    bool RequiresPhoto = false,
+    string? Description = null,
+    string? Instruction = null);
 
 public sealed record ReorderRoutePointDto(
     int SequenceNo,

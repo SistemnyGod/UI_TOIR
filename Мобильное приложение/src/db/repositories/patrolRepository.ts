@@ -40,11 +40,15 @@ export type PointListItem = {
   pointId: string;
   routeId: string;
   name: string;
+  description?: string | null;
+  instruction?: string | null;
   orderIndex: number;
   required: boolean;
   requiresPhoto: boolean;
   status: "pending" | "scanned" | "ok" | "issue" | "deferred" | "skipped";
   comment: string | null;
+  issueTypeId?: string | null;
+  confirmationType?: "nfc" | "qr" | "manual" | null;
   photoClientFileIds: string[];
 };
 
@@ -440,6 +444,22 @@ export async function releaseAcceptedRequestLocally(assignmentId: string) {
     throw new Error("Вернуть можно только принятую заявку до начала обхода.");
   }
 
+  const pendingRelease = await db.getFirstAsync<{ client_operation_id: string }>(
+    `
+      SELECT client_operation_id
+      FROM outbox_commands
+      WHERE owner_user_id = ?
+        AND command_type = 'releasePatrolRequest'
+        AND entity_local_id = ?
+        AND status IN ('pending', 'sending', 'retryLater')
+      LIMIT 1
+    `,
+    [ownerUserId, assignmentId]
+  );
+  if (pendingRelease) {
+    throw new Error("Возврат заявки уже сохранён и ожидает подтверждения сервера.");
+  }
+
   const now = new Date().toISOString();
   const command: OutboxCommand = {
     clientOperationId: Crypto.randomUUID(),
@@ -460,18 +480,22 @@ export async function releaseAcceptedRequestLocally(assignmentId: string) {
 
   await withSqliteBusyRetry(() =>
     db.withExclusiveTransactionAsync(async (tx) => {
-      await tx.runAsync("DELETE FROM point_results WHERE assignment_id = ?", [assignment.assignmentId]);
-      await tx.runAsync("DELETE FROM assignment_route_points WHERE assignment_id = ?", [assignment.assignmentId]);
-      await tx.runAsync("DELETE FROM patrol_assignments WHERE assignment_id = ?", [assignment.assignmentId]);
-      await tx.runAsync(
+      const releaseAlreadyQueued = await tx.getFirstAsync<{ clientOperationId: string }>(
         `
-          UPDATE patrol_request_board
-          SET status = CASE WHEN assigned_full_name IS NULL THEN 'available' ELSE 'assigned' END
+          SELECT client_operation_id AS clientOperationId
+          FROM outbox_commands
           WHERE owner_user_id = ?
-            AND request_id = ?
+            AND command_type = 'releasePatrolRequest'
+            AND entity_local_id = ?
+            AND status IN ('pending', 'sending', 'retryLater')
+          LIMIT 1
         `,
-        [ownerUserId, assignment.requestId]
+        [ownerUserId, assignment.assignmentId]
       );
+      if (releaseAlreadyQueued) {
+        throw new Error("Возврат заявки уже сохранён и ожидает подтверждения сервера.");
+      }
+
       await insertOutboxCommandInTransaction(tx, command);
     })
   );
@@ -500,11 +524,15 @@ export async function listAssignmentPoints(assignmentId: string) {
     pointId: string;
     routeId: string;
     name: string;
+    description: string | null;
+    instruction: string | null;
     orderIndex: number;
     required: number;
     requiresPhoto: number;
     status: PointListItem["status"];
     comment: string | null;
+    issueTypeId: string | null;
+    confirmationType: PointListItem["confirmationType"];
     photoClientFileIdsJson: string | null;
   }>(
     `
@@ -512,11 +540,15 @@ export async function listAssignmentPoints(assignmentId: string) {
         point.point_id AS pointId,
         point.route_id AS routeId,
         point.name,
+        point.description,
+        point.instruction,
         point.order_index AS orderIndex,
         point.required AS required,
         point.requires_photo AS requiresPhoto,
         COALESCE(result.status, 'pending') AS status,
         result.comment AS comment,
+        result.issue_type_id AS issueTypeId,
+        result.confirmation_type AS confirmationType,
         result.photo_client_file_ids_json AS photoClientFileIdsJson
       FROM patrol_assignments assignment
       JOIN assignment_route_points point ON point.assignment_id = assignment.assignment_id
@@ -534,13 +566,55 @@ export async function listAssignmentPoints(assignmentId: string) {
     pointId: row.pointId,
     routeId: row.routeId,
     name: row.name,
+    description: row.description,
+    instruction: row.instruction,
     orderIndex: row.orderIndex,
     required: row.required === 1,
     requiresPhoto: row.requiresPhoto === 1,
     status: row.status,
     comment: row.comment,
+    issueTypeId: row.issueTypeId,
+    confirmationType: row.confirmationType,
     photoClientFileIds: parseStringArray(row.photoClientFileIdsJson)
   } satisfies PointListItem));
+}
+
+type ExistingPointResultForScan = {
+  status: PointListItem["status"];
+  comment: string | null;
+  issueTypeId: string | null;
+  severity: string | null;
+  deferredReason: string | null;
+  confirmationType: PointListItem["confirmationType"];
+  photoClientFileIdsJson: string | null;
+};
+
+async function getExistingPointResultForScan(
+  db: SqlExecutor,
+  ownerUserId: string,
+  assignmentId: string,
+  pointId: string
+) {
+  return db.getFirstAsync<ExistingPointResultForScan>(
+    `
+      SELECT
+        status,
+        comment,
+        issue_type_id AS issueTypeId,
+        severity,
+        deferred_reason AS deferredReason,
+        confirmation_type AS confirmationType,
+        photo_client_file_ids_json AS photoClientFileIdsJson
+      FROM point_results
+      WHERE owner_user_id = ? AND assignment_id = ? AND point_id = ?
+      LIMIT 1
+    `,
+    [ownerUserId, assignmentId, pointId]
+  );
+}
+
+function isTerminalPointStatus(status: PointListItem["status"] | null | undefined): status is "ok" | "issue" | "skipped" {
+  return status === "ok" || status === "issue" || status === "skipped";
 }
 
 export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
@@ -599,6 +673,27 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
     return { matched: false as const, scannedCode: scannedNfcCode };
   }
 
+  const existingResult = await getExistingPointResultForScan(db, ownerUserId, assignmentId, point.pointId);
+  if (isTerminalPointStatus(existingResult?.status)) {
+    return {
+      matched: true as const,
+      alreadyCompleted: true as const,
+      point: {
+        pointId: point.pointId,
+        routeId: point.routeId,
+        name: point.name,
+        orderIndex: point.orderIndex,
+        required: point.required === 1,
+        requiresPhoto: point.requiresPhoto === 1,
+        status: existingResult.status,
+        comment: existingResult.comment,
+        issueTypeId: existingResult.issueTypeId,
+        confirmationType: existingResult.confirmationType,
+        photoClientFileIds: parseStringArray(existingResult.photoClientFileIdsJson)
+      } satisfies PointListItem
+    };
+  }
+
   // The backend validates against RoutePoint.NfcCode, so after a tolerant local match
   // we send the normalized route value rather than a device-specific byte order variant.
 
@@ -623,22 +718,22 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
 
   await withSqliteBusyRetry(() =>
     db.withExclusiveTransactionAsync(async (tx) => {
-    await upsertPointResultInTransaction(tx, {
-    ownerUserId,
-    assignmentId,
-    pointId: point.pointId,
-    status: "scanned",
-    comment: null,
-    issueTypeId: null,
-    severity: null,
-    deferredReason: null,
-    completedAtLocal: null,
-    syncStatus: "pending",
-    confirmationType: "nfc",
-    nfcUidHash: normalizedNfcCode,
-    scannedAtLocal,
-    photoClientFileIds: []
-  });
+      await upsertPointResultInTransaction(tx, {
+        ownerUserId,
+        assignmentId,
+        pointId: point.pointId,
+        status: "scanned",
+        comment: existingResult?.comment ?? null,
+        issueTypeId: existingResult?.issueTypeId ?? null,
+        severity: existingResult?.severity ?? null,
+        deferredReason: existingResult?.deferredReason ?? null,
+        completedAtLocal: null,
+        syncStatus: "pending",
+        confirmationType: "nfc",
+        nfcUidHash: normalizedNfcCode,
+        scannedAtLocal,
+        photoClientFileIds: parseStringArray(existingResult?.photoClientFileIdsJson ?? null)
+      });
 
       await insertOutboxCommandInTransaction(tx, command);
     })
@@ -704,6 +799,27 @@ export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
     return { matched: false as const };
   }
 
+  const existingResult = await getExistingPointResultForScan(db, ownerUserId, assignmentId, point.pointId);
+  if (isTerminalPointStatus(existingResult?.status)) {
+    return {
+      matched: true as const,
+      alreadyCompleted: true as const,
+      point: {
+        pointId: point.pointId,
+        routeId: point.routeId,
+        name: point.name,
+        orderIndex: point.orderIndex,
+        required: point.required === 1,
+        requiresPhoto: point.requiresPhoto === 1,
+        status: existingResult.status,
+        comment: existingResult.comment,
+        issueTypeId: existingResult.issueTypeId,
+        confirmationType: existingResult.confirmationType,
+        photoClientFileIds: parseStringArray(existingResult.photoClientFileIdsJson)
+      } satisfies PointListItem
+    };
+  }
+
   const scannedAtLocal = new Date().toISOString();
   const command: OutboxCommand = {
     clientOperationId: Crypto.randomUUID(),
@@ -725,22 +841,22 @@ export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
 
   await withSqliteBusyRetry(() =>
     db.withExclusiveTransactionAsync(async (tx) => {
-    await upsertPointResultInTransaction(tx, {
-    ownerUserId,
-    assignmentId,
-    pointId: point.pointId,
-    status: "scanned",
-    comment: null,
-    issueTypeId: null,
-    severity: null,
-    deferredReason: null,
-    completedAtLocal: null,
-    syncStatus: "pending",
-    confirmationType: "qr",
-    nfcUidHash: null,
-    scannedAtLocal,
-    photoClientFileIds: []
-  });
+      await upsertPointResultInTransaction(tx, {
+        ownerUserId,
+        assignmentId,
+        pointId: point.pointId,
+        status: "scanned",
+        comment: existingResult?.comment ?? null,
+        issueTypeId: existingResult?.issueTypeId ?? null,
+        severity: existingResult?.severity ?? null,
+        deferredReason: existingResult?.deferredReason ?? null,
+        completedAtLocal: null,
+        syncStatus: "pending",
+        confirmationType: "qr",
+        nfcUidHash: null,
+        scannedAtLocal,
+        photoClientFileIds: parseStringArray(existingResult?.photoClientFileIdsJson ?? null)
+      });
 
       await insertOutboxCommandInTransaction(tx, command);
     })
@@ -770,6 +886,8 @@ export async function getPointForFill(assignmentId: string, pointId: string) {
     pointId: string;
     routeId: string;
     name: string;
+    description: string | null;
+    instruction: string | null;
     orderIndex: number;
     required: number;
     requiresPhoto: number;
@@ -790,6 +908,8 @@ export async function getPointForFill(assignmentId: string, pointId: string) {
         point.point_id AS pointId,
         point.route_id AS routeId,
         point.name,
+        point.description,
+        point.instruction,
         point.order_index AS orderIndex,
         point.required AS required,
         point.requires_photo AS requiresPhoto,
@@ -825,6 +945,8 @@ export async function getPointForFill(assignmentId: string, pointId: string) {
     pointId: row.pointId,
     routeId: row.routeId,
     name: row.name,
+    description: row.description,
+    instruction: row.instruction,
     orderIndex: row.orderIndex,
     required: row.required === 1,
     requiresPhoto: row.requiresPhoto === 1,
@@ -1008,6 +1130,15 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
   }
 
   for (const point of points) {
+    if (point.status === "scanned") {
+      problems.push({
+        pointId: point.pointId,
+        pointName: point.name,
+        orderIndex: point.orderIndex,
+        reason: "Выберите состояние метки после сканирования"
+      });
+    }
+
     if (point.required && point.status === "pending") {
       problems.push({
         pointId: point.pointId,
@@ -1032,6 +1163,24 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointName: point.name,
         orderIndex: point.orderIndex,
         reason: "Для неисправности нужен комментарий"
+      });
+    }
+
+    if (point.status === "issue" && !point.issueTypeId?.trim()) {
+      problems.push({
+        pointId: point.pointId,
+        pointName: point.name,
+        orderIndex: point.orderIndex,
+        reason: "Для неисправности нужно указать тип"
+      });
+    }
+
+    if (point.status === "skipped" && !point.comment?.trim()) {
+      problems.push({
+        pointId: point.pointId,
+        pointName: point.name,
+        orderIndex: point.orderIndex,
+        reason: "Укажите причину недоступности метки"
       });
     }
 
@@ -1133,9 +1282,10 @@ export async function completeAssignmentLocally(assignmentId: string) {
         UPDATE patrol_assignments
         SET status = 'completedLocal',
             completed_at_local = ?
-        WHERE assignment_id = ?
+        WHERE owner_user_id = ?
+          AND assignment_id = ?
       `,
-      [completedAtLocal, assignmentId]
+      [completedAtLocal, ownerUserId, assignmentId]
     );
 
       await insertOutboxCommandInTransaction(tx, command);
@@ -1281,6 +1431,66 @@ async function updateAssignmentLifecycleLocally(
 
   await withSqliteBusyRetry(() =>
     db.withExclusiveTransactionAsync(async (tx) => {
+      const current = await tx.getFirstAsync<{ status: string }>(
+        `
+          SELECT status
+          FROM patrol_assignments
+          WHERE owner_user_id = ?
+            AND assignment_id = ?
+          LIMIT 1
+        `,
+        [ownerUserId, assignment.assignmentId]
+      );
+      if (!current) {
+        throw new Error("Assignment is no longer available on this device.");
+      }
+
+      const releasePending = await tx.getFirstAsync<{ clientOperationId: string }>(
+        `
+          SELECT client_operation_id AS clientOperationId
+          FROM outbox_commands
+          WHERE owner_user_id = ?
+            AND command_type = 'releasePatrolRequest'
+            AND entity_local_id = ?
+            AND status IN ('pending', 'sending', 'retryLater')
+          LIMIT 1
+        `,
+        [ownerUserId, assignment.assignmentId]
+      );
+      if (releasePending) {
+        throw new Error("Заявка ожидает подтверждения возврата и пока недоступна для запуска.");
+      }
+
+      if (commandType === "startPatrolAssignment"
+        && !["accepted", "paused", "inProgress"].includes(current.status)) {
+        throw new Error("Only an accepted or paused patrol can be started.");
+      }
+
+      if (commandType === "pausePatrolAssignment" && current.status !== "inProgress") {
+        throw new Error("Only an in-progress patrol can be paused.");
+      }
+
+      if (commandType === "resumePatrolAssignment" && current.status !== "paused") {
+        throw new Error("Only a paused patrol can be resumed.");
+      }
+
+      if (commandType === "startPatrolAssignment" || commandType === "resumePatrolAssignment") {
+        const competing = await tx.getFirstAsync<{ assignmentId: string }>(
+          `
+            SELECT assignment_id AS assignmentId
+            FROM patrol_assignments
+            WHERE owner_user_id = ?
+              AND assignment_id <> ?
+              AND status IN ('inProgress', 'paused')
+            LIMIT 1
+          `,
+          [ownerUserId, assignment.assignmentId]
+        );
+        if (competing) {
+          throw new Error("Finish or hand off the current patrol before starting another one.");
+        }
+      }
+
       await tx.runAsync(
         `
           UPDATE patrol_assignments

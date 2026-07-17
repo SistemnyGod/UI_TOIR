@@ -2,7 +2,15 @@ import { fetchWithTimeout, serverUnavailableMessage } from "@/api/networkTimeout
 import { shouldTryNextMobileServer } from "@/api/serverFailoverPolicy";
 import { getOrCreateDeviceId } from "@/auth/deviceRegistration";
 import { assertSessionOwner } from "@/auth/sessionIdentity";
-import { clearAuthTokens, getAccessToken, getRefreshToken, getStoredOwnerUserId, setOfflineSession, setStoredOwnerUserId, setTokens } from "@/auth/tokenStorage";
+import {
+  clearAuthTokens,
+  getAccessToken,
+  getRefreshToken,
+  getStoredOwnerUserId,
+  setOfflineSession,
+  setStoredOwnerUserId,
+  setTokens
+} from "@/auth/tokenStorage";
 import { getMobileRuntimeConfig, getServerCandidateBaseUrls, setServerBaseUrl } from "@/core/serverSettings";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -22,7 +30,10 @@ export async function mobileRequest<TResponse>(path: string, options: RequestOpt
   let { apiBaseUrl, response } = await sendMobileRequestWithFailover(runtimeConfig.apiBaseUrl, path, options, token);
 
   let refreshedSession = false;
-  if (response.status === 401 && token && !options.skipAuthRefresh) {
+  // A queued report may reach this point after the access token was cleared
+  // locally while the refresh token is still valid. Login/refresh/logout opt
+  // out explicitly, so a normal API request should always try recovery.
+  if (response.status === 401 && !options.skipAuthRefresh) {
     const refreshedToken = await refreshAccessToken(apiBaseUrl);
     refreshedSession = true;
     ({ response } = await sendMobileRequestWithFailover(apiBaseUrl, path, options, refreshedToken));
@@ -31,14 +42,22 @@ export async function mobileRequest<TResponse>(path: string, options: RequestOpt
   if (!response.ok) {
     if (response.status === 401) {
       if (path.endsWith("/auth/login")) {
-        throw new Error(`Server is reachable (${apiBaseUrl}), but mobile login was rejected. Check login, password, and account binding.`);
+        throw new Error(`Сервер доступен (${apiBaseUrl}), но вход отклонён. Проверьте логин, пароль и привязку аккаунта.`);
       }
 
-      // A protected endpoint may return 401 during a server restart, a late response,
-      // or a temporary gateway inconsistency. Only the refresh endpoint can prove a
-      // session invalid; keep credentials and let the outbox retry the saved report.
-      const retryHint = refreshedSession ? " after token refresh" : "";
-      throw new Error(`Mobile API temporarily rejected the request${retryHint} (${apiBaseUrl}). The report is saved and will be retried automatically.`);
+      if (refreshedSession) {
+        // A refreshed token was also rejected.  Do not leave the queue in an
+        // automatic retry loop with the same invalid session; preserve local
+        // owner data and force an explicit sign-in instead.
+        await clearAuthTokens();
+        throw new Error(
+          `Сессия не восстановлена после обновления токена. Войдите в аккаунт повторно. Очередь отправки сохранена. Адрес: ${apiBaseUrl}`
+        );
+      }
+
+      throw new Error(
+        `Сессия истекла. Войдите в аккаунт повторно. Локальные отчёты и очередь отправки сохранены. Адрес: ${apiBaseUrl}`
+      );
     }
 
     const message = await readErrorMessage(response);

@@ -101,6 +101,20 @@ public sealed record EmuWorkAttachmentDto(
     DateTimeOffset UploadedAt,
     string DownloadUrl);
 
+public sealed record EmuShiftRemarkDto(
+    Guid Id,
+    Guid EmployeeId,
+    string EmployeeName,
+    Guid SectionId,
+    string SectionName,
+    string Title,
+    string Comment,
+    string Status,
+    DateTimeOffset CreatedAtLocal,
+    DateTimeOffset CreatedAtServer,
+    string Source,
+    IReadOnlyList<EmuWorkAttachmentDto> Attachments);
+
 public sealed record EmuWorkSessionChangesDto(
     DateTimeOffset ServerTime,
     IReadOnlyList<EmuWorkSessionDto> ChangedSessions,

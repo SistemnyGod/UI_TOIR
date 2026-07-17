@@ -49,6 +49,7 @@ internal sealed partial class EfMobileAppService
                 .ThenInclude(route => route!.Points)
             .Include(item => item.RouteRevision)
                 .ThenInclude(revision => revision!.Points)
+            .Include(item => item.PatrolRequest)
             .FirstOrDefault(item => item.Id == assignmentId);
 
         if (assignment is null || assignment.Route is null)
@@ -61,10 +62,15 @@ internal sealed partial class EfMobileAppService
             return AssignmentPointValidation.Fail(Conflict(clientOperationId, "Assignment belongs to another employee."));
         }
 
-        if (assignment.Status is AssignmentStatusValues.Cancelled or AssignmentStatusValues.Completed)
+        var assignmentCancelled = assignment.Status == AssignmentStatusValues.Cancelled
+            || assignment.PatrolRequest?.Status == AssignmentStatusValues.Cancelled;
+        var assignmentCompleted = assignment.Status == AssignmentStatusValues.Completed
+            || assignment.PatrolRequest?.Status == AssignmentStatusValues.Completed;
+
+        if (assignmentCancelled || assignmentCompleted)
         {
             return AssignmentPointValidation.Fail(
-                assignment.Status == AssignmentStatusValues.Cancelled
+                assignmentCancelled
                     ? Conflict(clientOperationId, "Patrol assignment is already closed.", "assignmentCancelled")
                     : Conflict(clientOperationId, "Patrol assignment is already closed."));
         }

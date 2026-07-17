@@ -5,13 +5,15 @@ import { RoutePointDrawer } from "./components/routes/RoutePointDrawer";
 import { RouteWorkspacePanel } from "./components/routes/RouteWorkspacePanel";
 import { useRoutesEditor } from "../../hooks/useRoutesEditor";
 import { routesFallback } from "../../repositories/routesRepository";
-import type { RouteDirectoryItem, RouteFormPayload, RouteMode, RoutePointFormPayload, ScreenId } from "../../types";
+import { Panel, SkeletonList, SkeletonPreview } from "../../shared/ui";
+import type { DataSourceStatus, RouteDirectoryItem, RouteFormPayload, RouteMode, RoutePointFormPayload, ScreenId } from "../../types";
 
 type MaybePromise<T> = T | Promise<T>;
 
 export function RoutesScreen({
   canAssign = true,
   canManage = true,
+  dataStatus = "ready",
   selectedRouteId,
   selectedPointId,
   mode,
@@ -33,6 +35,7 @@ export function RoutesScreen({
 }: {
   canAssign?: boolean;
   canManage?: boolean;
+  dataStatus?: DataSourceStatus;
   selectedRouteId: string;
   selectedPointId: string;
   mode: RouteMode;
@@ -80,17 +83,35 @@ export function RoutesScreen({
     onUpdateRoutePoint,
   });
 
+  const isInitialLoading = dataStatus === "loading" && routeDirectory.length === 0;
+
   return (
-    <div className="routes-screen">
-      <RouteDirectoryPanel
+    <div className={`routes-screen ${isInitialLoading ? "is-loading" : ""}`} aria-busy={isInitialLoading}>
+      {isInitialLoading ? (
+        <>
+          <Panel className="route-directory-loading" title="Маршруты" note="Загружаем справочник маршрутов">
+            <SkeletonList rows={4} />
+          </Panel>
+          <Panel
+            className="route-editor route-workspace-loading"
+            title="Данные маршрута"
+            note="Связываем маршрут и контрольные точки"
+          >
+            <SkeletonPreview />
+          </Panel>
+        </>
+      ) : (
+        <>
+          <RouteDirectoryPanel
         canManage={canManage}
         routes={routeDirectory}
         selectedRouteId={selectedRoute?.id ?? ""}
         onCreateRoute={actions.startRouteCreate}
         onSelectRoute={onSelectRoute}
-      />
+          />
 
-      <RouteWorkspacePanel
+          <div className="route-workspace-transition" key={selectedRoute?.id ?? "route-empty"} aria-live="polite">
+            <RouteWorkspacePanel
         canAssign={canAssign}
         canManage={canManage}
         mode={mode}
@@ -117,7 +138,10 @@ export function RoutesScreen({
         onStartRouteCreate={actions.startRouteCreate}
         onStartRouteEdit={actions.startRouteEdit}
         onSubmitRoute={actions.submitRoute}
-      />
+            />
+          </div>
+        </>
+      )}
 
       <RouteCreateModal
         draft={routeDraft}

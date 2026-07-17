@@ -56,7 +56,9 @@ public sealed record MobileAccountSessionDto(
     string Platform,
     string AppVersion,
     string IpAddress,
-    DateTimeOffset LastSeenAt);
+    DateTimeOffset LastSeenAt,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? EndedAt);
 
 public sealed record MobileAccountSecurityEventDto(
     Guid Id,

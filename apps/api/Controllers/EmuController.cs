@@ -405,6 +405,45 @@ public sealed class EmuController(
         return Ok(workService.GetWorkSessionChanges(since, GetAllowedEmuSectionIds(actor), GetRestrictedEmuWorkOwnerUserId(actor)));
     }
 
+    [HttpGet("shift-remarks")]
+    [RequirePermission("emu.view")]
+    public ActionResult<EmuListResponseDto<EmuShiftRemarkDto>> ShiftRemarks(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] Guid? sectionId = null,
+        [FromQuery] Guid? employeeId = null)
+    {
+        var actor = ReadCurrentUser();
+        if (sectionId is not null && !CanAccessEmuSection(actor, sectionId.Value))
+        {
+            return Forbidden("emu_section");
+        }
+
+        return Ok(workService.GetShiftRemarks(page, pageSize, sectionId, employeeId, GetAllowedEmuSectionIds(actor)));
+    }
+
+    [HttpGet("shift-remarks/{id:guid}/attachments/{attachmentId:guid}")]
+    [RequirePermission("emu.view")]
+    public ActionResult DownloadShiftRemarkAttachment(Guid id, Guid attachmentId)
+    {
+        var actor = ReadCurrentUser();
+        var current = workService.GetShiftRemark(id);
+        if (!current.Succeeded || current.Value is null)
+        {
+            return NotFound();
+        }
+
+        if (!CanAccessEmuSection(actor, current.Value.SectionId))
+        {
+            return Forbidden("emu_section");
+        }
+
+        var attachment = workService.GetShiftRemarkAttachmentFile(id, attachmentId);
+        return attachment is null
+            ? NotFound()
+            : PhysicalFile(attachment.Path, attachment.ContentType, attachment.FileName);
+    }
+
     [HttpGet("work-sessions/{id:guid}")]
     [RequirePermission("emu.view")]
     public ActionResult<EmuWorkSessionDto> WorkSession(Guid id)

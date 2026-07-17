@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   EmuDecisionDto,
+  EmuShiftRemarkDto,
   SessionUserDto,
 } from "../../api/contracts";
 import type { EmuWorkspace } from "../../hooks/useEmuWorkspace";
@@ -100,6 +101,10 @@ export function EmuWorkAccountingScreen({
     [boardWork, sectionFilter, sourceFilter],
   );
   const ongoingWork = sectionFilteredBoardWork;
+  const visibleShiftRemarks = useMemo(
+    () => workspace.shiftRemarks.rows.filter((remark) => !sectionFilter || remark.sectionId === sectionFilter),
+    [sectionFilter, workspace.shiftRemarks.rows],
+  );
   const workFilterCounts = useMemo(() => buildWorkFilterCounts(sectionFilteredBoardWork), [sectionFilteredBoardWork]);
   const visibleWork = useMemo(
     () => sectionFilteredBoardWork.filter((work) => workFilter === "all" || resolveWorkCardState(work) === workFilter),
@@ -343,6 +348,7 @@ export function EmuWorkAccountingScreen({
       {workspace.error ? <div className="emu-alert">{workspace.error}</div> : null}
 
       <WorkAttentionSummary activeWork={ongoingWork} />
+      <MobileShiftRemarksPanel remarks={visibleShiftRemarks} total={workspace.shiftRemarks.total} />
 
       <div className="emu-work-layout">
         <section className="emu-panel emu-work-main">
@@ -540,4 +546,91 @@ export function EmuWorkAccountingScreen({
       ) : null}
     </section>
   );
+}
+
+function MobileShiftRemarksPanel({ remarks, total }: { remarks: EmuShiftRemarkDto[]; total: number }) {
+  return (
+    <section className="emu-panel emu-shift-remarks-panel">
+      <div className="emu-panel-header">
+        <div>
+          <h3>Замечания из мобильного приложения</h3>
+          <span>Сотрудники фиксируют замечания на телефоне; после синхронизации они появляются здесь.</span>
+        </div>
+        <span className="emu-decision-badge">Всего: {total}</span>
+      </div>
+      {remarks.length === 0 ? (
+        <div className="emu-empty-state">Замечаний по выбранному участку пока нет.</div>
+      ) : (
+        <div className="emu-shift-remark-grid">
+          {remarks.map((remark) => (
+            <article className="emu-shift-remark-card" key={remark.id}>
+              <header>
+                <div>
+                  <strong>{remark.sectionName}</strong>
+                  <span>{remark.employeeName}</span>
+                </div>
+                <span className="emu-status-pill">{remarkStatusText(remark.status)}</span>
+              </header>
+              <p>{remark.comment}</p>
+              <dl>
+                <div>
+                  <dt>Создано</dt>
+                  <dd>{formatRemarkDate(remark.createdAtLocal)}</dd>
+                </div>
+                <div>
+                  <dt>Доставлено</dt>
+                  <dd>{formatRemarkDate(remark.createdAtServer)}</dd>
+                </div>
+                <div>
+                  <dt>Источник</dt>
+                  <dd>Мобильное приложение</dd>
+                </div>
+              </dl>
+              <div className="emu-shift-remark-attachments">
+                {remark.attachments.length === 0 ? (
+                  <span>Вложений нет</span>
+                ) : (
+                  remark.attachments.map((file) => (
+                    <a href={file.downloadUrl} key={file.fileId} rel="noreferrer" target="_blank">
+                      {isVideoAttachment(file.contentType) ? "Видео" : "Фото"} · {formatFileSize(file.sizeBytes)}
+                    </a>
+                  ))
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function remarkStatusText(status: string) {
+  if (status === "accepted") return "Принято";
+  if (status === "pending") return "Ожидает отправки";
+  if (status === "rejected") return "Отклонено";
+  if (status === "conflict") return "Конфликт";
+  return status || "-";
+}
+
+function formatRemarkDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("ru-RU", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function isVideoAttachment(contentType: string) {
+  return contentType.toLowerCase().startsWith("video/");
+}
+
+function formatFileSize(sizeBytes: number) {
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) return "0 МБ";
+  if (sizeBytes < 1024 * 1024) return `${Math.max(1, Math.round(sizeBytes / 1024))} КБ`;
+  return `${(sizeBytes / 1024 / 1024).toFixed(1)} МБ`;
 }

@@ -117,7 +117,8 @@ export function RouteCreateModal({
       expectedTime: point.expectedTime,
       interval: point.interval,
       name: point.name,
-      requiresPhoto: point.requiresPhoto,
+      description: point.description,
+      instruction: point.instruction,
       status: point.status,
       tag: point.tag,
       type: point.type,
@@ -240,13 +241,13 @@ export function RouteCreateModal({
                   Зона точки
                   <input value={pointDraft.zone} onChange={(event) => patchPoint({ zone: event.currentTarget.value })} />
                 </label>
-                <label className="route-create-check">
-                  <input
-                    checked={pointDraft.requiresPhoto}
-                    onChange={(event) => patchPoint({ requiresPhoto: event.currentTarget.checked })}
-                    type="checkbox"
-                  />
-                  Фото обязательно
+                <label className="route-point-builder-copy">
+                  Описание оборудования
+                  <textarea rows={3} maxLength={1000} value={pointDraft.description} onChange={(event) => patchPoint({ description: event.currentTarget.value })} />
+                </label>
+                <label className="route-point-builder-copy">
+                  Инструкция к метке
+                  <textarea rows={3} maxLength={2000} value={pointDraft.instruction} onChange={(event) => patchPoint({ instruction: event.currentTarget.value })} />
                 </label>
               </div>
               <button className="button primary route-create-add-point" disabled={hasDuplicateTag} onClick={addOrUpdatePoint} type="button">

@@ -34,6 +34,16 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Patrol request is not available on the server.");
         }
 
+        if (patrolRequest.Status == AssignmentStatusValues.Cancelled)
+        {
+            return Conflict(command.ClientOperationId, "Patrol request was cancelled by dispatcher.", "assignmentCancelled");
+        }
+
+        if (patrolRequest.Status == AssignmentStatusValues.Completed)
+        {
+            return Conflict(command.ClientOperationId, "Patrol request is already completed.");
+        }
+
         var serverRevision = patrolRequest.CreatedAt.ToUnixTimeMilliseconds();
         if (serverRevision != requestRevision.Value)
         {
@@ -129,6 +139,16 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Patrol request is not available on the server.");
         }
 
+        if (patrolRequest.Status == AssignmentStatusValues.Cancelled)
+        {
+            return Conflict(command.ClientOperationId, "Patrol request was cancelled by dispatcher.", "assignmentCancelled");
+        }
+
+        if (patrolRequest.Status == AssignmentStatusValues.Completed)
+        {
+            return Conflict(command.ClientOperationId, "Patrol request is already completed.");
+        }
+
         var serverRevision = patrolRequest.CreatedAt.ToUnixTimeMilliseconds();
         if (serverRevision != requestRevision.Value)
         {
@@ -147,9 +167,14 @@ internal sealed partial class EfMobileAppService
                 return Conflict(command.ClientOperationId, "Patrol request is already assigned to another employee.");
             }
 
-            if (patrolRequest.Assignment.Status == AssignmentStatusValues.Cancelled || patrolRequest.Assignment.Status == AssignmentStatusValues.Completed)
+            if (patrolRequest.Assignment.Status == AssignmentStatusValues.Cancelled)
             {
-                return Conflict(command.ClientOperationId, "Patrol request is already closed.");
+                return Conflict(command.ClientOperationId, "Patrol request was cancelled by dispatcher.", "assignmentCancelled");
+            }
+
+            if (patrolRequest.Assignment.Status == AssignmentStatusValues.Completed)
+            {
+                return Conflict(command.ClientOperationId, "Patrol request is already completed.");
             }
 
             patrolRequest.Assignment.Status = AssignmentStatusValues.Accepted;
@@ -222,6 +247,16 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Assignment is not available.");
         }
 
+        if (assignment.PatrolRequest?.Status == AssignmentStatusValues.Cancelled)
+        {
+            return Conflict(command.ClientOperationId, "Patrol request was cancelled by dispatcher.", "assignmentCancelled");
+        }
+
+        if (assignment.PatrolRequest?.Status == AssignmentStatusValues.Completed)
+        {
+            return Conflict(command.ClientOperationId, "Patrol request is already completed.");
+        }
+
         if (assignment.Status != AssignmentStatusValues.Accepted && assignment.Status != AssignmentStatusValues.Assigned && assignment.Status != AssignmentStatusValues.Waiting)
         {
             return Rejected(command.ClientOperationId, "Only accepted patrol request can be returned before start.");
@@ -251,11 +286,24 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Assignment is not available.");
         }
 
-        if (assignment.Status == AssignmentStatusValues.Cancelled || assignment.Status == AssignmentStatusValues.Completed)
+        if (assignment.PatrolRequest?.Status == AssignmentStatusValues.Cancelled)
         {
-            return assignment.Status == AssignmentStatusValues.Cancelled
-                ? Conflict(command.ClientOperationId, "Closed patrol assignment cannot be started.", "assignmentCancelled")
-                : Conflict(command.ClientOperationId, "Closed patrol assignment cannot be started.");
+            return Conflict(command.ClientOperationId, "Patrol request was cancelled by dispatcher.", "assignmentCancelled");
+        }
+
+        if (assignment.PatrolRequest?.Status == AssignmentStatusValues.Completed)
+        {
+            return Conflict(command.ClientOperationId, "Patrol request is already completed.");
+        }
+
+        if (assignment.Status == AssignmentStatusValues.Cancelled)
+        {
+            return Conflict(command.ClientOperationId, "Closed patrol assignment cannot be started.", "assignmentCancelled");
+        }
+
+        if (assignment.Status == AssignmentStatusValues.Completed)
+        {
+            return Conflict(command.ClientOperationId, "Closed patrol assignment cannot be started.");
         }
 
         if (dbContext.Database.IsNpgsql())
@@ -295,6 +343,16 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Assignment is not available.");
         }
 
+        if (assignment.PatrolRequest?.Status == AssignmentStatusValues.Cancelled)
+        {
+            return Conflict(command.ClientOperationId, "Patrol request was cancelled by dispatcher.", "assignmentCancelled");
+        }
+
+        if (assignment.PatrolRequest?.Status == AssignmentStatusValues.Completed)
+        {
+            return Conflict(command.ClientOperationId, "Patrol request is already completed.");
+        }
+
         if (assignment.Status != AssignmentStatusValues.InProgress)
         {
             return Rejected(command.ClientOperationId, "Only patrol in progress can be paused.");
@@ -316,6 +374,16 @@ internal sealed partial class EfMobileAppService
         if (assignment is null)
         {
             return Conflict(command.ClientOperationId, "Assignment is not available.");
+        }
+
+        if (assignment.PatrolRequest?.Status == AssignmentStatusValues.Cancelled)
+        {
+            return Conflict(command.ClientOperationId, "Patrol request was cancelled by dispatcher.", "assignmentCancelled");
+        }
+
+        if (assignment.PatrolRequest?.Status == AssignmentStatusValues.Completed)
+        {
+            return Conflict(command.ClientOperationId, "Patrol request is already completed.");
         }
 
         if (assignment.Status != AssignmentStatusValues.Paused)
@@ -347,6 +415,16 @@ internal sealed partial class EfMobileAppService
         if (assignment is null)
         {
             return Conflict(command.ClientOperationId, "Assignment is not available.");
+        }
+
+        if (assignment.PatrolRequest?.Status == AssignmentStatusValues.Cancelled)
+        {
+            return Conflict(command.ClientOperationId, "Patrol request was cancelled by dispatcher.", "assignmentCancelled");
+        }
+
+        if (assignment.PatrolRequest?.Status == AssignmentStatusValues.Completed)
+        {
+            return Conflict(command.ClientOperationId, "Patrol request is already completed.");
         }
 
         if (assignment.Status == AssignmentStatusValues.Completed || assignment.Status == AssignmentStatusValues.Cancelled)

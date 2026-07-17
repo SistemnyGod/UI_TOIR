@@ -117,6 +117,26 @@ export async function attachRemarkVideoFromGallery(remarkId: string) {
   return "attached" satisfies MediaAttachResult;
 }
 
+export async function attachRemarkMediaFromGallery(remarkId: string): Promise<MediaAttachSummary> {
+  const ownerUserId = await prepareOwnerAndStorage();
+  const assets = await pickMixedMediaFromGallery();
+  const summary = await attachMixedMediaAssets(assets, async (asset) => {
+    if (isVideoAsset(asset)) {
+      const file = await prepareRemarkVideo(ownerUserId, remarkId, asset);
+      await attachMediaToShiftRemark(remarkId, file);
+      return "video";
+    }
+
+    await attachRemarkPhotoAssets(ownerUserId, remarkId, [asset]);
+    return "photo";
+  });
+
+  if (summary.attachedCount > 0) {
+    triggerForegroundSyncWithRetry();
+  }
+  return summary;
+}
+
 export async function attachWorkPhotoFromCamera(workTaskId: string) {
   const ownerUserId = await prepareOwnerAndStorage();
   const assets = await pickImages("camera");

@@ -1,6 +1,7 @@
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getDatabase } from "@/db/database";
 import { MobileNotificationDto } from "@/domain/patrol/patrolTypes";
+import { mergeNotificationReadState } from "@/services/notificationReadState";
 
 export async function saveDevicePushToken(deviceId: string, pushToken: string) {
   const db = await getDatabase();
@@ -16,6 +17,22 @@ export async function saveNotifications(notifications: MobileNotificationDto[]) 
   const db = await getDatabase();
   await db.withExclusiveTransactionAsync(async (tx) => {
     for (const notification of notifications) {
+      const local = await tx.getFirstAsync<{ read_at: string | null; read_sync_pending: number }>(
+        `
+          SELECT read_at, read_sync_pending
+          FROM mobile_notifications
+          WHERE notification_id = ? AND owner_user_id = ?
+        `,
+        [notification.id, ownerUserId]
+      );
+      const mergedReadState = mergeNotificationReadState(
+        {
+          readAt: local?.read_at ?? null,
+          readSyncPending: (local?.read_sync_pending ?? 0) === 1
+        },
+        notification.readAt
+      );
+
       await tx.runAsync(
         `
           INSERT INTO mobile_notifications (
@@ -27,17 +44,20 @@ export async function saveNotifications(notifications: MobileNotificationDto[]) 
             entity_type,
             entity_id,
             created_at,
-            read_at
+            read_at,
+            read_sync_pending
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(notification_id) DO UPDATE SET
+            owner_user_id = excluded.owner_user_id,
             notification_type = excluded.notification_type,
             title = excluded.title,
             message = excluded.message,
             entity_type = excluded.entity_type,
             entity_id = excluded.entity_id,
             created_at = excluded.created_at,
-            read_at = excluded.read_at
+            read_at = excluded.read_at,
+            read_sync_pending = excluded.read_sync_pending
         `,
         [
           notification.id,
@@ -48,7 +68,8 @@ export async function saveNotifications(notifications: MobileNotificationDto[]) 
           notification.entityType,
           notification.entityId,
           notification.createdAt,
-          notification.readAt
+          mergedReadState.readAt,
+          mergedReadState.readSyncPending ? 1 : 0
         ]
       );
     }
@@ -82,7 +103,36 @@ export async function listLocalNotifications(limit = 5) {
   );
 }
 
-export async function markLocalNotificationRead(notificationId: string, readAt: string) {
+export async function markLocalNotificationRead(notificationId: string, readAt: string, readSyncPending = true) {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return;
+  }
+
   const db = await getDatabase();
-  await db.runAsync("UPDATE mobile_notifications SET read_at = ? WHERE notification_id = ?", [readAt, notificationId]);
+  await db.runAsync(
+    "UPDATE mobile_notifications SET read_at = ?, read_sync_pending = ? WHERE notification_id = ? AND owner_user_id = ?",
+    [readAt, readSyncPending ? 1 : 0, notificationId, ownerUserId]
+  );
+}
+
+export async function listPendingNotificationReads() {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return [];
+  }
+
+  const db = await getDatabase();
+  return db.getAllAsync<{ notificationId: string; readAt: string }>(
+    `
+      SELECT
+        notification_id AS notificationId,
+        read_at AS readAt
+      FROM mobile_notifications
+      WHERE owner_user_id = ?
+        AND read_sync_pending = 1
+        AND read_at IS NOT NULL
+    `,
+    [ownerUserId]
+  );
 }

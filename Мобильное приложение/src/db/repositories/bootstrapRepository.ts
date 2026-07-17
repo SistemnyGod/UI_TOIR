@@ -63,7 +63,9 @@ export async function countBlockingLocalUserData() {
           WHERE status IN ('inProgress', 'paused', 'completedLocal', 'syncError')
              OR sync_status <> 'synced') +
         (SELECT COUNT(*) FROM shift_remarks
-          WHERE sync_status <> 'synced')
+          WHERE sync_status <> 'synced') +
+        (SELECT COUNT(*) FROM mobile_diagnostic_reports
+          WHERE status = 'pending')
       ) AS count
   `);
 
@@ -150,7 +152,7 @@ async function clearLocalUserTablesInTransaction(executor: SqlExecutor) {
     await executor.runAsync("DELETE FROM mobile_action_log");
     await executor.runAsync("DELETE FROM mobile_diagnostic_reports");
     await executor.runAsync("DELETE FROM mobile_diagnostic_state");
-  }
+}
 
 async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapDto) {
   const ownerUserId = bootstrap.user.serverUserId;
@@ -574,6 +576,8 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             point_id,
             route_id,
             name,
+            description,
+            instruction,
             order_index,
             nfc_uid_hash,
             qr_code_hash,
@@ -581,10 +585,12 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             requires_photo,
             revision
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(point_id) DO UPDATE SET
             route_id = excluded.route_id,
             name = excluded.name,
+            description = excluded.description,
+            instruction = excluded.instruction,
             order_index = excluded.order_index,
             nfc_uid_hash = excluded.nfc_uid_hash,
             qr_code_hash = excluded.qr_code_hash,
@@ -596,6 +602,8 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
           point.pointId,
           point.routeId,
           point.name,
+          point.description,
+          point.instruction,
           point.orderIndex,
           point.nfcUidHash,
           point.qrCodeHash,
@@ -614,6 +622,8 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             point_id,
             route_id,
             name,
+            description,
+            instruction,
             order_index,
             nfc_uid_hash,
             qr_code_hash,
@@ -626,6 +636,8 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             point_id,
             route_id,
             name,
+            description,
+            instruction,
             order_index,
             nfc_uid_hash,
             qr_code_hash,

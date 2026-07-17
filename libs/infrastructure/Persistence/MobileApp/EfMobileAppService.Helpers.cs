@@ -41,6 +41,8 @@ internal sealed partial class EfMobileAppService
                     Zone = point.Zone,
                     Type = point.Type,
                     Tag = point.Tag,
+                    Description = point.Description,
+                    Instruction = point.Instruction,
                     NfcCode = point.NfcCode,
                     IsRequired = point.IsRequired,
                     RequiresPhoto = point.RequiresPhoto,
@@ -63,6 +65,8 @@ internal sealed partial class EfMobileAppService
                 Zone = point.Zone,
                 Type = point.Type,
                 Tag = point.Tag,
+                Description = point.Description,
+                Instruction = point.Instruction,
                 NfcCode = point.NfcCode,
                 IsRequired = point.IsRequired,
                 RequiresPhoto = point.RequiresPhoto,
@@ -153,11 +157,8 @@ internal sealed partial class EfMobileAppService
         return activeBindingNames.Length > 0 ? activeBindingNames : account.BoundEmployees;
     }
 
-    private static DateTimeOffset BuildPlannedStartAt(DateOnly date, TimeOnly? time)
-    {
-        var dateTime = date.ToDateTime(time ?? TimeOnly.MinValue);
-        return new DateTimeOffset(DateTime.SpecifyKind(dateTime, DateTimeKind.Utc));
-    }
+    private DateTimeOffset BuildPlannedStartAt(DateOnly date, TimeOnly? time) =>
+        patrolTimeZone.ToUtc(date, time ?? TimeOnly.MinValue);
 
     private static string BuildWorkTaskTitle(EmuWorkSessionEntity workSession)
     {
@@ -197,6 +198,18 @@ internal sealed partial class EfMobileAppService
 
     private static string MapRequestStatus(PatrolRequestEntity request)
     {
+        if (request.Assignment?.Status == AssignmentStatusValues.Cancelled
+            || request.Status == AssignmentStatusValues.Cancelled)
+        {
+            return "cancelledServer";
+        }
+
+        if (request.Assignment?.Status == AssignmentStatusValues.Completed
+            || request.Status == AssignmentStatusValues.Completed)
+        {
+            return "completedServer";
+        }
+
         if (request.Assignment?.Status == AssignmentStatusValues.Assigned
             || request.Assignment?.Status == AssignmentStatusValues.Waiting)
         {
@@ -221,11 +234,6 @@ internal sealed partial class EfMobileAppService
         if (request.Assignment?.Status == AssignmentStatusValues.NeedsDispatcherDecision)
         {
             return "needsDispatcherDecision";
-        }
-
-        if (request.Assignment?.Status == AssignmentStatusValues.Cancelled || request.Status == AssignmentStatusValues.Cancelled)
-        {
-            return "cancelledServer";
         }
 
         return request.EmployeeId is null ? "available" : "assigned";

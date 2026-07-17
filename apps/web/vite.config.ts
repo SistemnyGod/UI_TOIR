@@ -102,6 +102,15 @@ export default defineConfig({
       "/health": "http://localhost:5080"
     }
   },
+  preview: {
+    host: "127.0.0.1",
+    port: 5176,
+    strictPort: true,
+    proxy: {
+      "/api": "http://localhost:5080",
+      "/health": "http://localhost:5080"
+    }
+  },
   test: {
     environment: "jsdom",
     exclude: [...configDefaults.exclude, "e2e/**"],

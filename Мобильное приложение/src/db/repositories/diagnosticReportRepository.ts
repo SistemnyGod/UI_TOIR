@@ -1,5 +1,6 @@
 import * as Crypto from "expo-crypto";
 
+import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getDatabase } from "@/db/database";
 import { countPendingOutboxCommands } from "@/db/repositories/outboxRepository";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
@@ -47,6 +48,11 @@ export async function getOrCreatePendingDiagnosticReport(
   now = new Date(),
   options: { force?: boolean; includeEmpty?: boolean } = {}
 ): Promise<MobileDiagnosticReport | null> {
+  const currentOwnerUserId = await getStoredOwnerUserId();
+  if (!currentOwnerUserId || currentOwnerUserId !== ownerUserId) {
+    return null;
+  }
+
   const db = await getDatabase();
   const pending = await db.getFirstAsync<{ payload_json: string }>(
     `SELECT payload_json FROM mobile_diagnostic_reports WHERE owner_user_id = ? AND status = 'pending' ORDER BY created_at_local LIMIT 1`,
@@ -84,7 +90,7 @@ export async function getOrCreatePendingDiagnosticReport(
       FROM mobile_action_log
       WHERE created_at_local > ?
         AND created_at_local <= ?
-        AND (owner_user_id = ? OR owner_user_id IS NULL)
+        AND owner_user_id = ?
         AND (
           LOWER(event_type) LIKE '%error%'
           OR LOWER(event_type) LIKE '%failed%'
@@ -130,22 +136,58 @@ export async function getOrCreatePendingDiagnosticReport(
         }]
   };
 
-  await withSqliteBusyRetry(() =>
-    db.runAsync(
-      `
-        INSERT OR IGNORE INTO mobile_diagnostic_reports (
-          report_id, owner_user_id, period_start, period_end, payload_json, status, created_at_local
-        ) VALUES (?, ?, ?, ?, ?, 'pending', ?)
-      `,
-      [report.reportId, ownerUserId, report.periodStart, report.periodEnd, JSON.stringify(report), report.generatedAt]
-    )
-  );
+  return withSqliteBusyRetry(async () => {
+    let existingPayloadJson: string | null = null;
+    await db.withExclusiveTransactionAsync(async (tx) => {
+      const existing = await tx.getFirstAsync<{ payload_json: string }>(
+        `
+          SELECT payload_json
+          FROM mobile_diagnostic_reports
+          WHERE owner_user_id = ? AND status = 'pending'
+          ORDER BY created_at_local ASC
+          LIMIT 1
+        `,
+        [ownerUserId]
+      );
+      if (existing) {
+        existingPayloadJson = existing.payload_json;
+        return;
+      }
 
-  return report;
+      await tx.runAsync(
+        `
+          INSERT OR IGNORE INTO mobile_diagnostic_reports (
+            report_id, owner_user_id, period_start, period_end, payload_json, status, created_at_local
+          ) VALUES (?, ?, ?, ?, ?, 'pending', ?)
+        `,
+        [report.reportId, ownerUserId, report.periodStart, report.periodEnd, JSON.stringify(report), report.generatedAt]
+      );
+    });
+
+    const stored = existingPayloadJson
+      ? { payload_json: existingPayloadJson }
+      : await db.getFirstAsync<{ payload_json: string }>(
+      `
+        SELECT payload_json
+        FROM mobile_diagnostic_reports
+        WHERE owner_user_id = ? AND status = 'pending'
+        ORDER BY created_at_local ASC
+        LIMIT 1
+      `,
+      [ownerUserId]
+    );
+
+    return stored ? JSON.parse(stored.payload_json) as MobileDiagnosticReport : report;
+  });
 }
 
 export async function listDiagnosticReports(limit = 10): Promise<MobileDiagnosticReportRow[]> {
   const db = await getDatabase();
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return [];
+  }
+
   const rows = await db.getAllAsync<{
     report_id: string;
     status: "pending" | "sent";
@@ -159,10 +201,11 @@ export async function listDiagnosticReports(limit = 10): Promise<MobileDiagnosti
     `
       SELECT report_id, status, period_start, period_end, created_at_local, sent_at_local, last_error, payload_json
       FROM mobile_diagnostic_reports
+      WHERE owner_user_id = ?
       ORDER BY created_at_local DESC
       LIMIT ?
     `,
-    [limit]
+    [ownerUserId, limit]
   );
 
   return rows.map((row) => {
@@ -188,6 +231,11 @@ export async function listDiagnosticReports(limit = 10): Promise<MobileDiagnosti
 
 export async function markDiagnosticReportSent(report: MobileDiagnosticReport) {
   const db = await getDatabase();
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return;
+  }
+
   const sentAt = new Date().toISOString();
   await withSqliteBusyRetry(() =>
     db.withExclusiveTransactionAsync(async (tx) => {
@@ -195,13 +243,13 @@ export async function markDiagnosticReportSent(report: MobileDiagnosticReport) {
         "SELECT owner_user_id FROM mobile_diagnostic_reports WHERE report_id = ?",
         [report.reportId]
       );
-      if (!row) {
+      if (!row || row.owner_user_id !== ownerUserId) {
         return;
       }
 
       await tx.runAsync(
-        "UPDATE mobile_diagnostic_reports SET status = 'sent', sent_at_local = ?, last_error = NULL WHERE report_id = ?",
-        [sentAt, report.reportId]
+        "UPDATE mobile_diagnostic_reports SET status = 'sent', sent_at_local = ?, last_error = NULL WHERE owner_user_id = ? AND report_id = ?",
+        [sentAt, ownerUserId, report.reportId]
       );
       await tx.runAsync(
         `INSERT INTO mobile_diagnostic_state (owner_user_id, last_period_end) VALUES (?, ?)
@@ -209,8 +257,8 @@ export async function markDiagnosticReportSent(report: MobileDiagnosticReport) {
         [row.owner_user_id, report.periodEnd]
       );
       await tx.runAsync(
-        "DELETE FROM mobile_diagnostic_reports WHERE status = 'sent' AND sent_at_local < ?",
-        [new Date(Date.now() - 30 * diagnosticReportIntervalMs).toISOString()]
+        "DELETE FROM mobile_diagnostic_reports WHERE owner_user_id = ? AND status = 'sent' AND sent_at_local < ?",
+        [ownerUserId, new Date(Date.now() - 30 * diagnosticReportIntervalMs).toISOString()]
       );
     })
   );
@@ -218,10 +266,15 @@ export async function markDiagnosticReportSent(report: MobileDiagnosticReport) {
 
 export async function markDiagnosticReportFailed(reportId: string, error: string) {
   const db = await getDatabase();
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return;
+  }
+
   await withSqliteBusyRetry(() =>
     db.runAsync(
-      "UPDATE mobile_diagnostic_reports SET last_error = ? WHERE report_id = ? AND status = 'pending'",
-      [sanitizeDiagnosticMessage(error), reportId]
+      "UPDATE mobile_diagnostic_reports SET last_error = ? WHERE owner_user_id = ? AND report_id = ? AND status = 'pending'",
+      [sanitizeDiagnosticMessage(error), ownerUserId, reportId]
     )
   );
 }

@@ -11,10 +11,11 @@ export const emptyPointDraft: RoutePointFormPayload = {
   zone: "",
   type: "NFC",
   tag: "",
+  description: "",
+  instruction: "",
   interval: "00:10",
   expectedTime: "00:05",
   status: "Активна" as RoutePoint["status"],
-  requiresPhoto: false,
 };
 
 export function PointEditorForm({
@@ -62,33 +63,71 @@ export function PointEditorForm({
         </div>
         <button className="icon-button" onClick={onCancel} title="Отменить" type="button">×</button>
       </div>
-      <div className="form-stack">
-        <label>
-          Название точки
-          <input required value={draft.name} onChange={(event) => onChange({ ...draft, name: event.currentTarget.value })} />
-        </label>
-        <label>
-          Тип точки
-          <select value={draft.type} onChange={(event) => onChange({ ...draft, type: event.currentTarget.value as RoutePoint["type"] })}>
-            {pointTypeOptions.map((item) => <option key={item}>{item}</option>)}
-          </select>
-        </label>
-        <label>
-          NFC / тег / ярлык
-          <input value={draft.tag} onChange={(event) => onChange({ ...draft, tag: event.currentTarget.value })} />
-        </label>
-        <label>
-          Зона точки
-          <input value={draft.zone} onChange={(event) => onChange({ ...draft, zone: event.currentTarget.value })} />
-        </label>
-        <label className="route-create-check">
-          <input
-            checked={draft.requiresPhoto}
-            onChange={(event) => onChange({ ...draft, requiresPhoto: event.currentTarget.checked })}
-            type="checkbox"
-          />
-          Фото обязательно
-        </label>
+      <div className="route-point-editor-body">
+        <section className="route-point-editor-section">
+          <div className="route-point-editor-section-head">
+            <span className="route-point-editor-step">1</span>
+            <div>
+              <h3>Идентификация оборудования</h3>
+              <p>Основные данные контрольной точки и физической метки.</p>
+            </div>
+          </div>
+          <div className="route-point-editor-grid">
+            <label className="route-point-editor-wide">
+              Название точки
+              <input required value={draft.name} onChange={(event) => onChange({ ...draft, name: event.currentTarget.value })} />
+            </label>
+            <label>
+              Тип точки
+              <select value={draft.type} onChange={(event) => onChange({ ...draft, type: event.currentTarget.value as RoutePoint["type"] })}>
+                {pointTypeOptions.map((item) => <option key={item}>{item}</option>)}
+              </select>
+            </label>
+            <label>
+              Код метки
+              <input placeholder="Например, NFC-001" value={draft.tag} onChange={(event) => onChange({ ...draft, tag: event.currentTarget.value })} />
+              <small>Уникальный NFC/QR-код внутри маршрута.</small>
+            </label>
+            <label className="route-point-editor-wide">
+              Зона или узел оборудования
+              <input placeholder="Например, электродвигатель печи" value={draft.zone} onChange={(event) => onChange({ ...draft, zone: event.currentTarget.value })} />
+            </label>
+          </div>
+        </section>
+
+        <section className="route-point-editor-section">
+          <div className="route-point-editor-section-head">
+            <span className="route-point-editor-step">2</span>
+            <div>
+              <h3>Контекст для обходчика</h3>
+              <p>Текст сохраняется в базе и передаётся вместе с точкой маршрута.</p>
+            </div>
+          </div>
+          <div className="route-point-editor-copy-grid">
+            <label>
+              Описание оборудования
+              <textarea
+                maxLength={1000}
+                placeholder="Что это за оборудование и что контролируется в этой точке"
+                rows={4}
+                value={draft.description}
+                onChange={(event) => onChange({ ...draft, description: event.currentTarget.value })}
+              />
+              <small>{draft.description.length}/1000</small>
+            </label>
+            <label>
+              Инструкция к метке
+              <textarea
+                maxLength={2000}
+                placeholder="Куда поднести телефон, что осмотреть и на что обратить внимание"
+                rows={4}
+                value={draft.instruction}
+                onChange={(event) => onChange({ ...draft, instruction: event.currentTarget.value })}
+              />
+              <small>{draft.instruction.length}/2000</small>
+            </label>
+          </div>
+        </section>
       </div>
       <dl className="meta-list">
         <Field label="Порядок" value={point?.order ?? route.points.length + 1} />
@@ -119,9 +158,10 @@ export function pointToDraft(point: RoutePoint): RoutePointFormPayload {
     zone: point.zone,
     type: point.type,
     tag: point.tag,
+    description: point.description,
+    instruction: point.instruction,
     interval: point.interval,
     expectedTime: point.expectedTime,
     status: point.status,
-    requiresPhoto: point.requiresPhoto,
   };
 }

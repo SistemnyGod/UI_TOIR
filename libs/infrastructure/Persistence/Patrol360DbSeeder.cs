@@ -1266,7 +1266,9 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
             Status = isRequired ? "Активна" : "Черновик",
             NfcCode = nfcCode,
             IsRequired = isRequired,
-            RequiresPhoto = isRequired
+            RequiresPhoto = false,
+            Description = string.Empty,
+            Instruction = string.Empty
         };
 
     private sealed record AccountingEmployeeSeed(

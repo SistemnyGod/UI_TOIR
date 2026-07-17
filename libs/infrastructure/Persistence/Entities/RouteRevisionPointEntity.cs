@@ -10,6 +10,8 @@ internal sealed class RouteRevisionPointEntity
     public string Zone { get; set; } = string.Empty;
     public string Type { get; set; } = string.Empty;
     public string Tag { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Instruction { get; set; } = string.Empty;
     public string? NfcCode { get; set; }
     public bool IsRequired { get; set; }
     public bool RequiresPhoto { get; set; }

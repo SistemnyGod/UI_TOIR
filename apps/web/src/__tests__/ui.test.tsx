@@ -2,7 +2,7 @@
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MobileAccountCreateDrawer, MobileAccountLinkPanel } from "../components/accounts/MobileAccountCreateDrawer";
+import { MobileAccountCreateDrawer, MobileAccountEditPanel, MobileAccountLinkPanel } from "../components/accounts/MobileAccountCreateDrawer";
 import { MobileAccountListPanel } from "../components/accounts/MobileAccountListPanel";
 import { MobileAccountSecurityPanels } from "../components/accounts/MobileAccountSecurityPanels";
 import { DashboardRequestsPanel } from "../components/dashboard/DashboardRequestsPanel";
@@ -101,6 +101,13 @@ function createEmuAccessWorkspace(sourceMode: "api" | "mock" = "api"): EmuWorksp
       waitReasons: [],
       workTemplates: [],
     },
+    shiftRemarks: {
+      page: 1,
+      pageCount: 1,
+      pageSize: 50,
+      rows: [],
+      total: 0,
+    },
     sourceMode,
     workSessions: {
       page: 1,
@@ -148,7 +155,7 @@ describe("shared UI primitives", () => {
   });
 
   it("renders shared button states and status badge", () => {
-    render(
+    const { container } = render(
       <>
         <Button variant="primary">Save</Button>
         <Button isLoading variant="danger">Delete</Button>
@@ -245,7 +252,7 @@ describe("shared UI primitives", () => {
     );
 
     expect(screen.getByText("Мои работы")).toBeInTheDocument();
-    expect(screen.getByText(/РџРѕРєР°Р·Р°РЅС‹ С‚РѕР»СЊРєРѕ РєР°СЂС‚РѕС‡РєРё, СЃРѕР·РґР°РЅРЅС‹Рµ РІР°С€РёРј Р°РєРєР°СѓРЅС‚РѕРј/)).toBeInTheDocument();
+    expect(screen.getByText(/Показаны только карточки, созданные вашим аккаунтом/)).toBeInTheDocument();
 
     rerender(
       <EmuWorkAccountingScreen
@@ -257,7 +264,7 @@ describe("shared UI primitives", () => {
     );
 
     expect(screen.getByText("Все доступные работы")).toBeInTheDocument();
-    expect(screen.getByText(/РІРёРґСЏС‚ СЂР°СЃС€РёСЂРµРЅРЅС‹Р№ СЃРїРёСЃРѕРє/)).toBeInTheDocument();
+    expect(screen.getByText(/видят расширенный список/)).toBeInTheDocument();
   });
 
   it("requires matching initial password when creating a site user", async () => {
@@ -318,7 +325,7 @@ describe("shared UI primitives", () => {
         fullName: "Оператор ЭМУ",
         role: "Оператор ЭМУ",
         status: "Заблокирован",
-        lastLogin: "вЂ”",
+        lastLogin: "—",
         createdAt: "01.06.2026",
         access: ["emu.work-accounting.view"],
         directPermissions: ["emu.work.create"],
@@ -415,8 +422,8 @@ describe("shared UI primitives", () => {
     expect(screen.getByRole("navigation", { name: "Разделы СИЗ" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Карточки СИЗ" })).toBeInTheDocument();
     expect(screen.getAllByText("Каска защитная").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: /РќРѕСЂРјС‹/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Р’С‹РґР°РЅРѕ/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Нормы/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Выдано/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Печать" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Каска защитная" }));
@@ -431,7 +438,7 @@ describe("shared UI primitives", () => {
     expect(screen.getByText("Комментарий")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Закрыть" }));
-    await user.click(screen.getByRole("button", { name: /Р’С‹РґР°РЅРѕ/ }));
+    await user.click(screen.getByRole("button", { name: /Выдано/ }));
     expect(screen.getByText("Модель / артикул")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Печать" }));
     expect(screen.getByText("Личная карточка СИЗ")).toBeInTheDocument();
@@ -454,7 +461,7 @@ describe("shared UI primitives", () => {
     );
 
     expect(screen.getByText("Заявка не найдена")).toBeInTheDocument();
-    expect(screen.getByText(/РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚ РІ С‚РµРєСѓС‰РµРј СЃРїРёСЃРєРµ Р·Р°СЏРІРѕРє/i)).toBeInTheDocument();
+    expect(screen.getByText(/отсутствует в текущем списке заявок/i)).toBeInTheDocument();
   });
 
   it("does not show request view action for an assignment with a missing request", async () => {
@@ -538,7 +545,7 @@ describe("shared UI primitives", () => {
     await waitFor(() => expect(screen.getAllByText("Костарев Илья Сергеевич").length).toBeGreaterThan(0));
 
     expect(screen.queryByText("Просмотр")).not.toBeInTheDocument();
-    expect(screen.getByText(/Р”РµР№СЃС‚РІСѓСЋС‰Р°СЏ Р·Р°СЏРІРєР°/i)).toBeInTheDocument();
+    expect(screen.getByText(/Действующая заявка/i)).toBeInTheDocument();
   });
 
   it("counts a linked request and assignment as one active employee item", async () => {
@@ -604,7 +611,7 @@ describe("shared UI primitives", () => {
             notificationText: "Notify",
             notifyEmployee: true,
             point: "",
-            priority: "РЎСЂРµРґРЅРёР№",
+            priority: "Средний",
             requestKind: "patrol-assignment",
             responsible: "Employee One",
             route: "Route One",
@@ -613,7 +620,7 @@ describe("shared UI primitives", () => {
             scheduledTime: "20:20",
             source: "web",
             sourceResultId: "",
-            status: "РќР°Р·РЅР°С‡РµРЅР°",
+            status: "Назначена",
             timeline: [],
             title: "REQ-1",
           } as never,
@@ -996,7 +1003,7 @@ describe("shared UI primitives", () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getAllByText("По 0 загруженным из 250").length).toBeGreaterThan(0));
 
-    fireEvent.change(screen.getByPlaceholderText(/РџРѕРёСЃРє РїРѕ РјР°СЂС€СЂСѓС‚Сѓ/), { target: { value: "печи" } });
+    fireEvent.change(screen.getByPlaceholderText(/Поиск по маршруту/), { target: { value: "печи" } });
     expect(fetcher).toHaveBeenCalledTimes(1);
     await new Promise((resolve) => window.setTimeout(resolve, 350));
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
@@ -1399,6 +1406,7 @@ describe("shared UI primitives", () => {
             platform: "Android",
             appVersion: "2.3.0",
             ipAddress: "127.0.0.1",
+            startedAt: "2026-05-18T10:00:00Z",
             lastSeenAt: "2026-05-18T10:20:00Z",
           },
         ]}
@@ -1406,8 +1414,9 @@ describe("shared UI primitives", () => {
       />,
     );
 
-    expect(screen.getByText("online")).toBeInTheDocument();
-    expect(screen.getByText("Xiaomi / Android / 2.3.0")).toBeInTheDocument();
+    expect(screen.getAllByText("Сейчас онлайн")).toHaveLength(2);
+    expect(screen.getByText("Xiaomi")).toBeInTheDocument();
+    expect(screen.getByText("Android · 2.3.0 · 127.0.0.1")).toBeInTheDocument();
     expect(screen.getByText("Вход в приложение")).toBeInTheDocument();
     expect(screen.getByText("Login accepted")).toBeInTheDocument();
 
@@ -1417,7 +1426,53 @@ describe("shared UI primitives", () => {
     expect(onNotify).not.toHaveBeenCalled();
   });
 
-  it("limits mobile account security events to the latest 10 with readable labels", () => {
+  it("edits a mobile account without clipping linked employee names", async () => {
+    const user = userEvent.setup();
+    const onUpdateAccount = vi.fn();
+    const onOpenLink = vi.fn();
+
+    const { container } = render(
+      <MobileAccountEditPanel
+        onNotify={vi.fn()}
+        onOpenLink={onOpenLink}
+        onUpdateAccount={onUpdateAccount}
+        selected={{
+          id: "account-1",
+          login: "test1",
+          passwordState: "set",
+          employee: "Костарев Илья Сергеевич",
+          employeeScope: "selected",
+          boundEmployeeIds: ["employee-1", "employee-2"],
+          boundEmployees: ["Костарев Илья Сергеевич", "Кириллов Иван Петрович"],
+          role: "Маршрутный обходчик",
+          status: "Активен",
+          session: "Онлайн",
+          lastSeen: "сейчас",
+          device: "Kenshi Armor C1s",
+          version: "0.1.24",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Костарев Илья Сергеевич")).toBeInTheDocument();
+    expect(container.querySelector(".employee-token-remove")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Управлять привязками" }));
+    expect(onOpenLink).toHaveBeenCalledOnce();
+
+    const loginInput = screen.getByRole("textbox", { name: /Логин/ });
+    await user.clear(loginInput);
+    await user.type(loginInput, "test2");
+    await user.click(screen.getByRole("button", { name: "Сохранить изменения" }));
+
+    expect(onUpdateAccount).toHaveBeenCalledWith({
+      login: "test2",
+      role: "Маршрутный обходчик",
+      status: "Активен",
+    });
+  });
+
+  it("limits mobile account security events to the latest 7 with readable labels", () => {
     render(
       <MobileAccountSecurityPanels
         onNotify={vi.fn()}
@@ -1440,6 +1495,7 @@ describe("shared UI primitives", () => {
             platform: "Android",
             appVersion: "2.3.0",
             ipAddress: "127.0.0.1",
+            startedAt: "2026-05-18T10:00:00Z",
             lastSeenAt: "2026-05-18T10:20:00Z",
           },
         ]}
@@ -1447,9 +1503,9 @@ describe("shared UI primitives", () => {
       />,
     );
 
-    expect(screen.getByText("Последние 10 из 11")).toBeInTheDocument();
-    expect(screen.getAllByText("Сотрудник привязан")).toHaveLength(10);
-    expect(screen.getAllByText("Код: mobile_account.employee_attached")).toHaveLength(10);
+    expect(screen.getByText("Последние 7 событий")).toBeInTheDocument();
+    expect(screen.getAllByText("Сотрудник привязан")).toHaveLength(7);
+    expect(screen.getAllByText("Пользователь: operator · Код: mobile_account.employee_attached")).toHaveLength(7);
   });
 
   it("does not render mobile account inactivity session policy control", () => {
@@ -1465,7 +1521,7 @@ describe("shared UI primitives", () => {
     expect(screen.queryByText(/automatic exit/i)).not.toBeInTheDocument();
   });
 
-  it("creates an unbound mobile account when employees are empty", async () => {
+  it("creates a mobile account with the default temporary password flow", async () => {
     const user = userEvent.setup();
     const onCreateAccount = vi.fn();
 
@@ -1474,13 +1530,10 @@ describe("shared UI primitives", () => {
         onCreateAccount={onCreateAccount}
         onEmployeeNameDraftChange={vi.fn()}
         onNotify={vi.fn()}
-      />,
+    />,
     );
 
     await user.type(screen.getByPlaceholderText("Введите логин (например, ivan.petrov)"), "mobile.test");
-    await user.type(screen.getByPlaceholderText("Введите пароль"), "Password1");
-    await user.type(screen.getByPlaceholderText("Повторите пароль"), "Password1");
-    await user.selectOptions(screen.getByRole("combobox", { name: /Р РѕР»СЊ/ }), "Инспектор");
     await user.click(screen.getByRole("button", { name: "Создать аккаунт" }));
 
     expect(onCreateAccount).toHaveBeenCalledWith(
@@ -1489,8 +1542,9 @@ describe("shared UI primitives", () => {
         employee: "",
         employeeScope: "selected",
         login: "mobile.test",
-        password: "Password1",
-        role: "Инспектор",
+        role: "Маршрутный обходчик",
+        status: "Не привязан",
+        temporaryPassword: true,
       }),
     );
   });

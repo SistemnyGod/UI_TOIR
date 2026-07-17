@@ -14,7 +14,7 @@ import { StatusPill } from "@/ui/StatusPill";
 type RequestTab = "available" | "mine" | "unsent" | "history";
 
 const activeStatuses = new Set(["accepted", "inProgress", "paused"]);
-const unsentStatuses = new Set(["completedLocal", "syncing", "syncError", "authRequired", "needsDispatcherDecision"]);
+const unsentStatuses = new Set(["completedLocal", "syncing", "retryLater", "syncError", "authRequired", "needsDispatcherDecision"]);
 const historyStatuses = new Set(["completed", "completedServer", "cancelled", "cancelledServer"]);
 
 export function RequestBoardScreen() {
@@ -169,6 +169,7 @@ function statusLabel(status: string) {
       return "Пауза";
     case "completedLocal":
     case "syncing":
+    case "retryLater":
       return "Ждет отправки";
     case "syncError":
       return "Ошибка";
@@ -191,7 +192,7 @@ function statusTone(status: string) {
   if (status === "syncError" || status === "authRequired" || status === "cancelledServer" || status === "cancelled") {
     return "danger";
   }
-  if (status === "completedLocal" || status === "syncing" || status === "paused" || status === "needsDispatcherDecision") {
+  if (status === "completedLocal" || status === "syncing" || status === "retryLater" || status === "paused" || status === "needsDispatcherDecision") {
     return "warning";
   }
   return "neutral";
@@ -204,7 +205,7 @@ function statusLineStyle(status: string) {
   if (status === "syncError" || status === "authRequired" || status === "cancelledServer" || status === "cancelled") {
     return styles.statusLineDanger;
   }
-  if (status === "completedLocal" || status === "syncing" || status === "paused" || status === "needsDispatcherDecision") {
+  if (status === "completedLocal" || status === "syncing" || status === "retryLater" || status === "paused" || status === "needsDispatcherDecision") {
     return styles.statusLineWarning;
   }
   return styles.statusLineNeutral;

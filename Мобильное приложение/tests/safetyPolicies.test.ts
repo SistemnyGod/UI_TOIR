@@ -15,11 +15,12 @@ test("refresh accepts the stored account and binds a legacy session once", () =>
 
 test("only a real expired session forces re-authentication", () => {
   assert.equal(isSessionExpiredError("Сессия истекла. Войдите в аккаунт повторно."), true);
+  assert.equal(isSessionExpiredError("Сессия не восстановлена после обновления токена. Войдите в аккаунт повторно."), true);
   assert.equal(isSessionExpiredError("Mobile session is invalid"), true);
-  assert.equal(isSessionExpiredError("Сервер доступен, требуется повторный вход: http://192.168.2.194"), false);
+  assert.equal(isSessionExpiredError("Сервер доступен, требуется повторный вход: http://192.168.2.194"), true);
   assert.equal(isSessionExpiredError("Mobile API temporarily rejected the request after token refresh"), false);
   assert.equal(isReauthenticationRequiredError("Сервер вернул сессию другого пользователя. Авторизация сброшена."), true);
-  assert.equal(isReauthenticationRequiredError("Сервер доступен, требуется повторный вход: http://192.168.2.194"), false);
+  assert.equal(isReauthenticationRequiredError("Сервер доступен, требуется повторный вход: http://192.168.2.194"), true);
 });
 
 test("sync refuses a mixed-owner batch", () => {

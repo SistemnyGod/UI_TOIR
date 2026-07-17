@@ -125,6 +125,8 @@ export function mapRoute(route: RouteDto): RouteDirectoryItem {
       zone: point.zone,
       type: point.type as RoutePoint["type"],
       tag: point.tag || point.nfcCode || "-",
+      description: point.description || "",
+      instruction: point.instruction || "",
       interval: point.interval,
       expectedTime: point.expectedTime,
       status: point.status as RoutePoint["status"],

@@ -63,10 +63,12 @@ export function createRoutePointDraft({
     zone: payload.zone.trim() || "Зона не указана",
     type: payload.type,
     tag: payload.tag.trim() || "Без метки",
+    description: payload.description.trim(),
+    instruction: payload.instruction.trim(),
     interval: payload.interval.trim() || "00:10",
     expectedTime: payload.expectedTime.trim() || "00:05",
     status: payload.status,
-    requiresPhoto: payload.requiresPhoto,
+    requiresPhoto: false,
   };
 }
 
@@ -77,10 +79,12 @@ export function updateRoutePointDraft(point: RoutePoint, payload: RoutePointForm
     zone: payload.zone.trim() || point.zone,
     type: payload.type,
     tag: payload.tag.trim(),
+    description: payload.description.trim(),
+    instruction: payload.instruction.trim(),
     interval: payload.interval.trim() || point.interval,
     expectedTime: payload.expectedTime.trim() || point.expectedTime,
     status: payload.status,
-    requiresPhoto: payload.requiresPhoto,
+    requiresPhoto: false,
   };
 }
 

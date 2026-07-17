@@ -1,5 +1,6 @@
 import { getDatabase } from "@/db/database";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
+import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 
 export type SyncQueueFileItem = Pick<
@@ -58,6 +59,11 @@ export async function insertLocalFileInTransaction(executor: Pick<Awaited<Return
 }
 
 export async function listPointFiles(assignmentId: string, pointId: string) {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return [];
+  }
+
   const db = await getDatabase();
 
   return withSqliteBusyRetry(() =>
@@ -80,17 +86,23 @@ export async function listPointFiles(assignmentId: string, pointId: string) {
           work_task_id AS workTaskId,
           created_at_local AS createdAtLocal
         FROM files
-        WHERE assignment_id = ?
+        WHERE owner_user_id = ?
+          AND assignment_id = ?
           AND point_id = ?
         ORDER BY created_at_local ASC
       `,
-      [assignmentId, pointId]
+      [ownerUserId, assignmentId, pointId]
     )
   );
 }
 
 export async function listFilesByClientIds(clientFileIds: string[]) {
   if (clientFileIds.length === 0) {
+    return [];
+  }
+
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
     return [];
   }
 
@@ -116,14 +128,20 @@ export async function listFilesByClientIds(clientFileIds: string[]) {
         work_task_id AS workTaskId,
         created_at_local AS createdAtLocal
       FROM files
-      WHERE client_file_id IN (${placeholders})
+      WHERE owner_user_id = ?
+        AND client_file_id IN (${placeholders})
       ORDER BY created_at_local ASC
     `,
-    clientFileIds
+    [ownerUserId, ...clientFileIds]
   );
 }
 
 export async function listRemarkFiles(remarkId: string) {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return [];
+  }
+
   const db = await getDatabase();
 
   return db.getAllAsync<LocalMobileFile>(
@@ -145,14 +163,20 @@ export async function listRemarkFiles(remarkId: string) {
         work_task_id AS workTaskId,
         created_at_local AS createdAtLocal
       FROM files
-      WHERE remark_id = ?
+      WHERE owner_user_id = ?
+        AND remark_id = ?
       ORDER BY created_at_local ASC
     `,
-    [remarkId]
+    [ownerUserId, remarkId]
   );
 }
 
 export async function listWorkTaskFiles(workTaskId: string) {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return [];
+  }
+
   const db = await getDatabase();
 
   return db.getAllAsync<LocalMobileFile>(
@@ -174,22 +198,30 @@ export async function listWorkTaskFiles(workTaskId: string) {
         work_task_id AS workTaskId,
         created_at_local AS createdAtLocal
       FROM files
-      WHERE work_task_id = ?
+      WHERE owner_user_id = ?
+        AND work_task_id = ?
       ORDER BY created_at_local ASC
     `,
-    [workTaskId]
+    [ownerUserId, workTaskId]
   );
 }
 
 export async function listKnownLocalFilePaths() {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return [];
+  }
+
   const db = await getDatabase();
 
   const rows = await db.getAllAsync<{ local_path: string }>(
     `
       SELECT local_path
       FROM files
-      WHERE local_path IS NOT NULL
-    `
+      WHERE owner_user_id = ?
+        AND local_path IS NOT NULL
+    `,
+    [ownerUserId]
   );
 
   return rows.map((row) => row.local_path);
@@ -228,19 +260,29 @@ export async function listSyncQueueFiles(ownerUserId: string, limit = 100) {
 }
 
 export async function markFileUploading(clientFileId: string) {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return;
+  }
+
   const db = await getDatabase();
 
   await db.runAsync(
     `
       UPDATE files
       SET status = 'uploading'
-      WHERE client_file_id = ?
+      WHERE owner_user_id = ? AND client_file_id = ?
     `,
-    [clientFileId]
+    [ownerUserId, clientFileId]
   );
 }
 
 export async function markFileUploaded(clientFileId: string, serverFileId: string) {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return;
+  }
+
   const db = await getDatabase();
 
   await db.runAsync(
@@ -248,22 +290,27 @@ export async function markFileUploaded(clientFileId: string, serverFileId: strin
       UPDATE files
       SET status = 'uploaded',
           server_file_id = ?
-      WHERE client_file_id = ?
+      WHERE owner_user_id = ? AND client_file_id = ?
     `,
-    [serverFileId, clientFileId]
+    [serverFileId, ownerUserId, clientFileId]
   );
 }
 
 export async function markFileUploadFailed(clientFileId: string) {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return;
+  }
+
   const db = await getDatabase();
 
   await db.runAsync(
     `
       UPDATE files
       SET status = 'retryLater'
-      WHERE client_file_id = ?
+      WHERE owner_user_id = ? AND client_file_id = ?
     `,
-    [clientFileId]
+    [ownerUserId, clientFileId]
   );
 }
 

@@ -64,6 +64,22 @@ internal sealed partial class EfMobileAppService
             return BuildRepeatedOutboxResponse(existing);
         }
 
+        // Serialize commands that touch the same patrol assignment. The
+        // clientOperationId lock prevents a duplicate retry of one command,
+        // but two different operation ids can still be produced by a double
+        // tap, a restored queue, or two app processes. Without an assignment
+        // lock both completion requests could observe an empty report and
+        // create two server results before either transaction commits.
+        if (dbContext.Database.IsNpgsql())
+        {
+            var patrolLockKey = BuildPatrolCommandLockKey(command);
+            if (patrolLockKey is not null)
+            {
+                dbContext.Database.ExecuteSqlInterpolated(
+                    $"SELECT pg_advisory_xact_lock(hashtextextended({patrolLockKey}, 0))");
+            }
+        }
+
         var response = command.CommandType switch
             {
                 var type when type.Equals("takePatrolRequest", StringComparison.OrdinalIgnoreCase) =>
@@ -159,12 +175,158 @@ internal sealed partial class EfMobileAppService
                 return BuildRepeatedOutboxResponse(racedOperation);
             }
 
+            var racedAssignmentResponse = TryBuildRacedPatrolRequestResponse(account, command);
+            if (racedAssignmentResponse is not null)
+            {
+                return racedAssignmentResponse;
+            }
+
+            var activePatrolResponse = TryBuildActivePatrolConflictResponse(account, command);
+            if (activePatrolResponse is not null)
+            {
+                return activePatrolResponse;
+            }
+
             throw;
         }
     }
 
+    private MobileOutboxResponseDto? TryBuildActivePatrolConflictResponse(
+        MobileAccountEntity account,
+        MobileOutboxCommandDto command)
+    {
+        var isStartOrResume = command.CommandType.Equals("startPatrolAssignment", StringComparison.OrdinalIgnoreCase)
+            || command.CommandType.Equals("resumePatrolAssignment", StringComparison.OrdinalIgnoreCase);
+        var isLegacyTake = command.CommandType.Equals("takePatrolRequest", StringComparison.OrdinalIgnoreCase);
+
+        if (!isStartOrResume && !isLegacyTake)
+        {
+            return null;
+        }
+
+        Guid? currentAssignmentId = null;
+        Guid? employeeId = null;
+        if (isStartOrResume)
+        {
+            currentAssignmentId = ReadGuid(command.Payload, "assignmentId");
+            if (currentAssignmentId is null)
+            {
+                return null;
+            }
+
+            employeeId = dbContext.Assignments
+                .AsNoTracking()
+                .Where(item => item.Id == currentAssignmentId.Value)
+                .Select(item => (Guid?)item.EmployeeId)
+                .FirstOrDefault();
+        }
+        else
+        {
+            var requestId = ReadGuid(command.Payload, "requestId");
+            if (requestId is null)
+            {
+                return null;
+            }
+
+            var request = dbContext.PatrolRequests
+                .AsNoTracking()
+                .Where(item => item.Id == requestId.Value)
+                .Select(item => new { item.EmployeeId, AssignmentEmployeeId = item.Assignment == null ? (Guid?)null : item.Assignment.EmployeeId })
+                .FirstOrDefault();
+            employeeId = request?.EmployeeId ?? request?.AssignmentEmployeeId;
+            employeeId ??= GetBoundEmployeeIds(account).FirstOrDefault();
+        }
+
+        if (employeeId is null)
+        {
+            return null;
+        }
+
+        var hasAnotherActivePatrol = dbContext.Assignments
+            .AsNoTracking()
+            .Any(item => item.EmployeeId == employeeId.Value
+                && (item.Status == AssignmentStatusValues.InProgress
+                    || item.Status == AssignmentStatusValues.Paused)
+                && (!currentAssignmentId.HasValue || item.Id != currentAssignmentId.Value));
+
+        return hasAnotherActivePatrol
+            ? Conflict(command.ClientOperationId, "Employee already has another started or paused patrol.", "activePatrolExists")
+            : null;
+    }
+
+    private MobileOutboxResponseDto? TryBuildRacedPatrolRequestResponse(
+        MobileAccountEntity account,
+        MobileOutboxCommandDto command)
+    {
+        if (!command.CommandType.Equals("acceptPatrolRequest", StringComparison.OrdinalIgnoreCase)
+            && !command.CommandType.Equals("takePatrolRequest", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var requestId = ReadGuid(command.Payload, "requestId");
+        if (requestId is null)
+        {
+            return null;
+        }
+
+        var assignment = dbContext.Assignments
+            .AsNoTracking()
+            .Include(item => item.PatrolRequest)
+            .FirstOrDefault(item => item.PatrolRequestId == requestId.Value);
+        if (assignment is null || !GetBoundEmployeeIds(account).Contains(assignment.EmployeeId))
+        {
+            return null;
+        }
+
+        if (assignment.Status == AssignmentStatusValues.Cancelled
+            || assignment.PatrolRequest?.Status == AssignmentStatusValues.Cancelled)
+        {
+            return Conflict(command.ClientOperationId, "Patrol request was cancelled by dispatcher.", "assignmentCancelled");
+        }
+
+        if (assignment.Status == AssignmentStatusValues.Completed
+            || assignment.PatrolRequest?.Status == AssignmentStatusValues.Completed)
+        {
+            return Conflict(command.ClientOperationId, "Patrol request is already completed.");
+        }
+
+        return new MobileOutboxResponseDto(
+            command.ClientOperationId,
+            "duplicate",
+            assignment.Id.ToString(),
+            assignment.LockVersion,
+            "Patrol request was already accepted.",
+            null,
+            null);
+    }
+
     private static bool IsUniqueConstraintViolation(DbUpdateException exception) =>
         exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
+
+    private static string? BuildPatrolCommandLockKey(MobileOutboxCommandDto command)
+    {
+        if (!command.CommandType.Contains("Patrol", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var assignmentId = ReadGuid(command.Payload, "assignmentId");
+        if (assignmentId is not null)
+        {
+            return $"mobile-patrol-assignment:{assignmentId.Value:N}";
+        }
+
+        var requestId = ReadGuid(command.Payload, "requestId");
+        if (requestId is not null)
+        {
+            return $"mobile-patrol-request:{requestId.Value:N}";
+        }
+
+        return Guid.TryParse(command.EntityLocalId, out var entityId)
+            ? $"mobile-patrol-assignment:{entityId:N}"
+            : null;
+    }
 
     private static MobileOutboxResponseDto BuildRepeatedOutboxResponse(MobileOutboxOperationEntity existing)
     {

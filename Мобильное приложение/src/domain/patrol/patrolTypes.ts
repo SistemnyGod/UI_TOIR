@@ -95,6 +95,8 @@ export type PatrolPointDto = {
   qrCodeHash: string | null;
   required: boolean;
   requiresPhoto: boolean;
+  description: string | null;
+  instruction: string | null;
   revision: number;
 };
 

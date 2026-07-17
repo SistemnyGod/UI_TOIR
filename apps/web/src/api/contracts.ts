@@ -224,6 +224,8 @@ export interface RoutePointDto {
   nfcCode: string | null;
   isRequired: boolean;
   requiresPhoto: boolean;
+  description: string;
+  instruction: string;
 }
 
 export interface CreateRouteDto {
@@ -252,6 +254,8 @@ export interface CreateRoutePointDto {
   expectedTime: string;
   status: string;
   requiresPhoto: boolean;
+  description: string;
+  instruction: string;
 }
 
 export type UpdateRoutePointDto = CreateRoutePointDto;
@@ -384,6 +388,8 @@ export interface MobileAccountSessionDto {
   appVersion: string;
   ipAddress: string;
   lastSeenAt: string;
+  startedAt: string;
+  endedAt: string | null;
 }
 
 export interface MobileAccountSecurityEventDto {
@@ -1401,6 +1407,21 @@ export interface EmuWorkAttachmentDto {
   sizeBytes: number;
   uploadedAt: string;
   downloadUrl: string;
+}
+
+export interface EmuShiftRemarkDto {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  sectionId: string;
+  sectionName: string;
+  title: string;
+  comment: string;
+  status: string;
+  createdAtLocal: string;
+  createdAtServer: string;
+  source: string;
+  attachments: EmuWorkAttachmentDto[];
 }
 
 export interface EmuWorkSessionChangesDto {

@@ -896,6 +896,12 @@ public class ApiSmokeTests
 
         public EmuCommandResult<EmuWorkSessionDto> GetWorkSession(Guid id) => new(null, new Dictionary<string, string[]>());
 
+        public EmuListResponseDto<EmuShiftRemarkDto> GetShiftRemarks(int page = 1, int pageSize = 50, Guid? sectionId = null, Guid? employeeId = null, IReadOnlyList<Guid>? allowedSectionIds = null) => new([], 0, page, pageSize, 1);
+
+        public EmuCommandResult<EmuShiftRemarkDto> GetShiftRemark(Guid id) => new(null, new Dictionary<string, string[]>());
+
+        public ResultAttachmentFileDto? GetShiftRemarkAttachmentFile(Guid remarkId, Guid attachmentId) => null;
+
         public ResultAttachmentFileDto? GetWorkAttachmentFile(Guid workSessionId, Guid attachmentId) => null;
 
         public EmuCommandResult<EmuWorkSessionDto> CreateWorkSession(EmuCreateWorkSessionDto request, Guid? actorUserId, string actorName, bool canOverridePlanApproval = false)

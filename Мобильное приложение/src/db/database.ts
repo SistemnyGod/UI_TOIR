@@ -66,6 +66,8 @@ export async function initializeDatabase() {
       point_id TEXT NOT NULL,
       route_id TEXT NOT NULL,
       name TEXT NOT NULL,
+      description TEXT,
+      instruction TEXT,
       order_index INTEGER NOT NULL,
       nfc_uid_hash TEXT,
       qr_code_hash TEXT,
@@ -88,6 +90,8 @@ export async function initializeDatabase() {
       point_id TEXT PRIMARY KEY,
       route_id TEXT NOT NULL,
       name TEXT NOT NULL,
+      description TEXT,
+      instruction TEXT,
       order_index INTEGER NOT NULL,
       nfc_uid_hash TEXT,
       qr_code_hash TEXT,
@@ -169,7 +173,8 @@ export async function initializeDatabase() {
       entity_type TEXT,
       entity_id TEXT,
       created_at TEXT NOT NULL,
-      read_at TEXT
+      read_at TEXT,
+      read_sync_pending INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS mobile_action_log (
@@ -334,6 +339,8 @@ async function ensureMobileColumns(db: SQLite.SQLiteDatabase) {
   ]);
 
   await ensureColumns(db, "route_points", [
+    { name: "description", sql: "ALTER TABLE route_points ADD COLUMN description TEXT" },
+    { name: "instruction", sql: "ALTER TABLE route_points ADD COLUMN instruction TEXT" },
     { name: "nfc_uid_hash", sql: "ALTER TABLE route_points ADD COLUMN nfc_uid_hash TEXT" },
     { name: "qr_code_hash", sql: "ALTER TABLE route_points ADD COLUMN qr_code_hash TEXT" },
     { name: "required", sql: "ALTER TABLE route_points ADD COLUMN required INTEGER NOT NULL DEFAULT 1" },
@@ -379,7 +386,8 @@ async function ensureMobileColumns(db: SQLite.SQLiteDatabase) {
   await ensureColumns(db, "mobile_notifications", [
     { name: "entity_type", sql: "ALTER TABLE mobile_notifications ADD COLUMN entity_type TEXT" },
     { name: "entity_id", sql: "ALTER TABLE mobile_notifications ADD COLUMN entity_id TEXT" },
-    { name: "read_at", sql: "ALTER TABLE mobile_notifications ADD COLUMN read_at TEXT" }
+    { name: "read_at", sql: "ALTER TABLE mobile_notifications ADD COLUMN read_at TEXT" },
+    { name: "read_sync_pending", sql: "ALTER TABLE mobile_notifications ADD COLUMN read_sync_pending INTEGER NOT NULL DEFAULT 0" }
   ]);
 }
 
@@ -559,6 +567,8 @@ async function ensureAssignmentSnapshotAndOutboxRecovery(db: SQLite.SQLiteDataba
       point_id TEXT NOT NULL,
       route_id TEXT NOT NULL,
       name TEXT NOT NULL,
+      description TEXT,
+      instruction TEXT,
       order_index INTEGER NOT NULL,
       nfc_uid_hash TEXT,
       qr_code_hash TEXT,
@@ -570,6 +580,8 @@ async function ensureAssignmentSnapshotAndOutboxRecovery(db: SQLite.SQLiteDataba
   `);
 
   await ensureColumns(db, "assignment_route_points", [
+    { name: "description", sql: "ALTER TABLE assignment_route_points ADD COLUMN description TEXT" },
+    { name: "instruction", sql: "ALTER TABLE assignment_route_points ADD COLUMN instruction TEXT" },
     { name: "nfc_uid_hash", sql: "ALTER TABLE assignment_route_points ADD COLUMN nfc_uid_hash TEXT" },
     { name: "qr_code_hash", sql: "ALTER TABLE assignment_route_points ADD COLUMN qr_code_hash TEXT" },
     { name: "required", sql: "ALTER TABLE assignment_route_points ADD COLUMN required INTEGER NOT NULL DEFAULT 1" },
@@ -587,6 +599,8 @@ async function ensureAssignmentSnapshotAndOutboxRecovery(db: SQLite.SQLiteDataba
       point_id,
       route_id,
       name,
+      description,
+      instruction,
       order_index,
       nfc_uid_hash,
       qr_code_hash,
@@ -599,6 +613,8 @@ async function ensureAssignmentSnapshotAndOutboxRecovery(db: SQLite.SQLiteDataba
       point.point_id,
       point.route_id,
       point.name,
+      point.description,
+      point.instruction,
       point.order_index,
       point.nfc_uid_hash,
       point.qr_code_hash,

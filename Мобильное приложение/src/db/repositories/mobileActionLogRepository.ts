@@ -64,6 +64,11 @@ export async function logMobileAction(event: MobileActionLogEvent) {
 
 export async function listMobileActionLog(limit = 20): Promise<MobileActionLogItem[]> {
   const db = await getDatabase();
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return [];
+  }
+
   const rows = await db.getAllAsync<{
     id: string;
     owner_user_id: string | null;
@@ -85,10 +90,11 @@ export async function listMobileActionLog(limit = 20): Promise<MobileActionLogIt
         payload_json,
         created_at_local
       FROM mobile_action_log
+      WHERE owner_user_id = ?
       ORDER BY created_at_local DESC
       LIMIT ?
     `,
-    [limit]
+    [ownerUserId, limit]
   );
 
   return rows.map((row) => ({
@@ -113,7 +119,10 @@ export async function pruneMobileActionLog(ownerUserId: string, now = new Date()
   const cutoff = getMobileActionLogRetentionCutoff(now);
 
   await withSqliteBusyRetry(async () => {
-    await db.runAsync("DELETE FROM mobile_action_log WHERE created_at_local < ?", [cutoff]);
+    await db.runAsync(
+      "DELETE FROM mobile_action_log WHERE owner_user_id = ? AND created_at_local < ?",
+      [ownerUserId, cutoff]
+    );
     await db.runAsync(
       `
         DELETE FROM mobile_action_log

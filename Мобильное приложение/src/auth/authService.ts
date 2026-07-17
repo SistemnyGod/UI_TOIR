@@ -133,6 +133,6 @@ export async function signOut() {
 async function assertNoPendingLocalChanges(message: string) {
   const pendingCount = await countBlockingLocalUserData();
   if (pendingCount > 0) {
-    throw new Error(`${message} Локальных незавершенных записей: ${pendingCount}.`);
+    throw new Error(`${message} Локальных незавершённых записей: ${pendingCount}.`);
   }
 }

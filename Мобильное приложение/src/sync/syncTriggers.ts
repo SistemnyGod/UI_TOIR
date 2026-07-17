@@ -1,5 +1,6 @@
 import NetInfo from "@react-native-community/netinfo";
 import { canAttemptServerConnection } from "@/core/networkPolicy";
+import { isReauthenticationRequiredError } from "@/auth/sessionErrors";
 
 import { refreshMobileData } from "@/services/mobileDataRefreshService";
 import { triggerDailyDiagnosticReportUpload } from "@/services/diagnosticReportService";
@@ -70,7 +71,12 @@ export async function triggerForegroundSyncWithRetry(
     resetRetryBackoff();
     void triggerDailyDiagnosticReportUpload();
     return result;
-  } catch {
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (isReauthenticationRequiredError(errorMessage)) {
+      return { sent: 0, skipped: "unauthenticated", hasMore: false };
+    }
+
     scheduleRetry();
     return { sent: 0, skipped: "failed", hasMore: false };
   }

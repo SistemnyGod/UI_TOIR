@@ -27,6 +27,7 @@ import type {
   EmuReschedulePlanTaskDto,
   EmuResumeWorkSessionDto,
   EmuSettingsDto,
+  EmuShiftRemarkDto,
   EmuUpdateEmployeeShiftDto,
   EmuUpdateReferenceDto,
   EmuUpdateWorkSessionDto,
@@ -50,6 +51,7 @@ type EmuWorkspaceState = {
   loading: boolean;
   planTasks: EmuPlanTaskDto[];
   settings: EmuSettingsDto;
+  shiftRemarks: EmuListResponseDto<EmuShiftRemarkDto>;
   sourceMode: DataSourceMode;
   workSessions: EmuListResponseDto<EmuWorkSessionDto>;
 };
@@ -118,6 +120,14 @@ const emptyList: EmuListResponseDto<EmuWorkSessionDto> = {
   total: 0,
 };
 
+const emptyShiftRemarkList: EmuListResponseDto<EmuShiftRemarkDto> = {
+  page: 1,
+  pageCount: 1,
+  pageSize: 50,
+  rows: [],
+  total: 0,
+};
+
 const demoEmployeeDirectory: EmployeeDirectoryItem[] = [
   createDemoEmployee("emu-emp-1", "Сидоров А.А.", "Слесарь", "Участок Обогащения"),
   createDemoEmployee("emu-emp-2", "Кузнецов П.В.", "Слесарь", "Участок Обогащения"),
@@ -168,10 +178,11 @@ export function useEmuWorkspace({
       emuRepository.getSettings(),
       canViewDashboard ? emuRepository.getDashboard() : Promise.resolve<EmuDashboardDto | null>(null),
       getAllApiWorkSessions(),
+      emuRepository.getShiftRemarks({ pageSize: 100 }),
       canViewPlan ? emuRepository.getPlanTasks() : Promise.resolve<EmuListResponseDto<EmuPlanTaskDto>>(toList([], 0)),
       emuRepository.getDecisions({ status: "new" }),
     ])
-      .then(([settings, dashboard, workSessions, planTasks, decisions]) => {
+      .then(([settings, dashboard, workSessions, shiftRemarks, planTasks, decisions]) => {
         if (!mounted) return;
         lastWorkSyncAtRef.current = maxUpdatedAt(workSessions.rows) ?? new Date().toISOString();
         lastPlanSyncAtRef.current = maxUpdatedAt(planTasks.rows) ?? new Date().toISOString();
@@ -183,6 +194,7 @@ export function useEmuWorkspace({
           loading: false,
           planTasks: planRows,
           settings,
+          shiftRemarks,
           sourceMode: "api",
           workSessions,
         });
@@ -232,7 +244,10 @@ export function useEmuWorkspace({
     }
 
     try {
-      const changes = await emuRepository.getWorkSessionChanges(since);
+      const [changes, shiftRemarks] = await Promise.all([
+        emuRepository.getWorkSessionChanges(since),
+        emuRepository.getShiftRemarks({ pageSize: 100 }),
+      ]);
       lastWorkSyncAtRef.current = changes.serverTime;
       setState((current) => ({
         ...(() => {
@@ -242,6 +257,7 @@ export function useEmuWorkspace({
             dashboard: buildDashboardFromCollections(rows, current.auditEvents, current.planTasks),
             error: undefined,
             loading: false,
+            shiftRemarks,
             sourceMode: "api" as const,
             workSessions: toList(rows, rows.length, 1, Math.max(1, rows.length)),
           };
@@ -1078,6 +1094,7 @@ function toWorkspaceState(store: LocalStore, loading: boolean, sourceMode: DataS
     loading,
     planTasks: [...store.planTasks].sort(comparePlanDate),
     settings: store.settings,
+    shiftRemarks: emptyShiftRemarkList,
     sourceMode,
     workSessions,
   };

@@ -1,4 +1,5 @@
 import { uploadMobileFile } from "@/api/fileApi";
+import { refreshStoredAccessToken } from "@/api/httpClient";
 import { getOutboxResult, postOutbox } from "@/api/mobileApi";
 import { checkServerConnection } from "@/api/serverHealthApi";
 import { getAccessToken, getStoredOwnerUserId } from "@/auth/tokenStorage";
@@ -86,9 +87,13 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
     return { sent: 0, skipped: "serverUnavailable" as const, hasMore: false };
   }
 
-  if (!(await getAccessToken())) {
-    await markPendingOutboxCommandsAuthRequired(ownerUserId, authRequiredMessage);
-    return { sent: 0, skipped: "unauthenticated" as const, hasMore: false };
+  const accessTokenState = await ensureAccessTokenForSync(ownerUserId);
+  if (accessTokenState !== "ok") {
+    return {
+      sent: 0,
+      skipped: accessTokenState,
+      hasMore: false
+    };
   }
 
   await resetStaleSendingOutboxCommands(ownerUserId, getStaleSendingBoundaryIso());
@@ -113,11 +118,11 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
       isFatal: isAuthRequiredError,
       process: async (command) => {
         const commandIds = [command.clientOperationId];
-        await markOutboxCommandsSending(commandIds);
+        await markOutboxCommandsSending(ownerUserId, commandIds);
         try {
           await uploadFilesForCompleteCommands(ownerUserId, [command]);
           const responses = await postOutboxWithServerReconciliation(ownerUserId, [command]);
-          await applyOutboxResponses(responses);
+          await applyOutboxResponses(ownerUserId, responses);
           await reclaimAcceptedLocalMedia(ownerUserId, getAcceptedCompletionFileIds([command], responses));
           logAcceptedReports([command], responses);
           emitSyncEvent(buildSyncEvent([command], responses));
@@ -128,7 +133,7 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
           if (isAuthRequiredError(error)) {
             await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError);
           } else {
-            await markOutboxCommandsRetryLater(commandIds, readableError);
+            await markOutboxCommandsRetryLater(ownerUserId, commandIds, readableError);
           }
           throw error;
         }
@@ -149,6 +154,26 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
   );
 
   return { sent, skipped: null, hasMore };
+}
+
+async function ensureAccessTokenForSync(ownerUserId: string): Promise<"ok" | "serverUnavailable" | "unauthenticated"> {
+  if (await getAccessToken()) {
+    return "ok";
+  }
+
+  try {
+    await refreshStoredAccessToken();
+    return "ok";
+  } catch (error) {
+    const readableError = getReadableSyncError(error);
+    if (isAuthRequiredError(error)) {
+      await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError);
+      return "unauthenticated";
+    }
+
+    await markPendingOutboxCommandsRetryLater(ownerUserId, readableError);
+    return "serverUnavailable";
+  }
 }
 
 function getCommandDependencyKey(command: OutboxCommand) {
@@ -176,13 +201,13 @@ async function postOutboxWithServerReconciliation(ownerUserId: string, commands:
     }
 
     if (reconciledResponses.length > 0) {
-      await applyOutboxResponses(reconciledResponses);
+      await applyOutboxResponses(ownerUserId, reconciledResponses);
       await reclaimAcceptedLocalMedia(ownerUserId, getAcceptedCompletionFileIds(commands, reconciledResponses));
       logAcceptedReports(commands, reconciledResponses);
       emitSyncEvent(buildSyncEvent(commands, reconciledResponses));
     }
 
-    await markOutboxCommandsRetryLater(remainingCommandIds, getReadableSyncError(error));
+    await markOutboxCommandsRetryLater(ownerUserId, remainingCommandIds, getReadableSyncError(error));
 
     throw error;
   }
@@ -218,9 +243,28 @@ function buildSyncEvent(commands: OutboxCommand[], responses: OutboxResponse[]) 
     )
     .map((command) => command.entityLocalId as string);
 
+  const cancelledAssignmentIds = commands.flatMap((command) => {
+    const cancelled = responses.some(
+      (response) =>
+        response.clientOperationId === command.clientOperationId
+        && response.reasonCode === "assignmentCancelled"
+    );
+    if (!cancelled) {
+      return [];
+    }
+
+    const assignmentId = command.payload.assignmentId;
+    if (typeof assignmentId === "string" && assignmentId) {
+      return [assignmentId];
+    }
+
+    return command.entityLocalId ? [command.entityLocalId] : [];
+  });
+
   return {
     acceptedOperationIds,
-    completedAssignmentIds
+    completedAssignmentIds,
+    cancelledAssignmentIds: Array.from(new Set(cancelledAssignmentIds))
   };
 }
 
@@ -255,7 +299,7 @@ export async function reconcileAcceptedCompleteReports(assignmentId?: string) {
     return { reconciled: localFinalized.finalized };
   }
 
-  await applyOutboxResponses(responses);
+  await applyOutboxResponses(ownerUserId, responses);
   await reclaimAcceptedLocalMedia(ownerUserId, getAcceptedCompletionFileIds(commands, responses));
   logAcceptedReports(commands, responses);
   emitSyncEvent(buildSyncEvent(commands, responses));
@@ -279,7 +323,7 @@ async function uploadFilesForCompleteCommands(ownerUserId: string, commands: Out
 
   if (missingClientFileIds.length > 0) {
     throw new Error(
-      `Не найдены локальные вложения: ${missingClientFileIds.length}. Добавьте фото или видео повторно перед отправкой отчета.`
+      `Не найдены локальные вложения: ${missingClientFileIds.length}. Добавьте фото или видео повторно перед отправкой отчёта.`
     );
   }
 
@@ -308,7 +352,7 @@ async function uploadFilesForCompleteCommands(ownerUserId: string, commands: Out
       }).catch(() => undefined);
     } catch (error) {
       await markFileUploadFailed(file.clientFileId);
-      if (error instanceof Error && error.message.includes("Mobile session is invalid")) {
+      if (isAuthRequiredError(error)) {
         throw error;
       }
       throw new Error("Не удалось отправить файл на сервер. Отчет останется в очереди восстановления.");
@@ -407,8 +451,6 @@ function getReadableSyncError(error: unknown) {
 
   return "Не удалось отправить данные. Приложение повторит отправку автоматически.";
 }
-
-const authRequiredMessage = "Сессия истекла. Войдите в аккаунт повторно. Локальные данные и очередь отправки сохранены.";
 
 function isAuthRequiredError(error: unknown) {
   return error instanceof Error && isReauthenticationRequiredError(error.message);

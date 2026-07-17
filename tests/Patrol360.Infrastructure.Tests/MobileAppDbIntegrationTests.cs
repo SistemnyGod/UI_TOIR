@@ -36,6 +36,7 @@ public sealed class MobileAppDbIntegrationTests
         Assert.NotNull(account.Account);
 
         var route = UseRoutes(provider, routes => routes.GetRoutes().First(item => item.Points.Any(point => !string.IsNullOrWhiteSpace(point.NfcCode))));
+        ClearInProgressAssignments(database.ConnectionString, account.Account!.BoundEmployeeIds[0]);
         var mobileRequestId = CreateUnassignedPatrolRequest(database.ConnectionString, account.Account!.BoundEmployeeIds[0], account.Account.BoundEmployees[0], route.Id, route.Name);
 
         var login = UseMobileApp(provider, mobile => mobile.Login(new MobileLoginRequestDto(
@@ -315,6 +316,9 @@ public sealed class MobileAppDbIntegrationTests
         Assert.Equal("uploaded", selectedUpload!.Status);
 
         var photoClientFileIdsByPoint = new Dictionary<Guid, string[]>();
+        // Keep the attachment assertion deterministic even when the seeded route
+        // does not mark the selected NFC point as photo-required.
+        photoClientFileIdsByPoint[routePoint.PointId] = ["file-test-2"];
         var requiredPhotoPoints = bootstrap.Points
             .Where(point => point.RouteId == boardItem.RouteId && point.RequiresPhoto)
             .ToArray();
@@ -651,6 +655,33 @@ public sealed class MobileAppDbIntegrationTests
         var bootstrapAfterCancellation = UseMobileApp(provider, mobile => mobile.GetBootstrap(login.Session.AccessToken));
         Assert.Contains(cancelledAssignmentId, bootstrapAfterCancellation!.CancelledAssignmentIds);
 
+        var cancelledPoint = cancelledBootstrap.Points
+            .First(point => point.RouteId == cancelledBoardItem.RouteId && !string.IsNullOrWhiteSpace(point.NfcUidHash));
+        var cancelledPointAction = UseMobileApp(provider, mobile => mobile.SaveOutbox(
+            login.Session.AccessToken,
+            new MobileOutboxBatchDto([
+                new MobileOutboxCommandDto(
+                    "op-cancelled-point-action",
+                    "scanPatrolPointNfc",
+                    "patrolPoint",
+                    cancelledPoint.PointId.ToString(),
+                    cancelledPoint.PointId.ToString(),
+                    new Dictionary<string, object?>
+                    {
+                        ["assignmentId"] = cancelledAssignmentId,
+                        ["pointId"] = cancelledPoint.PointId,
+                        ["nfcUidHash"] = cancelledPoint.NfcUidHash,
+                        ["scannedAtLocal"] = DateTimeOffset.UtcNow,
+                    },
+                    DateTimeOffset.UtcNow,
+                    0,
+                    "pending")
+            ])));
+
+        Assert.Single(cancelledPointAction);
+        Assert.Equal("conflict", cancelledPointAction[0].Status);
+        Assert.Equal("assignmentCancelled", cancelledPointAction[0].ReasonCode);
+
         var cancelledPointResults = cancelledBootstrap.Points
             .Where(point => point.RouteId == cancelledBoardItem.RouteId)
             .Select(point => new Dictionary<string, object?>
@@ -687,11 +718,11 @@ public sealed class MobileAppDbIntegrationTests
             ])));
 
         Assert.Single(cancelledComplete);
-        Assert.Equal("accepted", cancelledComplete[0].Status);
-        Assert.Contains("dispatcher cancellation", cancelledComplete[0].Message);
+        Assert.Equal("conflict", cancelledComplete[0].Status);
+        Assert.Contains("cancelled by dispatcher", cancelledComplete[0].Message);
         Assert.Equal(cancelledServerStatus, ReadAssignmentStatus(database.ConnectionString, cancelledAssignmentId));
         Assert.Equal(cancelledServerStatus, ReadPatrolRequestStatus(database.ConnectionString, cancelledRequestId));
-        Assert.Equal(cancelledPointResults.Length, CountPatrolResults(database.ConnectionString, cancelledAssignmentId));
+        Assert.Equal(0, CountPatrolResults(database.ConnectionString, cancelledAssignmentId));
     }
 
     [DbIntegrationFact]
@@ -825,12 +856,13 @@ public sealed class MobileAppDbIntegrationTests
         Assert.True(created.Succeeded);
 
         var login = Login(provider, account.Account.Login, "Patrol360!");
-        var bootstrap = UseMobileApp(provider, mobile => mobile.GetBootstrap(login.Session!.AccessToken));
+        var session = login.Session ?? throw new InvalidOperationException("Mobile login did not return a session.");
+        var bootstrap = UseMobileApp(provider, mobile => mobile.GetBootstrap(session.AccessToken));
         var boardItem = Assert.Single(bootstrap!.RequestBoard, item => item.RequestId == requestId);
         Assert.Equal("assigned", boardItem.Status);
         Assert.DoesNotContain(bootstrap.Assignments, item => item.RequestId == requestId);
 
-        var accepted = UseMobileApp(provider, mobile => mobile.SaveOutbox(login.Session.AccessToken, new MobileOutboxBatchDto([
+        var accepted = UseMobileApp(provider, mobile => mobile.SaveOutbox(session.AccessToken, new MobileOutboxBatchDto([
             BuildLifecycleCommand(
                 "op-assigned-explicit-accept",
                 "acceptPatrolRequest",
@@ -847,7 +879,7 @@ public sealed class MobileAppDbIntegrationTests
         Assert.Single(accepted);
         Assert.Equal("accepted", accepted[0].Status);
 
-        var afterAccept = UseMobileApp(provider, mobile => mobile.GetBootstrap(login.Session.AccessToken));
+        var afterAccept = UseMobileApp(provider, mobile => mobile.GetBootstrap(session.AccessToken));
         Assert.Contains(afterAccept!.Assignments, item => item.RequestId == requestId && item.Status == "accepted");
     }
 

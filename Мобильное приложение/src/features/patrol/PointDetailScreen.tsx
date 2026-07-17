@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { listPointFiles } from "@/db/repositories/filesRepository";
-import { getPointForFill, PointForFill, PointListItem } from "@/db/repositories/patrolRepository";
+import { getAssignmentById, getPointForFill, PointForFill, PointListItem } from "@/db/repositories/patrolRepository";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { Card } from "@/ui/Card";
@@ -16,14 +16,16 @@ export function PointDetailScreen() {
   const router = useRouter();
   const { assignmentId, pointId } = useLocalSearchParams<{ assignmentId: string; pointId: string }>();
   const { colors } = useAppTheme();
+  const [assignment, setAssignment] = useState<{ status: string } | null>(null);
   const [point, setPoint] = useState<PointForFill | null>(null);
   const [attachments, setAttachments] = useState<LocalMobileFile[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      void Promise.all([getPointForFill(assignmentId, pointId), listPointFiles(assignmentId, pointId)]).then(([loadedPoint, files]) => {
+      void Promise.all([getAssignmentById(assignmentId), getPointForFill(assignmentId, pointId), listPointFiles(assignmentId, pointId)]).then(([loadedAssignment, loadedPoint, files]) => {
         if (isMounted) {
+          setAssignment(loadedAssignment);
           setPoint(loadedPoint);
           setAttachments(files);
         }
@@ -44,6 +46,8 @@ export function PointDetailScreen() {
       </Screen>
     );
   }
+
+  const canEdit = assignment?.status === "inProgress";
 
   return (
     <Screen title="Точка маршрута" subtitle="Проверьте состояние точки, вложения и подтверждение метки.">
@@ -103,16 +107,24 @@ export function PointDetailScreen() {
         )}
       </Card>
 
-      <PrimaryButton
-        icon="create-outline"
-        label={point.status === "pending" ? "Заполнить метку" : "Изменить результат"}
-        onPress={() => router.push(`/patrol/assignment/${assignmentId}/point/${pointId}/fill`)}
-      />
-      <View style={styles.actionRow}>
-        <SecondaryAction label="Сканировать NFC" onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-nfc`)} />
-        <SecondaryAction label="QR резерв" onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-qr`)} />
-        <SecondaryAction label="Все метки" onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} />
-      </View>
+      {canEdit ? (
+        <>
+          <PrimaryButton
+            icon="create-outline"
+            label={point.status === "pending" ? "Заполнить метку" : "Изменить результат"}
+            onPress={() => router.push(`/patrol/assignment/${assignmentId}/point/${pointId}/fill`)}
+          />
+          <View style={styles.actionRow}>
+            <SecondaryAction label="Сканировать NFC" onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-nfc`)} />
+            <SecondaryAction label="QR резерв" onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-qr`)} />
+            <SecondaryAction label="Все метки" onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} />
+          </View>
+        </>
+      ) : (
+        <Card>
+          <Text style={[styles.text, { color: colors.mutedText }]}>{pointActionHint(assignment?.status)}</Text>
+        </Card>
+      )}
     </Screen>
   );
 }
@@ -213,6 +225,22 @@ function fileStatusLabel(status: string) {
     default:
       return "На телефоне";
   }
+}
+
+function pointActionHint(status: string | undefined) {
+  if (status === "cancelledServer" || status === "cancelled") {
+    return "Заявка отменена диспетчером. Точка доступна только для просмотра.";
+  }
+
+  if (status === "completed" || status === "completedServer" || status === "completedLocal" || status === "syncing") {
+    return "Обход завершен или ожидает отправки. Изменение точки заблокировано.";
+  }
+
+  if (status === "needsDispatcherDecision" || status === "conflict" || status === "syncError" || status === "authRequired") {
+    return "Действия по точке временно заблокированы до синхронизации или решения диспетчера.";
+  }
+
+  return "Действия с меткой доступны после начала обхода.";
 }
 
 function formatDateTime(value: string) {

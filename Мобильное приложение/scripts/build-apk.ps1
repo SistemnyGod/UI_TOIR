@@ -185,6 +185,10 @@ if (Test-Path -LiteralPath (Join-Path $HostGradleWrapperDists "gradle-9.3.1-bin"
     -Force
 }
 
+$LocalGradleBin = Get-ChildItem -Path $GradleWrapperDists -Recurse -Filter "gradle.bat" -ErrorAction SilentlyContinue |
+  Where-Object { $_.FullName -match "\\gradle-9\.3\.1\\bin\\gradle\.bat$" } |
+  Select-Object -First 1
+
 if ((Test-Path -LiteralPath $HostGradleModuleCache) -and -not (Test-Path -LiteralPath $GradleModuleCache)) {
   New-Item -ItemType Directory -Path (Split-Path -Parent $GradleModuleCache) -Force | Out-Null
   robocopy $HostGradleModuleCache $GradleModuleCache /E /NFL /NDL /NJH /NJS /NP /R:1 /W:1 | Out-Null
@@ -243,7 +247,10 @@ try {
   $gradlePluginSettings = Join-Path $BuildRoot "node_modules\@react-native\gradle-plugin\settings.gradle.kts"
   if (Test-Path -LiteralPath $gradlePluginSettings) {
     $settingsContent = Get-Content -LiteralPath $gradlePluginSettings -Raw
-    $settingsContent = $settingsContent -replace 'version\("0\.5\.0"\)', 'version("1.0.0")'
+    # JAVA_HOME is pinned above, so the optional Foojay toolchain resolver is
+    # not required for this build. Removing its plugin marker keeps local and
+    # restricted-network builds independent of Gradle Plugin Portal metadata.
+    $settingsContent = $settingsContent -replace '(?m)^\s*plugins\s*\{\s*id\("org\.gradle\.toolchains\.foojay-resolver-convention"\)\.version\("[^"]+"\)\s*\}\s*$', ''
     Set-Content -LiteralPath $gradlePluginSettings -Value $settingsContent -NoNewline
   }
 
@@ -259,7 +266,10 @@ try {
   try {
     $task = if ($Configuration -eq "Release") { "assembleRelease" } else { "assembleDebug" }
     Write-Host "Running Gradle task: $task"
-    if ($HostGradleBin) {
+    if ($LocalGradleBin) {
+      Invoke-Checked $LocalGradleBin.FullName $task "--no-daemon" "--console=plain" "-PreactNativeArchitectures=$ReactNativeArchitectures"
+    }
+    elseif ($HostGradleBin) {
       Invoke-Checked $HostGradleBin.FullName $task "--no-daemon" "--console=plain" "-PreactNativeArchitectures=$ReactNativeArchitectures"
     }
     else {

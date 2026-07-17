@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -80,7 +81,7 @@ export function PatrolHomeScreen() {
     () => ({
       available: requests.filter((request) => request.status === "available" || request.status === "assigned").length,
       mine: requests.filter((request) => ["accepted", "inProgress", "paused"].includes(request.status)).length,
-      unsent: requests.filter((request) => ["completedLocal", "syncing", "syncError", "authRequired", "needsDispatcherDecision"].includes(request.status)).length
+      unsent: requests.filter((request) => ["completedLocal", "syncing", "retryLater", "syncError", "authRequired", "needsDispatcherDecision"].includes(request.status)).length
     }),
     [requests]
   );
@@ -88,6 +89,7 @@ export function PatrolHomeScreen() {
   const isAccepted = active?.assignment.status === "accepted";
   const isPaused = active?.assignment.status === "paused";
   const isInProgress = active?.assignment.status === "inProgress";
+  const canUsePatrolAction = isAccepted || isPaused || isInProgress;
   const primaryAction = getPrimaryAction(active?.assignment.status);
   const visibleRequests = requests
     .filter((request) => ["available", "assigned", "accepted"].includes(request.status))
@@ -119,13 +121,17 @@ export function PatrolHomeScreen() {
             <View style={[styles.progressFill, { width: `${progressPercent(active.progress)}%` }]} />
           </View>
 
-          {!isCompletedLocal ? (
+          {canUsePatrolAction && !isCompletedLocal ? (
             <PrimaryButton
               icon={primaryAction.icon}
               label={primaryAction.label}
               onPress={() => router.push(primaryAction.path(active.assignment.assignmentId) as never)}
               size="large"
             />
+          ) : !isCompletedLocal ? (
+            <Text style={[styles.text, { color: colors.mutedText }]}>
+              {homeBlockedHint(active.assignment.status)}
+            </Text>
           ) : (
             <Text style={[styles.text, { color: colors.mutedText }]}>
               Отчёт сохранён на телефоне. Он отправится автоматически при связи; статус можно посмотреть в очереди.
@@ -133,10 +139,10 @@ export function PatrolHomeScreen() {
           )}
 
           <View style={styles.actions}>
-            <PrimaryButton icon="list-outline" label="Все метки" onPress={() => router.push(`/patrol/assignment/${active.assignment.assignmentId}/all-points`)} variant="secondary" />
-            <PrimaryButton icon="swap-horizontal-outline" label="Сменить заявку" onPress={() => router.push("/patrol/request-board")} variant="secondary" />
+            <HomeQuickAction icon="list-outline" label="Все метки" onPress={() => router.push(`/patrol/assignment/${active.assignment.assignmentId}/all-points`)} />
+            <HomeQuickAction icon="swap-horizontal-outline" label="Заявки" onPress={() => router.push("/patrol/request-board")} />
             {isCompletedLocal ? (
-              <PrimaryButton icon="cloud-upload-outline" label="Очередь отправки" onPress={() => router.push("/settings/sync-queue" as never)} variant="secondary" />
+              <HomeQuickAction icon="cloud-upload-outline" label="Очередь" onPress={() => router.push("/settings/sync-queue" as never)} />
             ) : null}
           </View>
         </Card>
@@ -201,6 +207,33 @@ export function PatrolHomeScreen() {
 
       {message ? <Text style={[styles.message, { color: colors.mutedText }]}>{message}</Text> : null}
     </Screen>
+  );
+}
+
+function HomeQuickAction({
+  icon,
+  label,
+  onPress
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
+  const { colors } = useAppTheme();
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.quickAction,
+        { borderColor: colors.border, backgroundColor: colors.card },
+        pressed ? styles.quickActionPressed : null
+      ]}
+    >
+      <Ionicons color={colors.primary} name={icon} size={17} />
+      <Text style={[styles.quickActionText, { color: colors.primary }]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -270,9 +303,31 @@ function getPrimaryAction(status: ActiveAssignment["status"] | undefined) {
   };
 }
 
+function homeBlockedHint(status: ActiveAssignment["status"]) {
+  if (status === "cancelledServer" || status === "cancelled") {
+    return "Заявка отменена диспетчером. Действия по меткам заблокированы.";
+  }
+
+  if (status === "authRequired") {
+    return "Сессия требует входа. Отчет и локальные действия сохранены в очереди.";
+  }
+
+  if (status === "needsDispatcherDecision" || status === "conflict") {
+    return "Нужно решение диспетчера. Откройте карточку обхода и очередь синхронизации.";
+  }
+
+  if (status === "syncError") {
+    return "Отправка остановлена из-за ошибки. Данные сохранены, повтор доступен в очереди.";
+  }
+
+  return "Действия по обходу временно недоступны. Проверьте статус и синхронизацию.";
+}
+
 const styles = StyleSheet.create({
   actions: {
-    gap: 10
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
   },
   cardTitle: {
     fontSize: 24,
@@ -324,6 +379,23 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     paddingHorizontal: 10,
     paddingVertical: 6
+  },
+  quickAction: {
+    alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    minHeight: 42,
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  quickActionPressed: {
+    opacity: 0.72
+  },
+  quickActionText: {
+    fontSize: 13,
+    fontWeight: "900"
   },
   requestCard: {
     padding: 14

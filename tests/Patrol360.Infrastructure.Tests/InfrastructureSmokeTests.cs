@@ -74,6 +74,19 @@ public class InfrastructureSmokeTests
     }
 
     [Fact]
+    public void PatrolTimeZoneConvertsMobileScheduleTimeFromBusinessZoneToUtc()
+    {
+        var services = new ServiceCollection();
+        services.AddPatrolInfrastructure(new ConfigurationBuilder().Build());
+        using var provider = services.BuildServiceProvider();
+        var timeZone = provider.GetRequiredService<IPatrolTimeZone>();
+
+        Assert.Equal(
+            new DateTimeOffset(2026, 7, 17, 15, 0, 0, TimeSpan.Zero),
+            timeZone.ToUtc(new DateOnly(2026, 7, 17), new TimeOnly(20, 0)));
+    }
+
+    [Fact]
     public void PercoRepairMigrationsAreDiscoverableByEf()
     {
         AssertMigrationId<PercoIntegrationStage1>("20260602120000_PercoIntegrationStage1");

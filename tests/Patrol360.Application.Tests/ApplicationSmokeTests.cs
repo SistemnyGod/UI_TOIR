@@ -36,7 +36,9 @@ public class ApplicationSmokeTests
             Status: "Active",
             NfcCode: "NFC-001",
             IsRequired: true,
-            RequiresPhoto: false);
+            RequiresPhoto: false,
+            Description: "Motor inspection point",
+            Instruction: "Scan the tag and inspect the motor");
 
         var success = new CreateRoutePointResult(route, point, new Dictionary<string, string[]>());
         var missingPoint = new CreateRoutePointResult(route, null, new Dictionary<string, string[]>());

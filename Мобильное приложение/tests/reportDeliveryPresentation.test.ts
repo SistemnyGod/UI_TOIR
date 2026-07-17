@@ -16,9 +16,9 @@ test("expired authorization directs the user to sign in without losing the repor
   assert.match(view.detail, /сохранен на телефоне/);
 });
 
-test("generic retry messages do not become a forced sign-in", () => {
+test("explicit re-authentication messages ask for sign-in", () => {
   const view = getReportDeliveryPresentation("retryLater", "Сервер доступен, требуется повторный вход: http://192.168.2.194");
-  assert.equal(view.action, "retry");
+  assert.equal(view.action, "signIn");
 });
 
 test("a session reset for another account asks to sign in", () => {

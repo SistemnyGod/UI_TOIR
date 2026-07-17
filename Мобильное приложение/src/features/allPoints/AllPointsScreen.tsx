@@ -2,7 +2,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { ListRenderItem, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { getActiveAssignment, listAssignmentPoints, PointListItem } from "@/db/repositories/patrolRepository";
+import { getActiveAssignment, getAssignmentById, listAssignmentPoints, PointListItem } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -16,6 +16,7 @@ export function AllPointsScreen() {
   const { colors } = useAppTheme();
   const { assignmentId: routeAssignmentId } = useLocalSearchParams<{ assignmentId?: string }>();
   const [assignmentId, setAssignmentId] = useState<string | null>(routeAssignmentId ?? null);
+  const [assignmentStatus, setAssignmentStatus] = useState<string | null>(null);
   const [points, setPoints] = useState<PointListItem[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -26,10 +27,14 @@ export function AllPointsScreen() {
       async function load() {
         const active = routeAssignmentId ? null : await getActiveAssignment();
         const targetAssignmentId = routeAssignmentId ?? active?.assignmentId ?? null;
+        const targetAssignment = targetAssignmentId && routeAssignmentId
+          ? await getAssignmentById(targetAssignmentId)
+          : active;
         const rows = targetAssignmentId ? await listAssignmentPoints(targetAssignmentId) : [];
 
         if (isMounted) {
           setAssignmentId(targetAssignmentId);
+          setAssignmentStatus(targetAssignment?.status ?? null);
           setPoints(rows);
         }
       }
@@ -96,11 +101,17 @@ export function AllPointsScreen() {
               <Text style={[styles.meta, { color: colors.mutedText }]}>{percent}%</Text>
             </Card>
 
-            <PrimaryButton
-              icon="scan-outline"
-              label="Сканировать NFC"
-              onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-nfc`)}
-            />
+            {assignmentStatus === "inProgress" ? (
+              <PrimaryButton
+                icon="scan-outline"
+                label="Сканировать NFC"
+                onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-nfc`)}
+              />
+            ) : (
+              <Card>
+                <Text style={[styles.text, { color: colors.mutedText }]}>{pointListHint(assignmentStatus)}</Text>
+              </Card>
+            )}
 
             <View style={styles.filters}>
               <FilterChip count={summary.total} label="Все" selected={filter === "all"} onPress={() => setFilter("all")} />
@@ -175,6 +186,22 @@ function buildSummary(points: PointListItem[]) {
 
 function progressPercent(summary: ReturnType<typeof buildSummary>) {
   return summary.total === 0 ? 0 : Math.round((summary.completed / summary.total) * 100);
+}
+
+function pointListHint(status: string | null) {
+  if (status === "cancelledServer" || status === "cancelled") {
+    return "Заявка отменена диспетчером. Метки доступны только для просмотра.";
+  }
+
+  if (status === "completed" || status === "completedServer" || status === "completedLocal" || status === "syncing") {
+    return "Обход завершен или ожидает отправки. Новое сканирование заблокировано.";
+  }
+
+  if (status === "needsDispatcherDecision" || status === "conflict" || status === "syncError" || status === "authRequired") {
+    return "Сканирование временно заблокировано до синхронизации или решения диспетчера.";
+  }
+
+  return "Сканирование NFC доступно после начала обхода.";
 }
 
 function pointStatusLabel(status: PointListItem["status"]) {

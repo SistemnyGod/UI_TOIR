@@ -74,7 +74,9 @@ internal sealed partial class EfPatrolStore
         AddMobileAccountAuditEvent(
             accountEntity.Id,
             temporaryPassword is null ? "mobile_account.created_without_password" : "mobile_account.created_with_temporary_password",
-            temporaryPassword is null ? "Account created; password must be set before first login." : "Temporary password generated and returned once.");
+            temporaryPassword is null
+                ? $"Создан мобильный аккаунт {accountEntity.Login}; пароль нужно задать перед первым входом."
+                : $"Создан мобильный аккаунт {accountEntity.Login}; временный пароль выдан один раз.");
         SyncEmployeeMobileFlags(accountEntity);
         SaveChangesAndInvalidateDashboardSummary();
 
@@ -107,7 +109,10 @@ internal sealed partial class EfPatrolStore
             DetachAllBindings(account);
         }
 
-        AddMobileAccountAuditEvent(account.Id, "mobile_account.updated", "Login, role or status updated.");
+        AddMobileAccountAuditEvent(
+            account.Id,
+            "mobile_account.updated",
+            $"Обновлён аккаунт {account.Login}. Роль: {account.Role}; статус: {account.Status}.");
         SyncMobileAccountDerivedState(account);
         SaveChangesAndRebuildEmployeeMobileFlags();
 
@@ -171,7 +176,10 @@ internal sealed partial class EfPatrolStore
             account.Status = "Активен";
         }
 
-        AddMobileAccountAuditEvent(account.Id, "mobile_account.employee_attached", $"Employee {employee.Id} attached.");
+        AddMobileAccountAuditEvent(
+            account.Id,
+            "mobile_account.employee_attached",
+            $"К аккаунту {account.Login} привязан сотрудник {employee.FullName} (ID: {employee.Id}).");
         SyncMobileAccountDerivedState(account);
         if (account.EmployeeScope == "all")
         {
@@ -216,7 +224,10 @@ internal sealed partial class EfPatrolStore
             binding.DetachedAt = DateTimeOffset.UtcNow;
         }
 
-        AddMobileAccountAuditEvent(account.Id, "mobile_account.employee_detached", $"Employee {employeeId} detached.");
+        AddMobileAccountAuditEvent(
+            account.Id,
+            "mobile_account.employee_detached",
+            $"От аккаунта {account.Login} отвязан сотрудник (ID: {employeeId}).");
         SyncMobileAccountDerivedState(account);
         if (account.Status == "Активен" && GetActiveBindings(account).Count == 0)
         {
@@ -247,7 +258,7 @@ internal sealed partial class EfPatrolStore
 
         account.Status = "Заблокирован";
         account.Session = "-";
-        AddMobileAccountAuditEvent(account.Id, "mobile_account.blocked", "Mobile account blocked.");
+        AddMobileAccountAuditEvent(account.Id, "mobile_account.blocked", $"Мобильный аккаунт {account.Login} заблокирован.");
         SaveChangesAndInvalidateDashboardSummary();
 
         return new UpdateMobileAccountResult(MapMobileAccount(account), new Dictionary<string, string[]>());
@@ -264,7 +275,7 @@ internal sealed partial class EfPatrolStore
         }
 
         account.Status = account.EmployeeScope == "all" || GetDisplayBoundEmployeeNames(account).Length > 0 ? "Активен" : "Не привязан";
-        AddMobileAccountAuditEvent(account.Id, "mobile_account.unblocked", "Mobile account unblocked.");
+        AddMobileAccountAuditEvent(account.Id, "mobile_account.unblocked", $"Мобильный аккаунт {account.Login} разблокирован.");
         SaveChangesAndInvalidateDashboardSummary();
 
         return new UpdateMobileAccountResult(MapMobileAccount(account), new Dictionary<string, string[]>());
@@ -282,7 +293,7 @@ internal sealed partial class EfPatrolStore
         account.PasswordHash = MobilePasswordHasher.HashPassword(account, password);
         account.PasswordResetRequired = true;
         account.LastPasswordResetAt = DateTimeOffset.UtcNow;
-        AddMobileAccountAuditEvent(account.Id, "mobile_account.password_reset", "Temporary password generated and returned once.");
+        AddMobileAccountAuditEvent(account.Id, "mobile_account.password_reset", $"Для аккаунта {account.Login} создан новый временный пароль.");
         SaveChangesAndInvalidateDashboardSummary();
 
         return new ResetMobileAccountPasswordDto(password, account.LastPasswordResetAt.Value);
@@ -296,7 +307,7 @@ internal sealed partial class EfPatrolStore
             return false;
         }
 
-        AddMobileAccountAuditEvent(account.Id, "mobile_account.deleted", "Mobile account deleted.");
+        AddMobileAccountAuditEvent(account.Id, "mobile_account.deleted", $"Мобильный аккаунт {account.Login} удалён.");
         dbContext.MobileAccounts.Remove(account);
         SaveChangesAndInvalidateDashboardSummary();
 
@@ -313,6 +324,7 @@ internal sealed partial class EfPatrolStore
             return [];
         }
 
+        var now = DateTimeOffset.UtcNow;
         return dbContext.MobileAccountSessions
             .AsNoTracking()
             .Where(session => session.MobileAccountId == id)
@@ -320,13 +332,16 @@ internal sealed partial class EfPatrolStore
             .Select(session => new MobileAccountSessionDto(
                 session.Id,
                 session.MobileAccountId,
-                session.Status,
+                session.RevokedAt != null ? "Вышел" : session.ExpiresAt <= now ? "Истекла" : "Онлайн",
                 session.DeviceId,
                 session.Device,
                 session.Platform,
                 session.AppVersion,
                 session.IpAddress,
-                session.LastSeenAt))
+                session.LastSeenAt,
+                session.CreatedAt,
+                session.RevokedAt ?? (session.ExpiresAt <= now ? session.ExpiresAt : null)))
+            .Take(7)
             .ToList();
     }
 
@@ -341,6 +356,7 @@ internal sealed partial class EfPatrolStore
             .AsNoTracking()
             .Where(auditEvent => auditEvent.MobileAccountId == id)
             .OrderByDescending(auditEvent => auditEvent.CreatedAt)
+            .Take(7)
             .Select(auditEvent => new MobileAccountSecurityEventDto(
                 auditEvent.Id,
                 auditEvent.MobileAccountId,

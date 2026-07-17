@@ -3,7 +3,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { refreshStoredAccessToken } from "@/api/httpClient";
 import { photoUploadTimeoutMs, serverUnavailableMessage, videoUploadTimeoutMs, withTimeout } from "@/api/networkTimeout";
 import { shouldTryNextMobileServer } from "@/api/serverFailoverPolicy";
-import { getAccessToken } from "@/auth/tokenStorage";
+import { clearAuthTokens, getAccessToken } from "@/auth/tokenStorage";
 import { getMobileRuntimeConfig, getServerCandidateBaseUrls, setServerBaseUrl } from "@/core/serverSettings";
 import { LocalMobileFile, MobileFileUploadResponse } from "@/domain/files/fileTypes";
 
@@ -17,22 +17,45 @@ export async function uploadMobileFile(file: LocalMobileFile) {
   const runtimeConfig = await getMobileRuntimeConfig();
   let { apiBaseUrl, result } = await uploadFileWithFailover(runtimeConfig.apiBaseUrl, runtimeConfig.syncProtocolVersion, file, token);
 
-  if (result.status === 401 && token) {
+  // Keep attachment upload consistent with JSON requests when only the
+  // refresh token remains available.
+  if (result.status === 401) {
     const refreshedToken = await refreshStoredAccessToken();
     ({ result } = await uploadFileWithFailover(apiBaseUrl, runtimeConfig.syncProtocolVersion, file, refreshedToken));
   }
 
   if (result.status === 401) {
-    // Keep the file and credentials intact. A temporary 401 after a refresh is
-    // retried by the outbox and must not become a forced sign-in.
-    throw new Error(`Mobile API temporarily rejected the file upload (${apiBaseUrl}). The report is saved and will be retried automatically.`);
+    // The retry used a refreshed token and was rejected again. Stop the
+    // attachment retry loop; local file/outbox data remains available after
+    // an explicit sign-in.
+    await clearAuthTokens();
+    throw new Error(
+      `Сессия не восстановлена при загрузке файла. Войдите в аккаунт повторно. Файл и отчёт сохранены. Адрес: ${apiBaseUrl}`
+    );
   }
 
   if (result.status < 200 || result.status >= 300) {
     throw new Error(`Не удалось загрузить файл: ${result.status}`);
   }
 
-  return JSON.parse(result.body) as MobileFileUploadResponse;
+  return validateFileUploadResponse(JSON.parse(result.body), file.clientFileId);
+}
+
+function validateFileUploadResponse(value: unknown, expectedClientFileId: string): MobileFileUploadResponse {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("Сервер вернул некорректный ответ вложения. Файл сохранён для повторной отправки.");
+  }
+
+  const response = value as Record<string, unknown>;
+  if (response.clientFileId !== expectedClientFileId
+    || typeof response.serverFileId !== "string"
+    || response.serverFileId.trim().length === 0
+    || (response.status !== "uploaded" && response.status !== "duplicate")
+    || typeof response.uploadedAt !== "string") {
+    throw new Error("Сервер вернул неполный ответ вложения. Файл сохранён для повторной отправки.");
+  }
+
+  return response as unknown as MobileFileUploadResponse;
 }
 
 export const uploadPatrolPhoto = uploadMobileFile;
@@ -43,7 +66,7 @@ async function validateMobileFileBeforeUpload(file: LocalMobileFile) {
   const hasWorkTaskScope = Boolean(file.workTaskId);
 
   if (!hasPatrolPointScope && !hasRemarkScope && !hasWorkTaskScope) {
-    throw new Error("Файл не привязан к точке обхода или замечанию смены.");
+    throw new Error("Файл не привязан к точке обхода, замечанию смены или работе.");
   }
 
   if (!file.clientFileId || !file.localPath || !file.sha256 || !file.sizeBytes) {

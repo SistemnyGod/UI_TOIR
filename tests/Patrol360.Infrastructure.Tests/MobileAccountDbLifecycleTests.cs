@@ -59,11 +59,28 @@ public sealed class MobileAccountDbLifecycleTests
         Assert.True(unblocked.Succeeded);
         Assert.Equal("Активен", unblocked.Account!.Status);
 
-        await database.InsertSessionAsync(accountId);
+        var login = UseMobileApp(provider, mobile => mobile.Login(
+            new MobileLoginRequestDto(
+                updated.Account.Login,
+                created.TemporaryPassword!,
+                "mobile-account-lifecycle-device",
+                "Test Android device",
+                "Android",
+                "2.3.0"),
+            "127.0.0.1"));
+        Assert.True(login.Succeeded);
+        Assert.NotNull(login.Session);
 
         var sessions = UseMobileAccounts(provider, mobileAccounts => mobileAccounts.GetSessions(accountId));
         Assert.Single(sessions);
         Assert.Equal("Android", sessions[0].Platform);
+        Assert.NotEqual(default, sessions[0].StartedAt);
+        Assert.Null(sessions[0].EndedAt);
+
+        Assert.True(UseMobileApp(provider, mobile => mobile.Logout(login.Session!.AccessToken)));
+        sessions = UseMobileAccounts(provider, mobileAccounts => mobileAccounts.GetSessions(accountId));
+        Assert.Single(sessions);
+        Assert.NotNull(sessions[0].EndedAt);
 
         var reset = UseMobileAccounts(provider, mobileAccounts => mobileAccounts.ResetPassword(accountId));
         Assert.NotNull(reset);
@@ -80,9 +97,11 @@ public sealed class MobileAccountDbLifecycleTests
         Assert.Equal("Не привязан", secondDetach.Account.Status);
 
         var securityEvents = UseMobileAccounts(provider, mobileAccounts => mobileAccounts.GetSecurityEvents(accountId));
-        Assert.Contains(securityEvents, item => item.EventType == "mobile_account.updated");
+        Assert.Equal(7, securityEvents.Count);
         Assert.Contains(securityEvents, item => item.EventType == "mobile_account.blocked");
         Assert.Contains(securityEvents, item => item.EventType == "mobile_account.unblocked");
+        Assert.Contains(securityEvents, item => item.EventType == "mobile_account.login");
+        Assert.Contains(securityEvents, item => item.EventType == "mobile_account.logout");
         Assert.Contains(securityEvents, item => item.EventType == "mobile_account.password_reset");
         Assert.Contains(securityEvents, item => item.EventType == "mobile_account.employee_detached");
 
@@ -133,6 +152,12 @@ public sealed class MobileAccountDbLifecycleTests
         using var scope = provider.CreateScope();
         return action(scope.ServiceProvider.GetRequiredService<IMobileAccountService>());
     }
+
+    private static T UseMobileApp<T>(ServiceProvider provider, Func<IMobileAppService, T> action)
+    {
+        using var scope = provider.CreateScope();
+        return action(scope.ServiceProvider.GetRequiredService<IMobileAppService>());
+    }
 }
 
 internal sealed class TemporaryPostgresDatabase : IAsyncDisposable
@@ -170,41 +195,6 @@ internal sealed class TemporaryPostgresDatabase : IAsyncDisposable
         await command.ExecuteNonQueryAsync();
 
         return new TemporaryPostgresDatabase(adminConnectionString, databaseName, testConnectionBuilder.ConnectionString);
-    }
-
-    public async Task InsertSessionAsync(Guid accountId)
-    {
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-
-        await using var command = connection.CreateCommand();
-        command.CommandText =
-            """
-            INSERT INTO mobile_account_sessions (
-                id,
-                mobile_account_id,
-                status,
-                device,
-                platform,
-                app_version,
-                ip_address,
-                last_seen_at
-            )
-            VALUES (
-                @id,
-                @account_id,
-                'Онлайн',
-                'Xiaomi Redmi Note 12',
-                'Android',
-                '2.3.0',
-                '127.0.0.1',
-                @last_seen_at
-            );
-            """;
-        command.Parameters.AddWithValue("id", Guid.NewGuid());
-        command.Parameters.AddWithValue("account_id", accountId);
-        command.Parameters.AddWithValue("last_seen_at", DateTimeOffset.UtcNow);
-        await command.ExecuteNonQueryAsync();
     }
 
     public async ValueTask DisposeAsync()

@@ -1,11 +1,18 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
-import { scanPointByNfc } from "@/db/repositories/patrolRepository";
+import {
+  AssignmentProgress,
+  getAssignmentById,
+  listAssignmentPoints,
+  PointListItem,
+  scanPointByNfc
+} from "@/db/repositories/patrolRepository";
 import { cancelNfcRead, getNfcCode, initializeNfc, readNfcTag } from "@/services/nfcService";
 import { Card } from "@/ui/Card";
+import { useAppTheme } from "@/features/settings/themePreference";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
@@ -14,9 +21,24 @@ type NfcStatus = "idle" | "reading" | "matched" | "unsupported" | "disabled" | "
 
 export function ScanNfcScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
   const { assignmentId } = useLocalSearchParams<{ assignmentId: string }>();
   const autoScanStartedRef = useRef(false);
   const [status, setStatus] = useState<NfcStatus>("idle");
+  const [routeName, setRouteName] = useState<string | null>(null);
+  const [progress, setProgress] = useState<AssignmentProgress | null>(null);
+  const [nextPoint, setNextPoint] = useState<PointListItem | null>(null);
+
+  const loadRouteProgress = useCallback(async () => {
+    const [assignment, points] = await Promise.all([
+      getAssignmentById(assignmentId),
+      listAssignmentPoints(assignmentId)
+    ]);
+
+    setRouteName(assignment?.routeName ?? null);
+    setProgress(buildProgress(points));
+    setNextPoint(points.find((point) => !["ok", "issue", "skipped"].includes(point.status)) ?? null);
+  }, [assignmentId]);
   const [message, setMessage] = useState("Поднесите телефон к NFC-метке.");
 
   const handleScan = useCallback(async () => {
@@ -60,6 +82,21 @@ export function ScanNfcScreen() {
     }
   }, [assignmentId, router]);
 
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      void loadRouteProgress().catch(() => {
+        if (isMounted) {
+          setProgress(null);
+          setNextPoint(null);
+        }
+      });
+      return () => {
+        isMounted = false;
+      };
+    }, [loadRouteProgress])
+  );
+
   useEffect(() => {
     if (autoScanStartedRef.current) {
       return;
@@ -75,6 +112,25 @@ export function ScanNfcScreen() {
 
   return (
     <Screen title="Сканирование NFC" subtitle={undefined}>
+      {routeName ? <Text style={[styles.routeName, { color: colors.text }]}>{routeName}</Text> : null}
+      {progress ? (
+        <Card>
+          <View style={styles.progressHeader}>
+            <Text style={[styles.progressLabel, { color: colors.text }]}>Прогресс маршрута</Text>
+            <Text style={[styles.progressLabel, { color: colors.text }]}>{progress.completed} из {progress.total}</Text>
+          </View>
+          <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+            <View style={[styles.progressFill, { width: `${progressPercent(progress)}%` }]} />
+          </View>
+          <Text style={[styles.progressPercent, { color: colors.mutedText }]}>{progressPercent(progress)}%</Text>
+          <View style={[styles.nextPointBox, { backgroundColor: colors.backgroundAccent, borderColor: colors.border }]}>
+            <Text style={[styles.nextPointLabel, { color: colors.primary }]}>СЛЕДУЮЩАЯ МЕТКА</Text>
+            <Text style={[styles.nextPointName, { color: colors.text }]}>
+              {nextPoint ? `${nextPoint.orderIndex}. ${nextPoint.name}` : "Все метки обработаны"}
+            </Text>
+          </View>
+        </Card>
+      ) : null}
       <Card>
         <View style={styles.scanIcon}>
           <Ionicons color="#1e5bff" name="scan-outline" size={44} />
@@ -141,6 +197,50 @@ function statusTone(status: NfcStatus) {
 }
 
 const styles = StyleSheet.create({
+  routeName: {
+    fontSize: 18,
+    fontWeight: "900",
+    lineHeight: 24
+  },
+  progressHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  progressLabel: {
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  progressTrack: {
+    borderRadius: 999,
+    height: 10,
+    overflow: "hidden"
+  },
+  progressFill: {
+    backgroundColor: "#1e5bff",
+    borderRadius: 999,
+    height: "100%"
+  },
+  progressPercent: {
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  nextPointBox: {
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 4,
+    padding: 12
+  },
+  nextPointLabel: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.6
+  },
+  nextPointName: {
+    fontSize: 17,
+    fontWeight: "900",
+    lineHeight: 22
+  },
   title: {
     color: "#0f1a2b",
     fontSize: 19,
@@ -163,3 +263,21 @@ const styles = StyleSheet.create({
     lineHeight: 21
   }
 });
+
+function progressPercent(progress: AssignmentProgress) {
+  if (progress.total === 0) {
+    return 0;
+  }
+
+  return Math.min(100, Math.round((progress.completed / progress.total) * 100));
+}
+
+function buildProgress(points: PointListItem[]): AssignmentProgress {
+  return {
+    total: points.length,
+    completed: points.filter((point) => ["ok", "issue", "skipped"].includes(point.status)).length,
+    deferred: points.filter((point) => point.status === "deferred").length,
+    issues: points.filter((point) => point.status === "issue").length,
+    skipped: points.filter((point) => point.status === "skipped").length
+  };
+}

@@ -280,6 +280,8 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(point => point.Zone).HasColumnName("zone").HasMaxLength(160).IsRequired();
             entity.Property(point => point.Type).HasColumnName("point_type").HasMaxLength(80).IsRequired();
             entity.Property(point => point.Tag).HasColumnName("tag").HasMaxLength(80).IsRequired();
+            entity.Property(point => point.Description).HasColumnName("description").HasMaxLength(1000).IsRequired();
+            entity.Property(point => point.Instruction).HasColumnName("instruction").HasMaxLength(2000).IsRequired();
             entity.Property(point => point.Interval).HasColumnName("interval").HasMaxLength(40).IsRequired();
             entity.Property(point => point.ExpectedTime).HasColumnName("expected_time").HasMaxLength(40).IsRequired();
             entity.Property(point => point.Status).HasColumnName("status").HasMaxLength(60).IsRequired();
@@ -336,6 +338,8 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(point => point.Zone).HasColumnName("zone").HasMaxLength(160).IsRequired();
             entity.Property(point => point.Type).HasColumnName("point_type").HasMaxLength(80).IsRequired();
             entity.Property(point => point.Tag).HasColumnName("tag").HasMaxLength(80).IsRequired();
+            entity.Property(point => point.Description).HasColumnName("description").HasMaxLength(1000).IsRequired();
+            entity.Property(point => point.Instruction).HasColumnName("instruction").HasMaxLength(2000).IsRequired();
             entity.Property(point => point.NfcCode).HasColumnName("nfc_code").HasMaxLength(80);
             entity.Property(point => point.IsRequired).HasColumnName("is_required");
             entity.Property(point => point.RequiresPhoto).HasColumnName("requires_photo");

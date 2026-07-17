@@ -449,6 +449,7 @@ export function App() {
           activePatrols={activePatrols}
           currentUser={session.user}
           dataSourceMode={dataAccessMode}
+          patrolDataStatus={patrolData.status}
           dashboardMetrics={dashboardMetrics}
           employeeDirectory={employeeDirectory}
           mobileAccountSecurityErrorMessage={mobileAccounts.mobileAccountSecurityErrorMessage}

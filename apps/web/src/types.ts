@@ -338,6 +338,8 @@ export interface MobileAccountSession {
   appVersion: string;
   ipAddress: string;
   lastSeenAt: string;
+  startedAt: string;
+  endedAt?: string | null;
 }
 
 export interface MobileAccountSecurityEvent {
@@ -388,6 +390,8 @@ export interface RoutePoint {
   zone: string;
   type: "NFC" | "QR-код" | "Ручной контроль";
   tag: string;
+  description: string;
+  instruction: string;
   interval: string;
   expectedTime: string;
   status: "Активна" | "Повтор метки" | "Черновик";
@@ -423,10 +427,11 @@ export interface RoutePointFormPayload {
   zone: string;
   type: RoutePoint["type"];
   tag: string;
+  description: string;
+  instruction: string;
   interval: string;
   expectedTime: string;
   status: RoutePoint["status"];
-  requiresPhoto: boolean;
 }
 
 export interface ScheduleCell {

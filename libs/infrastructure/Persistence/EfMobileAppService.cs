@@ -10,7 +10,8 @@ namespace Patrol360.Infrastructure.Persistence;
 internal sealed partial class EfMobileAppService(
     Patrol360DbContext dbContext,
     IEmuWorkService emuWorkService,
-    IMobileDiagnosticReportStore diagnosticReportStore) : IMobileAppService
+    IMobileDiagnosticReportStore diagnosticReportStore,
+    IPatrolTimeZone patrolTimeZone) : IMobileAppService
 {
     private static readonly TimeSpan AccessTokenLifetime = TimeSpan.FromHours(8);
     private static readonly TimeSpan RefreshTokenLifetime = TimeSpan.FromDays(14);

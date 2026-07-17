@@ -97,6 +97,7 @@ export function ScreenRouter({
   activePatrols,
   currentUser,
   dataSourceMode,
+  patrolDataStatus,
   dashboardMetrics,
   employeeDirectory,
   mobileAccountSecurityErrorMessage,
@@ -178,6 +179,7 @@ export function ScreenRouter({
   activePatrols: ActivePatrol[];
   currentUser: SessionUserDto | null;
   dataSourceMode: DataSourceMode;
+  patrolDataStatus: DataSourceStatus;
   dashboardMetrics: Metric[];
   employeeDirectory: EmployeeDirectoryItem[];
   mobileAccountSecurityErrorMessage?: string;
@@ -387,6 +389,7 @@ export function ScreenRouter({
           <RoutesScreen
             canManage={hasPermission(currentUser, "routes.write")}
             canAssign={hasPermission(currentUser, "assignments.write")}
+            dataStatus={patrolDataStatus}
             selectedRouteId={selectedRouteDirectoryId}
             selectedPointId={selectedPointId}
             mode={routeMode}

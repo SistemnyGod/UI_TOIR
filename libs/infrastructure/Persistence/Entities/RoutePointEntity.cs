@@ -16,6 +16,10 @@ internal sealed class RoutePointEntity
 
     public string Tag { get; set; } = string.Empty;
 
+    public string Description { get; set; } = string.Empty;
+
+    public string Instruction { get; set; } = string.Empty;
+
     public string Interval { get; set; } = string.Empty;
 
     public string ExpectedTime { get; set; } = string.Empty;

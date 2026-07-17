@@ -175,9 +175,11 @@ function mapPointPayload(payload: RoutePointFormPayload): CreateRoutePointDto {
     zone: payload.zone,
     type: payload.type,
     tag: payload.tag,
+    description: payload.description,
+    instruction: payload.instruction,
     interval: payload.interval,
     expectedTime: payload.expectedTime,
     status: payload.status,
-    requiresPhoto: payload.requiresPhoto,
+    requiresPhoto: false,
   };
 }

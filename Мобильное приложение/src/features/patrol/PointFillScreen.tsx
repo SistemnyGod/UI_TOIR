@@ -231,6 +231,13 @@ export function PointFillScreen() {
           </View>
         </Card>
 
+        <PointGuidanceCard
+          description={point.description}
+          instruction={point.instruction}
+          mutedColor={colors.mutedText}
+          textColor={colors.text}
+        />
+
         <View style={styles.statusGrid}>
           <StatusButton label="Исправно" description="Объект в нормальном состоянии" tone="success" onPress={() => selectStatus("ok")} />
           <StatusButton label="Неисправно" description="Найдена неисправность или отклонение" tone="danger" onPress={() => selectStatus("issue")} />
@@ -274,6 +281,13 @@ export function PointFillScreen() {
           <StatusPill label={statusLabel(selectedStatus)} tone={statusTone(selectedStatus)} />
         </View>
       </Card>
+
+      <PointGuidanceCard
+        description={point.description}
+        instruction={point.instruction}
+        mutedColor={colors.mutedText}
+        textColor={colors.text}
+      />
 
       {selectedStatus === "skipped" ? (
         <Card style={styles.skipInfoCard}>
@@ -365,6 +379,39 @@ export function PointFillScreen() {
         visible={openMenu !== null}
       />
     </Screen>
+  );
+}
+
+function PointGuidanceCard({
+  description,
+  instruction,
+  mutedColor,
+  textColor,
+}: {
+  description?: string | null;
+  instruction?: string | null;
+  mutedColor: string;
+  textColor: string;
+}) {
+  if (!description?.trim() && !instruction?.trim()) {
+    return null;
+  }
+
+  return (
+    <Card>
+      {description?.trim() ? (
+        <View style={styles.guidanceBlock}>
+          <Text style={[styles.label, { color: textColor }]}>Описание оборудования</Text>
+          <Text style={[styles.text, { color: mutedColor }]}>{description.trim()}</Text>
+        </View>
+      ) : null}
+      {instruction?.trim() ? (
+        <View style={styles.guidanceBlock}>
+          <Text style={[styles.label, { color: textColor }]}>Инструкция к метке</Text>
+          <Text style={[styles.text, { color: mutedColor }]}>{instruction.trim()}</Text>
+        </View>
+      ) : null}
+    </Card>
   );
 }
 
@@ -626,6 +673,9 @@ const styles = StyleSheet.create({
   },
   skipInfoCard: {
     borderColor: "#fbbf24"
+  },
+  guidanceBlock: {
+    gap: 5
   },
   photoNote: {
     color: "#6b7280",
