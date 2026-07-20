@@ -1,0 +1,188 @@
+.emu-create-work-modal {
+  height: min(850px, calc(100dvh - 36px));
+  padding: 0;
+}
+
+.emu-create-work-modal > header {
+  margin: 0;
+}
+
+.emu-create-work-body {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 18px 22px;
+}
+
+.emu-create-work-section {
+  display: grid;
+  gap: 10px;
+}
+
+.emu-create-work-section + .emu-create-work-section {
+  border-top: 1px solid var(--emu-line);
+  padding-top: 14px;
+}
+
+.emu-create-work-section-heading {
+  align-items: center;
+  display: flex;
+  gap: 9px;
+}
+
+.emu-create-work-section-heading > span {
+  align-items: center;
+  background: #eaf2ff;
+  border-radius: 999px;
+  color: var(--emu-blue);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 900;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.emu-create-work-section-heading > div {
+  display: grid;
+  gap: 1px;
+}
+
+.emu-create-work-section-heading strong {
+  color: var(--emu-text);
+  font-size: 14px;
+}
+
+.emu-create-work-section-heading small {
+  color: var(--emu-muted);
+  font-size: 11px;
+}
+
+.emu-create-work-search {
+  display: grid;
+  gap: 6px;
+}
+
+.emu-create-work-modal .emu-picker-shell {
+  margin: 0;
+  max-height: none;
+  overflow: visible;
+}
+
+.emu-create-work-modal .emu-picker {
+  max-height: 210px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.emu-create-work-modal .emu-picker-empty {
+  color: var(--emu-muted);
+  display: grid;
+  gap: 3px;
+  grid-column: 1 / -1;
+  padding: 18px 8px;
+  text-align: center;
+}
+
+.emu-create-work-modal .emu-picker-empty strong {
+  color: var(--emu-text);
+}
+
+.emu-favorite-mark {
+  color: #d59613;
+  margin-right: 5px;
+}
+
+.emu-quick-task-block {
+  display: grid;
+  gap: 7px;
+}
+
+.emu-quick-task-block > strong {
+  color: var(--emu-text);
+  font-size: 12px;
+}
+
+.emu-create-work-modal .emu-template-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.emu-create-work-modal .emu-template-suggestions button {
+  align-items: flex-start;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 260px;
+  min-height: 38px;
+  padding: 7px 10px;
+  text-align: left;
+}
+
+.emu-create-work-modal .emu-template-suggestions button span {
+  font-weight: 800;
+}
+
+.emu-create-work-modal .emu-template-suggestions button small {
+  color: var(--emu-muted);
+  font-size: 10px;
+}
+
+.emu-create-work-modal > .emu-modal-actions {
+  align-items: center;
+  bottom: auto;
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: space-between;
+  margin: 0;
+  padding: 12px 18px;
+}
+
+.emu-create-actions-secondary,
+.emu-create-actions-primary {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.emu-create-actions-primary > span {
+  color: var(--emu-muted);
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .emu-create-work-modal {
+    height: calc(100dvh - 20px);
+  }
+
+  .emu-create-work-body {
+    padding: 12px;
+  }
+
+  .emu-create-work-modal > .emu-modal-actions {
+    align-items: stretch;
+    display: grid;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .emu-create-actions-secondary,
+  .emu-create-actions-primary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .emu-create-actions-primary > span {
+    grid-column: 1 / -1;
+  }
+
+  .emu-create-actions-primary .emu-action-submit {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}

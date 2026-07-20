@@ -1,7 +1,7 @@
 param(
   [string]$Repository,
   [string[]]$Branches = @("main", "master"),
-  [string]$RequiredStatusCheck = "CI / verify",
+  [string[]]$RequiredStatusChecks = @("CI / verify", "CI / PostgreSQL integration"),
   [int]$RequiredApprovals = 1,
   [switch]$RequireCodeOwnerReviews
 )
@@ -49,7 +49,7 @@ $resolvedRepository = Resolve-GitHubRepository
 $payload = @{
   required_status_checks = @{
     strict = $true
-    contexts = @($RequiredStatusCheck)
+    contexts = @($RequiredStatusChecks)
   }
   enforce_admins = $true
   required_pull_request_reviews = @{
@@ -77,7 +77,7 @@ try {
       continue
     }
 
-    Write-Host "Applying branch protection to $resolvedRepository/$branch with required check '$RequiredStatusCheck'."
+    Write-Host "Applying branch protection to $resolvedRepository/$branch with required checks '$($RequiredStatusChecks -join "', '")'."
     # Uses `gh api` so the applied payload stays close to the GitHub branch protection REST contract.
     Invoke-Gh @(
       "api",

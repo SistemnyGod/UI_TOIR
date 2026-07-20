@@ -21399,7 +21399,7 @@ tr:hover td,
   width: 16px;
 }
 
-.screen-area :where(.icon-button, .chrome-icon-button, .perco-icon-button, .inventory-ppe-more-button, .emu-command-button) {
+.screen-area :where(.icon-button, .chrome-icon-button, .perco-icon-button, .inventory-ppe-more-button) {
   align-items: center;
   aspect-ratio: 1;
   display: inline-flex;
@@ -23320,9 +23320,11 @@ tr:hover td,
 
 .screen-area .results-review-modal {
   width: min(1180px, calc(100vw - 56px));
+  height: min(86dvh, 900px);
   max-height: calc(100dvh - 56px);
+  min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   overflow: hidden;
   border: 1px solid #d9e5f4;
   border-radius: 16px;
@@ -23698,6 +23700,7 @@ tr:hover td,
 
   .screen-area .results-review-modal {
     width: calc(100vw - 20px);
+    height: calc(100dvh - 20px);
     max-height: calc(100dvh - 20px);
     border-radius: 12px;
   }

@@ -469,7 +469,7 @@ public sealed class AssignmentsDbIntegrationTests
     }
 
     [DbIntegrationFact]
-    public async Task CompleteAssignmentValidatesPointChecklistWithReadableMessagesAndIssues()
+    public async Task CompleteAssignmentAllowsOptionalPhotosButValidatesIssueDetails()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
         using var provider = BuildProvider(database.ConnectionString);
@@ -487,14 +487,14 @@ public sealed class AssignmentsDbIntegrationTests
         Assert.NotNull(created.Assignment);
 
         var routePointResults = await ReadRoutePointResultsAsync(database.ConnectionString, FuelDepotRouteId);
-        var firstPhotoIndex = routePointResults.FindIndex(point => point.Photos > 0);
-        Assert.True(firstPhotoIndex >= 0);
-        var missingPhoto = routePointResults
-            .Select((point, index) => index == firstPhotoIndex
+        Assert.NotEmpty(routePointResults);
+        const int issuePointIndex = 0;
+        var invalidIssue = routePointResults
+            .Select((point, index) => index == issuePointIndex
                 ? point with
                 {
-                    Status = "Р—Р°РјРµС‡Р°РЅРёРµ",
-                    IssueType = "РџРѕРІСЂРµР¶РґРµРЅРёРµ",
+                    Status = "Замечание",
+                    IssueType = null,
                     Photos = 0,
                     PhotoAttachments = []
                 }
@@ -509,19 +509,20 @@ public sealed class AssignmentsDbIntegrationTests
             null,
             null,
             0,
-            missingPhoto)));
+            invalidIssue)));
 
         Assert.NotNull(rejected);
         Assert.False(rejected!.Changed);
-        Assert.Contains("photos", rejected.Errors!.Keys);
-        Assert.Contains("Для точек с фотофиксацией прикрепите файлы фото", rejected.Errors["photos"][0]);
+        Assert.Contains("issueType", rejected.Errors!.Keys);
+        Assert.Contains("укажите тип замечания", rejected.Errors["issueType"][0]);
 
-        routePointResults[firstPhotoIndex] = routePointResults[firstPhotoIndex] with
+        routePointResults[issuePointIndex] = routePointResults[issuePointIndex] with
         {
             Status = "Замечание",
             IssueType = "Повреждение",
             Severity = "Высокая",
-            Photos = 1
+            Photos = 0,
+            PhotoAttachments = []
         };
 
         var completed = UseAssignments(provider, assignments => assignments.Complete(created.Assignment!.Id, new CompleteAssignmentDto(
@@ -540,7 +541,7 @@ public sealed class AssignmentsDbIntegrationTests
         var savedIssueCount = await CountPatrolResultIssuesAsync(database.ConnectionString, created.Assignment.Id);
         Assert.Equal(1, savedIssueCount);
         var savedAttachmentCount = await CountPatrolResultAttachmentsAsync(database.ConnectionString, created.Assignment.Id);
-        Assert.Equal(routePointResults.Count, savedAttachmentCount);
+        Assert.Equal(0, savedAttachmentCount);
     }
 
     [DbIntegrationFact]

@@ -1,4 +1,5 @@
 import { mobileRequest } from "@/api/httpClient";
+import { notificationListResponseSchema, notificationSchema, registerPushTokenResponseSchema } from "@/api/schemas";
 import { MobileNotificationDto } from "@/domain/patrol/patrolTypes";
 
 export type RegisterPushTokenRequest = {
@@ -13,18 +14,23 @@ export type RegisterPushTokenResponse = {
 };
 
 export function registerPushToken(payload: RegisterPushTokenRequest) {
-  return mobileRequest<RegisterPushTokenResponse>("/api/v1/mobile/devices/push-token", {
+  return mobileRequest<RegisterPushTokenResponse>("/api/v1/mobile/devices/push-token", registerPushTokenResponseSchema, {
     method: "POST",
     body: payload
   });
 }
 
 export function listNotifications(unreadOnly = false) {
-  return mobileRequest<MobileNotificationDto[]>(`/api/v1/mobile/notifications?unreadOnly=${unreadOnly ? "true" : "false"}`);
+  return mobileRequest<MobileNotificationDto[]>(
+    `/api/v1/mobile/notifications?unreadOnly=${unreadOnly ? "true" : "false"}`,
+    notificationListResponseSchema
+  );
 }
 
 export function markNotificationRead(notificationId: string) {
-  return mobileRequest<MobileNotificationDto>(`/api/v1/mobile/notifications/${notificationId}/read`, {
-    method: "POST"
-  });
+  return mobileRequest<MobileNotificationDto>(
+    `/api/v1/mobile/notifications/${notificationId}/read`,
+    notificationSchema,
+    { method: "POST" }
+  );
 }

@@ -99,7 +99,18 @@ export function WorkCard({
       </div>
       {showAttention ? <div className="emu-card-warning compact">В карточке нет активных сотрудников. Продолжите работу, завершите или удалите карточку.</div> : null}
       <div className="emu-card-actions">
-        <button className="emu-command-button" onClick={(event) => openQuickMenu(event)} type="button">Команды</button>
+        <button
+          aria-expanded={Boolean(quickMenu)}
+          aria-haspopup="menu"
+          className="emu-command-button"
+          onClick={(event) => {
+            event.stopPropagation();
+            openQuickMenu(event);
+          }}
+          type="button"
+        >
+          Команды
+        </button>
       </div>
     </article>
     {quickMenu
@@ -107,13 +118,13 @@ export function WorkCard({
           <div className="emu-quick-menu-layer" onClick={() => setQuickMenu(null)} role="presentation">
             <div className="emu-quick-menu" onClick={(event) => event.stopPropagation()} style={{ left: quickMenu.x, top: quickMenu.y }}>
               <strong>Быстрые команды</strong>
-              <button onClick={() => runQuickAction(onDetails)} type="button">Просмотр</button>
-              {canUpdate ? <button onClick={() => runQuickAction(onEdit)} type="button">Изменить</button> : null}
-              {!isCompleted && hasPaused && canPause ? <button onClick={() => runQuickAction(onResume)} type="button">Продолжить</button> : null}
-              {!isCompleted && hasWorking && canPause ? <button onClick={() => runQuickAction(onPause)} type="button">Пауза</button> : null}
-              {!isCompleted && canUpdate ? <button onClick={() => runQuickAction(onCarryOver)} type="button">Перенести</button> : null}
-              {!isCompleted && canComplete ? <button onClick={() => runQuickAction(onComplete)} type="button">Завершить</button> : null}
-              {canDelete ? <button className="danger" onClick={() => runQuickAction(onDelete)} type="button">Удалить</button> : null}
+              <button onClick={() => runQuickAction(onDetails)} role="menuitem" type="button">Просмотр</button>
+              {canUpdate ? <button onClick={() => runQuickAction(onEdit)} role="menuitem" type="button">Изменить</button> : null}
+              {!isCompleted && hasPaused && canPause ? <button onClick={() => runQuickAction(onResume)} role="menuitem" type="button">Продолжить</button> : null}
+              {!isCompleted && hasWorking && canPause ? <button onClick={() => runQuickAction(onPause)} role="menuitem" type="button">Пауза</button> : null}
+              {!isCompleted && canUpdate ? <button onClick={() => runQuickAction(onCarryOver)} role="menuitem" type="button">Перенести</button> : null}
+              {!isCompleted && canComplete ? <button onClick={() => runQuickAction(onComplete)} role="menuitem" type="button">Завершить</button> : null}
+              {canDelete ? <button className="danger" onClick={() => runQuickAction(onDelete)} role="menuitem" type="button">Удалить</button> : null}
             </div>
           </div>,
           document.body,

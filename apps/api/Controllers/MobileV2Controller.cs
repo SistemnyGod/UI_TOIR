@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
 using Patrol360.Application;
@@ -10,6 +11,7 @@ namespace Patrol360.Api.Controllers;
 public sealed class MobileV2Controller(IMobileAppService mobileAppService) : ControllerBase
 {
     [HttpGet("work-items")]
+    [AllowAnonymous]
     public ActionResult<IReadOnlyList<MobileWorkItemDto>> WorkItems()
     {
         var token = ReadBearerToken();

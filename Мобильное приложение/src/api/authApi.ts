@@ -1,4 +1,5 @@
 import { mobileRequest } from "@/api/httpClient";
+import { emptyResponseSchema, loginResponseSchema } from "@/api/schemas";
 import { MobileDeviceDto, MobileUserDto } from "@/domain/patrol/patrolTypes";
 
 export type LoginRequest = {
@@ -20,7 +21,7 @@ export type LoginResponse = {
 };
 
 export function login(payload: LoginRequest) {
-  return mobileRequest<LoginResponse>("/api/v1/mobile/auth/login", {
+  return mobileRequest<LoginResponse>("/api/v1/mobile/auth/login", loginResponseSchema, {
     method: "POST",
     body: payload,
     accessToken: null,
@@ -34,7 +35,7 @@ export type RefreshRequest = {
 };
 
 export function refresh(payload: RefreshRequest) {
-  return mobileRequest<LoginResponse>("/api/v1/mobile/auth/refresh", {
+  return mobileRequest<LoginResponse>("/api/v1/mobile/auth/refresh", loginResponseSchema, {
     method: "POST",
     body: payload,
     accessToken: null,
@@ -43,7 +44,7 @@ export function refresh(payload: RefreshRequest) {
 }
 
 export function logout(accessToken?: string) {
-  return mobileRequest<void>("/api/v1/mobile/auth/logout", {
+  return mobileRequest<void>("/api/v1/mobile/auth/logout", emptyResponseSchema, {
     method: "POST",
     accessToken,
     skipAuthRefresh: true

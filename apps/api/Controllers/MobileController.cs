@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Net.Http.Headers;
@@ -11,6 +12,7 @@ namespace Patrol360.Api.Controllers;
 public sealed class MobileController(IMobileAppService mobileAppService) : ControllerBase
 {
     [HttpGet("health")]
+    [AllowAnonymous]
     public IActionResult Health() =>
         Ok(new
         {
@@ -20,6 +22,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
         });
 
     [HttpPost("auth/login")]
+    [AllowAnonymous]
     [EnableRateLimiting("mobile-auth")]
     public ActionResult<MobileAuthSessionDto> Login(MobileLoginRequestDto request)
     {
@@ -33,6 +36,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
     }
 
     [HttpPost("auth/refresh")]
+    [AllowAnonymous]
     [EnableRateLimiting("mobile-auth")]
     public ActionResult<MobileAuthSessionDto> Refresh(MobileRefreshRequestDto request)
     {
@@ -46,6 +50,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
     }
 
     [HttpPost("auth/logout")]
+    [AllowAnonymous]
     public IActionResult Logout()
     {
         var token = ReadBearerToken();
@@ -58,6 +63,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
     }
 
     [HttpGet("bootstrap")]
+    [AllowAnonymous]
     public ActionResult<MobileBootstrapDto> Bootstrap()
     {
         var token = ReadBearerToken();
@@ -71,6 +77,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
     }
 
     [HttpPost("devices/push-token")]
+    [AllowAnonymous]
     public ActionResult<MobileDeviceRegistrationDto> RegisterPushToken(MobilePushTokenRegistrationDto request)
     {
         var token = ReadBearerToken();
@@ -84,6 +91,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
     }
 
     [HttpPost("diagnostics/daily")]
+    [AllowAnonymous]
     [RequestSizeLimit(256 * 1024)]
     public ActionResult<MobileDiagnosticReportReceiptDto> SaveDiagnosticReport(MobileDiagnosticReportDto request)
     {
@@ -105,6 +113,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
     }
 
     [HttpGet("notifications")]
+    [AllowAnonymous]
     public ActionResult<IReadOnlyList<MobileNotificationDto>> Notifications([FromQuery] bool unreadOnly = false)
     {
         var token = ReadBearerToken();
@@ -117,6 +126,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
     }
 
     [HttpPost("notifications/{notificationId:guid}/read")]
+    [AllowAnonymous]
     public ActionResult<MobileNotificationDto> MarkNotificationRead(Guid notificationId)
     {
         var token = ReadBearerToken();
@@ -131,6 +141,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
 
     [HttpGet("work-tasks")]
     [HttpGet("emu/tasks")]
+    [AllowAnonymous]
     public ActionResult<IReadOnlyList<MobileWorkTaskDto>> WorkTasks()
     {
         var token = ReadBearerToken();
@@ -144,6 +155,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
 
     [HttpGet("work-tasks/{taskId:guid}")]
     [HttpGet("emu/tasks/{taskId:guid}")]
+    [AllowAnonymous]
     public ActionResult<MobileWorkTaskDto> WorkTask(Guid taskId)
     {
         var token = ReadBearerToken();
@@ -157,6 +169,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
     }
 
     [HttpPost("outbox")]
+    [AllowAnonymous]
     [RequestSizeLimit(1024 * 1024)]
     public ActionResult<IReadOnlyList<MobileOutboxResponseDto>> Outbox(MobileOutboxBatchDto request)
     {
@@ -176,6 +189,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
     }
 
     [HttpPost("files")]
+    [AllowAnonymous]
     [RequestSizeLimit(32 * 1024 * 1024)]
     public async Task<ActionResult<MobileFileUploadResponseDto>> UploadFile(
         [FromForm] string clientFileId,
@@ -220,6 +234,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
     }
 
     [HttpGet("outbox/{clientOperationId}")]
+    [AllowAnonymous]
     public ActionResult<MobileOutboxResponseDto> OutboxResult(string clientOperationId)
     {
         var token = ReadBearerToken();

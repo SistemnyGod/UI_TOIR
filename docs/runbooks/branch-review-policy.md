@@ -17,7 +17,7 @@
 - require at least 1 approving review;
 - require review from code owners после настройки владельцев;
 - require conversation resolution before merge;
-- require status check `CI / verify`;
+- require status checks `CI / verify` и `CI / PostgreSQL integration`;
 - require branches to be up to date before merging;
 - block force pushes;
 - block branch deletion;
@@ -83,7 +83,7 @@ PR должен содержать:
 
 Перед merge:
 
-- `CI / verify` зеленый;
+- `CI / verify` и `CI / PostgreSQL integration` зеленые;
 - все review comments закрыты;
 - PR checklist заполнен;
 - branch синхронизирована с protected branch, если GitHub требует up-to-date branch;

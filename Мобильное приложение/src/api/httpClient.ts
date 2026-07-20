@@ -1,5 +1,6 @@
 import { fetchWithTimeout, serverUnavailableMessage } from "@/api/networkTimeout";
 import { shouldTryNextMobileServer } from "@/api/serverFailoverPolicy";
+import { loginResponseSchema } from "@/api/schemas";
 import { getOrCreateDeviceId } from "@/auth/deviceRegistration";
 import { assertSessionOwner } from "@/auth/sessionIdentity";
 import {
@@ -12,6 +13,7 @@ import {
   setTokens
 } from "@/auth/tokenStorage";
 import { getMobileRuntimeConfig, getServerCandidateBaseUrls, setServerBaseUrl } from "@/core/serverSettings";
+import type { ZodType } from "zod";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -24,7 +26,11 @@ type RequestOptions = {
 
 let refreshPromise: Promise<string> | null = null;
 
-export async function mobileRequest<TResponse>(path: string, options: RequestOptions = {}) {
+export async function mobileRequest<TResponse>(
+  path: string,
+  schema: ZodType<TResponse>,
+  options: RequestOptions = {}
+) {
   const token = options.accessToken === undefined ? await getAccessToken() : options.accessToken;
   const runtimeConfig = await getMobileRuntimeConfig();
   let { apiBaseUrl, response } = await sendMobileRequestWithFailover(runtimeConfig.apiBaseUrl, path, options, token);
@@ -65,10 +71,18 @@ export async function mobileRequest<TResponse>(path: string, options: RequestOpt
   }
 
   if (response.status === 204) {
-    return undefined as TResponse;
+    return parseMobileResponse(schema, undefined);
   }
 
-  return (await response.json()) as TResponse;
+  return parseMobileResponse(schema, await response.json());
+}
+
+export function parseMobileResponse<TResponse>(schema: ZodType<TResponse>, value: unknown): TResponse {
+  try {
+    return schema.parse(value);
+  } catch {
+    throw new Error("Сервер вернул несовместимый ответ mobile API. Локальные данные сохранены.");
+  }
 }
 
 async function sendMobileRequestWithFailover(
@@ -205,27 +219,16 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
     throw new Error(message ?? `Не удалось обновить сессию: ${response.status}. Адрес: ${activeApiBaseUrl}`);
   }
 
-  let session: {
-    accessToken: string;
-    refreshToken: string;
-    refreshExpiresAt: string;
-    user: { serverUserId: string; fullName: string };
-  };
-
+  let session: ReturnType<typeof loginResponseSchema.parse>;
   try {
-    session = (await response.json()) as {
-      accessToken: string;
-      refreshToken: string;
-      refreshExpiresAt: string;
-      user: { serverUserId: string; fullName: string };
-    };
+    session = parseMobileResponse(loginResponseSchema, await response.json());
   } catch {
     throw new Error("Не удалось обновить сессию. Повторите позже.");
   }
 
   const expectedOwnerUserId = await getStoredOwnerUserId();
   try {
-    assertSessionOwner(expectedOwnerUserId, session.user?.serverUserId);
+    assertSessionOwner(expectedOwnerUserId, session.user.serverUserId);
   } catch (error) {
     await clearAuthTokens();
     throw error;

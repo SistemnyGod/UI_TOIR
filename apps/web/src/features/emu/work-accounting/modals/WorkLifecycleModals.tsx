@@ -145,7 +145,7 @@ export function CompleteWorkModal({ onClose, onNotify, workspace, work }: { onCl
   const reasonRequired = resultStatus === "Не выполнено";
 
   return (
-    <ModalFrame onClose={onClose} title="Завершить работу">
+    <ModalFrame className="emu-work-complete-modal" onClose={onClose} title="Завершить работу">
       <WorkSummary work={work} />
       <div className="emu-check-list">
         {work.employees.filter((employee) => !employee.finishedAt).map((employee) => (
@@ -156,10 +156,10 @@ export function CompleteWorkModal({ onClose, onNotify, workspace, work }: { onCl
         ))}
       </div>
       {work.employees.every((employee) => employee.finishedAt) ? <div className="emu-card-warning">В карточке нет незавершенных сотрудников.</div> : null}
-      <div className="emu-form-grid">
+      <div className="emu-form-grid emu-complete-form-grid">
         <label>Итоговый статус<select value={resultStatus} onChange={(event) => setResultStatus(event.target.value)}><option>Выполнено</option><option>Частично выполнено</option><option>Не выполнено</option></select></label>
         <label>Причина невыполнения<select disabled={!reasonRequired} value={notCompletedReasonId} onChange={(event) => setNotCompletedReasonId(event.target.value)}><option value="">Не требуется</option>{workspace.settings.notCompletedReasons.filter((reason) => reason.isActive).map((reason) => <option key={reason.id} value={reason.id}>{reason.name}</option>)}</select></label>
-        <label>Время окончания<span className="emu-input-action"><input type="date" value={completedDate} onChange={(event) => setCompletedDate(event.target.value)} /><input type="time" value={completedTime} onChange={(event) => setCompletedTime(event.target.value)} /><button onClick={setCompletedNow} type="button">Сейчас</button></span></label>
+        <label className="emu-complete-time-field">Время окончания<span className="emu-input-action"><input type="date" value={completedDate} onChange={(event) => setCompletedDate(event.target.value)} /><input type="time" value={completedTime} onChange={(event) => setCompletedTime(event.target.value)} /><button onClick={setCompletedNow} type="button">Сейчас</button></span></label>
       </div>
       <label className="emu-textarea-label">Результат работы<textarea value={resultComment} onChange={(event) => setResultComment(event.target.value)} placeholder="Опишите выполненные действия и важные детали" /></label>
       {completionBeforeArrival ? <div className="emu-card-warning">Время окончания не может быть раньше времени прихода выбранных сотрудников.</div> : null}
@@ -235,4 +235,3 @@ export function DeleteWorkModal({ onClose, onNotify, workspace, work }: { onClos
     </ModalFrame>
   );
 }
-

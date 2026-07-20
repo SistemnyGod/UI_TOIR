@@ -5,15 +5,34 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
+  migrate:
+    image: docker-api:latest
+    container_name: patrol360-migrate
+    entrypoint: ["dotnet", "Patrol360.Api.dll", "--migrate"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ConnectionStrings__Patrol360: Host=postgres;Port=5432;Database=${POSTGRES_DB:-patrol360};Username=${POSTGRES_USER:-patrol360};Password=${POSTGRES_PASSWORD:-patrol360_dev}
+      DataProtection__KeyRingPath: /var/lib/patrol360/data-protection-keys
+    volumes:
+      - ./secrets/data-protection-keys:/var/lib/patrol360/data-protection-keys
+    logging: *default-logging
+    profiles:
+      - app
+
   api:
+    image: docker-api:latest
     build:
       context: ../..
       dockerfile: apps/api/Dockerfile
     container_name: patrol360-api
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080

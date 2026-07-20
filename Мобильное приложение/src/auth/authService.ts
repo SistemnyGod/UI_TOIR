@@ -5,6 +5,7 @@ import { login, logout } from "@/api/authApi";
 import { refreshStoredAccessToken } from "@/api/httpClient";
 import { getBootstrap } from "@/api/mobileApi";
 import { getOrCreateDeviceId } from "@/auth/deviceRegistration";
+import { getDeviceDisplayName } from "@/auth/deviceInfo";
 import {
   clearTokens,
   getStoredOwnerUserId,
@@ -26,7 +27,6 @@ import { registerPushNotifications, syncMobileNotifications } from "@/services/n
 import { syncWorkTasks } from "@/services/workTaskService";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 
-const defaultDeviceName = "Kenshi Armor C1s";
 const appVersion = Constants.expoConfig?.version ?? "unknown";
 
 export async function signIn(loginName: string, password: string) {
@@ -37,7 +37,7 @@ export async function signIn(loginName: string, password: string) {
     login: loginName,
     password,
     deviceId,
-    deviceName: defaultDeviceName,
+    deviceName: getDeviceDisplayName(),
     platform: Platform.OS,
     appVersion
   });

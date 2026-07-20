@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { createShiftRemarkLocally, listShiftRemarks, ShiftRemark } from "@/db/repositories/shiftRemarkRepository";
@@ -18,7 +18,18 @@ import {
   startPlannedWorkLocally,
   updateWorkTaskLocally
 } from "@/db/repositories/workTaskRepository";
-import { MobileEmployeeDto, MobileEmuSectionDto, WorkItemDto, WorkTaskDto, WorkTaskStatus } from "@/domain/emu/emuTypes";
+import { MobileEmployeeDto, MobileEmuSectionDto, WorkItemDto, WorkTaskDto } from "@/domain/emu/emuTypes";
+import {
+  formatDateTime,
+  formatParticipants,
+  formatShortName,
+  formatWorkAttachments,
+  remarkStatusLabel,
+  remarkStatusTone,
+  statusLabel,
+  statusTone,
+  workAccountingStyles as styles
+} from "@/features/emuTask/WorkAccountingPresentation";
 import { useAppTheme } from "@/features/settings/themePreference";
 import {
   attachRemarkMediaFromGallery,
@@ -144,7 +155,7 @@ export function WorkAccountingScreen() {
     const employee = employees.find((item) => item.employeeId === taskEmployeeId);
     const section = sections.find((item) => item.sectionId === taskSectionId);
     if (!employee || !section || !taskText.trim()) {
-      setMessage("Выберите сотрудника, участок и заполните задачу.");
+      setMessage("Р’С‹Р±РµСЂРёС‚Рµ СЃРѕС‚СЂСѓРґРЅРёРєР°, СѓС‡Р°СЃС‚РѕРє Рё Р·Р°РїРѕР»РЅРёС‚Рµ Р·Р°РґР°С‡Сѓ.");
       return;
     }
 
@@ -158,7 +169,7 @@ export function WorkAccountingScreen() {
           sectionName: section.name,
           taskDescription: taskText
         });
-        setMessage("Изменение работы сохранено на телефоне и будет отправлено на сервер.");
+        setMessage("РР·РјРµРЅРµРЅРёРµ СЂР°Р±РѕС‚С‹ СЃРѕС…СЂР°РЅРµРЅРѕ РЅР° С‚РµР»РµС„РѕРЅРµ Рё Р±СѓРґРµС‚ РѕС‚РїСЂР°РІР»РµРЅРѕ РЅР° СЃРµСЂРІРµСЂ.");
       } else {
         await createWorkTaskLocally({
           employeeId: employee.employeeId,
@@ -167,14 +178,14 @@ export function WorkAccountingScreen() {
           sectionName: section.name,
           taskDescription: taskText
         });
-        setMessage("Работа создана на телефоне и появится в ЭМУ после синхронизации.");
+        setMessage("Р Р°Р±РѕС‚Р° СЃРѕР·РґР°РЅР° РЅР° С‚РµР»РµС„РѕРЅРµ Рё РїРѕСЏРІРёС‚СЃСЏ РІ Р­РњРЈ РїРѕСЃР»Рµ СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёРё.");
       }
 
       setTaskModal(null);
       await reloadLocal();
       triggerForegroundSyncWithRetry();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Не удалось сохранить работу.");
+      setMessage(error instanceof Error ? error.message : "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ СЂР°Р±РѕС‚Сѓ.");
     } finally {
       setLoading(false);
     }
@@ -184,7 +195,7 @@ export function WorkAccountingScreen() {
     const employee = employees.find((item) => item.employeeId === remarkEmployeeId);
     const section = sections.find((item) => item.sectionId === remarkSectionId);
     if (!employee || !section || !remarkComment.trim()) {
-      setMessage("Выберите сотрудника, участок и заполните описание замечания.");
+      setMessage("Р’С‹Р±РµСЂРёС‚Рµ СЃРѕС‚СЂСѓРґРЅРёРєР°, СѓС‡Р°СЃС‚РѕРє Рё Р·Р°РїРѕР»РЅРёС‚Рµ РѕРїРёСЃР°РЅРёРµ Р·Р°РјРµС‡Р°РЅРёСЏ.");
       return;
     }
 
@@ -200,7 +211,7 @@ export function WorkAccountingScreen() {
       });
       setRemarkModalOpen(false);
       await reloadLocal();
-      setMessage("Замечание сохранено на телефоне и будет отправлено на сервер.");
+      setMessage("Р—Р°РјРµС‡Р°РЅРёРµ СЃРѕС…СЂР°РЅРµРЅРѕ РЅР° С‚РµР»РµС„РѕРЅРµ Рё Р±СѓРґРµС‚ РѕС‚РїСЂР°РІР»РµРЅРѕ РЅР° СЃРµСЂРІРµСЂ.");
 
       if (remarkAttachmentAfterSave === "now") {
         setAttachmentRemark({ remarkId, title: section.name });
@@ -208,7 +219,7 @@ export function WorkAccountingScreen() {
         triggerForegroundSyncWithRetry();
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Не удалось сохранить замечание.");
+      setMessage(error instanceof Error ? error.message : "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ Р·Р°РјРµС‡Р°РЅРёРµ.");
     } finally {
       setLoading(false);
     }
@@ -236,7 +247,7 @@ export function WorkAccountingScreen() {
     }
 
     if (!completeComment.trim()) {
-      setMessage("Заполните результат работы перед завершением.");
+      setMessage("Р—Р°РїРѕР»РЅРёС‚Рµ СЂРµР·СѓР»СЊС‚Р°С‚ СЂР°Р±РѕС‚С‹ РїРµСЂРµРґ Р·Р°РІРµСЂС€РµРЅРёРµРј.");
       return;
     }
 
@@ -247,10 +258,10 @@ export function WorkAccountingScreen() {
       setCompleteTask(null);
       setCompleteComment("");
       await reloadLocal();
-      setMessage("Работа завершена на телефоне и будет отправлена на сервер.");
+      setMessage("Р Р°Р±РѕС‚Р° Р·Р°РІРµСЂС€РµРЅР° РЅР° С‚РµР»РµС„РѕРЅРµ Рё Р±СѓРґРµС‚ РѕС‚РїСЂР°РІР»РµРЅР° РЅР° СЃРµСЂРІРµСЂ.");
       triggerForegroundSyncWithRetry();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Не удалось завершить работу.");
+      setMessage(error instanceof Error ? error.message : "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РІРµСЂС€РёС‚СЊ СЂР°Р±РѕС‚Сѓ.");
     } finally {
       setLoading(false);
     }
@@ -293,11 +304,11 @@ export function WorkAccountingScreen() {
     }
     const employee = employees.find((item) => item.employeeId === participationEmployeeId);
     if (!employee) {
-      setMessage("Выберите фактического исполнителя.");
+      setMessage("Р’С‹Р±РµСЂРёС‚Рµ С„Р°РєС‚РёС‡РµСЃРєРѕРіРѕ РёСЃРїРѕР»РЅРёС‚РµР»СЏ.");
       return;
     }
     if (participationAction.mode === "replace" && (!participationPreviousEmployeeId || !participationReason.trim())) {
-      setMessage("Выберите прежнего исполнителя и укажите причину замены.");
+      setMessage("Р’С‹Р±РµСЂРёС‚Рµ РїСЂРµР¶РЅРµРіРѕ РёСЃРїРѕР»РЅРёС‚РµР»СЏ Рё СѓРєР°Р¶РёС‚Рµ РїСЂРёС‡РёРЅСѓ Р·Р°РјРµРЅС‹.");
       return;
     }
 
@@ -319,10 +330,10 @@ export function WorkAccountingScreen() {
       setParticipationAction(null);
       await reloadLocal();
       setTaskFilter("mine");
-      setMessage("Действие сохранено на телефоне и будет отправлено в ЭМУ.");
+      setMessage("Р”РµР№СЃС‚РІРёРµ СЃРѕС…СЂР°РЅРµРЅРѕ РЅР° С‚РµР»РµС„РѕРЅРµ Рё Р±СѓРґРµС‚ РѕС‚РїСЂР°РІР»РµРЅРѕ РІ Р­РњРЈ.");
       triggerForegroundSyncWithRetry();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Не удалось изменить исполнителя работы.");
+      setMessage(error instanceof Error ? error.message : "РќРµ СѓРґР°Р»РѕСЃСЊ РёР·РјРµРЅРёС‚СЊ РёСЃРїРѕР»РЅРёС‚РµР»СЏ СЂР°Р±РѕС‚С‹.");
     } finally {
       setLoading(false);
     }
@@ -331,7 +342,7 @@ export function WorkAccountingScreen() {
   async function handleAttachWorkMedia(kind: "photo" | "video" | "gallery") {
     const workTaskId = attachmentTask?.workSessionId ?? attachmentTask?.itemId ?? null;
     if (!workTaskId || attachmentTask?.kind === "planTask") {
-      setMessage("Сначала начните работу, затем добавьте вложения.");
+      setMessage("РЎРЅР°С‡Р°Р»Р° РЅР°С‡РЅРёС‚Рµ СЂР°Р±РѕС‚Сѓ, Р·Р°С‚РµРј РґРѕР±Р°РІСЊС‚Рµ РІР»РѕР¶РµРЅРёСЏ.");
       return;
     }
 
@@ -340,21 +351,21 @@ export function WorkAccountingScreen() {
     try {
       if (kind === "photo") {
         await attachWorkPhotoFromCamera(workTaskId);
-        setMessage("Фото сохранено на телефоне и будет отправлено в ЭМУ.");
+        setMessage("Р¤РѕС‚Рѕ СЃРѕС…СЂР°РЅРµРЅРѕ РЅР° С‚РµР»РµС„РѕРЅРµ Рё Р±СѓРґРµС‚ РѕС‚РїСЂР°РІР»РµРЅРѕ РІ Р­РњРЈ.");
       } else if (kind === "video") {
         await attachWorkVideoFromCamera(workTaskId);
-        setMessage("Видео сохранено на телефоне и будет отправлено в ЭМУ.");
+        setMessage("Р’РёРґРµРѕ СЃРѕС…СЂР°РЅРµРЅРѕ РЅР° С‚РµР»РµС„РѕРЅРµ Рё Р±СѓРґРµС‚ РѕС‚РїСЂР°РІР»РµРЅРѕ РІ Р­РњРЈ.");
       } else {
         const result = await attachWorkMediaFromGallery(workTaskId);
         if (result.status === "attached") {
-          const suffix = result.errors.length ? ` Отклонено: ${result.errors.join("; ")}` : "";
-          setMessage(`Добавлено вложений: ${result.attachedCount}. Фото: ${result.photoCount}, видео: ${result.videoCount}.${suffix}`);
+          const suffix = result.errors.length ? ` РћС‚РєР»РѕРЅРµРЅРѕ: ${result.errors.join("; ")}` : "";
+          setMessage(`Р”РѕР±Р°РІР»РµРЅРѕ РІР»РѕР¶РµРЅРёР№: ${result.attachedCount}. Р¤РѕС‚Рѕ: ${result.photoCount}, РІРёРґРµРѕ: ${result.videoCount}.${suffix}`);
         }
       }
       setAttachmentTask(null);
       await reloadLocal();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Не удалось добавить вложение к работе.");
+      setMessage(error instanceof Error ? error.message : "РќРµ СѓРґР°Р»РѕСЃСЊ РґРѕР±Р°РІРёС‚СЊ РІР»РѕР¶РµРЅРёРµ Рє СЂР°Р±РѕС‚Рµ.");
     } finally {
       setLoading(false);
     }
@@ -370,52 +381,52 @@ export function WorkAccountingScreen() {
     try {
       if (kind === "photo") {
         await attachRemarkPhotoFromCamera(attachmentRemark.remarkId);
-        setMessage("Фото замечания сохранено на телефоне и будет отправлено на сервер.");
+        setMessage("Р¤РѕС‚Рѕ Р·Р°РјРµС‡Р°РЅРёСЏ СЃРѕС…СЂР°РЅРµРЅРѕ РЅР° С‚РµР»РµС„РѕРЅРµ Рё Р±СѓРґРµС‚ РѕС‚РїСЂР°РІР»РµРЅРѕ РЅР° СЃРµСЂРІРµСЂ.");
       } else if (kind === "video") {
         await attachRemarkVideoFromCamera(attachmentRemark.remarkId);
-        setMessage("Видео замечания сохранено на телефоне и будет отправлено на сервер.");
+        setMessage("Р’РёРґРµРѕ Р·Р°РјРµС‡Р°РЅРёСЏ СЃРѕС…СЂР°РЅРµРЅРѕ РЅР° С‚РµР»РµС„РѕРЅРµ Рё Р±СѓРґРµС‚ РѕС‚РїСЂР°РІР»РµРЅРѕ РЅР° СЃРµСЂРІРµСЂ.");
       } else {
         const result = await attachRemarkMediaFromGallery(attachmentRemark.remarkId);
         if (result.status === "attached") {
-          const suffix = result.errors.length ? ` Отклонено: ${result.errors.join("; ")}` : "";
-          setMessage(`Добавлено вложений к замечанию: ${result.attachedCount}. Фото: ${result.photoCount}, видео: ${result.videoCount}.${suffix}`);
+          const suffix = result.errors.length ? ` РћС‚РєР»РѕРЅРµРЅРѕ: ${result.errors.join("; ")}` : "";
+          setMessage(`Р”РѕР±Р°РІР»РµРЅРѕ РІР»РѕР¶РµРЅРёР№ Рє Р·Р°РјРµС‡Р°РЅРёСЋ: ${result.attachedCount}. Р¤РѕС‚Рѕ: ${result.photoCount}, РІРёРґРµРѕ: ${result.videoCount}.${suffix}`);
         }
       }
       setAttachmentRemark(null);
       await reloadLocal();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Не удалось добавить вложение к замечанию.");
+      setMessage(error instanceof Error ? error.message : "РќРµ СѓРґР°Р»РѕСЃСЊ РґРѕР±Р°РІРёС‚СЊ РІР»РѕР¶РµРЅРёРµ Рє Р·Р°РјРµС‡Р°РЅРёСЋ.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <Screen title="Работы" subtitle="Учет работ и замечания по смене доступны оффлайн.">
+    <Screen title="Р Р°Р±РѕС‚С‹" subtitle="РЈС‡РµС‚ СЂР°Р±РѕС‚ Рё Р·Р°РјРµС‡Р°РЅРёСЏ РїРѕ СЃРјРµРЅРµ РґРѕСЃС‚СѓРїРЅС‹ РѕС„С„Р»Р°Р№РЅ.">
       <View style={styles.segment}>
-        <SegmentButton active={tab === "tasks"} label="Учет работ" onPress={() => setTab("tasks")} />
-        <SegmentButton active={tab === "remarks"} label="Замечания" onPress={() => setTab("remarks")} />
+        <SegmentButton active={tab === "tasks"} label="РЈС‡РµС‚ СЂР°Р±РѕС‚" onPress={() => setTab("tasks")} />
+        <SegmentButton active={tab === "remarks"} label="Р—Р°РјРµС‡Р°РЅРёСЏ" onPress={() => setTab("remarks")} />
       </View>
 
       {message ? <Text style={[styles.message, { color: colors.primary }]}>{message}</Text> : null}
 
       {tab === "tasks" ? (
         <>
-          <PrimaryButton disabled={loading} icon="add-circle-outline" label="Создать и начать" onPress={openCreateTask} />
+          <PrimaryButton disabled={loading} icon="add-circle-outline" label="РЎРѕР·РґР°С‚СЊ Рё РЅР°С‡Р°С‚СЊ" onPress={openCreateTask} />
           <View style={styles.segment}>
-            <SegmentButton active={taskFilter === "mine"} label="Мои" onPress={() => setTaskFilter("mine")} />
-            <SegmentButton active={taskFilter === "available"} label="Доступные" onPress={() => setTaskFilter("available")} />
-            <SegmentButton active={taskFilter === "history"} label="История" onPress={() => setTaskFilter("history")} />
+            <SegmentButton active={taskFilter === "mine"} label="РњРѕРё" onPress={() => setTaskFilter("mine")} />
+            <SegmentButton active={taskFilter === "available"} label="Р”РѕСЃС‚СѓРїРЅС‹Рµ" onPress={() => setTaskFilter("available")} />
+            <SegmentButton active={taskFilter === "history"} label="РСЃС‚РѕСЂРёСЏ" onPress={() => setTaskFilter("history")} />
           </View>
           {filteredTasks.length === 0 ? (
-            <EmptyCard title="Работ нет" text="Создайте работу на телефоне или дождитесь назначения из ЭМУ." />
+            <EmptyCard title="Р Р°Р±РѕС‚ РЅРµС‚" text="РЎРѕР·РґР°Р№С‚Рµ СЂР°Р±РѕС‚Сѓ РЅР° С‚РµР»РµС„РѕРЅРµ РёР»Рё РґРѕР¶РґРёС‚РµСЃСЊ РЅР°Р·РЅР°С‡РµРЅРёСЏ РёР· Р­РњРЈ." />
           ) : (
             filteredTasks.map((task) => (
               <Card key={task.taskId}>
                 <View style={styles.row}>
                   <View style={styles.titleBox}>
                     <Text style={[styles.cardTitle, { color: colors.text }]}>{task.title}</Text>
-                    <Text style={[styles.text, { color: colors.mutedText }]}>{task.sectionName ?? "Участок не указан"}</Text>
+                    <Text style={[styles.text, { color: colors.mutedText }]}>{task.sectionName ?? "РЈС‡Р°СЃС‚РѕРє РЅРµ СѓРєР°Р·Р°РЅ"}</Text>
                   </View>
                   <Pressable accessibilityRole="button" onPress={() => setMenuTask(task)} style={styles.iconButton}>
                     <Ionicons color={colors.mutedText} name="ellipsis-horizontal" size={22} />
@@ -423,38 +434,38 @@ export function WorkAccountingScreen() {
                 </View>
                 <View style={styles.metaRow}>
                   <StatusPill label={statusLabel(task.status)} tone={statusTone(task.status)} />
-                  <StatusPill label={task.syncStatus === "synced" ? "Синхронизировано" : "Ожидает отправки"} tone={task.syncStatus === "synced" ? "success" : "warning"} />
+                  <StatusPill label={task.syncStatus === "synced" ? "РЎРёРЅС…СЂРѕРЅРёР·РёСЂРѕРІР°РЅРѕ" : "РћР¶РёРґР°РµС‚ РѕС‚РїСЂР°РІРєРё"} tone={task.syncStatus === "synced" ? "success" : "warning"} />
                 </View>
-                <Text style={[styles.text, { color: colors.mutedText }]}>Исполнители: {formatParticipants(task)}</Text>
+                <Text style={[styles.text, { color: colors.mutedText }]}>РСЃРїРѕР»РЅРёС‚РµР»Рё: {formatParticipants(task)}</Text>
                 <Text style={[styles.muted, { color: colors.mutedText }]}>{formatWorkAttachments(task)}</Text>
-                <Text style={[styles.muted, { color: colors.mutedText }]}>Создано: {formatDateTime(task.createdAtLocal)}</Text>
+                <Text style={[styles.muted, { color: colors.mutedText }]}>РЎРѕР·РґР°РЅРѕ: {formatDateTime(task.createdAtLocal)}</Text>
               </Card>
             ))
           )}
         </>
       ) : (
         <>
-          <PrimaryButton disabled={loading} icon="add-circle-outline" label="Создать замечание" onPress={openCreateRemark} />
+          <PrimaryButton disabled={loading} icon="add-circle-outline" label="РЎРѕР·РґР°С‚СЊ Р·Р°РјРµС‡Р°РЅРёРµ" onPress={openCreateRemark} />
           {remarks.length === 0 ? (
-            <EmptyCard title="Замечаний нет" text="Добавьте замечание по смене, участку и приложите фото при необходимости." />
+            <EmptyCard title="Р—Р°РјРµС‡Р°РЅРёР№ РЅРµС‚" text="Р”РѕР±Р°РІСЊС‚Рµ Р·Р°РјРµС‡Р°РЅРёРµ РїРѕ СЃРјРµРЅРµ, СѓС‡Р°СЃС‚РєСѓ Рё РїСЂРёР»РѕР¶РёС‚Рµ С„РѕС‚Рѕ РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё." />
           ) : (
             remarks.map((remark) => (
               <Card key={remark.remarkId}>
                 <View style={styles.row}>
                   <View style={styles.titleBox}>
-                    <Text style={[styles.cardTitle, { color: colors.text }]}>{remark.sectionName ?? "Замечание"}</Text>
+                    <Text style={[styles.cardTitle, { color: colors.text }]}>{remark.sectionName ?? "Р—Р°РјРµС‡Р°РЅРёРµ"}</Text>
                     <Text style={[styles.text, { color: colors.mutedText }]} numberOfLines={4}>{remark.comment}</Text>
                   </View>
                   <StatusPill label={remarkStatusLabel(remark.status)} tone={remarkStatusTone(remark.status)} />
                 </View>
-                <Text style={[styles.text, { color: colors.mutedText }]}>Исполнитель: {remark.employeeName ? formatShortName(remark.employeeName) : "не указан"}</Text>
-                <Text style={[styles.muted, { color: colors.mutedText }]}>Дата: {formatDateTime(remark.createdAtLocal)}</Text>
-                <Text style={[styles.muted, { color: colors.mutedText }]}>Вложения: {remark.mediaClientFileIds.length}</Text>
+                <Text style={[styles.text, { color: colors.mutedText }]}>РСЃРїРѕР»РЅРёС‚РµР»СЊ: {remark.employeeName ? formatShortName(remark.employeeName) : "РЅРµ СѓРєР°Р·Р°РЅ"}</Text>
+                <Text style={[styles.muted, { color: colors.mutedText }]}>Р”Р°С‚Р°: {formatDateTime(remark.createdAtLocal)}</Text>
+                <Text style={[styles.muted, { color: colors.mutedText }]}>Р’Р»РѕР¶РµРЅРёСЏ: {remark.mediaClientFileIds.length}</Text>
                 <PrimaryButton
                   disabled={loading}
                   icon="attach-outline"
-                  label="Добавить вложение"
-                  onPress={() => setAttachmentRemark({ remarkId: remark.remarkId, title: remark.sectionName ?? "Замечание" })}
+                  label="Р”РѕР±Р°РІРёС‚СЊ РІР»РѕР¶РµРЅРёРµ"
+                  onPress={() => setAttachmentRemark({ remarkId: remark.remarkId, title: remark.sectionName ?? "Р—Р°РјРµС‡Р°РЅРёРµ" })}
                   variant="secondary"
                 />
               </Card>
@@ -503,15 +514,15 @@ export function WorkAccountingScreen() {
         onPause={(task) =>
           applyTaskAction(
             () => pauseWorkTaskLocally(task, ""),
-            "Работа поставлена на паузу.",
-            "Не удалось поставить работу на паузу."
+            "Р Р°Р±РѕС‚Р° РїРѕСЃС‚Р°РІР»РµРЅР° РЅР° РїР°СѓР·Сѓ.",
+            "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕСЃС‚Р°РІРёС‚СЊ СЂР°Р±РѕС‚Сѓ РЅР° РїР°СѓР·Сѓ."
           )
         }
         onResume={(task) =>
           applyTaskAction(
             () => resumeWorkTaskLocally(task, ""),
-            "Работа продолжена.",
-            "Не удалось продолжить работу."
+            "Р Р°Р±РѕС‚Р° РїСЂРѕРґРѕР»Р¶РµРЅР°.",
+            "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕРґРѕР»Р¶РёС‚СЊ СЂР°Р±РѕС‚Сѓ."
           )
         }
         onJoin={(task) => openParticipationAction("join", task)}
@@ -548,22 +559,22 @@ export function WorkAccountingScreen() {
       />
       <ActionSheet
         actions={[
-          { icon: "camera-outline", label: "Сделать фото", onPress: () => void handleAttachWorkMedia("photo") },
-          { icon: "videocam-outline", label: "Снять видео", onPress: () => void handleAttachWorkMedia("video") },
-          { icon: "images-outline", label: "Выбрать из галереи", onPress: () => void handleAttachWorkMedia("gallery") }
+          { icon: "camera-outline", label: "РЎРґРµР»Р°С‚СЊ С„РѕС‚Рѕ", onPress: () => void handleAttachWorkMedia("photo") },
+          { icon: "videocam-outline", label: "РЎРЅСЏС‚СЊ РІРёРґРµРѕ", onPress: () => void handleAttachWorkMedia("video") },
+          { icon: "images-outline", label: "Р’С‹Р±СЂР°С‚СЊ РёР· РіР°Р»РµСЂРµРё", onPress: () => void handleAttachWorkMedia("gallery") }
         ]}
         onClose={() => setAttachmentTask(null)}
-        title="Вложение к работе"
+        title="Р’Р»РѕР¶РµРЅРёРµ Рє СЂР°Р±РѕС‚Рµ"
         visible={Boolean(attachmentTask)}
       />
       <ActionSheet
         actions={[
-          { icon: "camera-outline", label: "Сделать фото", onPress: () => void handleAttachRemarkMedia("photo") },
-          { icon: "videocam-outline", label: "Снять видео", onPress: () => void handleAttachRemarkMedia("video") },
-          { icon: "images-outline", label: "Выбрать из галереи", onPress: () => void handleAttachRemarkMedia("gallery") }
+          { icon: "camera-outline", label: "РЎРґРµР»Р°С‚СЊ С„РѕС‚Рѕ", onPress: () => void handleAttachRemarkMedia("photo") },
+          { icon: "videocam-outline", label: "РЎРЅСЏС‚СЊ РІРёРґРµРѕ", onPress: () => void handleAttachRemarkMedia("video") },
+          { icon: "images-outline", label: "Р’С‹Р±СЂР°С‚СЊ РёР· РіР°Р»РµСЂРµРё", onPress: () => void handleAttachRemarkMedia("gallery") }
         ]}
         onClose={() => setAttachmentRemark(null)}
-        title={attachmentRemark ? `Вложение: ${attachmentRemark.title}` : "Вложение к замечанию"}
+        title={attachmentRemark ? `Р’Р»РѕР¶РµРЅРёРµ: ${attachmentRemark.title}` : "Р’Р»РѕР¶РµРЅРёРµ Рє Р·Р°РјРµС‡Р°РЅРёСЋ"}
         visible={Boolean(attachmentRemark)}
       />
     </Screen>
@@ -615,23 +626,23 @@ function TaskModal({
         style={styles.modalBackdrop}
       >
         <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>{modal?.mode === "edit" ? "Изменить работу" : "Создать работу"}</Text>
+          <Text style={styles.modalTitle}>{modal?.mode === "edit" ? "РР·РјРµРЅРёС‚СЊ СЂР°Р±РѕС‚Сѓ" : "РЎРѕР·РґР°С‚СЊ СЂР°Р±РѕС‚Сѓ"}</Text>
           <ScrollView
             contentContainerStyle={styles.modalScrollContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             style={styles.modalScroll}
           >
-            <OptionPicker label="Исполнитель" options={employees.map((item) => ({ id: item.employeeId, label: formatShortName(item.fullName) }))} selectedId={taskEmployeeId} onSelect={setTaskEmployeeId} />
-            <OptionPicker label="Участок" options={sections.map((item) => ({ id: item.sectionId, label: item.name }))} selectedId={taskSectionId} onSelect={setTaskSectionId} />
-            <Text style={styles.label}>Дата и время</Text>
-            <Text style={styles.readOnlyValue}>Автоматически при сохранении</Text>
-            <Text style={styles.label}>Задача</Text>
-            <TextInput multiline onChangeText={setTaskText} placeholder="Что нужно выполнить?" placeholderTextColor="#9ca3af" style={[styles.input, styles.textarea]} textAlignVertical="top" value={taskText} />
+            <OptionPicker label="РСЃРїРѕР»РЅРёС‚РµР»СЊ" options={employees.map((item) => ({ id: item.employeeId, label: formatShortName(item.fullName) }))} selectedId={taskEmployeeId} onSelect={setTaskEmployeeId} />
+            <OptionPicker label="РЈС‡Р°СЃС‚РѕРє" options={sections.map((item) => ({ id: item.sectionId, label: item.name }))} selectedId={taskSectionId} onSelect={setTaskSectionId} />
+            <Text style={styles.label}>Р”Р°С‚Р° Рё РІСЂРµРјСЏ</Text>
+            <Text style={styles.readOnlyValue}>РђРІС‚РѕРјР°С‚РёС‡РµСЃРєРё РїСЂРё СЃРѕС…СЂР°РЅРµРЅРёРё</Text>
+            <Text style={styles.label}>Р—Р°РґР°С‡Р°</Text>
+            <TextInput multiline onChangeText={setTaskText} placeholder="Р§С‚Рѕ РЅСѓР¶РЅРѕ РІС‹РїРѕР»РЅРёС‚СЊ?" placeholderTextColor="#9ca3af" style={[styles.input, styles.textarea]} textAlignVertical="top" value={taskText} />
           </ScrollView>
           <View style={[styles.modalActions, { paddingBottom: Math.max(insets.bottom + 12, 22) }]}>
-            <PrimaryButton disabled={loading} label="Отмена" onPress={onClose} variant="secondary" />
-            <PrimaryButton disabled={loading} label="Сохранить" onPress={onSave} />
+            <PrimaryButton disabled={loading} label="РћС‚РјРµРЅР°" onPress={onClose} variant="secondary" />
+            <PrimaryButton disabled={loading} label="РЎРѕС…СЂР°РЅРёС‚СЊ" onPress={onSave} />
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -680,29 +691,29 @@ function RemarkModal({
         style={styles.modalBackdrop}
       >
         <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>Новое замечание</Text>
+          <Text style={styles.modalTitle}>РќРѕРІРѕРµ Р·Р°РјРµС‡Р°РЅРёРµ</Text>
           <ScrollView
             contentContainerStyle={styles.modalScrollContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             style={styles.modalScroll}
           >
-            <OptionPicker label="Исполнитель" options={employees.map((item) => ({ id: item.employeeId, label: formatShortName(item.fullName) }))} selectedId={remarkEmployeeId} onSelect={setRemarkEmployeeId} />
-            <OptionPicker label="Участок" options={sections.map((item) => ({ id: item.sectionId, label: item.name }))} selectedId={remarkSectionId} onSelect={setRemarkSectionId} />
-            <Text style={styles.label}>Дата</Text>
-            <Text style={styles.readOnlyValue}>Автоматически при сохранении</Text>
-            <Text style={styles.label}>Описание замечания</Text>
-            <TextInput multiline onChangeText={setRemarkComment} placeholder="Опишите замечание" placeholderTextColor="#9ca3af" style={[styles.input, styles.textarea]} textAlignVertical="top" value={remarkComment} />
-            <Text style={styles.label}>Вложения</Text>
+            <OptionPicker label="РСЃРїРѕР»РЅРёС‚РµР»СЊ" options={employees.map((item) => ({ id: item.employeeId, label: formatShortName(item.fullName) }))} selectedId={remarkEmployeeId} onSelect={setRemarkEmployeeId} />
+            <OptionPicker label="РЈС‡Р°СЃС‚РѕРє" options={sections.map((item) => ({ id: item.sectionId, label: item.name }))} selectedId={remarkSectionId} onSelect={setRemarkSectionId} />
+            <Text style={styles.label}>Р”Р°С‚Р°</Text>
+            <Text style={styles.readOnlyValue}>РђРІС‚РѕРјР°С‚РёС‡РµСЃРєРё РїСЂРё СЃРѕС…СЂР°РЅРµРЅРёРё</Text>
+            <Text style={styles.label}>РћРїРёСЃР°РЅРёРµ Р·Р°РјРµС‡Р°РЅРёСЏ</Text>
+            <TextInput multiline onChangeText={setRemarkComment} placeholder="РћРїРёС€РёС‚Рµ Р·Р°РјРµС‡Р°РЅРёРµ" placeholderTextColor="#9ca3af" style={[styles.input, styles.textarea]} textAlignVertical="top" value={remarkComment} />
+            <Text style={styles.label}>Р’Р»РѕР¶РµРЅРёСЏ</Text>
             <View style={styles.inlineActions}>
-              <ChoiceButton active={remarkAttachmentAfterSave === "later"} label="Добавить позже" onPress={() => setRemarkAttachmentAfterSave("later")} />
-              <ChoiceButton active={remarkAttachmentAfterSave === "now"} label="Добавить сейчас" onPress={() => setRemarkAttachmentAfterSave("now")} />
+              <ChoiceButton active={remarkAttachmentAfterSave === "later"} label="Р”РѕР±Р°РІРёС‚СЊ РїРѕР·Р¶Рµ" onPress={() => setRemarkAttachmentAfterSave("later")} />
+              <ChoiceButton active={remarkAttachmentAfterSave === "now"} label="Р”РѕР±Р°РІРёС‚СЊ СЃРµР№С‡Р°СЃ" onPress={() => setRemarkAttachmentAfterSave("now")} />
             </View>
-            <Text style={styles.helperText}>После сохранения можно добавить фото, видео или выбрать несколько файлов из галереи.</Text>
+            <Text style={styles.helperText}>РџРѕСЃР»Рµ СЃРѕС…СЂР°РЅРµРЅРёСЏ РјРѕР¶РЅРѕ РґРѕР±Р°РІРёС‚СЊ С„РѕС‚Рѕ, РІРёРґРµРѕ РёР»Рё РІС‹Р±СЂР°С‚СЊ РЅРµСЃРєРѕР»СЊРєРѕ С„Р°Р№Р»РѕРІ РёР· РіР°Р»РµСЂРµРё.</Text>
           </ScrollView>
           <View style={[styles.modalActions, { paddingBottom: Math.max(insets.bottom + 12, 22) }]}>
-            <PrimaryButton disabled={loading} label="Отмена" onPress={onClose} variant="secondary" />
-            <PrimaryButton disabled={loading} label="Сохранить" onPress={onSave} />
+            <PrimaryButton disabled={loading} label="РћС‚РјРµРЅР°" onPress={onClose} variant="secondary" />
+            <PrimaryButton disabled={loading} label="РЎРѕС…СЂР°РЅРёС‚СЊ" onPress={onSave} />
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -735,22 +746,22 @@ function CompleteTaskModal({
         style={styles.modalBackdrop}
       >
         <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>Завершить работу</Text>
+          <Text style={styles.modalTitle}>Р—Р°РІРµСЂС€РёС‚СЊ СЂР°Р±РѕС‚Сѓ</Text>
           <ScrollView
             contentContainerStyle={styles.modalScrollContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             style={styles.modalScroll}
           >
-            <Text style={styles.label}>Работа</Text>
+            <Text style={styles.label}>Р Р°Р±РѕС‚Р°</Text>
             <Text style={styles.readOnlyValue}>{task?.title ?? "-"}</Text>
-            <Text style={styles.label}>Участок</Text>
-            <Text style={styles.readOnlyValue}>{task?.sectionName ?? "Участок не указан"}</Text>
-            <Text style={styles.label}>Результат выполнения</Text>
+            <Text style={styles.label}>РЈС‡Р°СЃС‚РѕРє</Text>
+            <Text style={styles.readOnlyValue}>{task?.sectionName ?? "РЈС‡Р°СЃС‚РѕРє РЅРµ СѓРєР°Р·Р°РЅ"}</Text>
+            <Text style={styles.label}>Р РµР·СѓР»СЊС‚Р°С‚ РІС‹РїРѕР»РЅРµРЅРёСЏ</Text>
             <TextInput
               multiline
               onChangeText={onChangeComment}
-              placeholder="Что выполнено?"
+              placeholder="Р§С‚Рѕ РІС‹РїРѕР»РЅРµРЅРѕ?"
               placeholderTextColor="#9ca3af"
               style={[styles.input, styles.textarea]}
               textAlignVertical="top"
@@ -758,8 +769,8 @@ function CompleteTaskModal({
             />
           </ScrollView>
           <View style={[styles.modalActions, { paddingBottom: Math.max(insets.bottom + 12, 22) }]}>
-            <PrimaryButton disabled={loading} label="Отмена" onPress={onClose} variant="secondary" />
-            <PrimaryButton disabled={loading} icon="checkmark-circle-outline" label="Завершить" onPress={onSave} />
+            <PrimaryButton disabled={loading} label="РћС‚РјРµРЅР°" onPress={onClose} variant="secondary" />
+            <PrimaryButton disabled={loading} icon="checkmark-circle-outline" label="Р—Р°РІРµСЂС€РёС‚СЊ" onPress={onSave} />
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -810,8 +821,8 @@ function TaskMenu({
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={Boolean(task)}>
       <View style={[styles.menuBackdrop, { paddingBottom: Math.max(insets.bottom + 12, 22) }]}>
         <View style={styles.menuCard}>
-          <Text style={styles.modalTitle}>{task?.title ?? "Работа"}</Text>
-          {task ? <Text style={styles.menuSubtitle}>{task.sectionName ?? "Участок не указан"} · {statusLabel(task.status)}</Text> : null}
+          <Text style={styles.modalTitle}>{task?.title ?? "Р Р°Р±РѕС‚Р°"}</Text>
+          {task ? <Text style={styles.menuSubtitle}>{task.sectionName ?? "РЈС‡Р°СЃС‚РѕРє РЅРµ СѓРєР°Р·Р°РЅ"} В· {statusLabel(task.status)}</Text> : null}
           {primaryAction ? (
             <PrimaryButton disabled={loading} icon={primaryAction.icon} label={primaryAction.label} onPress={primaryAction.onPress} />
           ) : null}
@@ -829,7 +840,7 @@ function TaskMenu({
               ))}
             </View>
           ) : null}
-          <PrimaryButton disabled={loading} label="Закрыть" onPress={onClose} variant="ghost" />
+          <PrimaryButton disabled={loading} label="Р—Р°РєСЂС‹С‚СЊ" onPress={onClose} variant="ghost" />
         </View>
       </View>
     </Modal>
@@ -852,16 +863,16 @@ function getTaskPrimaryAction(
   handlers: Pick<TaskMenuCallbackMap, "onComplete" | "onJoin" | "onResume" | "onStart">
 ) {
   if (task.capabilities.canStart) {
-    return { icon: "play-outline" as const, label: "Начать работу", onPress: () => handlers.onStart(task) };
+    return { icon: "play-outline" as const, label: "РќР°С‡Р°С‚СЊ СЂР°Р±РѕС‚Сѓ", onPress: () => handlers.onStart(task) };
   }
   if (task.capabilities.canJoin) {
-    return { icon: "person-add-outline" as const, label: "Присоединиться", onPress: () => handlers.onJoin(task) };
+    return { icon: "person-add-outline" as const, label: "РџСЂРёСЃРѕРµРґРёРЅРёС‚СЊСЃСЏ", onPress: () => handlers.onJoin(task) };
   }
   if (task.capabilities.canResume) {
-    return { icon: "play-outline" as const, label: "Продолжить", onPress: () => handlers.onResume(task) };
+    return { icon: "play-outline" as const, label: "РџСЂРѕРґРѕР»Р¶РёС‚СЊ", onPress: () => handlers.onResume(task) };
   }
   if (task.capabilities.canComplete) {
-    return { icon: "checkmark-circle-outline" as const, label: "Завершить", onPress: () => handlers.onComplete(task) };
+    return { icon: "checkmark-circle-outline" as const, label: "Р—Р°РІРµСЂС€РёС‚СЊ", onPress: () => handlers.onComplete(task) };
   }
   return null;
 }
@@ -878,16 +889,16 @@ function getTaskSecondaryActions(
   }[] = [];
 
   if (task.capabilities.canReplace) {
-    actions.push({ icon: "swap-horizontal-outline", label: "Принять вместо исполнителя", onPress: () => handlers.onReplace(task) });
+    actions.push({ icon: "swap-horizontal-outline", label: "РџСЂРёРЅСЏС‚СЊ РІРјРµСЃС‚Рѕ РёСЃРїРѕР»РЅРёС‚РµР»СЏ", onPress: () => handlers.onReplace(task) });
   }
   if (task.capabilities.canPause) {
-    actions.push({ icon: "pause-outline", label: "Остановить", onPress: () => handlers.onPause(task), danger: true });
+    actions.push({ icon: "pause-outline", label: "РћСЃС‚Р°РЅРѕРІРёС‚СЊ", onPress: () => handlers.onPause(task), danger: true });
   }
   if (task.capabilities.canComplete) {
-    actions.push({ icon: "create-outline", label: "Изменить", onPress: () => handlers.onEdit(task) });
+    actions.push({ icon: "create-outline", label: "РР·РјРµРЅРёС‚СЊ", onPress: () => handlers.onEdit(task) });
   }
   if (task.kind === "workSession") {
-    actions.push({ icon: "attach-outline", label: "Добавить вложение", onPress: () => handlers.onAttach(task) });
+    actions.push({ icon: "attach-outline", label: "Р”РѕР±Р°РІРёС‚СЊ РІР»РѕР¶РµРЅРёРµ", onPress: () => handlers.onAttach(task) });
   }
   return actions;
 }
@@ -952,10 +963,10 @@ function ParticipationModal({
     .filter((participant) => !participant.finishedAt && !participant.isCurrentMobileEmployee)
     .map((participant) => ({ id: participant.employeeId, label: formatShortName(participant.fullName) })) ?? [];
   const title = action?.mode === "replace"
-    ? "Принять вместо исполнителя"
+    ? "РџСЂРёРЅСЏС‚СЊ РІРјРµСЃС‚Рѕ РёСЃРїРѕР»РЅРёС‚РµР»СЏ"
     : action?.mode === "join"
-      ? "Присоединиться к работе"
-      : "Начать работу";
+      ? "РџСЂРёСЃРѕРµРґРёРЅРёС‚СЊСЃСЏ Рє СЂР°Р±РѕС‚Рµ"
+      : "РќР°С‡Р°С‚СЊ СЂР°Р±РѕС‚Сѓ";
 
   return (
     <Modal animationType="slide" onRequestClose={onClose} transparent visible={Boolean(action)}>
@@ -965,21 +976,21 @@ function ParticipationModal({
           <ScrollView contentContainerStyle={styles.modalScrollContent} keyboardShouldPersistTaps="handled">
             <Text style={styles.readOnlyValue}>{action?.item.title ?? "-"}</Text>
             <OptionPicker
-              label="Фактический исполнитель"
+              label="Р¤Р°РєС‚РёС‡РµСЃРєРёР№ РёСЃРїРѕР»РЅРёС‚РµР»СЊ"
               onSelect={setEmployeeId}
               options={employees.map((employee) => ({ id: employee.employeeId, label: formatShortName(employee.fullName) }))}
               selectedId={employeeId}
             />
             {action?.mode === "replace" ? (
-              <OptionPicker label="Прежний исполнитель" onSelect={setPreviousEmployeeId} options={previousOptions} selectedId={previousEmployeeId} />
+              <OptionPicker label="РџСЂРµР¶РЅРёР№ РёСЃРїРѕР»РЅРёС‚РµР»СЊ" onSelect={setPreviousEmployeeId} options={previousOptions} selectedId={previousEmployeeId} />
             ) : null}
             {action?.mode !== "start" ? (
               <>
-                <Text style={styles.label}>{action?.mode === "replace" ? "Причина замены" : "Примечание"}</Text>
+                <Text style={styles.label}>{action?.mode === "replace" ? "РџСЂРёС‡РёРЅР° Р·Р°РјРµРЅС‹" : "РџСЂРёРјРµС‡Р°РЅРёРµ"}</Text>
                 <TextInput
                   multiline
                   onChangeText={setReason}
-                  placeholder={action?.mode === "replace" ? "Почему меняется исполнитель?" : "Что будете выполнять?"}
+                  placeholder={action?.mode === "replace" ? "РџРѕС‡РµРјСѓ РјРµРЅСЏРµС‚СЃСЏ РёСЃРїРѕР»РЅРёС‚РµР»СЊ?" : "Р§С‚Рѕ Р±СѓРґРµС‚Рµ РІС‹РїРѕР»РЅСЏС‚СЊ?"}
                   placeholderTextColor="#9ca3af"
                   style={[styles.input, styles.textarea]}
                   value={reason}
@@ -988,8 +999,8 @@ function ParticipationModal({
             ) : null}
           </ScrollView>
           <View style={[styles.modalActions, { paddingBottom: Math.max(insets.bottom + 12, 22) }]}>
-            <PrimaryButton disabled={loading} label="Отмена" onPress={onClose} variant="secondary" />
-            <PrimaryButton disabled={loading} label={action?.mode === "replace" ? "Подтвердить замену" : "Продолжить"} onPress={onSave} />
+            <PrimaryButton disabled={loading} label="РћС‚РјРµРЅР°" onPress={onClose} variant="secondary" />
+            <PrimaryButton disabled={loading} label={action?.mode === "replace" ? "РџРѕРґС‚РІРµСЂРґРёС‚СЊ Р·Р°РјРµРЅСѓ" : "РџСЂРѕРґРѕР»Р¶РёС‚СЊ"} onPress={onSave} />
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -1036,327 +1047,3 @@ function EmptyCard({ text, title }: { text: string; title: string }) {
     </Card>
   );
 }
-
-function statusLabel(status: WorkTaskStatus) {
-  const labels: Record<WorkTaskStatus, string> = {
-    available: "Доступна",
-    assigned: "Назначена",
-    new: "Новая",
-    accepted: "Назначена",
-    inProgress: "В работе",
-    paused: "Пауза",
-    completedLocal: "Завершена локально",
-    completedServer: "Завершена",
-    cancelled: "Отменена",
-    conflict: "Конфликт"
-  };
-
-  return labels[status] ?? status;
-}
-
-function formatParticipants(task: WorkItemDto) {
-  const participants = task.actualParticipants.length > 0 ? task.actualParticipants : task.assignedEmployees;
-  return participants.length > 0
-    ? participants.map((participant) => formatShortName(participant.fullName)).join(", ")
-    : "не указаны";
-}
-
-function formatWorkAttachments(task: WorkItemDto) {
-  const serverCount = task.attachments?.length ?? 0;
-  const localCount = task.localAttachmentCount ?? 0;
-  const photoCount = task.localPhotoCount ?? task.attachments?.filter((item) => item.contentType.startsWith("image/")).length ?? 0;
-  const videoCount = task.localVideoCount ?? task.attachments?.filter((item) => item.contentType.startsWith("video/")).length ?? 0;
-  const total = Math.max(serverCount, localCount);
-  if (total === 0) {
-    return "Вложения: нет";
-  }
-
-  const pendingLabel = localCount > serverCount ? `, ожидают отправки: ${localCount - serverCount}` : "";
-  return `Вложения: ${total}. Фото: ${photoCount}, видео: ${videoCount}${pendingLabel}`;
-}
-
-function statusTone(status: WorkTaskStatus) {
-  if (status === "completedServer" || status === "completedLocal") {
-    return "success";
-  }
-  if (status === "paused") {
-    return "warning";
-  }
-  if (status === "cancelled" || status === "conflict") {
-    return "danger";
-  }
-  return "neutral";
-}
-
-function remarkStatusLabel(status: ShiftRemark["status"]) {
-  if (status === "accepted" || status === "duplicate") {
-    return "Отправлено";
-  }
-  if (status === "rejected" || status === "conflict") {
-    return "Ошибка";
-  }
-  return "Ожидает";
-}
-
-function remarkStatusTone(status: ShiftRemark["status"]) {
-  if (status === "accepted" || status === "duplicate") {
-    return "success";
-  }
-  if (status === "rejected" || status === "conflict") {
-    return "danger";
-  }
-  return "warning";
-}
-
-function formatShortName(fullName: string | null | undefined) {
-  if (!fullName?.trim()) {
-    return "не указан";
-  }
-
-  const parts = fullName.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 1) {
-    return parts[0];
-  }
-
-  const [lastName, firstName, middleName] = parts;
-  const initials = [firstName, middleName]
-    .filter(Boolean)
-    .map((part) => `${part[0].toUpperCase()}.`)
-    .join("");
-
-  return initials ? `${lastName} ${initials}` : lastName;
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Дата не указана";
-  }
-
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "2-digit",
-    year: "numeric"
-  }).format(new Date(value));
-}
-
-const styles = StyleSheet.create({
-  actions: {
-    gap: 8
-  },
-  cardTitle: {
-    color: "#0f1a2b",
-    flex: 1,
-    fontSize: 18,
-    fontWeight: "800"
-  },
-  choice: {
-    borderColor: "#dbe5f2",
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 9
-  },
-  choiceActive: {
-    backgroundColor: "#eaf1ff",
-    borderColor: "#1e5bff"
-  },
-  choiceText: {
-    color: "#42526b",
-    fontSize: 13,
-    fontWeight: "800"
-  },
-  choiceTextActive: {
-    color: "#1e5bff"
-  },
-  field: {
-    gap: 8
-  },
-  iconButton: {
-    alignItems: "center",
-    borderColor: "#dbe5f2",
-    borderRadius: 10,
-    borderWidth: 1,
-    height: 38,
-    justifyContent: "center",
-    width: 42
-  },
-  helperText: {
-    color: "#6b7280",
-    fontSize: 13,
-    lineHeight: 18
-  },
-  inlineActions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
-  },
-  input: {
-    borderColor: "#d1d5db",
-    borderRadius: 10,
-    borderWidth: 1,
-    color: "#0f1a2b",
-    fontSize: 15,
-    paddingHorizontal: 12,
-    paddingVertical: 10
-  },
-  label: {
-    color: "#42526b",
-    fontSize: 13,
-    fontWeight: "800"
-  },
-  disabledAction: {
-    opacity: 0.45
-  },
-  menuBackdrop: {
-    backgroundColor: "rgba(15, 26, 43, 0.22)",
-    flex: 1,
-    justifyContent: "flex-end",
-    padding: 18
-  },
-  menuCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    gap: 10,
-    padding: 16
-  },
-  menuSecondaryAction: {
-    alignItems: "center",
-    borderColor: "#e5edf7",
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 9,
-    minHeight: 46,
-    paddingHorizontal: 12,
-    paddingVertical: 10
-  },
-  menuSecondaryDanger: {
-    color: "#ef4444"
-  },
-  menuSecondaryList: {
-    gap: 8
-  },
-  menuSecondaryPressed: {
-    opacity: 0.72
-  },
-  menuSecondaryText: {
-    color: "#1e5bff",
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "800"
-  },
-  menuSubtitle: {
-    color: "#6b7280",
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 18,
-    marginHorizontal: 18,
-    marginTop: -8
-  },
-  message: {
-    fontSize: 14,
-    fontWeight: "700",
-    lineHeight: 20
-  },
-  metaRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
-  },
-  modalActions: {
-    borderColor: "#e5edf7",
-    borderTopWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    paddingHorizontal: 18,
-    paddingTop: 12
-  },
-  modalBackdrop: {
-    backgroundColor: "rgba(15, 26, 43, 0.28)",
-    flex: 1,
-    justifyContent: "flex-end"
-  },
-  modalCard: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    maxHeight: "92%",
-    overflow: "hidden",
-    padding: 0
-  },
-  modalScroll: {
-    flexGrow: 0
-  },
-  modalScrollContent: {
-    gap: 12,
-    paddingBottom: 14,
-    paddingHorizontal: 18
-  },
-  modalTitle: {
-    color: "#0f1a2b",
-    fontSize: 20,
-    fontWeight: "900",
-    margin: 18,
-    marginBottom: 12
-  },
-  muted: {
-    fontSize: 13,
-    lineHeight: 18
-  },
-  optionWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
-  },
-  readOnlyValue: {
-    backgroundColor: "#f5f7fa",
-    borderRadius: 10,
-    color: "#6b7280",
-    fontSize: 14,
-    fontWeight: "700",
-    padding: 12
-  },
-  row: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "space-between"
-  },
-  segment: {
-    backgroundColor: "#edf2f8",
-    borderRadius: 12,
-    flexDirection: "row",
-    padding: 4
-  },
-  segmentButton: {
-    alignItems: "center",
-    borderRadius: 9,
-    flex: 1,
-    paddingVertical: 10
-  },
-  segmentButtonActive: {
-    backgroundColor: "#1e5bff"
-  },
-  segmentText: {
-    color: "#42526b",
-    fontSize: 14,
-    fontWeight: "900"
-  },
-  segmentTextActive: {
-    color: "#fff"
-  },
-  text: {
-    color: "#6b7280",
-    fontSize: 15,
-    lineHeight: 21
-  },
-  textarea: {
-    minHeight: 88
-  },
-  titleBox: {
-    flex: 1,
-    gap: 5
-  }
-});

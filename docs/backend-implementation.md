@@ -13,7 +13,9 @@ Backend is an ASP.NET Core API inside the modular monolith skeleton:
 - `libs/infrastructure` - EF Core/Npgsql persistence implementations.
 - `apps/worker` - background worker host placeholder.
 
-The current implementation uses PostgreSQL through EF Core and Npgsql. Database schema changes are versioned through checked-in EF Core migrations. API startup applies pending migrations with `MigrateAsync` and then runs the development seeder if the database is empty.
+The current implementation uses PostgreSQL through EF Core and Npgsql. Database schema changes are versioned through checked-in EF Core migrations. Normal API startup does not mutate the database schema. Migrations and idempotent seeding run in the explicit `--migrate` mode; Docker Compose executes that mode as a one-shot `migrate` service before starting the API.
+
+The initializer holds a PostgreSQL advisory lock scoped to the current database while migration and seeding run. This prevents concurrent deployment jobs from racing. A failed migrator blocks API startup instead of exposing a partially upgraded application.
 
 ## Persistence slice
 

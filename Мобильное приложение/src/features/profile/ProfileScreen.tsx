@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { signOut } from "@/auth/authService";
+import { getDeviceDisplayName } from "@/auth/deviceInfo";
 import { listLocalNotifications } from "@/db/repositories/notificationRepository";
 import { MobileNotificationDto } from "@/domain/patrol/patrolTypes";
 import { useAppTheme } from "@/features/settings/themePreference";
@@ -18,6 +19,7 @@ const NOTIFICATION_LIMIT = 8;
 export function ProfileScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
+  const deviceName = getDeviceDisplayName();
   const [notifications, setNotifications] = useState<MobileNotificationDto[]>([]);
   const [isRefreshingNotifications, setIsRefreshingNotifications] = useState(false);
 
@@ -92,9 +94,9 @@ export function ProfileScreen() {
       <Card>
         <View style={styles.row}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Устройство</Text>
-          <StatusPill label="Kenshi Armor C1s" tone="success" />
+          <StatusPill label={deviceName} tone="success" />
         </View>
-        <Text style={[styles.deviceTitle, { color: colors.text }]}>Kenshi Armor C1s</Text>
+        <Text style={[styles.deviceTitle, { color: colors.text }]}>{deviceName}</Text>
         <Text style={[styles.text, { color: colors.mutedText }]}>
           Patrol360. Устройство привязано к мобильной сессии.
         </Text>

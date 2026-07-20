@@ -13,7 +13,7 @@
     "test": "vitest --configLoader runner",
     "test:unit": "vitest run --configLoader runner",
     "test:unit:ci": "node -e \"require('node:fs').mkdirSync('../../TestResults/vitest',{recursive:true})\" && vitest run --configLoader runner --reporter=default --reporter=junit --outputFile.junit=../../TestResults/vitest/junit.xml",
-    "test:structural": "node ../../tests/web/unit/run-unit-tests.mjs",
+    "test:structural": "node ../../tests/web/unit/run-unit-tests.mjs && dotnet run --project ../../tests/Patrol360.Structure.Tests/Patrol360.Structure.Tests.csproj --no-restore",
     "test:run": "npm run test:unit && npm run test:structural",
     "test:ci": "npm run test:unit:ci && npm run test:structural",
     "test:e2e": "node ./e2e/run-playwright.mjs"

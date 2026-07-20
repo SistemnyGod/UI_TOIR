@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 
 namespace Patrol360.Api.Controllers;
 
 [ApiController]
+[AllowAnonymous]
 [Route("health")]
 public sealed class HealthController(IConfiguration configuration) : ControllerBase
 {

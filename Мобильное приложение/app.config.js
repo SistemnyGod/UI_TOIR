@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { AndroidConfig, withAndroidManifest, withDangerousMod } = require("expo/config-plugins");
+const packageVersion = require("./package.json").version;
 
 const googleServicesFile = "./secrets/google-services.json";
 const appIconFile = "./assets/app-icon.png";
@@ -109,7 +110,7 @@ module.exports = {
     name: "Patrol360",
     slug: "patrol360-mobile",
     scheme: "patrol360",
-    version: "0.1.24",
+     version: packageVersion,
     platforms: ["android"],
     orientation: "portrait",
     icon: appIconFile,

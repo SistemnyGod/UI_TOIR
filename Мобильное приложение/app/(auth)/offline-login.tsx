@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text } from "react-native";
 
 import { isOfflineSessionValid } from "@/auth/offlineSession";
+import { consumePendingSessionRoute, markSessionUnlocked } from "@/auth/sessionGateState";
 import { getOfflineSession, getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getLocalUserProfile } from "@/db/repositories/bootstrapRepository";
 import { Card } from "@/ui/Card";
@@ -65,7 +66,8 @@ export default function OfflineLoginRoute() {
         return;
       }
 
-      router.replace("/(tabs)/patrol");
+      markSessionUnlocked();
+      router.replace((consumePendingSessionRoute() ?? "/(tabs)/patrol") as never);
     } catch {
       setAuthError("На устройстве не настроена безопасная блокировка. Офлайн-данные не открыты.");
     } finally {

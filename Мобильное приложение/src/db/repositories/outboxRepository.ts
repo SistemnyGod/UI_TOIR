@@ -1,20 +1,11 @@
 import { getDatabase } from "@/db/database";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
+import { updatePendingCompleteReportBaseRevisionInTransaction } from "@/db/repositories/outboxSql";
 import { MobileEntityType, OutboxCommand, OutboxCommandStatus, OutboxCommandType, OutboxResponse } from "@/domain/sync/syncTypes";
+import { extractAssignmentId, extractCompletionFileIds, isCancelledCompletionResponse, isProblemResponse } from "@/db/repositories/outboxPolicies";
+import { SyncQueueCommandItem } from "@/db/repositories/outboxTypes";
 
-export type SyncQueueCommandItem = {
-  clientOperationId: string;
-  commandType: OutboxCommandType;
-  entityType: MobileEntityType;
-  entityLocalId: string | null;
-  entityServerId: string | null;
-  status: OutboxCommandStatus;
-  createdAtLocal: string;
-  updatedAtLocal: string | null;
-  attemptCount: number;
-  lastError: string | null;
-  assignmentRouteName: string | null;
-};
+export type { SyncQueueCommandItem } from "@/db/repositories/outboxTypes";
 
 export async function insertOutboxCommand(command: OutboxCommand) {
   const db = await getDatabase();
@@ -357,7 +348,7 @@ export async function resetStaleSendingOutboxCommands(ownerUserId: string, stale
     `
       UPDATE outbox_commands
       SET status = 'retryLater',
-          last_error = COALESCE(last_error, 'Отправка зависла и будет повторена автоматически.'),
+          last_error = COALESCE(last_error, 'РћС‚РїСЂР°РІРєР° Р·Р°РІРёСЃР»Р° Рё Р±СѓРґРµС‚ РїРѕРІС‚РѕСЂРµРЅР° Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё.'),
           updated_at_local = ?
       WHERE owner_user_id = ?
         AND status = 'sending'
@@ -375,7 +366,7 @@ export async function resetSendingOutboxCommandsForManualRetry(ownerUserId: stri
     `
       UPDATE outbox_commands
       SET status = 'retryLater',
-          last_error = 'Пользователь запустил повторную отправку.',
+          last_error = 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ Р·Р°РїСѓСЃС‚РёР» РїРѕРІС‚РѕСЂРЅСѓСЋ РѕС‚РїСЂР°РІРєСѓ.',
           updated_at_local = ?
       WHERE owner_user_id = ?
         AND status = 'sending'
@@ -822,81 +813,8 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
       eventType: `sync.${response.status}`,
       entityType: "outboxCommand",
       entityId: response.clientOperationId,
-      message: response.status === "conflict" ? "Команда требует проверки оператора." : "Команда отклонена сервером.",
+      message: response.status === "conflict" ? "РљРѕРјР°РЅРґР° С‚СЂРµР±СѓРµС‚ РїСЂРѕРІРµСЂРєРё РѕРїРµСЂР°С‚РѕСЂР°." : "РљРѕРјР°РЅРґР° РѕС‚РєР»РѕРЅРµРЅР° СЃРµСЂРІРµСЂРѕРј.",
       payload: response
     }).catch(() => undefined);
   }
-}
-
-function extractCompletionFileIds(payloadJson: string) {
-  try {
-    const payload = JSON.parse(payloadJson) as { pointResults?: { photoClientFileIds?: unknown }[] };
-    return Array.from(new Set(
-      (payload.pointResults ?? []).flatMap((point) =>
-        Array.isArray(point.photoClientFileIds)
-          ? point.photoClientFileIds.filter((value): value is string => typeof value === "string")
-          : []
-      )
-    ));
-  } catch {
-    return [];
-  }
-}
-
-function extractAssignmentId(payloadJson: string) {
-  try {
-    const payload = JSON.parse(payloadJson) as { assignmentId?: unknown };
-    return typeof payload.assignmentId === "string" && payload.assignmentId.trim()
-      ? payload.assignmentId
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-async function updatePendingCompleteReportBaseRevisionInTransaction(
-  tx: Awaited<ReturnType<typeof getDatabase>>,
-  ownerUserId: string,
-  assignmentId: string,
-  baseRevision: number
-) {
-  const commands = await tx.getAllAsync<{
-    client_operation_id: string;
-    payload_json: string;
-  }>(
-    `
-      SELECT client_operation_id, payload_json
-      FROM outbox_commands
-      WHERE owner_user_id = ?
-        AND command_type = 'completePatrolAssignment'
-        AND entity_local_id = ?
-        AND status IN ('pending', 'retryLater')
-    `,
-    [ownerUserId, assignmentId]
-  );
-
-  for (const command of commands) {
-    try {
-      const payload = JSON.parse(command.payload_json) as Record<string, unknown>;
-      payload.baseRevision = baseRevision;
-      await tx.runAsync(
-        "UPDATE outbox_commands SET payload_json = ?, updated_at_local = ? WHERE owner_user_id = ? AND client_operation_id = ?",
-        [JSON.stringify(payload), new Date().toISOString(), ownerUserId, command.client_operation_id]
-      );
-    } catch {
-      // The report command will be rejected by its normal payload validation;
-      // never replace an unreadable payload with a partial one.
-    }
-  }
-}
-
-function isProblemResponse(status: OutboxResponse["status"]) {
-  return status === "conflict" || status === "rejected" || status === "retryLater";
-}
-
-function isCancelledCompletionResponse(response: OutboxResponse) {
-  return (
-    (response.status === "accepted" || response.status === "duplicate")
-    && response.message.toLowerCase().includes("dispatcher cancellation")
-  );
 }

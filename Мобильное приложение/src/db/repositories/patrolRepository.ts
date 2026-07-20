@@ -5,6 +5,8 @@ import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getDatabase } from "@/db/database";
 import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
+import { insertOutboxCommandInTransaction } from "@/db/repositories/outboxSql";
+import { parseStringArray, supersedePendingPointStatusCommands, updateLatestPendingMarkPhotoPayloadInTransaction, upsertPointResult, upsertPointResultInTransaction } from "@/db/repositories/patrolPersistence";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { isPhotoEvidenceRequired } from "@/domain/patrol/photoEvidencePolicy";
@@ -223,7 +225,7 @@ export async function takeRequestLocally(requestId: string) {
 
   const request = await getRequestBoardItem(requestId);
   if (!request) {
-    throw new Error("Заявка не загружена на телефон.");
+    throw new Error("Р—Р°СЏРІРєР° РЅРµ Р·Р°РіСЂСѓР¶РµРЅР° РЅР° С‚РµР»РµС„РѕРЅ.");
   }
 
   const assignmentId = Crypto.randomUUID();
@@ -306,7 +308,7 @@ export async function takeRequestLocally(requestId: string) {
       [assignmentId]
     );
     if ((snapshot?.count ?? 0) === 0) {
-      throw new Error("Маршрут не загружен на телефон.");
+      throw new Error("РњР°СЂС€СЂСѓС‚ РЅРµ Р·Р°РіСЂСѓР¶РµРЅ РЅР° С‚РµР»РµС„РѕРЅ.");
     }
 
     await tx.runAsync(
@@ -327,7 +329,7 @@ export async function takeRequestLocally(requestId: string) {
     eventType: "patrol.request.taken",
     entityType: "patrolAssignment",
     entityId: assignmentId,
-    message: "Заявка взята в работу.",
+    message: "Р—Р°СЏРІРєР° РІР·СЏС‚Р° РІ СЂР°Р±РѕС‚Сѓ.",
     payload: { requestId: request.requestId, routeId: request.routeId }
   }).catch(() => undefined);
 
@@ -357,7 +359,7 @@ export async function acceptRequestLocally(requestId: string) {
 
   const request = await getRequestBoardItem(requestId);
   if (!request) {
-    throw new Error("Заявка не загружена на телефон.");
+    throw new Error("Р—Р°СЏРІРєР° РЅРµ Р·Р°РіСЂСѓР¶РµРЅР° РЅР° С‚РµР»РµС„РѕРЅ.");
   }
 
   const assignmentId = Crypto.randomUUID();
@@ -437,11 +439,11 @@ export async function releaseAcceptedRequestLocally(assignmentId: string) {
   const ownerUserId = await requireOwnerUserId();
   const assignment = await getAssignmentById(assignmentId);
   if (!assignment) {
-    throw new Error("Назначение не найдено на телефоне.");
+    throw new Error("РќР°Р·РЅР°С‡РµРЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ РЅР° С‚РµР»РµС„РѕРЅРµ.");
   }
 
   if (assignment.status !== "accepted" || assignment.startedAtLocal) {
-    throw new Error("Вернуть можно только принятую заявку до начала обхода.");
+    throw new Error("Р’РµСЂРЅСѓС‚СЊ РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ РїСЂРёРЅСЏС‚СѓСЋ Р·Р°СЏРІРєСѓ РґРѕ РЅР°С‡Р°Р»Р° РѕР±С…РѕРґР°.");
   }
 
   const pendingRelease = await db.getFirstAsync<{ client_operation_id: string }>(
@@ -457,7 +459,7 @@ export async function releaseAcceptedRequestLocally(assignmentId: string) {
     [ownerUserId, assignmentId]
   );
   if (pendingRelease) {
-    throw new Error("Возврат заявки уже сохранён и ожидает подтверждения сервера.");
+    throw new Error("Р’РѕР·РІСЂР°С‚ Р·Р°СЏРІРєРё СѓР¶Рµ СЃРѕС…СЂР°РЅС‘РЅ Рё РѕР¶РёРґР°РµС‚ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ СЃРµСЂРІРµСЂР°.");
   }
 
   const now = new Date().toISOString();
@@ -493,7 +495,7 @@ export async function releaseAcceptedRequestLocally(assignmentId: string) {
         [ownerUserId, assignment.assignmentId]
       );
       if (releaseAlreadyQueued) {
-        throw new Error("Возврат заявки уже сохранён и ожидает подтверждения сервера.");
+        throw new Error("Р’РѕР·РІСЂР°С‚ Р·Р°СЏРІРєРё СѓР¶Рµ СЃРѕС…СЂР°РЅС‘РЅ Рё РѕР¶РёРґР°РµС‚ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ СЃРµСЂРІРµСЂР°.");
       }
 
       await insertOutboxCommandInTransaction(tx, command);
@@ -743,7 +745,7 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
     eventType: "patrol.nfc.scanned",
     entityType: "patrolPoint",
     entityId: point.pointId,
-    message: "NFC-метка считана.",
+    message: "NFC-РјРµС‚РєР° СЃС‡РёС‚Р°РЅР°.",
     payload: { assignmentId, nfcCode: normalizedNfcCode }
   }).catch(() => undefined);
 
@@ -988,12 +990,12 @@ export async function deferPoint(assignmentId: string, pointId: string, input: D
   await assertPointActionAllowed(assignmentId);
   const point = await getPointForFill(assignmentId, pointId);
   if (!point) {
-    throw new Error("Метка не загружена на телефон.");
+    throw new Error("РњРµС‚РєР° РЅРµ Р·Р°РіСЂСѓР¶РµРЅР° РЅР° С‚РµР»РµС„РѕРЅ.");
   }
 
   const selectedStatus = input.selectedStatus ?? (point.issueTypeId ? "issue" : null);
   const issueTypeId = selectedStatus === "issue"
-    ? input.issueTypeId?.trim() || point.issueTypeId || "Неисправность"
+    ? input.issueTypeId?.trim() || point.issueTypeId || "РќРµРёСЃРїСЂР°РІРЅРѕСЃС‚СЊ"
     : null;
 
   await upsertPointResult({
@@ -1004,7 +1006,7 @@ export async function deferPoint(assignmentId: string, pointId: string, input: D
     comment: input.comment ?? point.comment,
     issueTypeId,
     severity: null,
-    deferredReason: input.reason ?? "Заполнить позже",
+    deferredReason: input.reason ?? "Р—Р°РїРѕР»РЅРёС‚СЊ РїРѕР·Р¶Рµ",
     completedAtLocal: null,
     syncStatus: "pending",
     confirmationType: point.confirmationType ?? "manual",
@@ -1017,7 +1019,7 @@ export async function deferPoint(assignmentId: string, pointId: string, input: D
     eventType: "patrol.point.deferred",
     entityType: "patrolPoint",
     entityId: pointId,
-    message: "Метка отложена на потом.",
+    message: "РњРµС‚РєР° РѕС‚Р»РѕР¶РµРЅР° РЅР° РїРѕС‚РѕРј.",
     payload: { assignmentId, selectedStatus, photoCount: (input.photoClientFileIds ?? point.photoClientFileIds).length }
   }).catch(() => undefined);
 }
@@ -1027,7 +1029,7 @@ export async function skipPoint(assignmentId: string, pointId: string, input: Pi
   await assertPointActionAllowed(assignmentId);
   const point = await getPointForFill(assignmentId, pointId);
   if (!point) {
-    throw new Error("Метка не загружена на телефон.");
+    throw new Error("РњРµС‚РєР° РЅРµ Р·Р°РіСЂСѓР¶РµРЅР° РЅР° С‚РµР»РµС„РѕРЅ.");
   }
 
   const completedAtLocal = point.status === "skipped" && point.completedAtLocal ? point.completedAtLocal : new Date().toISOString();
@@ -1039,7 +1041,7 @@ export async function skipPoint(assignmentId: string, pointId: string, input: Pi
     comment: input.comment ?? point.comment,
     issueTypeId: null,
     severity: null,
-    deferredReason: "Метка недоступна",
+    deferredReason: "РњРµС‚РєР° РЅРµРґРѕСЃС‚СѓРїРЅР°",
     completedAtLocal,
     syncStatus: "pending",
     confirmationType: "manual",
@@ -1052,7 +1054,7 @@ export async function skipPoint(assignmentId: string, pointId: string, input: Pi
     eventType: "patrol.point.skipped",
     entityType: "patrolPoint",
     entityId: pointId,
-    message: "Метка отмечена как недоступная.",
+    message: "РњРµС‚РєР° РѕС‚РјРµС‡РµРЅР° РєР°Рє РЅРµРґРѕСЃС‚СѓРїРЅР°СЏ.",
     payload: { assignmentId, attachmentCount: (input.photoClientFileIds ?? point.photoClientFileIds).length }
   }).catch(() => undefined);
 }
@@ -1062,7 +1064,7 @@ export async function attachPhotoToPoint(assignmentId: string, pointId: string, 
   await assertPointActionAllowed(assignmentId);
   const point = await getPointForFill(assignmentId, pointId);
   if (!point) {
-    throw new Error("Метка не загружена на телефон.");
+    throw new Error("РњРµС‚РєР° РЅРµ Р·Р°РіСЂСѓР¶РµРЅР° РЅР° С‚РµР»РµС„РѕРЅ.");
   }
 
   const photoClientFileIds = Array.from(new Set([...point.photoClientFileIds, file.clientFileId]));
@@ -1094,7 +1096,7 @@ export async function attachPhotoToPoint(assignmentId: string, pointId: string, 
     eventType: file.mediaKind === "video" ? "patrol.video.added" : "patrol.photo.added",
     entityType: "patrolPoint",
     entityId: pointId,
-    message: file.mediaKind === "video" ? "Видео добавлено к метке." : "Фото добавлено к метке.",
+    message: file.mediaKind === "video" ? "Р’РёРґРµРѕ РґРѕР±Р°РІР»РµРЅРѕ Рє РјРµС‚РєРµ." : "Р¤РѕС‚Рѕ РґРѕР±Р°РІР»РµРЅРѕ Рє РјРµС‚РєРµ.",
     payload: { assignmentId, clientFileId: file.clientFileId }
   }).catch(() => undefined);
 }
@@ -1115,7 +1117,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: "route-version",
         pointName: assignment.routeName,
         orderIndex: 0,
-        reason: "Маршрут обновлен после назначения. Синхронизируйте данные и получите актуальный чек-лист."
+        reason: "РњР°СЂС€СЂСѓС‚ РѕР±РЅРѕРІР»РµРЅ РїРѕСЃР»Рµ РЅР°Р·РЅР°С‡РµРЅРёСЏ. РЎРёРЅС…СЂРѕРЅРёР·РёСЂСѓР№С‚Рµ РґР°РЅРЅС‹Рµ Рё РїРѕР»СѓС‡РёС‚Рµ Р°РєС‚СѓР°Р»СЊРЅС‹Р№ С‡РµРє-Р»РёСЃС‚."
       });
     }
   }
@@ -1125,7 +1127,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
       pointId: "route-empty",
       pointName: assignment.routeName,
       orderIndex: 0,
-      reason: "Маршрут не загружен на телефон"
+      reason: "РњР°СЂС€СЂСѓС‚ РЅРµ Р·Р°РіСЂСѓР¶РµРЅ РЅР° С‚РµР»РµС„РѕРЅ"
     });
   }
 
@@ -1135,7 +1137,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: point.pointId,
         pointName: point.name,
         orderIndex: point.orderIndex,
-        reason: "Выберите состояние метки после сканирования"
+        reason: "Р’С‹Р±РµСЂРёС‚Рµ СЃРѕСЃС‚РѕСЏРЅРёРµ РјРµС‚РєРё РїРѕСЃР»Рµ СЃРєР°РЅРёСЂРѕРІР°РЅРёСЏ"
       });
     }
 
@@ -1144,7 +1146,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: point.pointId,
         pointName: point.name,
         orderIndex: point.orderIndex,
-        reason: "Обязательная метка не заполнена"
+        reason: "РћР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РјРµС‚РєР° РЅРµ Р·Р°РїРѕР»РЅРµРЅР°"
       });
     }
 
@@ -1153,7 +1155,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: point.pointId,
         pointName: point.name,
         orderIndex: point.orderIndex,
-        reason: "Обязательная метка отложена"
+        reason: "РћР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РјРµС‚РєР° РѕС‚Р»РѕР¶РµРЅР°"
       });
     }
 
@@ -1162,7 +1164,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: point.pointId,
         pointName: point.name,
         orderIndex: point.orderIndex,
-        reason: "Для неисправности нужен комментарий"
+        reason: "Р”Р»СЏ РЅРµРёСЃРїСЂР°РІРЅРѕСЃС‚Рё РЅСѓР¶РµРЅ РєРѕРјРјРµРЅС‚Р°СЂРёР№"
       });
     }
 
@@ -1171,7 +1173,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: point.pointId,
         pointName: point.name,
         orderIndex: point.orderIndex,
-        reason: "Для неисправности нужно указать тип"
+        reason: "Р”Р»СЏ РЅРµРёСЃРїСЂР°РІРЅРѕСЃС‚Рё РЅСѓР¶РЅРѕ СѓРєР°Р·Р°С‚СЊ С‚РёРї"
       });
     }
 
@@ -1180,7 +1182,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: point.pointId,
         pointName: point.name,
         orderIndex: point.orderIndex,
-        reason: "Укажите причину недоступности метки"
+        reason: "РЈРєР°Р¶РёС‚Рµ РїСЂРёС‡РёРЅСѓ РЅРµРґРѕСЃС‚СѓРїРЅРѕСЃС‚Рё РјРµС‚РєРё"
       });
     }
 
@@ -1189,7 +1191,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: point.pointId,
         pointName: point.name,
         orderIndex: point.orderIndex,
-        reason: "Для метки требуется фотофиксация"
+        reason: "Р”Р»СЏ РјРµС‚РєРё С‚СЂРµР±СѓРµС‚СЃСЏ С„РѕС‚РѕС„РёРєСЃР°С†РёСЏ"
       });
     }
   }
@@ -1210,7 +1212,7 @@ export async function completeAssignmentLocally(assignmentId: string) {
   await assertPointActionAllowed(assignmentId);
   const readiness = await getReportReadiness(assignmentId);
   if (!readiness.assignment || !readiness.ready) {
-    throw new Error("Отчет еще не готов к отправке.");
+    throw new Error("РћС‚С‡РµС‚ РµС‰Рµ РЅРµ РіРѕС‚РѕРІ Рє РѕС‚РїСЂР°РІРєРµ.");
   }
 
   const completedAtLocal = new Date().toISOString();
@@ -1299,7 +1301,7 @@ export async function completeAssignmentLocally(assignmentId: string) {
 
   const completionResult = completionResultRef.current;
   if (!completionResult) {
-    throw new Error("Не удалось сохранить отчет в очередь отправки.");
+    throw new Error("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РѕС‚С‡РµС‚ РІ РѕС‡РµСЂРµРґСЊ РѕС‚РїСЂР°РІРєРё.");
   }
 
   if (completionResult.alreadyQueued) {
@@ -1310,7 +1312,7 @@ export async function completeAssignmentLocally(assignmentId: string) {
     eventType: "patrol.report.completedLocal",
     entityType: "patrolAssignment",
     entityId: assignmentId,
-    message: "Отчет завершен локально и ожидает отправки.",
+    message: "РћС‚С‡РµС‚ Р·Р°РІРµСЂС€РµРЅ Р»РѕРєР°Р»СЊРЅРѕ Рё РѕР¶РёРґР°РµС‚ РѕС‚РїСЂР°РІРєРё.",
     payload: { photoCount, pointCount: readiness.progress.total }
   }).catch(() => undefined);
 
@@ -1378,11 +1380,11 @@ async function updateAssignmentLifecycleLocally(
   const ownerUserId = await requireOwnerUserId();
   const assignment = await getAssignmentById(assignmentId);
   if (!assignment) {
-    throw new Error("Назначение не найдено на телефоне.");
+    throw new Error("РќР°Р·РЅР°С‡РµРЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ РЅР° С‚РµР»РµС„РѕРЅРµ.");
   }
 
   if (commandType === "startPatrolAssignment" && !["accepted", "paused", "inProgress"].includes(assignment.status)) {
-    throw new Error("Начать можно только принятую или приостановленную заявку.");
+    throw new Error("РќР°С‡Р°С‚СЊ РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ РїСЂРёРЅСЏС‚СѓСЋ РёР»Рё РїСЂРёРѕСЃС‚Р°РЅРѕРІР»РµРЅРЅСѓСЋ Р·Р°СЏРІРєСѓ.");
   }
 
   if (commandType === "startPatrolAssignment" || commandType === "resumePatrolAssignment") {
@@ -1398,16 +1400,16 @@ async function updateAssignmentLifecycleLocally(
       [ownerUserId, assignment.assignmentId]
     );
     if (competing) {
-      throw new Error("Сначала завершите или передайте текущий обход.");
+      throw new Error("РЎРЅР°С‡Р°Р»Р° Р·Р°РІРµСЂС€РёС‚Рµ РёР»Рё РїРµСЂРµРґР°Р№С‚Рµ С‚РµРєСѓС‰РёР№ РѕР±С…РѕРґ.");
     }
   }
 
   if (commandType === "pausePatrolAssignment" && assignment.status !== "inProgress") {
-    throw new Error("Приостановить можно только начатый обход.");
+    throw new Error("РџСЂРёРѕСЃС‚Р°РЅРѕРІРёС‚СЊ РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ РЅР°С‡Р°С‚С‹Р№ РѕР±С…РѕРґ.");
   }
 
   if (commandType === "resumePatrolAssignment" && assignment.status !== "paused") {
-    throw new Error("Продолжить можно только приостановленный обход.");
+    throw new Error("РџСЂРѕРґРѕР»Р¶РёС‚СЊ РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ РїСЂРёРѕСЃС‚Р°РЅРѕРІР»РµРЅРЅС‹Р№ РѕР±С…РѕРґ.");
   }
 
   const now = new Date().toISOString();
@@ -1458,7 +1460,7 @@ async function updateAssignmentLifecycleLocally(
         [ownerUserId, assignment.assignmentId]
       );
       if (releasePending) {
-        throw new Error("Заявка ожидает подтверждения возврата и пока недоступна для запуска.");
+        throw new Error("Р—Р°СЏРІРєР° РѕР¶РёРґР°РµС‚ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ РІРѕР·РІСЂР°С‚Р° Рё РїРѕРєР° РЅРµРґРѕСЃС‚СѓРїРЅР° РґР»СЏ Р·Р°РїСѓСЃРєР°.");
       }
 
       if (commandType === "startPatrolAssignment"
@@ -1563,7 +1565,7 @@ async function snapshotRoutePointsInTransaction(executor: SqlExecutor, assignmen
     [assignmentId]
   );
   if ((snapshot?.count ?? 0) === 0) {
-    throw new Error("Маршрут не загружен на телефон.");
+    throw new Error("РњР°СЂС€СЂСѓС‚ РЅРµ Р·Р°РіСЂСѓР¶РµРЅ РЅР° С‚РµР»РµС„РѕРЅ.");
   }
 }
 
@@ -1640,7 +1642,7 @@ async function getQueuedCompleteAssignmentCommand(executor: SqlExecutor, ownerUs
 async function requireOwnerUserId() {
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
-    throw new Error("Выполните вход в мобильный аккаунт.");
+    throw new Error("Р’С‹РїРѕР»РЅРёС‚Рµ РІС…РѕРґ РІ РјРѕР±РёР»СЊРЅС‹Р№ Р°РєРєР°СѓРЅС‚.");
   }
 
   return ownerUserId;
@@ -1649,19 +1651,19 @@ async function requireOwnerUserId() {
 async function assertPointActionAllowed(assignmentId: string) {
   const assignment = await getAssignmentById(assignmentId);
   if (!assignment) {
-    throw new Error("Назначение не найдено на телефоне.");
+    throw new Error("РќР°Р·РЅР°С‡РµРЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ РЅР° С‚РµР»РµС„РѕРЅРµ.");
   }
 
   if (assignment.status === "cancelled" || assignment.status === "cancelledServer") {
-    throw new Error("Заявка отменена диспетчером. Действия по обходу заблокированы.");
+    throw new Error("Р—Р°СЏРІРєР° РѕС‚РјРµРЅРµРЅР° РґРёСЃРїРµС‚С‡РµСЂРѕРј. Р”РµР№СЃС‚РІРёСЏ РїРѕ РѕР±С…РѕРґСѓ Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅС‹.");
   }
 
   if (["completed", "completedServer", "completedLocal"].includes(assignment.status)) {
-    throw new Error("Обход уже завершён. Изменение точек недоступно.");
+    throw new Error("РћР±С…РѕРґ СѓР¶Рµ Р·Р°РІРµСЂС€С‘РЅ. РР·РјРµРЅРµРЅРёРµ С‚РѕС‡РµРє РЅРµРґРѕСЃС‚СѓРїРЅРѕ.");
   }
 
   if (assignment.status !== "inProgress") {
-    throw new Error("Действия с метками доступны только после начала обхода.");
+    throw new Error("Р”РµР№СЃС‚РІРёСЏ СЃ РјРµС‚РєР°РјРё РґРѕСЃС‚СѓРїРЅС‹ С‚РѕР»СЊРєРѕ РїРѕСЃР»Рµ РЅР°С‡Р°Р»Р° РѕР±С…РѕРґР°.");
   }
 }
 
@@ -1682,12 +1684,12 @@ async function savePointResult({
   await assertPointActionAllowed(assignmentId);
   const point = await getPointForFill(assignmentId, pointId);
   if (!point) {
-    throw new Error("Метка не загружена на телефон.");
+    throw new Error("РњРµС‚РєР° РЅРµ Р·Р°РіСЂСѓР¶РµРЅР° РЅР° С‚РµР»РµС„РѕРЅ.");
   }
 
   const completedAtLocal = new Date().toISOString();
   if (point.confirmationType !== "nfc" && point.confirmationType !== "qr" && !comment.trim()) {
-    throw new Error("Для ручного подтверждения укажите причину, почему метку не удалось отсканировать.");
+    throw new Error("Р”Р»СЏ СЂСѓС‡РЅРѕРіРѕ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ СѓРєР°Р¶РёС‚Рµ РїСЂРёС‡РёРЅСѓ, РїРѕС‡РµРјСѓ РјРµС‚РєСѓ РЅРµ СѓРґР°Р»РѕСЃСЊ РѕС‚СЃРєР°РЅРёСЂРѕРІР°С‚СЊ.");
   }
 
   const commandType = status === "issue" ? "markPatrolPointIssue" : "markPatrolPointOk";
@@ -1740,244 +1742,7 @@ async function savePointResult({
     eventType: "patrol.point.saved",
     entityType: "patrolPoint",
     entityId: pointId,
-    message: status === "issue" ? "Метка сохранена как неисправная." : "Метка сохранена как исправная.",
+    message: status === "issue" ? "РњРµС‚РєР° СЃРѕС…СЂР°РЅРµРЅР° РєР°Рє РЅРµРёСЃРїСЂР°РІРЅР°СЏ." : "РњРµС‚РєР° СЃРѕС…СЂР°РЅРµРЅР° РєР°Рє РёСЃРїСЂР°РІРЅР°СЏ.",
     payload: { assignmentId, status, photoCount: point.photoClientFileIds.length }
   }).catch(() => undefined);
-}
-
-async function updateLatestPendingMarkPhotoPayloadInTransaction(
-  executor: SqlExecutor,
-  assignmentId: string,
-  pointId: string,
-  photoClientFileIds: string[]
-) {
-  const command = await executor.getFirstAsync<{
-    client_operation_id: string;
-    payload_json: string;
-  }>(
-    `
-      SELECT client_operation_id, payload_json
-      FROM outbox_commands
-      WHERE entity_local_id = ?
-        AND command_type IN ('markPatrolPointOk', 'markPatrolPointIssue')
-        AND status IN ('pending', 'retryLater')
-      ORDER BY created_at_local DESC
-      LIMIT 1
-    `,
-    [pointId]
-  );
-
-  if (!command) {
-    return;
-  }
-
-  const payload = JSON.parse(command.payload_json) as Record<string, unknown>;
-  if (payload.assignmentId !== assignmentId || payload.pointId !== pointId) {
-    return;
-  }
-
-  await executor.runAsync(
-    `
-      UPDATE outbox_commands
-      SET payload_json = ?,
-          updated_at_local = ?
-      WHERE client_operation_id = ?
-    `,
-    [
-      JSON.stringify({
-        ...payload,
-        photoClientFileIds
-      }),
-      new Date().toISOString(),
-      command.client_operation_id
-    ]
-  );
-}
-
-async function supersedePendingPointStatusCommands(
-  executor: SqlExecutor,
-  ownerUserId: string,
-  assignmentId: string,
-  pointId: string
-) {
-  const commands = await executor.getAllAsync<{
-    clientOperationId: string;
-    payloadJson: string;
-  }>(
-    `
-      SELECT
-        client_operation_id AS clientOperationId,
-        payload_json AS payloadJson
-      FROM outbox_commands
-      WHERE owner_user_id = ?
-        AND entity_local_id = ?
-        AND command_type IN ('markPatrolPointOk', 'markPatrolPointIssue')
-        AND status IN ('pending', 'retryLater')
-    `,
-    [ownerUserId, pointId]
-  );
-  const supersededIds = commands
-    .filter((command) => {
-      try {
-        const payload = JSON.parse(command.payloadJson) as Record<string, unknown>;
-        return payload.assignmentId === assignmentId && payload.pointId === pointId;
-      } catch {
-        return false;
-      }
-    })
-    .map((command) => command.clientOperationId);
-
-  if (supersededIds.length === 0) {
-    return;
-  }
-
-  const placeholders = supersededIds.map(() => "?").join(", ");
-  await executor.runAsync(
-    `
-      UPDATE outbox_commands
-      SET status = 'superseded',
-          last_error = NULL,
-          updated_at_local = ?
-      WHERE client_operation_id IN (${placeholders})
-        AND status IN ('pending', 'retryLater')
-    `,
-    [new Date().toISOString(), ...supersededIds]
-  );
-}
-
-async function upsertPointResult(input: {
-  ownerUserId: string;
-  assignmentId: string;
-  pointId: string;
-  status: PointListItem["status"];
-  comment: string | null;
-  issueTypeId: string | null;
-  severity: string | null;
-  deferredReason: string | null;
-  completedAtLocal: string | null;
-  syncStatus: string;
-    confirmationType: "nfc" | "qr" | "manual" | null;
-  nfcUidHash: string | null;
-  scannedAtLocal: string | null;
-  photoClientFileIds: string[];
-}) {
-  const db = await getDatabase();
-  await withSqliteBusyRetry(() => upsertPointResultInTransaction(db, input));
-}
-
-async function upsertPointResultInTransaction(executor: SqlExecutor, input: {
-  ownerUserId: string;
-  assignmentId: string;
-  pointId: string;
-  status: PointListItem["status"];
-  comment: string | null;
-  issueTypeId: string | null;
-  severity: string | null;
-  deferredReason: string | null;
-  completedAtLocal: string | null;
-  syncStatus: string;
-  confirmationType: "nfc" | "qr" | "manual" | null;
-  nfcUidHash: string | null;
-  scannedAtLocal: string | null;
-  photoClientFileIds: string[];
-}) {
-  const existing = await executor.getFirstAsync<{ localResultId: string }>(
-    `
-      SELECT local_result_id AS localResultId
-      FROM point_results
-      WHERE owner_user_id = ?
-        AND assignment_id = ?
-        AND point_id = ?
-      LIMIT 1
-    `,
-    [input.ownerUserId, input.assignmentId, input.pointId]
-  );
-  const localResultId = existing?.localResultId ?? Crypto.randomUUID();
-
-  await executor.runAsync(
-    `
-      INSERT OR REPLACE INTO point_results (
-        local_result_id,
-        owner_user_id,
-        assignment_id,
-        point_id,
-        status,
-        comment,
-        issue_type_id,
-        severity,
-        deferred_reason,
-        completed_at_local,
-        sync_status,
-        confirmation_type,
-        nfc_uid_hash,
-        scanned_at_local,
-        photo_client_file_ids_json
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    [
-      localResultId,
-      input.ownerUserId,
-      input.assignmentId,
-      input.pointId,
-      input.status,
-      input.comment,
-      input.issueTypeId,
-      input.severity,
-      input.deferredReason,
-      input.completedAtLocal,
-      input.syncStatus,
-      input.confirmationType,
-      input.nfcUidHash,
-      input.scannedAtLocal,
-      JSON.stringify(input.photoClientFileIds)
-    ]
-  );
-}
-
-async function insertOutboxCommandInTransaction(executor: SqlExecutor, command: OutboxCommand) {
-  await executor.runAsync(
-    `
-      INSERT INTO outbox_commands (
-        client_operation_id,
-        owner_user_id,
-        command_type,
-        entity_type,
-        entity_local_id,
-        entity_server_id,
-        payload_json,
-        created_at_local,
-        updated_at_local,
-        attempt_count,
-        status
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    [
-      command.clientOperationId,
-      command.ownerUserId,
-      command.commandType,
-      command.entityType,
-      command.entityLocalId ?? null,
-      command.entityServerId ?? null,
-      JSON.stringify(command.payload),
-      command.createdAtLocal,
-      command.createdAtLocal,
-      command.attemptCount,
-      command.status
-    ]
-  );
-}
-
-function parseStringArray(value: string | null) {
-  if (!value) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
 }

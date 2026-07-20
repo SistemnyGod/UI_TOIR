@@ -1,6 +1,9 @@
 import * as SQLite from "expo-sqlite";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
+let initializationPromise: Promise<void> | null = null;
+
+type SqlExecutor = Pick<SQLite.SQLiteDatabase, "execAsync" | "getAllAsync" | "getFirstAsync" | "runAsync">;
 
 export function getDatabase() {
   databasePromise ??= SQLite.openDatabaseAsync("patrol360-mobile.db");
@@ -8,14 +11,27 @@ export function getDatabase() {
   return databasePromise;
 }
 
-export async function initializeDatabase() {
+export function initializeDatabase() {
+  initializationPromise ??= initializeDatabaseOnce().catch((error) => {
+    initializationPromise = null;
+    throw error;
+  });
+
+  return initializationPromise;
+}
+
+async function initializeDatabaseOnce() {
   const db = await getDatabase();
 
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
     PRAGMA busy_timeout = 5000;
     PRAGMA foreign_keys = ON;
+  `);
 
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    await tx.execAsync("PRAGMA busy_timeout = 5000;");
+    await tx.execAsync(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id TEXT PRIMARY KEY,
       applied_at TEXT NOT NULL
@@ -250,62 +266,63 @@ export async function initializeDatabase() {
       employee_name TEXT,
       sync_status TEXT NOT NULL DEFAULT 'pending'
     );
-  `);
+    `);
 
-  await runLocalMigration(db, "20260526_safe_mobile_columns", async () => {
-    await ensureMobileColumns(db);
+    await runLocalMigration(tx, "20260526_safe_mobile_columns", async () => {
+      await ensureMobileColumns(tx);
   });
 
-  await runLocalMigration(db, "20260526_assignment_snapshot_outbox_recovery", async () => {
-    await ensureAssignmentSnapshotAndOutboxRecovery(db);
+    await runLocalMigration(tx, "20260526_assignment_snapshot_outbox_recovery", async () => {
+      await ensureAssignmentSnapshotAndOutboxRecovery(tx);
   });
 
-  await runLocalMigration(db, "20260528_shift_remarks", async () => {
-    await ensureShiftRemarks(db);
+    await runLocalMigration(tx, "20260528_shift_remarks", async () => {
+      await ensureShiftRemarks(tx);
   });
 
-  await runLocalMigration(db, "20260528_mobile_file_scopes", async () => {
-    await ensureMobileFileScopes(db);
+    await runLocalMigration(tx, "20260528_mobile_file_scopes", async () => {
+      await ensureMobileFileScopes(tx);
   });
 
-  await runLocalMigration(db, "20260529_mobile_work_board", async () => {
-    await ensureMobileWorkBoard(db);
+    await runLocalMigration(tx, "20260529_mobile_work_board", async () => {
+      await ensureMobileWorkBoard(tx);
   });
 
-  await runLocalMigration(db, "20260602_mobile_action_log", async () => {
-    await ensureMobileActionLog(db);
+    await runLocalMigration(tx, "20260602_mobile_action_log", async () => {
+      await ensureMobileActionLog(tx);
   });
 
-  await runLocalMigration(db, "20260623_outbox_last_error", async () => {
-    await ensureOutboxLastError(db);
+    await runLocalMigration(tx, "20260623_outbox_last_error", async () => {
+      await ensureOutboxLastError(tx);
   });
 
-  await runLocalMigration(db, "20260623_mobile_hot_path_indexes", async () => {
-    await ensureMobileHotPathIndexes(db);
+    await runLocalMigration(tx, "20260623_mobile_hot_path_indexes", async () => {
+      await ensureMobileHotPathIndexes(tx);
   });
 
-  await runLocalMigration(db, "20260630_route_point_requires_photo", async () => {
-    await ensureRoutePointRequiresPhoto(db);
+    await runLocalMigration(tx, "20260630_route_point_requires_photo", async () => {
+      await ensureRoutePointRequiresPhoto(tx);
   });
 
-  await runLocalMigration(db, "20260715_daily_mobile_diagnostics", async () => {
-    await ensureDailyMobileDiagnostics(db);
+    await runLocalMigration(tx, "20260715_daily_mobile_diagnostics", async () => {
+      await ensureDailyMobileDiagnostics(tx);
   });
 
-  await runLocalMigration(db, "20260715_unique_active_completion", async () => {
-    await ensureUniqueActiveCompletion(db);
+    await runLocalMigration(tx, "20260715_unique_active_completion", async () => {
+      await ensureUniqueActiveCompletion(tx);
   });
 
-  await runLocalMigration(db, "20260715_unique_point_results", async () => {
-    await ensureUniquePointResults(db);
+    await runLocalMigration(tx, "20260715_unique_point_results", async () => {
+      await ensureUniquePointResults(tx);
   });
 
-  await runLocalMigration(db, "20260715_mobile_action_log_retention", async () => {
-    await ensureMobileActionLogRetention(db);
+    await runLocalMigration(tx, "20260715_mobile_action_log_retention", async () => {
+      await ensureMobileActionLogRetention(tx);
+    });
   });
 }
 
-async function runLocalMigration(db: SQLite.SQLiteDatabase, id: string, action: () => Promise<void>) {
+async function runLocalMigration(db: SqlExecutor, id: string, action: () => Promise<void>) {
   const existing = await db.getFirstAsync<{ id: string }>(
     "SELECT id FROM schema_migrations WHERE id = ?",
     [id]
@@ -321,7 +338,7 @@ async function runLocalMigration(db: SQLite.SQLiteDatabase, id: string, action: 
   );
 }
 
-async function ensureMobileColumns(db: SQLite.SQLiteDatabase) {
+async function ensureMobileColumns(db: SqlExecutor) {
   await ensureColumns(db, "devices", [
     { name: "push_token", sql: "ALTER TABLE devices ADD COLUMN push_token TEXT" },
     { name: "trusted", sql: "ALTER TABLE devices ADD COLUMN trusted INTEGER NOT NULL DEFAULT 0" },
@@ -391,13 +408,13 @@ async function ensureMobileColumns(db: SQLite.SQLiteDatabase) {
   ]);
 }
 
-async function ensureOutboxLastError(db: SQLite.SQLiteDatabase) {
+async function ensureOutboxLastError(db: SqlExecutor) {
   await ensureColumns(db, "outbox_commands", [
     { name: "last_error", sql: "ALTER TABLE outbox_commands ADD COLUMN last_error TEXT" }
   ]);
 }
 
-async function ensureMobileHotPathIndexes(db: SQLite.SQLiteDatabase) {
+async function ensureMobileHotPathIndexes(db: SqlExecutor) {
   await db.execAsync(`
     CREATE INDEX IF NOT EXISTS ix_patrol_request_board_owner_status_start
       ON patrol_request_board (owner_user_id, status, planned_start_at);
@@ -425,7 +442,7 @@ async function ensureMobileHotPathIndexes(db: SQLite.SQLiteDatabase) {
   `);
 }
 
-async function ensureRoutePointRequiresPhoto(db: SQLite.SQLiteDatabase) {
+async function ensureRoutePointRequiresPhoto(db: SqlExecutor) {
   await ensureColumns(db, "route_points", [
     { name: "requires_photo", sql: "ALTER TABLE route_points ADD COLUMN requires_photo INTEGER NOT NULL DEFAULT 0" }
   ]);
@@ -435,7 +452,7 @@ async function ensureRoutePointRequiresPhoto(db: SQLite.SQLiteDatabase) {
   ]);
 }
 
-async function ensureDailyMobileDiagnostics(db: SQLite.SQLiteDatabase) {
+async function ensureDailyMobileDiagnostics(db: SqlExecutor) {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS mobile_diagnostic_reports (
       report_id TEXT PRIMARY KEY,
@@ -459,7 +476,7 @@ async function ensureDailyMobileDiagnostics(db: SQLite.SQLiteDatabase) {
   `);
 }
 
-async function ensureUniqueActiveCompletion(db: SQLite.SQLiteDatabase) {
+async function ensureUniqueActiveCompletion(db: SqlExecutor) {
   await db.execAsync(`
     UPDATE outbox_commands
     SET status = 'superseded',
@@ -496,7 +513,7 @@ async function ensureUniqueActiveCompletion(db: SQLite.SQLiteDatabase) {
   `);
 }
 
-async function ensureUniquePointResults(db: SQLite.SQLiteDatabase) {
+async function ensureUniquePointResults(db: SqlExecutor) {
   await db.execAsync(`
     -- Keep the most recently completed result for a point, but preserve a photo
     -- that was attached to an older duplicate record before removing duplicates.
@@ -560,7 +577,7 @@ async function ensureUniquePointResults(db: SQLite.SQLiteDatabase) {
   `);
 }
 
-async function ensureAssignmentSnapshotAndOutboxRecovery(db: SQLite.SQLiteDatabase) {
+async function ensureAssignmentSnapshotAndOutboxRecovery(db: SqlExecutor) {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS assignment_route_points (
       assignment_id TEXT NOT NULL,
@@ -627,7 +644,7 @@ async function ensureAssignmentSnapshotAndOutboxRecovery(db: SQLite.SQLiteDataba
   `);
 }
 
-async function ensureShiftRemarks(db: SQLite.SQLiteDatabase) {
+async function ensureShiftRemarks(db: SqlExecutor) {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS shift_remarks (
       remark_id TEXT PRIMARY KEY,
@@ -648,7 +665,7 @@ async function ensureShiftRemarks(db: SQLite.SQLiteDatabase) {
   ]);
 }
 
-async function ensureMobileFileScopes(db: SQLite.SQLiteDatabase) {
+async function ensureMobileFileScopes(db: SqlExecutor) {
   await ensureColumns(db, "files", [
     { name: "content_type", sql: "ALTER TABLE files ADD COLUMN content_type TEXT" },
     { name: "media_kind", sql: "ALTER TABLE files ADD COLUMN media_kind TEXT" },
@@ -657,7 +674,7 @@ async function ensureMobileFileScopes(db: SQLite.SQLiteDatabase) {
   ]);
 }
 
-async function ensureMobileWorkBoard(db: SQLite.SQLiteDatabase) {
+async function ensureMobileWorkBoard(db: SqlExecutor) {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS mobile_employees (
       employee_id TEXT PRIMARY KEY,
@@ -702,7 +719,7 @@ async function ensureMobileWorkBoard(db: SQLite.SQLiteDatabase) {
   ]);
 }
 
-async function ensureMobileActionLog(db: SQLite.SQLiteDatabase) {
+async function ensureMobileActionLog(db: SqlExecutor) {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS mobile_action_log (
       id TEXT PRIMARY KEY,
@@ -724,14 +741,14 @@ async function ensureMobileActionLog(db: SQLite.SQLiteDatabase) {
   ]);
 }
 
-async function ensureMobileActionLogRetention(db: SQLite.SQLiteDatabase) {
+async function ensureMobileActionLogRetention(db: SqlExecutor) {
   await db.execAsync(`
     CREATE INDEX IF NOT EXISTS ix_mobile_action_log_owner_created
       ON mobile_action_log (owner_user_id, created_at_local DESC);
   `);
 }
 
-async function ensureColumns(db: SQLite.SQLiteDatabase, tableName: string, additions: { name: string; sql: string }[]) {
+async function ensureColumns(db: SqlExecutor, tableName: string, additions: { name: string; sql: string }[]) {
   const columns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${tableName})`);
   const existing = new Set(columns.map((column) => column.name));
 

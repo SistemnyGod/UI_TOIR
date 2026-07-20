@@ -1,12 +1,13 @@
 import { mobileRequest } from "@/api/httpClient";
-import { WorkItemDto, WorkTaskDto } from "@/domain/emu/emuTypes";
+import { workItemListResponseSchema, workTaskListResponseSchema } from "@/api/schemas";
+import { WorkTaskDto } from "@/domain/emu/emuTypes";
 
 export function getWorkTasks() {
-  return mobileRequest<WorkTaskDto[]>("/api/v1/mobile/work-tasks");
+  return mobileRequest<WorkTaskDto[]>("/api/v1/mobile/work-tasks", workTaskListResponseSchema);
 }
 
 export function getWorkItemsV2() {
-  return mobileRequest<WorkItemDto[]>("/api/v2/mobile/work-items").then((items) => items.map((item) => {
+  return mobileRequest("/api/v2/mobile/work-items", workItemListResponseSchema).then((items) => items.map((item) => {
     const currentEmployee = item.actualParticipants.find((employee) => employee.isCurrentMobileEmployee)
       ?? item.assignedEmployees.find((employee) => employee.isCurrentMobileEmployee)
       ?? null;

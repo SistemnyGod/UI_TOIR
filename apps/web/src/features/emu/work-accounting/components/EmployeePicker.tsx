@@ -13,6 +13,7 @@ import {
 export function EmployeePicker({
   currentWorkId,
   employees,
+  favoriteIds,
   selectedIds,
   sessions,
   setSelectedIds,
@@ -20,6 +21,7 @@ export function EmployeePicker({
 }: {
   currentWorkId: string;
   employees: EmuEmployeeOption[];
+  favoriteIds?: ReadonlySet<string>;
   selectedIds: string[];
   sessions: EmuWorkSessionDto[];
   setSelectedIds: (updater: (value: string[]) => string[]) => void;
@@ -47,6 +49,12 @@ export function EmployeePicker({
         </div>
       ) : null}
       <div className="emu-picker">
+        {visibleEmployees.length === 0 ? (
+          <div className="emu-picker-empty">
+            <strong>Сотрудники не найдены</strong>
+            <span>Измените поиск или проверьте справочник сотрудников.</span>
+          </div>
+        ) : null}
         {visibleEmployees.map((employee) => {
         const state = getEmployeeWorkState(employee.id, sessions, currentWorkId);
         return (
@@ -56,7 +64,10 @@ export function EmployeePicker({
             onClick={() => setSelectedIds((value) => toggle(value, employee.id))}
             type="button"
           >
-            <strong title={employee.fullName}>{formatEmployeeShortName(employee.fullName)}</strong>
+            <strong title={employee.fullName}>
+              {favoriteIds?.has(employee.id) ? <span aria-label="В избранном" className="emu-favorite-mark">★</span> : null}
+              {formatEmployeeShortName(employee.fullName)}
+            </strong>
             <small>{employee.position || employee.department}</small>
             {shouldShowEmployeeState(state) ? <em className={`emu-employee-status ${statusClass(state)}`}>{employeeStatusLabel(state)}</em> : null}
           </button>

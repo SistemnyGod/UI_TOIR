@@ -49,6 +49,65 @@ test("EMU key routes fit desktop and mobile without API calls", async ({ page })
   expect(consoleIssues).toEqual([]);
 });
 
+test("create work modal keeps employees, quick tasks and submit action visible", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("patrol360.emu.workspace.v1", JSON.stringify({
+      auditEvents: [],
+      planTasks: [],
+      sessions: [],
+      settings: {
+        favoriteEmployees: [
+          {
+            createdAt: "2026-07-20T08:00:00.000Z",
+            department: "ЭМУ",
+            employeeId: "employee-1",
+            fullName: "Тестов Алексей Иванович",
+            id: "favorite-1",
+            isActive: true,
+            personnelNo: "001",
+            position: "Слесарь",
+            status: "Активен",
+          },
+        ],
+        notCompletedReasons: [],
+        sections: [
+          { code: "prochee", id: "section-other", isActive: true, name: "Прочее", sortOrder: 1 },
+        ],
+        waitReasons: [],
+        workTemplates: [
+          {
+            description: "Проверить оборудование и зафиксировать результат.",
+            id: "template-1",
+            isActive: true,
+            name: "Осмотр оборудования",
+            sectionId: "section-main",
+            sectionName: "Другой участок",
+            sortOrder: 1,
+          },
+        ],
+      },
+    }));
+  });
+  await page.setViewportSize({ height: 768, width: 1365 });
+  await page.goto("/#emu-work-accounting");
+  await page.getByRole("button", { name: "↗ Отправить в работу" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Отправить в работу / Новая работа" });
+  await expect(dialog.getByText("доступно 1")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /Тестов А\.И\./ })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /Осмотр оборудования/ })).toBeVisible();
+  const submit = dialog.getByRole("button", { name: "Отправить в работу" });
+  await expect(submit).toBeVisible();
+
+  await dialog.getByRole("button", { name: /Тестов А\.И\./ }).click();
+  await dialog.getByRole("button", { name: /Осмотр оборудования/ }).click();
+  await expect(submit).toBeEnabled();
+  await expect(submit).not.toHaveCSS("background-image", "none");
+  const submitBox = await submit.boundingBox();
+  expect(submitBox).not.toBeNull();
+  expect((submitBox?.y ?? 0) + (submitBox?.height ?? 0)).toBeLessThanOrEqual(768);
+});
+
 test("EMU MVP work cycle, plan board, favorites and history smoke", async ({ page }) => {
   test.setTimeout(120_000);
   const suffix = Date.now();
@@ -97,6 +156,14 @@ test("EMU MVP work cycle, plan board, favorites and history smoke", async ({ pag
   const completeDialog = page.getByRole("dialog", { name: "Завершить работу" });
   await expect(completeDialog).toBeVisible();
   await expect(completeDialog.getByText("Время окончания")).toBeVisible();
+  const completeNowButton = completeDialog.getByRole("button", { name: "Сейчас" });
+  await expect(completeNowButton).toBeVisible();
+  const completionTimeFitsDialog = await completeNowButton.evaluate((button, dialog) => {
+    const buttonRect = button.getBoundingClientRect();
+    const dialogRect = dialog!.getBoundingClientRect();
+    return buttonRect.left >= dialogRect.left && buttonRect.right <= dialogRect.right;
+  }, await completeDialog.elementHandle());
+  expect(completionTimeFitsDialog).toBe(true);
   await completeDialog.getByRole("textbox", { name: "Результат работы" }).fill("Smoke работа выполнена, результат зафиксирован");
   await completeDialog.getByRole("button", { name: "Завершить работу" }).click();
   await expect(workCard).toBeHidden();
@@ -192,7 +259,7 @@ async function clickWorkCardCommand(page: Page, card: Locator, actionName: strin
   await card.getByRole("button", { name: "Команды" }).click();
   const menu = page.locator(".emu-quick-menu").last();
   await expect(menu).toBeVisible();
-  await menu.getByRole("button", { name: actionName }).click();
+  await menu.getByRole("menuitem", { name: actionName }).click();
 }
 
 async function openPlanBoard(page: Page) {

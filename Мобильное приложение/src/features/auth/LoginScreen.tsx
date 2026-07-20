@@ -20,6 +20,7 @@ import {
 
 import { checkServerConnection } from "@/api/serverHealthApi";
 import { restoreSessionWithRefreshToken, signIn } from "@/auth/authService";
+import { consumePendingSessionRoute, markSessionUnlocked } from "@/auth/sessionGateState";
 import { getRefreshToken } from "@/auth/tokenStorage";
 import { getServerBaseUrl, localLanServerBaseUrl, setLocalLanServerBaseUrl } from "@/core/serverSettings";
 
@@ -129,7 +130,8 @@ export function LoginScreen() {
     try {
       await signIn(normalizedLogin, password);
       await saveRememberChoice(normalizedLogin);
-      router.replace("/(tabs)/patrol");
+      markSessionUnlocked();
+      router.replace((consumePendingSessionRoute() ?? "/(tabs)/patrol") as never);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -207,7 +209,8 @@ export function LoginScreen() {
     try {
       await SecureStore.deleteItemAsync(legacyRememberedPasswordKey);
       await restoreSessionWithRefreshToken();
-      router.replace("/(tabs)/patrol");
+      markSessionUnlocked();
+      router.replace((consumePendingSessionRoute() ?? "/(tabs)/patrol") as never);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error

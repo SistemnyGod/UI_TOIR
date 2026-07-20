@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.Net.Http.Headers;
-using Patrol360.Application;
 
 namespace Patrol360.Api.Authorization;
 
@@ -27,8 +25,8 @@ internal static class PermissionAuthorization
 {
     public static void Apply(AuthorizationFilterContext context, IReadOnlyList<string> permissions)
     {
-        var token = ReadBearerToken(context.HttpContext.Request);
-        if (token is null)
+        var principal = context.HttpContext.User;
+        if (principal.Identity?.IsAuthenticated != true)
         {
             context.Result = new UnauthorizedObjectResult(new ProblemDetails
             {
@@ -39,20 +37,10 @@ internal static class PermissionAuthorization
             return;
         }
 
-        var authSessionService = context.HttpContext.RequestServices.GetRequiredService<IAuthSessionService>();
-        var user = authSessionService.GetCurrentUser(token);
-        if (user is null)
-        {
-            context.Result = new UnauthorizedObjectResult(new ProblemDetails
-            {
-                Title = "Сессия недействительна",
-                Detail = "Войдите в систему повторно.",
-                Status = StatusCodes.Status401Unauthorized
-            });
-            return;
-        }
-
-        if (!permissions.Any(permission => user.Permissions.Contains(permission, StringComparer.OrdinalIgnoreCase)))
+        var grantedPermissions = principal.FindAll("permission")
+            .Select(claim => claim.Value)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!permissions.Any(grantedPermissions.Contains))
         {
             var permissionList = string.Join(", ", permissions);
             context.Result = new ObjectResult(new ProblemDetails
@@ -67,17 +55,4 @@ internal static class PermissionAuthorization
         }
     }
 
-    private static string? ReadBearerToken(HttpRequest request)
-    {
-        if (!request.Headers.TryGetValue(HeaderNames.Authorization, out var values))
-        {
-            return null;
-        }
-
-        var value = values.ToString();
-        const string bearerPrefix = "Bearer ";
-        return value.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase)
-            ? value[bearerPrefix.Length..].Trim()
-            : null;
-    }
 }

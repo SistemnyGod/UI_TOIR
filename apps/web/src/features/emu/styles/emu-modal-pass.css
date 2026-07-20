@@ -1,14 +1,29 @@
 /* Modal finishing pass for EMU surfaces. */
 .emu-modal-backdrop {
+  --emu-surface: rgba(255, 255, 255, 0.98);
+  --emu-surface-soft: rgba(248, 251, 255, 0.94);
+  --emu-line: #d7e4f7;
+  --emu-line-strong: #b9cdf0;
+  --emu-text: #0d1b34;
+  --emu-muted: #52637f;
+  --emu-blue: #1267f1;
+  --emu-blue-dark: #0b52c5;
   z-index: 5000;
+  background: rgba(15, 23, 42, 0.58);
+  backdrop-filter: blur(8px);
   overscroll-behavior: contain;
 }
 
 .emu-modal,
 .emu-modal-wide {
+  background: #ffffff;
+  background-color: #ffffff !important;
+  background-image: none;
+  isolation: isolate;
   max-width: calc(100vw - 32px);
   max-height: calc(100dvh - 32px);
   min-width: 0;
+  opacity: 1;
   overflow: hidden;
 }
 
@@ -23,6 +38,7 @@
 }
 
 .emu-modal > :not(header):not(.emu-modal-actions) {
+  background-color: #ffffff;
   min-height: 0;
 }
 
@@ -73,4 +89,3 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
-

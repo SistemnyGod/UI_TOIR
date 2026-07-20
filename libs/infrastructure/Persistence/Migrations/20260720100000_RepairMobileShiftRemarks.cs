@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Patrol360.Infrastructure.Persistence.Migrations;
 
 [DbContext(typeof(Patrol360DbContext))]
-[Migration("20260529120000_MobileWorkBoard")]
-public partial class MobileWorkBoard : Migration
+[Migration("20260720100000_RepairMobileShiftRemarks")]
+public partial class RepairMobileShiftRemarks : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
@@ -24,8 +24,10 @@ public partial class MobileWorkBoard : Migration
                 created_at_server timestamp with time zone NOT NULL,
                 status character varying(40) NOT NULL
             );
+
             CREATE INDEX IF NOT EXISTS ix_mobile_shift_remarks_account_created
                 ON mobile_shift_remarks (mobile_account_id, created_at_server);
+
             CREATE INDEX IF NOT EXISTS ix_mobile_shift_remarks_employee
                 ON mobile_shift_remarks (employee_id);
             """);
@@ -33,6 +35,7 @@ public partial class MobileWorkBoard : Migration
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DropTable(name: "mobile_shift_remarks");
+        // The original MobileWorkBoard migration owns this table. This repair
+        // migration must not remove pre-existing data when it is rolled back.
     }
 }

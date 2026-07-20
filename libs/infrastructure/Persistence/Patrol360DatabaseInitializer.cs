@@ -16,9 +16,30 @@ public static class Patrol360DatabaseInitializer
         var dbContext = scope.ServiceProvider.GetRequiredService<Patrol360DbContext>();
         var seeder = scope.ServiceProvider.GetRequiredService<Patrol360DbSeeder>();
 
-        await MarkInitialMigrationIfLegacySchemaAsync(dbContext, cancellationToken);
-        await dbContext.Database.MigrateAsync(cancellationToken);
-        await seeder.SeedAsync(cancellationToken);
+        await dbContext.Database.OpenConnectionAsync(cancellationToken);
+        try
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(
+                "SELECT pg_advisory_lock(hashtext('patrol360:migrations'), hashtext(current_database()));",
+                cancellationToken);
+
+            await MarkInitialMigrationIfLegacySchemaAsync(dbContext, cancellationToken);
+            await dbContext.Database.MigrateAsync(cancellationToken);
+            await seeder.SeedAsync(cancellationToken);
+        }
+        finally
+        {
+            try
+            {
+                await dbContext.Database.ExecuteSqlRawAsync(
+                    "SELECT pg_advisory_unlock(hashtext('patrol360:migrations'), hashtext(current_database()));",
+                    CancellationToken.None);
+            }
+            finally
+            {
+                await dbContext.Database.CloseConnectionAsync();
+            }
+        }
     }
 
     private static async Task MarkInitialMigrationIfLegacySchemaAsync(

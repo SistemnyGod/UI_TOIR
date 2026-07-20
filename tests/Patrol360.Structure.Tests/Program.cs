@@ -53,6 +53,7 @@ RequireFile("docs/adr/0001-monorepo-modular-monolith.md");
 RequireFile("docs/adr/0002-layer-dependency-rules.md");
 RequireFile("docs/adr/0003-frontend-data-source-boundaries.md");
 RequireFile("docs/refactor-structure-plan.md");
+RequireFile("docs/complexity-hotspots-refactor-plan.md");
 RequireFile("docs/structure-remaining-work.md");
 RequireFile("docs/runbooks/ci-contract.md");
 RequireFile("docs/runbooks/branch-review-policy.md");
@@ -65,6 +66,7 @@ RequireFile("infra/env/.env.example");
 RequireFile("legacy/README.md");
 RequireFile("legacy/territory-patrol-panel/README.md");
 RequireFile("tools/Verify-TextEncoding.ps1");
+RequireFile("apps/api/Authorization/SiteBearerAuthenticationHandler.cs");
 RequireFile("tools/Clean-Workspace.ps1");
 RequireFile("tools/Test-All.ps1");
 RequireFile("tools/Check-Structure.ps1");
@@ -92,6 +94,13 @@ RequireFile("apps/web/src/features/inventory/ppe/PpePickerSummary.tsx");
 RequireFile("apps/web/src/features/inventory/ppe/PpePickerTabs.tsx");
 RequireFile("apps/web/src/features/inventory/ppe/PpePositionNormList.tsx");
 RequireFile("apps/web/src/features/inventory/ppe/PpeDrawerTables.tsx");
+
+AssertFileLineCountAtMost("apps/web/src/styles.css", 28029);
+AssertFileLineCountAtMost("libs/infrastructure/Persistence/Patrol360DbContext.cs", 2274);
+AssertFileLineCountAtMost("apps/web/src/hooks/useEmuWorkspace.ts", 2222);
+AssertFileLineCountAtMost("apps/web/src/repositories/mockInventoryRepository.ts", 2114);
+AssertFileLineCountAtMost("apps/web/src/features/perco/PercoIntegrationScreen.tsx", 2040);
+AssertFileLineCountAtMost("apps/web/src/features/patrol/AssignmentScreen.tsx", 2016);
 RequireFile("apps/web/src/features/inventory/ppe/ppeFormatters.ts");
 RequireFile("apps/web/src/features/inventory/ppe/ppePrintMapping.ts");
 RequireFile("apps/web/src/features/inventory/ppe/ppeWizardDomain.ts");
@@ -204,7 +213,20 @@ AssertFileContains(".github/workflows/ci.yml", "dotnet format");
 AssertFileContains(".github/workflows/ci.yml", "actions/upload-artifact@v4");
 AssertFileContains(".github/workflows/ci.yml", "TestResults/**");
 AssertFileContains(".github/workflows/ci.yml", "npm run test:ci");
+AssertFileContains(".github/workflows/ci.yml", "postgres:17-alpine");
+AssertFileContains(".github/workflows/ci.yml", "PATROL360_RUN_DB_INTEGRATION");
+AssertFileContains(".github/workflows/ci.yml", "notExecuted");
 AssertFileContains(".github/pull_request_template.md", ".\\tools\\Test-All.ps1");
+AssertFileContains("apps/api/Program.cs", "AddAuthentication");
+AssertFileContains("apps/api/Program.cs", "FallbackPolicy");
+AssertFileContains("apps/api/Program.cs", "UseAuthentication");
+AssertFileContains("apps/api/Program.cs", "--migrate");
+AssertFileContains("libs/infrastructure/Persistence/Patrol360DatabaseInitializer.cs", "pg_advisory_lock");
+AssertFileContains("infra/docker/compose.yaml", "service_completed_successfully");
+AssertFileContains("apps/api/Authorization/SiteBearerAuthenticationHandler.cs", "GetCurrentUser");
+AssertFileContains("Directory.Build.props", "<TreatWarningsAsErrors>true</TreatWarningsAsErrors>");
+AssertFileContains("Directory.Build.props", "NU1901;NU1902;NU1903;NU1904");
+AssertFileContains(".github/workflows/ci.yml", "NuGet vulnerability audit did not complete");
 AssertFileContains(".github/pull_request_template.md", "Generated artifacts are not committed");
 AssertFileContains("docs/runbooks/ci-contract.md", "CI / verify");
 AssertFileContains("docs/runbooks/ci-contract.md", "actions/upload-artifact");
@@ -214,11 +236,12 @@ AssertFileContains("docs/structure-remaining-work.md", "CODEOWNERS");
 AssertFileContains("docs/refactor-structure-plan.md", "modular monolith");
 AssertFileContains("docs/refactor-structure-plan.md", "Do not mix mechanical moves with behavioral fixes.");
 AssertFileContains("docs/refactor-structure-plan.md", "src/features/emu");
-AssertFileContains("docs/runbooks/branch-review-policy.md", "require status check `CI / verify`");
+AssertFileContains("docs/runbooks/branch-review-policy.md", "require status checks `CI / verify` и `CI / PostgreSQL integration`");
 AssertFileContains("docs/runbooks/branch-review-policy.md", "squash merge");
 AssertFileContains("docs/runbooks/branch-review-policy.md", "Set-GitHubBranchProtection.ps1");
 AssertFileContains("tools/Set-GitHubBranchProtection.ps1", "required_status_checks");
 AssertFileContains("tools/Set-GitHubBranchProtection.ps1", "CI / verify");
+AssertFileContains("tools/Set-GitHubBranchProtection.ps1", "CI / PostgreSQL integration");
 AssertFileContains("tools/Set-GitHubBranchProtection.ps1", "gh api");
 AssertFileContains("tools/Test-All.ps1", "--logger");
 AssertFileContains("tools/Test-All.ps1", "dotnet format");
@@ -484,6 +507,22 @@ bool IsMojibakeTrail(char character)
 void AssertGitIgnoreContains(string pattern)
 {
     AssertFileContains(".gitignore", pattern);
+}
+
+void AssertFileLineCountAtMost(string relativePath, int maximumLines)
+{
+    var fullPath = Path.Combine(repoRoot, NormalizePath(relativePath));
+    if (!File.Exists(fullPath))
+    {
+        failures.Add($"Cannot enforce line budget for missing file: {relativePath}");
+        return;
+    }
+
+    var actualLines = File.ReadLines(fullPath).Count();
+    if (actualLines > maximumLines)
+    {
+        failures.Add($"{relativePath} has {actualLines:N0} lines; budget is {maximumLines:N0}. Split the hotspot before adding code.");
+    }
 }
 
 void AssertSolutionContains(string projectRelativePath)

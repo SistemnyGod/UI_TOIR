@@ -8,6 +8,74 @@ on:
       - master
 
 jobs:
+  db-integration:
+    name: PostgreSQL integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: patrol360
+          POSTGRES_PASSWORD: patrol360_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U patrol360 -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      PATROL360_RUN_DB_INTEGRATION: "true"
+      PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING: Host=localhost;Port=5432;Database=postgres;Username=patrol360;Password=patrol360_dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore DB integration tests
+        run: dotnet restore ./tests/Patrol360.Infrastructure.Tests/Patrol360.Infrastructure.Tests.csproj
+
+      - name: Run PostgreSQL integration tests
+        run: >-
+          dotnet test ./tests/Patrol360.Infrastructure.Tests/Patrol360.Infrastructure.Tests.csproj
+          --configuration Release
+          --no-restore
+          --logger "trx;LogFileName=db-integration.trx"
+          --results-directory ./TestResults/db-integration
+
+      - name: Ensure no DB tests were skipped
+        shell: pwsh
+        run: |
+          [xml]$trx = Get-Content ./TestResults/db-integration/db-integration.trx -Raw
+          $counters = $trx.TestRun.ResultSummary.Counters
+          if ([int]$counters.failed -ne 0) {
+            throw "DB integration suite contains $($counters.failed) failed tests."
+          }
+          if ([int]$counters.notExecuted -ne 0) {
+            throw "DB integration suite skipped $($counters.notExecuted) tests."
+          }
+          if ([int]$counters.passed -le 0) {
+            throw "DB integration suite did not execute any tests."
+          }
+          Write-Host "DB integration suite executed $($counters.passed) tests without skips."
+
+      - name: Upload DB integration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-integration-results
+          if-no-files-found: error
+          path: TestResults/db-integration/**
+
   verify:
     runs-on: windows-latest
 
@@ -30,7 +98,17 @@ jobs:
             Мобильное приложение/package-lock.json
 
       - name: Restore .NET
-        run: dotnet restore .\Patrol360.slnx
+        shell: pwsh
+        run: |
+          $restoreOutput = dotnet restore .\Patrol360.slnx 2>&1
+          $restoreExitCode = $LASTEXITCODE
+          $restoreOutput | ForEach-Object { Write-Host $_ }
+          if ($restoreExitCode -ne 0) {
+            exit $restoreExitCode
+          }
+          if ($restoreOutput -match '\bNU1900\b') {
+            throw "NuGet vulnerability audit did not complete. Restore reported NU1900."
+          }
 
       - name: Build .NET
         run: dotnet build .\Patrol360.slnx --no-restore

@@ -6,9 +6,11 @@ import type * as Notifications from "expo-notifications";
 import { router, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, AppState, View } from "react-native";
+import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { bootstrapApplication } from "@/core/bootstrap";
+import { SessionGateProvider, SessionGuard } from "@/auth/SessionGate";
+import { isSessionUnlocked, setPendingSessionRoute } from "@/auth/sessionGateState";
 import { ThemeProvider, useAppTheme } from "@/features/settings/themePreference";
 import { registerPushNotifications, refreshPushRegistrationIfAllowed, syncMobileNotifications, subscribeToMobilePushEvents } from "@/services/notificationService";
 import { installMobileErrorReporter, logMobileError } from "@/services/mobileErrorReporter";
@@ -19,13 +21,31 @@ import { requestMobileDataRefresh, subscribeToNetworkSync, triggerForegroundSync
 export default function RootLayout() {
   const queryClient = useMemo(() => new QueryClient(), []);
   const [isReady, setIsReady] = useState(false);
+  const [bootstrapError, setBootstrapError] = useState<unknown>(null);
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
 
   useEffect(() => {
+    let isMounted = true;
+
     void bootstrapApplication()
-      .then(() => installMobileErrorReporter())
-      .catch((error) => logMobileError("app.bootstrap.failed", error))
-      .finally(() => setIsReady(true));
-  }, []);
+      .then(() => {
+        if (!isMounted) {
+          return;
+        }
+        setIsReady(true);
+        installMobileErrorReporter();
+      })
+      .catch((error) => {
+        logMobileError("app.bootstrap.failed", error);
+        if (isMounted) {
+          setBootstrapError(error);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [bootstrapAttempt]);
 
   useEffect(() => {
     if (!isReady) {
@@ -71,6 +91,18 @@ export default function RootLayout() {
     };
   }, [isReady]);
 
+  if (bootstrapError) {
+    return (
+      <BootstrapFailureScreen
+        onRetry={() => {
+          setIsReady(false);
+          setBootstrapError(null);
+          setBootstrapAttempt((attempt) => attempt + 1);
+        }}
+      />
+    );
+  }
+
   if (!isReady) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
@@ -82,9 +114,31 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <RootStack />
+        <SessionGateProvider>
+          <SessionGuard>
+            <RootStack />
+          </SessionGuard>
+        </SessionGateProvider>
       </ThemeProvider>
     </QueryClientProvider>
+  );
+}
+
+function BootstrapFailureScreen({ onRetry }: { onRetry: () => void }) {
+  return (
+    <View style={styles.failureScreen}>
+      <Text style={styles.failureTitle}>Не удалось подготовить приложение</Text>
+      <Text style={styles.failureMessage}>
+        Локальное хранилище не инициализировано. Рабочие данные не изменены. Повторите запуск или обратитесь к администратору.
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onRetry}
+        style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}
+      >
+        <Text style={styles.retryButtonText}>Повторить</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -93,12 +147,17 @@ function openNotificationTarget(response: Notifications.NotificationResponse) {
   const entityType = typeof data.entityType === "string" ? data.entityType : null;
   const entityId = typeof data.entityId === "string" ? data.entityId : null;
 
-  if (entityType === "patrolRequest" && entityId) {
-    router.push(`/patrol/request/${entityId}`);
+  const target = entityType === "patrolRequest" && entityId
+    ? `/patrol/request/${entityId}`
+    : "/patrol/request-board";
+
+  if (isSessionUnlocked()) {
+    router.push(target as never);
     return;
   }
 
-  router.push("/patrol/request-board");
+  setPendingSessionRoute(target);
+  router.replace("/");
 }
 
 function RootStack() {
@@ -116,3 +175,44 @@ function RootStack() {
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  failureScreen: {
+    alignItems: "center",
+    backgroundColor: "#f4f7fb",
+    flex: 1,
+    justifyContent: "center",
+    padding: 28
+  },
+  failureTitle: {
+    color: "#14233d",
+    fontSize: 22,
+    fontWeight: "800",
+    marginBottom: 12,
+    textAlign: "center"
+  },
+  failureMessage: {
+    color: "#53627b",
+    fontSize: 15,
+    lineHeight: 22,
+    maxWidth: 420,
+    textAlign: "center"
+  },
+  retryButton: {
+    backgroundColor: "#1769e0",
+    borderRadius: 12,
+    marginTop: 24,
+    minWidth: 144,
+    paddingHorizontal: 22,
+    paddingVertical: 13
+  },
+  retryButtonPressed: {
+    opacity: 0.78
+  },
+  retryButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "800",
+    textAlign: "center"
+  }
+});

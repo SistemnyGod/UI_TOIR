@@ -1,43 +1,13 @@
 import * as Crypto from "expo-crypto";
-import * as SQLite from "expo-sqlite";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getDatabase } from "@/db/database";
 import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
-import { MobileEmployeeDto, MobileEmuSectionDto, WorkAttachmentDto, WorkItemCapabilitiesDto, WorkItemDto, WorkParticipantDto, WorkTaskDto } from "@/domain/emu/emuTypes";
+import { MobileEmployeeDto, MobileEmuSectionDto, WorkItemDto, WorkTaskDto } from "@/domain/emu/emuTypes";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
-import { OutboxCommand } from "@/domain/sync/syncTypes";
-
-type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "runAsync">;
-
-type WorkTaskRow = {
-  task_id: string;
-  title: string;
-  status: WorkTaskDto["status"];
-  planned_at: string | null;
-  revision: number;
-  completed_at_local: string | null;
-  section_id: string | null;
-  section_name: string | null;
-  employee_id: string | null;
-  employee_name: string | null;
-  created_at_local: string | null;
-  sync_status: string;
-  item_kind?: WorkItemDto["kind"] | null;
-  work_session_id?: string | null;
-  plan_task_id?: string | null;
-  description?: string | null;
-  approval_status?: string | null;
-  source?: string | null;
-  assigned_employees_json?: string | null;
-  actual_participants_json?: string | null;
-  attachments_json?: string | null;
-  capabilities_json?: string | null;
-  local_attachment_count?: number | null;
-  local_photo_count?: number | null;
-  local_video_count?: number | null;
-};
+import { WorkTaskRow, createWorkTaskOutboxCommand, mapWorkItemRow, mapWorkTaskRow, statusForPendingAction } from "@/db/repositories/workTaskMappers";
+import { insertOutboxCommandInTransaction } from "@/db/repositories/outboxSql";
 
 export async function saveWorkItems(items: WorkItemDto[]) {
   const ownerUserId = await requireOwnerUserId();
@@ -349,7 +319,7 @@ export async function createWorkTaskLocally(input: CreateWorkTaskInput) {
   const createdAtLocal = new Date().toISOString();
   const title = input.taskDescription.trim();
   if (!title) {
-    throw new Error("Заполните задачу.");
+    throw new Error("Р—Р°РїРѕР»РЅРёС‚Рµ Р·Р°РґР°С‡Сѓ.");
   }
 
   const db = await getDatabase();
@@ -410,7 +380,7 @@ export async function createWorkTaskLocally(input: CreateWorkTaskInput) {
 
 export async function startPlannedWorkLocally(item: WorkItemDto, employee: MobileEmployeeDto) {
   if (item.kind !== "planTask" || !item.planTaskId) {
-    throw new Error("Плановая работа недоступна для запуска.");
+    throw new Error("РџР»Р°РЅРѕРІР°СЏ СЂР°Р±РѕС‚Р° РЅРµРґРѕСЃС‚СѓРїРЅР° РґР»СЏ Р·Р°РїСѓСЃРєР°.");
   }
 
   const ownerUserId = await requireOwnerUserId();
@@ -443,7 +413,7 @@ export async function startPlannedWorkLocally(item: WorkItemDto, employee: Mobil
         taskId, ownerUserId, item.title, startedAtLocal, item.sectionId, item.sectionName,
         employee.employeeId, employee.fullName, startedAtLocal, taskId, item.planTaskId,
         item.description, item.approvalStatus, JSON.stringify(item.assignedEmployees),
-        JSON.stringify([{ employeeId: employee.employeeId, fullName: employee.fullName, status: "Работает", startedAt: startedAtLocal, finishedAt: null, isCurrentMobileEmployee: true }]),
+        JSON.stringify([{ employeeId: employee.employeeId, fullName: employee.fullName, status: "Р Р°Р±РѕС‚Р°РµС‚", startedAt: startedAtLocal, finishedAt: null, isCurrentMobileEmployee: true }]),
         JSON.stringify({ canStart: false, canJoin: false, canReplace: false, canPause: true, canResume: false, canComplete: true })
       ]
     );
@@ -452,7 +422,7 @@ export async function startPlannedWorkLocally(item: WorkItemDto, employee: Mobil
 }
 
 export async function joinWorkTaskLocally(item: WorkItemDto, employee: MobileEmployeeDto, comment: string) {
-  await enqueueParticipantChange(item, employee, "joinWorkTask", { comment: comment.trim() || "Присоединение к работе" });
+  await enqueueParticipantChange(item, employee, "joinWorkTask", { comment: comment.trim() || "РџСЂРёСЃРѕРµРґРёРЅРµРЅРёРµ Рє СЂР°Р±РѕС‚Рµ" });
 }
 
 export async function replaceWorkTaskParticipantLocally(
@@ -462,7 +432,7 @@ export async function replaceWorkTaskParticipantLocally(
   reason: string
 ) {
   if (!reason.trim()) {
-    throw new Error("Укажите причину замены исполнителя.");
+    throw new Error("РЈРєР°Р¶РёС‚Рµ РїСЂРёС‡РёРЅСѓ Р·Р°РјРµРЅС‹ РёСЃРїРѕР»РЅРёС‚РµР»СЏ.");
   }
   await enqueueParticipantChange(item, employee, "replaceWorkTaskParticipant", {
     previousEmployeeId,
@@ -505,7 +475,7 @@ export async function updateWorkTaskLocally(input: UpdateWorkTaskInput) {
   const updatedAtLocal = new Date().toISOString();
   const title = input.taskDescription.trim();
   if (!title) {
-    throw new Error("Заполните задачу.");
+    throw new Error("Р—Р°РїРѕР»РЅРёС‚Рµ Р·Р°РґР°С‡Сѓ.");
   }
 
   const db = await getDatabase();
@@ -618,7 +588,7 @@ export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: 
 
   const comment = resultComment.trim();
   if (!comment) {
-    throw new Error("Заполните комментарий для завершения работы.");
+    throw new Error("Р—Р°РїРѕР»РЅРёС‚Рµ РєРѕРјРјРµРЅС‚Р°СЂРёР№ РґР»СЏ Р·Р°РІРµСЂС€РµРЅРёСЏ СЂР°Р±РѕС‚С‹.");
   }
 
   const completedAtLocal = new Date().toISOString();
@@ -665,7 +635,7 @@ export async function attachMediaToWorkTask(workTaskId: string, file: LocalMobil
       [workTaskId, ownerUserId]
     );
     if (!task) {
-      throw new Error("Работа не найдена на телефоне.");
+      throw new Error("Р Р°Р±РѕС‚Р° РЅРµ РЅР°Р№РґРµРЅР° РЅР° С‚РµР»РµС„РѕРЅРµ.");
     }
 
     await insertLocalFileInTransaction(tx, { ...file, status: "queued", workTaskId });
@@ -675,151 +645,8 @@ export async function attachMediaToWorkTask(workTaskId: string, file: LocalMobil
 async function requireOwnerUserId() {
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
-    throw new Error("Нужно войти в мобильный аккаунт.");
+    throw new Error("РќСѓР¶РЅРѕ РІРѕР№С‚Рё РІ РјРѕР±РёР»СЊРЅС‹Р№ Р°РєРєР°СѓРЅС‚.");
   }
 
   return ownerUserId;
-}
-
-function statusForPendingAction(commandType: string): WorkTaskDto["status"] {
-  if (commandType === "completeWorkTask") {
-    return "completedLocal";
-  }
-
-  return commandType === "pauseWorkTask" ? "paused" : "inProgress";
-}
-
-function createWorkTaskOutboxCommand({
-  ownerUserId,
-  commandType,
-  payload,
-  taskId,
-  createdAtLocal
-}: {
-  ownerUserId: string;
-  commandType: "createWorkTask" | "updateWorkTask" | "pauseWorkTask" | "resumeWorkTask" | "completeWorkTask" | "startPlannedWork" | "joinWorkTask" | "replaceWorkTaskParticipant";
-  payload: Record<string, unknown>;
-  taskId: string;
-  createdAtLocal: string;
-}): OutboxCommand {
-  return {
-    clientOperationId: Crypto.randomUUID(),
-    ownerUserId,
-    commandType,
-    entityType: "workTask",
-    entityLocalId: taskId,
-    entityServerId: taskId,
-    payload,
-    createdAtLocal,
-    attemptCount: 0,
-    status: "pending"
-  };
-}
-
-function mapWorkItemRow(row: WorkTaskRow): WorkItemDto {
-  const assignedEmployees = parseJson<WorkParticipantDto[]>(row.assigned_employees_json, []);
-  const actualParticipants = parseJson<WorkParticipantDto[]>(row.actual_participants_json, []);
-  const attachments = parseJson<WorkAttachmentDto[]>(row.attachments_json, []);
-  const defaultCapabilities: WorkItemCapabilitiesDto = {
-    canStart: row.item_kind === "planTask",
-    canJoin: false,
-    canReplace: false,
-    canPause: row.status === "inProgress",
-    canResume: row.status === "paused",
-    canComplete: row.status === "inProgress" || row.status === "paused"
-  };
-  const capabilities = {
-    ...defaultCapabilities,
-    ...parseJson<Partial<WorkItemCapabilitiesDto>>(row.capabilities_json, {})
-  };
-  return {
-    taskId: row.work_session_id ?? row.task_id,
-    itemId: row.task_id,
-    kind: row.item_kind === "planTask" ? "planTask" : "workSession",
-    workSessionId: row.work_session_id ?? (row.item_kind === "planTask" ? null : row.task_id),
-    planTaskId: row.plan_task_id ?? null,
-    title: row.title,
-    description: row.description ?? row.title,
-    sectionId: row.section_id,
-    sectionName: row.section_name ?? "Без участка",
-    plannedAt: row.planned_at,
-    status: row.status,
-    approvalStatus: row.approval_status ?? "",
-    revision: row.revision,
-    source: row.source ?? "web",
-    assignedEmployees,
-    actualParticipants,
-    attachments,
-    localAttachmentCount: row.local_attachment_count ?? 0,
-    localPhotoCount: row.local_photo_count ?? 0,
-    localVideoCount: row.local_video_count ?? 0,
-    capabilities,
-    employeeId: row.employee_id,
-    employeeName: row.employee_name,
-    createdAtLocal: row.created_at_local ?? row.planned_at ?? new Date().toISOString(),
-    completedAtLocal: row.completed_at_local,
-    syncStatus: row.sync_status
-  };
-}
-
-function parseJson<T>(value: string | null | undefined, fallback: T): T {
-  if (!value) {
-    return fallback;
-  }
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-async function insertOutboxCommandInTransaction(executor: SqlExecutor, command: OutboxCommand) {
-  await executor.runAsync(
-    `
-      INSERT INTO outbox_commands (
-        client_operation_id,
-        owner_user_id,
-        command_type,
-        entity_type,
-        entity_local_id,
-        entity_server_id,
-        payload_json,
-        created_at_local,
-        updated_at_local,
-        attempt_count,
-        status
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    [
-      command.clientOperationId,
-      command.ownerUserId,
-      command.commandType,
-      command.entityType,
-      command.entityLocalId ?? null,
-      command.entityServerId ?? null,
-      JSON.stringify(command.payload),
-      command.createdAtLocal,
-      command.createdAtLocal,
-      command.attemptCount,
-      command.status
-    ]
-  );
-}
-
-function mapWorkTaskRow(row: WorkTaskRow): WorkTaskDto {
-  return {
-    taskId: row.task_id,
-    title: row.title,
-    status: row.status,
-    plannedAt: row.planned_at,
-    revision: row.revision,
-    completedAtLocal: row.completed_at_local,
-    sectionId: row.section_id,
-    sectionName: row.section_name,
-    employeeId: row.employee_id,
-    employeeName: row.employee_name,
-    createdAtLocal: row.created_at_local ?? row.planned_at ?? new Date().toISOString(),
-    syncStatus: row.sync_status
-  };
 }

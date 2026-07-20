@@ -1,6 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 
 import type { OfflineSessionState } from "@/auth/offlineSession";
+import { lockSession } from "@/auth/sessionGateState";
 
 const accessTokenKey = "patrol360.accessToken";
 const refreshTokenKey = "patrol360.refreshToken";
@@ -92,6 +93,7 @@ export async function restoreStoredSessionSnapshot(snapshot: StoredSessionSnapsh
 export async function clearAuthTokens() {
   await SecureStore.deleteItemAsync(accessTokenKey);
   await SecureStore.deleteItemAsync(refreshTokenKey);
+  lockSession();
 }
 
 export async function clearTokens() {

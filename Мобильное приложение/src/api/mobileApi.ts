@@ -1,16 +1,17 @@
 import { mobileRequest } from "@/api/httpClient";
+import { bootstrapResponseSchema, unknownResponseSchema } from "@/api/schemas";
 import { BootstrapDto } from "@/domain/patrol/patrolTypes";
 import { OutboxCommand, OutboxResponse } from "@/domain/sync/syncTypes";
 import { MobileDiagnosticReport } from "@/db/repositories/diagnosticReportRepository";
 
 export function getBootstrap(accessToken?: string) {
-  return mobileRequest<BootstrapDto>("/api/v1/mobile/bootstrap", {
+  return mobileRequest<BootstrapDto>("/api/v1/mobile/bootstrap", bootstrapResponseSchema, {
     accessToken
   });
 }
 
 export async function postOutbox(commands: OutboxCommand[]) {
-  const response = await mobileRequest<unknown>("/api/v1/mobile/outbox", {
+  const response = await mobileRequest<unknown>("/api/v1/mobile/outbox", unknownResponseSchema, {
     method: "POST",
     body: { commands }
   });
@@ -63,7 +64,7 @@ export function validateOutboxResponses(value: unknown, commands: OutboxCommand[
 }
 
 export function getOutboxResult(clientOperationId: string) {
-  return mobileRequest<unknown>(`/api/v1/mobile/outbox/${clientOperationId}`).then((response) =>
+  return mobileRequest<unknown>(`/api/v1/mobile/outbox/${clientOperationId}`, unknownResponseSchema).then((response) =>
     validateOutboxResponse(response, clientOperationId)
   );
 }
@@ -76,6 +77,7 @@ export function validateOutboxResponse(value: unknown, expectedClientOperationId
 export function postDailyDiagnosticReport(report: MobileDiagnosticReport) {
   return mobileRequest<unknown>(
     "/api/v1/mobile/diagnostics/daily",
+    unknownResponseSchema,
     { method: "POST", body: report }
   ).then((response) => validateDiagnosticReportReceipt(response, report.reportId));
 }

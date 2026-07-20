@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ActivityIndicator, StyleSheet, Text } from "react-native";
 
 import { signOut } from "@/auth/authService";
+import { getDeviceDisplayName } from "@/auth/deviceInfo";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -12,6 +13,7 @@ import { StatusPill } from "@/ui/StatusPill";
 export default function AccountRoute() {
   const router = useRouter();
   const { colors } = useAppTheme();
+  const deviceName = getDeviceDisplayName();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +43,7 @@ export default function AccountRoute() {
       <Card>
         <Text style={[styles.title, { color: colors.text }]}>Что останется</Text>
         <Text style={[styles.text, { color: colors.mutedText }]}>
-          Идентификатор устройства сохраняется, чтобы сервер продолжал видеть этот телефон как Kenshi Armor C1s. Локальные
+          Идентификатор устройства сохраняется, чтобы сервер продолжал видеть этот телефон как {deviceName}. Локальные
           данные очищаются только после проверки, что нет неотправленных действий.
         </Text>
       </Card>

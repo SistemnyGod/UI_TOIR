@@ -3,12 +3,14 @@ import { createPortal } from "react-dom";
 
 export function ModalFrame({
   children,
+  className = "",
   onClose,
   subtitle,
   title,
   wide = false,
 }: {
   children: ReactNode;
+  className?: string;
   onClose: () => void;
   subtitle?: string;
   title: string;
@@ -28,7 +30,7 @@ export function ModalFrame({
 
   const modal = (
     <div className="emu-modal-backdrop" onClick={onClose} role="presentation">
-      <section className={`emu-modal ${wide ? "emu-modal-wide" : ""}`} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
+      <section className={`emu-modal ${wide ? "emu-modal-wide" : ""} ${className}`.trim()} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
         <header>
           <div>
             <h3>{title}</h3>

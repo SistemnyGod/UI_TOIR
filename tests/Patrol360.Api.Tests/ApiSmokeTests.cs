@@ -1,8 +1,13 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Patrol360.Api.Authorization;
 using Patrol360.Api.Controllers;
@@ -45,6 +50,90 @@ public class ApiSmokeTests
         var result = controller.Login(new LoginRequestDto("admin", "wrong"));
 
         Assert.IsType<UnauthorizedObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public void AuthControllerLoginUsesWebAuthRateLimitPolicy()
+    {
+        var method = typeof(AuthController).GetMethod(nameof(AuthController.Login));
+
+        Assert.NotNull(method);
+        var attribute = Assert.Single(method.GetCustomAttributes(typeof(EnableRateLimitingAttribute), inherit: true));
+        Assert.Equal("web-auth", Assert.IsType<EnableRateLimitingAttribute>(attribute).PolicyName);
+    }
+
+    [Fact]
+    public void EveryApiEndpointHasExplicitAuthenticationClassification()
+    {
+        var explicitlyAnonymousEndpoints = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "AuthController.Login",
+            "HealthController.Live",
+            "HealthController.Ready",
+            "MobileController.Bootstrap",
+            "MobileController.Health",
+            "MobileController.Login",
+            "MobileController.Logout",
+            "MobileController.MarkNotificationRead",
+            "MobileController.Notifications",
+            "MobileController.Outbox",
+            "MobileController.OutboxResult",
+            "MobileController.RegisterPushToken",
+            "MobileController.Refresh",
+            "MobileController.SaveDiagnosticReport",
+            "MobileController.UploadFile",
+            "MobileController.WorkTask",
+            "MobileController.WorkTasks",
+            "MobileV2Controller.WorkItems",
+        };
+
+        var endpoints = typeof(AuthController).Assembly
+            .GetTypes()
+            .Where(type => !type.IsAbstract && typeof(ControllerBase).IsAssignableFrom(type))
+            .SelectMany(type => type
+                .GetMethods()
+                .Where(method => method.DeclaringType == type)
+                .Where(method => method.GetCustomAttributes(inherit: true).OfType<HttpMethodAttribute>().Any())
+                .Select(method => new { Controller = type, Method = method }))
+            .ToArray();
+
+        var endpointsWithoutExplicitClassification = endpoints
+            .Where(endpoint => !HasAuthenticationMetadata(endpoint.Controller, endpoint.Method))
+            .Select(endpoint => $"{endpoint.Controller.Name}.{endpoint.Method.Name}")
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var actualAnonymousEndpoints = endpoints
+            .Where(endpoint => HasAllowAnonymousMetadata(endpoint.Controller, endpoint.Method))
+            .Select(endpoint => $"{endpoint.Controller.Name}.{endpoint.Method.Name}")
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(endpointsWithoutExplicitClassification);
+        Assert.Equal(explicitlyAnonymousEndpoints.Order(StringComparer.Ordinal), actualAnonymousEndpoints);
+    }
+
+    [Fact]
+    public async Task SiteBearerAuthenticationBuildsPrincipalFromActiveSession()
+    {
+        var user = new SessionUserDto(Guid.NewGuid(), "operator", "Operator", ["operator"], ["dashboard.read"]);
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IAuthSessionService>(new FakeAuthSessionService(currentUser: user));
+        services
+            .AddAuthentication(SiteBearerAuthenticationHandler.SchemeName)
+            .AddScheme<AuthenticationSchemeOptions, SiteBearerAuthenticationHandler>(
+                SiteBearerAuthenticationHandler.SchemeName,
+                _ => { });
+
+        await using var provider = services.BuildServiceProvider();
+        var context = new DefaultHttpContext { RequestServices = provider };
+        context.Request.Headers.Authorization = "Bearer token-1";
+
+        var result = await context.AuthenticateAsync(SiteBearerAuthenticationHandler.SchemeName);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(user.Id.ToString(), result.Principal!.FindFirstValue(ClaimTypes.NameIdentifier));
+        Assert.True(result.Principal.HasClaim("permission", "dashboard.read"));
     }
 
     [Fact]
@@ -547,15 +636,15 @@ public class ApiSmokeTests
     }
 
     [Fact]
-    public void ResultsV2ControllerReturnsPagingEnvelope()
+    public async Task ResultsV2ControllerReturnsPagingEnvelope()
     {
         var resultItem = CreateResultListItem();
         var query = new FakePatrolResultQuery([resultItem]);
         var controller = new ResultsV2Controller(query);
 
-        var result = controller.List(null, null, null, null, null, null, 2, 25);
+        var result = await controller.List(null, null, null, null, null, null, 2, 25);
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var ok = Assert.IsType<OkObjectResult>(result);
         var page = Assert.IsType<ResultPageDto>(ok.Value);
         Assert.Single(page.Items);
         Assert.Equal(2, page.Page);
@@ -781,6 +870,18 @@ public class ApiSmokeTests
         if (!string.IsNullOrWhiteSpace(accessToken))
         {
             httpContext.Request.Headers.Authorization = $"Bearer {accessToken}";
+            var user = authSessionService.GetCurrentUser(accessToken);
+            if (user is not null)
+            {
+                var claims = new List<Claim>
+                {
+                    new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                    new(ClaimTypes.Name, user.Login),
+                };
+                claims.AddRange(user.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
+                claims.AddRange(user.Permissions.Select(permission => new Claim("permission", permission)));
+                httpContext.User = new ClaimsPrincipal(new ClaimsIdentity(claims, SiteBearerAuthenticationHandler.SchemeName));
+            }
         }
 
         var actionContext = new ActionContext(
@@ -789,6 +890,25 @@ public class ApiSmokeTests
             new ActionDescriptor());
         return new AuthorizationFilterContext(actionContext, []);
     }
+
+    private static bool HasAuthenticationMetadata(Type controllerType, System.Reflection.MethodInfo method)
+    {
+        var attributes = GetEndpointAttributes(controllerType, method);
+
+        return attributes.OfType<IAllowAnonymous>().Any()
+            || attributes.OfType<IAuthorizeData>().Any()
+            || attributes.OfType<RequirePermissionAttribute>().Any()
+            || attributes.OfType<RequireAnyPermissionAttribute>().Any();
+    }
+
+    private static bool HasAllowAnonymousMetadata(Type controllerType, System.Reflection.MethodInfo method) =>
+        GetEndpointAttributes(controllerType, method).OfType<IAllowAnonymous>().Any();
+
+    private static object[] GetEndpointAttributes(Type controllerType, System.Reflection.MethodInfo method) =>
+        controllerType
+            .GetCustomAttributes(inherit: true)
+            .Concat(method.GetCustomAttributes(inherit: true))
+            .ToArray();
 
     private static void AssertEndpointPermission(Type controllerType, string methodName, string permission)
     {

@@ -10,8 +10,8 @@ export default function IndexRoute() {
 
   useEffect(() => {
     void Promise.all([getAccessToken(), getStoredOwnerUserId(), getOfflineSession()]).then(async ([token, ownerUserId, offlineSession]) => {
-      if (token && offlineSession && offlineSession.userId === ownerUserId && isOfflineSessionValid(offlineSession)) {
-        setTarget("/(tabs)/patrol");
+      if (offlineSession && offlineSession.userId === ownerUserId && isOfflineSessionValid(offlineSession)) {
+        setTarget("/(auth)/offline-login");
         return;
       }
 

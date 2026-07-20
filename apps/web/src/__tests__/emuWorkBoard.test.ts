@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { EmuFavoriteEmployeeDto, EmuWorkSessionDto } from "../api/contracts";
+import type { EmuFavoriteEmployeeDto, EmuWorkSessionDto, EmuWorkTemplateDto } from "../api/contracts";
+import { buildCreateWorkEmployeeOptions, buildCreateWorkTemplates } from "../features/emu/work-accounting/createWorkOptions";
 import {
   buildEmuEmployeeWorkload,
   buildEmuHistoryCsv,
@@ -56,6 +57,31 @@ describe("EMU work board helpers", () => {
     expect(filterEmuEmployeeWorkload(rows, "", "free").map((row) => row.employeeId)).toEqual(["emp-2"]);
   });
 
+  it("keeps the full employee directory in create work and puts favorites first", () => {
+    const directory = [
+      employeeOption("emp-1", "Алексеева Анна"),
+      employeeOption("emp-2", "Борисов Борис"),
+      employeeOption("emp-3", "Власов Виктор"),
+    ];
+    const result = buildCreateWorkEmployeeOptions(directory, [favorite("emp-3", "Власов Виктор")]);
+
+    expect(result.employees.map((employee) => employee.id)).toEqual(["emp-3", "emp-1", "emp-2"]);
+    expect(result.favoriteIds.has("emp-3")).toBe(true);
+  });
+
+  it("keeps active quick tasks visible for other sections while prioritizing the selected section", () => {
+    const templates = [
+      workTemplate("template-other", "Общая задача", "section-other", 10),
+      workTemplate("template-current", "Задача участка", "section-current", 20),
+      { ...workTemplate("template-hidden", "Скрытая", "section-current", 1), isActive: false },
+    ];
+
+    expect(buildCreateWorkTemplates(templates, "section-current").map((template) => template.id)).toEqual([
+      "template-current",
+      "template-other",
+    ]);
+  });
+
   it("filters and groups cards by section", () => {
     const rows = [
       work("work-b", { sectionId: "b", sectionName: "Энергетика", createdAt: "2026-06-01T08:00:00.000Z" }),
@@ -107,6 +133,29 @@ function favorite(employeeId: string, fullName: string): EmuFavoriteEmployeeDto 
     personnelNo: employeeId,
     position: "Слесарь",
     status: "Активен",
+  };
+}
+
+function employeeOption(id: string, fullName: string) {
+  return {
+    department: "ЭМУ",
+    fullName,
+    id,
+    personnelNo: id,
+    position: "Слесарь",
+    status: "Активен" as const,
+  };
+}
+
+function workTemplate(id: string, name: string, sectionId: string, sortOrder: number): EmuWorkTemplateDto {
+  return {
+    description: `${name}: описание`,
+    id,
+    isActive: true,
+    name,
+    sectionId,
+    sectionName: sectionId,
+    sortOrder,
   };
 }
 

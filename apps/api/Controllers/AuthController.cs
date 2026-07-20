@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Net.Http.Headers;
 using Patrol360.Application;
 using Patrol360.Contracts;
@@ -10,6 +12,8 @@ namespace Patrol360.Api.Controllers;
 public sealed class AuthController(IAuthSessionService authSessionService) : ControllerBase
 {
     [HttpPost("login")]
+    [AllowAnonymous]
+    [EnableRateLimiting("web-auth")]
     public ActionResult<AuthSessionDto> Login(LoginRequestDto request)
     {
         var result = authSessionService.Login(request);
@@ -32,6 +36,7 @@ public sealed class AuthController(IAuthSessionService authSessionService) : Con
     }
 
     [HttpGet("me")]
+    [Authorize]
     public ActionResult<SessionUserDto> Me()
     {
         var token = ReadBearerToken();
@@ -40,6 +45,7 @@ public sealed class AuthController(IAuthSessionService authSessionService) : Con
     }
 
     [HttpPost("logout")]
+    [Authorize]
     public IActionResult Logout()
     {
         var token = ReadBearerToken();
