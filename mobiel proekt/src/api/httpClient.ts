@@ -271,6 +271,7 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
   await setTokens(session.accessToken, session.refreshToken);
   await setOfflineSession({
     userId: session.user.serverUserId,
+    contourId: runtimeConfig.contourId,
     fullName: session.user.fullName,
     lastOnlineLoginAt: new Date().toISOString(),
     expiresAt: session.refreshExpiresAt

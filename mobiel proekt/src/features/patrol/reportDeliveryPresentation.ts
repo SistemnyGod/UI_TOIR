@@ -8,9 +8,13 @@ export type ReportDeliveryStatus =
   | "retryLater"
   | "rejected"
   | "conflict"
+  | "waiting_auth"
+  | "waiting_network"
+  | "wrong_contour"
+  | "blocked"
   | "superseded";
 
-export type ReportDeliveryAction = "submit" | "retry" | "repair" | "resubmit" | "signIn" | "done";
+export type ReportDeliveryAction = "submit" | "retry" | "repair" | "resubmit" | "signIn" | "serverSettings" | "done";
 
 export function getReportDeliveryPresentation(status: ReportDeliveryStatus | null, lastError: string | null) {
   if (!status || status === "superseded") {
@@ -53,7 +57,17 @@ export function getReportDeliveryPresentation(status: ReportDeliveryStatus | nul
     };
   }
 
-  if (isAuthenticationError(lastError)) {
+  if (status === "wrong_contour" || status === "blocked") {
+    return {
+      action: "serverSettings" as const,
+      buttonLabel: "Проверить настройки сервера",
+      detail: lastError || "Отправка заблокирована до подтверждения целевого серверного контура.",
+      title: "Отправка заблокирована",
+      tone: "danger" as const
+    };
+
+  }
+  if (status === "waiting_auth" || isAuthenticationError(lastError)) {
     return {
       action: "signIn" as const,
       buttonLabel: "Войти и продолжить отправку",

@@ -1,5 +1,5 @@
 import { fetchWithTimeout, serverHealthTimeoutMs, serverUnavailableMessage } from "@/api/networkTimeout";
-import { getServerBaseUrl, getServerCandidateBaseUrls, normalizeServerBaseUrl, setServerBaseUrl } from "@/core/serverSettings";
+import { getServerBaseUrl, getServerCandidateBaseUrls, isAllowedServerBaseUrl, normalizeServerBaseUrl, setServerBaseUrl } from "@/core/serverSettings";
 import { currentContourId } from "@/core/environments";
 
 export type ServerConnectionCheckResult = {
@@ -27,7 +27,8 @@ export async function probeServerHealth(serverBaseUrl: string, expectedContourId
         headers: {
           Accept: "application/json",
           "X-Mobile-Sync-Protocol": "1.0",
-          "X-Patrol360-Client": "mobile-app"
+          "X-Patrol360-Client": "mobile-app",
+          "X-Patrol360-Contour": expectedContourId
         }
       },
       serverHealthTimeoutMs
@@ -62,6 +63,12 @@ export async function checkServerConnection(rawServerBaseUrl?: string): Promise<
 
   try {
     const serverBaseUrl = rawServerBaseUrl ? normalizeServerBaseUrl(rawServerBaseUrl) : await getServerBaseUrl();
+    if (rawServerBaseUrl && !isAllowedServerBaseUrl(serverBaseUrl)) {
+      return {
+        ok: false,
+        message: "Адрес сервера не разрешён для текущего контура."
+      };
+    }
     serverBaseUrls = await getServerCandidateBaseUrls(serverBaseUrl);
   } catch (error) {
     return {

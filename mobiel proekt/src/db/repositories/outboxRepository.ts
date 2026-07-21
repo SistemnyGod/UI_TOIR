@@ -51,6 +51,7 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
   const rows = await db.getAllAsync<{
     client_operation_id: string;
     owner_user_id: string;
+     contour_id: string;
     command_type: string;
     entity_type: string;
     entity_local_id: string | null;
@@ -66,7 +67,7 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
       SELECT *
       FROM outbox_commands
       WHERE owner_user_id = ?
-        AND contour_id = ?
+                AND contour_id = ?
         AND status IN ('pending', 'retryLater')
         AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
       ORDER BY created_at_local ASC
@@ -78,6 +79,7 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
   return rows.map((row) => ({
     clientOperationId: row.client_operation_id,
     ownerUserId: row.owner_user_id,
+     contourId: row.contour_id,
     commandType: row.command_type as OutboxCommandType,
     entityType: row.entity_type as MobileEntityType,
     entityLocalId: row.entity_local_id,
@@ -96,8 +98,8 @@ export async function countPendingOutboxCommands(ownerUserId: string) {
       SELECT COUNT(*) AS count
       FROM outbox_commands
       WHERE owner_user_id = ?
-        AND contour_id = ?
-        AND status IN ('pending', 'sending', 'retryLater')
+                AND contour_id = ?
+        AND status IN ('pending', 'sending', 'retryLater', 'waiting_auth', 'waiting_network', 'wrong_contour', 'blocked')
     `,
     [ownerUserId, currentContourId]
   );
@@ -116,9 +118,9 @@ export async function getOutboxCommandDeliveryState(ownerUserId: string, clientO
         status,
         last_error AS lastError
       FROM outbox_commands
-      WHERE owner_user_id = ? AND client_operation_id = ?
+      WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
     `,
-    [ownerUserId, clientOperationId]
+    [ownerUserId, currentContourId, clientOperationId]
   );
 }
 
@@ -140,8 +142,8 @@ export async function getCompleteReportDeliveryState(ownerUserId: string, assign
         updated_at_local AS updatedAtLocal
       FROM outbox_commands
       WHERE owner_user_id = ?
-        AND contour_id = ?
-        AND command_type = 'completePatrolAssignment'
+                AND contour_id = ?
+                AND command_type = 'completePatrolAssignment'
         AND entity_local_id = ?
         AND status <> 'superseded'
       ORDER BY created_at_local DESC
@@ -159,6 +161,7 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
   const db = await getDatabase();
   const rows = await db.getAllAsync<{
     client_operation_id: string;
+    contour_id: string;
     command_type: string;
     entity_type: string;
     entity_local_id: string | null;
@@ -174,6 +177,7 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
     `
       SELECT
         command.client_operation_id,
+        command.contour_id,
         command.command_type,
         command.entity_type,
         command.entity_local_id,
@@ -190,7 +194,7 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
         ON assignment.assignment_id = command.entity_local_id
       WHERE command.owner_user_id = ?
         AND command.contour_id = ?
-        AND command.status IN ('pending', 'sending', 'retryLater', 'rejected', 'conflict')
+        AND command.status IN ('pending', 'sending', 'retryLater', 'waiting_auth', 'waiting_network', 'wrong_contour', 'blocked', 'rejected', 'conflict')
       ORDER BY
         CASE command.status
           WHEN 'sending' THEN 0
@@ -206,6 +210,7 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
 
   return rows.map<SyncQueueCommandItem>((row) => ({
     clientOperationId: row.client_operation_id,
+    contourId: row.contour_id,
     commandType: row.command_type as OutboxCommandType,
     entityType: row.entity_type as MobileEntityType,
     entityLocalId: row.entity_local_id,
@@ -232,6 +237,7 @@ export async function listUnconfirmedCompleteReportCommands(
   const rows = await db.getAllAsync<{
     client_operation_id: string;
     owner_user_id: string;
+     contour_id: string;
     command_type: string;
     entity_type: string;
     entity_local_id: string | null;
@@ -247,8 +253,8 @@ export async function listUnconfirmedCompleteReportCommands(
       SELECT *
       FROM outbox_commands
       WHERE owner_user_id = ?
-        AND contour_id = ?
-        AND command_type = 'completePatrolAssignment'
+                AND contour_id = ?
+                AND command_type = 'completePatrolAssignment'
         AND status IN ('pending', 'sending', 'retryLater')
         ${assignmentFilter}
       ORDER BY updated_at_local ASC, created_at_local ASC
@@ -260,6 +266,7 @@ export async function listUnconfirmedCompleteReportCommands(
   return rows.map((row) => ({
     clientOperationId: row.client_operation_id,
     ownerUserId: row.owner_user_id,
+     contourId: row.contour_id,
     commandType: row.command_type as OutboxCommandType,
     entityType: row.entity_type as MobileEntityType,
     entityLocalId: row.entity_local_id,
@@ -288,7 +295,7 @@ export async function markOutboxCommandsSending(ownerUserId: string, clientOpera
           next_attempt_at = NULL,
           updated_at_local = ?
       WHERE owner_user_id = ?
-        AND contour_id = ?
+                AND contour_id = ?
         AND client_operation_id IN (${placeholders})
         AND status IN ('pending', 'retryLater')
     `,
@@ -314,7 +321,7 @@ export async function markOutboxCommandsRetryLater(
         SELECT client_operation_id, attempt_count
         FROM outbox_commands
         WHERE owner_user_id = ?
-          AND contour_id = ?
+                AND contour_id = ?
           AND client_operation_id IN (${placeholders})
           AND status = 'sending'
       `,
@@ -334,7 +341,7 @@ export async function markOutboxCommandsRetryLater(
               next_attempt_at = ?,
               updated_at_local = ?
           WHERE owner_user_id = ?
-            AND contour_id = ?
+                AND contour_id = ?
             AND client_operation_id = ?
             AND status = 'sending'
         `,
@@ -366,32 +373,73 @@ export async function markPendingOutboxCommandsRetryLater(ownerUserId: string, l
           next_attempt_at = ?,
           updated_at_local = ?
       WHERE owner_user_id = ?
-        AND contour_id = ?
+                AND contour_id = ?
         AND status IN ('pending', 'sending', 'retryLater')
     `,
     [lastError, nextAttemptAt, updatedAtLocal, ownerUserId, currentContourId]
   );
 }
 
+export async function markPendingOutboxCommandsWaitingNetwork(ownerUserId: string, lastError: string) {
+  const db = await getDatabase();
+  const updatedAtLocal = new Date().toISOString();
+  await db.runAsync(
+    "UPDATE outbox_commands SET status = 'waiting_network', last_error = ?, next_attempt_at = NULL, updated_at_local = ? " +
+    "WHERE owner_user_id = ? AND contour_id = ? AND status IN ('pending', 'sending', 'retryLater', 'waiting_network')",
+    [lastError, updatedAtLocal, ownerUserId, currentContourId]
+  );
+}
+
+export async function activateWaitingNetworkOutboxCommands(ownerUserId: string) {
+  const db = await getDatabase();
+  const updatedAtLocal = new Date().toISOString();
+  await db.runAsync(
+    "UPDATE outbox_commands SET status = 'pending', next_attempt_at = NULL, updated_at_local = ? " +
+    "WHERE owner_user_id = ? AND contour_id = ? AND status = 'waiting_network'",
+    [updatedAtLocal, ownerUserId, currentContourId]
+  );
+}
 export async function markPendingOutboxCommandsAuthRequired(ownerUserId: string, lastError: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
-  const nextAttemptAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
   // Authentication is a delivery condition, not a patrol lifecycle state.
   // Keep the local report and defer automatic retries until the session is restored.
   await db.runAsync(
     `
       UPDATE outbox_commands
-      SET status = 'retryLater',
+      SET status = 'waiting_auth',
           last_error = ?,
-          next_attempt_at = ?,
+          next_attempt_at = NULL,
           updated_at_local = ?
       WHERE owner_user_id = ?
-        AND contour_id = ?
-        AND status IN ('pending', 'sending', 'retryLater')
+                AND contour_id = ?
+        AND status IN ('pending', 'sending', 'retryLater', 'waiting_auth')
     `,
-    [lastError, nextAttemptAt, updatedAtLocal, ownerUserId, currentContourId]
+    [lastError, updatedAtLocal, ownerUserId, currentContourId]
+  );
+}
+export async function activateWaitingAuthOutboxCommands(ownerUserId: string) {
+  const db = await getDatabase();
+  const updatedAtLocal = new Date().toISOString();
+  await db.runAsync(
+    "UPDATE outbox_commands SET status = 'pending', next_attempt_at = NULL, updated_at_local = ? " +
+    "WHERE owner_user_id = ? AND contour_id = ? AND status = 'waiting_auth'",
+    [updatedAtLocal, ownerUserId, currentContourId]
+  );
+}
+
+export async function markOutboxCommandsWrongContour(ownerUserId: string, clientOperationIds: string[], lastError: string) {
+  if (clientOperationIds.length === 0) {
+    return;
+  }
+  const db = await getDatabase();
+  const placeholders = clientOperationIds.map(() => "?").join(", ");
+  const updatedAtLocal = new Date().toISOString();
+  await db.runAsync(
+    "UPDATE outbox_commands SET status = 'wrong_contour', last_error = ?, next_attempt_at = NULL, updated_at_local = ? " +
+    "WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id IN (" + placeholders + ")",
+    [lastError, updatedAtLocal, ownerUserId, currentContourId, ...clientOperationIds]
   );
 }
 export async function resetStaleSendingOutboxCommands(ownerUserId: string, staleBeforeIso: string) {
@@ -406,7 +454,7 @@ export async function resetStaleSendingOutboxCommands(ownerUserId: string, stale
           last_error = COALESCE(last_error, 'Отправка прервана и будет повторена автоматически.'),
           updated_at_local = ?
       WHERE owner_user_id = ?
-        AND contour_id = ?
+                AND contour_id = ?
         AND status = 'sending'
         AND (updated_at_local IS NULL OR updated_at_local < ?)
     `,
@@ -426,7 +474,7 @@ export async function resetSendingOutboxCommandsForManualRetry(ownerUserId: stri
           last_error = 'Пользователь запустил повторную отправку.',
           updated_at_local = ?
       WHERE owner_user_id = ?
-        AND contour_id = ?
+                AND contour_id = ?
         AND status = 'sending'
     `,
     [updatedAtLocal, updatedAtLocal, ownerUserId, currentContourId]
@@ -549,12 +597,13 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
                   last_error = NULL,
                   updated_at_local = ?
               WHERE owner_user_id = ?
+                AND contour_id = ?
                 AND command_type = 'completePatrolAssignment'
                 AND entity_local_id = ?
                 AND client_operation_id <> ?
                 AND status IN ('rejected', 'conflict')
             `,
-            [new Date().toISOString(), command.owner_user_id, command.entity_local_id, response.clientOperationId]
+            [new Date().toISOString(), command.owner_user_id, currentContourId, command.entity_local_id, response.clientOperationId]
           );
 
           await tx.runAsync(
@@ -562,17 +611,19 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
               UPDATE sync_conflicts
               SET status = 'resolved'
               WHERE owner_user_id = ?
+                AND contour_id = ?
                 AND status NOT IN ('resolved', 'dismissed')
                 AND client_operation_id IN (
                   SELECT client_operation_id
                   FROM outbox_commands
                   WHERE owner_user_id = ?
-                    AND command_type = 'completePatrolAssignment'
+                AND contour_id = ?
+                AND command_type = 'completePatrolAssignment'
                     AND entity_local_id = ?
                     AND status IN ('accepted', 'duplicate', 'superseded')
                 )
             `,
-            [command.owner_user_id, command.owner_user_id, command.entity_local_id]
+            [command.owner_user_id, currentContourId, command.owner_user_id, currentContourId, command.entity_local_id]
           );
 
           await tx.runAsync(
@@ -781,17 +832,19 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
               INSERT OR REPLACE INTO sync_conflicts (
                 conflict_id,
                 owner_user_id,
+                contour_id,
                 client_operation_id,
                 entity_type,
                 reason,
                 payload_snapshot_json,
                 status
               )
-              VALUES (?, ?, ?, ?, ?, ?, 'open')
+              VALUES (?, ?, ?, ?, ?, ?, ?, 'open')
             `,
             [
               conflictId,
               command.owner_user_id,
+              currentContourId,
               response.clientOperationId,
               command.entity_type,
               response.message,
@@ -877,7 +930,7 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
       eventType: `sync.${response.status}`,
       entityType: "outboxCommand",
       entityId: response.clientOperationId,
-      message: response.status === "conflict" ? "РљРѕРјР°РЅРґР° С‚СЂРµР±СѓРµС‚ РїСЂРѕРІРµСЂРєРё РѕРїРµСЂР°С‚РѕСЂР°." : "РљРѕРјР°РЅРґР° РѕС‚РєР»РѕРЅРµРЅР° СЃРµСЂРІРµСЂРѕРј.",
+      message: response.status === "conflict" ? "Команда требует проверки оператора." : "Команда отклонена сервером.",
       payload: response
     }).catch(() => undefined);
   }

@@ -6,7 +6,7 @@ import { LocalMobileFile } from "@/domain/files/fileTypes";
 
 export type SyncQueueFileItem = Pick<
   LocalMobileFile,
-  "clientFileId" | "localPath" | "serverFileId" | "status" | "contentType" | "mediaKind" | "assignmentId" | "pointId" | "remarkId" | "workTaskId" | "createdAtLocal"
+  "clientFileId" | "localPath" | "serverFileId" | "status" | "contentType" | "mediaKind" | "assignmentId" | "pointId" | "remarkId" | "workTaskId" | "createdAtLocal" | "contourId"
 > & {
   assignmentRouteName: string | null;
 };
@@ -75,6 +75,7 @@ export async function listPointFiles(assignmentId: string, pointId: string) {
         SELECT
           client_file_id AS clientFileId,
           owner_user_id AS ownerUserId,
+           contour_id AS contourId,
           local_path AS localPath,
           preview_path AS previewPath,
           server_file_id AS serverFileId,
@@ -118,6 +119,7 @@ export async function listFilesByClientIds(clientFileIds: string[]) {
       SELECT
         client_file_id AS clientFileId,
         owner_user_id AS ownerUserId,
+           contour_id AS contourId,
         local_path AS localPath,
         preview_path AS previewPath,
         server_file_id AS serverFileId,
@@ -154,6 +156,7 @@ export async function listRemarkFiles(remarkId: string) {
       SELECT
         client_file_id AS clientFileId,
         owner_user_id AS ownerUserId,
+           contour_id AS contourId,
         local_path AS localPath,
         preview_path AS previewPath,
         server_file_id AS serverFileId,
@@ -190,6 +193,7 @@ export async function listWorkTaskFiles(workTaskId: string) {
       SELECT
         client_file_id AS clientFileId,
         owner_user_id AS ownerUserId,
+           contour_id AS contourId,
         local_path AS localPath,
         preview_path AS previewPath,
         server_file_id AS serverFileId,
@@ -226,7 +230,6 @@ export async function listKnownLocalFilePaths(): Promise<string[] | null> {
       SELECT local_path
       FROM files
       WHERE owner_user_id = ?
-        AND contour_id = '${currentContourId}'
         AND local_path IS NOT NULL
     `,
     [ownerUserId]

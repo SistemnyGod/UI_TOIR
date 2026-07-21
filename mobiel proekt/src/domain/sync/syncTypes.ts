@@ -4,6 +4,10 @@ export type OutboxCommandStatus =
   | "accepted"
   | "duplicate"
   | "retryLater"
+  | "waiting_auth"
+  | "waiting_network"
+  | "wrong_contour"
+  | "blocked"
   | "rejected"
   | "conflict"
   | "superseded";

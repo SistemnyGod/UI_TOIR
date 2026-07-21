@@ -97,7 +97,7 @@ RequireFile("apps/web/src/features/inventory/ppe/PpeDrawerTables.tsx");
 
 AssertFileLineCountAtMost("apps/web/src/styles.css", 28029);
 AssertFileLineCountAtMost("libs/infrastructure/Persistence/Patrol360DbContext.cs", 2274);
-AssertFileLineCountAtMost("apps/web/src/hooks/useEmuWorkspace.ts", 2222);
+AssertFileLineCountAtMost("apps/web/src/hooks/useEmuWorkspace.ts", 2031);
 AssertFileLineCountAtMost("apps/web/src/repositories/mockInventoryRepository.ts", 2114);
 AssertFileLineCountAtMost("apps/web/src/features/perco/PercoIntegrationScreen.tsx", 2040);
 AssertFileLineCountAtMost("apps/web/src/features/patrol/AssignmentScreen.tsx", 2016);

@@ -57,6 +57,11 @@ export function SubmitReportScreen() {
       return;
     }
 
+    if (presentation.action === "serverSettings") {
+      router.push("/(auth)/server-settings");
+      return;
+    }
+
     if (presentation.action === "repair") {
       router.push(`/patrol/assignment/${assignmentId}/all-points`);
       return;

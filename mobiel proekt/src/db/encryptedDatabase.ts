@@ -17,10 +17,24 @@ const encryptedDatabaseName = "patrol360-mobile-encrypted.db";
 const databaseEncryptionKeyName = "patrol360.databaseEncryptionKey.v1";
 const protectedTables = [
   "users",
+  "devices",
+  "patrol_request_board",
   "patrol_assignments",
+  "assignment_route_points",
+  "routes",
+  "route_points",
   "point_results",
   "files",
   "outbox_commands",
+  "sync_cursors",
+  "sync_conflicts",
+  "mobile_notifications",
+  "mobile_diagnostic_state",
+  "mobile_employees",
+  "emu_sections",
+  "work_tasks",
+  "shift_remarks",
+  "mobile_logout_queue",
   "mobile_action_log",
   "mobile_diagnostic_reports"
 ] as const;

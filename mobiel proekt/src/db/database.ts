@@ -1,4 +1,3 @@
-import { currentContourId } from "@/core/environments";
 import * as SQLite from "expo-sqlite";
 
 import { openProtectedDatabase } from "@/db/encryptedDatabase";
@@ -9,7 +8,12 @@ let initializationPromise: Promise<void> | null = null;
 type SqlExecutor = Pick<SQLite.SQLiteDatabase, "execAsync" | "getAllAsync" | "getFirstAsync" | "runAsync">;
 
 export function getDatabase() {
-  databasePromise ??= openProtectedDatabase();
+  databasePromise ??= openProtectedDatabase().catch((error) => {
+    // SecureStore and the encrypted database can fail transiently while the
+    // device is still unlocking. Do not cache a rejected promise forever.
+    databasePromise = null;
+    throw error;
+  });
 
   return databasePromise;
 }
@@ -38,6 +42,14 @@ async function initializeDatabaseOnce() {
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id TEXT PRIMARY KEY,
       applied_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS mobile_logout_queue (
+      id TEXT PRIMARY KEY,
+      owner_user_id TEXT,
+      contour_id TEXT,
+      created_at_local TEXT NOT NULL,
+      status TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS users (
@@ -136,6 +148,7 @@ async function initializeDatabaseOnce() {
     CREATE TABLE IF NOT EXISTS files (
       client_file_id TEXT PRIMARY KEY,
       owner_user_id TEXT NOT NULL,
+      contour_id TEXT,
       local_path TEXT NOT NULL,
       preview_path TEXT,
       server_file_id TEXT,
@@ -154,6 +167,7 @@ async function initializeDatabaseOnce() {
     CREATE TABLE IF NOT EXISTS outbox_commands (
       client_operation_id TEXT PRIMARY KEY,
       owner_user_id TEXT NOT NULL,
+      contour_id TEXT,
       command_type TEXT NOT NULL,
       entity_type TEXT NOT NULL,
       entity_local_id TEXT,
@@ -169,6 +183,7 @@ async function initializeDatabaseOnce() {
 
     CREATE TABLE IF NOT EXISTS sync_cursors (
       scope TEXT PRIMARY KEY,
+      contour_id TEXT,
       cursor_value TEXT,
       last_sync_at TEXT,
       protocol_version TEXT NOT NULL
@@ -770,7 +785,37 @@ async function ensureColumns(db: SqlExecutor, tableName: string, additions: { na
     }
   }
 }
+const contourScopedTableNames = [
+  "users",
+  "devices",
+  "patrol_request_board",
+  "patrol_assignments",
+  "assignment_route_points",
+  "routes",
+  "route_points",
+  "point_results",
+  "files",
+  "outbox_commands",
+  "sync_cursors",
+  "mobile_logout_queue",
+  "sync_conflicts",
+  "mobile_notifications",
+  "mobile_action_log",
+  "mobile_diagnostic_reports",
+  "mobile_diagnostic_state",
+  "work_tasks",
+  "mobile_employees",
+  "emu_sections",
+  "shift_remarks"
+] as const;
+
 async function ensureContourIsolation(db: SqlExecutor) {
+  for (const tableName of contourScopedTableNames) {
+    await ensureColumns(db, tableName, [
+      { name: "contour_id", sql: "ALTER TABLE " + tableName + " ADD COLUMN contour_id TEXT" }
+    ]);
+    await db.execAsync("CREATE INDEX IF NOT EXISTS ix_" + tableName + "_contour ON " + tableName + " (contour_id)");
+  }
   await ensureColumns(db, "files", [
     { name: "contour_id", sql: "ALTER TABLE files ADD COLUMN contour_id TEXT" }
   ]);
@@ -780,9 +825,11 @@ async function ensureContourIsolation(db: SqlExecutor) {
   await ensureColumns(db, "sync_cursors", [
     { name: "contour_id", sql: "ALTER TABLE sync_cursors ADD COLUMN contour_id TEXT" }
   ]);
-  await db.runAsync("UPDATE files SET contour_id = ? WHERE contour_id IS NULL", [currentContourId]);
-  await db.runAsync("UPDATE outbox_commands SET contour_id = ? WHERE contour_id IS NULL", [currentContourId]);
-  await db.runAsync("UPDATE sync_cursors SET contour_id = ? WHERE contour_id IS NULL", [currentContourId]);
+  // Legacy rows created before contour isolation stay unassigned.  Assigning
+  // them to the current build would allow a production upgrade to submit a
+  // queue that was created for another server contour.  Repositories only
+  // select the current contour, so these rows remain preserved but blocked
+  // until an explicit, operator-approved migration is implemented.
   await db.execAsync(`
     CREATE INDEX IF NOT EXISTS ix_files_contour_status
       ON files (contour_id, status);

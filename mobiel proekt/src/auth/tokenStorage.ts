@@ -36,14 +36,17 @@ export async function getOfflineSession(): Promise<OfflineSessionState | null> {
       return null;
     }
 
+    const parsedContourId = typeof parsed.contourId === "string" ? parsed.contourId : undefined;
+
     return {
       userId: parsed.userId,
+      contourId: parsedContourId,
       fullName: parsed.fullName,
       lastOnlineLoginAt: parsed.lastOnlineLoginAt,
       expiresAt: parsed.expiresAt,
       revokedAt: parsed.revokedAt ?? null,
       revocationReason: parsed.revocationReason ?? null,
-      requiresReenrollment: parsed.requiresReenrollment ?? false
+      requiresReenrollment: parsed.requiresReenrollment ?? !parsedContourId
     };
   } catch {
     return null;
@@ -99,6 +102,13 @@ export async function clearAuthTokens() {
   lockSession();
 }
 
+export async function clearLocalSessionKeepingRefreshToken() {
+  await SecureStore.deleteItemAsync(accessTokenKey);
+  await SecureStore.deleteItemAsync(ownerUserIdKey);
+  await SecureStore.deleteItemAsync(offlineSessionKey);
+  lockSession();
+
+}
 export async function markSessionNeedsReenrollment(reason = "device_reenrollment_required") {
   const offlineSession = await getOfflineSession();
   if (offlineSession) {

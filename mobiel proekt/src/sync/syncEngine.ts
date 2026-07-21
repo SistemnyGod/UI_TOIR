@@ -17,9 +17,13 @@ import {
 } from "@/db/repositories/filesRepository";
 import {
   applyOutboxResponses,
+  activateWaitingAuthOutboxCommands,
+  activateWaitingNetworkOutboxCommands,
   finalizeAcceptedCompleteReportCommands,
   listUnconfirmedCompleteReportCommands,
   markPendingOutboxCommandsAuthRequired,
+  markPendingOutboxCommandsWaitingNetwork,
+  markOutboxCommandsWrongContour,
   markOutboxCommandsRetryLater,
   markOutboxCommandsSending,
   markPendingOutboxCommandsRetryLater,
@@ -78,8 +82,10 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
   await reclaimAcceptedLocalMedia(ownerUserId);
 
   if (!(await hasUsableNetwork())) {
+    await markPendingOutboxCommandsWaitingNetwork(ownerUserId, "Сеть недоступна. Отчет сохранён на телефоне.");
     return { sent: 0, skipped: "offline" as const, hasMore: false };
   }
+  await activateWaitingNetworkOutboxCommands(ownerUserId);
 
   const serverCheck = await checkServerConnection();
   if (!serverCheck.ok) {
@@ -97,6 +103,7 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
   }
 
   await resetStaleSendingOutboxCommands(ownerUserId, getStaleSendingBoundaryIso());
+  await activateWaitingAuthOutboxCommands(ownerUserId);
   await reconcileAcceptedCompleteReports();
 
   let sent = 0;
@@ -130,7 +137,9 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
         } catch (error) {
           const readableError = getReadableSyncError(error);
           void logMobileError("sync.failed", error);
-          if (isAuthRequiredError(error)) {
+          if (isWrongContourError(error)) {
+            await markOutboxCommandsWrongContour(ownerUserId, commandIds, readableError);
+          } else if (isAuthRequiredError(error)) {
             await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError);
           } else {
             await markOutboxCommandsRetryLater(ownerUserId, commandIds, readableError);
@@ -454,4 +463,8 @@ function getReadableSyncError(error: unknown) {
 
 function isAuthRequiredError(error: unknown) {
   return error instanceof Error && isReauthenticationRequiredError(error.message);
+}
+
+function isWrongContourError(error: unknown) {
+  return error instanceof Error && /wrong_contour|друг(ого|ому|ом)\s+(?:серверн(ого|ом)\s+)?контур/i.test(error.message);
 }

@@ -30,10 +30,10 @@ export function ActionSheet({
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
       <View style={styles.backdrop}>
         <Pressable accessibilityLabel="Закрыть меню" accessibilityRole="button" onPress={onClose} style={StyleSheet.absoluteFill} />
-        <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <View accessibilityLabel={title} accessibilityViewIsModal style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.handle} />
           <View style={styles.header}>
-            <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+            <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{title}</Text>
             <Pressable accessibilityLabel="Закрыть" accessibilityRole="button" hitSlop={8} onPress={onClose} style={styles.closeButton}>
               <Ionicons color={colors.mutedText} name="close" size={22} />
             </Pressable>

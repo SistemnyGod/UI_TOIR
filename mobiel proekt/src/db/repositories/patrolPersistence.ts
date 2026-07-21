@@ -1,6 +1,7 @@
 import * as Crypto from "expo-crypto";
 import * as SQLite from "expo-sqlite";
 
+import { currentContourId } from "@/core/environments";
 import { getDatabase } from "@/db/database";
 import type { PointListItem } from "@/db/repositories/patrolRepository";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
@@ -22,11 +23,12 @@ export async function updateLatestPendingMarkPhotoPayloadInTransaction(
       FROM outbox_commands
       WHERE entity_local_id = ?
         AND command_type IN ('markPatrolPointOk', 'markPatrolPointIssue')
+        AND contour_id = ?
         AND status IN ('pending', 'retryLater')
       ORDER BY created_at_local DESC
       LIMIT 1
     `,
-    [pointId]
+    [pointId, currentContourId]
   );
 
   if (!command) {
@@ -44,6 +46,7 @@ export async function updateLatestPendingMarkPhotoPayloadInTransaction(
       SET payload_json = ?,
           updated_at_local = ?
       WHERE client_operation_id = ?
+        AND contour_id = ?
     `,
     [
       JSON.stringify({
@@ -51,7 +54,8 @@ export async function updateLatestPendingMarkPhotoPayloadInTransaction(
         photoClientFileIds
       }),
       new Date().toISOString(),
-      command.client_operation_id
+      command.client_operation_id,
+      currentContourId
     ]
   );
 }
@@ -73,10 +77,11 @@ export async function supersedePendingPointStatusCommands(
       FROM outbox_commands
       WHERE owner_user_id = ?
         AND entity_local_id = ?
+        AND contour_id = ?
         AND command_type IN ('markPatrolPointOk', 'markPatrolPointIssue')
         AND status IN ('pending', 'retryLater')
     `,
-    [ownerUserId, pointId]
+    [ownerUserId, pointId, currentContourId]
   );
   const supersededIds = commands
     .filter((command) => {
@@ -101,9 +106,10 @@ export async function supersedePendingPointStatusCommands(
           last_error = NULL,
           updated_at_local = ?
       WHERE client_operation_id IN (${placeholders})
+        AND contour_id = ?
         AND status IN ('pending', 'retryLater')
     `,
-    [new Date().toISOString(), ...supersededIds]
+    [new Date().toISOString(), ...supersededIds, currentContourId]
   );
 }
 

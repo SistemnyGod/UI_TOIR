@@ -29,6 +29,9 @@ export function installMobileErrorReporter() {
 
 export function logMobileError(eventType: string, error: unknown) {
   const message = sanitizeDiagnosticMessage(error instanceof Error ? error.message : String(error));
+  // Database diagnostics are unavailable when bootstrap is the failure.
+  // Keep a native logcat/console fallback for support.
+  console.error(`[${eventType}] ${message || "Unknown mobile error"}`, error);
   return logMobileAction({
     eventType,
     entityType: "mobileApp",

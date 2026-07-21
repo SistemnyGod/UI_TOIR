@@ -1,11 +1,13 @@
-import { currentContourId } from "@/core/environments";
 import * as SQLite from "expo-sqlite";
-
+import { currentContourId } from "@/core/environments";
 import { getDatabase } from "@/db/database";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { BootstrapDto } from "@/domain/patrol/patrolTypes";
 import { deletePatrolPhotoDirectory } from "@/services/fileStorageService";
 
+const bootstrapScope = `bootstrap:${currentContourId}`;
+
+const contourGuardTableNames = ["files", "outbox_commands", "sync_cursors", "sync_conflicts"] as const;
 type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "getFirstAsync" | "runAsync">;
 
 export async function clearLocalUserData() {
@@ -38,6 +40,15 @@ export async function hasLocalUserData() {
 
   return (row?.count ?? 0) > 0;
 }
+export async function hasUnscopedLocalData() {
+  const db = await getDatabase();
+  const countExpression = contourGuardTableNames
+    .map((tableName) => "(SELECT COUNT(*) FROM " + tableName + " WHERE contour_id IS NULL)")
+    .join(" + ");
+  const row = await db.getFirstAsync<{ count: number }>("SELECT " + countExpression + " AS count");
+  return (row?.count ?? 0) > 0;
+}
+
 
 export async function countBlockingLocalUserData() {
   const db = await getDatabase();
@@ -57,7 +68,7 @@ export async function countBlockingLocalUserData() {
         (SELECT COUNT(*) FROM files
           WHERE status NOT IN ('uploaded', 'linked')) +
         (SELECT COUNT(*) FROM outbox_commands
-          WHERE status IN ('pending', 'sending', 'retryLater')) +
+          WHERE status IN ('pending', 'sending', 'retryLater', 'waiting_auth', 'waiting_network', 'wrong_contour', 'blocked')) +
         (SELECT COUNT(*) FROM sync_conflicts
           WHERE status NOT IN ('resolved', 'dismissed')) +
         (SELECT COUNT(*) FROM work_tasks
@@ -84,9 +95,10 @@ export async function getLocalUserProfile(ownerUserId: string) {
       SELECT server_user_id, full_name
       FROM users
       WHERE server_user_id = ?
+        AND contour_id = ?
       LIMIT 1
     `,
-    [ownerUserId]
+    [ownerUserId, currentContourId]
   );
 
   return row
@@ -98,6 +110,10 @@ export async function getLocalUserProfile(ownerUserId: string) {
 }
 
 export async function saveBootstrap(bootstrap: BootstrapDto) {
+  if (await hasUnscopedLocalData()) {
+    throw new Error("Локальные данные не привязаны к серверному контуру. Выполните вход после безопасной очистки или синхронизации очереди.");
+  }
+
   const currentCursor = await getBootstrapSyncCursor();
   if (bootstrap.syncCursor && bootstrap.syncCursor === currentCursor) {
     return false;
@@ -115,8 +131,8 @@ export async function saveBootstrap(bootstrap: BootstrapDto) {
 export async function getBootstrapSyncCursor() {
   const db = await getDatabase();
   const row = await db.getFirstAsync<{ cursor_value: string | null }>(
-    "SELECT cursor_value FROM sync_cursors WHERE scope = 'bootstrap' AND contour_id = ? LIMIT 1",
-    [currentContourId]
+    "SELECT cursor_value FROM sync_cursors WHERE scope = ? AND contour_id = ? LIMIT 1",
+    [bootstrapScope, currentContourId]
   );
   return row?.cursor_value ?? null;
 }
@@ -170,13 +186,15 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
       `
         INSERT INTO users (
           server_user_id,
+          contour_id,
           full_name,
           roles_json,
           permissions_json,
           updated_at_server
         )
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(server_user_id) DO UPDATE SET
+          contour_id = excluded.contour_id,
           full_name = excluded.full_name,
           roles_json = excluded.roles_json,
           permissions_json = excluded.permissions_json,
@@ -184,6 +202,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
       `,
       [
         ownerUserId,
+        currentContourId,
         bootstrap.user.fullName,
         JSON.stringify(bootstrap.user.roles),
         JSON.stringify(bootstrap.user.permissions),
@@ -662,13 +681,13 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
           last_sync_at,
           protocol_version
         )
-        VALUES ('bootstrap', ?, ?, ?, '1.0')
+        VALUES (?, ?, ?, ?, '1.0')
         ON CONFLICT(scope) DO UPDATE SET
           contour_id = excluded.contour_id,
           cursor_value = excluded.cursor_value,
           last_sync_at = excluded.last_sync_at,
           protocol_version = excluded.protocol_version
       `,
-      [currentContourId, bootstrap.syncCursor, bootstrap.serverTime]
+      [bootstrapScope, currentContourId, bootstrap.syncCursor, bootstrap.serverTime]
     );
 }

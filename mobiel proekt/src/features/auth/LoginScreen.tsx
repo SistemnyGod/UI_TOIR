@@ -21,6 +21,7 @@ import {
 import { checkServerConnection } from "@/api/serverHealthApi";
 import { restoreSessionWithRefreshToken, signIn } from "@/auth/authService";
 import { isOfflineSessionValid } from "@/auth/offlineSession";
+import { currentContourId } from "@/core/environments";
 import { consumePendingSessionRoute, markSessionUnlocked } from "@/auth/sessionGateState";
 import { getOfflineSession, getRefreshToken, getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getServerBaseUrl, localLanServerBaseUrl, setLocalLanServerBaseUrl } from "@/core/serverSettings";
@@ -174,7 +175,7 @@ export function LoginScreen() {
   }
 
   function showOtherDeviceLogin() {
-    Alert.alert("Вход с другого устройства", "Для мобильного аккаунта используйте логин и пароль, выданные оператором.");
+    Alert.alert("Как войти на другом телефоне", "На другом зарегистрированном телефоне используйте логин и пароль, выданные оператором. Текущая локальная очередь на новый телефон не переносится.");
   }
 
   async function handleBiometricLogin() {
@@ -206,7 +207,7 @@ export function LoginScreen() {
     try {
       await SecureStore.deleteItemAsync(legacyRememberedPasswordKey);
       const [offlineSession, ownerUserId] = await Promise.all([getOfflineSession(), getStoredOwnerUserId()]);
-      if (offlineSession && ownerUserId === offlineSession.userId && isOfflineSessionValid(offlineSession)) {
+      if (offlineSession && ownerUserId === offlineSession.userId && isOfflineSessionValid(offlineSession, currentContourId)) {
         markSessionUnlocked();
         router.replace((consumePendingSessionRoute() ?? "/(tabs)/patrol") as never);
         return;
@@ -249,6 +250,7 @@ export function LoginScreen() {
                 <View style={styles.inputBox}>
                   <Ionicons color="#c6def7" name="person-outline" size={22} />
                   <TextInput
+                    accessibilityLabel="Логин"
                     autoCapitalize="none"
                     autoCorrect={false}
                     editable={!isSubmitting}
@@ -264,6 +266,7 @@ export function LoginScreen() {
                 <View style={styles.inputBox}>
                   <Ionicons color="#c6def7" name="lock-closed-outline" size={22} />
                   <TextInput
+                    accessibilityLabel="Пароль"
                     autoCapitalize="none"
                     autoCorrect={false}
                     editable={!isSubmitting}
@@ -295,7 +298,7 @@ export function LoginScreen() {
                     <View style={[styles.checkbox, rememberMe ? styles.checkboxActive : null]}>
                       {rememberMe ? <Ionicons color="#ffffff" name="checkmark" size={16} /> : null}
                     </View>
-                    <Text style={styles.rememberText}>Запомнить меня</Text>
+                    <Text style={styles.rememberText}>Запомнить логин</Text>
                   </Pressable>
 
                   <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={showPasswordRecovery}>
@@ -303,16 +306,16 @@ export function LoginScreen() {
                   </Pressable>
                 </View>
 
-                {error ? <Text style={styles.error}>{error}</Text> : null}
+                {error ? <Text accessibilityLiveRegion="assertive" accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
 
                 <Pressable
                   accessibilityRole="button"
-                  disabled={isSubmitting || login.trim().length === 0 || password.length === 0}
+                  disabled={isSubmitting}
                   onPress={handleSubmit}
                   style={({ pressed }) => [
                     styles.loginButton,
                     pressed ? styles.loginButtonPressed : null,
-                    isSubmitting || login.trim().length === 0 || password.length === 0 ? styles.loginButtonDisabled : null
+                    isSubmitting ? styles.loginButtonDisabled : null
                   ]}
                 >
                   {isSubmitting ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.loginButtonText}>Войти</Text>}
@@ -360,17 +363,10 @@ export function LoginScreen() {
               <View style={styles.secondaryCard}>
                 <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={showOtherDeviceLogin} style={styles.secondaryRow}>
                   <Ionicons color="#16a8ff" name="phone-portrait-outline" size={22} />
-                  <Text style={styles.secondaryText}>Вход с другого устройства</Text>
+                  <Text style={styles.secondaryText}>Как войти на другом телефоне</Text>
                   <Ionicons color="#d6e9ff" name="chevron-forward-outline" size={22} />
                 </Pressable>
 
-                <View style={styles.divider} />
-
-                <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={showPasswordRecovery} style={styles.secondaryRow}>
-                  <Ionicons color="#16a8ff" name="refresh-outline" size={23} />
-                  <Text style={styles.secondaryText}>Восстановление</Text>
-                  <Ionicons color="#d6e9ff" name="chevron-forward-outline" size={22} />
-                </Pressable>
               </View>
 
               <Text style={styles.footer}>Поддержка сотрудников - Atom Minerals</Text>

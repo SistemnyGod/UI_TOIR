@@ -3,6 +3,7 @@ import { createContext, ReactNode, useContext, useEffect, useMemo, useState } fr
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 import { isOfflineSessionValid } from "@/auth/offlineSession";
+import { currentContourId } from "@/core/environments";
 import { clearAuthTokens, getAccessToken, getOfflineSession, getStoredOwnerUserId } from "@/auth/tokenStorage";
 import {
   isSessionUnlocked,
@@ -55,10 +56,10 @@ export function SessionGuard({ children }: { children: ReactNode }) {
           ownerUserId
           && offlineSession
           && offlineSession.userId === ownerUserId
-          && isOfflineSessionValid(offlineSession)
+          && isOfflineSessionValid(offlineSession, currentContourId)
         );
 
-        if (token && offlineSession && !isOfflineSessionValid(offlineSession)) {
+        if (token && offlineSession && !isOfflineSessionValid(offlineSession, currentContourId)) {
           await clearAuthTokens();
         }
 

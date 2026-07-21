@@ -75,6 +75,11 @@ export function ServerSettingsScreen() {
           ? `Локальный сервер подключен: ${localUrl}`
           : `Локальный адрес сохранен, но сервер не ответил. Проверьте Wi-Fi и Windows Firewall. ${result.message}`
       });
+    } catch (error) {
+      setStatusMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Локальный сервер не разрешён для этой сборки."
+      });
     } finally {
       setIsBusy(false);
     }

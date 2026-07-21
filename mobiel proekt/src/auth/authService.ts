@@ -2,12 +2,15 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 import { login, logout } from "@/api/authApi";
+import { isReauthenticationRequiredError } from "@/auth/sessionErrors";
 import { refreshStoredAccessToken } from "@/api/httpClient";
 import { getBootstrap } from "@/api/mobileApi";
 import { getOrCreateDeviceId } from "@/auth/deviceRegistration";
 import { getDeviceDisplayName } from "@/auth/deviceInfo";
 import {
+  clearLocalSessionKeepingRefreshToken,
   clearTokens,
+  getAccessToken,
   getStoredOwnerUserId,
   getStoredSessionSnapshot,
   restoreStoredSessionSnapshot,
@@ -19,10 +22,12 @@ import {
   clearLocalUserData,
   countBlockingLocalUserData,
   hasLocalUserData,
+  hasUnscopedLocalData,
   replaceLocalUserDataWithBootstrap,
   saveBootstrap
 } from "@/db/repositories/bootstrapRepository";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
+import { completePendingLogoutIntents, enqueueLogoutIntent, getPendingLogoutContourId } from "@/db/repositories/logoutQueueRepository";
 import { registerPushNotifications, syncMobileNotifications } from "@/services/notificationService";
 import { syncWorkTasks } from "@/services/workTaskService";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
@@ -30,10 +35,49 @@ import { currentContourId } from "@/core/environments";
 
 const appVersion = Constants.expoConfig?.version ?? "unknown";
 
+export async function flushPendingLogout() {
+  const pendingContourId = await getPendingLogoutContourId();
+  if (pendingContourId === undefined) {
+    return true;
+  }
+  if (pendingContourId !== currentContourId) {
+    return false;
+  }
+
+  try {
+    await revokeServerSession();
+    await completePendingLogoutIntents();
+    await clearTokens();
+    return true;
+  } catch (error) {
+    if (error instanceof Error && isReauthenticationRequiredError(error.message)) {
+      await completePendingLogoutIntents();
+      await clearTokens();
+      return true;
+    }
+
+    return false;
+  }
+}
+
+async function revokeServerSession() {
+  const accessToken = await getAccessToken();
+  try {
+    await logout(accessToken ?? await refreshStoredAccessToken());
+  } catch {
+    await logout(await refreshStoredAccessToken());
+  }
+}
+
 export async function signIn(loginName: string, password: string) {
+  if (!(await flushPendingLogout())) {
+    throw new Error("Предыдущая сессия ожидает отзыва. Подключите сервер и повторите вход.");
+  }
   const deviceId = await getOrCreateDeviceId();
   const previousSession = await getStoredSessionSnapshot();
   const previousOwnerUserId = previousSession.ownerUserId;
+  const previousContourId = previousSession.offlineSession?.contourId;
+  const contourMismatch = Boolean(previousOwnerUserId && previousContourId !== currentContourId);
   const result = await login({
     login: loginName,
     password,
@@ -54,9 +98,9 @@ export async function signIn(loginName: string, password: string) {
       throw new Error(`Bootstrap относится к другому контуру (${bootstrap.contourId}). Локальные данные не изменены.`);
     }
 
-    const shouldClearLocalData = previousOwnerUserId
+    const shouldClearLocalData = contourMismatch || await hasUnscopedLocalData() || (previousOwnerUserId
       ? previousOwnerUserId !== result.user.serverUserId
-      : await hasLocalUserData();
+      : await hasLocalUserData());
 
     if (shouldClearLocalData) {
       await assertNoPendingLocalChanges("Нельзя сменить пользователя: на телефоне есть неотправленные отчеты или действия. Сначала выполните синхронизацию.");
@@ -69,6 +113,7 @@ export async function signIn(loginName: string, password: string) {
     await setStoredOwnerUserId(result.user.serverUserId);
     await setOfflineSession({
       userId: result.user.serverUserId,
+      contourId: currentContourId,
       fullName: result.user.fullName,
       lastOnlineLoginAt: new Date().toISOString(),
       expiresAt: result.refreshExpiresAt
@@ -101,15 +146,17 @@ export async function signIn(loginName: string, password: string) {
 }
 
 export async function restoreSessionWithRefreshToken() {
+  const previousSession = await getStoredSessionSnapshot();
   const previousOwnerUserId = await getStoredOwnerUserId();
+  const contourMismatch = Boolean(previousSession.ownerUserId && previousSession.offlineSession?.contourId !== currentContourId);
   const accessToken = await refreshStoredAccessToken();
   const bootstrap = await getBootstrap(accessToken);
   if (bootstrap.contourId !== currentContourId) {
     throw new Error(`Bootstrap относится к другому контуру (${bootstrap.contourId}). Локальные данные не изменены.`);
   }
-  const shouldClearLocalData = previousOwnerUserId
+  const shouldClearLocalData = contourMismatch || await hasUnscopedLocalData() || (previousOwnerUserId
     ? previousOwnerUserId !== bootstrap.user.serverUserId
-    : await hasLocalUserData();
+    : await hasLocalUserData());
 
   if (shouldClearLocalData) {
     await assertNoPendingLocalChanges("Нельзя восстановить другую сессию: на телефоне есть неотправленные отчеты или действия.");
@@ -136,9 +183,30 @@ export async function restoreSessionWithRefreshToken() {
 
 export async function signOut() {
   await assertNoPendingLocalChanges("Нельзя выйти из аккаунта: на телефоне есть неотправленные отчеты или действия. Сначала выполните синхронизацию.");
-  await logout().catch(() => undefined);
-  await clearTokens();
+  const ownerUserId = await getStoredOwnerUserId();
+  await enqueueLogoutIntent(ownerUserId);
+
+  let serverRevoked = false;
+  try {
+    await revokeServerSession();
+    serverRevoked = true;
+  } catch (error) {
+    if (error instanceof Error && isReauthenticationRequiredError(error.message)) {
+      serverRevoked = true;
+    }
+  }
+
+  if (serverRevoked) {
+    await completePendingLogoutIntents();
+    await clearTokens();
+  } else {
+    // Remove the active session locally, but retain the refresh token in
+    // SecureStore so the queued server-side revoke can be completed later.
+    await clearLocalSessionKeepingRefreshToken();
+  }
+
   await clearLocalUserData();
+  return serverRevoked;
 }
 
 async function assertNoPendingLocalChanges(message: string) {

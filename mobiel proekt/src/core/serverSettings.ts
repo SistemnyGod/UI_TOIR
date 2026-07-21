@@ -5,7 +5,6 @@ import { currentContourId, defaultEnvironment } from "@/core/environments";
 const serverBaseUrlKey = `patrol360.serverBaseUrl.${currentContourId}`;
 
 export const localLanServerBaseUrl = "http://192.168.2.194:5173";
-export const localLanFallbackServerBaseUrls = ["http://192.168.2.194:5173", "http://192.168.2.194"];
 export const defaultServerBaseUrl = defaultEnvironment.apiBaseUrl;
 
 export type MobileRuntimeConfig = {
@@ -21,7 +20,19 @@ export async function getServerBaseUrl() {
     return defaultServerBaseUrl;
   }
 
-  const normalizedValue = normalizeServerBaseUrl(storedValue);
+  let normalizedValue: string;
+  try {
+    normalizedValue = normalizeServerBaseUrl(storedValue);
+  } catch {
+    await SecureStore.deleteItemAsync(serverBaseUrlKey).catch(() => undefined);
+    return defaultServerBaseUrl;
+  }
+
+  if (!isAllowedServerBaseUrl(normalizedValue)) {
+    await SecureStore.deleteItemAsync(serverBaseUrlKey).catch(() => undefined);
+    return defaultServerBaseUrl;
+  }
+
   if (normalizedValue !== storedValue) {
     await SecureStore.setItemAsync(serverBaseUrlKey, normalizedValue).catch(() => undefined);
   }
@@ -34,11 +45,10 @@ export async function getServerCandidateBaseUrls(preferredBaseUrl?: string) {
   const candidates = [
     preferredBaseUrl,
     storedValue,
-    ...defaultEnvironment.allowedBaseUrls,
-    defaultServerBaseUrl
+    ...defaultEnvironment.allowedBaseUrls
   ];
 
-  return uniqueNormalizedUrls(candidates);
+  return uniqueNormalizedUrls(candidates).filter(isAllowedServerBaseUrl);
 }
 
 export async function getMobileRuntimeConfig(): Promise<MobileRuntimeConfig> {
@@ -52,6 +62,10 @@ export async function getMobileRuntimeConfig(): Promise<MobileRuntimeConfig> {
 
 export async function setServerBaseUrl(value: string) {
   const normalizedValue = normalizeServerBaseUrl(value);
+  if (!isAllowedServerBaseUrl(normalizedValue)) {
+    throw new Error(`Адрес сервера не разрешён для контура ${currentContourId}.`);
+  }
+
   await SecureStore.setItemAsync(serverBaseUrlKey, normalizedValue);
   return normalizedValue;
 }
@@ -62,8 +76,7 @@ export async function resetServerBaseUrl() {
 }
 
 export async function setLocalLanServerBaseUrl() {
-  await SecureStore.setItemAsync(serverBaseUrlKey, localLanServerBaseUrl);
-  return localLanServerBaseUrl;
+  return setServerBaseUrl(localLanServerBaseUrl);
 }
 
 function uniqueNormalizedUrls(values: (string | null | undefined)[]) {
@@ -84,7 +97,12 @@ function uniqueNormalizedUrls(values: (string | null | undefined)[]) {
     }
   }
 
-  return result.length > 0 ? result : [defaultServerBaseUrl];
+  return result;
+}
+
+export function isAllowedServerBaseUrl(value: string) {
+  const normalizedAllowedUrls = defaultEnvironment.allowedBaseUrls.map((allowedUrl) => normalizeServerBaseUrl(allowedUrl));
+  return normalizedAllowedUrls.includes(value);
 }
 
 export function normalizeServerBaseUrl(value: string) {

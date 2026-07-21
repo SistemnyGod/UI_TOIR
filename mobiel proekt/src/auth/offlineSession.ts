@@ -1,4 +1,5 @@
 export type OfflineSessionState = {
+  contourId?: string;
   userId: string;
   fullName: string;
   lastOnlineLoginAt: string;
@@ -8,9 +9,9 @@ export type OfflineSessionState = {
   requiresReenrollment?: boolean;
 };
 
-export function isOfflineSessionValid(session: OfflineSessionState) {
+export function isOfflineSessionValid(session: OfflineSessionState, expectedContourId?: string) {
   // Offline authorization belongs to the enrolled device and is not tied to
   // access/refresh token expiry. It ends only after explicit revocation or a
   // manual logout.
-  return !session.revokedAt;
+  return !session.revokedAt && (!expectedContourId || session.contourId === expectedContourId);
 }

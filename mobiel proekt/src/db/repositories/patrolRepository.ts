@@ -226,7 +226,7 @@ export async function takeRequestLocally(requestId: string) {
 
   const request = await getRequestBoardItem(requestId);
   if (!request) {
-    throw new Error("Р—Р°СЏРІРєР° РЅРµ Р·Р°РіСЂСѓР¶РµРЅР° РЅР° С‚РµР»РµС„РѕРЅ.");
+    throw new Error("Заявка не загружена на телефон.");
   }
 
   const assignmentId = Crypto.randomUUID();
@@ -309,7 +309,7 @@ export async function takeRequestLocally(requestId: string) {
       [assignmentId]
     );
     if ((snapshot?.count ?? 0) === 0) {
-      throw new Error("РњР°СЂС€СЂСѓС‚ РЅРµ Р·Р°РіСЂСѓР¶РµРЅ РЅР° С‚РµР»РµС„РѕРЅ.");
+      throw new Error("Маршрут не загружен на телефон.");
     }
 
     await tx.runAsync(
@@ -330,7 +330,7 @@ export async function takeRequestLocally(requestId: string) {
     eventType: "patrol.request.taken",
     entityType: "patrolAssignment",
     entityId: assignmentId,
-    message: "Р—Р°СЏРІРєР° РІР·СЏС‚Р° РІ СЂР°Р±РѕС‚Сѓ.",
+    message: "Заявка взята в работу.",
     payload: { requestId: request.requestId, routeId: request.routeId }
   }).catch(() => undefined);
 
@@ -360,7 +360,7 @@ export async function acceptRequestLocally(requestId: string) {
 
   const request = await getRequestBoardItem(requestId);
   if (!request) {
-    throw new Error("Р—Р°СЏРІРєР° РЅРµ Р·Р°РіСЂСѓР¶РµРЅР° РЅР° С‚РµР»РµС„РѕРЅ.");
+    throw new Error("Заявка не загружена на телефон.");
   }
 
   const assignmentId = Crypto.randomUUID();
@@ -440,11 +440,11 @@ export async function releaseAcceptedRequestLocally(assignmentId: string) {
   const ownerUserId = await requireOwnerUserId();
   const assignment = await getAssignmentById(assignmentId);
   if (!assignment) {
-    throw new Error("РќР°Р·РЅР°С‡РµРЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ РЅР° С‚РµР»РµС„РѕРЅРµ.");
+    throw new Error("Назначение не найдено на телефоне.");
   }
 
   if (assignment.status !== "accepted" || assignment.startedAtLocal) {
-    throw new Error("Р’РµСЂРЅСѓС‚СЊ РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ РїСЂРёРЅСЏС‚СѓСЋ Р·Р°СЏРІРєСѓ РґРѕ РЅР°С‡Р°Р»Р° РѕР±С…РѕРґР°.");
+    throw new Error("Вернуть можно только принятую заявку до начала обхода.");
   }
 
   const pendingRelease = await db.getFirstAsync<{ client_operation_id: string }>(
@@ -454,13 +454,14 @@ export async function releaseAcceptedRequestLocally(assignmentId: string) {
       WHERE owner_user_id = ?
         AND command_type = 'releasePatrolRequest'
         AND entity_local_id = ?
+        AND contour_id = ?
         AND status IN ('pending', 'sending', 'retryLater')
       LIMIT 1
     `,
-    [ownerUserId, assignmentId]
+    [ownerUserId, assignmentId, currentContourId]
   );
   if (pendingRelease) {
-    throw new Error("Р’РѕР·РІСЂР°С‚ Р·Р°СЏРІРєРё СѓР¶Рµ СЃРѕС…СЂР°РЅС‘РЅ Рё РѕР¶РёРґР°РµС‚ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ СЃРµСЂРІРµСЂР°.");
+    throw new Error("Возврат заявки уже сохранён и ожидает подтверждения сервера.");
   }
 
   const now = new Date().toISOString();
@@ -490,13 +491,14 @@ export async function releaseAcceptedRequestLocally(assignmentId: string) {
           WHERE owner_user_id = ?
             AND command_type = 'releasePatrolRequest'
             AND entity_local_id = ?
+            AND contour_id = ?
             AND status IN ('pending', 'sending', 'retryLater')
           LIMIT 1
         `,
-        [ownerUserId, assignment.assignmentId]
+        [ownerUserId, assignment.assignmentId, currentContourId]
       );
       if (releaseAlreadyQueued) {
-        throw new Error("Р’РѕР·РІСЂР°С‚ Р·Р°СЏРІРєРё СѓР¶Рµ СЃРѕС…СЂР°РЅС‘РЅ Рё РѕР¶РёРґР°РµС‚ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ СЃРµСЂРІРµСЂР°.");
+        throw new Error("Возврат заявки уже сохранён и ожидает подтверждения сервера.");
       }
 
       await insertOutboxCommandInTransaction(tx, command);
@@ -746,7 +748,7 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
     eventType: "patrol.nfc.scanned",
     entityType: "patrolPoint",
     entityId: point.pointId,
-    message: "NFC-РјРµС‚РєР° СЃС‡РёС‚Р°РЅР°.",
+    message: "NFC-метка считана.",
     payload: { assignmentId, nfcCode: normalizedNfcCode }
   }).catch(() => undefined);
 
@@ -991,12 +993,12 @@ export async function deferPoint(assignmentId: string, pointId: string, input: D
   await assertPointActionAllowed(assignmentId);
   const point = await getPointForFill(assignmentId, pointId);
   if (!point) {
-    throw new Error("РњРµС‚РєР° РЅРµ Р·Р°РіСЂСѓР¶РµРЅР° РЅР° С‚РµР»РµС„РѕРЅ.");
+    throw new Error("Метка не загружена на телефон.");
   }
 
   const selectedStatus = input.selectedStatus ?? (point.issueTypeId ? "issue" : null);
   const issueTypeId = selectedStatus === "issue"
-    ? input.issueTypeId?.trim() || point.issueTypeId || "РќРµРёСЃРїСЂР°РІРЅРѕСЃС‚СЊ"
+    ? input.issueTypeId?.trim() || point.issueTypeId || "Неисправность"
     : null;
 
   await upsertPointResult({
@@ -1007,7 +1009,7 @@ export async function deferPoint(assignmentId: string, pointId: string, input: D
     comment: input.comment ?? point.comment,
     issueTypeId,
     severity: null,
-    deferredReason: input.reason ?? "Р—Р°РїРѕР»РЅРёС‚СЊ РїРѕР·Р¶Рµ",
+    deferredReason: input.reason ?? "Заполнить позже",
     completedAtLocal: null,
     syncStatus: "pending",
     confirmationType: point.confirmationType ?? "manual",
@@ -1020,7 +1022,7 @@ export async function deferPoint(assignmentId: string, pointId: string, input: D
     eventType: "patrol.point.deferred",
     entityType: "patrolPoint",
     entityId: pointId,
-    message: "РњРµС‚РєР° РѕС‚Р»РѕР¶РµРЅР° РЅР° РїРѕС‚РѕРј.",
+    message: "Метка отложена на потом.",
     payload: { assignmentId, selectedStatus, photoCount: (input.photoClientFileIds ?? point.photoClientFileIds).length }
   }).catch(() => undefined);
 }
@@ -1030,7 +1032,7 @@ export async function skipPoint(assignmentId: string, pointId: string, input: Pi
   await assertPointActionAllowed(assignmentId);
   const point = await getPointForFill(assignmentId, pointId);
   if (!point) {
-    throw new Error("РњРµС‚РєР° РЅРµ Р·Р°РіСЂСѓР¶РµРЅР° РЅР° С‚РµР»РµС„РѕРЅ.");
+    throw new Error("Метка не загружена на телефон.");
   }
 
   const completedAtLocal = point.status === "skipped" && point.completedAtLocal ? point.completedAtLocal : new Date().toISOString();
@@ -1042,7 +1044,7 @@ export async function skipPoint(assignmentId: string, pointId: string, input: Pi
     comment: input.comment ?? point.comment,
     issueTypeId: null,
     severity: null,
-    deferredReason: "РњРµС‚РєР° РЅРµРґРѕСЃС‚СѓРїРЅР°",
+    deferredReason: "Метка недоступна",
     completedAtLocal,
     syncStatus: "pending",
     confirmationType: "manual",
@@ -1055,7 +1057,7 @@ export async function skipPoint(assignmentId: string, pointId: string, input: Pi
     eventType: "patrol.point.skipped",
     entityType: "patrolPoint",
     entityId: pointId,
-    message: "РњРµС‚РєР° РѕС‚РјРµС‡РµРЅР° РєР°Рє РЅРµРґРѕСЃС‚СѓРїРЅР°СЏ.",
+    message: "Метка отмечена как недоступная.",
     payload: { assignmentId, attachmentCount: (input.photoClientFileIds ?? point.photoClientFileIds).length }
   }).catch(() => undefined);
 }
@@ -1065,7 +1067,7 @@ export async function attachPhotoToPoint(assignmentId: string, pointId: string, 
   await assertPointActionAllowed(assignmentId);
   const point = await getPointForFill(assignmentId, pointId);
   if (!point) {
-    throw new Error("РњРµС‚РєР° РЅРµ Р·Р°РіСЂСѓР¶РµРЅР° РЅР° С‚РµР»РµС„РѕРЅ.");
+    throw new Error("Метка не загружена на телефон.");
   }
 
   const photoClientFileIds = Array.from(new Set([...point.photoClientFileIds, file.clientFileId]));
@@ -1097,7 +1099,7 @@ export async function attachPhotoToPoint(assignmentId: string, pointId: string, 
     eventType: file.mediaKind === "video" ? "patrol.video.added" : "patrol.photo.added",
     entityType: "patrolPoint",
     entityId: pointId,
-    message: file.mediaKind === "video" ? "Р’РёРґРµРѕ РґРѕР±Р°РІР»РµРЅРѕ Рє РјРµС‚РєРµ." : "Р¤РѕС‚Рѕ РґРѕР±Р°РІР»РµРЅРѕ Рє РјРµС‚РєРµ.",
+    message: file.mediaKind === "video" ? "Видео добавлено к метке." : "Фото добавлено к метке.",
     payload: { assignmentId, clientFileId: file.clientFileId }
   }).catch(() => undefined);
 }
@@ -1118,7 +1120,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: "route-version",
         pointName: assignment.routeName,
         orderIndex: 0,
-        reason: "РњР°СЂС€СЂСѓС‚ РѕР±РЅРѕРІР»РµРЅ РїРѕСЃР»Рµ РЅР°Р·РЅР°С‡РµРЅРёСЏ. РЎРёРЅС…СЂРѕРЅРёР·РёСЂСѓР№С‚Рµ РґР°РЅРЅС‹Рµ Рё РїРѕР»СѓС‡РёС‚Рµ Р°РєС‚СѓР°Р»СЊРЅС‹Р№ С‡РµРє-Р»РёСЃС‚."
+        reason: "Маршрут обновлен после назначения. Синхронизируйте данные и получите актуальный чек-лист."
       });
     }
   }
@@ -1128,7 +1130,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
       pointId: "route-empty",
       pointName: assignment.routeName,
       orderIndex: 0,
-      reason: "РњР°СЂС€СЂСѓС‚ РЅРµ Р·Р°РіСЂСѓР¶РµРЅ РЅР° С‚РµР»РµС„РѕРЅ"
+      reason: "Маршрут не загружен на телефон"
     });
   }
 
@@ -1138,7 +1140,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: point.pointId,
         pointName: point.name,
         orderIndex: point.orderIndex,
-        reason: "Р’С‹Р±РµСЂРёС‚Рµ СЃРѕСЃС‚РѕСЏРЅРёРµ РјРµС‚РєРё РїРѕСЃР»Рµ СЃРєР°РЅРёСЂРѕРІР°РЅРёСЏ"
+        reason: "Выберите состояние метки после сканирования"
       });
     }
 
@@ -1147,7 +1149,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: point.pointId,
         pointName: point.name,
         orderIndex: point.orderIndex,
-        reason: "РћР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РјРµС‚РєР° РЅРµ Р·Р°РїРѕР»РЅРµРЅР°"
+        reason: "Обязательная метка не заполнена"
       });
     }
 
@@ -1156,7 +1158,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: point.pointId,
         pointName: point.name,
         orderIndex: point.orderIndex,
-        reason: "РћР±СЏР·Р°С‚РµР»СЊРЅР°СЏ РјРµС‚РєР° РѕС‚Р»РѕР¶РµРЅР°"
+        reason: "Обязательная метка отложена"
       });
     }
 
@@ -1165,7 +1167,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: point.pointId,
         pointName: point.name,
         orderIndex: point.orderIndex,
-        reason: "Р”Р»СЏ РЅРµРёСЃРїСЂР°РІРЅРѕСЃС‚Рё РЅСѓР¶РµРЅ РєРѕРјРјРµРЅС‚Р°СЂРёР№"
+        reason: "Для неисправности нужен комментарий"
       });
     }
 
@@ -1174,7 +1176,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: point.pointId,
         pointName: point.name,
         orderIndex: point.orderIndex,
-        reason: "Р”Р»СЏ РЅРµРёСЃРїСЂР°РІРЅРѕСЃС‚Рё РЅСѓР¶РЅРѕ СѓРєР°Р·Р°С‚СЊ С‚РёРї"
+        reason: "Для неисправности нужно указать тип"
       });
     }
 
@@ -1183,7 +1185,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: point.pointId,
         pointName: point.name,
         orderIndex: point.orderIndex,
-        reason: "РЈРєР°Р¶РёС‚Рµ РїСЂРёС‡РёРЅСѓ РЅРµРґРѕСЃС‚СѓРїРЅРѕСЃС‚Рё РјРµС‚РєРё"
+        reason: "Укажите причину недоступности метки"
       });
     }
 
@@ -1192,7 +1194,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: point.pointId,
         pointName: point.name,
         orderIndex: point.orderIndex,
-        reason: "Р”Р»СЏ РјРµС‚РєРё С‚СЂРµР±СѓРµС‚СЃСЏ С„РѕС‚РѕС„РёРєСЃР°С†РёСЏ"
+        reason: "Для метки требуется фотофиксация"
       });
     }
   }
@@ -1213,7 +1215,7 @@ export async function completeAssignmentLocally(assignmentId: string) {
   await assertPointActionAllowed(assignmentId);
   const readiness = await getReportReadiness(assignmentId);
   if (!readiness.assignment || !readiness.ready) {
-    throw new Error("РћС‚С‡РµС‚ РµС‰Рµ РЅРµ РіРѕС‚РѕРІ Рє РѕС‚РїСЂР°РІРєРµ.");
+    throw new Error("Отчет еще не готов к отправке.");
   }
 
   const completedAtLocal = new Date().toISOString();
@@ -1302,7 +1304,7 @@ export async function completeAssignmentLocally(assignmentId: string) {
 
   const completionResult = completionResultRef.current;
   if (!completionResult) {
-    throw new Error("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РѕС‚С‡РµС‚ РІ РѕС‡РµСЂРµРґСЊ РѕС‚РїСЂР°РІРєРё.");
+    throw new Error("Не удалось сохранить отчет в очередь отправки.");
   }
 
   if (completionResult.alreadyQueued) {
@@ -1313,7 +1315,7 @@ export async function completeAssignmentLocally(assignmentId: string) {
     eventType: "patrol.report.completedLocal",
     entityType: "patrolAssignment",
     entityId: assignmentId,
-    message: "РћС‚С‡РµС‚ Р·Р°РІРµСЂС€РµРЅ Р»РѕРєР°Р»СЊРЅРѕ Рё РѕР¶РёРґР°РµС‚ РѕС‚РїСЂР°РІРєРё.",
+    message: "Отчет завершен локально и ожидает отправки.",
     payload: { photoCount, pointCount: readiness.progress.total }
   }).catch(() => undefined);
 
@@ -1367,7 +1369,7 @@ export async function getAssignmentById(assignmentId: string) {
         AND assignment.assignment_id = ?
       LIMIT 1
     `,
-    [ownerUserId, assignmentId]
+    [ownerUserId, assignmentId, currentContourId]
   );
 }
 
@@ -1381,11 +1383,11 @@ async function updateAssignmentLifecycleLocally(
   const ownerUserId = await requireOwnerUserId();
   const assignment = await getAssignmentById(assignmentId);
   if (!assignment) {
-    throw new Error("РќР°Р·РЅР°С‡РµРЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ РЅР° С‚РµР»РµС„РѕРЅРµ.");
+    throw new Error("Назначение не найдено на телефоне.");
   }
 
   if (commandType === "startPatrolAssignment" && !["accepted", "paused", "inProgress"].includes(assignment.status)) {
-    throw new Error("РќР°С‡Р°С‚СЊ РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ РїСЂРёРЅСЏС‚СѓСЋ РёР»Рё РїСЂРёРѕСЃС‚Р°РЅРѕРІР»РµРЅРЅСѓСЋ Р·Р°СЏРІРєСѓ.");
+    throw new Error("Начать можно только принятую или приостановленную заявку.");
   }
 
   if (commandType === "startPatrolAssignment" || commandType === "resumePatrolAssignment") {
@@ -1398,19 +1400,19 @@ async function updateAssignmentLifecycleLocally(
           AND status IN ('inProgress', 'paused')
         LIMIT 1
       `,
-      [ownerUserId, assignment.assignmentId]
+      [ownerUserId, assignment.assignmentId, currentContourId]
     );
     if (competing) {
-      throw new Error("РЎРЅР°С‡Р°Р»Р° Р·Р°РІРµСЂС€РёС‚Рµ РёР»Рё РїРµСЂРµРґР°Р№С‚Рµ С‚РµРєСѓС‰РёР№ РѕР±С…РѕРґ.");
+      throw new Error("Сначала завершите или передайте текущий обход.");
     }
   }
 
   if (commandType === "pausePatrolAssignment" && assignment.status !== "inProgress") {
-    throw new Error("РџСЂРёРѕСЃС‚Р°РЅРѕРІРёС‚СЊ РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ РЅР°С‡Р°С‚С‹Р№ РѕР±С…РѕРґ.");
+    throw new Error("Приостановить можно только начатый обход.");
   }
 
   if (commandType === "resumePatrolAssignment" && assignment.status !== "paused") {
-    throw new Error("РџСЂРѕРґРѕР»Р¶РёС‚СЊ РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ РїСЂРёРѕСЃС‚Р°РЅРѕРІР»РµРЅРЅС‹Р№ РѕР±С…РѕРґ.");
+    throw new Error("Продолжить можно только приостановленный обход.");
   }
 
   const now = new Date().toISOString();
@@ -1442,7 +1444,7 @@ async function updateAssignmentLifecycleLocally(
             AND assignment_id = ?
           LIMIT 1
         `,
-        [ownerUserId, assignment.assignmentId]
+        [ownerUserId, assignment.assignmentId, currentContourId]
       );
       if (!current) {
         throw new Error("Assignment is no longer available on this device.");
@@ -1455,13 +1457,14 @@ async function updateAssignmentLifecycleLocally(
           WHERE owner_user_id = ?
             AND command_type = 'releasePatrolRequest'
             AND entity_local_id = ?
+            AND contour_id = ?
             AND status IN ('pending', 'sending', 'retryLater')
           LIMIT 1
         `,
-        [ownerUserId, assignment.assignmentId]
+        [ownerUserId, assignment.assignmentId, currentContourId]
       );
       if (releasePending) {
-        throw new Error("Р—Р°СЏРІРєР° РѕР¶РёРґР°РµС‚ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ РІРѕР·РІСЂР°С‚Р° Рё РїРѕРєР° РЅРµРґРѕСЃС‚СѓРїРЅР° РґР»СЏ Р·Р°РїСѓСЃРєР°.");
+        throw new Error("Заявка ожидает подтверждения возврата и пока недоступна для запуска.");
       }
 
       if (commandType === "startPatrolAssignment"
@@ -1487,7 +1490,7 @@ async function updateAssignmentLifecycleLocally(
               AND status IN ('inProgress', 'paused')
             LIMIT 1
           `,
-          [ownerUserId, assignment.assignmentId]
+          [ownerUserId, assignment.assignmentId, currentContourId]
         );
         if (competing) {
           throw new Error("Finish or hand off the current patrol before starting another one.");
@@ -1566,7 +1569,7 @@ async function snapshotRoutePointsInTransaction(executor: SqlExecutor, assignmen
     [assignmentId]
   );
   if ((snapshot?.count ?? 0) === 0) {
-    throw new Error("РњР°СЂС€СЂСѓС‚ РЅРµ Р·Р°РіСЂСѓР¶РµРЅ РЅР° С‚РµР»РµС„РѕРЅ.");
+    throw new Error("Маршрут не загружен на телефон.");
   }
 }
 
@@ -1856,18 +1859,19 @@ async function getQueuedCompleteAssignmentCommand(executor: SqlExecutor, ownerUs
       WHERE owner_user_id = ?
         AND command_type = 'completePatrolAssignment'
         AND entity_local_id = ?
+        AND contour_id = ?
         AND status IN ('pending', 'sending', 'retryLater', 'accepted', 'duplicate')
       ORDER BY created_at_local DESC
       LIMIT 1
     `,
-    [ownerUserId, assignmentId]
+    [ownerUserId, assignmentId, currentContourId]
   );
 }
 
 async function requireOwnerUserId() {
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
-    throw new Error("Р’С‹РїРѕР»РЅРёС‚Рµ РІС…РѕРґ РІ РјРѕР±РёР»СЊРЅС‹Р№ Р°РєРєР°СѓРЅС‚.");
+    throw new Error("Выполните вход в мобильный аккаунт.");
   }
 
   return ownerUserId;
@@ -1876,19 +1880,19 @@ async function requireOwnerUserId() {
 async function assertPointActionAllowed(assignmentId: string) {
   const assignment = await getAssignmentById(assignmentId);
   if (!assignment) {
-    throw new Error("РќР°Р·РЅР°С‡РµРЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ РЅР° С‚РµР»РµС„РѕРЅРµ.");
+    throw new Error("Назначение не найдено на телефоне.");
   }
 
   if (assignment.status === "cancelled" || assignment.status === "cancelledServer") {
-    throw new Error("Р—Р°СЏРІРєР° РѕС‚РјРµРЅРµРЅР° РґРёСЃРїРµС‚С‡РµСЂРѕРј. Р”РµР№СЃС‚РІРёСЏ РїРѕ РѕР±С…РѕРґСѓ Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅС‹.");
+    throw new Error("Заявка отменена диспетчером. Действия по обходу заблокированы.");
   }
 
   if (["completed", "completedServer", "completedLocal"].includes(assignment.status)) {
-    throw new Error("РћР±С…РѕРґ СѓР¶Рµ Р·Р°РІРµСЂС€С‘РЅ. РР·РјРµРЅРµРЅРёРµ С‚РѕС‡РµРє РЅРµРґРѕСЃС‚СѓРїРЅРѕ.");
+    throw new Error("Обход уже завершён. Изменение точек недоступно.");
   }
 
   if (assignment.status !== "inProgress") {
-    throw new Error("Р”РµР№СЃС‚РІРёСЏ СЃ РјРµС‚РєР°РјРё РґРѕСЃС‚СѓРїРЅС‹ С‚РѕР»СЊРєРѕ РїРѕСЃР»Рµ РЅР°С‡Р°Р»Р° РѕР±С…РѕРґР°.");
+    throw new Error("Действия с метками доступны только после начала обхода.");
   }
 }
 
@@ -1909,12 +1913,12 @@ async function savePointResult({
   await assertPointActionAllowed(assignmentId);
   const point = await getPointForFill(assignmentId, pointId);
   if (!point) {
-    throw new Error("РњРµС‚РєР° РЅРµ Р·Р°РіСЂСѓР¶РµРЅР° РЅР° С‚РµР»РµС„РѕРЅ.");
+    throw new Error("Метка не загружена на телефон.");
   }
 
   const completedAtLocal = new Date().toISOString();
   if (point.confirmationType !== "nfc" && point.confirmationType !== "qr" && !comment.trim()) {
-    throw new Error("Р”Р»СЏ СЂСѓС‡РЅРѕРіРѕ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ СѓРєР°Р¶РёС‚Рµ РїСЂРёС‡РёРЅСѓ, РїРѕС‡РµРјСѓ РјРµС‚РєСѓ РЅРµ СѓРґР°Р»РѕСЃСЊ РѕС‚СЃРєР°РЅРёСЂРѕРІР°С‚СЊ.");
+    throw new Error("Для ручного подтверждения укажите причину, почему метку не удалось отсканировать.");
   }
 
   const commandType = status === "issue" ? "markPatrolPointIssue" : "markPatrolPointOk";
@@ -1967,7 +1971,7 @@ async function savePointResult({
     eventType: "patrol.point.saved",
     entityType: "patrolPoint",
     entityId: pointId,
-    message: status === "issue" ? "РњРµС‚РєР° СЃРѕС…СЂР°РЅРµРЅР° РєР°Рє РЅРµРёСЃРїСЂР°РІРЅР°СЏ." : "РњРµС‚РєР° СЃРѕС…СЂР°РЅРµРЅР° РєР°Рє РёСЃРїСЂР°РІРЅР°СЏ.",
+    message: status === "issue" ? "Метка сохранена как неисправная." : "Метка сохранена как исправная.",
     payload: { assignmentId, status, photoCount: point.photoClientFileIds.length }
   }).catch(() => undefined);
 }

@@ -59,15 +59,25 @@ internal sealed partial class EfMobileAppService
         var deviceId = NormalizeOptionalText(request.DeviceId);
         var now = DateTimeOffset.UtcNow;
         var previousSessions = dbContext.MobileAccountSessions
-            .Where(item => item.MobileAccountId == account.Id
-                && item.DeviceId == deviceId
-                && item.RevokedAt == null)
+            .Include(item => item.MobileAccount)
+            .Where(item => item.DeviceId == deviceId && item.RevokedAt == null)
             .ToList();
         foreach (var previousSession in previousSessions)
         {
             previousSession.RevokedAt = now;
             previousSession.PushTokenRevokedAt = now;
             previousSession.Status = "Заменена";
+            if (previousSession.MobileAccount is not null)
+            {
+                previousSession.MobileAccount.Session = "Офлайн";
+                if (previousSession.MobileAccountId != account.Id)
+                {
+                    AddMobileSessionAuditEvent(
+                        previousSession.MobileAccount,
+                        "mobile_account.session_replaced",
+                        $"Сессия заменена повторным входом на устройстве {deviceId}.");
+                }
+            }
         }
 
         if (previousSessions.Count > 0)

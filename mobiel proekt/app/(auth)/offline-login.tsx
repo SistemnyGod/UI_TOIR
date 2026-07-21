@@ -6,6 +6,7 @@ import { ActivityIndicator, StyleSheet, Text } from "react-native";
 import { isOfflineSessionValid } from "@/auth/offlineSession";
 import { consumePendingSessionRoute, markSessionUnlocked } from "@/auth/sessionGateState";
 import { getOfflineSession, getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { currentContourId } from "@/core/environments";
 import { getLocalUserProfile } from "@/db/repositories/bootstrapRepository";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -30,7 +31,7 @@ export default function OfflineLoginRoute() {
     void Promise.all([getStoredOwnerUserId(), getOfflineSession()])
       .then(([ownerUserId, offlineSession]) => {
         setRequiresReenrollment(Boolean(offlineSession?.requiresReenrollment));
-        if (!ownerUserId || !offlineSession || offlineSession.userId !== ownerUserId || !isOfflineSessionValid(offlineSession)) {
+        if (!ownerUserId || !offlineSession || offlineSession.userId !== ownerUserId || !isOfflineSessionValid(offlineSession, currentContourId)) {
           return null;
         }
 

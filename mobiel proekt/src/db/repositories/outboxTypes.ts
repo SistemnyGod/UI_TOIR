@@ -2,6 +2,7 @@ import { MobileEntityType, OutboxCommandStatus, OutboxCommandType } from "@/doma
 
 export type SyncQueueCommandItem = {
   clientOperationId: string;
+  contourId: string;
   commandType: OutboxCommandType;
   entityType: MobileEntityType;
   entityLocalId: string | null;

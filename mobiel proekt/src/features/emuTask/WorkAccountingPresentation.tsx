@@ -5,16 +5,16 @@ import { WorkItemDto, WorkTaskStatus } from "@/domain/emu/emuTypes";
 
 export function statusLabel(status: WorkTaskStatus) {
   const labels: Record<WorkTaskStatus, string> = {
-    available: "Р”РѕСЃС‚СѓРїРЅР°",
-    assigned: "РќР°Р·РЅР°С‡РµРЅР°",
-    new: "РќРѕРІР°СЏ",
-    accepted: "РќР°Р·РЅР°С‡РµРЅР°",
-    inProgress: "Р’ СЂР°Р±РѕС‚Рµ",
-    paused: "РџР°СѓР·Р°",
-    completedLocal: "Р—Р°РІРµСЂС€РµРЅР° Р»РѕРєР°Р»СЊРЅРѕ",
-    completedServer: "Р—Р°РІРµСЂС€РµРЅР°",
-    cancelled: "РћС‚РјРµРЅРµРЅР°",
-    conflict: "РљРѕРЅС„Р»РёРєС‚"
+    available: "Доступна",
+    assigned: "Назначена",
+    new: "Новая",
+    accepted: "Назначена",
+    inProgress: "В работе",
+    paused: "Пауза",
+    completedLocal: "Завершена локально",
+    completedServer: "Завершена",
+    cancelled: "Отменена",
+    conflict: "Конфликт"
   };
 
   return labels[status] ?? status;
@@ -24,7 +24,7 @@ export function formatParticipants(task: WorkItemDto) {
   const participants = task.actualParticipants.length > 0 ? task.actualParticipants : task.assignedEmployees;
   return participants.length > 0
     ? participants.map((participant) => formatShortName(participant.fullName)).join(", ")
-    : "РЅРµ СѓРєР°Р·Р°РЅС‹";
+    : "не указаны";
 }
 
 export function formatWorkAttachments(task: WorkItemDto) {
@@ -34,11 +34,11 @@ export function formatWorkAttachments(task: WorkItemDto) {
   const videoCount = task.localVideoCount ?? task.attachments?.filter((item) => item.contentType.startsWith("video/")).length ?? 0;
   const total = Math.max(serverCount, localCount);
   if (total === 0) {
-    return "Р’Р»РѕР¶РµРЅРёСЏ: РЅРµС‚";
+    return "Вложения: нет";
   }
 
-  const pendingLabel = localCount > serverCount ? `, РѕР¶РёРґР°СЋС‚ РѕС‚РїСЂР°РІРєРё: ${localCount - serverCount}` : "";
-  return `Р’Р»РѕР¶РµРЅРёСЏ: ${total}. Р¤РѕС‚Рѕ: ${photoCount}, РІРёРґРµРѕ: ${videoCount}${pendingLabel}`;
+  const pendingLabel = localCount > serverCount ? `, ожидают отправки: ${localCount - serverCount}` : "";
+  return `Вложения: ${total}. Фото: ${photoCount}, видео: ${videoCount}${pendingLabel}`;
 }
 
 export function statusTone(status: WorkTaskStatus) {
@@ -56,12 +56,12 @@ export function statusTone(status: WorkTaskStatus) {
 
 export function remarkStatusLabel(status: ShiftRemark["status"]) {
   if (status === "accepted" || status === "duplicate") {
-    return "РћС‚РїСЂР°РІР»РµРЅРѕ";
+    return "Отправлено";
   }
   if (status === "rejected" || status === "conflict") {
-    return "РћС€РёР±РєР°";
+    return "Ошибка";
   }
-  return "РћР¶РёРґР°РµС‚";
+  return "Ожидает";
 }
 
 export function remarkStatusTone(status: ShiftRemark["status"]) {
@@ -76,7 +76,7 @@ export function remarkStatusTone(status: ShiftRemark["status"]) {
 
 export function formatShortName(fullName: string | null | undefined) {
   if (!fullName?.trim()) {
-    return "РЅРµ СѓРєР°Р·Р°РЅ";
+    return "не указан";
   }
 
   const parts = fullName.trim().split(/\s+/).filter(Boolean);
@@ -95,7 +95,7 @@ export function formatShortName(fullName: string | null | undefined) {
 
 export function formatDateTime(value: string | null) {
   if (!value) {
-    return "Р”Р°С‚Р° РЅРµ СѓРєР°Р·Р°РЅР°";
+    return "Дата не указана";
   }
 
   return new Intl.DateTimeFormat("ru-RU", {

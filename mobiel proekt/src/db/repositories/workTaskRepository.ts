@@ -1,5 +1,6 @@
 import * as Crypto from "expo-crypto";
 
+import { currentContourId } from "@/core/environments";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getDatabase } from "@/db/database";
 import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
@@ -18,7 +19,7 @@ export async function saveWorkItems(items: WorkItemDto[]) {
       const placeholders = itemIds.map(() => "?").join(", ");
       await tx.runAsync(
         `DELETE FROM work_tasks WHERE owner_user_id = ? AND sync_status = 'synced' AND task_id NOT IN (${placeholders})`,
-        [ownerUserId, ...itemIds]
+        [ownerUserId, currentContourId, ...itemIds]
       );
     }
 
@@ -148,10 +149,11 @@ export async function saveWorkTasks(tasks: WorkTaskDto[]) {
           ON outbox_commands.entity_local_id = work_tasks.task_id
          AND outbox_commands.command_type IN ('createWorkTask', 'updateWorkTask', 'pauseWorkTask', 'resumeWorkTask', 'completeWorkTask')
          AND outbox_commands.status IN ('pending', 'sending', 'retryLater')
-        WHERE work_tasks.owner_user_id = ?
+         AND outbox_commands.contour_id = ?
+         WHERE work_tasks.owner_user_id = ?
         ORDER BY outbox_commands.created_at_local ASC
       `,
-      [ownerUserId]
+      [currentContourId, ownerUserId]
     );
     const pendingByTaskId = new Map(pendingActions.map((item) => [item.task_id, item]));
     const serverTaskIds = tasks.map((task) => task.taskId);
@@ -169,9 +171,10 @@ export async function saveWorkTasks(tasks: WorkTaskDto[]) {
               WHERE outbox_commands.entity_local_id = work_tasks.task_id
                 AND outbox_commands.command_type IN ('createWorkTask', 'updateWorkTask', 'pauseWorkTask', 'resumeWorkTask', 'completeWorkTask')
                 AND outbox_commands.status IN ('pending', 'sending', 'retryLater')
+         AND outbox_commands.contour_id = ?
             )
         `,
-        [ownerUserId, ...serverTaskIds]
+        [ownerUserId, ...serverTaskIds, currentContourId]
       );
     } else {
       await tx.runAsync(
@@ -184,9 +187,10 @@ export async function saveWorkTasks(tasks: WorkTaskDto[]) {
               WHERE outbox_commands.entity_local_id = work_tasks.task_id
                 AND outbox_commands.command_type IN ('createWorkTask', 'updateWorkTask', 'pauseWorkTask', 'resumeWorkTask', 'completeWorkTask')
                 AND outbox_commands.status IN ('pending', 'sending', 'retryLater')
+         AND outbox_commands.contour_id = ?
             )
         `,
-        [ownerUserId]
+        [ownerUserId, currentContourId]
       );
     }
 
@@ -319,7 +323,7 @@ export async function createWorkTaskLocally(input: CreateWorkTaskInput) {
   const createdAtLocal = new Date().toISOString();
   const title = input.taskDescription.trim();
   if (!title) {
-    throw new Error("Р—Р°РїРѕР»РЅРёС‚Рµ Р·Р°РґР°С‡Сѓ.");
+    throw new Error("Заполните задачу.");
   }
 
   const db = await getDatabase();
@@ -380,7 +384,7 @@ export async function createWorkTaskLocally(input: CreateWorkTaskInput) {
 
 export async function startPlannedWorkLocally(item: WorkItemDto, employee: MobileEmployeeDto) {
   if (item.kind !== "planTask" || !item.planTaskId) {
-    throw new Error("РџР»Р°РЅРѕРІР°СЏ СЂР°Р±РѕС‚Р° РЅРµРґРѕСЃС‚СѓРїРЅР° РґР»СЏ Р·Р°РїСѓСЃРєР°.");
+    throw new Error("Плановая работа недоступна для запуска.");
   }
 
   const ownerUserId = await requireOwnerUserId();
@@ -413,7 +417,7 @@ export async function startPlannedWorkLocally(item: WorkItemDto, employee: Mobil
         taskId, ownerUserId, item.title, startedAtLocal, item.sectionId, item.sectionName,
         employee.employeeId, employee.fullName, startedAtLocal, taskId, item.planTaskId,
         item.description, item.approvalStatus, JSON.stringify(item.assignedEmployees),
-        JSON.stringify([{ employeeId: employee.employeeId, fullName: employee.fullName, status: "Р Р°Р±РѕС‚Р°РµС‚", startedAt: startedAtLocal, finishedAt: null, isCurrentMobileEmployee: true }]),
+        JSON.stringify([{ employeeId: employee.employeeId, fullName: employee.fullName, status: "Работает", startedAt: startedAtLocal, finishedAt: null, isCurrentMobileEmployee: true }]),
         JSON.stringify({ canStart: false, canJoin: false, canReplace: false, canPause: true, canResume: false, canComplete: true })
       ]
     );
@@ -422,7 +426,7 @@ export async function startPlannedWorkLocally(item: WorkItemDto, employee: Mobil
 }
 
 export async function joinWorkTaskLocally(item: WorkItemDto, employee: MobileEmployeeDto, comment: string) {
-  await enqueueParticipantChange(item, employee, "joinWorkTask", { comment: comment.trim() || "РџСЂРёСЃРѕРµРґРёРЅРµРЅРёРµ Рє СЂР°Р±РѕС‚Рµ" });
+  await enqueueParticipantChange(item, employee, "joinWorkTask", { comment: comment.trim() || "Присоединение к работе" });
 }
 
 export async function replaceWorkTaskParticipantLocally(
@@ -432,7 +436,7 @@ export async function replaceWorkTaskParticipantLocally(
   reason: string
 ) {
   if (!reason.trim()) {
-    throw new Error("РЈРєР°Р¶РёС‚Рµ РїСЂРёС‡РёРЅСѓ Р·Р°РјРµРЅС‹ РёСЃРїРѕР»РЅРёС‚РµР»СЏ.");
+    throw new Error("Укажите причину замены исполнителя.");
   }
   await enqueueParticipantChange(item, employee, "replaceWorkTaskParticipant", {
     previousEmployeeId,
@@ -475,7 +479,7 @@ export async function updateWorkTaskLocally(input: UpdateWorkTaskInput) {
   const updatedAtLocal = new Date().toISOString();
   const title = input.taskDescription.trim();
   if (!title) {
-    throw new Error("Р—Р°РїРѕР»РЅРёС‚Рµ Р·Р°РґР°С‡Сѓ.");
+    throw new Error("Заполните задачу.");
   }
 
   const db = await getDatabase();
@@ -588,7 +592,7 @@ export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: 
 
   const comment = resultComment.trim();
   if (!comment) {
-    throw new Error("Р—Р°РїРѕР»РЅРёС‚Рµ РєРѕРјРјРµРЅС‚Р°СЂРёР№ РґР»СЏ Р·Р°РІРµСЂС€РµРЅРёСЏ СЂР°Р±РѕС‚С‹.");
+    throw new Error("Заполните комментарий для завершения работы.");
   }
 
   const completedAtLocal = new Date().toISOString();
@@ -635,7 +639,7 @@ export async function attachMediaToWorkTask(workTaskId: string, file: LocalMobil
       [workTaskId, ownerUserId]
     );
     if (!task) {
-      throw new Error("Р Р°Р±РѕС‚Р° РЅРµ РЅР°Р№РґРµРЅР° РЅР° С‚РµР»РµС„РѕРЅРµ.");
+      throw new Error("Работа не найдена на телефоне.");
     }
 
     await insertLocalFileInTransaction(tx, { ...file, status: "queued", workTaskId });
@@ -645,7 +649,7 @@ export async function attachMediaToWorkTask(workTaskId: string, file: LocalMobil
 async function requireOwnerUserId() {
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
-    throw new Error("РќСѓР¶РЅРѕ РІРѕР№С‚Рё РІ РјРѕР±РёР»СЊРЅС‹Р№ Р°РєРєР°СѓРЅС‚.");
+    throw new Error("Нужно войти в мобильный аккаунт.");
   }
 
   return ownerUserId;

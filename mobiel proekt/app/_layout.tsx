@@ -14,6 +14,7 @@ import { isSessionUnlocked, setPendingSessionRoute } from "@/auth/sessionGateSta
 import { ThemeProvider, useAppTheme } from "@/features/settings/themePreference";
 import { registerPushNotifications, refreshPushRegistrationIfAllowed, syncMobileNotifications, subscribeToMobilePushEvents } from "@/services/notificationService";
 import { installMobileErrorReporter, logMobileError } from "@/services/mobileErrorReporter";
+import { sanitizeDiagnosticMessage } from "@/services/diagnosticReportPolicy";
 import { registerBackgroundSyncTask } from "@/sync/backgroundSyncTask";
 import { registerBackgroundNotificationTask } from "@/services/backgroundNotificationTask";
 import { requestMobileDataRefresh, subscribeToNetworkSync, triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
@@ -94,6 +95,8 @@ export default function RootLayout() {
   if (bootstrapError) {
     return (
       <BootstrapFailureScreen
+        attempt={bootstrapAttempt + 1}
+        error={bootstrapError}
         onRetry={() => {
           setIsReady(false);
           setBootstrapError(null);
@@ -105,9 +108,13 @@ export default function RootLayout() {
 
   if (!isReady) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator size="large" />
-      </View>
+      <>
+        <StatusBar style="dark" />
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.loadingText}>Подготавливаем защищённое хранилище…</Text>
+        </View>
+      </>
     );
   }
 
@@ -124,22 +131,52 @@ export default function RootLayout() {
   );
 }
 
-function BootstrapFailureScreen({ onRetry }: { onRetry: () => void }) {
+function BootstrapFailureScreen({
+  attempt,
+  error,
+  onRetry
+}: {
+  attempt: number;
+  error: unknown;
+  onRetry: () => void;
+}) {
+  const technicalMessage = bootstrapErrorMessage(error);
+
   return (
-    <View style={styles.failureScreen}>
-      <Text style={styles.failureTitle}>Не удалось подготовить приложение</Text>
+    <>
+      <StatusBar style="dark" />
+      <View style={styles.failureScreen}>
+      <Text accessibilityRole="header" style={styles.failureTitle}>Не удалось подготовить приложение</Text>
       <Text style={styles.failureMessage}>
         Локальное хранилище не инициализировано. Рабочие данные не изменены. Повторите запуск или обратитесь к администратору.
       </Text>
+      <Text selectable style={styles.failureCode}>Код: P360-LOCAL-STORAGE · попытка {attempt}</Text>
+      {technicalMessage ? <Text selectable style={styles.failureDetails}>{technicalMessage}</Text> : null}
       <Pressable
         accessibilityRole="button"
+        accessibilityHint="Повторно открыть защищённое локальное хранилище"
         onPress={onRetry}
         style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}
       >
         <Text style={styles.retryButtonText}>Повторить</Text>
       </Pressable>
-    </View>
+      <Text style={styles.failureSupport}>Если ошибка повторяется, сообщите администратору код и текст выше.</Text>
+      </View>
+    </>
   );
+}
+
+function bootstrapErrorMessage(error: unknown) {
+  const messages: string[] = [];
+  let current = error;
+  for (let depth = 0; depth < 3 && current instanceof Error; depth += 1) {
+    const message = sanitizeDiagnosticMessage(current.message);
+    if (message && !messages.includes(message)) {
+      messages.push(message);
+    }
+    current = current.cause;
+  }
+  return messages.join(" Причина: ");
 }
 
 function openNotificationTarget(response: Notifications.NotificationResponse) {
@@ -177,6 +214,11 @@ function RootStack() {
 }
 
 const styles = StyleSheet.create({
+  loadingText: {
+    color: "#53627b",
+    fontSize: 14,
+    marginTop: 14
+  },
   failureScreen: {
     alignItems: "center",
     backgroundColor: "#f4f7fb",
@@ -198,6 +240,21 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     textAlign: "center"
   },
+  failureCode: {
+    color: "#14233d",
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 16,
+    textAlign: "center"
+  },
+  failureDetails: {
+    color: "#53627b",
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 8,
+    maxWidth: 420,
+    textAlign: "center"
+  },
   retryButton: {
     backgroundColor: "#1769e0",
     borderRadius: 12,
@@ -213,6 +270,14 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 15,
     fontWeight: "800",
+    textAlign: "center"
+  },
+  failureSupport: {
+    color: "#53627b",
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 14,
+    maxWidth: 360,
     textAlign: "center"
   }
 });

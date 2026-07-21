@@ -8,7 +8,7 @@ Generated EF migration snapshots and designer files are excluded from this plan.
 | --- | ---: | ---: | --- |
 | `apps/web/src/styles.css` | 28,029 | below 5,000 | shared shell/tokens only; feature CSS moves to feature-owned entrypoints |
 | `libs/infrastructure/Persistence/Patrol360DbContext.cs` | 2,274 | below 400 | DbSets and `OnModelCreating`; mappings move to domain `IEntityTypeConfiguration` classes |
-| `apps/web/src/hooks/useEmuWorkspace.ts` | 2,222 | below 650 | orchestration hook only; local engine, reports, selectors and mutations move out |
+| `apps/web/src/hooks/useEmuWorkspace.ts` | 2,031 | below 650 | orchestration hook only; local engine, reports, selectors and mutations move out |
 | `apps/web/src/repositories/mockInventoryRepository.ts` | 2,114 | below 800 | split mock state, catalog, PPE, custody and reports adapters |
 | `apps/web/src/features/perco/PercoIntegrationScreen.tsx` | 2,040 | below 800 | screen composition plus feature hooks and tab components |
 | `apps/web/src/features/patrol/AssignmentScreen.tsx` | 2,016 | below 800 | screen composition plus form, board and modal modules |

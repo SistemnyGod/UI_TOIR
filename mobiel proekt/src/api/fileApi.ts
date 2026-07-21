@@ -1,11 +1,13 @@
 import * as FileSystem from "expo-file-system/legacy";
 
 import { refreshStoredAccessToken } from "@/api/httpClient";
+import { probeServerHealth } from "@/api/serverHealthApi";
 import { photoUploadTimeoutMs, serverUnavailableMessage, videoUploadTimeoutMs, withTimeout } from "@/api/networkTimeout";
 import { shouldTryNextMobileServer } from "@/api/serverFailoverPolicy";
 import { getAccessToken } from "@/auth/tokenStorage";
 import { getMobileRuntimeConfig, getServerCandidateBaseUrls, setServerBaseUrl } from "@/core/serverSettings";
 import { LocalMobileFile, MobileFileUploadResponse } from "@/domain/files/fileTypes";
+import { currentContourId } from "@/core/environments";
 
 const maxPhotoBytes = 6 * 1024 * 1024;
 const maxVideoBytes = 25 * 1024 * 1024;
@@ -57,6 +59,9 @@ function validateFileUploadResponse(value: unknown, expectedClientFileId: string
 export const uploadPatrolPhoto = uploadMobileFile;
 
 async function validateMobileFileBeforeUpload(file: LocalMobileFile) {
+  if (file.contourId && file.contourId !== currentContourId) {
+    throw new Error(`Вложение относится к другому серверному контуру (${file.contourId}) и не будет отправлено.`);
+  }
   const hasPatrolPointScope = Boolean(file.assignmentId && file.pointId);
   const hasRemarkScope = Boolean(file.remarkId);
   const hasWorkTaskScope = Boolean(file.workTaskId);
@@ -100,6 +105,12 @@ async function uploadFileWithFailover(
 
   for (const apiBaseUrl of apiBaseUrls) {
     try {
+      const health = await probeServerHealth(apiBaseUrl, contourId);
+      if (!health.ok) {
+        lastError = new Error(health.message ?? "Сервер не прошёл проверку контура: " + apiBaseUrl);
+        continue;
+      }
+
       const result = await uploadFileWithToken(apiBaseUrl, syncProtocolVersion, contourId, file, token);
       if (shouldTryNextMobileServer(result.status, null, Boolean(result.body))
           && apiBaseUrl !== apiBaseUrls[apiBaseUrls.length - 1]) {
@@ -142,6 +153,7 @@ async function uploadFileWithToken(
           Accept: "application/json",
           "X-Mobile-Sync-Protocol": syncProtocolVersion,
           "X-Patrol360-Client": "mobile-app",
+          "X-Patrol360-Contour": contourId,
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
         httpMethod: "POST",

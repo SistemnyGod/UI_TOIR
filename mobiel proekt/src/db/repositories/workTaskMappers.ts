@@ -91,7 +91,7 @@ export function mapWorkItemRow(row: WorkTaskRow): WorkItemDto {
     title: row.title,
     description: row.description ?? row.title,
     sectionId: row.section_id,
-    sectionName: row.section_name ?? "Р‘РµР· СѓС‡Р°СЃС‚РєР°",
+    sectionName: row.section_name ?? "Без участка",
     plannedAt: row.planned_at,
     status: row.status,
     approvalStatus: row.approval_status ?? "",

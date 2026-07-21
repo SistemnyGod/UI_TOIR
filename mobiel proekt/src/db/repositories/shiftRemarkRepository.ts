@@ -146,12 +146,13 @@ export async function attachMediaToShiftRemark(remarkId: string, file: LocalMobi
       SELECT payload_json
       FROM outbox_commands
       WHERE entity_local_id = ?
+        AND contour_id = ?
         AND command_type = 'createShiftRemark'
         AND status IN ('pending', 'retryLater')
       ORDER BY created_at_local DESC
       LIMIT 1
     `,
-    [remarkId]
+    [remarkId, currentContourId]
   );
   const nextPayload = {
     ...safeParseRecord(outboxRow?.payload_json),
@@ -180,11 +181,13 @@ export async function attachMediaToShiftRemark(remarkId: string, file: LocalMobi
             UPDATE outbox_commands
             SET payload_json = ?,
                 updated_at_local = ?
-            WHERE entity_local_id = ?
+            WHERE owner_user_id = ?
+        AND contour_id = ?
+              AND entity_local_id = ?
               AND command_type = 'createShiftRemark'
               AND status IN ('pending', 'retryLater')
           `,
-          [JSON.stringify(nextPayload), createdAtLocal, remarkId]
+          [JSON.stringify(nextPayload), createdAtLocal, ownerUserId, currentContourId, remarkId]
         );
       }
 
