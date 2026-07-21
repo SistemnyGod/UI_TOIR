@@ -44,6 +44,7 @@ export type MobileEntityType =
 export type OutboxCommand = {
   clientOperationId: string;
   ownerUserId: string;
+  contourId?: string;
   commandType: OutboxCommandType;
   entityType: MobileEntityType;
   entityLocalId?: string | null;

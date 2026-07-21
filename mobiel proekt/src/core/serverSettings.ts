@@ -1,8 +1,8 @@
 import * as SecureStore from "expo-secure-store";
 
-import { defaultEnvironment } from "@/core/environments";
+import { currentContourId, defaultEnvironment } from "@/core/environments";
 
-const serverBaseUrlKey = "patrol360.serverBaseUrl";
+const serverBaseUrlKey = `patrol360.serverBaseUrl.${currentContourId}`;
 
 export const localLanServerBaseUrl = "http://192.168.2.194:5173";
 export const localLanFallbackServerBaseUrls = ["http://192.168.2.194:5173", "http://192.168.2.194"];
@@ -10,6 +10,8 @@ export const defaultServerBaseUrl = defaultEnvironment.apiBaseUrl;
 
 export type MobileRuntimeConfig = {
   apiBaseUrl: string;
+  contourId: string;
+  allowedBaseUrls: string[];
   syncProtocolVersion: "1.0";
 };
 
@@ -32,7 +34,7 @@ export async function getServerCandidateBaseUrls(preferredBaseUrl?: string) {
   const candidates = [
     preferredBaseUrl,
     storedValue,
-    ...localLanFallbackServerBaseUrls,
+    ...defaultEnvironment.allowedBaseUrls,
     defaultServerBaseUrl
   ];
 
@@ -42,6 +44,8 @@ export async function getServerCandidateBaseUrls(preferredBaseUrl?: string) {
 export async function getMobileRuntimeConfig(): Promise<MobileRuntimeConfig> {
   return {
     apiBaseUrl: await getServerBaseUrl(),
+    contourId: currentContourId,
+    allowedBaseUrls: defaultEnvironment.allowedBaseUrls,
     syncProtocolVersion: defaultEnvironment.syncProtocolVersion
   };
 }
@@ -76,11 +80,11 @@ function uniqueNormalizedUrls(values: (string | null | undefined)[]) {
         result.push(normalizedValue);
       }
     } catch {
-      // Invalid saved values are ignored so they cannot block local failover.
+      // Invalid saved values are ignored and cannot become an API target.
     }
   }
 
-  return result.length > 0 ? result : [localLanServerBaseUrl];
+  return result.length > 0 ? result : [defaultServerBaseUrl];
 }
 
 export function normalizeServerBaseUrl(value: string) {

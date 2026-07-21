@@ -30,6 +30,15 @@ internal sealed class MobileAccountSessionEntity
 
     public string RefreshTokenHash { get; set; } = string.Empty;
 
+    public string PreviousRefreshTokenHash { get; set; } = string.Empty;
+
+    public string PreviousAccessTokenProtected { get; set; } = string.Empty;
+
+    public string PreviousRefreshTokenProtected { get; set; } = string.Empty;
+    public DateTimeOffset? PreviousRefreshTokenValidUntil { get; set; }
+
+    public int RefreshGeneration { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset ExpiresAt { get; set; }

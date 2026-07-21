@@ -1,3 +1,4 @@
+import { currentContourId } from "@/core/environments";
 import { getDatabase } from "@/db/database";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { updatePendingCompleteReportBaseRevisionInTransaction } from "@/db/repositories/outboxSql";
@@ -15,6 +16,7 @@ export async function insertOutboxCommand(command: OutboxCommand) {
       INSERT INTO outbox_commands (
         client_operation_id,
         owner_user_id,
+        contour_id,
         command_type,
         entity_type,
         entity_local_id,
@@ -25,11 +27,12 @@ export async function insertOutboxCommand(command: OutboxCommand) {
         attempt_count,
         status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       command.clientOperationId,
       command.ownerUserId,
+      command.contourId ?? currentContourId,
       command.commandType,
       command.entityType,
       command.entityLocalId ?? null,
@@ -55,6 +58,7 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
     payload_json: string;
     created_at_local: string;
     updated_at_local: string | null;
+    next_attempt_at: string | null;
     attempt_count: number;
     status: string;
   }>(
@@ -62,11 +66,13 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
       SELECT *
       FROM outbox_commands
       WHERE owner_user_id = ?
+        AND contour_id = ?
         AND status IN ('pending', 'retryLater')
+        AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
       ORDER BY created_at_local ASC
       LIMIT ?
     `,
-    [ownerUserId, limit]
+    [ownerUserId, currentContourId, new Date().toISOString(), limit]
   );
 
   return rows.map((row) => ({
@@ -90,9 +96,10 @@ export async function countPendingOutboxCommands(ownerUserId: string) {
       SELECT COUNT(*) AS count
       FROM outbox_commands
       WHERE owner_user_id = ?
+        AND contour_id = ?
         AND status IN ('pending', 'sending', 'retryLater')
     `,
-    [ownerUserId]
+    [ownerUserId, currentContourId]
   );
 
   return row?.count ?? 0;
@@ -133,13 +140,14 @@ export async function getCompleteReportDeliveryState(ownerUserId: string, assign
         updated_at_local AS updatedAtLocal
       FROM outbox_commands
       WHERE owner_user_id = ?
+        AND contour_id = ?
         AND command_type = 'completePatrolAssignment'
         AND entity_local_id = ?
         AND status <> 'superseded'
       ORDER BY created_at_local DESC
       LIMIT 1
     `,
-    [ownerUserId, assignmentId]
+    [ownerUserId, currentContourId, assignmentId]
   );
 }
 
@@ -158,6 +166,7 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
     status: string;
     created_at_local: string;
     updated_at_local: string | null;
+    next_attempt_at: string | null;
     attempt_count: number;
     last_error: string | null;
     assignment_route_name: string | null;
@@ -172,6 +181,7 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
         command.status,
         command.created_at_local,
         command.updated_at_local,
+        command.next_attempt_at,
         command.attempt_count,
         command.last_error,
         assignment.route_name AS assignment_route_name
@@ -179,6 +189,7 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
       LEFT JOIN patrol_assignments assignment
         ON assignment.assignment_id = command.entity_local_id
       WHERE command.owner_user_id = ?
+        AND command.contour_id = ?
         AND command.status IN ('pending', 'sending', 'retryLater', 'rejected', 'conflict')
       ORDER BY
         CASE command.status
@@ -190,7 +201,7 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
         COALESCE(command.updated_at_local, command.created_at_local) DESC
       LIMIT ?
     `,
-    [ownerUserId, limit]
+    [ownerUserId, currentContourId, limit]
   );
 
   return rows.map<SyncQueueCommandItem>((row) => ({
@@ -202,6 +213,7 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
     status: row.status as OutboxCommandStatus,
     createdAtLocal: row.created_at_local,
     updatedAtLocal: row.updated_at_local,
+    nextAttemptAt: row.next_attempt_at,
     attemptCount: row.attempt_count,
     lastError: row.last_error,
     assignmentRouteName: row.assignment_route_name
@@ -216,7 +228,7 @@ export async function listUnconfirmedCompleteReportCommands(
   const db = await getDatabase();
   const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
   const assignmentFilter = assignmentId ? "AND entity_local_id = ?" : "";
-  const params = assignmentId ? [ownerUserId, assignmentId] : [ownerUserId];
+  const params = assignmentId ? [ownerUserId, currentContourId, assignmentId] : [ownerUserId, currentContourId];
   const rows = await db.getAllAsync<{
     client_operation_id: string;
     owner_user_id: string;
@@ -227,6 +239,7 @@ export async function listUnconfirmedCompleteReportCommands(
     payload_json: string;
     created_at_local: string;
     updated_at_local: string | null;
+    next_attempt_at: string | null;
     attempt_count: number;
     status: string;
   }>(
@@ -234,6 +247,7 @@ export async function listUnconfirmedCompleteReportCommands(
       SELECT *
       FROM outbox_commands
       WHERE owner_user_id = ?
+        AND contour_id = ?
         AND command_type = 'completePatrolAssignment'
         AND status IN ('pending', 'sending', 'retryLater')
         ${assignmentFilter}
@@ -271,75 +285,115 @@ export async function markOutboxCommandsSending(ownerUserId: string, clientOpera
       SET status = 'sending',
           attempt_count = attempt_count + 1,
           last_error = NULL,
+          next_attempt_at = NULL,
           updated_at_local = ?
       WHERE owner_user_id = ?
+        AND contour_id = ?
         AND client_operation_id IN (${placeholders})
         AND status IN ('pending', 'retryLater')
     `,
-    [updatedAtLocal, ownerUserId, ...clientOperationIds]
+    [updatedAtLocal, ownerUserId, currentContourId, ...clientOperationIds]
   );
 }
 
-export async function markOutboxCommandsRetryLater(ownerUserId: string, clientOperationIds: string[], lastError?: string) {
+export async function markOutboxCommandsRetryLater(
+  ownerUserId: string,
+  clientOperationIds: string[],
+  lastError?: string,
+  retryAfterSeconds?: number | null
+) {
   if (clientOperationIds.length === 0) {
     return;
   }
 
   const db = await getDatabase();
   const placeholders = clientOperationIds.map(() => "?").join(", ");
-  const updatedAtLocal = new Date().toISOString();
-  await db.runAsync(
-    `
-      UPDATE outbox_commands
-      SET status = 'retryLater',
-          last_error = COALESCE(?, last_error),
-          updated_at_local = ?
-      WHERE owner_user_id = ?
-        AND client_operation_id IN (${placeholders})
-        AND status = 'sending'
-    `,
-    [lastError ?? null, updatedAtLocal, ownerUserId, ...clientOperationIds]
-  );
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    const rows = await tx.getAllAsync<{ client_operation_id: string; attempt_count: number }>(
+      `
+        SELECT client_operation_id, attempt_count
+        FROM outbox_commands
+        WHERE owner_user_id = ?
+          AND contour_id = ?
+          AND client_operation_id IN (${placeholders})
+          AND status = 'sending'
+      `,
+      [ownerUserId, currentContourId, ...clientOperationIds]
+    );
+    const updatedAtLocal = new Date().toISOString();
+    const nowMs = Date.now();
+
+    for (const row of rows) {
+      const delaySeconds = resolveRetryDelaySeconds(retryAfterSeconds, row.attempt_count);
+      const nextAttemptAt = new Date(nowMs + delaySeconds * 1000).toISOString();
+      await tx.runAsync(
+        `
+          UPDATE outbox_commands
+          SET status = 'retryLater',
+              last_error = COALESCE(?, last_error),
+              next_attempt_at = ?,
+              updated_at_local = ?
+          WHERE owner_user_id = ?
+            AND contour_id = ?
+            AND client_operation_id = ?
+            AND status = 'sending'
+        `,
+        [lastError ?? null, nextAttemptAt, updatedAtLocal, ownerUserId, currentContourId, row.client_operation_id]
+      );
+    }
+  });
+}
+
+function resolveRetryDelaySeconds(retryAfterSeconds: number | null | undefined, attemptCount: number) {
+  if (typeof retryAfterSeconds === "number" && Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
+    return Math.min(Math.ceil(retryAfterSeconds), 24 * 60 * 60);
+  }
+
+  const exponent = Math.max(0, Math.min(8, Math.trunc(attemptCount) - 1));
+  return Math.min(60 * 60, 15 * (2 ** exponent));
 }
 
 export async function markPendingOutboxCommandsRetryLater(ownerUserId: string, lastError: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
+  const nextAttemptAt = new Date(Date.now() + resolveRetryDelaySeconds(null, 1) * 1000).toISOString();
 
   await db.runAsync(
     `
       UPDATE outbox_commands
       SET status = 'retryLater',
           last_error = ?,
+          next_attempt_at = ?,
           updated_at_local = ?
       WHERE owner_user_id = ?
+        AND contour_id = ?
         AND status IN ('pending', 'sending', 'retryLater')
     `,
-    [lastError, updatedAtLocal, ownerUserId]
+    [lastError, nextAttemptAt, updatedAtLocal, ownerUserId, currentContourId]
   );
 }
 
 export async function markPendingOutboxCommandsAuthRequired(ownerUserId: string, lastError: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
+  const nextAttemptAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
   // Authentication is a delivery condition, not a patrol lifecycle state.
-  // Replacing `inProgress` with `authRequired` stranded a patrol after a user
-  // signed back in.  Keep its operational state intact and surface the sign-in
-  // requirement from the pending outbox command instead.
+  // Keep the local report and defer automatic retries until the session is restored.
   await db.runAsync(
     `
       UPDATE outbox_commands
       SET status = 'retryLater',
           last_error = ?,
+          next_attempt_at = ?,
           updated_at_local = ?
       WHERE owner_user_id = ?
+        AND contour_id = ?
         AND status IN ('pending', 'sending', 'retryLater')
     `,
-    [lastError, updatedAtLocal, ownerUserId]
+    [lastError, nextAttemptAt, updatedAtLocal, ownerUserId, currentContourId]
   );
 }
-
 export async function resetStaleSendingOutboxCommands(ownerUserId: string, staleBeforeIso: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
@@ -348,13 +402,15 @@ export async function resetStaleSendingOutboxCommands(ownerUserId: string, stale
     `
       UPDATE outbox_commands
       SET status = 'retryLater',
-          last_error = COALESCE(last_error, 'РћС‚РїСЂР°РІРєР° Р·Р°РІРёСЃР»Р° Рё Р±СѓРґРµС‚ РїРѕРІС‚РѕСЂРµРЅР° Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё.'),
+          next_attempt_at = ?,
+          last_error = COALESCE(last_error, 'Отправка прервана и будет повторена автоматически.'),
           updated_at_local = ?
       WHERE owner_user_id = ?
+        AND contour_id = ?
         AND status = 'sending'
         AND (updated_at_local IS NULL OR updated_at_local < ?)
     `,
-    [updatedAtLocal, ownerUserId, staleBeforeIso]
+    [updatedAtLocal, updatedAtLocal, ownerUserId, currentContourId, staleBeforeIso]
   );
 }
 
@@ -366,22 +422,23 @@ export async function resetSendingOutboxCommandsForManualRetry(ownerUserId: stri
     `
       UPDATE outbox_commands
       SET status = 'retryLater',
-          last_error = 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ Р·Р°РїСѓСЃС‚РёР» РїРѕРІС‚РѕСЂРЅСѓСЋ РѕС‚РїСЂР°РІРєСѓ.',
+          next_attempt_at = ?,
+          last_error = 'Пользователь запустил повторную отправку.',
           updated_at_local = ?
       WHERE owner_user_id = ?
+        AND contour_id = ?
         AND status = 'sending'
     `,
-    [updatedAtLocal, ownerUserId]
+    [updatedAtLocal, updatedAtLocal, ownerUserId, currentContourId]
   );
 }
-
 export async function finalizeAcceptedCompleteReportCommands(ownerUserId: string, assignmentId?: string) {
   const db = await getDatabase();
   let finalized = 0;
 
   await db.withExclusiveTransactionAsync(async (tx) => {
     const assignmentFilter = assignmentId ? "AND command.entity_local_id = ?" : "";
-    const params = assignmentId ? [ownerUserId, assignmentId] : [ownerUserId];
+    const params = assignmentId ? [ownerUserId, currentContourId, assignmentId] : [ownerUserId, currentContourId];
     const rows = await tx.getAllAsync<{ assignment_id: string }>(
       `
         SELECT command.entity_local_id AS assignment_id
@@ -389,7 +446,8 @@ export async function finalizeAcceptedCompleteReportCommands(ownerUserId: string
         INNER JOIN patrol_assignments assignment
           ON assignment.assignment_id = command.entity_local_id
         WHERE command.owner_user_id = ?
-          AND command.command_type = 'completePatrolAssignment'
+          AND command.contour_id = ?
+           AND command.command_type = 'completePatrolAssignment'
           AND command.status IN ('accepted', 'duplicate')
           AND command.entity_local_id IS NOT NULL
           AND assignment.status = 'completedLocal'
@@ -433,21 +491,27 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
 
   await db.withExclusiveTransactionAsync(async (tx) => {
     for (const response of responses) {
+      const nextAttemptAt = response.status === "retryLater"
+        ? new Date(Date.now() + resolveRetryDelaySeconds(response.retryAfterSeconds, 1) * 1000).toISOString()
+        : null;
       await tx.runAsync(
         `
           UPDATE outbox_commands
           SET status = ?,
               entity_server_id = COALESCE(?, entity_server_id),
+              next_attempt_at = ?,
               last_error = ?,
               updated_at_local = ?
-          WHERE owner_user_id = ? AND client_operation_id = ?
+          WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
         `,
         [
           response.status,
           response.serverEntityId,
-          isProblemResponse(response.status) ? response.message : null,
+           nextAttemptAt,
+           isProblemResponse(response.status) ? response.message : null,
           new Date().toISOString(),
           ownerUserId,
+          currentContourId,
           response.clientOperationId
         ]
       );
@@ -462,16 +526,16 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
           `
             SELECT owner_user_id, command_type, entity_local_id, payload_json
             FROM outbox_commands
-            WHERE owner_user_id = ? AND client_operation_id = ?
+            WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
           `,
-          [ownerUserId, response.clientOperationId]
+          [ownerUserId, currentContourId, response.clientOperationId]
         );
 
         if (command?.command_type === "completePatrolAssignment" && command.entity_local_id) {
           for (const clientFileId of extractCompletionFileIds(command.payload_json)) {
             await tx.runAsync(
-              "UPDATE files SET status = 'linked' WHERE owner_user_id = ? AND client_file_id = ? AND status = 'uploaded'",
-              [command.owner_user_id, clientFileId]
+              "UPDATE files SET status = 'linked' WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ? AND status = 'uploaded'",
+              [command.owner_user_id, currentContourId, clientFileId]
             );
           }
 
@@ -705,9 +769,9 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
           `
             SELECT owner_user_id, command_type, entity_type, entity_local_id, payload_json
             FROM outbox_commands
-            WHERE owner_user_id = ? AND client_operation_id = ?
+            WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
           `,
-          [ownerUserId, response.clientOperationId]
+          [ownerUserId, currentContourId, response.clientOperationId]
         );
 
         if (command) {

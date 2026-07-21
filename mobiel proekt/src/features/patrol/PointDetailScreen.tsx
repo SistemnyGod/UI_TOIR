@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { listPointFiles } from "@/db/repositories/filesRepository";
-import { getAssignmentById, getPointForFill, PointForFill, PointListItem } from "@/db/repositories/patrolRepository";
+import { getAssignmentById, getPointForFill, listMissingCompleteAssignmentAttachmentIds, PointForFill, PointListItem } from "@/db/repositories/patrolRepository";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { Card } from "@/ui/Card";
@@ -19,15 +19,17 @@ export function PointDetailScreen() {
   const [assignment, setAssignment] = useState<{ status: string } | null>(null);
   const [point, setPoint] = useState<PointForFill | null>(null);
   const [attachments, setAttachments] = useState<LocalMobileFile[]>([]);
+  const [missingAttachmentIds, setMissingAttachmentIds] = useState<string[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      void Promise.all([getAssignmentById(assignmentId), getPointForFill(assignmentId, pointId), listPointFiles(assignmentId, pointId)]).then(([loadedAssignment, loadedPoint, files]) => {
+      void Promise.all([getAssignmentById(assignmentId), getPointForFill(assignmentId, pointId), listPointFiles(assignmentId, pointId), listMissingCompleteAssignmentAttachmentIds(assignmentId, pointId)]).then(([loadedAssignment, loadedPoint, files, missingIds]) => {
         if (isMounted) {
           setAssignment(loadedAssignment);
           setPoint(loadedPoint);
           setAttachments(files);
+          setMissingAttachmentIds(missingIds);
         }
       });
 
@@ -48,6 +50,7 @@ export function PointDetailScreen() {
   }
 
   const canEdit = assignment?.status === "inProgress";
+  const canRestoreMissing = assignment?.status === "completedLocal" && missingAttachmentIds.length > 0;
 
   return (
     <Screen title="Точка маршрута" subtitle="Проверьте состояние точки, вложения и подтверждение метки.">
@@ -121,9 +124,22 @@ export function PointDetailScreen() {
           </View>
         </>
       ) : (
-        <Card>
-          <Text style={[styles.text, { color: colors.mutedText }]}>{pointActionHint(assignment?.status)}</Text>
-        </Card>
+        <>
+          {canRestoreMissing ? (
+            <Card>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Вложение отсутствует</Text>
+              <Text style={[styles.text, { color: colors.mutedText }]}>Файл отчёта потерян на телефоне. Можно добавить новое фото вместо него; исходный отчёт и его clientOperationId сохранятся.</Text>
+              <PrimaryButton
+                icon="refresh-outline"
+                label={`Восстановить отсутствующее вложение (${missingAttachmentIds.length})`}
+                onPress={() => router.push(`/camera/capture?assignmentId=${encodeURIComponent(assignmentId)}&pointId=${encodeURIComponent(pointId)}&mediaKind=photo&restoreMissing=true&missingClientFileId=${encodeURIComponent(missingAttachmentIds[0])}`)}
+              />
+            </Card>
+          ) : null}
+          <Card>
+            <Text style={[styles.text, { color: colors.mutedText }]}>{pointActionHint(assignment?.status)}</Text>
+          </Card>
+        </>
       )}
     </Screen>
   );

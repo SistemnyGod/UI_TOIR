@@ -29,7 +29,8 @@ test("auth response accepts the complete mobile session", () => {
     accessToken: "access-token",
     refreshToken: "refresh-token",
     expiresAt: "2026-07-20T11:00:00Z",
-    refreshExpiresAt: "2026-07-27T11:00:00Z"
+    refreshExpiresAt: "2026-07-27T11:00:00Z",
+    contourId: "patrol360-local-enterprise"
   });
 
   assert.equal(result.success, true);

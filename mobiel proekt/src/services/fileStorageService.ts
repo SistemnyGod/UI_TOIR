@@ -22,7 +22,11 @@ export async function deletePatrolPhotoDirectory() {
   await FileSystem.deleteAsync(directoryUri, { idempotent: true });
 }
 
-export async function deleteOrphanPatrolPhotos(knownLocalPaths: string[]) {
+export async function deleteOrphanPatrolPhotos(knownLocalPaths: readonly string[] | null) {
+  if (!knownLocalPaths) {
+    return;
+  }
+
   const directoryUri = getPatrolPhotoDirectory();
   const directoryInfo = await FileSystem.getInfoAsync(directoryUri);
   if (!directoryInfo.exists) {

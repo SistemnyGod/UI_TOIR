@@ -1,3 +1,4 @@
+import { currentContourId } from "@/core/environments";
 import { getDatabase } from "@/db/database";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
@@ -22,6 +23,7 @@ export async function insertLocalFileInTransaction(executor: Pick<Awaited<Return
       INSERT OR REPLACE INTO files (
         client_file_id,
         owner_user_id,
+        contour_id,
         local_path,
         preview_path,
         server_file_id,
@@ -36,11 +38,12 @@ export async function insertLocalFileInTransaction(executor: Pick<Awaited<Return
         work_task_id,
         created_at_local
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       file.clientFileId,
       file.ownerUserId,
+      file.contourId ?? currentContourId,
       file.localPath,
       file.previewPath ?? null,
       file.serverFileId ?? null,
@@ -87,6 +90,7 @@ export async function listPointFiles(assignmentId: string, pointId: string) {
           created_at_local AS createdAtLocal
         FROM files
         WHERE owner_user_id = ?
+          AND contour_id = '${currentContourId}'
           AND assignment_id = ?
           AND point_id = ?
         ORDER BY created_at_local ASC
@@ -129,6 +133,7 @@ export async function listFilesByClientIds(clientFileIds: string[]) {
         created_at_local AS createdAtLocal
       FROM files
       WHERE owner_user_id = ?
+        AND contour_id = '${currentContourId}'
         AND client_file_id IN (${placeholders})
       ORDER BY created_at_local ASC
     `,
@@ -164,6 +169,7 @@ export async function listRemarkFiles(remarkId: string) {
         created_at_local AS createdAtLocal
       FROM files
       WHERE owner_user_id = ?
+        AND contour_id = '${currentContourId}'
         AND remark_id = ?
       ORDER BY created_at_local ASC
     `,
@@ -199,6 +205,7 @@ export async function listWorkTaskFiles(workTaskId: string) {
         created_at_local AS createdAtLocal
       FROM files
       WHERE owner_user_id = ?
+        AND contour_id = '${currentContourId}'
         AND work_task_id = ?
       ORDER BY created_at_local ASC
     `,
@@ -206,10 +213,10 @@ export async function listWorkTaskFiles(workTaskId: string) {
   );
 }
 
-export async function listKnownLocalFilePaths() {
+export async function listKnownLocalFilePaths(): Promise<string[] | null> {
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
-    return [];
+    return null;
   }
 
   const db = await getDatabase();
@@ -219,6 +226,7 @@ export async function listKnownLocalFilePaths() {
       SELECT local_path
       FROM files
       WHERE owner_user_id = ?
+        AND contour_id = '${currentContourId}'
         AND local_path IS NOT NULL
     `,
     [ownerUserId]
@@ -250,6 +258,7 @@ export async function listSyncQueueFiles(ownerUserId: string, limit = 100) {
         LEFT JOIN patrol_assignments assignment
           ON assignment.assignment_id = file.assignment_id
         WHERE file.owner_user_id = ?
+          AND file.contour_id = '${currentContourId}'
           AND file.status NOT IN ('uploaded', 'linked')
         ORDER BY file.created_at_local DESC
         LIMIT ?
@@ -271,9 +280,9 @@ export async function markFileUploading(clientFileId: string) {
     `
       UPDATE files
       SET status = 'uploading'
-      WHERE owner_user_id = ? AND client_file_id = ?
+      WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ?
     `,
-    [ownerUserId, clientFileId]
+    [ownerUserId, currentContourId, clientFileId]
   );
 }
 
@@ -290,9 +299,9 @@ export async function markFileUploaded(clientFileId: string, serverFileId: strin
       UPDATE files
       SET status = 'uploaded',
           server_file_id = ?
-      WHERE owner_user_id = ? AND client_file_id = ?
+      WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ?
     `,
-    [serverFileId, ownerUserId, clientFileId]
+    [serverFileId, ownerUserId, currentContourId, clientFileId]
   );
 }
 
@@ -308,9 +317,9 @@ export async function markFileUploadFailed(clientFileId: string) {
     `
       UPDATE files
       SET status = 'retryLater'
-      WHERE owner_user_id = ? AND client_file_id = ?
+      WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ?
     `,
-    [ownerUserId, clientFileId]
+    [ownerUserId, currentContourId, clientFileId]
   );
 }
 
@@ -327,7 +336,7 @@ export async function listLinkedLocalFiles(ownerUserId: string, clientFileIds?: 
     `
       SELECT client_file_id AS clientFileId, local_path AS localPath, status
       FROM files
-      WHERE owner_user_id = ? AND status = 'linked'${clientFileFilter}
+      WHERE owner_user_id = ? AND contour_id = '${currentContourId}' AND status = 'linked'${clientFileFilter}
       ORDER BY created_at_local ASC
     `,
     [ownerUserId, ...(clientFileIds ?? [])]
@@ -337,7 +346,7 @@ export async function listLinkedLocalFiles(ownerUserId: string, clientFileIds?: 
 export async function deleteLinkedLocalFileRecord(ownerUserId: string, clientFileId: string) {
   const db = await getDatabase();
   await db.runAsync(
-    "DELETE FROM files WHERE owner_user_id = ? AND client_file_id = ? AND status = 'linked'",
-    [ownerUserId, clientFileId]
+    "DELETE FROM files WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ? AND status = 'linked'",
+    [ownerUserId, currentContourId, clientFileId]
   );
 }

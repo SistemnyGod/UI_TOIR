@@ -1,12 +1,14 @@
 import { fetchWithTimeout, serverUnavailableMessage } from "@/api/networkTimeout";
 import { shouldTryNextMobileServer } from "@/api/serverFailoverPolicy";
 import { loginResponseSchema } from "@/api/schemas";
+import { probeServerHealth } from "@/api/serverHealthApi";
 import { getOrCreateDeviceId } from "@/auth/deviceRegistration";
 import { assertSessionOwner } from "@/auth/sessionIdentity";
 import {
   getAccessToken,
   getRefreshToken,
   getStoredOwnerUserId,
+  markSessionNeedsReenrollment,
   revokeStoredSession,
   setOfflineSession,
   setStoredOwnerUserId,
@@ -93,6 +95,12 @@ async function sendMobileRequestWithFailover(
 
   for (const apiBaseUrl of apiBaseUrls) {
     try {
+      const health = await probeServerHealth(apiBaseUrl);
+      if (!health.ok) {
+        lastError = new Error(health.message ?? `Сервер не прошёл проверку контура: ${apiBaseUrl}`);
+        continue;
+      }
+
       const response = await sendMobileRequest(apiBaseUrl, path, options, token);
       if (shouldTryNextServer(response, path) && apiBaseUrl !== apiBaseUrls[apiBaseUrls.length - 1]) {
         lastResponse = response;
@@ -136,6 +144,7 @@ async function sendMobileRequest(apiBaseUrl: string, path: string, options: Requ
         "Content-Type": "application/json",
         "X-Patrol360-Client": "mobile-app",
         "X-Mobile-Sync-Protocol": runtimeConfig.syncProtocolVersion,
+        "X-Patrol360-Contour": runtimeConfig.contourId,
         ...(token ? { Authorization: `Bearer ${token}` } : {})
       },
       body: options.body ? JSON.stringify(options.body) : undefined
@@ -159,6 +168,7 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
     throw new Error("Ключ мобильной сессии недоступен. Локальные отчёты сохранены; автоматическая отправка приостановлена.");
   }
 
+  const runtimeConfig = await getMobileRuntimeConfig();
   const deviceId = await getOrCreateDeviceId();
   const apiBaseUrls = await getServerCandidateBaseUrls(apiBaseUrl);
   let response: Response | null = null;
@@ -168,14 +178,21 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
 
   for (const candidateApiBaseUrl of apiBaseUrls) {
     try {
+      const health = await probeServerHealth(candidateApiBaseUrl);
+      if (!health.ok) {
+        lastError = new Error(health.message ?? `Сервер не прошёл проверку контура: ${candidateApiBaseUrl}`);
+        continue;
+      }
+
       response = await fetchWithTimeout(`${candidateApiBaseUrl}/api/v1/mobile/auth/refresh`, {
         method: "POST",
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
-          "X-Patrol360-Client": "mobile-app"
+          "X-Patrol360-Client": "mobile-app",
+          "X-Patrol360-Contour": runtimeConfig.contourId
         },
-        body: JSON.stringify({ deviceId, refreshToken })
+        body: JSON.stringify({ deviceId, refreshToken, contourId: runtimeConfig.contourId })
       });
       if (shouldTryNextMobileServer(response.status, response.headers.get("content-type"))
           && candidateApiBaseUrl !== apiBaseUrls[apiBaseUrls.length - 1]) {
@@ -206,9 +223,18 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
 
   if (response.status === 401) {
     const failureCode = await readAuthFailureCode(response);
+    if (failureCode === "device_reenrollment_required"
+      || failureCode === "device_session_not_found"
+      || failureCode === "device_mismatch"
+      || failureCode === "refresh_expired") {
+      await markSessionNeedsReenrollment("device_reenrollment_required");
+      throw new Error(explicitRevocationMessage("device_reenrollment_required"));
+    }
+
     if (failureCode === "session_revoked"
       || failureCode === "device_revoked"
-      || failureCode === "account_disabled") {
+      || failureCode === "account_disabled"
+      || failureCode === "refresh_token_reuse") {
       await revokeStoredSession(failureCode);
       throw new Error(explicitRevocationMessage(failureCode));
     }
@@ -228,6 +254,10 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
     session = parseMobileResponse(loginResponseSchema, await response.json());
   } catch {
     throw new Error("Не удалось обновить сессию. Повторите позже.");
+  }
+
+  if (session.contourId !== runtimeConfig.contourId) {
+    throw new Error(`Сервер вернул сессию другого контура (${session.contourId}). Токены не сохранены.`);
   }
 
   const expectedOwnerUserId = await getStoredOwnerUserId();
@@ -287,7 +317,7 @@ async function readAuthFailureCode(response: Response) {
   }
 }
 
-function explicitRevocationMessage(code: "session_revoked" | "device_revoked" | "account_disabled") {
+function explicitRevocationMessage(code: "session_revoked" | "device_revoked" | "account_disabled" | "refresh_expired" | "refresh_token_reuse" | "device_reenrollment_required" | "device_session_not_found" | "device_mismatch") {
   switch (code) {
     case "session_revoked":
       return "Мобильная сессия явно отозвана. Локальные отчёты сохранены.";
@@ -295,5 +325,13 @@ function explicitRevocationMessage(code: "session_revoked" | "device_revoked" | 
       return "Это устройство явно отозвано администратором. Локальные отчёты сохранены.";
     case "account_disabled":
       return "Учётная запись заблокирована администратором. Локальные отчёты сохранены.";
+    case "device_reenrollment_required":
+    case "device_session_not_found":
+    case "device_mismatch":
+      return "Требуется повторная регистрация устройства. Локальные отчёты и очередь сохранены.";
+    case "refresh_expired":
+      return "Срок мобильной сессии истёк. Локальные отчёты сохранены; требуется повторная регистрация устройства.";
+    case "refresh_token_reuse":
+      return "Обнаружено повторное использование refresh-токена. Сессия отозвана, локальные отчёты сохранены.";
   }
 }

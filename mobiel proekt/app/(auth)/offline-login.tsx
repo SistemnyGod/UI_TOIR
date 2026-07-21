@@ -22,12 +22,14 @@ export default function OfflineLoginRoute() {
   const [isReady, setIsReady] = useState(false);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [requiresReenrollment, setRequiresReenrollment] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
     void Promise.all([getStoredOwnerUserId(), getOfflineSession()])
       .then(([ownerUserId, offlineSession]) => {
+        setRequiresReenrollment(Boolean(offlineSession?.requiresReenrollment));
         if (!ownerUserId || !offlineSession || offlineSession.userId !== ownerUserId || !isOfflineSessionValid(offlineSession)) {
           return null;
         }
@@ -106,6 +108,9 @@ export default function OfflineLoginRoute() {
           Загруженные обходы доступны локально. После онлайн-входа приложение автоматически продолжит отправку очереди.
         </Text>
       </Card>
+      {requiresReenrollment ? (
+        <Text style={styles.error}>Требуется повторная регистрация устройства. Локальные отчёты и очередь сохранены. Нажмите «Войти онлайн», когда сервер будет доступен.</Text>
+      ) : null}
       {authError ? <Text style={styles.error}>{authError}</Text> : null}
       <PrimaryButton
         disabled={isAuthenticating}

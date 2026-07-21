@@ -5,6 +5,7 @@ export type OfflineSessionState = {
   expiresAt: string;
   revokedAt?: string | null;
   revocationReason?: string | null;
+  requiresReenrollment?: boolean;
 };
 
 export function isOfflineSessionValid(session: OfflineSessionState) {

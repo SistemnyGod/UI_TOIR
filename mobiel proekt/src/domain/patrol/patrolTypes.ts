@@ -126,6 +126,7 @@ export type BootstrapDto = {
   points: PatrolPointDto[];
   serverTime: string;
   syncCursor: string | null;
+  contourId: string;
 };
 
 export type MobileNotificationDto = {

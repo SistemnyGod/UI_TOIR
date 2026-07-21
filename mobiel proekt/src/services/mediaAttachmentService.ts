@@ -2,7 +2,7 @@ import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
-import { attachPhotoToPoint } from "@/db/repositories/patrolRepository";
+import { attachPhotoToPoint, restoreMissingPointAttachment } from "@/db/repositories/patrolRepository";
 import { attachMediaToShiftRemark } from "@/db/repositories/shiftRemarkRepository";
 import { attachMediaToWorkTask } from "@/db/repositories/workTaskRepository";
 import { getLocalFileInfo, hasEnoughStorageForPhoto } from "@/services/fileStorageService";
@@ -40,6 +40,25 @@ export async function attachPointPhotoFromGallery(assignmentId: string, pointId:
   return "attached" satisfies MediaAttachResult;
 }
 
+export async function restoreMissingPointPhotoFromCamera(assignmentId: string, pointId: string, missingClientFileId: string) {
+  const ownerUserId = await prepareOwnerAndStorage();
+  const assets = await pickImages("camera");
+  if (!assets?.length) return "cancelled" satisfies MediaAttachResult;
+
+  await restorePointPhotoAsset(ownerUserId, assignmentId, pointId, missingClientFileId, assets[0]);
+  triggerForegroundSyncWithRetry();
+  return "attached" satisfies MediaAttachResult;
+}
+
+export async function restoreMissingPointPhotoFromGallery(assignmentId: string, pointId: string, missingClientFileId: string) {
+  const ownerUserId = await prepareOwnerAndStorage();
+  const assets = await pickImages("library");
+  if (!assets?.length) return "cancelled" satisfies MediaAttachResult;
+
+  await restorePointPhotoAsset(ownerUserId, assignmentId, pointId, missingClientFileId, assets[0]);
+  triggerForegroundSyncWithRetry();
+  return "attached" satisfies MediaAttachResult;
+}
 export async function attachPointVideoFromCamera(assignmentId: string, pointId: string) {
   const ownerUserId = await prepareOwnerAndStorage();
   const asset = await pickVideo("camera");
@@ -331,6 +350,22 @@ async function attachPointPhotoAssets(
   }
 }
 
+async function restorePointPhotoAsset(
+  ownerUserId: string,
+  assignmentId: string,
+  pointId: string,
+  missingClientFileId: string,
+  asset: ImagePicker.ImagePickerAsset
+) {
+  const optimizedPhoto = await optimizePhoto(asset);
+  const file = await prepareLocalPhoto({
+    ownerUserId,
+    localPath: optimizedPhoto.uri,
+    assignmentId,
+    pointId
+  });
+  await restoreMissingPointAttachment(assignmentId, pointId, missingClientFileId, file);
+}
 async function attachRemarkPhotoAssets(ownerUserId: string, remarkId: string, assets: ImagePicker.ImagePickerAsset[]) {
   for (const asset of assets) {
     const optimizedPhoto = await optimizePhoto(asset);

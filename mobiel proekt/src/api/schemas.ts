@@ -68,7 +68,8 @@ export const loginResponseSchema = z.object({
   accessToken: identifier,
   refreshToken: identifier,
   expiresAt: timestamp,
-  refreshExpiresAt: timestamp
+  refreshExpiresAt: timestamp,
+  contourId: identifier
 }).passthrough();
 
 const mobileEmployeeSchema = z.object({
@@ -140,7 +141,8 @@ export const bootstrapResponseSchema = z.object({
   routes: z.array(patrolRouteSchema),
   points: z.array(patrolPointSchema),
   serverTime: timestamp,
-  syncCursor: nullableString
+  syncCursor: nullableString,
+  contourId: identifier
 }).passthrough();
 
 export const workTaskListResponseSchema = z.array(z.object({

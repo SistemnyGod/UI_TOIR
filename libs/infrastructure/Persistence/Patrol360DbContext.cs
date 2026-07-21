@@ -742,6 +742,11 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(session => session.PushTokenRevokedAt).HasColumnName("push_token_revoked_at");
             entity.Property(session => session.TokenHash).HasColumnName("token_hash").HasMaxLength(128).IsRequired();
             entity.Property(session => session.RefreshTokenHash).HasColumnName("refresh_token_hash").HasMaxLength(128).IsRequired();
+            entity.Property(session => session.PreviousRefreshTokenHash).HasColumnName("previous_refresh_token_hash").HasMaxLength(128).IsRequired();
+            entity.Property(session => session.PreviousAccessTokenProtected).HasColumnName("previous_access_token_protected").HasMaxLength(4096).IsRequired();
+            entity.Property(session => session.PreviousRefreshTokenProtected).HasColumnName("previous_refresh_token_protected").HasMaxLength(4096).IsRequired();
+            entity.Property(session => session.PreviousRefreshTokenValidUntil).HasColumnName("previous_refresh_token_valid_until");
+            entity.Property(session => session.RefreshGeneration).HasColumnName("refresh_generation").IsRequired().IsConcurrencyToken();
             entity.Property(session => session.CreatedAt).HasColumnName("created_at");
             entity.Property(session => session.ExpiresAt).HasColumnName("expires_at");
             entity.Property(session => session.RefreshExpiresAt).HasColumnName("refresh_expires_at");
@@ -759,6 +764,9 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
                 .IsUnique()
                 .HasFilter("token_hash <> ''")
                 .HasDatabaseName("ux_mobile_account_sessions_token_hash");
+            entity.HasIndex(session => session.PreviousRefreshTokenHash)
+                .HasDatabaseName("ix_mobile_account_sessions_previous_refresh_token_hash")
+                .HasFilter("previous_refresh_token_hash <> ''");
             entity.HasIndex(session => session.RefreshTokenHash)
                 .IsUnique()
                 .HasFilter("refresh_token_hash <> ''")

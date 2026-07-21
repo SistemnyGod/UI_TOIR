@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -10,7 +11,7 @@ namespace Patrol360.Api.Controllers;
 [ApiController]
 [Route("api/v1/mobile")]
 [Authorize(Policy = MobileBearerAuthenticationHandler.PolicyName)]
-public sealed class MobileController(IMobileAppService mobileAppService) : MobileApiControllerBase
+public sealed class MobileController(IMobileAppService mobileAppService, IConfiguration configuration) : MobileApiControllerBase
 {
     [HttpGet("health")]
     [AllowAnonymous]
@@ -19,7 +20,8 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Mobil
         {
             status = "ok",
             serverTime = DateTimeOffset.UtcNow,
-            syncProtocolVersion = "1.0"
+            syncProtocolVersion = "1.0",
+            contourId = MobileContourId
         });
 
     [HttpPost("auth/login")]
@@ -27,6 +29,11 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Mobil
     [EnableRateLimiting("mobile-auth")]
     public ActionResult<MobileAuthSessionDto> Login(MobileLoginRequestDto request)
     {
+        if (!IsExpectedContour(request.ContourId))
+        {
+            return Unauthorized(new { code = "wrong_contour" });
+        }
+
         var result = mobileAppService.Login(request, GetIpAddress());
         if (result.Errors.Count > 0)
         {
@@ -43,6 +50,11 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Mobil
     [EnableRateLimiting("mobile-auth")]
     public ActionResult<MobileAuthSessionDto> Refresh(MobileRefreshRequestDto request)
     {
+        if (!IsExpectedContour(request.ContourId))
+        {
+            return Unauthorized(new { code = "wrong_contour" });
+        }
+
         var result = mobileAppService.Refresh(request, GetIpAddress());
         if (result.Errors.Count > 0)
         {
@@ -50,7 +62,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Mobil
         }
 
         return result.Unauthorized
-            ? Unauthorized(new { code = result.FailureCode ?? "device_session_not_found" })
+            ? Unauthorized(new { code = result.FailureCode ?? "device_reenrollment_required" })
             : Ok(result.Session);
     }
 
@@ -122,6 +134,11 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Mobil
     [RequestSizeLimit(1024 * 1024)]
     public ActionResult<IReadOnlyList<MobileOutboxResponseDto>> Outbox(MobileOutboxBatchDto request)
     {
+        if (!IsExpectedContour(request.ContourId))
+        {
+            return BadRequest(new { code = "wrong_contour" });
+        }
+
         if (request.Commands is null || request.Commands.Count is < 1 or > 100)
         {
             return BadRequest("Outbox batch must contain from 1 to 100 commands.");
@@ -134,6 +151,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Mobil
     [HttpPost("files")]
     [RequestSizeLimit(32 * 1024 * 1024)]
     public async Task<ActionResult<MobileFileUploadResponseDto>> UploadFile(
+        [FromForm] string? contourId,
         [FromForm] string clientFileId,
         [FromForm] Guid? assignmentId,
         [FromForm] Guid? pointId,
@@ -144,6 +162,11 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Mobil
         [FromForm] DateTimeOffset capturedAtLocal,
         [FromForm] IFormFile file)
     {
+        if (!IsExpectedContour(contourId))
+        {
+            return BadRequest(new { code = "wrong_contour" });
+        }
+
         if (file.Length == 0)
         {
             return BadRequest("File is empty.");
@@ -176,6 +199,13 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Mobil
         return result is null ? NotFound() : Ok(result);
     }
 
+    private string MobileContourId => configuration["Patrol360:Mobile:ContourId"]
+        ?? Environment.GetEnvironmentVariable("PATROL360_CONTOUR_ID")
+        ?? "patrol360-local-enterprise";
+
+    private bool IsExpectedContour(string? contourId) =>
+        !string.IsNullOrWhiteSpace(contourId)
+        && string.Equals(contourId.Trim(), MobileContourId, StringComparison.Ordinal);
     private string GetIpAddress() =>
         HttpContext.Connection.RemoteIpAddress?.ToString() ?? "-";
 

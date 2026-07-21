@@ -1,3 +1,4 @@
+import { currentContourId } from "@/core/environments";
 import * as Crypto from "expo-crypto";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
@@ -87,6 +88,7 @@ export async function createShiftRemarkLocally(input: {
           INSERT INTO outbox_commands (
             client_operation_id,
             owner_user_id,
+            contour_id,
             command_type,
             entity_type,
             entity_local_id,
@@ -97,11 +99,12 @@ export async function createShiftRemarkLocally(input: {
             attempt_count,
             status
           )
-          VALUES (?, ?, 'createShiftRemark', 'shiftRemark', ?, NULL, ?, ?, ?, 0, 'pending')
+          VALUES (?, ?, ?, 'createShiftRemark', 'shiftRemark', ?, NULL, ?, ?, ?, 0, 'pending')
         `,
         [
           clientOperationId,
           ownerUserId,
+          currentContourId,
           remarkId,
           JSON.stringify({
             remarkId,
@@ -190,6 +193,7 @@ export async function attachMediaToShiftRemark(remarkId: string, file: LocalMobi
           INSERT INTO outbox_commands (
             client_operation_id,
             owner_user_id,
+            contour_id,
             command_type,
             entity_type,
             entity_local_id,
@@ -200,17 +204,19 @@ export async function attachMediaToShiftRemark(remarkId: string, file: LocalMobi
             attempt_count,
             status
           )
-          VALUES (?, ?, 'attachShiftRemarkMedia', 'shiftRemark', ?, NULL, ?, ?, ?, 0, 'pending')
+          VALUES (?, ?, ?, 'attachShiftRemarkMedia', 'shiftRemark', ?, NULL, ?, ?, ?, 0, 'pending')
         `,
         [
           clientOperationId,
           ownerUserId,
+          currentContourId,
           remarkId,
           JSON.stringify({
             remarkId,
             mediaClientFileIds: [file.clientFileId],
             createdAtLocal
           }),
+          createdAtLocal,
           createdAtLocal
         ]
       );

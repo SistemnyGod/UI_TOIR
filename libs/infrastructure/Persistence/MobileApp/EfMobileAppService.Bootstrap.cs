@@ -96,6 +96,7 @@ internal sealed partial class EfMobileAppService
             DateTimeOffset.UtcNow,
             syncCursor)
         {
+            ContourId = MobileContourId,
             CancelledAssignmentIds = cancelledAssignmentIds
         };
     }

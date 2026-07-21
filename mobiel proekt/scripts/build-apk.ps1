@@ -2,6 +2,9 @@ param(
   [ValidateSet("Debug", "Release")]
   [string]$Configuration = "Release",
 
+  [ValidateSet("dev", "test", "local-enterprise", "production")]
+  [string]$Patrol360Environment = $env:PATROL360_ENVIRONMENT,
+
   [string]$BuildRoot = "",
 
   [string]$AndroidSdk = $env:ANDROID_HOME,
@@ -18,6 +21,13 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Configuration -eq "Release" -and [string]::IsNullOrWhiteSpace($Patrol360Environment)) {
+  throw "Release environment is required. Pass -Patrol360Environment production (or another approved contour)."
+}
+if (-not [string]::IsNullOrWhiteSpace($Patrol360Environment)) {
+  $env:PATROL360_ENVIRONMENT = $Patrol360Environment
+}
 
 function Invoke-Checked {
   param(

@@ -26,6 +26,7 @@ import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { registerPushNotifications, syncMobileNotifications } from "@/services/notificationService";
 import { syncWorkTasks } from "@/services/workTaskService";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { currentContourId } from "@/core/environments";
 
 const appVersion = Constants.expoConfig?.version ?? "unknown";
 
@@ -42,9 +43,16 @@ export async function signIn(loginName: string, password: string) {
     appVersion
   });
 
+  if (result.contourId !== currentContourId) {
+    throw new Error(`Сервер вернул сессию другого контура (${result.contourId}). Вход остановлен.`);
+  }
+
   let bootstrap: Awaited<ReturnType<typeof getBootstrap>>;
   try {
     bootstrap = await getBootstrap(result.accessToken);
+    if (bootstrap.contourId !== currentContourId) {
+      throw new Error(`Bootstrap относится к другому контуру (${bootstrap.contourId}). Локальные данные не изменены.`);
+    }
 
     const shouldClearLocalData = previousOwnerUserId
       ? previousOwnerUserId !== result.user.serverUserId
@@ -96,6 +104,9 @@ export async function restoreSessionWithRefreshToken() {
   const previousOwnerUserId = await getStoredOwnerUserId();
   const accessToken = await refreshStoredAccessToken();
   const bootstrap = await getBootstrap(accessToken);
+  if (bootstrap.contourId !== currentContourId) {
+    throw new Error(`Bootstrap относится к другому контуру (${bootstrap.contourId}). Локальные данные не изменены.`);
+  }
   const shouldClearLocalData = previousOwnerUserId
     ? previousOwnerUserId !== bootstrap.user.serverUserId
     : await hasLocalUserData();

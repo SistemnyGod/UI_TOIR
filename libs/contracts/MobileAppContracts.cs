@@ -6,11 +6,13 @@ public sealed record MobileLoginRequestDto(
     string DeviceId,
     string DeviceName,
     string Platform,
-    string AppVersion);
+    string AppVersion,
+    string? ContourId = null);
 
 public sealed record MobileRefreshRequestDto(
     string RefreshToken,
-    string DeviceId);
+    string DeviceId,
+    string? ContourId = null);
 
 public sealed record MobileAuthSessionDto(
     MobileUserDto User,
@@ -18,7 +20,8 @@ public sealed record MobileAuthSessionDto(
     string AccessToken,
     string RefreshToken,
     DateTimeOffset ExpiresAt,
-    DateTimeOffset RefreshExpiresAt);
+    DateTimeOffset RefreshExpiresAt,
+    string ContourId);
 
 public sealed record MobileUserDto(
     Guid ServerUserId,
@@ -154,6 +157,7 @@ public sealed record MobileBootstrapDto(
     DateTimeOffset ServerTime,
     string? SyncCursor)
 {
+    public string ContourId { get; init; } = string.Empty;
     public IReadOnlyList<Guid> CancelledAssignmentIds { get; init; } = [];
 }
 
@@ -199,7 +203,10 @@ public sealed record MobilePatrolPointDto(
     string? Instruction);
 
 public sealed record MobileOutboxBatchDto(
-    IReadOnlyList<MobileOutboxCommandDto> Commands);
+    IReadOnlyList<MobileOutboxCommandDto> Commands)
+{
+    public string? ContourId { get; init; }
+}
 
 public sealed record MobileOutboxCommandDto(
     string ClientOperationId,

@@ -9,6 +9,7 @@ export type SyncQueueCommandItem = {
   status: OutboxCommandStatus;
   createdAtLocal: string;
   updatedAtLocal: string | null;
+  nextAttemptAt: string | null;
   attemptCount: number;
   lastError: string | null;
   assignmentRouteName: string | null;

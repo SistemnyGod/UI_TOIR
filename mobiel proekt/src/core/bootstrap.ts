@@ -10,9 +10,14 @@ export async function bootstrapApplication() {
   await initializeDatabase();
   await recoverStaleSendingOutboxCommands();
   const ownerUserId = await getStoredOwnerUserId();
-  if (ownerUserId) {
-    await pruneMobileActionLog(ownerUserId);
-    await reclaimAcceptedLocalMedia(ownerUserId);
+  if (!ownerUserId) {
+    // SecureStore can be temporarily unavailable while the encrypted DB and
+    // photo directory are still intact. Never treat an unknown owner as an
+    // empty database: pruning would physically delete unsent attachments.
+    return;
   }
+
+  await pruneMobileActionLog(ownerUserId);
+  await reclaimAcceptedLocalMedia(ownerUserId);
   await deleteOrphanPatrolPhotos(await listKnownLocalFilePaths());
 }

@@ -11,9 +11,14 @@ const packageVersion = require("./package.json").version;
 const googleServicesFile = "./secrets/google-services.json";
 const appIconFile = "./assets/app-icon.png";
 const supportedDefaultEnvironments = new Set(["dev", "test", "local-enterprise", "production"]);
-const configuredDefaultEnvironment = process.env.PATROL360_ENVIRONMENT
-  ?? process.env.EXPO_PUBLIC_PATROL360_ENVIRONMENT
-  ?? "local-enterprise";
+const configuredEnvironment = process.env.PATROL360_ENVIRONMENT
+  ?? process.env.EXPO_PUBLIC_PATROL360_ENVIRONMENT;
+const isReleaseBuild = process.env.NODE_ENV === "production"
+  || process.env.EAS_BUILD_PROFILE === "production";
+if (isReleaseBuild && !configuredEnvironment) {
+  throw new Error("PATROL360_ENVIRONMENT must be explicitly set for a Release build (for example: production or local-enterprise).");
+}
+const configuredDefaultEnvironment = configuredEnvironment ?? "local-enterprise";
 
 if (!supportedDefaultEnvironments.has(configuredDefaultEnvironment)) {
   throw new Error(`Unsupported PATROL360_ENVIRONMENT: ${configuredDefaultEnvironment}`);

@@ -11,6 +11,7 @@ export type LocalFileStatus =
 export type LocalMobileFile = {
   clientFileId: string;
   ownerUserId: string;
+  contourId?: string;
   localPath: string;
   previewPath?: string | null;
   serverFileId?: string | null;

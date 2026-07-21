@@ -2,6 +2,7 @@ import * as Crypto from "expo-crypto";
 import * as SQLite from "expo-sqlite";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { currentContourId } from "@/core/environments";
 import { getDatabase } from "@/db/database";
 import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
@@ -1618,6 +1619,230 @@ async function buildCompletedPointResults(assignmentId: string) {
   }));
 }
 
+export async function listMissingCompleteAssignmentAttachmentIds(assignmentId: string, pointId: string) {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return [];
+  }
+
+  const db = await getDatabase();
+  const command = await db.getFirstAsync<{ payloadJson: string }>(
+    `
+      SELECT payload_json AS payloadJson
+      FROM outbox_commands
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND command_type = 'completePatrolAssignment'
+        AND entity_local_id = ?
+        AND status IN ('pending', 'retryLater')
+      ORDER BY created_at_local DESC
+      LIMIT 1
+    `,
+    [ownerUserId, currentContourId, assignmentId]
+  );
+
+  if (!command) {
+    return [];
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(command.payloadJson) as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+
+  const pointResult = Array.isArray(payload.pointResults)
+    ? payload.pointResults.find((value): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && value.pointId === pointId)
+    : undefined;
+  const clientFileIds = Array.isArray(pointResult?.photoClientFileIds)
+    ? pointResult.photoClientFileIds.filter((value): value is string => typeof value === "string")
+    : [];
+
+  if (clientFileIds.length === 0) {
+    return [];
+  }
+
+  const placeholders = clientFileIds.map(() => "?").join(", ");
+  const presentFiles = await db.getAllAsync<{ clientFileId: string }>(
+    `
+      SELECT client_file_id AS clientFileId
+      FROM files
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND client_file_id IN (${placeholders})
+    `,
+    [ownerUserId, currentContourId, ...clientFileIds]
+  );
+  const presentIds = new Set(presentFiles.map((file) => file.clientFileId));
+  return clientFileIds.filter((clientFileId) => !presentIds.has(clientFileId));
+}
+
+export async function restoreMissingPointAttachment(
+  assignmentId: string,
+  pointId: string,
+  missingClientFileId: string,
+  file: LocalMobileFile
+) {
+  const ownerUserId = await requireOwnerUserId();
+  if (file.ownerUserId !== ownerUserId || file.assignmentId !== assignmentId || file.pointId !== pointId) {
+    throw new Error("Вложение не соответствует текущему пользователю или точке.");
+  }
+  if (file.clientFileId === missingClientFileId) {
+    throw new Error("Для восстановления требуется новый файл.");
+  }
+
+  const assignment = await getAssignmentById(assignmentId);
+  if (!assignment) {
+    throw new Error("Назначение не найдено на телефоне.");
+  }
+  if (assignment.status !== "completedLocal") {
+    throw new Error("Восстановление доступно только для локально завершённого отчёта.");
+  }
+
+  const db = await getDatabase();
+  const resultRef: { clientOperationId: string | null } = { clientOperationId: null };
+
+  await withSqliteBusyRetry(() =>
+    db.withExclusiveTransactionAsync(async (tx) => {
+      const command = await tx.getFirstAsync<{
+        clientOperationId: string;
+        payloadJson: string;
+      }>(
+        `
+          SELECT
+            client_operation_id AS clientOperationId,
+            payload_json AS payloadJson
+          FROM outbox_commands
+          WHERE owner_user_id = ?
+            AND contour_id = ?
+            AND command_type = 'completePatrolAssignment'
+            AND entity_local_id = ?
+            AND status IN ('pending', 'retryLater')
+          ORDER BY created_at_local DESC
+          LIMIT 1
+        `,
+        [ownerUserId, currentContourId, assignmentId]
+      );
+
+      if (!command) {
+        throw new Error("Не найдена ожидающая отправки команда завершения отчёта.");
+      }
+
+      const existingMissingFile = await tx.getFirstAsync<{ clientFileId: string }>(
+        `
+          SELECT client_file_id AS clientFileId
+          FROM files
+          WHERE owner_user_id = ?
+            AND contour_id = ?
+            AND client_file_id = ?
+          LIMIT 1
+        `,
+        [ownerUserId, currentContourId, missingClientFileId]
+      );
+      if (existingMissingFile) {
+        throw new Error("Исходное вложение уже доступно на телефоне; повторное восстановление не требуется.");
+      }
+
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(command.payloadJson) as Record<string, unknown>;
+      } catch {
+        throw new Error("Не удалось прочитать payload завершённого отчёта.");
+      }
+
+      if (!Array.isArray(payload.pointResults)) {
+        throw new Error("В отчёте отсутствуют результаты точек для восстановления.");
+      }
+
+      let replaced = false;
+      const pointResults = payload.pointResults.map((value) => {
+        if (!value || typeof value !== "object") {
+          return value;
+        }
+        const pointResult = value as Record<string, unknown>;
+        if (pointResult.pointId !== pointId) {
+          return value;
+        }
+        const ids = Array.isArray(pointResult.photoClientFileIds)
+          ? pointResult.photoClientFileIds.filter((id): id is string => typeof id === "string")
+          : [];
+        if (!ids.includes(missingClientFileId)) {
+          return value;
+        }
+        replaced = true;
+        return {
+          ...pointResult,
+          photoClientFileIds: ids.map((id) => (id === missingClientFileId ? file.clientFileId : id))
+        };
+      });
+
+      if (!replaced) {
+        throw new Error("Указанное отсутствующее вложение не относится к этой точке.");
+      }
+
+      const pointRow = await tx.getFirstAsync<{ photoClientFileIdsJson: string | null }>(
+        `
+          SELECT photo_client_file_ids_json AS photoClientFileIdsJson
+          FROM point_results
+          WHERE owner_user_id = ?
+            AND assignment_id = ?
+            AND point_id = ?
+          LIMIT 1
+        `,
+        [ownerUserId, assignmentId, pointId]
+      );
+      if (!pointRow) {
+        throw new Error("Результат точки не найден; восстановление остановлено без изменения отчёта.");
+      }
+      const persistedIds = parseStringArray(pointRow.photoClientFileIdsJson ?? null);
+      const updatedPersistedIds = Array.from(new Set(
+        (persistedIds.length > 0 ? persistedIds : [missingClientFileId])
+          .map((id) => (id === missingClientFileId ? file.clientFileId : id))
+      ));
+
+      await insertLocalFileInTransaction(tx, {
+        ...file,
+        ownerUserId,
+        contourId: currentContourId,
+        assignmentId,
+        pointId,
+        status: "queued"
+      });
+      await tx.runAsync(
+        `
+          UPDATE point_results
+          SET photo_client_file_ids_json = ?,
+              sync_status = 'pending'
+          WHERE owner_user_id = ?
+            AND assignment_id = ?
+            AND point_id = ?
+        `,
+        [JSON.stringify(updatedPersistedIds), ownerUserId, assignmentId, pointId]
+      );
+      await tx.runAsync(
+        `
+          UPDATE outbox_commands
+          SET payload_json = ?,
+              next_attempt_at = NULL,
+              updated_at_local = ?
+          WHERE client_operation_id = ?
+            AND owner_user_id = ?
+            AND contour_id = ?
+            AND status IN ('pending', 'retryLater')
+        `,
+        [JSON.stringify({ ...payload, pointResults }), new Date().toISOString(), command.clientOperationId, ownerUserId, currentContourId]
+      );
+
+      resultRef.clientOperationId = command.clientOperationId;
+    })
+  );
+
+  if (!resultRef.clientOperationId) {
+    throw new Error("Не удалось сохранить восстановленное вложение.");
+  }
+  return { clientOperationId: resultRef.clientOperationId };
+}
 async function getQueuedCompleteAssignmentCommand(executor: SqlExecutor, ownerUserId: string, assignmentId: string) {
   return executor.getFirstAsync<{
     clientOperationId: string;

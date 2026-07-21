@@ -1,5 +1,6 @@
 import * as SQLite from "expo-sqlite";
 
+import { currentContourId } from "@/core/environments";
 import { OutboxCommand } from "@/domain/sync/syncTypes";
 
 export type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "runAsync">;
@@ -10,6 +11,7 @@ export async function insertOutboxCommandInTransaction(executor: SqlExecutor, co
       INSERT INTO outbox_commands (
         client_operation_id,
         owner_user_id,
+        contour_id,
         command_type,
         entity_type,
         entity_local_id,
@@ -20,11 +22,12 @@ export async function insertOutboxCommandInTransaction(executor: SqlExecutor, co
         attempt_count,
         status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       command.clientOperationId,
       command.ownerUserId,
+      command.contourId ?? currentContourId,
       command.commandType,
       command.entityType,
       command.entityLocalId ?? null,
@@ -52,11 +55,12 @@ export async function updatePendingCompleteReportBaseRevisionInTransaction(
       SELECT client_operation_id, payload_json
       FROM outbox_commands
       WHERE owner_user_id = ?
+        AND contour_id = ?
         AND command_type = 'completePatrolAssignment'
         AND entity_local_id = ?
         AND status IN ('pending', 'retryLater')
     `,
-    [ownerUserId, assignmentId]
+    [ownerUserId, currentContourId, assignmentId]
   );
 
   for (const command of commands) {
@@ -64,8 +68,8 @@ export async function updatePendingCompleteReportBaseRevisionInTransaction(
       const payload = JSON.parse(command.payload_json) as Record<string, unknown>;
       payload.baseRevision = baseRevision;
       await tx.runAsync(
-        "UPDATE outbox_commands SET payload_json = ?, updated_at_local = ? WHERE owner_user_id = ? AND client_operation_id = ?",
-        [JSON.stringify(payload), new Date().toISOString(), ownerUserId, command.client_operation_id]
+        "UPDATE outbox_commands SET payload_json = ?, updated_at_local = ? WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?",
+        [JSON.stringify(payload), new Date().toISOString(), ownerUserId, currentContourId, command.client_operation_id]
       );
     } catch {
       // The report command will be rejected by its normal payload validation;

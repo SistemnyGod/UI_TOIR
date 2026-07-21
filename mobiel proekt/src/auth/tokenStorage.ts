@@ -42,7 +42,8 @@ export async function getOfflineSession(): Promise<OfflineSessionState | null> {
       lastOnlineLoginAt: parsed.lastOnlineLoginAt,
       expiresAt: parsed.expiresAt,
       revokedAt: parsed.revokedAt ?? null,
-      revocationReason: parsed.revocationReason ?? null
+      revocationReason: parsed.revocationReason ?? null,
+      requiresReenrollment: parsed.requiresReenrollment ?? false
     };
   } catch {
     return null;
@@ -96,6 +97,19 @@ export async function clearAuthTokens() {
   await SecureStore.deleteItemAsync(accessTokenKey);
   await SecureStore.deleteItemAsync(refreshTokenKey);
   lockSession();
+}
+
+export async function markSessionNeedsReenrollment(reason = "device_reenrollment_required") {
+  const offlineSession = await getOfflineSession();
+  if (offlineSession) {
+    await setOfflineSession({
+      ...offlineSession,
+      revokedAt: null,
+      revocationReason: reason,
+      requiresReenrollment: true
+    });
+  }
+  await clearAuthTokens();
 }
 
 export async function revokeStoredSession(reason: string) {

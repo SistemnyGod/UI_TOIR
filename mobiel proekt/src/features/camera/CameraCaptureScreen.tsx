@@ -5,6 +5,8 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import {
   attachPointPhotoFromCamera,
   attachPointPhotoFromGallery,
+  restoreMissingPointPhotoFromCamera,
+  restoreMissingPointPhotoFromGallery,
   attachPointVideoFromCamera,
   attachPointVideoFromGallery,
   attachRemarkPhotoFromCamera,
@@ -18,18 +20,21 @@ import { Screen } from "@/ui/Screen";
 
 export function CameraCaptureScreen() {
   const router = useRouter();
-  const { assignmentId, pointId, remarkId, mediaKind, source } = useLocalSearchParams<{
+  const { assignmentId, pointId, remarkId, mediaKind, source, restoreMissing, missingClientFileId } = useLocalSearchParams<{
     assignmentId?: string;
     pointId?: string;
     remarkId?: string;
     mediaKind?: "photo" | "video";
     source?: "camera" | "gallery";
+    restoreMissing?: string;
+    missingClientFileId?: string;
   }>();
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const captureKind = mediaKind === "video" ? "video" : "photo";
   const isRemarkMedia = Boolean(remarkId);
+  const isMissingAttachmentRecovery = restoreMissing === "true" && Boolean(missingClientFileId);
   const autoStarted = useRef(false);
 
   const handleAttach = useCallback(async (selectedSource: "camera" | "gallery") => {
@@ -52,6 +57,18 @@ export function CameraCaptureScreen() {
         return;
       }
 
+      if (isMissingAttachmentRecovery) {
+        if (captureKind !== "photo" || !missingClientFileId) {
+          setError("Восстановление доступно только для отсутствующего фото.");
+          return;
+        }
+        await (selectedSource === "camera"
+          ? restoreMissingPointPhotoFromCamera(assignmentId, pointId, missingClientFileId)
+          : restoreMissingPointPhotoFromGallery(assignmentId, pointId, missingClientFileId));
+        router.replace(`/patrol/assignment/${assignmentId}/point/${pointId}`);
+        return;
+      }
+
       if (captureKind === "video") {
         await (selectedSource === "camera"
           ? attachPointVideoFromCamera(assignmentId, pointId)
@@ -67,7 +84,7 @@ export function CameraCaptureScreen() {
     } finally {
       setIsBusy(false);
     }
-  }, [assignmentId, captureKind, isRemarkMedia, pointId, remarkId, router]);
+  }, [assignmentId, captureKind, isMissingAttachmentRecovery, isRemarkMedia, missingClientFileId, pointId, remarkId, router]);
 
   useEffect(() => {
     if ((source === "camera" || source === "gallery") && !autoStarted.current) {
@@ -77,6 +94,11 @@ export function CameraCaptureScreen() {
   }, [handleAttach, source]);
 
   function goBack() {
+    if (isMissingAttachmentRecovery) {
+      router.replace(`/patrol/assignment/${assignmentId}/point/${pointId}`);
+      return;
+    }
+
     if (isRemarkMedia) {
       router.replace("/(tabs)/work-accounting");
       return;

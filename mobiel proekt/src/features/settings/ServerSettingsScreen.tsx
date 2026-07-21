@@ -8,8 +8,6 @@ import {
   isPilotHttpServer,
   localLanServerBaseUrl,
   resetServerBaseUrl,
-  setLocalLanServerBaseUrl,
-  setServerBaseUrl
 } from "@/core/serverSettings";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { Card } from "@/ui/Card";
@@ -45,7 +43,11 @@ export function ServerSettingsScreen() {
   const handleSave = useCallback(async () => {
     setIsBusy(true);
     try {
-      const normalizedUrl = await setServerBaseUrl(serverUrl);
+      const result = await checkServerConnection(serverUrl);
+      if (!result.ok) {
+        throw new Error(result.message);
+      }
+      const normalizedUrl = await getServerBaseUrl();
       setServerUrl(normalizedUrl);
       setStatusMessage({
         tone: "success",
@@ -64,9 +66,9 @@ export function ServerSettingsScreen() {
   const handleUseLocalServer = useCallback(async () => {
     setIsBusy(true);
     try {
-      const localUrl = await setLocalLanServerBaseUrl();
+      const result = await checkServerConnection(localLanServerBaseUrl);
+      const localUrl = result.url?.replace("/api/v1/mobile/health", "") ?? localLanServerBaseUrl;
       setServerUrl(localUrl);
-      const result = await checkServerConnection(localUrl);
       setStatusMessage({
         tone: result.ok ? "success" : "error",
         text: result.ok

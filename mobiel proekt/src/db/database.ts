@@ -1,3 +1,4 @@
+import { currentContourId } from "@/core/environments";
 import * as SQLite from "expo-sqlite";
 
 import { openProtectedDatabase } from "@/db/encryptedDatabase";
@@ -160,6 +161,7 @@ async function initializeDatabaseOnce() {
       payload_json TEXT NOT NULL,
       created_at_local TEXT NOT NULL,
       updated_at_local TEXT,
+      next_attempt_at TEXT,
       attempt_count INTEGER NOT NULL DEFAULT 0,
       last_error TEXT,
       status TEXT NOT NULL
@@ -320,6 +322,14 @@ async function initializeDatabaseOnce() {
 
     await runLocalMigration(tx, "20260715_mobile_action_log_retention", async () => {
       await ensureMobileActionLogRetention(tx);
+    });
+
+    await runLocalMigration(tx, "20260721_contour_isolation", async () => {
+      await ensureContourIsolation(tx);
+    });
+
+    await runLocalMigration(tx, "20260721_outbox_next_attempt_at", async () => {
+      await ensureOutboxNextAttemptAt(tx);
     });
   });
 }
@@ -759,4 +769,35 @@ async function ensureColumns(db: SqlExecutor, tableName: string, additions: { na
       await db.execAsync(addition.sql);
     }
   }
+}
+async function ensureContourIsolation(db: SqlExecutor) {
+  await ensureColumns(db, "files", [
+    { name: "contour_id", sql: "ALTER TABLE files ADD COLUMN contour_id TEXT" }
+  ]);
+  await ensureColumns(db, "outbox_commands", [
+    { name: "contour_id", sql: "ALTER TABLE outbox_commands ADD COLUMN contour_id TEXT" }
+  ]);
+  await ensureColumns(db, "sync_cursors", [
+    { name: "contour_id", sql: "ALTER TABLE sync_cursors ADD COLUMN contour_id TEXT" }
+  ]);
+  await db.runAsync("UPDATE files SET contour_id = ? WHERE contour_id IS NULL", [currentContourId]);
+  await db.runAsync("UPDATE outbox_commands SET contour_id = ? WHERE contour_id IS NULL", [currentContourId]);
+  await db.runAsync("UPDATE sync_cursors SET contour_id = ? WHERE contour_id IS NULL", [currentContourId]);
+  await db.execAsync(`
+    CREATE INDEX IF NOT EXISTS ix_files_contour_status
+      ON files (contour_id, status);
+    CREATE INDEX IF NOT EXISTS ix_outbox_commands_contour_status_created
+      ON outbox_commands (contour_id, status, created_at_local);
+    CREATE INDEX IF NOT EXISTS ix_sync_cursors_contour_scope
+      ON sync_cursors (contour_id, scope);
+  `);
+}
+async function ensureOutboxNextAttemptAt(db: SqlExecutor) {
+  await ensureColumns(db, "outbox_commands", [
+    { name: "next_attempt_at", sql: "ALTER TABLE outbox_commands ADD COLUMN next_attempt_at TEXT" }
+  ]);
+  await db.execAsync(`
+    CREATE INDEX IF NOT EXISTS ix_outbox_commands_contour_next_attempt
+      ON outbox_commands (contour_id, status, next_attempt_at, created_at_local);
+  `);
 }

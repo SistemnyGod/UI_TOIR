@@ -1,3 +1,4 @@
+import { currentContourId } from "@/core/environments";
 import * as SQLite from "expo-sqlite";
 
 import { getDatabase } from "@/db/database";
@@ -114,7 +115,8 @@ export async function saveBootstrap(bootstrap: BootstrapDto) {
 export async function getBootstrapSyncCursor() {
   const db = await getDatabase();
   const row = await db.getFirstAsync<{ cursor_value: string | null }>(
-    "SELECT cursor_value FROM sync_cursors WHERE scope = 'bootstrap' LIMIT 1"
+    "SELECT cursor_value FROM sync_cursors WHERE scope = 'bootstrap' AND contour_id = ? LIMIT 1",
+    [currentContourId]
   );
   return row?.cursor_value ?? null;
 }
@@ -655,16 +657,18 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
       `
         INSERT INTO sync_cursors (
           scope,
+          contour_id,
           cursor_value,
           last_sync_at,
           protocol_version
         )
-        VALUES ('bootstrap', ?, ?, '1.0')
+        VALUES ('bootstrap', ?, ?, ?, '1.0')
         ON CONFLICT(scope) DO UPDATE SET
+          contour_id = excluded.contour_id,
           cursor_value = excluded.cursor_value,
           last_sync_at = excluded.last_sync_at,
           protocol_version = excluded.protocol_version
       `,
-      [bootstrap.syncCursor, bootstrap.serverTime]
+      [currentContourId, bootstrap.syncCursor, bootstrap.serverTime]
     );
 }

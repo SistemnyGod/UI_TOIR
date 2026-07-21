@@ -15,13 +15,13 @@ export async function uploadMobileFile(file: LocalMobileFile) {
 
   const token = await getAccessToken();
   const runtimeConfig = await getMobileRuntimeConfig();
-  let { apiBaseUrl, result } = await uploadFileWithFailover(runtimeConfig.apiBaseUrl, runtimeConfig.syncProtocolVersion, file, token);
+  let { apiBaseUrl, result } = await uploadFileWithFailover(runtimeConfig.apiBaseUrl, runtimeConfig.syncProtocolVersion, runtimeConfig.contourId, file, token);
 
   // Keep attachment upload consistent with JSON requests when only the
   // refresh token remains available.
   if (result.status === 401) {
     const refreshedToken = await refreshStoredAccessToken();
-    ({ result } = await uploadFileWithFailover(apiBaseUrl, runtimeConfig.syncProtocolVersion, file, refreshedToken));
+    ({ result } = await uploadFileWithFailover(apiBaseUrl, runtimeConfig.syncProtocolVersion, runtimeConfig.contourId, file, refreshedToken));
   }
 
   if (result.status === 401) {
@@ -90,6 +90,7 @@ async function validateMobileFileBeforeUpload(file: LocalMobileFile) {
 async function uploadFileWithFailover(
   preferredApiBaseUrl: string,
   syncProtocolVersion: string,
+  contourId: string,
   file: LocalMobileFile,
   token: string | null
 ) {
@@ -99,7 +100,7 @@ async function uploadFileWithFailover(
 
   for (const apiBaseUrl of apiBaseUrls) {
     try {
-      const result = await uploadFileWithToken(apiBaseUrl, syncProtocolVersion, file, token);
+      const result = await uploadFileWithToken(apiBaseUrl, syncProtocolVersion, contourId, file, token);
       if (shouldTryNextMobileServer(result.status, null, Boolean(result.body))
           && apiBaseUrl !== apiBaseUrls[apiBaseUrls.length - 1]) {
         lastResult = result;
@@ -127,6 +128,7 @@ async function uploadFileWithFailover(
 async function uploadFileWithToken(
   apiBaseUrl: string,
   syncProtocolVersion: string,
+  contourId: string,
   file: LocalMobileFile,
   token: string | null
 ) {
@@ -145,6 +147,7 @@ async function uploadFileWithToken(
         httpMethod: "POST",
         mimeType: contentType,
         parameters: {
+          contourId,
           assignmentId: file.assignmentId ?? "",
           capturedAtLocal: file.createdAtLocal,
           clientFileId: file.clientFileId,

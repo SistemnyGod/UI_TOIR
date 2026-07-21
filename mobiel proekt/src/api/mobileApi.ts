@@ -1,4 +1,5 @@
 import { mobileRequest } from "@/api/httpClient";
+import { getMobileRuntimeConfig } from "@/core/serverSettings";
 import { bootstrapResponseSchema, unknownResponseSchema } from "@/api/schemas";
 import { BootstrapDto } from "@/domain/patrol/patrolTypes";
 import { OutboxCommand, OutboxResponse } from "@/domain/sync/syncTypes";
@@ -11,9 +12,10 @@ export function getBootstrap(accessToken?: string) {
 }
 
 export async function postOutbox(commands: OutboxCommand[]) {
+  const runtimeConfig = await getMobileRuntimeConfig();
   const response = await mobileRequest<unknown>("/api/v1/mobile/outbox", unknownResponseSchema, {
     method: "POST",
-    body: { commands }
+    body: { contourId: runtimeConfig.contourId, commands }
   });
 
   return validateOutboxResponses(response, commands);

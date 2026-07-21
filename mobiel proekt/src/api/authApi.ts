@@ -1,6 +1,7 @@
 import { mobileRequest } from "@/api/httpClient";
 import { emptyResponseSchema, loginResponseSchema } from "@/api/schemas";
 import { MobileDeviceDto, MobileUserDto } from "@/domain/patrol/patrolTypes";
+import { getMobileRuntimeConfig } from "@/core/serverSettings";
 
 export type LoginRequest = {
   login: string;
@@ -18,12 +19,14 @@ export type LoginResponse = {
   refreshToken: string;
   expiresAt: string;
   refreshExpiresAt: string;
+  contourId: string;
 };
 
-export function login(payload: LoginRequest) {
+export async function login(payload: LoginRequest) {
+  const runtimeConfig = await getMobileRuntimeConfig();
   return mobileRequest<LoginResponse>("/api/v1/mobile/auth/login", loginResponseSchema, {
     method: "POST",
-    body: payload,
+    body: { ...payload, contourId: runtimeConfig.contourId },
     accessToken: null,
     skipAuthRefresh: true
   });
@@ -34,10 +37,11 @@ export type RefreshRequest = {
   deviceId: string;
 };
 
-export function refresh(payload: RefreshRequest) {
+export async function refresh(payload: RefreshRequest) {
+  const runtimeConfig = await getMobileRuntimeConfig();
   return mobileRequest<LoginResponse>("/api/v1/mobile/auth/refresh", loginResponseSchema, {
     method: "POST",
-    body: payload,
+    body: { ...payload, contourId: runtimeConfig.contourId },
     accessToken: null,
     skipAuthRefresh: true
   });
