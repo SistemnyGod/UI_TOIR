@@ -2,6 +2,13 @@ using Patrol360.Contracts;
 
 namespace Patrol360.Application;
 
+public interface IMobileSessionAuthenticationService
+{
+    MobileSessionIdentity? GetCurrentSession(string accessToken);
+}
+
+public sealed record MobileSessionIdentity(Guid MobileAccountId, string Login);
+
 public interface IMobileAppService
 {
     MobileAuthResult Login(MobileLoginRequestDto request, string ipAddress);

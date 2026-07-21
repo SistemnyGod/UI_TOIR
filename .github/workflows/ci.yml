@@ -95,7 +95,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             apps/web/package-lock.json
-            Мобильное приложение/package-lock.json
+            mobiel proekt/package-lock.json
 
       - name: Restore .NET
         shell: pwsh
@@ -137,11 +137,11 @@ jobs:
         run: npm run verify
 
       - name: Install mobile dependencies
-        working-directory: Мобильное приложение
+        working-directory: mobiel proekt
         run: npm ci
 
       - name: Verify mobile offline, auth and sync safeguards
-        working-directory: Мобильное приложение
+        working-directory: mobiel proekt
         run: npm run verify
 
       - name: Frontend structural tests

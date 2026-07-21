@@ -7,14 +7,15 @@ using Patrol360.Application;
 
 namespace Patrol360.Api.Authorization;
 
-public sealed class SiteBearerAuthenticationHandler(
+public sealed class MobileBearerAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
     UrlEncoder encoder,
-    IAuthSessionService authSessionService)
+    IMobileSessionAuthenticationService mobileSessionAuthenticationService)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
-    public const string SchemeName = "SiteBearer";
+    public const string SchemeName = "MobileBearer";
+    public const string PolicyName = "MobileSession";
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
@@ -29,20 +30,18 @@ public sealed class SiteBearerAuthenticationHandler(
             return Task.FromResult(AuthenticateResult.NoResult());
         }
 
-        var user = authSessionService.GetCurrentUser(accessToken);
-        if (user is null)
+        var session = mobileSessionAuthenticationService.GetCurrentSession(accessToken);
+        if (session is null)
         {
-            return Task.FromResult(AuthenticateResult.Fail("Bearer session is invalid or expired."));
+            return Task.FromResult(AuthenticateResult.Fail("Mobile bearer session is invalid or expired."));
         }
 
-        var claims = new List<Claim>
+        var claims = new[]
         {
-            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new(ClaimTypes.Name, user.Login),
+            new Claim(ClaimTypes.NameIdentifier, session.MobileAccountId.ToString()),
+            new Claim(ClaimTypes.Name, session.Login),
+            new Claim("mobile_account_id", session.MobileAccountId.ToString())
         };
-        claims.AddRange(user.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
-        claims.AddRange(user.Permissions.Select(permission => new Claim("permission", permission)));
-
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, SchemeName));
         var ticket = new AuthenticationTicket(principal, SchemeName);
         return Task.FromResult(AuthenticateResult.Success(ticket));

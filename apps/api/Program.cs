@@ -26,27 +26,34 @@ builder.Services
     })
     .AddScheme<AuthenticationSchemeOptions, SiteBearerAuthenticationHandler>(
         SiteBearerAuthenticationHandler.SchemeName,
+        _ => { })
+    .AddScheme<AuthenticationSchemeOptions, MobileBearerAuthenticationHandler>(
+        MobileBearerAuthenticationHandler.SchemeName,
         _ => { });
 builder.Services.AddAuthorization(options =>
 {
     options.FallbackPolicy = new AuthorizationPolicyBuilder(SiteBearerAuthenticationHandler.SchemeName)
         .RequireAuthenticatedUser()
         .Build();
+    options.AddPolicy(MobileBearerAuthenticationHandler.PolicyName, policy =>
+    {
+        policy.AddAuthenticationSchemes(MobileBearerAuthenticationHandler.SchemeName);
+        policy.RequireAuthenticatedUser();
+    });
 });
+var knownProxyAddresses = builder.Configuration
+    .GetSection("ForwardedHeaders:KnownProxies")
+    .GetChildren()
+    .Select(section => section.Value)
+    .ToArray();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
-{
-    // The API is only exposed behind the Caddy container in the supported
-    // deployment. Trust its forwarded client address for rate limiting.
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
-});
+    ForwardedHeadersConfiguration.Configure(options, knownProxyAddresses));
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     Func<HttpContext, RateLimitPartition<string>> authRateLimitPartition = context =>
         RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            partitionKey: ClientAddressRateLimitPartition.GetPartitionKey(context),
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 10,

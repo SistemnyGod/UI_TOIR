@@ -512,8 +512,8 @@ internal sealed partial class EfMobileAppService
         return true;
     }
 
-    private static MobileAuthResult UnauthorizedResult() =>
-        new(null, true, EmptyErrors());
+    private static MobileAuthResult UnauthorizedResult(string failureCode = "invalid_credentials") =>
+        new(null, true, EmptyErrors(), failureCode);
 
     private static IReadOnlyDictionary<string, string[]> EmptyErrors() =>
         new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);

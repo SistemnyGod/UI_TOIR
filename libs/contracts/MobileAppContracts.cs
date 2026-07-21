@@ -287,7 +287,8 @@ public sealed record MobileDeviceHealthDto(
 public sealed record MobileAuthResult(
     MobileAuthSessionDto? Session,
     bool Unauthorized,
-    IReadOnlyDictionary<string, string[]> Errors)
+    IReadOnlyDictionary<string, string[]> Errors,
+    string? FailureCode = null)
 {
     public bool Succeeded => Session is not null && !Unauthorized && Errors.Count == 0;
 }

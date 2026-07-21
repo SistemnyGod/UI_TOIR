@@ -1,7 +1,10 @@
 using System.Security.Claims;
+using System.Net;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
@@ -70,21 +73,9 @@ public class ApiSmokeTests
             "AuthController.Login",
             "HealthController.Live",
             "HealthController.Ready",
-            "MobileController.Bootstrap",
             "MobileController.Health",
             "MobileController.Login",
-            "MobileController.Logout",
-            "MobileController.MarkNotificationRead",
-            "MobileController.Notifications",
-            "MobileController.Outbox",
-            "MobileController.OutboxResult",
-            "MobileController.RegisterPushToken",
             "MobileController.Refresh",
-            "MobileController.SaveDiagnosticReport",
-            "MobileController.UploadFile",
-            "MobileController.WorkTask",
-            "MobileController.WorkTasks",
-            "MobileV2Controller.WorkItems",
         };
 
         var endpoints = typeof(AuthController).Assembly
@@ -113,6 +104,31 @@ public class ApiSmokeTests
     }
 
     [Fact]
+    public void EveryProtectedMobileEndpointUsesDedicatedMobileSessionPolicy()
+    {
+        var controllerTypes = new[] { typeof(MobileController), typeof(MobileV2Controller) };
+
+        foreach (var controllerType in controllerTypes)
+        {
+            var authorize = Assert.Single(controllerType
+                .GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+                .OfType<AuthorizeAttribute>());
+            Assert.Equal(MobileBearerAuthenticationHandler.PolicyName, authorize.Policy);
+
+            var protectedMethods = controllerType
+                .GetMethods()
+                .Where(method => method.DeclaringType == controllerType)
+                .Where(method => method.GetCustomAttributes(inherit: true).OfType<HttpMethodAttribute>().Any())
+                .Where(method => !method.GetCustomAttributes(inherit: true).OfType<IAllowAnonymous>().Any())
+                .ToArray();
+
+            Assert.NotEmpty(protectedMethods);
+            Assert.All(protectedMethods, method =>
+                Assert.DoesNotContain(method.GetCustomAttributes(inherit: true), attribute => attribute is IAllowAnonymous));
+        }
+    }
+
+    [Fact]
     public async Task SiteBearerAuthenticationBuildsPrincipalFromActiveSession()
     {
         var user = new SessionUserDto(Guid.NewGuid(), "operator", "Operator", ["operator"], ["dashboard.read"]);
@@ -134,6 +150,95 @@ public class ApiSmokeTests
         Assert.True(result.Succeeded);
         Assert.Equal(user.Id.ToString(), result.Principal!.FindFirstValue(ClaimTypes.NameIdentifier));
         Assert.True(result.Principal.HasClaim("permission", "dashboard.read"));
+    }
+
+    [Fact]
+    public async Task MobileBearerAuthenticationBuildsPrincipalFromActiveSession()
+    {
+        var accountId = Guid.NewGuid();
+        await using var provider = BuildMobileAuthenticationProvider(
+            new FakeMobileSessionAuthenticationService(new MobileSessionIdentity(accountId, "mobile-user")));
+        var context = new DefaultHttpContext { RequestServices = provider };
+        context.Request.Headers.Authorization = "Bearer mobile-token";
+
+        var result = await context.AuthenticateAsync(MobileBearerAuthenticationHandler.SchemeName);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(accountId.ToString(), result.Principal!.FindFirstValue(ClaimTypes.NameIdentifier));
+        Assert.Equal("mobile-user", result.Principal.FindFirstValue(ClaimTypes.Name));
+        Assert.Equal(accountId.ToString(), result.Principal.FindFirstValue("mobile_account_id"));
+    }
+
+    [Theory]
+    [InlineData("invalid-token")]
+    [InlineData("expired-token")]
+    [InlineData("revoked-token")]
+    public async Task MobileBearerAuthenticationRejectsInactiveSession(string accessToken)
+    {
+        await using var provider = BuildMobileAuthenticationProvider(new FakeMobileSessionAuthenticationService());
+        var context = new DefaultHttpContext { RequestServices = provider };
+        context.Request.Headers.Authorization = $"Bearer {accessToken}";
+
+        var result = await context.AuthenticateAsync(MobileBearerAuthenticationHandler.SchemeName);
+        await context.ChallengeAsync(MobileBearerAuthenticationHandler.SchemeName);
+
+        Assert.False(result.Succeeded);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task MobileBearerAuthenticationChallengesMissingTokenWith401()
+    {
+        await using var provider = BuildMobileAuthenticationProvider(new FakeMobileSessionAuthenticationService());
+        var context = new DefaultHttpContext { RequestServices = provider };
+
+        var result = await context.AuthenticateAsync(MobileBearerAuthenticationHandler.SchemeName);
+        await context.ChallengeAsync(MobileBearerAuthenticationHandler.SchemeName);
+
+        Assert.True(result.None);
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UntrustedDirectRequestCannotSpoofRateLimitPartitionWithForwardedFor()
+    {
+        var originalAddress = IPAddress.Parse("203.0.113.10");
+        var spoofedAddress = IPAddress.Parse("198.51.100.25");
+
+        var result = await ApplyForwardedHeaders(
+            originalAddress,
+            spoofedAddress,
+            knownProxyAddresses: ["172.30.0.10"]);
+
+        Assert.Equal(originalAddress, result.RemoteIpAddress);
+        Assert.Equal(originalAddress.ToString(), result.RateLimitPartitionKey);
+    }
+
+    [Fact]
+    public async Task TrustedCaddyProxySuppliesClientRateLimitPartition()
+    {
+        var proxyAddress = IPAddress.Parse("172.30.0.10");
+        var clientAddress = IPAddress.Parse("198.51.100.25");
+
+        var result = await ApplyForwardedHeaders(
+            proxyAddress,
+            clientAddress,
+            knownProxyAddresses: [proxyAddress.ToString()]);
+
+        Assert.Equal(clientAddress, result.RemoteIpAddress);
+        Assert.Equal(clientAddress.ToString(), result.RateLimitPartitionKey);
+    }
+
+    [Fact]
+    public void ForwardedHeadersRejectInvalidKnownProxyConfiguration()
+    {
+        var options = new ForwardedHeadersOptions();
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            ForwardedHeadersConfiguration.Configure(options, ["not-an-ip-address"]));
+
+        Assert.Contains("invalid IP address", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -891,6 +996,48 @@ public class ApiSmokeTests
         return new AuthorizationFilterContext(actionContext, []);
     }
 
+    private static ServiceProvider BuildMobileAuthenticationProvider(
+        IMobileSessionAuthenticationService mobileSessionAuthenticationService)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(mobileSessionAuthenticationService);
+        services
+            .AddAuthentication(MobileBearerAuthenticationHandler.SchemeName)
+            .AddScheme<AuthenticationSchemeOptions, MobileBearerAuthenticationHandler>(
+                MobileBearerAuthenticationHandler.SchemeName,
+                _ => { });
+        return services.BuildServiceProvider();
+    }
+
+    private static async Task<ForwardedHeaderTestResult> ApplyForwardedHeaders(
+        IPAddress remoteIpAddress,
+        IPAddress forwardedFor,
+        IReadOnlyList<string> knownProxyAddresses)
+    {
+        var services = new ServiceCollection().AddLogging().BuildServiceProvider();
+        var options = new ForwardedHeadersOptions();
+        ForwardedHeadersConfiguration.Configure(options, knownProxyAddresses);
+
+        IPAddress? observedAddress = null;
+        string? partitionKey = null;
+        var application = new ApplicationBuilder(services);
+        application.UseForwardedHeaders(options);
+        application.Run(context =>
+        {
+            observedAddress = context.Connection.RemoteIpAddress;
+            partitionKey = ClientAddressRateLimitPartition.GetPartitionKey(context);
+            return Task.CompletedTask;
+        });
+
+        var httpContext = new DefaultHttpContext { RequestServices = services };
+        httpContext.Connection.RemoteIpAddress = remoteIpAddress;
+        httpContext.Request.Headers["X-Forwarded-For"] = forwardedFor.ToString();
+        await application.Build()(httpContext);
+
+        return new ForwardedHeaderTestResult(observedAddress, partitionKey);
+    }
+
     private static bool HasAuthenticationMetadata(Type controllerType, System.Reflection.MethodInfo method)
     {
         var attributes = GetEndpointAttributes(controllerType, method);
@@ -1255,6 +1402,16 @@ public class ApiSmokeTests
 
         public bool Logout(string accessToken) => true;
     }
+
+    private sealed class FakeMobileSessionAuthenticationService(MobileSessionIdentity? session = null)
+        : IMobileSessionAuthenticationService
+    {
+        public MobileSessionIdentity? GetCurrentSession(string accessToken) => session;
+    }
+
+    private sealed record ForwardedHeaderTestResult(
+        IPAddress? RemoteIpAddress,
+        string? RateLimitPartitionKey);
 
     private sealed class FakeSiteUserAdminService(
         CreateSiteUserResult? createResult = null,

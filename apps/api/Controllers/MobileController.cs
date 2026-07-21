@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.Net.Http.Headers;
+using Patrol360.Api.Authorization;
 using Patrol360.Application;
 using Patrol360.Contracts;
 
@@ -9,7 +9,8 @@ namespace Patrol360.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/mobile")]
-public sealed class MobileController(IMobileAppService mobileAppService) : ControllerBase
+[Authorize(Policy = MobileBearerAuthenticationHandler.PolicyName)]
+public sealed class MobileController(IMobileAppService mobileAppService) : MobileApiControllerBase
 {
     [HttpGet("health")]
     [AllowAnonymous]
@@ -32,7 +33,9 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
             return MobileValidationProblem("Mobile login failed", result.Errors);
         }
 
-        return result.Unauthorized ? Unauthorized() : Ok(result.Session);
+        return result.Unauthorized
+            ? Unauthorized(new { code = result.FailureCode ?? "invalid_credentials" })
+            : Ok(result.Session);
     }
 
     [HttpPost("auth/refresh")]
@@ -46,64 +49,39 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
             return MobileValidationProblem("Mobile refresh failed", result.Errors);
         }
 
-        return result.Unauthorized ? Unauthorized() : Ok(result.Session);
+        return result.Unauthorized
+            ? Unauthorized(new { code = result.FailureCode ?? "device_session_not_found" })
+            : Ok(result.Session);
     }
 
     [HttpPost("auth/logout")]
-    [AllowAnonymous]
     public IActionResult Logout()
     {
-        var token = ReadBearerToken();
-        if (token is not null)
-        {
-            mobileAppService.Logout(token);
-        }
-
+        mobileAppService.Logout(MobileAccessToken);
         return NoContent();
     }
 
     [HttpGet("bootstrap")]
-    [AllowAnonymous]
     public ActionResult<MobileBootstrapDto> Bootstrap()
     {
-        var token = ReadBearerToken();
-        if (token is null)
-        {
-            return Unauthorized();
-        }
-
-        var bootstrap = mobileAppService.GetBootstrap(token);
+        var bootstrap = mobileAppService.GetBootstrap(MobileAccessToken);
         return bootstrap is null ? Unauthorized() : Ok(bootstrap);
     }
 
     [HttpPost("devices/push-token")]
-    [AllowAnonymous]
     public ActionResult<MobileDeviceRegistrationDto> RegisterPushToken(MobilePushTokenRegistrationDto request)
     {
-        var token = ReadBearerToken();
-        if (token is null)
-        {
-            return Unauthorized();
-        }
-
-        var result = mobileAppService.RegisterPushToken(token, request);
+        var result = mobileAppService.RegisterPushToken(MobileAccessToken, request);
         return result is null ? Unauthorized() : Ok(result);
     }
 
     [HttpPost("diagnostics/daily")]
-    [AllowAnonymous]
     [RequestSizeLimit(256 * 1024)]
     public ActionResult<MobileDiagnosticReportReceiptDto> SaveDiagnosticReport(MobileDiagnosticReportDto request)
     {
-        var token = ReadBearerToken();
-        if (token is null)
-        {
-            return Unauthorized();
-        }
-
         try
         {
-            var result = mobileAppService.SaveDiagnosticReport(token, request);
+            var result = mobileAppService.SaveDiagnosticReport(MobileAccessToken, request);
             return result is null ? Unauthorized() : Ok(result);
         }
         catch (ArgumentException exception)
@@ -113,83 +91,47 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
     }
 
     [HttpGet("notifications")]
-    [AllowAnonymous]
     public ActionResult<IReadOnlyList<MobileNotificationDto>> Notifications([FromQuery] bool unreadOnly = false)
     {
-        var token = ReadBearerToken();
-        if (token is null)
-        {
-            return Unauthorized();
-        }
-
-        return Ok(mobileAppService.GetNotifications(token, unreadOnly));
+        return Ok(mobileAppService.GetNotifications(MobileAccessToken, unreadOnly));
     }
 
     [HttpPost("notifications/{notificationId:guid}/read")]
-    [AllowAnonymous]
     public ActionResult<MobileNotificationDto> MarkNotificationRead(Guid notificationId)
     {
-        var token = ReadBearerToken();
-        if (token is null)
-        {
-            return Unauthorized();
-        }
-
-        var result = mobileAppService.MarkNotificationRead(token, notificationId);
+        var result = mobileAppService.MarkNotificationRead(MobileAccessToken, notificationId);
         return result is null ? NotFound() : Ok(result);
     }
 
     [HttpGet("work-tasks")]
     [HttpGet("emu/tasks")]
-    [AllowAnonymous]
     public ActionResult<IReadOnlyList<MobileWorkTaskDto>> WorkTasks()
     {
-        var token = ReadBearerToken();
-        if (token is null)
-        {
-            return Unauthorized();
-        }
-
-        return Ok(mobileAppService.GetWorkTasks(token));
+        return Ok(mobileAppService.GetWorkTasks(MobileAccessToken));
     }
 
     [HttpGet("work-tasks/{taskId:guid}")]
     [HttpGet("emu/tasks/{taskId:guid}")]
-    [AllowAnonymous]
     public ActionResult<MobileWorkTaskDto> WorkTask(Guid taskId)
     {
-        var token = ReadBearerToken();
-        if (token is null)
-        {
-            return Unauthorized();
-        }
-
-        var result = mobileAppService.GetWorkTask(token, taskId);
+        var result = mobileAppService.GetWorkTask(MobileAccessToken, taskId);
         return result is null ? NotFound() : Ok(result);
     }
 
     [HttpPost("outbox")]
-    [AllowAnonymous]
     [RequestSizeLimit(1024 * 1024)]
     public ActionResult<IReadOnlyList<MobileOutboxResponseDto>> Outbox(MobileOutboxBatchDto request)
     {
-        var token = ReadBearerToken();
-        if (token is null)
-        {
-            return Unauthorized();
-        }
-
-        if (request.Commands is null || request.Commands.Count > 100)
+        if (request.Commands is null || request.Commands.Count is < 1 or > 100)
         {
             return BadRequest("Outbox batch must contain from 1 to 100 commands.");
         }
 
-        var result = mobileAppService.SaveOutbox(token, request);
-        return result.Count == 0 ? Unauthorized() : Ok(result);
+        var result = mobileAppService.SaveOutbox(MobileAccessToken, request);
+        return Ok(result);
     }
 
     [HttpPost("files")]
-    [AllowAnonymous]
     [RequestSizeLimit(32 * 1024 * 1024)]
     public async Task<ActionResult<MobileFileUploadResponseDto>> UploadFile(
         [FromForm] string clientFileId,
@@ -202,12 +144,6 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
         [FromForm] DateTimeOffset capturedAtLocal,
         [FromForm] IFormFile file)
     {
-        var token = ReadBearerToken();
-        if (token is null)
-        {
-            return Unauthorized();
-        }
-
         if (file.Length == 0)
         {
             return BadRequest("File is empty.");
@@ -215,7 +151,7 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
 
         using var stream = file.OpenReadStream();
         var result = await mobileAppService.UploadFileAsync(
-            token,
+            MobileAccessToken,
             new MobileFileUploadCommand(
                 clientFileId,
                 assignmentId,
@@ -234,31 +170,10 @@ public sealed class MobileController(IMobileAppService mobileAppService) : Contr
     }
 
     [HttpGet("outbox/{clientOperationId}")]
-    [AllowAnonymous]
     public ActionResult<MobileOutboxResponseDto> OutboxResult(string clientOperationId)
     {
-        var token = ReadBearerToken();
-        if (token is null)
-        {
-            return Unauthorized();
-        }
-
-        var result = mobileAppService.GetOutboxResult(token, clientOperationId);
+        var result = mobileAppService.GetOutboxResult(MobileAccessToken, clientOperationId);
         return result is null ? NotFound() : Ok(result);
-    }
-
-    private string? ReadBearerToken()
-    {
-        if (!Request.Headers.TryGetValue(HeaderNames.Authorization, out var values))
-        {
-            return null;
-        }
-
-        var value = values.ToString();
-        const string bearerPrefix = "Bearer ";
-        return value.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase)
-            ? value[bearerPrefix.Length..].Trim()
-            : null;
     }
 
     private string GetIpAddress() =>

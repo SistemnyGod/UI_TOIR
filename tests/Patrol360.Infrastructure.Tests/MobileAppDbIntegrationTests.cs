@@ -1148,6 +1148,42 @@ public sealed class MobileAppDbIntegrationTests
         Assert.Empty(unlinkedLogin.Errors);
     }
 
+    [DbIntegrationFact]
+    public async Task MobileSessionAuthenticationRejectsInvalidExpiredAndRevokedTokens()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+
+        await provider.InitializePatrolDatabaseAsync();
+        var employee = UseEmployees(provider, employees => employees.GetEmployees().First());
+        var account = UseMobileAccounts(provider, accounts => accounts.CreateAccount(new CreateMobileAccountDto(
+            employee.FullName,
+            "selected",
+            $"auth_{Guid.NewGuid():N}"[..18],
+            "РњР°СЂС€СЂСѓС‚РЅС‹Р№ РѕР±С…РѕРґС‡РёРє",
+            BindEmployee: true,
+            RestrictToBoundDevice: false,
+            TemporaryPassword: false,
+            Password: "Patrol360!",
+            ConfirmPassword: "Patrol360!",
+            RequirePasswordChange: false)));
+        Assert.True(account.Succeeded);
+
+        var firstLogin = Login(provider, account.Account!.Login, "Patrol360!");
+        Assert.True(firstLogin.Succeeded);
+        Assert.NotNull(AuthenticateMobileSession(provider, firstLogin.Session!.AccessToken));
+        Assert.Null(AuthenticateMobileSession(provider, "invalid-token"));
+
+        ExpireMobileSessions(database.ConnectionString, account.Account.Id);
+        Assert.Null(AuthenticateMobileSession(provider, firstLogin.Session.AccessToken));
+
+        var secondLogin = Login(provider, account.Account.Login, "Patrol360!");
+        Assert.True(secondLogin.Succeeded);
+        Assert.NotNull(AuthenticateMobileSession(provider, secondLogin.Session!.AccessToken));
+        Assert.True(UseMobileApp(provider, mobile => mobile.Logout(secondLogin.Session.AccessToken)));
+        Assert.Null(AuthenticateMobileSession(provider, secondLogin.Session.AccessToken));
+    }
+
     private static MobileAuthResult Login(ServiceProvider provider, string login, string password) =>
         UseMobileApp(provider, mobile => mobile.Login(new MobileLoginRequestDto(
             login,
@@ -1201,6 +1237,25 @@ public sealed class MobileAppDbIntegrationTests
         services.AddSingleton<IConfiguration>(configuration);
 
         return services.BuildServiceProvider();
+    }
+
+    private static MobileSessionIdentity? AuthenticateMobileSession(ServiceProvider provider, string accessToken)
+    {
+        using var scope = provider.CreateScope();
+        return scope.ServiceProvider
+            .GetRequiredService<IMobileSessionAuthenticationService>()
+            .GetCurrentSession(accessToken);
+    }
+
+    private static void ExpireMobileSessions(string connectionString, Guid mobileAccountId)
+    {
+        using var connection = new NpgsqlConnection(connectionString);
+        connection.Open();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE mobile_account_sessions SET expires_at = NOW() - INTERVAL '1 minute' WHERE mobile_account_id = @account_id;";
+        command.Parameters.AddWithValue("account_id", mobileAccountId);
+        command.ExecuteNonQuery();
     }
 
     private static T UseMobileAccounts<T>(ServiceProvider provider, Func<IMobileAccountService, T> action)

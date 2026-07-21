@@ -9,6 +9,14 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfMobileAppService
 {
+    public MobileSessionIdentity? GetCurrentSession(string accessToken)
+    {
+        var session = FindActiveSession(accessToken);
+        return session?.MobileAccount is null
+            ? null
+            : new MobileSessionIdentity(session.MobileAccountId, session.MobileAccount.Login);
+    }
+
     public MobileAuthResult Login(MobileLoginRequestDto request, string ipAddress)
     {
         var errors = ValidateLoginRequest(request);
@@ -80,33 +88,42 @@ internal sealed partial class EfMobileAppService
                 .ThenInclude(account => account!.EmployeeBindings)
             .FirstOrDefault(item => item.RefreshTokenHash == tokenHash);
 
-        if (oldSession is null
-            || oldSession.RevokedAt is not null
-            || oldSession.RefreshExpiresAt <= now
-            || !string.Equals(oldSession.DeviceId, request.DeviceId, StringComparison.Ordinal)
-            || oldSession.MobileAccount is null
-            || !CanUseMobileApp(oldSession.MobileAccount))
+        if (oldSession is null)
         {
-            return UnauthorizedResult();
+            return UnauthorizedResult("device_session_not_found");
         }
 
-        oldSession.RevokedAt = now;
-        oldSession.Status = "Завершена";
+        if (oldSession.RevokedAt is not null)
+        {
+            return UnauthorizedResult("session_revoked");
+        }
 
-        var sessionBundle = CreateSession(
-            oldSession.MobileAccount,
-            oldSession.DeviceId,
-            oldSession.Device,
-            oldSession.Platform,
-            oldSession.AppVersion,
-            ipAddress);
-        var session = sessionBundle.Session;
+        if (!string.Equals(oldSession.DeviceId, request.DeviceId, StringComparison.Ordinal))
+        {
+            return UnauthorizedResult("device_mismatch");
+        }
+
+        if (oldSession.MobileAccount is null || !CanUseMobileApp(oldSession.MobileAccount))
+        {
+            return UnauthorizedResult("account_disabled");
+        }
+
+        var accessToken = EfAuthSessionService.GenerateAccessToken();
+        oldSession.TokenHash = EfAuthSessionService.HashToken(accessToken);
+        oldSession.ExpiresAt = now.Add(AccessTokenLifetime);
+        oldSession.RefreshExpiresAt = PersistentDeviceSessionExpiry;
+        oldSession.LastSeenAt = now;
+        oldSession.IpAddress = NormalizeOptionalText(ipAddress, "-");
+        oldSession.Status = "Онлайн";
         oldSession.MobileAccount.Session = "Онлайн";
         oldSession.MobileAccount.LastSeenAt = now;
 
         dbContext.SaveChanges();
 
-        return new MobileAuthResult(MapAuthSession(oldSession.MobileAccount, session, sessionBundle.AccessToken, sessionBundle.RefreshToken), false, EmptyErrors());
+        return new MobileAuthResult(
+            MapAuthSession(oldSession.MobileAccount, oldSession, accessToken, request.RefreshToken),
+            false,
+            EmptyErrors());
     }
 
     public bool Logout(string accessToken)
@@ -180,7 +197,7 @@ internal sealed partial class EfMobileAppService
             RefreshTokenHash = EfAuthSessionService.HashToken(refreshToken),
             CreatedAt = now,
             ExpiresAt = now.Add(AccessTokenLifetime),
-            RefreshExpiresAt = now.Add(RefreshTokenLifetime),
+            RefreshExpiresAt = PersistentDeviceSessionExpiry,
             LastSeenAt = now,
         };
 

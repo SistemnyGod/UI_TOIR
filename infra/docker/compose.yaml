@@ -39,6 +39,8 @@ services:
       ConnectionStrings__Patrol360: Host=postgres;Port=5432;Database=${POSTGRES_DB:-patrol360};Username=${POSTGRES_USER:-patrol360};Password=${POSTGRES_PASSWORD:-patrol360_dev}
       DataProtection__KeyRingPath: /var/lib/patrol360/data-protection-keys
       MobileDiagnostics__StoragePath: /app/mobile-diagnostics
+      # Must match the proxy address below; all other X-Forwarded-* senders are ignored.
+      ForwardedHeaders__KnownProxies__0: ${PATROL360_PROXY_IP:-172.30.0.10}
     volumes:
       - ./secrets/data-protection-keys:/var/lib/patrol360/data-protection-keys
       - api-mobile-files:/app/mobile-files
@@ -116,6 +118,10 @@ services:
       - "80:80"
       - "443:443"
       - "5173:80"
+    networks:
+      default:
+        # Keep this synchronized with ForwardedHeaders__KnownProxies__0 on api.
+        ipv4_address: ${PATROL360_PROXY_IP:-172.30.0.10}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./certs/patrol360.local.crt:/etc/caddy/certs/patrol360.local.crt:ro
@@ -204,3 +210,9 @@ volumes:
   api-mobile-files:
   postgres-data:
   minio-data:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${PATROL360_DOCKER_SUBNET:-172.30.0.0/24}

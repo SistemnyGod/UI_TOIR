@@ -31,7 +31,7 @@ infra/docker/certs/*.pfx
 infra/docker/secrets/
 infra/docker/mobile-diagnostics/
 mobile-diagnostics/
-Мобильное приложение/secrets/
+mobiel proekt/secrets/
 apps/mobile/secrets/
 *firebase-adminsdk*.json
 firebase-service-account*.json

@@ -11,10 +11,13 @@ internal sealed partial class EfMobileAppService(
     Patrol360DbContext dbContext,
     IEmuWorkService emuWorkService,
     IMobileDiagnosticReportStore diagnosticReportStore,
-    IPatrolTimeZone patrolTimeZone) : IMobileAppService
+    IPatrolTimeZone patrolTimeZone) : IMobileAppService, IMobileSessionAuthenticationService
 {
     private static readonly TimeSpan AccessTokenLifetime = TimeSpan.FromHours(8);
-    private static readonly TimeSpan RefreshTokenLifetime = TimeSpan.FromDays(14);
+    // A mobile refresh credential represents an enrolled device and remains
+    // valid until logout, device revocation or account blocking. Access tokens
+    // stay short lived and are renewed whenever the phone can reach the API.
+    private static readonly DateTimeOffset PersistentDeviceSessionExpiry = DateTimeOffset.MaxValue;
     private const long MaxMobilePhotoBytes = 6 * 1024 * 1024;
     private const long MaxMobileVideoBytes = 30 * 1024 * 1024;
     private const string MobileEmuDoneStatus = "Завершил";
