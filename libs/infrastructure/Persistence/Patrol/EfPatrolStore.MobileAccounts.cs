@@ -93,6 +93,7 @@ internal sealed partial class EfPatrolStore
             return MissingMobileAccountResult();
         }
 
+        var password = NormalizeOptionalText(request.Password);
         var errors = ValidateUpdateMobileAccount(id, request);
         if (errors.Count > 0)
         {
@@ -104,15 +105,28 @@ internal sealed partial class EfPatrolStore
         account.Role = NormalizeOptionalText(request.Role);
         account.Status = nextStatus;
 
+        if (!string.IsNullOrWhiteSpace(password))
+        {
+            account.PasswordHash = MobilePasswordHasher.HashPassword(account, password);
+            account.PasswordResetRequired = false;
+            account.LastPasswordResetAt = DateTimeOffset.UtcNow;
+        }
+
         if (nextStatus == "Не привязан")
         {
             DetachAllBindings(account);
         }
 
+        var auditDetails = $"Обновлён аккаунт {account.Login}. Роль: {account.Role}; статус: {account.Status}.";
+        if (!string.IsNullOrWhiteSpace(password))
+        {
+            auditDetails += " Пароль изменён вручную.";
+        }
+
         AddMobileAccountAuditEvent(
             account.Id,
             "mobile_account.updated",
-            $"Обновлён аккаунт {account.Login}. Роль: {account.Role}; статус: {account.Status}.");
+            auditDetails);
         SyncMobileAccountDerivedState(account);
         SaveChangesAndRebuildEmployeeMobileFlags();
 
@@ -427,6 +441,21 @@ internal sealed partial class EfPatrolStore
         var login = NormalizeLogin(request.Login);
         var role = NormalizeOptionalText(request.Role);
         var status = NormalizeOptionalText(request.Status);
+        var password = NormalizeOptionalText(request.Password);
+        var confirmPassword = NormalizeOptionalText(request.ConfirmPassword);
+
+        if (string.IsNullOrWhiteSpace(password) && !string.IsNullOrWhiteSpace(confirmPassword))
+        {
+            errors["password"] = ["Укажите новый пароль."];
+        }
+        else if (!string.IsNullOrWhiteSpace(password) && password.Length < 8)
+        {
+            errors["password"] = ["Пароль должен содержать минимум 8 символов."];
+        }
+        else if (!string.IsNullOrWhiteSpace(password) && password != confirmPassword)
+        {
+            errors["password"] = ["Пароли не совпадают."];
+        }
 
         if (string.IsNullOrWhiteSpace(login))
         {

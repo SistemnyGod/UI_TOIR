@@ -326,6 +326,8 @@ export interface UpdateMobileAccountPayload {
   login: string;
   role: string;
   status: MobileAccount["status"];
+  password?: string;
+  confirmPassword?: string;
 }
 
 export interface MobileAccountSession {

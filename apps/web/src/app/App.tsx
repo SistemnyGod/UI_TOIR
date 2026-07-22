@@ -434,7 +434,6 @@ export function App() {
           currentScreen={currentScreen}
           primaryActionDisabledReason={getPermissionDeniedMessage(primaryActionPermission)}
           screen={screen}
-          onOpenRequest={() => openRequestForResult()}
           onPrimaryAction={handlePrimaryAction}
         />
 

@@ -269,11 +269,9 @@ export function ScreenRouter({
             activePatrols={activePatrols}
             dashboardMetrics={dashboardMetrics}
             dataSourceMode={dataSourceMode}
-            employeeDirectory={employeeDirectory}
             onCreateRequest={onCreateRequest}
             onNavigate={onNavigate}
             onOpenRequestById={onOpenRequestById}
-            onOpenRequest={onOpenRequest}
             onNotify={onNotify}
             onSelectResult={onSelectResult}
             routeDirectory={routeDirectory}

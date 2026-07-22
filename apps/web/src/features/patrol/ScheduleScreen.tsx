@@ -1,4 +1,3 @@
-import { PlanningSummaryCards } from "./components/schedule/PlanningSummaryCards";
 import { ScheduleEditPanel } from "./components/schedule/ScheduleEditPanel";
 import { ScheduleGridPanel } from "./components/schedule/ScheduleGridPanel";
 import { ScheduleSidePanels } from "./components/schedule/ScheduleSidePanels";
@@ -66,11 +65,8 @@ export function ScheduleScreen({
     return employeeDirectory.filter((employee) => favoriteSet.has(employee.id));
   }, [employeeDirectory, syncedFavoriteEmployeeIds]);
   const {
-    coveragePercent,
-    dayCount,
     errorMessage,
     exceptionCount,
-    nightCount,
     plannedCount,
     refreshScheduleReferences,
     scheduleCells,
@@ -111,15 +107,6 @@ export function ScheduleScreen({
         onModeChange={onModeChange}
         onNotify={onNotify}
         onShiftFilterChange={setShiftFilter}
-      />
-
-      <PlanningSummaryCards
-        coveragePercent={coveragePercent}
-        dayCount={dayCount}
-        plannedCount={plannedCount}
-        exceptionCount={exceptionCount}
-        nightCount={nightCount}
-        onModeChange={onModeChange}
       />
 
       <div className="two-column wide-left">

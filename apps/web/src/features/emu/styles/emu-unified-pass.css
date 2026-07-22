@@ -1173,3 +1173,578 @@
     width: 100%;
   }
 }
+
+/*
+ * The EMU view lives next to the application sidebar, so the browser viewport
+ * is not a reliable breakpoint. Use the shell width instead; this keeps the
+ * dashboard compact inside a narrow iframe, split view, laptop or phone.
+ */
+.emu-shell {
+  container-name: emu-shell;
+  container-type: inline-size;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.emu-shell .emu-dashboard-page {
+  min-width: 0;
+  overflow-x: clip;
+}
+
+@container emu-shell (max-width: 1240px) {
+  .emu-shell .emu-dashboard-page {
+    gap: 10px;
+    padding: 8px 10px 22px;
+  }
+
+  .emu-shell .emu-dashboard-header {
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .emu-shell .emu-dashboard-header h2 {
+    font-size: 26px;
+  }
+
+  .emu-shell .emu-dashboard-header p {
+    font-size: 12px;
+  }
+
+  .emu-shell .emu-dashboard-top-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .emu-shell .emu-dashboard-top-grid .emu-dashboard-shift {
+    grid-column: span 3;
+  }
+
+  .emu-shell .emu-dashboard-middle-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .emu-shell .emu-dashboard-middle-grid .emu-dashboard-actions {
+    grid-column: span 2;
+  }
+
+  .emu-shell .emu-dashboard-bottom-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .emu-shell .emu-dashboard-bottom-grid > .emu-dashboard-card:first-child {
+    grid-column: span 2;
+  }
+
+  .emu-shell .emu-dashboard-metric {
+    min-height: 108px;
+    padding: 11px;
+  }
+
+  .emu-shell .emu-dashboard-metric-main {
+    gap: 8px;
+  }
+
+  .emu-shell .emu-dashboard-metric strong {
+    font-size: 26px;
+  }
+
+  .emu-shell .emu-dashboard-metric span,
+  .emu-shell .emu-dashboard-metric em {
+    font-size: 11px;
+  }
+
+  .emu-shell .emu-dashboard-icon {
+    height: 36px;
+    width: 36px;
+  }
+
+  .emu-shell .emu-dashboard-icon svg {
+    height: 18px;
+    width: 18px;
+  }
+
+  .emu-shell .emu-dashboard-card > header {
+    min-height: 48px;
+    padding: 10px 12px;
+  }
+
+  .emu-shell .emu-dashboard-card > header h3,
+  .emu-shell .emu-dashboard-card-title h3 {
+    font-size: 14px;
+  }
+
+  .emu-shell .emu-area-summary,
+  .emu-shell .emu-dashboard-occupancy,
+  .emu-shell .emu-dashboard-section-risks,
+  .emu-shell .emu-key-indicators,
+  .emu-shell .emu-trend-chart {
+    padding: 11px;
+  }
+
+  .emu-shell .emu-dashboard-bars {
+    min-height: 136px;
+    padding: 12px 10px 10px;
+  }
+
+  .emu-shell .emu-dashboard-bars > div {
+    height: 100px;
+  }
+
+  .emu-shell .emu-quick-actions {
+    gap: 7px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 10px;
+  }
+
+  .emu-shell .emu-quick-actions button {
+    min-height: 38px;
+    padding: 0 8px;
+  }
+}
+
+@container emu-shell (max-width: 900px) {
+  .emu-shell .emu-dashboard-page {
+    gap: 8px;
+    padding: 6px 7px 18px;
+  }
+
+  .emu-shell .emu-dashboard-header {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 11px 12px;
+  }
+
+  .emu-shell .emu-dashboard-header h2 {
+    font-size: 23px;
+  }
+
+  .emu-shell .emu-dashboard-header-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .emu-shell .emu-dashboard-header-actions .emu-shift-select {
+    grid-column: 1 / -1;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .emu-shell .emu-dashboard-header-actions .emu-secondary-button {
+    justify-content: center;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .emu-shell .emu-dashboard-top-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .emu-shell .emu-dashboard-top-grid .emu-dashboard-shift {
+    grid-column: span 2;
+  }
+
+  .emu-shell .emu-dashboard-middle-grid,
+  .emu-shell .emu-dashboard-bottom-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emu-shell .emu-dashboard-middle-grid .emu-dashboard-actions,
+  .emu-shell .emu-dashboard-bottom-grid > .emu-dashboard-card:first-child {
+    grid-column: auto;
+  }
+
+  .emu-shell .emu-dashboard-metric {
+    min-height: 96px;
+    padding: 10px;
+  }
+
+  .emu-shell .emu-dashboard-metric strong {
+    font-size: 23px;
+  }
+
+  .emu-shell .emu-dashboard-shift {
+    padding: 11px;
+  }
+
+  .emu-shell .emu-dashboard-shift-main {
+    gap: 10px;
+  }
+
+  .emu-shell .emu-dashboard-donut {
+    height: 76px;
+    width: 76px;
+  }
+
+  .emu-shell .emu-dashboard-footer {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+  }
+}
+
+@container emu-shell (max-width: 640px) {
+  .emu-shell .emu-dashboard-top-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emu-shell .emu-dashboard-top-grid .emu-dashboard-shift {
+    grid-column: auto;
+  }
+
+  .emu-shell .emu-dashboard-header h2 {
+    font-size: 21px;
+  }
+
+  .emu-shell .emu-dashboard-header-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emu-shell .emu-dashboard-header-actions .emu-shift-select {
+    grid-column: auto;
+  }
+
+  .emu-shell .emu-dashboard-header-actions .emu-secondary-button,
+  .emu-shell .emu-quick-actions button {
+    min-height: 36px;
+  }
+
+  .emu-shell .emu-quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .emu-shell .emu-dashboard-card > header {
+    min-height: 44px;
+    padding: 9px 10px;
+  }
+
+  .emu-shell .emu-dashboard-card > header h3,
+  .emu-shell .emu-dashboard-card-title h3 {
+    font-size: 13px;
+  }
+
+  .emu-shell .emu-active-work-list article {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+    padding: 10px 12px;
+  }
+
+  .emu-shell .emu-active-work-list article > div:last-child {
+    text-align: left;
+  }
+
+  .emu-shell .emu-dashboard-occupancy-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Keep long decision queues compact; reveal the next five records on demand. */
+.emu-shell .emu-decision-list {
+  align-content: start;
+  gap: 8px;
+}
+
+.emu-shell .emu-decision-load-more {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid #c9daf4;
+  border-radius: 8px;
+  background: #fff;
+  color: #0b63f6;
+  cursor: pointer;
+  font: 800 12px/1.2 inherit;
+  padding: 0 12px;
+}
+
+.emu-shell .emu-decision-load-more:hover {
+  border-color: #8fb8ff;
+  background: #f4f8ff;
+}
+
+/* Compact employee quick picker: favorites first, full directory on demand. */
+.emu-shell .emu-create-work-modal .emu-picker-shell {
+  max-height: none;
+  overflow: visible;
+  padding: 8px;
+}
+
+.emu-shell .emu-create-work-modal .emu-picker-toolbar {
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+
+.emu-shell .emu-create-work-modal .emu-picker-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.emu-shell .emu-create-work-modal .emu-picker-toolbar-actions button {
+  min-height: 30px;
+  padding: 0 9px;
+}
+
+.emu-shell .emu-create-work-modal .emu-picker-mode-toggle {
+  border-color: #9fc1f5;
+  background: #eef6ff;
+  color: #0b63f6;
+}
+
+.emu-shell .emu-create-work-modal .emu-picker {
+  max-height: 184px;
+  overflow-y: auto;
+  padding: 2px 4px 2px 0;
+}
+
+.emu-shell .emu-create-work-modal .emu-picker button {
+  min-height: 42px;
+  padding: 6px 7px;
+}
+
+.emu-shell .emu-create-work-modal .emu-picker strong {
+  font-size: 12px;
+  line-height: 1.15;
+}
+
+.emu-shell .emu-create-work-modal .emu-picker small {
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+@container emu-shell (max-width: 760px) {
+  .emu-shell .emu-create-work-modal .emu-picker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: 210px;
+  }
+
+  .emu-shell .emu-create-work-modal .emu-picker-toolbar {
+    flex-direction: column;
+  }
+
+  .emu-shell .emu-create-work-modal .emu-picker-toolbar-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+
+/* Edit-work modal: keep schedule fields and task editor visible above the picker. */
+.emu-shell .emu-edit-work-modal {
+  width: min(920px, calc(100vw - 32px));
+}
+
+.emu-shell .emu-edit-work-modal .emu-work-summary {
+  margin-bottom: 8px;
+}
+
+.emu-shell .emu-edit-work-modal .emu-form-grid {
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.emu-shell .emu-edit-work-modal .emu-picker-shell {
+  max-height: 190px;
+  overflow: hidden;
+  padding: 8px;
+}
+
+.emu-shell .emu-edit-work-modal .emu-picker {
+  max-height: 136px;
+  overflow-y: auto;
+}
+
+.emu-shell .emu-edit-work-modal .emu-picker button {
+  min-height: 40px;
+}
+
+.emu-shell .emu-edit-work-modal .emu-textarea-label {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.emu-shell .emu-edit-work-modal .emu-textarea-label textarea {
+  min-height: 70px;
+}
+
+.emu-shell .emu-edit-work-modal > .emu-modal-actions {
+  position: sticky;
+  z-index: 2;
+}
+
+@container emu-shell (max-width: 760px) {
+  .emu-shell .emu-edit-work-modal {
+    width: min(100%, calc(100vw - 20px));
+  }
+
+  .emu-shell .emu-edit-work-modal .emu-picker-shell {
+    max-height: 210px;
+  }
+
+  .emu-shell .emu-edit-work-modal .emu-picker {
+    max-height: 154px;
+  }
+}
+
+/* Work summary and time controls: explicit task blocks, compact employees, visible Now action. */
+.emu-work-summary {
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+}
+
+.emu-work-summary-field {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.emu-work-summary-field > span,
+.emu-work-summary-description > span {
+  color: #6b7891;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.emu-work-summary-field > strong {
+  color: #162846;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.emu-work-summary-task {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.72fr) minmax(0, 1.28fr);
+  gap: 12px;
+  border-top: 1px solid #e2ebf7;
+  border-bottom: 1px solid #e2ebf7;
+  padding: 8px 0;
+}
+
+.emu-work-summary-description {
+  min-width: 0;
+  border-left: 1px solid #e2ebf7;
+  padding-left: 12px;
+}
+
+.emu-work-summary-description p {
+  margin: 2px 0 0;
+  color: #344867;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.emu-work-summary-people {
+  display: grid;
+  gap: 6px;
+}
+
+.emu-work-summary-people > .emu-work-summary-field {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.emu-work-summary-people > .emu-work-summary-field small {
+  color: #7b8ba3;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.emu-work-summary-employee-list {
+  display: grid;
+  gap: 4px;
+  max-height: 126px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.emu-work-summary-employee {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid #e3ecf8;
+  border-radius: 7px;
+  background: #fff;
+  padding: 5px 7px;
+}
+
+.emu-work-summary-employee strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #21385b;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emu-work-summary-employee small {
+  flex: 0 0 auto;
+  color: #687b96;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.emu-shell .emu-input-action .emu-now-button,
+.emu-modal .emu-now-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 76px;
+  min-height: 38px;
+  border: 1px solid #b8cff0;
+  border-radius: 8px;
+  background: #edf5ff;
+  color: #1556b8;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 900;
+  opacity: 1;
+  padding: 0 10px;
+  visibility: visible;
+  white-space: nowrap;
+}
+
+.emu-shell .emu-input-action .emu-now-button:hover,
+.emu-modal .emu-now-button:hover {
+  border-color: #7eabeb;
+  background: #e3efff;
+  color: #0d4fae;
+}
+
+@container emu-shell (max-width: 760px) {
+  .emu-work-summary-task {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .emu-work-summary-description {
+    border-top: 1px solid #e2ebf7;
+    border-left: 0;
+    padding-top: 7px;
+    padding-left: 0;
+  }
+
+  .emu-work-summary-employee {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .emu-work-summary-employee small {
+    white-space: normal;
+  }
+}

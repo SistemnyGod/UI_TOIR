@@ -6,51 +6,89 @@ import type { EmuEmployeeOption } from "../types";
 import { ModalFrame } from "../components/ModalFrame";
 import { filterEmployees, formatEmployeeShortName, isSystemOtherSection } from "../workAccountingUtils";
 
+type CatalogTab = "sections" | "waitReasons" | "notCompletedReasons" | "templates";
+
 export function CatalogsModal({ onClose, onNotify, workspace }: { onClose: () => void; onNotify: (message: string) => void; workspace: EmuWorkspace }) {
+  const [activeTab, setActiveTab] = useState<CatalogTab>("sections");
+  const tabs: Array<{ id: CatalogTab; label: string; count: number }> = [
+    { id: "sections", label: "Участки", count: workspace.settings.sections.length },
+    { id: "waitReasons", label: "Причины ожидания", count: workspace.settings.waitReasons.length },
+    { id: "notCompletedReasons", label: "Причины невыполнения", count: workspace.settings.notCompletedReasons.length },
+    { id: "templates", label: "Типовые работы", count: workspace.settings.workTemplates.length },
+  ];
+
+  const content = activeTab === "sections" ? (
+    <ReferenceBlock
+      items={workspace.settings.sections}
+      onCreate={(name) => workspace.actions.createSection({ name })}
+      onNotify={onNotify}
+      onUpdate={(item, patch) =>
+        workspace.actions.updateSection(item.id, {
+          isActive: patch.isActive ?? item.isActive,
+          name: patch.name ?? item.name,
+          sortOrder: item.sortOrder,
+        })
+      }
+      protectSystemOther
+      title="Участки"
+    />
+  ) : activeTab === "waitReasons" ? (
+    <ReferenceBlock
+      items={workspace.settings.waitReasons}
+      onCreate={(name) => workspace.actions.createWaitReason({ name })}
+      onNotify={onNotify}
+      onUpdate={(item, patch) =>
+        workspace.actions.updateWaitReason(item.id, {
+          isActive: patch.isActive ?? item.isActive,
+          name: patch.name ?? item.name,
+          sortOrder: item.sortOrder,
+        })
+      }
+      title="Причины ожидания"
+    />
+  ) : activeTab === "notCompletedReasons" ? (
+    <ReferenceBlock
+      items={workspace.settings.notCompletedReasons}
+      onCreate={(name) => workspace.actions.createNotCompletedReason({ name })}
+      onNotify={onNotify}
+      onUpdate={(item, patch) =>
+        workspace.actions.updateNotCompletedReason(item.id, {
+          isActive: patch.isActive ?? item.isActive,
+          name: patch.name ?? item.name,
+          sortOrder: item.sortOrder,
+        })
+      }
+      title="Причины невыполнения"
+    />
+  ) : (
+    <TemplateBlock onNotify={onNotify} workspace={workspace} />
+  );
+
   return (
     <ModalFrame wide onClose={onClose} title="Справочники ЭМУ">
-      <div className="emu-reference-grid">
-        <ReferenceBlock
-          items={workspace.settings.sections}
-          onCreate={(name) => workspace.actions.createSection({ name })}
-          onNotify={onNotify}
-          onUpdate={(item, patch) =>
-            workspace.actions.updateSection(item.id, {
-              isActive: patch.isActive ?? item.isActive,
-              name: patch.name ?? item.name,
-              sortOrder: item.sortOrder,
-            })
-          }
-          protectSystemOther
-          title="Участки"
-        />
-        <ReferenceBlock
-          items={workspace.settings.waitReasons}
-          onCreate={(name) => workspace.actions.createWaitReason({ name })}
-          onNotify={onNotify}
-          onUpdate={(item, patch) =>
-            workspace.actions.updateWaitReason(item.id, {
-              isActive: patch.isActive ?? item.isActive,
-              name: patch.name ?? item.name,
-              sortOrder: item.sortOrder,
-            })
-          }
-          title="Причины ожидания"
-        />
-        <ReferenceBlock
-          items={workspace.settings.notCompletedReasons}
-          onCreate={(name) => workspace.actions.createNotCompletedReason({ name })}
-          onNotify={onNotify}
-          onUpdate={(item, patch) =>
-            workspace.actions.updateNotCompletedReason(item.id, {
-              isActive: patch.isActive ?? item.isActive,
-              name: patch.name ?? item.name,
-              sortOrder: item.sortOrder,
-            })
-          }
-          title="Причины невыполнения"
-        />
-        <TemplateBlock onNotify={onNotify} workspace={workspace} />
+      <div className="emu-catalog-modal">
+        <nav className="emu-catalog-tabs" aria-label="Разделы справочников">
+          {tabs.map((tab) => (
+            <button
+              aria-selected={activeTab === tab.id}
+              className="emu-catalog-tab"
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              role="tab"
+              type="button"
+            >
+              <span>{tab.label}</span>
+              <em>{tab.count}</em>
+            </button>
+          ))}
+        </nav>
+        <div className="emu-catalog-content" role="tabpanel">
+          {content}
+        </div>
+        <footer className="emu-catalog-footer">
+          <span>Изменения сохраняются сразу после добавления или редактирования.</span>
+          <button className="emu-primary-button" onClick={onClose} type="button">Сохранить и закрыть</button>
+        </footer>
       </div>
     </ModalFrame>
   );
@@ -213,20 +251,35 @@ export function TemplateBlock({ onNotify, workspace }: { onNotify: (message: str
         </div>
         <em>{workspace.settings.workTemplates.length}</em>
       </div>
-      <div className="emu-inline-form">
-        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Название" />
-        <select value={sectionId} onChange={(event) => setSectionId(event.target.value)}>
-          <option value="">Любой участок</option>
-          {workspace.settings.sections.map((section) => <option key={section.id} value={section.id}>{section.name}</option>)}
-        </select>
+      <div className="emu-template-form-grid">
+        <label className="emu-catalog-field">
+          <span>Название работы</span>
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Например, осмотр оборудования" />
+        </label>
+        <label className="emu-catalog-field">
+          <span>Участок</span>
+          <select value={sectionId} onChange={(event) => setSectionId(event.target.value)}>
+            <option value="">Любой участок</option>
+            {workspace.settings.sections.map((section) => <option key={section.id} value={section.id}>{section.name}</option>)}
+          </select>
+        </label>
       </div>
-      <label className="emu-textarea-label"><textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Описание типовой работы" /></label>
-      <button className="emu-primary-button" disabled={!name.trim()} onClick={() => void create()} type="button">Добавить типовую работу</button>
-      <input className="emu-reference-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск типовой работы" />
+      <label className="emu-catalog-field emu-catalog-field-wide">
+        <span>Описание и ожидаемый результат</span>
+        <textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Кратко опишите, что нужно сделать и какой результат получить" />
+      </label>
+      <button className="emu-primary-button emu-template-add-button" disabled={!name.trim()} onClick={() => void create()} type="button">Добавить типовую работу</button>
+      <div className="emu-template-list-toolbar">
+        <input className="emu-reference-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск по типовым работам" />
+        <span>{filteredTemplates.length} из {workspace.settings.workTemplates.length}</span>
+      </div>
       <div className="emu-reference-list">
         {filteredTemplates.map((template) => (
-          <div className="emu-reference-row" key={template.id}>
-            <span>{template.name}</span>
+          <div className="emu-reference-row emu-template-row" key={template.id}>
+            <span>
+              <strong>{template.name}</strong>
+              <small>{template.sectionName || "Любой участок"}</small>
+            </span>
             <em>{template.isActive ? "активно" : "скрыто"}</em>
             <button onClick={() => void toggleTemplate(template)} type="button">{template.isActive ? "Скрыть" : "Вернуть"}</button>
           </div>

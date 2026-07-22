@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -226,7 +226,7 @@ describe("shared UI primitives", () => {
     expect(container.querySelector(".skeleton-preview")).toBeInTheDocument();
   });
 
-  it("explains EMU work ownership mode for regular and full-access users", () => {
+  it("keeps the EMU work header focused on board actions", () => {
     const regularUser = {
       displayName: "Operator",
       id: "user-1",
@@ -251,8 +251,9 @@ describe("shared UI primitives", () => {
       />,
     );
 
-    expect(screen.getByText("Мои работы")).toBeInTheDocument();
-    expect(screen.getByText(/Показаны только карточки, созданные вашим аккаунтом/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Учет работ ЭМУ" })).toBeInTheDocument();
+    expect(screen.queryByText("Мои работы")).not.toBeInTheDocument();
+    expect(screen.queryByText("Все доступные работы")).not.toBeInTheDocument();
 
     rerender(
       <EmuWorkAccountingScreen
@@ -263,10 +264,9 @@ describe("shared UI primitives", () => {
       />,
     );
 
-    expect(screen.getByText("Все доступные работы")).toBeInTheDocument();
-    expect(screen.getByText(/видят расширенный список/)).toBeInTheDocument();
+    expect(screen.queryByText("Мои работы")).not.toBeInTheDocument();
+    expect(screen.queryByText("Все доступные работы")).not.toBeInTheDocument();
   });
-
   it("requires matching initial password when creating a site user", async () => {
     const user = userEvent.setup();
     const onNotify = vi.fn();
@@ -1464,6 +1464,8 @@ describe("shared UI primitives", () => {
     await user.clear(loginInput);
     await user.type(loginInput, "test2");
     await user.click(screen.getByRole("button", { name: "Сохранить изменения" }));
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Да, сохранить" }));
 
     expect(onUpdateAccount).toHaveBeenCalledWith({
       login: "test2",

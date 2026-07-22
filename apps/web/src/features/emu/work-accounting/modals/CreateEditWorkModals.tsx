@@ -44,6 +44,7 @@ export function CreateWorkModal({
   const [taskDescription, setTaskDescription] = useState(storedDraft.taskDescription);
   const [employeeIds, setEmployeeIds] = useState<string[]>(initialEmployeeId ? [initialEmployeeId] : storedDraft.employeeIds);
   const [search, setSearch] = useState("");
+  const [showAllEmployees, setShowAllEmployees] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const { employees: availableEmployeeOptions, favoriteIds: favoriteEmployeeIds } = useMemo(
@@ -51,6 +52,13 @@ export function CreateWorkModal({
     [employeeOptions, workspace.settings.favoriteEmployees],
   );
   const filteredEmployees = useMemo(() => filterEmployees(availableEmployeeOptions, search), [availableEmployeeOptions, search]);
+  const quickEmployees = useMemo(
+    () =>
+      showAllEmployees
+        ? filteredEmployees
+        : filteredEmployees.filter((employee) => favoriteEmployeeIds.has(employee.id) || employeeIds.includes(employee.id)),
+    [employeeIds, favoriteEmployeeIds, filteredEmployees, showAllEmployees],
+  );
   const sectionTemplates = useMemo(
     () => buildCreateWorkTemplates(workspace.settings.workTemplates, sectionId),
     [sectionId, workspace.settings.workTemplates],
@@ -134,7 +142,7 @@ export function CreateWorkModal({
               {sections.length === 0 ? <option value="">Нет доступных участков</option> : null}
               {sections.map((section) => <option key={section.id} value={section.id}>{section.name}</option>)}
             </select></label>
-            <label>Время прихода<span className="emu-input-action"><input type="time" value={time} onChange={(event) => setTime(event.target.value)} /><button onClick={setNow} type="button">Сейчас</button></span></label>
+            <label>Время прихода<span className="emu-input-action"><input type="time" value={time} onChange={(event) => setTime(event.target.value)} /><button className="emu-now-button" onClick={setNow} type="button">Сейчас</button></span></label>
           </div>
         </section>
         {sections.length === 0 ? <div className="emu-card-warning">Для учета работ не назначены участки. Создание карточек недоступно, пока администратор не выдаст доступ к участку ЭМУ.</div> : null}
@@ -142,13 +150,20 @@ export function CreateWorkModal({
         <section className="emu-create-work-section" aria-label="Выбор сотрудников">
           <div className="emu-create-work-section-heading">
             <span>2</span>
-            <div><strong>Сотрудники</strong><small>Избранные показаны первыми · доступно {availableEmployeeOptions.length}</small></div>
+            <div><strong>Сотрудники</strong><small>Быстрый выбор: избранные · доступно {favoriteEmployeeIds.size} из {availableEmployeeOptions.length}</small></div>
           </div>
-          <label className="emu-create-work-search">Поиск сотрудника<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Фамилия, должность, подразделение или табельный номер" /></label>
+          <label className="emu-create-work-search">Поиск сотрудника<input value={search} onChange={(event) => {
+              const value = event.target.value;
+              setSearch(value);
+              if (value.trim()) setShowAllEmployees(true);
+            }} placeholder="Фамилия, должность, подразделение или табельный номер" /></label>
           <EmployeePicker
             currentWorkId=""
-            employees={filteredEmployees}
+            employees={quickEmployees}
+            favoriteCount={favoriteEmployeeIds.size}
             favoriteIds={favoriteEmployeeIds}
+            onToggleShowAll={() => setShowAllEmployees((value) => !value)}
+            showAll={showAllEmployees}
             totalCount={availableEmployeeOptions.length}
             selectedIds={employeeIds}
             sessions={workspace.workSessions.rows}
@@ -211,8 +226,20 @@ export function EditWorkModal({
   const [taskDescription, setTaskDescription] = useState(work.taskDescription);
   const [employeeIds, setEmployeeIds] = useState(work.employees.map((employee) => employee.employeeId));
   const [search, setSearch] = useState("");
+  const [showAllEmployees, setShowAllEmployees] = useState(false);
   const [comment, setComment] = useState("");
   const filteredEmployees = filterEmployees(employeeOptions, search);
+  const favoriteEmployeeIds = useMemo(
+    () => new Set(workspace.settings.favoriteEmployees.filter((employee) => employee.isActive).map((employee) => employee.employeeId)),
+    [workspace.settings.favoriteEmployees],
+  );
+  const quickEmployees = useMemo(
+    () =>
+      showAllEmployees
+        ? filteredEmployees
+        : filteredEmployees.filter((employee) => favoriteEmployeeIds.has(employee.id) || employeeIds.includes(employee.id)),
+    [employeeIds, favoriteEmployeeIds, filteredEmployees, showAllEmployees],
+  );
   const conflicts = selectedConflicts(employeeIds, workspace.workSessions.rows, work.id);
   const hasConflict = conflicts.length > 0;
   const needsCorrectionComment = (workDate !== work.workDate || time !== toTimeInput(arrived)) && !comment.trim();
@@ -238,18 +265,26 @@ export function EditWorkModal({
   }
 
   return (
-    <ModalFrame onClose={onClose} title="Изменить карточку работы">
+    <ModalFrame className="emu-edit-work-modal" onClose={onClose} title="Изменить карточку работы" wide>
       <WorkSummary work={work} />
       <div className="emu-form-grid">
         <label>Дата работ<input type="date" value={workDate} onChange={(event) => setWorkDate(event.target.value)} /></label>
         <label>Участок<select value={sectionId} onChange={(event) => setSectionId(event.target.value)}>{activeSections(workspace).map((section) => <option key={section.id} value={section.id}>{section.name}</option>)}</select></label>
-        <label>Время прихода<span className="emu-input-action"><input type="time" value={time} onChange={(event) => setTime(event.target.value)} /><button onClick={() => setTime(toTimeInput(new Date()))} type="button">Сейчас</button></span></label>
+        <label>Время прихода<span className="emu-input-action"><input type="time" value={time} onChange={(event) => setTime(event.target.value)} /><button className="emu-now-button" onClick={() => setTime(toTimeInput(new Date()))} type="button">Сейчас</button></span></label>
       </div>
-      <label>Поиск сотрудника<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ФИО, должность, участок" /></label>
+      <label>Поиск сотрудника<input value={search} onChange={(event) => {
+          const value = event.target.value;
+          setSearch(value);
+          if (value.trim()) setShowAllEmployees(true);
+        }} placeholder="ФИО, должность, участок" /></label>
       {hasConflict ? <div className="emu-card-warning">Сотрудник одновременно работает в другой карточке: {conflicts.join(", ")}</div> : null}
       <EmployeePicker
         currentWorkId={work.id}
-        employees={filteredEmployees}
+        employees={quickEmployees}
+        favoriteCount={favoriteEmployeeIds.size}
+        favoriteIds={favoriteEmployeeIds}
+        onToggleShowAll={() => setShowAllEmployees((value) => !value)}
+        showAll={showAllEmployees}
         selectedIds={employeeIds}
         sessions={workspace.workSessions.rows}
         setSelectedIds={setEmployeeIds}

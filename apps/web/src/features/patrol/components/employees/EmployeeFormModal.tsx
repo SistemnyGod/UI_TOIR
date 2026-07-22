@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { X } from "lucide-react";
 import type { EmployeeDirectoryItem, EmployeeFormPayload } from "../../../../types";
 
 type EmployeeFormMode = "create" | "edit";
@@ -25,21 +26,33 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
     employeeGroup: employee?.employeeGroup ?? referenceOptions?.groups[0] ?? "Атом",
     hiredAt: employee?.hiredAt ?? "",
     birthDate: employee?.birthDate ?? "",
-    status: (employee?.status ?? "Активен") as EmployeeDirectoryItem["status"],
-    shift: employee?.shift ?? "День",
+    status: (employee?.status || "\u0410\u043a\u0442\u0438\u0432\u0435\u043d") as EmployeeDirectoryItem["status"],
+    shift: employee?.shift || "\u0414\u0435\u043d\u044c",
     hasMobileAccount: employee?.mobileStatus === "Привязан",
   }));
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const positions = referenceOptions?.positions ?? [];
   const departments = referenceOptions?.departments ?? [];
   const groups = referenceOptions?.groups ?? ["Атом", "Атом Экология"];
 
   async function submitForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setErrorMessage("");
+
+    const fullName = draft.fullName.trim();
+    const personnelNo = draft.personnelNo.trim();
+    if (!fullName || !personnelNo) {
+      setErrorMessage("\u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u0424\u0418\u041e \u0438 \u0442\u0430\u0431\u0435\u043b\u044c\u043d\u044b\u0439 \u043d\u043e\u043c\u0435\u0440.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      await onSubmit(draft);
+      await onSubmit({ ...draft, fullName, personnelNo });
       onClose();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0430.");
     } finally {
       setIsSubmitting(false);
     }
@@ -47,10 +60,13 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
 
   async function deleteEmployee() {
     if (!employee || !onDelete) return;
+    setErrorMessage("");
     setIsSubmitting(true);
     try {
       await onDelete(employee.id);
       onClose();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0434\u0435\u0430\u043a\u0442\u0438\u0432\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0430.");
     } finally {
       setIsSubmitting(false);
     }
@@ -59,8 +75,9 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <form
+        aria-labelledby="employee-form-title"
         aria-modal="true"
-        className="modal-window request-modal request-create-modal"
+        className="modal-window request-modal request-create-modal employee-form-modal"
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={submitForm}
         role="dialog"
@@ -68,13 +85,15 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
         <div className="modal-head">
           <div>
             <span className="modal-kicker">Справочник сотрудников</span>
-            <h2>{mode === "create" ? "Создать сотрудника" : "Редактировать сотрудника"}</h2>
+            <h2 id="employee-form-title">{mode === "create" ? "Создать сотрудника" : "Редактировать сотрудника"}</h2>
             <p>Данные используются для заявок на обход и привязки к мобильным аккаунтам.</p>
           </div>
-          <button aria-label="Закрыть" className="modal-close" onClick={onClose} type="button">
-            ×
+          <button aria-label="Закрыть" className="modal-close employee-form-close" onClick={onClose} title="Закрыть" type="button">
+            <X aria-hidden="true" size={18} strokeWidth={2.5} />
           </button>
         </div>
+
+        {errorMessage ? <div className="employee-form-error" role="alert">{errorMessage}</div> : null}
 
         <div className="form-grid">
           <label>

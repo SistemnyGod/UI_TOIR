@@ -79,6 +79,7 @@ export function updateMobileAccountLocal(
           login: payload.login.trim(),
           role: payload.role.trim(),
           status: payload.status,
+          passwordState: payload.password?.trim() ? "Установлен" : account.passwordState,
         }
       : account,
   );

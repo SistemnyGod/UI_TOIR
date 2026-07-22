@@ -32,7 +32,6 @@ import {
   addMonths,
   buildCalendarDays,
   createAssignmentHistoryEvents,
-  employeeStatusText,
   formatShiftRange,
   formatAssignmentActionTime,
   formatDate,
@@ -204,10 +203,16 @@ export function AssignmentScreen({
 
   const employees = useMemo(
     () => {
-      const directoryEmployees = employeeDirectory.map(mapEmployeeToAssignable);
+      const directoryEmployees = employeeDirectory.filter(isAssignableDirectoryEmployee).map(mapEmployeeToAssignable);
+      const referenceEmployees = assignments.assignableEmployees.filter((employee) => employee.status !== "\u041d\u0435\u0442 \u0441\u0432\u044f\u0437\u0438");
+
+      if (dataSourceMode === "api") {
+        if (referenceEmployees.length > 0) return referenceEmployees;
+        return directoryEmployees;
+      }
+
       if (directoryEmployees.length > 0) return directoryEmployees;
-      if (assignments.assignableEmployees.length > 0) return assignments.assignableEmployees;
-      return dataSourceMode === "api" ? [] : assignments.assignableEmployeesFallback;
+      return assignments.assignableEmployeesFallback;
     },
     [assignments.assignableEmployees, assignments.assignableEmployeesFallback, dataSourceMode, employeeDirectory],
   );
@@ -227,12 +232,7 @@ export function AssignmentScreen({
     .filter((employee) => favoriteEmployeeSet.has(employee.id))
     .sort((left, right) => left.name.localeCompare(right.name, "ru"));
   const visibleEmployees = employees
-    .filter((employee) => {
-      if (!favoriteEmployeeSet.has(employee.id)) return false;
-
-      const matchesSearch = !normalizedSearch || [employee.name, employee.role, employee.zone].join(" ").toLowerCase().includes(normalizedSearch);
-      return matchesSearch;
-    })
+    .filter((employee) => !normalizedSearch || [employee.name, employee.role, employee.zone].join(" ").toLowerCase().includes(normalizedSearch))
     .sort((left, right) => {
       const leftFavorite = favoriteEmployeeSet.has(left.id) ? 0 : 1;
       const rightFavorite = favoriteEmployeeSet.has(right.id) ? 0 : 1;
@@ -258,12 +258,65 @@ export function AssignmentScreen({
     [plannedDate, plannedStart, selectedEmployee, selectedRoute],
   );
   const screenAssignments = dataSourceMode === "api" ? assignments.activePatrols ?? [] : assignments.activePatrols ?? activePatrols;
-  const hasConflict = Boolean(
-    selectedEmployee &&
-      selectedRoute &&
-      (employeeStatusText(selectedEmployee.status) === "В обходе" ||
-        selectedRoute.loadedEmployees >= selectedRoute.requiredEmployees && selectedRoute.requiredEmployees > 0),
+  const activeAssignments = useMemo(() => screenAssignments.filter(isAssignmentCurrent), [screenAssignments]);
+  const selectedEmployeeAssignment = useMemo(
+    () => (selectedEmployee ? activeAssignments.find((assignment) => assignment.employeeId === selectedEmployee.id) : undefined),
+    [activeAssignments, selectedEmployee],
   );
+  const hasConflict = Boolean(
+    selectedEmployeeAssignment &&
+      selectedEmployee &&
+      selectedEmployeeAssignment.shift === selectedEmployee.shift &&
+      isAssignmentOnDate(selectedEmployeeAssignment, plannedDate),
+  );
+  const conflicts = useMemo(() => {
+    const items: Array<{ id: string; type: "danger" | "warning" | "info"; title: string; description: string; time: string }> = [];
+
+    if (selectedEmployeeAssignment && selectedEmployee) {
+      const sameShift = selectedEmployeeAssignment.shift === selectedEmployee.shift && isAssignmentOnDate(selectedEmployeeAssignment, plannedDate);
+      items.push({
+        id: `employee-${selectedEmployeeAssignment.id}`,
+        type: sameShift ? "danger" : "warning",
+        title: sameShift ? "\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a \u0443\u0436\u0435 \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d" : "\u0423 \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0430 \u0435\u0441\u0442\u044c \u043d\u0435\u0437\u0430\u043a\u0440\u044b\u0442\u044b\u0439 \u043e\u0431\u0445\u043e\u0434",
+        description: sameShift
+          ? `${selectedEmployee.name} \u0443\u0436\u0435 \u0432\u044b\u043f\u043e\u043b\u043d\u044f\u0435\u0442 \u043c\u0430\u0440\u0448\u0440\u0443\u0442 \u00ab${selectedEmployeeAssignment.route}\u00bb \u0432 \u044d\u0442\u0443 \u0441\u043c\u0435\u043d\u0443.`
+          : `${selectedEmployee.name} \u0441\u0435\u0439\u0447\u0430\u0441 \u0437\u0430\u043d\u044f\u0442 \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u043e\u043c \u00ab${selectedEmployeeAssignment.route}\u00bb. \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0435\u0433\u043e \u0441\u0442\u0430\u0442\u0443\u0441 \u043f\u0435\u0440\u0435\u0434 \u043d\u043e\u0432\u044b\u043c \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c.`,
+        time: selectedEmployeeAssignment.plannedAt ?? "\u0441\u0435\u0439\u0447\u0430\u0441",
+      });
+    }
+
+    if (requestListStatus === "error") {
+      items.push({
+        id: "requests",
+        type: "warning",
+        title: "\u0417\u0430\u044f\u0432\u043a\u0438 API \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u044b",
+        description: requestListErrorMessage || "\u041d\u0435\u043b\u044c\u0437\u044f \u0441\u043e\u0437\u0434\u0430\u0442\u044c \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435, \u043f\u043e\u043a\u0430 \u043d\u0435 \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u043b\u0441\u044f \u0441\u043f\u0438\u0441\u043e\u043a \u0437\u0430\u044f\u0432\u043e\u043a.",
+        time: "API",
+      });
+    }
+
+    if (assignments.referenceStatus === "error") {
+      items.push({
+        id: "reference",
+        type: "warning",
+        title: "\u0421\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u0438 \u043d\u0435 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u044b",
+        description: assignments.referenceErrorMessage || "\u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0441\u043e\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u0435 \u0438 \u043f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0443 \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u043e\u0432 \u0438 \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u043e\u0432.",
+        time: "API",
+      });
+    }
+
+    if (assignments.listStatus === "error") {
+      items.push({
+        id: "assignments",
+        type: "warning",
+        title: "\u041d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f \u043d\u0435 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u044b",
+        description: assignments.errorMessage || "\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u043e\u0431\u0445\u043e\u0434\u043e\u0432 \u043c\u043e\u0436\u0435\u0442 \u0431\u044b\u0442\u044c \u0443\u0441\u0442\u0430\u0440\u0435\u0432\u0448\u0438\u043c.",
+        time: "API",
+      });
+    }
+
+    return items;
+  }, [assignments.errorMessage, assignments.listStatus, assignments.referenceErrorMessage, assignments.referenceStatus, plannedDate, requestListErrorMessage, requestListStatus, selectedEmployee, selectedEmployeeAssignment]);
 
   useEffect(() => {
     if (!selectedEmployeeId && visibleEmployees[0]) {
@@ -361,6 +414,11 @@ export function AssignmentScreen({
     if (selectedRequestId && !selectedRequest) {
       setSelectedRequestId("");
       onNotify("Выбранная заявка уже закрыта, отменена или назначена. Выберите другую заявку либо создайте новую.");
+      return;
+    }
+
+    if (hasConflict) {
+      onNotify("У выбранного сотрудника уже есть активное назначение на эту дату и смену.");
       return;
     }
 
@@ -604,12 +662,7 @@ export function AssignmentScreen({
           />
         ) : null}
         <DraftsCard drafts={drafts} onDelete={deleteDraft} onOpen={openDraft} />
-        <ConflictsCard
-          conflicts={[
-            ...(hasConflict ? [{ id: "selection", type: "danger" as const, title: "Конфликт выбора", description: "Проверьте загрузку сотрудника и маршрута перед отправкой.", time: "сейчас" }] : []),
-            ...(requestListStatus === "error" ? [{ id: "requests", type: "warning" as const, title: "Заявки API недоступны", description: requestListErrorMessage || "Невозможно создать назначение без заявки.", time: "API" }] : []),
-          ]}
-        />
+        <ConflictsCard conflicts={conflicts} />
       </section>
       {requestModalOpen ? (
         <RequestModal
@@ -767,6 +820,20 @@ function PeriodFilter({
       ) : null}
     </div>
   );
+}
+
+function isAssignmentOnDate(assignment: ActivePatrol, date: string) {
+  if (!date) return false;
+
+  const source = assignment.plannedAtIso ?? assignment.plannedAt;
+  if (!source) return false;
+
+  const parsed = new Date(source);
+  return !Number.isNaN(parsed.getTime()) && toDateInput(parsed) === date;
+}
+
+function isAssignableDirectoryEmployee(employee: EmployeeDirectoryItem) {
+  return !/^(?:\u041e\u0444\u043b\u0430\u0439\u043d|\u041e\u0442\u043f\u0443\u0441\u043a|\u0410\u0440\u0445\u0438\u0432|\u041d\u0435\u0430\u043a\u0442\u0438\u0432\u0435\u043d|\u0423\u0434\u0430\u043b\u0435\u043d)/i.test(employee.status.trim());
 }
 
 function FilterBox({ icon: Icon, label, value }: { icon?: AssignmentIconComponent; label: string; value: string }) {

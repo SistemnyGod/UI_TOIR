@@ -117,3 +117,212 @@
     min-height: 0;
   }
 }
+/* Keep every EMU reference block usable inside the catalog modal. */
+.emu-modal-wide > .emu-reference-grid {
+  grid-auto-rows: minmax(230px, auto);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.emu-modal-wide > .emu-reference-grid > .emu-reference-block:not(.emu-template-block) {
+  min-height: 230px;
+}
+
+.emu-modal-wide > .emu-reference-grid > .emu-template-block {
+  grid-column: 1 / -1;
+  min-height: min(420px, 48dvh);
+}
+
+@media (max-width: 900px) {
+  .emu-modal-wide > .emu-reference-grid {
+    grid-auto-rows: minmax(210px, auto);
+  }
+
+  .emu-modal-wide > .emu-reference-grid > .emu-reference-block:not(.emu-template-block) {
+    min-height: 210px;
+  }
+}
+/* Catalogs modal: one clear, editable section at a time. */
+.emu-modal-wide > .emu-catalog-modal {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.emu-catalog-tabs {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.emu-catalog-tab {
+  align-items: center;
+  background: #f7faff;
+  border: 1px solid #d5e2f5;
+  border-radius: 12px;
+  color: #1c3e6c;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 8px;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 9px 12px;
+  text-align: left;
+}
+
+.emu-catalog-tab:hover {
+  border-color: #7fb1f4;
+  background: #eef6ff;
+}
+
+.emu-catalog-tab[aria-selected="true"] {
+  background: #e4f0ff;
+  border-color: #1769e8;
+  box-shadow: 0 0 0 2px rgb(23 105 232 / 10%);
+  color: #0b4ea8;
+}
+
+.emu-catalog-tab em {
+  align-items: center;
+  background: #dbeafe;
+  border-radius: 999px;
+  color: #1457a6;
+  display: inline-flex;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  justify-content: center;
+  min-width: 24px;
+  padding: 3px 7px;
+}
+
+.emu-catalog-content {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1px 4px 1px 1px;
+}
+
+.emu-catalog-content > .emu-reference-block {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.emu-catalog-content .emu-reference-list {
+  max-height: none;
+}
+
+.emu-catalog-footer {
+  align-items: center;
+  border-top: 1px solid #e0e9f5;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 12px;
+  justify-content: space-between;
+  padding-top: 12px;
+}
+
+.emu-catalog-footer span {
+  color: #6d7d96;
+  font-size: 12px;
+}
+
+.emu-catalog-footer .emu-primary-button {
+  flex: 0 0 auto;
+  min-width: 190px;
+}
+
+.emu-template-form-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(190px, 0.85fr);
+}
+
+.emu-catalog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.emu-catalog-field > span {
+  color: #506582;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.emu-catalog-field input,
+.emu-catalog-field select,
+.emu-catalog-field textarea {
+  min-width: 0;
+  width: 100%;
+}
+
+.emu-catalog-field-wide {
+  margin-top: 10px;
+}
+
+.emu-template-add-button {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.emu-template-list-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.emu-template-list-toolbar .emu-reference-search {
+  flex: 1 1 auto;
+  margin-top: 0;
+}
+
+.emu-template-list-toolbar > span {
+  color: #6d7d96;
+  flex: 0 0 auto;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.emu-template-row > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.emu-template-row > span strong {
+  font-size: 13px;
+}
+
+.emu-template-row > span small {
+  color: #6d7d96;
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .emu-catalog-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .emu-template-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emu-catalog-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .emu-catalog-footer .emu-primary-button {
+    width: 100%;
+  }
+}

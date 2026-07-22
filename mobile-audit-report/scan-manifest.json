@@ -1,0 +1,160 @@
+{
+  "documentType": "codex-security.scan-manifest",
+  "scan": {
+    "artifacts": [
+      {
+        "mediaType": "application/json",
+        "path": "findings.json",
+        "sha256": "34adbab0a058d15f1039b8fd03b3b4d98873fba71ec33f87e9b44c144d652d58"
+      },
+      {
+        "mediaType": "application/json",
+        "path": "coverage.json",
+        "sha256": "db22cc2719b3784ee3a765663256cc38876f100848d9f6bde48e5737337e34af"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/02_discovery/raw_candidates.jsonl",
+        "sha256": "ec0ecc7833fb8f6c03d3c407141e0447a81d3a3571168712e840f019618617ad"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/02_discovery/work_ledger.jsonl",
+        "sha256": "0dc6e1c33b3a8e27dea2fe3fae3cfe3708bd92c687de84ac405b0efffabd0015"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/03_coverage/repository_coverage_ledger.md",
+        "sha256": "b42819f702f2769c5de19c48f132e33357d1d4efcdd0a48205c82487beab2a70"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/mobile-cleartext-lan-token-transport/attack_path_analysis_report.md",
+        "sha256": "f23f334d9b5b2762dcb9df0a20580642e81c884a01a1c5d946966b53e59b93eb"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/mobile-cleartext-lan-token-transport/candidate_ledger.jsonl",
+        "sha256": "e7c3f728ddc7a5db98863cb9f80687ac5a460e293fb7f4c6785949224746b7f8"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/mobile-contour-schema-key-collision/candidate_ledger.jsonl",
+        "sha256": "4a5d2c6ac6c5f410f346fca14fa237d954262db8d62e19247ef92a2f693dba09"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/mobile-media-size-unbounded/attack_path_analysis_report.md",
+        "sha256": "6a5d3a32ba6a32c0a39269de2c884fff41186ff6f3fe3f3dc5f258f9542b3ced"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/mobile-media-size-unbounded/candidate_ledger.jsonl",
+        "sha256": "ac16c6d08a97704a7eab6389baf507e8e622da0df894911d0901d2ff21473344"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/mobile-outbox-response-validation/candidate_ledger.jsonl",
+        "sha256": "e1d87a552e6660661cf926c9baa281a921f2c50fd744b5a8610cea8e10e1bdf0"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/mobile-patrol-point-read-owner-bypass/attack_path_analysis_report.md",
+        "sha256": "9cd9f62376a7f174d4c5df57789fa724cd055d323619180f13919fae2adcccdc"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/mobile-patrol-point-read-owner-bypass/candidate_ledger.jsonl",
+        "sha256": "25987fbd7982e26c6ccc55fb7dd07108098e7d867a3730048b6cb4a979da9a64"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/mobile-refresh-bearer-device-binding/candidate_ledger.jsonl",
+        "sha256": "ed087d759902ed02de23174203b5604233a719153452e9bd4967dfbf74643da8"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/mobile-sql-parameter-count-mismatch/candidate_ledger.jsonl",
+        "sha256": "089e534074d1033aa166f39189b25855a717663ddd2abb4b57dd2ec29071a9ec"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/validation_summary.md",
+        "sha256": "5f37090ad643c68b6f5b38a612cf1e6a9602a3300383a06bf6b8444b70954ed7"
+      }
+    ],
+    "completedAt": "2026-07-21T23:59:00Z",
+    "coverageRef": "coverage.json",
+    "findingsRef": "findings.json",
+    "hardening": {
+      "portfolioPath": "hardening/hardening.md"
+    },
+    "id": "60e773d544a3_20260721_mobileaudit",
+    "producer": {
+      "name": "Codex Security",
+      "version": "0.1.11"
+    },
+    "scope": {
+      "artifactsReviewed": [
+        "rank_input.jsonl",
+        "rank_output.jsonl",
+        "deep_review_input.jsonl",
+        "work_ledger.jsonl",
+        "raw_candidates.jsonl"
+      ],
+      "context": "Mobile app only; server enforcement/deployment is a proof gap.",
+      "excludePaths": [
+        "mobiel proekt/node_modules",
+        "mobiel proekt/.expo",
+        "mobiel proekt/build-output"
+      ],
+      "includePaths": [
+        "mobiel proekt"
+      ],
+      "limitations": [
+        "No native SQLite integration harness",
+        "No Android E2E or two-contour runtime fixture",
+        "Server-side refresh/device proof not in scope"
+      ],
+      "runtimeStatus": "Static plus repository test validation; no APK/Docker build.",
+      "summary": "Risk-prioritized scoped mobile audit with nine deep-review shards.",
+      "validationMode": "focused static tracing and existing tests"
+    },
+    "sealedAt": "2026-07-21T23:59:00Z",
+    "startedAt": "2026-07-21T22:00:00Z",
+    "status": "completed",
+    "target": {
+      "displayName": "Patrol360 mobile application",
+      "kind": "git_worktree",
+      "revision": "60e773d544a3d08009b6deedcffc4434186122f7",
+      "snapshotDigest": "codex-security-snapshot/v1:sha256:4127e75526caabc4b38dc2f3c50e303809149ad49dee22d9e301407410fedb5c",
+      "targetId": "patrol360-mobile"
+    },
+    "threatModel": {
+      "assets": [
+        "access/refresh tokens",
+        "patrol reports and media",
+        "local SQLite/outbox state",
+        "release signing material"
+      ],
+      "attackerCapabilities": [
+        "same-LAN observer",
+        "authenticated user with crafted local IDs",
+        "physical/rooted-device extraction is conditional"
+      ],
+      "securityObjectives": [
+        "no wrong-contour transmission",
+        "owner-bound local reads/writes",
+        "reliable offline queue",
+        "confidential transport"
+      ],
+      "summary": "Protect credentials, mobile sessions, local patrol data, evidence files, and contour isolation across offline/online sync.",
+      "trustBoundaries": [
+        "mobile app to LAN/API",
+        "authenticated user to local SQLite",
+        "build workspace to release artifact"
+      ]
+    }
+  },
+  "schemaVersion": "1.0"
+}

@@ -376,6 +376,8 @@ export interface UpdateMobileAccountDto {
   login?: string;
   role?: string;
   status?: string;
+  password?: string;
+  confirmPassword?: string;
 }
 
 export interface MobileAccountSessionDto {

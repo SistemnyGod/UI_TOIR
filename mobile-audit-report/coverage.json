@@ -1,0 +1,156 @@
+{
+  "completeness": "partial",
+  "deferred": [
+    {
+      "id": "mobile-refresh-bearer-device-binding",
+      "reason": "Server rotation and hardware-proof enforcement were outside mobile scope.",
+      "surfaceIds": [
+        "auth-refresh"
+      ]
+    },
+    {
+      "id": "mobile-contour-schema-key-collision",
+      "reason": "Need server ID uniqueness and a two-contour SQLite fixture.",
+      "surfaceIds": [
+        "sqlite"
+      ]
+    },
+    {
+      "id": "mobile-release-signing-dpapi-shard09",
+      "reason": "Ignored local signing files require deployment/ACL proof.",
+      "surfaceIds": [
+        "release-boundary"
+      ]
+    },
+    {
+      "id": "native-sqlite-e2e",
+      "reason": "No native SQLite/Android E2E harness was run.",
+      "surfaceIds": [
+        "sqlite",
+        "tests"
+      ]
+    }
+  ],
+  "documentType": "codex-security.coverage",
+  "excludePaths": [
+    "mobiel proekt/node_modules",
+    "mobiel proekt/.expo",
+    "mobiel proekt/build-output"
+  ],
+  "explicitExclusions": [
+    {
+      "pattern": "mobiel proekt/.tmp/**",
+      "reason": "Ignored/generated build copies are not included by official build-apk.ps1."
+    },
+    {
+      "pattern": "mobiel proekt/node_modules/**",
+      "reason": "Third-party dependency installation tree; behavior assessed through manifests and tests."
+    }
+  ],
+  "includePaths": [
+    "mobiel proekt"
+  ],
+  "inventoryStrategy": "scoped_path",
+  "mode": "scoped_path",
+  "openQuestions": [
+    {
+      "followUpPrompt": "Require TLS/VPN/pinning unless the network trust boundary is explicit.",
+      "question": "Does the deployed local-enterprise Wi-Fi count as trusted, or must tokens be protected against any same-LAN observer?"
+    },
+    {
+      "followUpPrompt": "Run a two-contour fixture and enforce composite contour keys locally.",
+      "question": "Are assignment/task/point IDs globally unique across contours on the server?"
+    }
+  ],
+  "scanId": "60e773d544a3_20260721_mobileaudit",
+  "schemaVersion": "1.0",
+  "surfaces": [
+    {
+      "disposition": "needs_follow_up",
+      "id": "auth-refresh",
+      "label": "Authentication, refresh and offline session",
+      "notes": "Client hardware proof and server rotation remain unverified.",
+      "receiptRefs": [
+        "artifacts/05_findings/mobile-refresh-bearer-device-binding/candidate_ledger.jsonl",
+        "artifacts/05_findings/validation_summary.md"
+      ],
+      "riskArea": "session security"
+    },
+    {
+      "disposition": "reported",
+      "id": "transport",
+      "label": "HTTP transport and server failover",
+      "notes": "Local-enterprise HTTP path is reportable conditionally.",
+      "receiptRefs": [
+        "artifacts/05_findings/mobile-cleartext-lan-token-transport/candidate_ledger.jsonl",
+        "artifacts/05_findings/mobile-cleartext-lan-token-transport/attack_path_analysis_report.md"
+      ],
+      "riskArea": "credential confidentiality"
+    },
+    {
+      "disposition": "reported",
+      "id": "media",
+      "label": "Media preparation, storage and upload",
+      "notes": "Base64 memory amplification and unbounded selection are reportable.",
+      "receiptRefs": [
+        "artifacts/05_findings/mobile-media-size-unbounded/candidate_ledger.jsonl",
+        "artifacts/05_findings/mobile-media-size-unbounded/attack_path_analysis_report.md"
+      ],
+      "riskArea": "availability"
+    },
+    {
+      "disposition": "reported",
+      "id": "patrol",
+      "label": "Patrol point reads and actions",
+      "notes": "Point reads lack owner binding.",
+      "receiptRefs": [
+        "artifacts/05_findings/mobile-patrol-point-read-owner-bypass/candidate_ledger.jsonl",
+        "artifacts/05_findings/mobile-patrol-point-read-owner-bypass/attack_path_analysis_report.md"
+      ],
+      "riskArea": "local object authorization"
+    },
+    {
+      "disposition": "needs_follow_up",
+      "id": "sqlite",
+      "label": "SQLite contour isolation and query correctness",
+      "notes": "SQL arity is reportable; contour schema/key collision needs two-contour runtime proof.",
+      "receiptRefs": [
+        "artifacts/05_findings/mobile-sql-parameter-count-mismatch/candidate_ledger.jsonl",
+        "artifacts/05_findings/mobile-contour-schema-key-collision/candidate_ledger.jsonl"
+      ],
+      "riskArea": "data isolation and sync availability"
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "outbox",
+      "label": "Outbox, idempotency and response validation",
+      "notes": "Current source validates responses and owner/contour applies; stale generated copies suppressed.",
+      "receiptRefs": [
+        "artifacts/05_findings/mobile-outbox-response-validation/candidate_ledger.jsonl",
+        "artifacts/05_findings/validation_summary.md"
+      ],
+      "riskArea": "sync integrity"
+    },
+    {
+      "disposition": "not_applicable",
+      "id": "release-boundary",
+      "label": "Generated and ignored build copies",
+      "notes": "Official build excludes .tmp; generated candidates were suppressed.",
+      "receiptRefs": [
+        "artifacts/02_discovery/work_ledger.jsonl",
+        "artifacts/02_discovery/raw_candidates.jsonl"
+      ],
+      "riskArea": "artifact provenance"
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "tests",
+      "label": "Automated policy/type/lint/encoding checks",
+      "notes": "57 tests, encoding, typecheck and lint pass; native SQLite/E2E gaps remain.",
+      "receiptRefs": [
+        "artifacts/03_coverage/repository_coverage_ledger.md"
+      ],
+      "riskArea": "verification"
+    }
+  ]
+}

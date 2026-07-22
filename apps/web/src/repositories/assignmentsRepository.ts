@@ -64,7 +64,7 @@ export function createApiAssignmentsRepository({
 
     async getEmployees(options: ApiRequestOptions = {}) {
       const employees = await client.get<EmployeeDto[]>("/api/v1/employees", options);
-      return employees.map(mapEmployeeDtoToAssignable);
+      return employees.map(mapEmployeeDtoToAssignable).filter((employee) => employee.status !== "\u041d\u0435\u0442 \u0441\u0432\u044f\u0437\u0438");
     },
 
     async getRoutes(options: ApiRequestOptions = {}) {
@@ -239,13 +239,12 @@ function normalizeShift(shift: string): ActivePatrol["shift"] {
 }
 
 function normalizeEmployeeStatus(status: string): Employee["status"] {
-  if (status === "Офлайн") {
-    return "Нет связи";
+  if (/^(?:\u041e\u0444\u043b\u0430\u0439\u043d|\u041e\u0442\u043f\u0443\u0441\u043a|\u0410\u0440\u0445\u0438\u0432|\u041d\u0435\u0430\u043a\u0442\u0438\u0432\u0435\u043d|\u0423\u0434\u0430\u043b\u0435\u043d)/i.test(status.trim())) {
+    return "\u041d\u0435\u0442 \u0441\u0432\u044f\u0437\u0438";
   }
 
-  return "Свободен";
+  return "\u0421\u0432\u043e\u0431\u043e\u0434\u0435\u043d";
 }
-
 function normalizeAssignmentStatus(status: string): ActivePatrol["status"] {
   if (status === "В пути") return "В пути";
   if (status === "Задержка") return "Задержка";

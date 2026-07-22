@@ -37,7 +37,9 @@ public sealed record CreateMobileAccountDto(
 public sealed record UpdateMobileAccountDto(
     string? Login,
     string? Role,
-    string? Status);
+    string? Status,
+    string? Password = null,
+    string? ConfirmPassword = null);
 
 public sealed record AttachMobileAccountEmployeeDto(
     Guid? EmployeeId,

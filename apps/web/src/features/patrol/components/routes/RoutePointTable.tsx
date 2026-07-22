@@ -36,6 +36,10 @@ export function RoutePointTable({
             <tr
               className={`clickable ${selectedPointId === point.id ? "selected" : ""}`}
               key={point.id}
+              onClick={(event) => {
+                if (event.target instanceof Element && event.target.closest("button")) return;
+                onSelectPoint(point.id);
+              }}
             >
               <td>{point.order}</td>
               <td>

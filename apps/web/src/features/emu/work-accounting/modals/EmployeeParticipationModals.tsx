@@ -50,7 +50,7 @@ export function AddEmployeeToWorkModal({
       <WorkSummary work={work} />
       <div className="emu-form-grid">
         <label>Дата начала<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
-        <label>Время начала<span className="emu-input-action"><input type="time" value={time} onChange={(event) => setTime(event.target.value)} /><button onClick={() => setTime(toTimeInput(new Date()))} type="button">Сейчас</button></span></label>
+        <label>Время начала<span className="emu-input-action"><input type="time" value={time} onChange={(event) => setTime(event.target.value)} /><button className="emu-now-button" onClick={() => setTime(toTimeInput(new Date()))} type="button">Сейчас</button></span></label>
       </div>
       <label>Поиск сотрудника<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ФИО, табельный, должность" /></label>
       <EmployeePicker
@@ -109,7 +109,7 @@ export function FinishEmployeeParticipationModal({
       <div className="emu-form-grid">
         <label>Статус<select value={participationStatus} onChange={(event) => setParticipationStatus(event.target.value)}><option>Завершил</option><option>Частично выполнено</option></select></label>
         <label>Дата<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
-        <label>Время<span className="emu-input-action"><input type="time" value={time} onChange={(event) => setTime(event.target.value)} /><button onClick={() => setTime(toTimeInput(new Date()))} type="button">Сейчас</button></span></label>
+        <label>Время<span className="emu-input-action"><input type="time" value={time} onChange={(event) => setTime(event.target.value)} /><button className="emu-now-button" onClick={() => setTime(toTimeInput(new Date()))} type="button">Сейчас</button></span></label>
       </div>
       <label className="emu-textarea-label">Причина / комментарий<textarea value={comment} onChange={(event) => setComment(event.target.value)} /></label>
       <div className="emu-modal-actions">

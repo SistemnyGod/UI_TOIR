@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { EmuDecisionDto, EmuResolveDecisionDto } from "../../../../api/contracts";
 import type { EmuWorkspace } from "../../../../hooks/useEmuWorkspace";
 import { ModalFrame } from "../components/ModalFrame";
@@ -17,6 +17,16 @@ export function DecisionList({
   onResolve: (decision: EmuDecisionDto) => void;
   title: string;
 }) {
+  const [visibleCount, setVisibleCount] = useState(5);
+  const decisionKey = decisions.map((decision) => decision.id).join("|");
+
+  useEffect(() => {
+    setVisibleCount(5);
+  }, [decisionKey]);
+
+  const visibleDecisions = decisions.slice(0, visibleCount);
+  const remainingCount = decisions.length - visibleDecisions.length;
+
   if (decisions.length === 0 && !emptyText) return null;
 
   return (
@@ -28,21 +38,33 @@ export function DecisionList({
         </div>
       </div>
       {decisions.length ? (
-        decisions.map((decision) => (
-          <article className={`emu-decision-card severity-${decision.severity}`} key={decision.id}>
-            <div>
-              <strong>{decision.employeeName || "Сотрудник не указан"}</strong>
-              <span>{decision.workNumber || "Карточка не указана"} · {decision.sectionName || "Участок не указан"}</span>
-            </div>
-            <p>{decisionTypeLabel(decision)}{decision.decisionType === "lunch_overlap" ? ` · ${formatMinutes(decision.overlapMinutes)}` : ""}</p>
-            <small>
-              Смена {formatDate(decision.shiftDate)}
-              {decision.lunchStartAt && decision.lunchEndAt ? ` · обед ${formatTime(decision.lunchStartAt)}-${formatTime(decision.lunchEndAt)}` : ""}
-            </small>
-            <em>{decision.severity === "danger" ? "Просрочено" : "Нужно решение"}</em>
-            {canResolveDecision ? <button onClick={() => onResolve(decision)} type="button">Закрыть</button> : null}
-          </article>
-        ))
+        <>
+          {visibleDecisions.map((decision) => (
+            <article className={`emu-decision-card severity-${decision.severity}`} key={decision.id}>
+              <div>
+                <strong>{decision.employeeName || "Сотрудник не указан"}</strong>
+                <span>{decision.workNumber || "Карточка не указана"} · {decision.sectionName || "Участок не указан"}</span>
+              </div>
+              <p>{decisionTypeLabel(decision)}{decision.decisionType === "lunch_overlap" ? ` · ${formatMinutes(decision.overlapMinutes)}` : ""}</p>
+              <small>
+                Смена {formatDate(decision.shiftDate)}
+                {decision.lunchStartAt && decision.lunchEndAt ? ` · обед ${formatTime(decision.lunchStartAt)}-${formatTime(decision.lunchEndAt)}` : ""}
+              </small>
+              <em>{decision.severity === "danger" ? "Просрочено" : "Нужно решение"}</em>
+              {canResolveDecision ? <button onClick={() => onResolve(decision)} type="button">Закрыть</button> : null}
+            </article>
+          ))}
+          {remainingCount > 0 ? (
+            <button
+              aria-label={`Показать ещё ${Math.min(5, remainingCount)} решений`}
+              className="emu-decision-load-more"
+              onClick={() => setVisibleCount((current) => Math.min(current + 5, decisions.length))}
+              type="button"
+            >
+              Показать ещё {Math.min(5, remainingCount)}
+            </button>
+          ) : null}
+        </>
       ) : (
         <p>{emptyText}</p>
       )}

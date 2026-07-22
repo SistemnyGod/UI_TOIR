@@ -1,0 +1,267 @@
+{
+  "documentType": "codex-security.findings",
+  "findings": [
+    {
+      "confidence": {
+        "level": "high",
+        "rationale": "Exact source/control/sink trace with repository and test evidence; native runtime proof is recorded as a limitation."
+      },
+      "extensions": {
+        "candidateId": "mobile-cleartext-lan-token-transport"
+      },
+      "findingId": "csf_bbf9e0dae7de93e0a1821081",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:52b00010d6de9a5b45f1d68cec0b412dd2ca1d6fb4706d6ed5316564ed9b5fab"
+      },
+      "identity": {
+        "anchor": "mobile-cleartext-credential-transport",
+        "instance": "mobile-cleartext-lan-token-transport"
+      },
+      "locations": [
+        {
+          "endLine": 103,
+          "path": "mobiel proekt/app.config.js",
+          "role": "root_control",
+          "startLine": 86
+        },
+        {
+          "endLine": 33,
+          "path": "mobiel proekt/src/core/environments.ts",
+          "role": "configuration",
+          "startLine": 28
+        },
+        {
+          "endLine": 47,
+          "path": "mobiel proekt/src/api/authApi.ts",
+          "role": "entrypoint",
+          "startLine": 25
+        },
+        {
+          "endLine": 150,
+          "path": "mobiel proekt/src/api/httpClient.ts",
+          "role": "sink",
+          "startLine": 136
+        }
+      ],
+      "occurrenceId": "occ_ec42f75f25e1103c09cd543e",
+      "provenance": {
+        "source": "Codex Security scoped-path audit of the mobile application"
+      },
+      "remediation": "Require HTTPS (or a pinned trusted internal certificate/VPN) for credential-bearing traffic. Keep the LAN contour out of production and add a release assertion that cleartext is impossible in production APKs.",
+      "rootCause": {
+        "summary": "Require HTTPS (or a pinned trusted internal certificate/VPN) for credential-bearing traffic. Keep the LAN contour out of production and add a release assertion that cleartext is impossible in production APKs."
+      },
+      "ruleId": "mobile/cleartext-credential-transport",
+      "severity": {
+        "level": "high",
+        "rationale": "local-enterprise/dev configuration permits HTTP to 192.168.2.194 while login, refresh, bearer and media requests carry secrets. A same-LAN attacker can capture credentials or alter queued report traffic. The risk is conditional on deploying this contour on an untrusted Wi-Fi; production HTTPS is a counterexample.",
+        "score": 8.1,
+        "scoringSystem": "CVSS-like mobile audit"
+      },
+      "summary": "local-enterprise/dev configuration permits HTTP to 192.168.2.194 while login, refresh, bearer and media requests carry secrets. A same-LAN attacker can capture credentials or alter queued report traffic. The risk is conditional on deploying this contour on an untrusted Wi-Fi; production HTTPS is a counterexample.",
+      "taxonomy": {
+        "category": "transport security",
+        "cwe": [
+          "CWE-319",
+          "CWE-522"
+        ]
+      },
+      "title": "Credential-bearing mobile traffic can use cleartext LAN HTTP"
+    },
+    {
+      "confidence": {
+        "level": "high",
+        "rationale": "Exact source/control/sink trace with repository and test evidence; native runtime proof is recorded as a limitation."
+      },
+      "extensions": {
+        "candidateId": "mobile-media-size-unbounded"
+      },
+      "findingId": "csf_6c3672f84f934eacbb374883",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:35a27a759de6ae31ead59b08752f64ca7738991eb09120a2f8f392558ecb57b2"
+      },
+      "identity": {
+        "anchor": "mobile-media-resource-bounds",
+        "instance": "mobile-media-size-unbounded"
+      },
+      "locations": [
+        {
+          "endLine": 445,
+          "path": "mobiel proekt/src/services/mediaAttachmentService.ts",
+          "role": "root_control",
+          "startLine": 13
+        },
+        {
+          "endLine": 65,
+          "path": "mobiel proekt/src/services/fileStorageService.ts",
+          "role": "sink",
+          "startLine": 64
+        },
+        {
+          "endLine": 40,
+          "path": "mobiel proekt/src/sync/fileUploadQueue.ts",
+          "role": "sink",
+          "startLine": 35
+        }
+      ],
+      "occurrenceId": "occ_027efeb730b6bf6856d28d70",
+      "provenance": {
+        "source": "Codex Security scoped-path audit of the mobile application"
+      },
+      "remediation": "Use streaming/native SHA-256 and multipart file streams, enforce a hard size/count/aggregate quota before copy, and reject unknown-size media instead of treating it as acceptable.",
+      "rootCause": {
+        "summary": "Use streaming/native SHA-256 and multipart file streams, enforce a hard size/count/aggregate quota before copy, and reject unknown-size media instead of treating it as acceptable."
+      },
+      "ruleId": "mobile/media-resource-bounds",
+      "severity": {
+        "level": "medium",
+        "rationale": "Video preparation reads the entire file as Base64 and then materializes decoded bytes for hashing. Unknown-size assets can bypass the 25 MiB check and multi-selection has no aggregate cap, making memory and storage pressure likely before sync.",
+        "score": 6.0,
+        "scoringSystem": "CVSS-like mobile audit"
+      },
+      "summary": "Video preparation reads the entire file as Base64 and then materializes decoded bytes for hashing. Unknown-size assets can bypass the 25 MiB check and multi-selection has no aggregate cap, making memory and storage pressure likely before sync.",
+      "taxonomy": {
+        "category": "availability",
+        "cwe": [
+          "CWE-400",
+          "CWE-770"
+        ]
+      },
+      "title": "Large or unknown-size media can exhaust device memory during preparation"
+    },
+    {
+      "confidence": {
+        "level": "high",
+        "rationale": "Exact source/control/sink trace with repository and test evidence; native runtime proof is recorded as a limitation."
+      },
+      "extensions": {
+        "candidateId": "mobile-patrol-point-read-owner-bypass"
+      },
+      "findingId": "csf_1616a8a04656e13f5da38497",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:439fecc2bfd6d77a10ac7ad4cc8f83045d138ae7f51b10f0a8c1480d250e996c"
+      },
+      "identity": {
+        "anchor": "mobile-object-authorization-local-read",
+        "instance": "mobile-patrol-point-read-owner-bypass"
+      },
+      "locations": [
+        {
+          "endLine": 567,
+          "path": "mobiel proekt/src/db/repositories/patrolRepository.ts",
+          "role": "sink",
+          "startLine": 525
+        },
+        {
+          "endLine": 942,
+          "path": "mobiel proekt/src/db/repositories/patrolRepository.ts",
+          "role": "sink",
+          "startLine": 886
+        },
+        {
+          "endLine": 27,
+          "path": "mobiel proekt/src/features/patrol/PointDetailScreen.tsx",
+          "role": "entrypoint",
+          "startLine": 27
+        }
+      ],
+      "occurrenceId": "occ_03231dbdb12732129b9d09fa",
+      "provenance": {
+        "source": "Codex Security scoped-path audit of the mobile application"
+      },
+      "remediation": "Require the current owner and contour in every point read, join through an owner/contour-bound assignment, and add a two-account SQLite integration test covering forged assignment/point IDs.",
+      "rootCause": {
+        "summary": "Require the current owner and contour in every point read, join through an owner/contour-bound assignment, and add a two-account SQLite integration test covering forged assignment/point IDs."
+      },
+      "ruleId": "mobile/object-authorization-local-read",
+      "severity": {
+        "level": "high",
+        "rationale": "listAssignmentPoints and getPointForFill accept assignmentId/pointId and query local assignment/point rows without requireOwnerUserId or owner/contour predicates. A reachable local route with another assignment ID can disclose another owner's cached patrol state and evidence references.",
+        "score": 7.5,
+        "scoringSystem": "CVSS-like mobile audit"
+      },
+      "summary": "listAssignmentPoints and getPointForFill accept assignmentId/pointId and query local assignment/point rows without requireOwnerUserId or owner/contour predicates. A reachable local route with another assignment ID can disclose another owner's cached patrol state and evidence references.",
+      "taxonomy": {
+        "category": "authorization",
+        "cwe": [
+          "CWE-639",
+          "CWE-862"
+        ]
+      },
+      "title": "Point metadata/results can be read without owner binding"
+    },
+    {
+      "confidence": {
+        "level": "high",
+        "rationale": "Exact source/control/sink trace with repository and test evidence; native runtime proof is recorded as a limitation."
+      },
+      "extensions": {
+        "candidateId": "mobile-sql-parameter-count-mismatch"
+      },
+      "findingId": "csf_9c7df8715dbd3cb9402587cc",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:aec0ff1d27235c79cdbbf7b59a3841b6ced7f647856deb8c259c8c0f9a6f5fb8"
+      },
+      "identity": {
+        "anchor": "mobile-sql-bind-arity",
+        "instance": "mobile-sql-parameter-count-mismatch"
+      },
+      "locations": [
+        {
+          "endLine": 1372,
+          "path": "mobiel proekt/src/db/repositories/patrolRepository.ts",
+          "role": "sink",
+          "startLine": 1368
+        },
+        {
+          "endLine": 1403,
+          "path": "mobiel proekt/src/db/repositories/patrolRepository.ts",
+          "role": "sink",
+          "startLine": 1397
+        },
+        {
+          "endLine": 1447,
+          "path": "mobiel proekt/src/db/repositories/patrolRepository.ts",
+          "role": "sink",
+          "startLine": 1442
+        },
+        {
+          "endLine": 1493,
+          "path": "mobiel proekt/src/db/repositories/patrolRepository.ts",
+          "role": "sink",
+          "startLine": 1487
+        }
+      ],
+      "occurrenceId": "occ_fb0f7a0e359cd73da8229ed9",
+      "provenance": {
+        "source": "Codex Security scoped-path audit of the mobile application"
+      },
+      "remediation": "Make SQL placeholders and bind arrays match exactly, add contour predicates where intended, and add a native SQLite integration test for every lifecycle action.",
+      "rootCause": {
+        "summary": "Make SQL placeholders and bind arrays match exactly, add contour predicates where intended, and add a native SQLite integration test for every lifecycle action."
+      },
+      "ruleId": "mobile/sql-bind-arity",
+      "severity": {
+        "level": "medium",
+        "rationale": "Four patrol lifecycle queries contain two SQL placeholders but pass ownerUserId, assignmentId and currentContourId. Expo SQLite can reject the bind with SQLITE_RANGE, blocking assignment reads and start/pause/resume/handoff workflows.",
+        "score": 5.8,
+        "scoringSystem": "CVSS-like mobile audit"
+      },
+      "summary": "Four patrol lifecycle queries contain two SQL placeholders but pass ownerUserId, assignmentId and currentContourId. Expo SQLite can reject the bind with SQLITE_RANGE, blocking assignment reads and start/pause/resume/handoff workflows.",
+      "taxonomy": {
+        "category": "correctness/availability",
+        "cwe": [
+          "CWE-248",
+          "CWE-754"
+        ]
+      },
+      "title": "Patrol lifecycle queries bind an extra contour parameter"
+    }
+  ],
+  "scanId": "60e773d544a3_20260721_mobileaudit",
+  "schemaVersion": "1.0"
+}

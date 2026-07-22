@@ -1,0 +1,375 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "60e773d544a3_20260721_mobileaudit"
+      },
+      "properties": {
+        "codexSecuritySchemaVersion": "1.0",
+        "codexSecurityTargetKind": "git_worktree"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "message": {
+                "text": "root_control"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "mobiel%20proekt/src/services/mediaAttachmentService.ts"
+                },
+                "region": {
+                  "endLine": 445,
+                  "startLine": 13
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Video preparation reads the entire file as Base64 and then materializes decoded bytes for hashing. Unknown-size assets can bypass the 25 MiB check and multi-selection has no aggregate cap, making memory and storage pressure likely before sync."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:35a27a759de6ae31ead59b08752f64ca7738991eb09120a2f8f392558ecb57b2",
+            "primaryLocationLineHash": "655e6aaa46fdae9b:1"
+          },
+          "properties": {
+            "candidateId": "mobile-media-size-unbounded",
+            "category": "availability",
+            "confidence": "high",
+            "findingId": "csf_6c3672f84f934eacbb374883",
+            "occurrenceId": "occ_027efeb730b6bf6856d28d70",
+            "severity": "medium"
+          },
+          "relatedLocations": [
+            {
+              "id": 1,
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "mobiel%20proekt/src/services/fileStorageService.ts"
+                },
+                "region": {
+                  "endLine": 65,
+                  "startLine": 64
+                }
+              }
+            },
+            {
+              "id": 2,
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "mobiel%20proekt/src/sync/fileUploadQueue.ts"
+                },
+                "region": {
+                  "endLine": 40,
+                  "startLine": 35
+                }
+              }
+            }
+          ],
+          "ruleId": "mobile/media-resource-bounds",
+          "ruleIndex": 1
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "mobiel%20proekt/src/db/repositories/patrolRepository.ts"
+                },
+                "region": {
+                  "endLine": 567,
+                  "startLine": 525
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "listAssignmentPoints and getPointForFill accept assignmentId/pointId and query local assignment/point rows without requireOwnerUserId or owner/contour predicates. A reachable local route with another assignment ID can disclose another owner's cached patrol state and evidence references."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:439fecc2bfd6d77a10ac7ad4cc8f83045d138ae7f51b10f0a8c1480d250e996c",
+            "primaryLocationLineHash": "ea153b0921d773ac:1"
+          },
+          "properties": {
+            "candidateId": "mobile-patrol-point-read-owner-bypass",
+            "category": "authorization",
+            "confidence": "high",
+            "findingId": "csf_1616a8a04656e13f5da38497",
+            "occurrenceId": "occ_03231dbdb12732129b9d09fa",
+            "severity": "high"
+          },
+          "relatedLocations": [
+            {
+              "id": 1,
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "mobiel%20proekt/src/db/repositories/patrolRepository.ts"
+                },
+                "region": {
+                  "endLine": 942,
+                  "startLine": 886
+                }
+              }
+            },
+            {
+              "id": 2,
+              "message": {
+                "text": "entrypoint"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "mobiel%20proekt/src/features/patrol/PointDetailScreen.tsx"
+                },
+                "region": {
+                  "endLine": 27,
+                  "startLine": 27
+                }
+              }
+            }
+          ],
+          "ruleId": "mobile/object-authorization-local-read",
+          "ruleIndex": 2
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "message": {
+                "text": "root_control"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "mobiel%20proekt/app.config.js"
+                },
+                "region": {
+                  "endLine": 103,
+                  "startLine": 86
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "local-enterprise/dev configuration permits HTTP to 192.168.2.194 while login, refresh, bearer and media requests carry secrets. A same-LAN attacker can capture credentials or alter queued report traffic. The risk is conditional on deploying this contour on an untrusted Wi-Fi; production HTTPS is a counterexample."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:52b00010d6de9a5b45f1d68cec0b412dd2ca1d6fb4706d6ed5316564ed9b5fab",
+            "primaryLocationLineHash": "9e0cf77e06bd2589:1"
+          },
+          "properties": {
+            "candidateId": "mobile-cleartext-lan-token-transport",
+            "category": "transport security",
+            "confidence": "high",
+            "findingId": "csf_bbf9e0dae7de93e0a1821081",
+            "occurrenceId": "occ_ec42f75f25e1103c09cd543e",
+            "severity": "high"
+          },
+          "relatedLocations": [
+            {
+              "id": 1,
+              "message": {
+                "text": "configuration"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "mobiel%20proekt/src/core/environments.ts"
+                },
+                "region": {
+                  "endLine": 33,
+                  "startLine": 28
+                }
+              }
+            },
+            {
+              "id": 2,
+              "message": {
+                "text": "entrypoint"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "mobiel%20proekt/src/api/authApi.ts"
+                },
+                "region": {
+                  "endLine": 47,
+                  "startLine": 25
+                }
+              }
+            },
+            {
+              "id": 3,
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "mobiel%20proekt/src/api/httpClient.ts"
+                },
+                "region": {
+                  "endLine": 150,
+                  "startLine": 136
+                }
+              }
+            }
+          ],
+          "ruleId": "mobile/cleartext-credential-transport",
+          "ruleIndex": 0
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "mobiel%20proekt/src/db/repositories/patrolRepository.ts"
+                },
+                "region": {
+                  "endLine": 1372,
+                  "startLine": 1368
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Four patrol lifecycle queries contain two SQL placeholders but pass ownerUserId, assignmentId and currentContourId. Expo SQLite can reject the bind with SQLITE_RANGE, blocking assignment reads and start/pause/resume/handoff workflows."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:aec0ff1d27235c79cdbbf7b59a3841b6ced7f647856deb8c259c8c0f9a6f5fb8",
+            "primaryLocationLineHash": "a2985a0db5088c62:1"
+          },
+          "properties": {
+            "candidateId": "mobile-sql-parameter-count-mismatch",
+            "category": "correctness/availability",
+            "confidence": "high",
+            "findingId": "csf_9c7df8715dbd3cb9402587cc",
+            "occurrenceId": "occ_fb0f7a0e359cd73da8229ed9",
+            "severity": "medium"
+          },
+          "relatedLocations": [
+            {
+              "id": 1,
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "mobiel%20proekt/src/db/repositories/patrolRepository.ts"
+                },
+                "region": {
+                  "endLine": 1403,
+                  "startLine": 1397
+                }
+              }
+            },
+            {
+              "id": 2,
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "mobiel%20proekt/src/db/repositories/patrolRepository.ts"
+                },
+                "region": {
+                  "endLine": 1447,
+                  "startLine": 1442
+                }
+              }
+            },
+            {
+              "id": 3,
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "mobiel%20proekt/src/db/repositories/patrolRepository.ts"
+                },
+                "region": {
+                  "endLine": 1493,
+                  "startLine": 1487
+                }
+              }
+            }
+          ],
+          "ruleId": "mobile/sql-bind-arity",
+          "ruleIndex": 3
+        }
+      ],
+      "tool": {
+        "driver": {
+          "name": "Codex Security",
+          "rules": [
+            {
+              "id": "mobile/cleartext-credential-transport",
+              "name": "mobile/cleartext-credential-transport",
+              "properties": {
+                "tags": [
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "mobile/cleartext-credential-transport"
+              }
+            },
+            {
+              "id": "mobile/media-resource-bounds",
+              "name": "mobile/media-resource-bounds",
+              "properties": {
+                "tags": [
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "mobile/media-resource-bounds"
+              }
+            },
+            {
+              "id": "mobile/object-authorization-local-read",
+              "name": "mobile/object-authorization-local-read",
+              "properties": {
+                "tags": [
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "mobile/object-authorization-local-read"
+              }
+            },
+            {
+              "id": "mobile/sql-bind-arity",
+              "name": "mobile/sql-bind-arity",
+              "properties": {
+                "tags": [
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "mobile/sql-bind-arity"
+              }
+            }
+          ],
+          "version": "0.1.11"
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

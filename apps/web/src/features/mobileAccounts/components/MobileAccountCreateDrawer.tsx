@@ -342,7 +342,15 @@ export function MobileAccountLinkPanel({
     return employeeDirectory.filter((employee) => {
       const matchesSearch =
         query.length === 0 ||
-        [employee.fullName, employee.position, employee.department, employee.zone]
+        [
+          employee.fullName,
+          employee.personnelNo,
+          employee.phone,
+          employee.email,
+          employee.position,
+          employee.department,
+          employee.zone,
+        ]
           .join(" ")
           .toLowerCase()
           .includes(query);
@@ -493,16 +501,26 @@ export function MobileAccountLinkPanel({
           </div>
         </section>
 
-        <section className="employee-binding-filters">
+        <section aria-label="Фильтры сотрудников" className="employee-binding-filters">
           <label className="employee-binding-search">
             <AccountModalIcon name="search" />
             <input
               autoFocus
               id="employee-binding-search"
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Поиск по ФИО, должности, отделу или участку"
+              placeholder="Начните вводить ФИО или табельный номер"
               value={search}
             />
+            {search ? (
+              <button
+                aria-label="Очистить поиск"
+                className="employee-binding-clear"
+                onClick={() => setSearch("")}
+                type="button"
+              >
+                <CloseIcon />
+              </button>
+            ) : null}
           </label>
           <label>
             Участок
@@ -532,8 +550,13 @@ export function MobileAccountLinkPanel({
 
         <section className="employee-binding-directory">
           <div className="employee-binding-directory-head">
-            <h4>Доступные сотрудники</h4>
-            <span>{filteredEmployees.length} найдено</span>
+            <div>
+              <h4>Выберите сотрудника</h4>
+              <span>Нажмите «Добавить» или отметьте строку галочкой</span>
+            </div>
+            <strong aria-live="polite" className="employee-binding-result-count">
+              {filteredEmployees.length} найдено
+            </strong>
           </div>
           <div className="employee-binding-table-wrap">
             <table>
@@ -552,9 +575,10 @@ export function MobileAccountLinkPanel({
                   const isSelected = selectedIdSet.has(employee.id);
 
                   return (
-                    <tr key={employee.id}>
+                    <tr className={isSelected ? "employee-binding-row-selected" : undefined} key={employee.id}>
                       <td>
                         <input
+                          aria-label={isSelected ? employee.fullName + " выбрана" : "Выбрать " + employee.fullName}
                           checked={isSelected}
                           onChange={() => (isSelected ? removeEmployee(employee.id) : addEmployee(employee))}
                           type="checkbox"
@@ -574,9 +598,11 @@ export function MobileAccountLinkPanel({
                       <td>{displayKnownValue(employee.zone)}</td>
                       <td>
                         <button
+                          aria-label={isSelected ? employee.fullName + " уже добавлен" : "Добавить " + employee.fullName}
                           className="button ghost"
                           disabled={isSelected || !canAddMore}
                           onClick={() => addEmployee(employee)}
+                          title={!isSelected && !canAddMore ? "Достигнут лимит: 5 сотрудников" : undefined}
                           type="button"
                         >
                           {isSelected ? "Добавлен" : "Добавить"}
@@ -588,7 +614,21 @@ export function MobileAccountLinkPanel({
               </tbody>
             </table>
             {filteredEmployees.length === 0 ? (
-              <div className="employee-binding-empty">Сотрудники по заданным фильтрам не найдены.</div>
+              <div className="employee-binding-empty">
+                <strong>Ничего не найдено</strong>
+                <span>Измените запрос или сбросьте фильтры.</span>
+                <button
+                  className="button ghost"
+                  onClick={() => {
+                    setSearch("");
+                    setZoneFilter("all");
+                    setRoleFilter("all");
+                  }}
+                  type="button"
+                >
+                  Сбросить фильтры
+                </button>
+              </div>
             ) : null}
           </div>
         </section>
@@ -620,11 +660,14 @@ export function MobileAccountEditPanel({
   onUpdateAccount: (payload: UpdateMobileAccountPayload) => Promise<void> | void;
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [form, setForm] = useState({
     login: selected?.login ?? "",
     role: displayKnownValue(selected?.role) || "Маршрутный обходчик",
     status: (displayKnownValue(selected?.status) || "Активен") as MobileAccount["status"],
+    password: "",
+    confirmPassword: "",
   });
 
   useEffect(() => {
@@ -632,19 +675,42 @@ export function MobileAccountEditPanel({
       login: selected?.login ?? "",
       role: displayKnownValue(selected?.role) || "Маршрутный обходчик",
       status: (displayKnownValue(selected?.status) || "Активен") as MobileAccount["status"],
+      password: "",
+      confirmPassword: "",
     });
     setFieldErrors({});
+    setShowConfirm(false);
   }, [selected?.id, selected?.login, selected?.role, selected?.status]);
 
+  function patchForm(patch: Partial<typeof form>) {
+    setForm((current) => ({ ...current, ...patch }));
+    setFieldErrors({});
+    setShowConfirm(false);
+  }
+
   const normalizedLogin = form.login.trim();
-  const isValid = normalizedLogin.length >= 3 && Boolean(form.role) && Boolean(form.status);
+  const normalizedPassword = form.password.trim();
+  const passwordChangeRequested = normalizedPassword.length > 0 || form.confirmPassword.length > 0;
+  const passwordValidationError = passwordChangeRequested
+    ? normalizedPassword.length < 8
+      ? "Новый пароль должен содержать минимум 8 символов."
+      : normalizedPassword !== form.confirmPassword
+        ? "Пароли не совпадают."
+        : ""
+    : "";
+  const isValid =
+    normalizedLogin.length >= 3 &&
+    Boolean(form.role) &&
+    Boolean(form.status) &&
+    !passwordValidationError;
   const hasChanges = selected
     ? normalizedLogin !== selected.login ||
       form.role !== displayKnownValue(selected.role) ||
-      form.status !== displayKnownValue(selected.status)
+      form.status !== displayKnownValue(selected.status) ||
+      passwordChangeRequested
     : false;
 
-  async function submitEdit(event: FormEvent<HTMLFormElement>) {
+  function submitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!selected) {
@@ -652,13 +718,32 @@ export function MobileAccountEditPanel({
       return;
     }
 
+    if (!isValid) {
+      setFieldErrors({
+        ...(normalizedLogin.length < 3
+          ? { login: ["Логин должен содержать минимум 3 символа."] }
+          : {}),
+        ...(passwordValidationError ? { password: [passwordValidationError] } : {}),
+      });
+      return;
+    }
+
+    if (hasChanges) setShowConfirm(true);
+  }
+
+  async function confirmEdit() {
+    if (!selected || !hasChanges || !isValid) return;
+
     setIsSubmitting(true);
+    setShowConfirm(false);
     try {
       setFieldErrors({});
       await onUpdateAccount({
         login: normalizedLogin,
         role: form.role,
         status: form.status,
+        password: passwordChangeRequested ? normalizedPassword : undefined,
+        confirmPassword: passwordChangeRequested ? form.confirmPassword : undefined,
       });
       onClose?.();
     } catch (error) {
@@ -671,7 +756,7 @@ export function MobileAccountEditPanel({
   return (
     <AccountPanelCard
       title="Редактирование аккаунта"
-      note="Измените логин, роль, статус и список привязанных сотрудников."
+      note="Измените логин, роль, статус или задайте новый пароль."
       onClose={onClose}
     >
       <form className="account-panel-form account-edit-form" onSubmit={submitEdit}>
@@ -681,7 +766,7 @@ export function MobileAccountEditPanel({
               <strong>Основные параметры</strong>
               <span>Настройки входа и уровня доступа</span>
             </div>
-            <span className={`account-edit-status ${form.status === "Заблокирован" ? "blocked" : "active"}`}>
+            <span className={"account-edit-status " + (form.status === "Заблокирован" ? "blocked" : "active")}>
               {form.status}
             </span>
           </div>
@@ -692,11 +777,8 @@ export function MobileAccountEditPanel({
               <input
                 autoComplete="username"
                 autoFocus
-                onChange={(event) => {
-                  const login = event.currentTarget.value;
-                  setForm((current) => ({ ...current, login }));
-                }}
-                placeholder="Логин аккаунта"
+                onChange={(event) => patchForm({ login: event.currentTarget.value })}
+                placeholder="Введите логин"
                 value={form.login}
               />
               <small>Не менее трёх символов, без пробелов по краям</small>
@@ -704,15 +786,10 @@ export function MobileAccountEditPanel({
             </label>
             <label className="account-edit-field">
               <span>Роль <b>*</b></span>
-              <select
-                onChange={(event) => {
-                  const role = event.currentTarget.value;
-                  setForm((current) => ({ ...current, role }));
-                }}
-                value={form.role}
-              >
+              <select onChange={(event) => patchForm({ role: event.currentTarget.value })} value={form.role}>
                 <option>Маршрутный обходчик</option>
                 <option>Оператор</option>
+                <option>Администратор</option>
                 <option>Администратор мобильного доступа</option>
               </select>
               <small>Определяет доступные функции мобильного приложения</small>
@@ -723,10 +800,7 @@ export function MobileAccountEditPanel({
           <label className="account-edit-field account-edit-field-wide">
             <span>Статус аккаунта <b>*</b></span>
             <select
-              onChange={(event) => {
-                const status = event.currentTarget.value as MobileAccount["status"];
-                setForm((current) => ({ ...current, status }));
-              }}
+              onChange={(event) => patchForm({ status: event.currentTarget.value as MobileAccount["status"] })}
               value={form.status}
             >
               <option>Активен</option>
@@ -736,6 +810,41 @@ export function MobileAccountEditPanel({
             <small>{statusHelpText(form.status)}</small>
             <FieldError errors={fieldErrors.status} />
           </label>
+        </section>
+
+        <section className="account-edit-section account-edit-password-section">
+          <div className="account-edit-section-head">
+            <div>
+              <strong>Пароль</strong>
+              <span>Оставьте поля пустыми, если менять пароль не нужно.</span>
+            </div>
+            <span className="account-edit-password-badge">Защищён</span>
+          </div>
+          <div className="account-form-grid two">
+            <label className="account-edit-field">
+              <span>Новый пароль</span>
+              <input
+                autoComplete="new-password"
+                onChange={(event) => patchForm({ password: event.currentTarget.value })}
+                placeholder="Минимум 8 символов"
+                type="password"
+                value={form.password}
+              />
+              <small>Пароль передаётся на сервер только после подтверждения.</small>
+              <FieldError errors={fieldErrors.password} />
+            </label>
+            <label className="account-edit-field">
+              <span>Подтверждение пароля</span>
+              <input
+                autoComplete="new-password"
+                onChange={(event) => patchForm({ confirmPassword: event.currentTarget.value })}
+                placeholder="Повторите новый пароль"
+                type="password"
+                value={form.confirmPassword}
+              />
+              <small>Оба значения должны совпадать.</small>
+            </label>
+          </div>
         </section>
 
         <section className="selected-employee-block account-edit-section">
@@ -757,21 +866,40 @@ export function MobileAccountEditPanel({
           <EmployeeTokenList employees={selected?.boundEmployees ?? []} />
           <p className="account-edit-help">
             {hasChanges
-              ? "Сначала сохраните изменения аккаунта, затем откройте управление привязками."
+              ? "Сначала сохраните изменения аккаунта, затем управляйте привязками."
               : "Добавление и удаление сотрудников выполняется в отдельном окне управления привязками."}
           </p>
         </section>
 
-        {!isValid && form.login.length > 0 ? (
-          <div className="account-edit-validation" role="alert">Логин должен содержать не менее трёх символов.</div>
+        {!isValid && form.login.length > 0 && !passwordValidationError ? (
+          <div className="account-edit-validation" role="alert">
+            Логин должен содержать минимум 3 символа.
+          </div>
+        ) : null}
+
+        {showConfirm ? (
+          <div aria-labelledby="account-edit-confirm-title" className="account-edit-confirm" role="alertdialog">
+            <div>
+              <strong id="account-edit-confirm-title">Подтвердить изменения?</strong>
+              <span>Логин, роль, статус или пароль будут обновлены на сервере.</span>
+            </div>
+            <div className="account-edit-confirm-actions">
+              <button className="button ghost" onClick={() => setShowConfirm(false)} type="button">
+                Нет
+              </button>
+              <button className="button primary" disabled={isSubmitting} onClick={() => void confirmEdit()} type="button">
+                {isSubmitting ? "Сохранение..." : "Да, сохранить"}
+              </button>
+            </div>
+          </div>
         ) : null}
 
         <div className="account-panel-actions account-edit-actions">
-          <span>{hasChanges ? "Есть несохранённые изменения" : "Изменений пока нет"}</span>
+          {hasChanges && !showConfirm ? (
+            <span className="account-edit-change-hint">Изменения готовы к сохранению</span>
+          ) : null}
           <div>
-            <button className="button ghost" onClick={onClose} type="button">
-              Отмена
-            </button>
+            <button className="button ghost" onClick={onClose} type="button">Отмена</button>
             <button className="button primary" disabled={isSubmitting || !selected || !isValid || !hasChanges} type="submit">
               {isSubmitting ? "Сохранение..." : "Сохранить изменения"}
             </button>
@@ -987,7 +1115,7 @@ function AccountPanelCard({
           <p>{note}</p>
         </div>
         <button aria-label="Закрыть окно" className="account-panel-close" onClick={onClose} type="button">
-          ×
+          <CloseIcon />
         </button>
       </header>
       {children}

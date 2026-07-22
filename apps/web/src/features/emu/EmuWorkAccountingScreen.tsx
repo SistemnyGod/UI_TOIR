@@ -127,16 +127,6 @@ export function EmuWorkAccountingScreen({
   const canViewPlan = hasPermission(currentUser, "emu.plan.view");
   const canManagePlan = hasPermission(currentUser, "emu.plan.manage");
   const canApprovePlan = hasPermission(currentUser, "emu.plan.approve");
-  const hasFullEmuWorkAccess = Boolean(
-    currentUser &&
-      (currentUser.roles.some((role) => role.toLowerCase() === "admin" || role.toLowerCase() === "manager") ||
-        hasPermission(currentUser, "emu.scope.all")),
-  );
-  const accessTitle = workspace.sourceMode === "api" && !hasFullEmuWorkAccess ? "Мои работы" : "Все доступные работы";
-  const accessDescription =
-    workspace.sourceMode === "api" && !hasFullEmuWorkAccess
-      ? "Показаны только карточки, созданные вашим аккаунтом. Чужие работы скрыты до выдачи расширенного доступа администратором."
-      : "Показаны работы по вашим правам доступа: администратор, manager или emu.scope.all видят расширенный список.";
   const employeeOptions = useMemo<EmuEmployeeOption[]>(() => {
     const activeFavoriteIds = new Set(workspace.settings.favoriteEmployees.filter((employee) => employee.isActive).map((employee) => employee.employeeId));
     const source =
@@ -313,10 +303,6 @@ export function EmuWorkAccountingScreen({
         <div>
           <h2>Учет работ ЭМУ</h2>
           <p>Суточная доска активных работ, пауз, переносов и решений диспетчера.</p>
-        </div>
-        <div className={`emu-access-scope ${hasFullEmuWorkAccess ? "is-wide" : "is-own"}`}>
-          <strong>{accessTitle}</strong>
-          <span>{accessDescription}</span>
         </div>
         <div className="emu-heading-actions">
           {canViewPlan ? (
