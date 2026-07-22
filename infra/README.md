@@ -1,5 +1,7 @@
 # Infrastructure
 
+Дата актуализации: 2026-07-22.
+
 `infra` содержит локальные и будущие deployment-артефакты проекта.
 
 ## Локальный compose
@@ -15,6 +17,8 @@ docker compose -f .\infra\docker\compose.yaml up -d
 - RabbitMQ 3 Management
 - MinIO
 
+PostgreSQL используется application-кодом. Redis, RabbitMQ и MinIO доступны как инфраструктурный резерв и пока не являются обязательными runtime adapters.
+
 ## Полный Docker-запуск приложения
 
 ```powershell
@@ -23,11 +27,14 @@ docker compose -f .\infra\docker\compose.yaml --profile app up --build
 
 Состав профиля `app`:
 
-- API: `http://localhost:5080`
-- Web: `http://localhost:5173`
-- PostgreSQL автоматически поднимается и проверяется через healthcheck.
+- отдельный migrator;
+- API;
+- web;
+- worker;
+- reverse proxy;
+- PostgreSQL и доступные stateful-сервисы.
 
-Frontend-контейнер отдает production build через Nginx и проксирует `/api/*` и `/health/*` во внутренний сервис `api`.
+Наружу публикуется proxy на портах `80`, `443` и `5173`. API и web containers доступны только внутри Docker network. Proxy направляет `/api/*` и `/health/*` во внутренний API.
 
 Остановить:
 
@@ -40,6 +47,8 @@ docker compose -f .\infra\docker\compose.yaml --profile app down
 Шаблон локальных переменных находится в `infra/env/.env.example`.
 
 Production secrets не хранятся в репозитории.
+
+Локальные secrets в `infra/docker/secrets` игнорируются Git. Не выводите их содержимое в логи и документацию.
 
 ## Web-only update
 

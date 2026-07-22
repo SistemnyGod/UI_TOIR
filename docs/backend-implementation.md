@@ -1,5 +1,9 @@
 # Backend implementation notes
 
+> **Статус документа: исторический снимок первой persistence-итерации (май 2026).**
+> Перечни endpoint-ов, таблиц, gaps и next steps ниже не отражают текущую полноту backend.
+> Для актуального состояния используйте [README.md](./README.md), [architecture.md](./architecture.md), [modules.md](./modules.md) и код `apps/api/Controllers`.
+
 Date: 2026-05-15
 Last updated: 2026-05-18 after Mobile Accounts edit/block/unblock/detach/session/security endpoints and binding schema.
 

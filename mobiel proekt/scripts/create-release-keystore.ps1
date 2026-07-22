@@ -2,7 +2,8 @@ param(
   [string]$KeystorePath = (Join-Path (Split-Path $PSScriptRoot -Parent) "secrets\patrol360-release.jks"),
   [string]$SecretPath = (Join-Path (Split-Path $PSScriptRoot -Parent) "secrets\patrol360-release.dpapi.json"),
   [string]$Alias = "patrol360-release",
-  [string]$JavaHome = $env:JAVA_HOME
+  [string]$JavaHome = $env:JAVA_HOME,
+  [switch]$AllowCertificateRotation
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,6 +15,11 @@ if ([string]::IsNullOrWhiteSpace($JavaHome)) {
 $keytool = Join-Path $JavaHome "bin\keytool.exe"
 if (-not (Test-Path -LiteralPath $keytool)) {
   throw "keytool not found: $keytool"
+}
+
+$signingPolicyPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'release-signing.json'
+if ((Test-Path -LiteralPath $signingPolicyPath) -and -not $AllowCertificateRotation) {
+  throw 'A release certificate is already pinned. Restore the existing JKS; a new key would make Android updates incompatible. Use -AllowCertificateRotation only for an approved rotation.'
 }
 
 if ((Test-Path -LiteralPath $KeystorePath) -or (Test-Path -LiteralPath $SecretPath)) {

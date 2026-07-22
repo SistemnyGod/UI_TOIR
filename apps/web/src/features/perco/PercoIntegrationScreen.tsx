@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ApiError } from "../../api/client";
 import type {
@@ -102,6 +102,10 @@ const percoTabs: Array<{ id: PercoTab; label: string }> = [
 
 const repository = createPercoRepository();
 
+const percoTabOrder = percoTabs.map((tab) => tab.id);
+const defaultListPageSize = 20;
+const diagnosticsListPageSize = 12;
+
 function getPercoTabLabel(tab: PercoTab) {
   const labels: Record<PercoTab, string> = {
     connection: "Подключение",
@@ -156,11 +160,11 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
     setStatus("loading");
     setErrorMessage(null);
     try {
-      const nextSettings = await repository.getSettings();
-      setSettings(nextSettings);
-      setForm(toForm(nextSettings));
-
       const requests: Array<Promise<unknown>> = [
+        repository.getSettings().then((nextSettings) => {
+          setSettings(nextSettings);
+          setForm(toForm(nextSettings));
+        }),
         repository.getDiagnostics(120).then(setDiagnostics),
         repository.getUnmatchedEmployees().then((items) => {
           setUnmatchedEmployees([...items]);
@@ -171,7 +175,18 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
         requests.push(repository.getLogs(80).then((items) => setLogs([...items])));
       }
 
-      await Promise.allSettled(requests);
+      const results = await Promise.allSettled(requests);
+      const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+      if (failures.length > 0) {
+        setStatus("error");
+        setErrorMessage(
+          failures.length === results.length
+            ? getErrorMessage(failures[0].reason)
+            : `Часть данных PERCO-Web временно недоступна. ${getErrorMessage(failures[0].reason)}`,
+        );
+        return;
+      }
+
       setStatus("ready");
     } catch (error) {
       setStatus("error");
@@ -285,7 +300,7 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
       setSyncResult(result);
       setStatus("ready");
       onNotify(result.message);
-      await Promise.allSettled([refreshDiagnostics(), refreshLogs(), refreshUnmatched()]);
+      await Promise.all([refreshDiagnostics(), refreshLogs(), refreshUnmatched()]);
     } catch (error) {
       setStatus("error");
       setErrorMessage(getErrorMessage(error));
@@ -312,19 +327,11 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
   }
 
   async function refreshAll() {
-    setStatus("loading");
-    setErrorMessage(null);
-    try {
-      await Promise.allSettled([load(), refreshDiagnostics(), refreshLogs(), refreshUnmatched()]);
-      setStatus("ready");
-    } catch (error) {
-      setStatus("error");
-      setErrorMessage(getErrorMessage(error));
-    }
+    await load();
   }
 
   async function refreshLiveData() {
-    if (canSync && (activeTab === "dashboard" || activeTab === "diagnostics")) {
+    if (canSync && activeTab === "diagnostics") {
       await runSync("events");
       return;
     }
@@ -350,7 +357,7 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
       const result = await repository.matchEmployee({ action, employeeId, percoEmployeeId });
       setSyncResult(result);
       onNotify(result.message);
-      await Promise.allSettled([refreshUnmatched(), refreshDiagnostics()]);
+      await Promise.all([refreshUnmatched(), refreshDiagnostics()]);
       setStatus("ready");
     } catch (error) {
       setStatus("error");
@@ -394,7 +401,7 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
       });
       setCloseInterval(null);
       onNotify(result.message);
-      await Promise.allSettled([refreshDiagnostics(), refreshLogs()]);
+      await Promise.all([refreshDiagnostics(), refreshLogs()]);
       setStatus("ready");
     } catch (error) {
       setStatus("error");
@@ -404,6 +411,21 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
 
   function updateForm<K extends keyof SettingsForm>(key: K, value: SettingsForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function selectTabFromKeyboard(event: React.KeyboardEvent<HTMLButtonElement>, tab: PercoTab) {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+
+    event.preventDefault();
+    const currentIndex = percoTabOrder.indexOf(tab);
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? percoTabOrder.length - 1
+        : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + percoTabOrder.length) % percoTabOrder.length;
+    const nextTab = percoTabOrder[nextIndex];
+    setActiveTab(nextTab);
+    window.requestAnimationFrame(() => document.getElementById(`perco-tab-${nextTab}`)?.focus());
   }
 
   if (!canView) {
@@ -418,11 +440,11 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
   }
 
   return (
-    <div className="perco-shell">
-      <section className="perco-toolbar">
+    <div className="perco-shell" aria-busy={status === "loading" || status === "saving"}>
+      <section className="perco-toolbar" aria-labelledby="perco-screen-title">
         <div className="perco-toolbar-main">
           <span className="perco-eyebrow">PERCo-Web</span>
-          <strong>Проходы по заводу и смены сотрудников</strong>
+          <strong id="perco-screen-title">Проходы по заводу и смены сотрудников</strong>
           <span>Контроль входов/выходов, присутствия, сопоставления сотрудников и простоев.</span>
         </div>
         <div className="perco-toolbar-routes" aria-label="Правила проходов">
@@ -437,21 +459,46 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
         </div>
         <div className="perco-hero-actions">
           <StatusPill status={settings?.lastConnectionStatus ?? "idle"} />
-          <button className="perco-button perco-button-secondary" disabled={status === "loading"} onClick={() => void refreshLiveData()} type="button">
-            Обновить данные
+          <button className="perco-button perco-button-secondary" disabled={isBusyStatus(status)} onClick={() => void refreshAll()} type="button">
+            {isBusyStatus(status) ? "Обновляем…" : "Обновить данные"}
           </button>
         </div>
       </section>
 
-      <nav className="perco-tabs" aria-label="Разделы PERCo-Web">
+      <nav className="perco-tabs" aria-label="Разделы PERCo-Web" role="tablist">
         {percoTabs.map((tab) => (
-          <button className={activeTab === tab.id ? "active" : ""} key={tab.id} onClick={() => setActiveTab(tab.id)} type="button">
+          <button
+            aria-controls={`perco-panel-${tab.id}`}
+            aria-selected={activeTab === tab.id}
+            className={activeTab === tab.id ? "active" : ""}
+            id={`perco-tab-${tab.id}`}
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            onKeyDown={(event) => selectTabFromKeyboard(event, tab.id)}
+            role="tab"
+            tabIndex={activeTab === tab.id ? 0 : -1}
+            type="button"
+          >
             {getPercoTabLabel(tab.id)}
           </button>
         ))}
       </nav>
 
-      {errorMessage ? <div className="perco-alert perco-alert-error">{errorMessage}</div> : null}
+      {status === "loading" || status === "saving" ? (
+        <div className="perco-progress" role="status">
+          {status === "saving" ? "Сохраняем изменения PERCO-Web…" : "Обновляем данные PERCO-Web…"}
+        </div>
+      ) : null}
+
+      {errorMessage ? <div className="perco-alert perco-alert-error" role="alert">{errorMessage}</div> : null}
+
+      <div
+        aria-labelledby={`perco-tab-${activeTab}`}
+        className="perco-tab-panel"
+        id={`perco-panel-${activeTab}`}
+        role="tabpanel"
+        tabIndex={0}
+      >
 
       {activeTab === "dashboard" ? (
         <PercoDashboardTab
@@ -462,7 +509,7 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
           status={status}
           onCloseInterval={startClosePresenceInterval}
           onNavigate={setActiveTab}
-          onRefresh={refreshLiveData}
+          onRefresh={refreshAll}
           onSyncEvents={() => runSync("events")}
         />
       ) : null}
@@ -491,6 +538,7 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
           employeeOptions={matchEmployeeOptions}
           search={matchSearch}
           selectedMatch={selectedMatch}
+          status={status}
           unmatchedEmployees={unmatchedEmployees}
           onSearch={setMatchSearch}
           onSelect={(percoEmployeeId, employeeId) =>
@@ -506,6 +554,7 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
           diagnostics={diagnostics}
           canSync={canSync}
           settings={settings}
+          status={status}
           onCloseInterval={startClosePresenceInterval}
           onRefresh={async () => {
             await refreshLiveData();
@@ -514,8 +563,9 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
       ) : null}
 
       {activeTab === "logs" ? (
-        <LogsTab canView={canViewLogs} logs={logs} onRefresh={refreshLogs} />
+        <LogsTab canView={canViewLogs} logs={logs} status={status} onRefresh={refreshLogs} />
       ) : null}
+      </div>
 
       {closeInterval ? (
         <ClosePresenceModal
@@ -568,7 +618,7 @@ function ConnectionTab({
           <label className="perco-switch">
             <input
               checked={form.isEnabled}
-              disabled={!canManage}
+              disabled={!canManage || isBusyStatus(status)}
               onChange={(event) => onUpdate("isEnabled", event.target.checked)}
               type="checkbox"
             />
@@ -578,28 +628,28 @@ function ConnectionTab({
 
         <div className="perco-form-grid">
           <Field label="Адрес сервера PERCo">
-            <input disabled={!canManage} onChange={(event) => onUpdate("baseUrl", event.target.value)} value={form.baseUrl} />
+            <input disabled={!canManage || isBusyStatus(status)} onChange={(event) => onUpdate("baseUrl", event.target.value)} value={form.baseUrl} />
           </Field>
           <Field label="Проверочный путь">
-            <input disabled={!canManage} onChange={(event) => onUpdate("devPath", event.target.value)} value={form.devPath} />
+            <input disabled={!canManage || isBusyStatus(status)} onChange={(event) => onUpdate("devPath", event.target.value)} value={form.devPath} />
           </Field>
           <Field label="Endpoint сотрудников">
             <input
-              disabled={!canManage}
+              disabled={!canManage || isBusyStatus(status)}
               onChange={(event) => onUpdate("employeesEndpoint", event.target.value)}
               value={form.employeesEndpoint}
             />
           </Field>
           <Field label="Endpoint проходов по заводу">
             <input
-              disabled={!canManage}
+              disabled={!canManage || isBusyStatus(status)}
               onChange={(event) => onUpdate("eventsEndpoint", event.target.value)}
               value={form.eventsEndpoint}
             />
           </Field>
           <Field label="Режим авторизации">
             <select
-              disabled={!canManage}
+              disabled={!canManage || isBusyStatus(status)}
               onChange={(event) => onUpdate("authMode", event.target.value as SettingsForm["authMode"])}
               value={form.authMode}
             >
@@ -611,7 +661,7 @@ function ConnectionTab({
             <Field label={`Токен${settings?.hasToken ? " сохранен" : ""}`}>
               <input
                 autoComplete="off"
-                disabled={!canManage}
+                disabled={!canManage || isBusyStatus(status)}
                 onChange={(event) => onUpdate("token", event.target.value)}
                 placeholder={settings?.hasToken ? "Оставьте пустым, чтобы не менять" : "Вставьте Bearer token"}
                 type="password"
@@ -621,12 +671,12 @@ function ConnectionTab({
           ) : (
             <>
               <Field label="Логин">
-                <input disabled={!canManage} onChange={(event) => onUpdate("username", event.target.value)} value={form.username} />
+                <input disabled={!canManage || isBusyStatus(status)} onChange={(event) => onUpdate("username", event.target.value)} value={form.username} />
               </Field>
               <Field label={`Пароль${settings?.hasPassword ? " сохранен" : ""}`}>
                 <input
                   autoComplete="off"
-                  disabled={!canManage}
+                  disabled={!canManage || isBusyStatus(status)}
                   onChange={(event) => onUpdate("password", event.target.value)}
                   placeholder={settings?.hasPassword ? "Оставьте пустым, чтобы не менять" : "Введите пароль"}
                   type="password"
@@ -639,11 +689,11 @@ function ConnectionTab({
 
         <div className="perco-form-grid compact">
           <Field label="Часовой пояс">
-            <input disabled={!canManage} onChange={(event) => onUpdate("timezone", event.target.value)} value={form.timezone} />
+            <input disabled={!canManage || isBusyStatus(status)} onChange={(event) => onUpdate("timezone", event.target.value)} value={form.timezone} />
           </Field>
           <Field label="Сотрудники, мин">
             <input
-              disabled={!canManage}
+              disabled={!canManage || isBusyStatus(status)}
               min={1}
               onChange={(event) => onUpdate("employeesSyncMinutes", Number(event.target.value))}
               type="number"
@@ -652,7 +702,7 @@ function ConnectionTab({
           </Field>
           <Field label="Проходы, мин">
             <input
-              disabled={!canManage}
+              disabled={!canManage || isBusyStatus(status)}
               min={1}
               onChange={(event) => onUpdate("eventsSyncMinutes", Number(event.target.value))}
               type="number"
@@ -661,7 +711,7 @@ function ConnectionTab({
           </Field>
           <Field label="Допуск смены, мин">
             <input
-              disabled={!canManage}
+              disabled={!canManage || isBusyStatus(status)}
               min={0}
               onChange={(event) => onUpdate("shiftStartToleranceMinutes", Number(event.target.value))}
               type="number"
@@ -671,15 +721,15 @@ function ConnectionTab({
         </div>
 
         <div className="perco-actions">
-          <button className="perco-button perco-button-primary" disabled={!canManage || status === "saving"} type="submit">
-            Сохранить настройки
+          <button className="perco-button perco-button-primary" disabled={!canManage || isBusyStatus(status)} type="submit">
+            {status === "saving" ? "Сохраняем…" : "Сохранить настройки"}
           </button>
-          <button className="perco-button perco-button-secondary" disabled={!canManage || status === "loading"} onClick={onTest} type="button">
+          <button className="perco-button perco-button-secondary" disabled={!canManage || isBusyStatus(status)} onClick={onTest} type="button">
             Проверить подключение
           </button>
           <button
             className="perco-button perco-button-secondary"
-            disabled={!canManage || status === "loading"}
+            disabled={!canManage || isBusyStatus(status)}
             onClick={onCheckSecret}
             type="button"
           >
@@ -716,11 +766,11 @@ function SyncTab({
           </div>
         </header>
         <div className="perco-action-grid">
-          <button className="perco-button perco-button-primary" disabled={!canSync || status === "loading"} onClick={() => onRunSync("employees")} type="button">
-            Синхронизировать сотрудников
+          <button className="perco-button perco-button-primary" disabled={!canSync || isBusyStatus(status)} onClick={() => onRunSync("employees")} type="button">
+            {isBusyStatus(status) ? "Выполняется…" : "Синхронизировать сотрудников"}
           </button>
-          <button className="perco-button perco-button-primary" disabled={!canSync || status === "loading"} onClick={() => onRunSync("events")} type="button">
-            Синхронизировать проходы
+          <button className="perco-button perco-button-primary" disabled={!canSync || isBusyStatus(status)} onClick={() => onRunSync("events")} type="button">
+            {isBusyStatus(status) ? "Выполняется…" : "Синхронизировать проходы"}
           </button>
         </div>
         {result ? <SyncSummary result={result} /> : <EmptyBlock title="Синхронизация еще не запускалась" text="Результат появится после ручного запуска или работы worker." />}
@@ -756,6 +806,7 @@ function MatchingTab({
   employeeOptions,
   search,
   selectedMatch,
+  status,
   unmatchedEmployees,
   onSearch,
   onSelect,
@@ -765,11 +816,29 @@ function MatchingTab({
   employeeOptions: EmployeeDirectoryItem[];
   search: string;
   selectedMatch: Record<string, string | null>;
+  status: LoadStatus;
   unmatchedEmployees: PercoUnmatchedEmployeeDto[];
   onSearch: (value: string) => void;
   onSelect: (percoEmployeeId: string, employeeId: string) => void;
   onSubmit: (percoEmployeeId: string, action: "match" | "ignore") => void;
 }) {
+  const [ignoreCandidate, setIgnoreCandidate] = useState<PercoUnmatchedEmployeeDto | null>(null);
+  const [percoQuery, setPercoQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(defaultListPageSize);
+  const normalizedPercoQuery = useMemo(() => normalizeSearch(percoQuery), [percoQuery]);
+  const filteredUnmatchedEmployees = useMemo(
+    () =>
+      unmatchedEmployees.filter((item) =>
+        !normalizedPercoQuery ||
+        normalizeSearch(`${item.fullName} ${item.personnelNo} ${item.cardNumber} ${item.department}`).includes(normalizedPercoQuery),
+      ),
+    [normalizedPercoQuery, unmatchedEmployees],
+  );
+
+  useEffect(() => {
+    setVisibleCount(defaultListPageSize);
+  }, [percoQuery, unmatchedEmployees.length]);
+
   return (
     <section className="perco-card">
       <header>
@@ -779,15 +848,29 @@ function MatchingTab({
         </div>
       </header>
       <div className="perco-match-toolbar">
-        <input onChange={(event) => onSearch(event.target.value)} placeholder="Поиск по ФИО, табельному, должности или подразделению" value={search} />
-        <span>Найдено: {employeeOptions.length}</span>
+        <input
+          aria-label="Поиск сотрудника PERCO"
+          onChange={(event) => setPercoQuery(event.target.value)}
+          placeholder="Найти сотрудника PERCO"
+          type="search"
+          value={percoQuery}
+        />
+        <input
+          aria-label="Фильтр кандидатов проекта"
+          onChange={(event) => onSearch(event.target.value)}
+          placeholder="Фильтр кандидатов проекта"
+          type="search"
+          value={search}
+        />
+        <span>PERCO: {filteredUnmatchedEmployees.length} · кандидатов: {employeeOptions.length}</span>
       </div>
-      {unmatchedEmployees.length === 0 ? (
+      {filteredUnmatchedEmployees.length === 0 ? (
         <EmptyBlock title="Несопоставленных сотрудников нет" text="Новые записи появятся после синхронизации сотрудников PERCo." />
       ) : (
-        <div className="perco-table">
-          {unmatchedEmployees.map((item) => (
-            <article key={item.percoEmployeeId}>
+        <>
+          <div className="perco-table">
+            {filteredUnmatchedEmployees.slice(0, visibleCount).map((item) => (
+              <article key={item.percoEmployeeId}>
               <div>
                 <strong>{item.fullName || "Без ФИО"}</strong>
                 <span>
@@ -797,7 +880,7 @@ function MatchingTab({
               </div>
               <div className="perco-match-actions">
                 <select
-                  disabled={!canMatch}
+                  disabled={!canMatch || isBusyStatus(status)}
                   onChange={(event) => onSelect(item.percoEmployeeId, event.target.value)}
                   value={selectedMatch[item.percoEmployeeId] ?? ""}
                 >
@@ -808,17 +891,36 @@ function MatchingTab({
                     </option>
                   ))}
                 </select>
-                <button className="perco-button perco-button-primary" disabled={!canMatch} onClick={() => onSubmit(item.percoEmployeeId, "match")} type="button">
-                  Связать
+                <button className="perco-button perco-button-primary" disabled={!canMatch || isBusyStatus(status)} onClick={() => onSubmit(item.percoEmployeeId, "match")} type="button">
+                  {status === "saving" ? "Сохраняем…" : "Связать"}
                 </button>
-                <button className="perco-button perco-button-secondary" disabled={!canMatch} onClick={() => onSubmit(item.percoEmployeeId, "ignore")} type="button">
+                <button className="perco-button perco-button-secondary" disabled={!canMatch || isBusyStatus(status)} onClick={() => setIgnoreCandidate(item)} type="button">
                   Игнорировать
                 </button>
               </div>
-            </article>
-          ))}
-        </div>
+              </article>
+            ))}
+          </div>
+          <ListExpansionControls
+            pageSize={defaultListPageSize}
+            shown={visibleCount}
+            total={filteredUnmatchedEmployees.length}
+            onCollapse={() => setVisibleCount(defaultListPageSize)}
+            onShowMore={() => setVisibleCount((current) => current + defaultListPageSize)}
+          />
+        </>
       )}
+      {ignoreCandidate ? (
+        <ConfirmIgnoreEmployeeModal
+          employee={ignoreCandidate}
+          onCancel={() => setIgnoreCandidate(null)}
+          onConfirm={() => {
+            const employeeId = ignoreCandidate.percoEmployeeId;
+            setIgnoreCandidate(null);
+            onSubmit(employeeId, "ignore");
+          }}
+        />
+      ) : null}
     </section>
   );
 }
@@ -862,7 +964,7 @@ function PercoDashboardTab({
           <h2>Дашборд PERCo еще не загружен</h2>
           <span>Запустите обновление, чтобы увидеть входы, выходы, присутствие и спорные интервалы.</span>
         </div>
-        <button className="perco-button perco-button-primary" disabled={status === "loading"} onClick={() => void onRefresh()} type="button">
+        <button className="perco-button perco-button-primary" disabled={isBusyStatus(status)} onClick={() => void onRefresh()} type="button">
           Обновить данные
         </button>
       </section>
@@ -883,12 +985,12 @@ function PercoDashboardTab({
         </div>
         <div className="perco-dashboard-actions">
           {canSync ? (
-            <button className="perco-button perco-button-primary" disabled={status === "loading"} onClick={onSyncEvents} type="button">
-              Синхронизировать проходы
+            <button className="perco-button perco-button-primary" disabled={isBusyStatus(status)} onClick={onSyncEvents} type="button">
+              {isBusyStatus(status) ? "Выполняется…" : "Синхронизировать проходы"}
             </button>
           ) : null}
-          <button className="perco-button perco-button-secondary" disabled={status === "loading"} onClick={() => void onRefresh()} type="button">
-            Обновить дашборд
+          <button className="perco-button perco-button-secondary" disabled={isBusyStatus(status)} onClick={() => void onRefresh()} type="button">
+            {isBusyStatus(status) ? "Обновляем…" : "Обновить дашборд"}
           </button>
         </div>
       </div>
@@ -1055,6 +1157,7 @@ function DiagnosticsTab({
   canManage,
   diagnostics,
   settings,
+  status,
   onCloseInterval,
   onRefresh,
 }: {
@@ -1062,11 +1165,16 @@ function DiagnosticsTab({
   canManage: boolean;
   diagnostics: PercoDiagnosticsDto | null;
   settings: PercoIntegrationSettingsDto | null;
+  status: LoadStatus;
   onCloseInterval: (interval: PercoPresenceIntervalDiagnosticsDto) => void;
   onRefresh: () => Promise<void>;
 }) {
   const [presenceQuery, setPresenceQuery] = useState("");
   const [presenceState, setPresenceState] = useState<PresenceFilter>("all");
+  const [visibleActiveCount, setVisibleActiveCount] = useState(diagnosticsListPageSize);
+  const [visibleCompletedCount, setVisibleCompletedCount] = useState(diagnosticsListPageSize);
+  const [visibleProblemCount, setVisibleProblemCount] = useState(diagnosticsListPageSize);
+  const [visibleEventCount, setVisibleEventCount] = useState(defaultListPageSize);
   const analytics = useMemo(() => buildPresenceAnalytics(diagnostics), [diagnostics]);
   const normalizedPresenceQuery = useMemo(() => normalizeSearch(presenceQuery), [presenceQuery]);
   const filteredEmployees = useMemo(
@@ -1127,6 +1235,13 @@ function DiagnosticsTab({
   const durationBuckets = useMemo(() => buildDurationBuckets(diagnostics?.presenceIntervals ?? []), [diagnostics?.presenceIntervals]);
   const dataQuality = useMemo(() => buildPercoQuality(diagnostics, analytics), [analytics, diagnostics]);
 
+  useEffect(() => {
+    setVisibleActiveCount(diagnosticsListPageSize);
+    setVisibleCompletedCount(diagnosticsListPageSize);
+    setVisibleProblemCount(diagnosticsListPageSize);
+    setVisibleEventCount(defaultListPageSize);
+  }, [presenceQuery, presenceState]);
+
   if (!diagnostics) {
     return <EmptyBlock title="Диагностика еще не загружена" text="Нажмите обновить или проверьте подключение PERCo-Web." />;
   }
@@ -1140,8 +1255,8 @@ function DiagnosticsTab({
             Последнее обновление: {formatDateTime(diagnostics.generatedAt)} · период: {formatDateTime(diagnostics.windowStart)} - {formatDateTime(diagnostics.windowEnd)} · endpoint: {settings?.eventsEndpoint || "-"}
           </span>
         </div>
-        <button className="perco-button perco-button-secondary" onClick={() => void onRefresh()} type="button">
-          {canSync ? "Синхронизировать проходы" : "Обновить диагностику"}
+        <button className="perco-button perco-button-secondary" disabled={isBusyStatus(status)} onClick={() => void onRefresh()} type="button">
+          {isBusyStatus(status) ? "Выполняется…" : canSync ? "Синхронизировать проходы" : "Обновить диагностику"}
         </button>
       </header>
 
@@ -1248,7 +1363,7 @@ function DiagnosticsTab({
               <EmptyBlock title="На заводе сейчас никого нет" text="Открытые входы появятся после синхронизации проходов PERCo." />
             ) : (
               <div className="perco-presence-list">
-                {activeShiftEmployees.map((employee) => (
+                {activeShiftEmployees.slice(0, visibleActiveCount).map((employee) => (
                   <article className="is-active-shift" key={`${employee.employeeId}-${employee.employeeName}`}>
                     <div className="perco-presence-person">
                       <span className="perco-presence-dot inside" />
@@ -1268,6 +1383,13 @@ function DiagnosticsTab({
                 ))}
               </div>
             )}
+            <ListExpansionControls
+              pageSize={diagnosticsListPageSize}
+              shown={visibleActiveCount}
+              total={activeShiftEmployees.length}
+              onCollapse={() => setVisibleActiveCount(diagnosticsListPageSize)}
+              onShowMore={() => setVisibleActiveCount((current) => current + diagnosticsListPageSize)}
+            />
           </section>
 
           <section className="perco-card perco-card-flat">
@@ -1282,7 +1404,7 @@ function DiagnosticsTab({
               <EmptyBlock title="Завершенных смен пока нет" text="Здесь появятся сотрудники, по которым PERCo уже прислал вход и выход." />
             ) : (
               <div className="perco-presence-list">
-                {completedShiftEmployees.map((employee) => (
+                {completedShiftEmployees.slice(0, visibleCompletedCount).map((employee) => (
                   <article className="is-completed-shift" key={`${employee.employeeId}-${employee.employeeName}`}>
                     <div className="perco-presence-person">
                       <span className="perco-presence-dot outside" />
@@ -1302,6 +1424,13 @@ function DiagnosticsTab({
                 ))}
               </div>
             )}
+            <ListExpansionControls
+              pageSize={diagnosticsListPageSize}
+              shown={visibleCompletedCount}
+              total={completedShiftEmployees.length}
+              onCollapse={() => setVisibleCompletedCount(diagnosticsListPageSize)}
+              onShowMore={() => setVisibleCompletedCount((current) => current + diagnosticsListPageSize)}
+            />
           </section>
         </div>
 
@@ -1316,7 +1445,7 @@ function DiagnosticsTab({
             {filteredProblemIntervals.length === 0 ? (
               <EmptyBlock title="Спорных интервалов нет" text="Все найденные проходы имеют корректные входы и выходы." />
             ) : (
-              filteredProblemIntervals.map((interval) => (
+              filteredProblemIntervals.slice(0, visibleProblemCount).map((interval) => (
                 <article className={isOldOpenInterval(interval) ? "is-archive" : ""} key={interval.id}>
                   <div>
                     <strong>{interval.employeeName}</strong>
@@ -1341,7 +1470,7 @@ function DiagnosticsTab({
                   <aside>
                     <b className={isStaleInterval(interval) || isOldOpenInterval(interval) ? "stale" : "in"}>{isOldOpenInterval(interval) ? "Старый" : isStaleInterval(interval) ? "Проверить" : "Открыт"}</b>
                     {canManage && !interval.endedAt ? (
-                      <button className="perco-link-button" onClick={() => onCloseInterval(interval)} type="button">
+                      <button className="perco-link-button" disabled={isBusyStatus(status)} onClick={() => onCloseInterval(interval)} type="button">
                         Закрыть вручную
                       </button>
                     ) : null}
@@ -1350,6 +1479,13 @@ function DiagnosticsTab({
               ))
             )}
           </div>
+          <ListExpansionControls
+            pageSize={diagnosticsListPageSize}
+            shown={visibleProblemCount}
+            total={filteredProblemIntervals.length}
+            onCollapse={() => setVisibleProblemCount(diagnosticsListPageSize)}
+            onShowMore={() => setVisibleProblemCount((current) => current + diagnosticsListPageSize)}
+          />
         </section>
       </div>
 
@@ -1360,7 +1496,7 @@ function DiagnosticsTab({
             {filteredRecentEvents.length === 0 ? (
               <EmptyBlock title="Проходов по фильтру нет" text="Измените фильтр или обновите диагностику проходов." />
             ) : (
-              filteredRecentEvents.map((event) => (
+              filteredRecentEvents.slice(0, visibleEventCount).map((event) => (
                 <article key={event.id}>
                   <div>
                     <strong>{event.employeeName || "Сотрудник не сопоставлен"}</strong>
@@ -1379,6 +1515,13 @@ function DiagnosticsTab({
               ))
             )}
           </div>
+          <ListExpansionControls
+            pageSize={defaultListPageSize}
+            shown={visibleEventCount}
+            total={filteredRecentEvents.length}
+            onCollapse={() => setVisibleEventCount(defaultListPageSize)}
+            onShowMore={() => setVisibleEventCount((current) => current + defaultListPageSize)}
+          />
         </section>
 
         <section className="perco-diagnostics-panel">
@@ -1402,7 +1545,23 @@ function DiagnosticsTab({
     </section>
   );
 }
-function LogsTab({ canView, logs, onRefresh }: { canView: boolean; logs: PercoIntegrationLogDto[]; onRefresh: () => void }) {
+function LogsTab({ canView, logs, status, onRefresh }: { canView: boolean; logs: PercoIntegrationLogDto[]; status: LoadStatus; onRefresh: () => void }) {
+  const [query, setQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(defaultListPageSize);
+  const normalizedQuery = useMemo(() => normalizeSearch(query), [query]);
+  const filteredLogs = useMemo(
+    () =>
+      logs.filter((log) =>
+        !normalizedQuery ||
+        normalizeSearch(`${formatOperation(log.operation)} ${log.message} ${log.details} ${log.status}`).includes(normalizedQuery),
+      ),
+    [logs, normalizedQuery],
+  );
+
+  useEffect(() => {
+    setVisibleCount(defaultListPageSize);
+  }, [logs.length, query]);
+
   if (!canView) {
     return <EmptyBlock title="Нет доступа к журналу" text="Для просмотра журнала требуется integrations.perco.logs.view." />;
   }
@@ -1414,16 +1573,27 @@ function LogsTab({ canView, logs, onRefresh }: { canView: boolean; logs: PercoIn
           <h2>Журнал синхронизации</h2>
           <span>Последние операции API и worker.</span>
         </div>
-        <button className="perco-button perco-button-secondary" onClick={onRefresh} type="button">
-          Обновить журнал
+        <button className="perco-button perco-button-secondary" disabled={isBusyStatus(status)} onClick={onRefresh} type="button">
+          {isBusyStatus(status) ? "Обновляем…" : "Обновить журнал"}
         </button>
       </header>
-      {logs.length === 0 ? (
+      <div className="perco-list-toolbar">
+        <input
+          aria-label="Поиск по журналу PERCO"
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Операция, статус или текст сообщения"
+          type="search"
+          value={query}
+        />
+        <span>Найдено: {filteredLogs.length}</span>
+      </div>
+      {filteredLogs.length === 0 ? (
         <EmptyBlock title="Записей журнала нет" text="Журнал появится после проверки подключения или синхронизации." />
       ) : (
-        <div className="perco-log-list">
-          {logs.map((log) => (
-            <article key={log.id}>
+        <>
+          <div className="perco-log-list">
+            {filteredLogs.slice(0, visibleCount).map((log) => (
+              <article key={log.id}>
               <div>
                 <strong>{formatOperation(log.operation)}</strong>
                 <span>{log.message}</span>
@@ -1433,9 +1603,17 @@ function LogsTab({ canView, logs, onRefresh }: { canView: boolean; logs: PercoIn
                 <b className={normalizeStatusTone(log.status)}>{log.status}</b>
                 <time>{formatDateTime(log.startedAt)}</time>
               </aside>
-            </article>
-          ))}
-        </div>
+              </article>
+            ))}
+          </div>
+          <ListExpansionControls
+            pageSize={defaultListPageSize}
+            shown={visibleCount}
+            total={filteredLogs.length}
+            onCollapse={() => setVisibleCount(defaultListPageSize)}
+            onShowMore={() => setVisibleCount((current) => current + defaultListPageSize)}
+          />
+        </>
       )}
     </section>
   );
@@ -1533,6 +1711,82 @@ function SyncSummary({ result }: { result: PercoSyncResultDto }) {
   );
 }
 
+function ConfirmIgnoreEmployeeModal({
+  employee,
+  onCancel,
+  onConfirm,
+}: {
+  employee: PercoUnmatchedEmployeeDto;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
+
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onCancelRef.current();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    window.requestAnimationFrame(() => cancelButtonRef.current?.focus());
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previousFocusRef.current?.focus();
+    };
+  }, []);
+
+  return (
+    <div className="perco-modal-backdrop" onMouseDown={onCancel}>
+      <section
+        aria-describedby="perco-ignore-description"
+        aria-labelledby="perco-ignore-title"
+        aria-modal="true"
+        className="perco-modal perco-confirm-modal"
+        onMouseDown={(event) => event.stopPropagation()}
+        ref={dialogRef}
+        role="alertdialog"
+      >
+        <header>
+          <div>
+            <h2 id="perco-ignore-title">Игнорировать сотрудника PERCO?</h2>
+            <span>{employee.fullName || "Сотрудник без ФИО"} · {employee.personnelNo || "без табельного номера"}</span>
+          </div>
+        </header>
+        <p className="perco-warning-text" id="perco-ignore-description">
+          Запись будет исключена из текущей очереди сопоставления. Используйте это действие только если сотрудника действительно не нужно связывать со справочником проекта.
+        </p>
+        <div className="perco-modal-actions">
+          <button className="perco-button perco-button-secondary" onClick={onCancel} ref={cancelButtonRef} type="button">
+            Отмена
+          </button>
+          <button className="perco-button perco-button-danger" onClick={onConfirm} type="button">
+            Игнорировать
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function ClosePresenceModal({
   form,
   interval,
@@ -1546,32 +1800,86 @@ function ClosePresenceModal({
   onChange: (value: ClosePercoPresenceIntervalDto) => void;
   onSubmit: () => void;
 }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
+  const endedAtTimestamp = new Date(form.endedAt).getTime();
+  const startedAtTimestamp = new Date(interval.startedAt).getTime();
   const previewDurationMinutes = Math.max(
     0,
-    Math.round((new Date(form.endedAt).getTime() - new Date(interval.startedAt).getTime()) / 60000),
+    Math.round((endedAtTimestamp - startedAtTimestamp) / 60000),
   );
   const durationIsTooLong = previewDurationMinutes > 18 * 60;
+  const endedAtIsInvalid =
+    Number.isNaN(endedAtTimestamp) ||
+    endedAtTimestamp <= startedAtTimestamp ||
+    endedAtTimestamp > Date.now() + 60_000;
+  const canSubmit = !durationIsTooLong && !endedAtIsInvalid && Boolean(form.comment.trim());
+
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onCancelRef.current();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    window.requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>("input, textarea, button")?.focus());
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previousFocusRef.current?.focus();
+    };
+  }, []);
 
   return (
     <div className="perco-modal-backdrop" onMouseDown={onCancel}>
-      <section className="perco-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
+      <section
+        aria-describedby="perco-close-description perco-close-duration"
+        aria-labelledby="perco-close-title"
+        className="perco-modal"
+        onMouseDown={(event) => event.stopPropagation()}
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+      >
         <header>
           <div>
-            <h2>Закрыть присутствие вручную</h2>
+            <h2 id="perco-close-title">Закрыть присутствие вручную</h2>
             <span>{interval.employeeName} · вход {formatDateTime(interval.startedAt)}</span>
           </div>
           <button className="perco-icon-button" onClick={onCancel} type="button" aria-label="Закрыть">
             ×
           </button>
         </header>
-        <p className="perco-warning-text">
+        <p className="perco-warning-text" id="perco-close-description">
           Используйте только когда PERCo не прислал выход с завода или направление прохода было распознано неверно.
         </p>
-        <p className={`perco-warning-text ${durationIsTooLong ? "is-danger" : ""}`}>
+        <p className={`perco-warning-text ${durationIsTooLong || endedAtIsInvalid ? "is-danger" : ""}`} id="perco-close-duration">
           Расчетная длительность: {formatDuration(previewDurationMinutes)}. Максимум для ручного закрытия: 18 ч.
+          {endedAtIsInvalid ? " Время выхода должно быть позже входа и не может быть в будущем." : ""}
         </p>
         <Field label="Время выхода">
           <input
+            aria-invalid={endedAtIsInvalid}
             onChange={(event) => onChange({ ...form, endedAt: event.target.value })}
             type="datetime-local"
             value={form.endedAt}
@@ -1579,8 +1887,10 @@ function ClosePresenceModal({
         </Field>
         <Field label="Причина">
           <textarea
+            aria-invalid={!form.comment.trim()}
             onChange={(event) => onChange({ ...form, comment: event.target.value })}
             placeholder="Например: сотрудник вышел на обед, событие выхода не пришло из PERCo"
+            required
             value={form.comment}
           />
         </Field>
@@ -1588,7 +1898,7 @@ function ClosePresenceModal({
           <button className="perco-button perco-button-secondary" onClick={onCancel} type="button">
             Отмена
           </button>
-          <button className="perco-button perco-button-primary" onClick={onSubmit} type="button">
+          <button className="perco-button perco-button-primary" disabled={!canSubmit} onClick={onSubmit} type="button">
             Закрыть интервал
           </button>
         </div>
@@ -1707,6 +2017,41 @@ function Field({ children, label }: { children: ReactNode; label: string }) {
 function StatusPill({ status }: { status: string }) {
   const normalized = normalizeStatusTone(status);
   return <span className={`perco-status-pill ${normalized}`}>{formatStatus(status)}</span>;
+}
+
+function ListExpansionControls({
+  onCollapse,
+  onShowMore,
+  pageSize,
+  shown,
+  total,
+}: {
+  onCollapse: () => void;
+  onShowMore: () => void;
+  pageSize: number;
+  shown: number;
+  total: number;
+}) {
+  if (total <= pageSize) return null;
+
+  const visible = Math.min(shown, total);
+  return (
+    <div className="perco-list-expansion" aria-live="polite">
+      <span>Показано {visible} из {total}</span>
+      <div>
+        {visible < total ? (
+          <button className="perco-button perco-button-secondary" onClick={onShowMore} type="button">
+            Показать ещё
+          </button>
+        ) : null}
+        {shown > pageSize ? (
+          <button className="perco-link-button" onClick={onCollapse} type="button">
+            Свернуть список
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 function EmptyBlock({ text, title }: { text: string; title: string }) {
@@ -2027,14 +2372,20 @@ function maxIso(current: string | null, next: string) {
   return next > current ? next : current;
 }
 
+function isBusyStatus(status: LoadStatus) {
+  return status === "loading" || status === "saving";
+}
+
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
     const details = error.errors ? ` ${Object.values(error.errors).flat().join(" ")}` : "";
-    return `${error.message}${details}`.trim();
+    if (error.status === 401) return "Сессия истекла или не подтверждена. Войдите заново и повторите обновление.";
+    if (error.status === 403) return "Недостаточно прав для загрузки этого раздела PERCO-Web.";
+    if (error.status === 404) return "Сервис PERCO-Web не найден. Проверьте версию и адрес backend.";
+    if (error.status === 0 || error.status >= 500) return "Сервис PERCO-Web временно недоступен. Проверьте backend и повторите обновление.";
+    return (`Не удалось выполнить запрос PERCO-Web.${details}`).trim();
   }
-  return error instanceof Error ? error.message : "Неизвестная ошибка PERCo-Web.";
+  return error instanceof Error && error.message
+    ? "Не удалось обновить данные PERCO-Web. Повторите попытку."
+    : "Неизвестная ошибка PERCO-Web.";
 }
-
-
-
-

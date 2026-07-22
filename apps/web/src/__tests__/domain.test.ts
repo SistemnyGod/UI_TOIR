@@ -5,6 +5,7 @@ import { moveRoutePoint } from "../domain/routes";
 import { createApiAssignmentsRepository } from "../repositories/assignmentsRepository";
 import { createApiPatrolRequestsRepository, resolveServiceRequests } from "../repositories/patrolRequestsRepository";
 import { createApiResultsRepository } from "../repositories/resultsRepository";
+import { createPercoRepository } from "../repositories/percoRepository";
 import { isTerminalPatrolRequestStatus } from "../domain/patrolRequestStatus";
 import { buildOperationalPatrolDateRange } from "../domain/patrolQueryWindow";
 import { isAssignableRequest } from "../features/patrol/assignments/assignmentUtils";
@@ -77,6 +78,27 @@ describe("domain workflows", () => {
 
   it("allows view-only users to open PERCo integration screen", () => {
     expect(getPrimaryActionPermission("perco-integration")).toBe("integrations.perco.view");
+  });
+
+  it("keeps PERCo repository routes and methods stable", async () => {
+    const requests: Array<{ method: string; url: string }> = [];
+    const repository = createPercoRepository({
+      baseUrl: "https://api.example.test",
+      fetcher: async (input, init) => {
+        requests.push({ method: init?.method ?? "GET", url: String(input) });
+        return new Response("{}", { headers: { "content-type": "application/json" } });
+      },
+    });
+
+    await repository.getSettings();
+    await repository.syncEvents();
+    await repository.closePresenceInterval("interval-1", { comment: "Проверено", endedAt: "2026-07-22T08:15:30Z" });
+
+    expect(requests).toEqual([
+      { method: "GET", url: "https://api.example.test/api/v1/integrations/perco/settings" },
+      { method: "POST", url: "https://api.example.test/api/v1/integrations/perco/sync-events" },
+      { method: "PATCH", url: "https://api.example.test/api/v1/integrations/perco/presence-intervals/interval-1/close" },
+    ]);
   });
 
   it("maps API result DTOs without reading fallback results", async () => {

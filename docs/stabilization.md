@@ -1,68 +1,108 @@
 # Стабилизация проекта
 
+Дата актуализации: 2026-07-22.
+
 ## Цель
 
-Стабилизация фиксирует минимальные инженерные правила, которые должны выполняться перед развитием логики, API-интеграции и persistence. Сейчас проект находится на этапе UI + .NET skeleton, поэтому главный риск — разъезд контрактов, неявное состояние во фронтенде и отсутствие единого проверочного контура.
+Этот документ фиксирует обязательный инженерный baseline для изменений Patrol360. Текущий проект — не UI/.NET skeleton: web, API, worker, PostgreSQL и Android mobile образуют рабочий end-to-end контур.
 
 ## Текущий baseline
 
-- Backend собирается через `Patrol360.slnx`.
-- Frontend живет в `apps/web` и использует React + TypeScript + Vite.
-- UI пока работает без backend-данных: экраны показывают пустые состояния и локальные UI-черновики.
-- Hash-навигация, toast-уведомления и создание UI-черновика заявки вынесены из `App.tsx` в отдельные модули.
-- Shell интерфейса вынесен из `App.tsx` в `Sidebar`, `Topbar`, `WorkspaceHeader` и `ScreenRouter`.
-- Frontend имеет typed data-source слой в `apps/web/src/api`: mock-клиент, API-клиент и маппинг DTO в UI-модель.
-- Режимы вкладок и фильтров фронтенда централизованы в `apps/web/src/types.ts`.
+- .NET solution собирает API, worker, libraries и test projects на .NET 10.
+- Web использует API-backed repositories и permission-driven UI; mock mode остается отдельным режимом.
+- PostgreSQL schema управляется EF migrations.
+- Web и mobile используют разные bearer authentication schemes.
+- Android mobile работает offline-first через SQLCipher и ordered outbox.
+- Worker обслуживает mobile push, EMU и PERCo.
+- Inventory, EMU, Patrol, users/RBAC и PERCo имеют рабочие backend endpoints.
 
-## Обязательные проверки перед продолжением
+Частично реализованным остается отдельный schedule bounded context: экран использует реальные заявки/назначения, но собственного CRUD расписаний нет.
 
-Backend:
+## Обязательные проверки
+
+Базовая проверка репозитория:
+
+```powershell
+.\tools\Test-All.ps1
+```
+
+Раздельные команды:
 
 ```powershell
 dotnet build .\Patrol360.slnx
-```
-
-Если локально уже запущен `Patrol360.Api` или открыт Visual Studio debug-session, обычная Debug-сборка может упереться в lock файлов `bin/Debug`. В этом случае нужно остановить запущенный API/отладку и повторить сборку, либо выполнять проверочную сборку в отдельный artifacts-каталог:
-
-```powershell
-dotnet build .\Patrol360.slnx --artifacts-path .\output\stabilization-dotnet-build
-```
-
-Frontend:
-
-```powershell
-cd .\apps\web
-npm run typecheck
-npm run build
-```
-
-Для быстрого локального подтверждения фронтенда можно использовать:
-
-```powershell
-cd .\apps\web
-npm run verify
-```
-
-Кодировка текстовых файлов:
-
-```powershell
+dotnet test .\Patrol360.slnx --no-build
+npm run verify --prefix apps\web
+npm run verify --prefix '.\mobiel proekt'
 .\tools\Verify-TextEncoding.ps1
 ```
 
-## Правила стабилизации frontend
+Дополнительные контуры:
 
-- Не добавлять новые screen mode union-типы внутри экранов; общие режимы хранить в `apps/web/src/types.ts`.
-- Не держать доменную сборку объектов в JSX-компонентах, если ее можно вынести в `apps/web/src/domain`.
-- Не заводить новые глобальные browser side effects прямо в `App.tsx`; использовать хуки в `apps/web/src/hooks`.
-- Локальные UI-черновики хранить через версионированный `localStorage`-слой, а не напрямую в компонентах.
-- Для временных действий без backend использовать понятные toast-сообщения, а не молчащие кнопки.
-- Пустые состояния должны иметь либо объяснение, либо следующий безопасный шаг.
-- После каждой крупной UI-правки проверять хотя бы: загрузку dashboard, переход по вкладке, toast и модалку заявки.
+```powershell
+.\tools\Test-All.ps1 -IncludeE2E
+.\tools\Test-All.ps1 -IncludeDbIntegration
+```
 
-## Следующие стабилизационные шаги
+DB integration требует доступного PostgreSQL. E2E требует подготовленного web/API-контура.
 
-1. Расширить typed API client на результаты обходов, сотрудников, мобильные аккаунты и пользователей сайта.
-2. После утверждения OpenAPI заменить временные DTO на generated/shared contracts.
-3. Добавить frontend smoke/e2e тесты после выбора тестового раннера.
-4. Добавить backend unit/integration тестовые проекты после фиксации первых use cases.
-5. Ввести CI gate: `dotnet build`, `npm run verify`, затем smoke-тесты.
+Если Windows блокирует native Node module с `EPERM unlink`, нельзя считать frontend непроверенным: typecheck, unit test и build запускаются отдельно из существующей установки.
+
+## Контракты и authorization
+
+При изменении endpoint-а:
+
+- синхронно обновить C# DTO, web contracts/repository mapping и mobile schema, если контракт используется mobile;
+- сохранить Problem Details/validation behavior;
+- проверить `401`, `403` и разрешенный сценарий;
+- добавить permission к backend до клиентского скрытия действия;
+- проверить idempotency/version behavior write-команд;
+- не вводить новый API version без необходимости совместимости.
+
+Frontend permission check улучшает UX, но не заменяет backend authorization.
+
+## Persistence и миграции
+
+- Изменение EF model сопровождается migration и актуальным model snapshot.
+- Production-like запуск применяет migrations отдельным сервисом `migrate`.
+- API не должен стартовать поверх частично обновленной схемы.
+- Исторические записи и route revisions не удаляются физически без отдельного решения.
+- Повторный Inventory import запускается только из миграционной копии.
+- DB-backed bug fix должен иметь integration test, если сценарий невозможно надежно проверить in-memory.
+
+## Mobile и offline
+
+- Любая локальная запись содержит owner/contour scope, если данные зависят от пользователя.
+- Outbox command имеет стабильный client operation id.
+- Повторная доставка не создает дубликат серверного эффекта.
+- Неизвестный owner не трактуется как разрешение очистить локальные файлы.
+- Media удаляется только после server acceptance и проверки ссылочной целостности.
+- Auth revocation, temporary network failure и wrong contour обрабатываются по-разному.
+- NFC/camera/background behavior проверяется на dev/release build, не в Expo Go.
+
+## Файлы и секреты
+
+- Signing keys, DPAPI metadata, Firebase secrets, certificates с private key и production credentials не коммитятся.
+- Диагностика редактирует authorization/token/secret значения.
+- Generated APK, native build, `bin/obj/dist` и test results не являются исходниками.
+- Cleanup scripts запускаются только после проверки точного target path.
+
+## Документация
+
+- Актуальные источники истины перечислены в [README.md](./README.md).
+- Датированный аудит остается историческим снимком и не переписывается как текущий baseline.
+- Изменение модуля обновляет `modules.md` и профильную navigation note.
+- Изменение runtime/dependency обновляет `architecture.md` и `technology-stack.md`.
+- Runbook должен содержать проверенную команду и предупреждать о destructive flags.
+
+## Release gate
+
+Перед передачей сборки:
+
+1. рабочее дерево и scope изменений просмотрены;
+2. обязательные проверки пройдены либо отклонения перечислены явно;
+3. migrations применены на тестовом контуре;
+4. health endpoints отвечают через внешний proxy;
+5. web smoke не содержит console/runtime ошибок;
+6. mobile APK имеет ожидаемые package/version, SHA-256 и проверенную release-подпись;
+7. rollback/backup путь понятен для изменения данных;
+8. документация соответствует фактическому поведению.

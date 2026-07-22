@@ -60,6 +60,7 @@ internal sealed partial class EfPercoIntegrationService
             var duplicates = 0;
             var unmatched = 0;
             var skippedNotFactory = 0;
+            var skippedInvalidTimestamp = 0;
             long maxCursor = lastCursor;
             var now = DateTimeOffset.UtcNow;
             var isReportEndpoint = IsAccessReportEventsEndpoint(settings.EventsEndpoint);
@@ -92,7 +93,11 @@ internal sealed partial class EfPercoIntegrationService
                         continue;
                     }
 
-                    var eventAt = ParsePercoDate(row.TimeLabel, settings.Timezone);
+                    if (!TryParsePercoDate(row.TimeLabel, settings.Timezone, out var eventAt))
+                    {
+                        skippedInvalidTimestamp++;
+                        continue;
+                    }
                     var percoEmployeeId = row.UserId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
                     var percoEventId = BuildPercoEventId(row, direction, eventAt, isReportEndpoint);
                     if (!isReportEndpoint)
@@ -165,7 +170,7 @@ internal sealed partial class EfPercoIntegrationService
                 "SYNC_EVENTS",
                 "SUCCESS",
                 $"Синхронизация проходов PERCo завершена: добавлено {inserted}.",
-                $"endpoint={settings.EventsEndpoint}; mode={(isReportEndpoint ? "accessReports" : "cursor")}; loaded={loaded}; duplicates={duplicates}; skippedNotFactory={skippedNotFactory}; unmatched={unmatched}; backfilledEvents={backfilledEvents}",
+                $"endpoint={settings.EventsEndpoint}; mode={(isReportEndpoint ? "accessReports" : "cursor")}; loaded={loaded}; duplicates={duplicates}; skippedNotFactory={skippedNotFactory}; skippedInvalidTimestamp={skippedInvalidTimestamp}; unmatched={unmatched}; backfilledEvents={backfilledEvents}",
                 actorUserId,
                 startedAt,
                 finishedAt,
@@ -375,9 +380,41 @@ internal sealed partial class EfPercoIntegrationService
             && eventName.Contains("проход", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsStoredTechnicalIndicationEvent(string? rawPayload)
+    internal static bool IsStoredTechnicalIndicationEvent(string? rawPayload)
     {
-        return false;
+        if (string.IsNullOrWhiteSpace(rawPayload))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(rawPayload);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            if (!root.TryGetProperty("event_name", out var eventNameElement) &&
+                !root.TryGetProperty("eventName", out eventNameElement))
+            {
+                return false;
+            }
+
+            if (eventNameElement.ValueKind != JsonValueKind.String)
+            {
+                return false;
+            }
+
+            var eventName = NormalizeName(eventNameElement.GetString() ?? string.Empty);
+            return eventName.Contains("индикац", StringComparison.OrdinalIgnoreCase)
+                && eventName.Contains("проход", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static string DetectDirection(PercoEventRow row)
@@ -446,25 +483,22 @@ internal sealed partial class EfPercoIntegrationService
         return exit + enter;
     }
 
-    private static DateTimeOffset ParsePercoDate(string? value, string timezone)
+    internal static bool TryParsePercoDate(string? value, string timezone, out DateTimeOffset parsedUtc)
     {
+        parsedUtc = default;
         if (string.IsNullOrWhiteSpace(value))
         {
-            return DateTimeOffset.UtcNow;
+            return false;
         }
 
-        var parsed = DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal);
-        TimeZoneInfo zone;
-        try
+        if (!DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var parsed))
         {
-            zone = TimeZoneInfo.FindSystemTimeZoneById(timezone);
-        }
-        catch
-        {
-            zone = TimeZoneInfo.Local;
+            return false;
         }
 
+        var zone = ResolveTimezone(timezone);
         var unspecified = DateTime.SpecifyKind(parsed, DateTimeKind.Unspecified);
-        return new DateTimeOffset(unspecified, zone.GetUtcOffset(unspecified)).ToUniversalTime();
+        parsedUtc = new DateTimeOffset(unspecified, zone.GetUtcOffset(unspecified)).ToUniversalTime();
+        return true;
     }
 }

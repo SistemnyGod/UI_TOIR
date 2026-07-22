@@ -101,6 +101,11 @@
   gap: 8px;
 }
 
+.perco-tab-panel {
+  min-width: 0;
+  outline: none;
+}
+
 .perco-tabs button,
 .perco-button {
   min-height: 38px;
@@ -131,10 +136,30 @@
   opacity: 0.55;
 }
 
+.perco-tabs button:focus-visible,
+.perco-button:focus-visible,
+.perco-link-button:focus-visible,
+.perco-icon-button:focus-visible,
+.perco-scenario-card:focus-visible,
+.perco-tab-panel:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.32);
+  outline-offset: 2px;
+}
+
 .perco-button-primary {
   border-color: #0b63f6;
   background: #0b63f6;
   color: white;
+}
+
+.perco-button-danger {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #fff;
+}
+
+.perco-button-danger:hover:not(:disabled) {
+  background: #b91c1c;
 }
 
 .perco-button-secondary:hover,
@@ -288,8 +313,23 @@
 }
 
 .perco-alert {
+  border: 1px solid transparent;
   border-radius: 9px;
   padding: 12px 14px;
+  font-weight: 800;
+}
+
+.perco-alert-error {
+  border-color: #fecaca;
+}
+
+.perco-progress {
+  border: 1px solid #bfdbfe;
+  border-radius: 9px;
+  background: #eff6ff;
+  padding: 10px 14px;
+  color: #1d4ed8;
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -329,12 +369,13 @@
 
 .perco-match-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
   align-items: center;
   gap: 10px;
 }
 
 .perco-match-toolbar input,
+.perco-list-toolbar input,
 .perco-match-actions select {
   min-height: 38px;
   border: 1px solid #bfd3ef;
@@ -350,11 +391,60 @@
   padding: 0 12px;
 }
 
+.perco-list-toolbar input {
+  width: 100%;
+  padding: 0 12px;
+}
+
+.perco-match-toolbar input:focus,
+.perco-list-toolbar input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
 .perco-match-toolbar span {
   color: #526581;
   font-size: 12px;
   font-weight: 900;
   white-space: nowrap;
+}
+
+.perco-list-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.perco-list-toolbar span {
+  color: #526581;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.perco-list-expansion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+
+.perco-list-expansion > span {
+  color: #526581;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.perco-list-expansion > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.perco-list-expansion .perco-button {
+  min-height: 34px;
 }
 
 .perco-table article,
@@ -1323,6 +1413,12 @@
   text-decoration: underline;
 }
 
+.perco-link-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  text-decoration: none;
+}
+
 .perco-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1342,6 +1438,10 @@
   background: #fff;
   box-shadow: 0 22px 70px rgba(15, 23, 42, 0.24);
   padding: 18px;
+}
+
+.perco-confirm-modal {
+  width: min(480px, 100%);
 }
 
 .perco-modal header,
@@ -1680,6 +1780,22 @@
     padding: 12px;
   }
 
+  .perco-tabs {
+    order: -1;
+    flex-wrap: nowrap;
+    max-width: 100%;
+    overflow-x: auto;
+    padding: 2px 2px 8px;
+    scroll-padding-inline: 2px;
+    scrollbar-width: thin;
+  }
+
+  .perco-tabs button {
+    min-height: 44px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
   .perco-toolbar,
   .perco-card header,
   .perco-actions,
@@ -1693,6 +1809,7 @@
   .perco-form-grid,
   .perco-form-grid.compact,
   .perco-match-toolbar,
+  .perco-list-toolbar,
   .perco-match-actions,
   .perco-sync-result div,
   .perco-live-analytics-grid,
@@ -1705,7 +1822,24 @@
   }
 
   .perco-toolbar-routes {
-    grid-template-columns: 1fr;
+    grid-template-columns: none;
+    grid-auto-columns: minmax(240px, 86vw);
+    grid-auto-flow: column;
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+  }
+
+  .perco-toolbar-routes span {
+    scroll-snap-align: start;
+  }
+
+  .perco-list-expansion,
+  .perco-list-expansion > div {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .perco-button,

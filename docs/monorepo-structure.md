@@ -1,185 +1,180 @@
 # Структура monorepo
 
-Проект ведется как monorepo, потому что на первом этапе одновременно развиваются backend, frontend, worker, API-контракты, инфраструктура и документация. Это снижает риск рассинхронизации между вкладками интерфейса, API и доменной моделью.
+Дата актуализации: 2026-07-22.
 
-План доработки структуры зафиксирован отдельно: `docs/structure-improvement-plan.md`.
+Patrol360 развивается как monorepo: backend, web, worker, mobile, контракты, migrations, инфраструктура, тесты и документация изменяются согласованно.
+
+## Корневые точки входа
+
+- `Patrol360.slnx` — .NET solution;
+- `compose.yaml` — корневой include для Docker Compose;
+- `README.md` — обзор, запуск и текущий статус;
+- `Start-Patrol360.cmd` и `tools/Start-Patrol360.ps1` — штатный локальный Docker-запуск;
+- `Directory.Build.props`, `global.json` — общие .NET-настройки.
 
 ## apps/api
 
 ASP.NET Core API host.
 
-Назначение:
+Ответственность:
 
-- REST API `/api/v1`.
-- Health endpoints.
-- OpenAPI в следующем этапе.
-- Browser/mobile/internal endpoint groups в будущем.
-- Подключение application/infrastructure слоев.
+- HTTP controllers и routing;
+- web/mobile authentication;
+- permission authorization;
+- rate limiting, CORS и forwarded headers;
+- validation и mapping HTTP responses;
+- композиция application/infrastructure services.
 
-Текущее состояние:
-
-- Health endpoints.
-- Seed read endpoints для dashboard и routes.
+API host не должен содержать EF queries или дублировать бизнес-логику service implementations.
 
 ## apps/web
 
-React + TypeScript + Vite frontend.
+React + TypeScript + Vite административная панель.
 
-Назначение:
+Основные слои:
 
-- Административная веб-панель.
-- Операционные вкладки обходов территории.
-- Пустые UI-состояния до подключения API, без фальшивого доменного наполнения.
-- Локальные UI-черновики для проверки модалок и сценариев без backend.
-- В будущем typed API client и design-token слой.
+- `src/app` — shell, auth, routing и composition;
+- `src/features` — экраны и компоненты продуктовых модулей;
+- `src/repositories` — API/mock/browser-storage adapters;
+- `src/hooks` — workspace orchestration;
+- `src/api` — HTTP client, DTO и data-source configuration;
+- `src/security` — permission helpers;
+- `src/shared` — переиспользуемые UI/styles/API helpers;
+- `src/__tests__` и `e2e` — component/unit и Playwright tests.
 
-Текущее состояние:
+Продуктовые feature-группы: patrol, inventory, EMU, PERCo, users и mobile accounts.
 
-- Перенесены вкладки: дашборд, результаты, назначения, сотрудники, планирование, мобильные аккаунты, маршруты и точки, пользователи сайта.
-- Данные вкладок не заполнены seed-записями; интерфейс показывает пустые состояния и готов к API.
-- Worklog намеренно отсутствует в первом UI-проходе.
+Mock mode используется для изолированной UI-разработки. API mode работает с backend и не должен подмешивать mock/localStorage записи в серверные списки.
 
 ## apps/worker
 
-.NET Worker host.
+.NET Worker host для периодических прикладных задач:
 
-Будущие задачи:
+- mobile push delivery;
+- EMU notifications и carry-over;
+- автоматическая PERCo sync.
 
-- Генерация отчетов.
-- Импорт/экспорт.
-- Outbox processing.
-- Уведомления.
-- Плановые фоновые операции.
+Worker использует application interfaces и infrastructure implementations через DI.
 
-Hangfire/RabbitMQ пока не подключены, границы будут закреплены после NFR discovery.
+## mobiel proekt
+
+Android-приложение сотрудников на React Native + Expo.
+
+Основные слои:
+
+- `app` — Expo Router routes/layouts;
+- `src/auth` — online/offline session и device identity;
+- `src/api` — HTTP clients и Zod schemas;
+- `src/db` — SQLCipher database и repositories;
+- `src/domain` — mobile domain rules;
+- `src/features` — patrol, EMU, settings, profile и camera screens;
+- `src/sync` — ordered outbox, retry, reconciliation и background sync;
+- `src/services` — media, notifications, diagnostics и device APIs;
+- `tests` — Node policy/contract tests;
+- `scripts` — encoding, keystore и APK build scripts.
+
+`android` — генерируемый native-проект и исключен из Git. Источником истины являются Expo config, TypeScript-код и build scripts. Название каталога сохраняется ради совместимости существующей автоматизации.
 
 ## libs/domain
 
-Доменный слой без инфраструктурных зависимостей.
-
-Содержит:
-
-- сущности;
-- value objects;
-- доменные правила;
-- инварианты.
+Доменный слой без ASP.NET/EF/файловых зависимостей. Содержит доменные типы и инварианты.
 
 ## libs/application
 
-Application слой.
+Application-порты и сценарии:
 
-Содержит:
-
-- use cases;
-- command/query contracts;
-- интерфейсы портов;
-- orchestration без деталей БД/очередей/файлов.
+- query/command interfaces;
+- orchestration contracts;
+- time, notifications, files и integration abstractions.
 
 ## libs/contracts
 
-Контракты обмена.
-
-Содержит:
-
-- DTO для API;
-- read-model contracts;
-- схемы, которые позже будут синхронизироваться с OpenAPI.
+C# DTO и API read/write contracts. Пока OpenAPI codegen отсутствует, изменения здесь должны вручную синхронизироваться с web DTO и mobile schemas.
 
 ## libs/infrastructure
 
-Инфраструктурный слой.
+Реализации application-портов:
 
-Будущие реализации:
+- `Patrol360DbContext`, entities, configurations и migrations;
+- patrol, mobile, Inventory, EMU, auth/RBAC и PERCo services;
+- file/attachment stores;
+- FCM push;
+- DOCX/XLSX/PDF generation;
+- seed data и templates.
 
-- EF Core + PostgreSQL;
-- MinIO/S3 storage;
-- Redis cache;
-- RabbitMQ/MassTransit;
-- FCM;
-- document/report adapters.
-
-Сейчас содержит временный read-store/scaffolding для раннего frontend/API skeleton; production persistence будет добавляться отдельно через PostgreSQL и EF Core.
+Infrastructure может зависеть от application/domain/contracts; обратная зависимость запрещена.
 
 ## infra
 
-Инфраструктурные артефакты разработки и deployment.
+Инфраструктура локального и production-like запуска:
 
-Сейчас:
+- `docker/compose.yaml` — migrate, API, web, worker, proxy и stateful services;
+- `docker/certs` — локальная TLS-конфигурация;
+- `docker/secrets` — локальные ignored secrets и data-protection keys;
+- compose overrides для prebuilt/smoke сценариев;
+- scripts обновления и обслуживания контейнеров.
 
-- `infra/docker/compose.yaml` для PostgreSQL, Redis, RabbitMQ, MinIO.
-
-Позже:
-
-- nginx;
-- monitoring;
-- deployment manifests;
-- runbooks.
+Redis, RabbitMQ и MinIO присутствуют в Compose, но не являются обязательными adapters application-кода.
 
 ## tests
 
-Тестовая структура проекта.
+.NET:
 
-Сейчас:
+- `Patrol360.Domain.Tests`;
+- `Patrol360.Application.Tests`;
+- `Patrol360.Infrastructure.Tests`;
+- `Patrol360.Api.Tests`;
+- `Patrol360.Worker.Tests`;
+- `Patrol360.Structure.Tests`.
 
-- `tests/Patrol360.Structure.Tests` - zero-dependency структурные проверки solution, project references и repository hygiene;
-- `tests/Patrol360.Domain.Tests` - xUnit smoke tests доменного слоя;
-- `tests/Patrol360.Application.Tests` - xUnit smoke tests application слоя;
-- `tests/Patrol360.Infrastructure.Tests` - xUnit smoke tests infrastructure DI;
-- `tests/Patrol360.Api.Tests` - xUnit smoke tests API assembly;
-- `tests/Patrol360.Worker.Tests` - xUnit smoke tests worker assembly;
-- `tests/web/unit` - frontend structural smoke tests;
-- `tests/web/e2e` - место для будущих Playwright smoke tests.
+Infrastructure tests включают DB-backed сценарии assignments, results, mobile, push, Inventory и EMU. Они пропускаются без явно включенного PostgreSQL-контура.
 
-Позже:
+Web:
 
-- расширить xUnit smoke tests до сценарных тестов;
-- добавить Vitest;
-- добавить Playwright smoke.
+- Vitest/Testing Library tests в `apps/web/src/__tests__`;
+- structural checks в `tests/web/unit`;
+- Playwright e2e в `apps/web/e2e` и вспомогательная документация в `tests/web/e2e`.
+
+Mobile tests находятся внутри `mobiel proekt/tests`, потому что используют mobile TypeScript modules и Node test runner.
 
 ## tools
 
-Локальные команды, которые повторяют CI-проверки и обслуживание рабочей папки.
+Основные команды:
 
-Сейчас:
-
+- `Start-Patrol360.ps1`;
+- `Test-All.ps1`;
 - `Verify-TextEncoding.ps1`;
 - `Check-Structure.ps1`;
 - `Clean-Workspace.ps1`;
-- `Test-All.ps1`;
-- `Set-GitHubBranchProtection.ps1`.
-
-## .github
-
-Репозиторные правила GitHub.
-
-Сейчас:
-
-- `.github/workflows/ci.yml` - обязательный CI gate для pull request и protected branches;
-- `.github/pull_request_template.md` - checklist для структуры, тестов, generated artifacts и документации.
-
-Правила branch protection и review policy описаны в `docs/runbooks/branch-review-policy.md`.
-CI-контракт описан в `docs/runbooks/ci-contract.md`.
-
-## legacy
-
-Каталог для старых прототипов и материалов, которые больше не являются активной production-частью проекта.
-
-Сейчас:
-
-- `legacy/territory-patrol-panel` - старый статический UI-прототип без backend.
-
-Legacy-код не должен участвовать в CI и новой feature-разработке.
+- Inventory migration helpers;
+- GitHub branch-protection helper.
 
 ## docs
 
-Документация проекта ведется рядом с кодом.
+Точка входа — [README.md](./README.md).
 
-Минимальный обязательный набор:
+Документы делятся на:
 
-- `architecture.md`;
-- `technology-stack.md`;
-- `modules.md`;
-- `tz-normalization.md`;
-- `runbooks/ci-contract.md`;
-- `runbooks/branch-review-policy.md`;
-- ADR при принятии крупных решений.
+- канонические architecture/modules/stack/structure/runbooks;
+- ADR;
+- модульные navigation notes;
+- требования и планы;
+- датированные аудиты и status snapshots.
+
+Исторический аудит не переписывается как текущая инструкция. Актуальные утверждения вносятся в канонические документы.
+
+## .github
+
+- CI workflow;
+- pull request template;
+- repository automation.
+
+Branch protection и CI contract описаны в `docs/runbooks`.
+
+## legacy
+
+`legacy/territory-patrol-panel` — старый статический UI-прототип. Legacy-код не участвует в новой feature-разработке и не должен становиться зависимостью активных приложений.
+
+## Generated и локальные артефакты
+
+`bin`, `obj`, `dist`, `build-output`, `TestResults`, временные audit/output каталоги и native build caches не являются исходниками. Их не следует добавлять в навигацию документации или использовать как источник истины.

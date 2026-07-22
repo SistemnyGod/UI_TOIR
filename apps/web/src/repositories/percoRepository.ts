@@ -12,8 +12,8 @@ import type {
   UpdatePercoIntegrationSettingsDto,
 } from "../api/contracts";
 
-export function createPercoRepository({ baseUrl }: { baseUrl?: string } = {}) {
-  const client = new ApiClient({ baseUrl });
+export function createPercoRepository({ baseUrl, fetcher }: { baseUrl?: string; fetcher?: typeof fetch } = {}) {
+  const client = new ApiClient({ baseUrl, fetcher });
 
   return {
     getSettings() {

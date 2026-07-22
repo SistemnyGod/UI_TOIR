@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "packageName": "ru.patrol360.mobile",
+  "keyAlias": "patrol360-release-v2",
+  "certificateSha256": "dd9c7fa83d36bcee0fda8c6f03c2a2f6b380cf596eb76066e7ddf3fa4f345550",
+  "preferredMetadataFiles": [
+    "patrol360-release.machine.dpapi.json",
+    "patrol360-release-v2.dpapi.json"
+  ]
+}

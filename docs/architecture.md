@@ -1,126 +1,137 @@
 # Архитектура
 
-## Архитектурный baseline
+Дата актуализации: 2026-07-22.
 
-Целевая система строится как modular monolith на .NET:
+## Архитектурный стиль
 
-- основной API host: `apps/api`;
-- административный frontend: `apps/web`;
-- фоновые задачи: `apps/worker`;
-- доменная модель и use cases: `libs/domain`, `libs/application`;
-- контракты обмена: `libs/contracts`;
-- инфраструктурные реализации: `libs/infrastructure`.
+Patrol360 реализован как modular monolith на .NET с несколькими host-приложениями:
 
-Такой подход выбран для MVP, потому что домен уже широкий, но пока нет доказанной необходимости разрезать систему на независимые микросервисы. Модульный монолит позволяет быстрее собрать продуктовую основу, сохранить целостность транзакций и подготовить границы для будущего выделения сервисов.
+- `apps/api` — ASP.NET Core HTTP API;
+- `apps/web` — административный React SPA;
+- `apps/worker` — фоновые прикладные процессы;
+- `mobiel proekt` — Android-приложение сотрудников;
+- `libs/domain` — доменные типы и инварианты;
+- `libs/application` — application-порты и сценарии;
+- `libs/contracts` — DTO и контракты обмена;
+- `libs/infrastructure` — EF Core, файлы, FCM, отчеты и внешние интеграции.
+
+Модульный монолит сохраняет общую транзакционную модель PostgreSQL и позволяет развивать функциональные границы без преждевременного выделения микросервисов.
 
 ## Контуры приложения
 
-```mermaid
-flowchart LR
-    WEB["apps/web React UI"] --> API["apps/api ASP.NET Core"]
-    API --> APP["libs/application"]
-    APP --> DOMAIN["libs/domain"]
-    API --> INFRA["libs/infrastructure"]
-    WORKER["apps/worker .NET Worker"] --> APP
-    WORKER --> INFRA
-    INFRA --> PG[("PostgreSQL")]
-    INFRA --> FILES["local files / templates"]
-    INFRA --> FCM["Firebase Cloud Messaging"]
+```text
+apps/web ───────┐
+                ├─→ apps/api ─→ application/domain ─→ infrastructure ─→ PostgreSQL/files/FCM/PERCo
+mobiel proekt ──┘
+apps/worker ───────→ application/infrastructure
+mobiel proekt ─────→ SQLite/SQLCipher и локальные media
 ```
+
+Web и mobile не обращаются к PostgreSQL напрямую. Все серверные операции проходят через API/application-интерфейсы. Worker использует те же application/infrastructure services, что и API.
+
+## Функциональные границы
+
+Основные bounded contexts:
+
+- Patrol: маршруты, точки, заявки, назначения и результаты;
+- Identity: web auth, site users, роли, permissions и scopes;
+- Mobile: аккаунты, сессии, устройства, bootstrap, outbox, push и диагностика;
+- Inventory: каталог, движения, custody, PPE, отчеты, настройки и аудит;
+- EMU: рабочие сессии, планы, смены, решения, история и отчеты;
+- PERCo: настройки интеграции, сотрудники, события доступа и presence intervals;
+- Notifications: системные web-уведомления и mobile push.
+
+Подробный статус находится в [modules.md](./modules.md).
 
 ## Зависимости runtime
 
-### Active dependencies
+### Активные
 
-На текущем этапе приложение фактически опирается на:
+Application-код фактически использует:
 
-- PostgreSQL через EF Core;
-- локальный/volume-контур файлов для мобильных вложений и шаблонов;
-- Firebase Cloud Messaging для push-уведомлений, если настроены ключи;
-- in-process `IMemoryCache` для короткоживущих web/API сводок.
+- PostgreSQL через EF Core и Npgsql;
+- локальное/volume-хранилище мобильных вложений, диагностических отчетов и шаблонов;
+- Firebase Cloud Messaging, если предоставлена конфигурация;
+- in-process `IMemoryCache`;
+- HTTP-интеграцию с PERCo-Web;
+- Open XML SDK, ClosedXML и QuestPDF для профильных печатных форм и экспортов.
 
-### Target/planned dependencies
+Mobile использует SQLite/SQLCipher, SecureStore, локальную файловую систему, Expo notifications/background tasks, NFC, QR и камеру. Синхронизация построена на ordered outbox с retry, owner/contour isolation и server reconciliation.
 
-Следующие сервисы могут подниматься локальным Docker Compose, но не должны считаться обязательными application dependencies, пока код явно не переведен на них:
+### Инфраструктурный резерв
 
-- Redis - distributed cache, session/cache coordination, multi-instance readiness;
-- RabbitMQ - event-driven pipeline, outbox delivery, тяжелые асинхронные процессы;
-- MinIO/S3 - production-ready storage для фото, вложений, отчетов и versioning;
-- Hangfire - расписания, retries, операторские фоновые задачи и отчеты;
-- SignalR - realtime web dashboards.
+Docker Compose также поднимает Redis, RabbitMQ и MinIO. Они не считаются обязательными runtime-зависимостями, пока application-код не переведен на соответствующие адаптеры.
 
-Перед включением planned dependencies в production-контур нужно зафиксировать NFR, health checks, retry/idempotency rules и fallback-поведение.
+Hangfire и SignalR не подключены. Их добавление требует зафиксированных NFR, health checks, retry/idempotency и fallback-правил.
 
-## Принципы слоев
+## Правила слоев
 
-`libs/domain` не зависит от ASP.NET, EF Core, очередей, файлового хранилища и frontend.
+`libs/domain` не зависит от ASP.NET Core, EF Core, файлов, push и внешних интеграций. Здесь живут доменные типы и инварианты.
 
-`libs/application` описывает сценарии и порты. Здесь должны жить команды, запросы, политики приложения и orchestration.
+`libs/application` зависит от domain и contracts, определяет query/command interfaces и orchestration, но не знает деталей PostgreSQL, FCM и файловой системы.
 
-`libs/infrastructure` реализует порты application слоя через PostgreSQL, локальный файловый контур, FCM и внешние сервисы. Redis, MinIO и RabbitMQ остаются planned dependencies до отдельного подключения.
+`libs/infrastructure` реализует application-порты и содержит `Patrol360DbContext`, EF services, migrations, seed data, адаптеры файлов, FCM, PERCo и генерации документов.
 
-`apps/api` отвечает за HTTP, authentication/authorization, request validation, API versioning, OpenAPI и mapping request/response.
+`apps/api` отвечает за HTTP routing, authentication, authorization, validation и response mapping. Он использует отдельные bearer-схемы для web и mobile и применяет permission policies.
 
-`apps/worker` отвечает за фоновые задачи и должен использовать те же application use cases, что и API, чтобы не дублировать бизнес-логику.
+`apps/worker` доставляет queued mobile push, обслуживает уведомления и перенос работ ЭМУ, запускает автоматическую синхронизацию PERCo. Host не должен дублировать прикладную логику сервисов.
 
-`apps/web` не содержит бизнес-истину. Пока вкладки работают без backend и без seed-наполнения: экраны показывают пустые состояния, а временные интеракции вроде черновика заявки живут только в локальном состоянии React. После подключения API состояние будет загружаться из typed client.
+`apps/web` хранит presentation state, фильтры и формы, получает backend data через typed repositories/hooks и поддерживает mock-режим для UI-разработки. В API-режиме серверные списки не смешиваются с локальными mock-записями.
 
-## API baseline
+`mobiel proekt` является offline-first клиентом. Он хранит локальный снимок назначений, точек, результатов, файлов и команд, не считает локальную команду подтвержденной сервером и очищает media только после server reconciliation.
 
-Будущий API должен идти через `/api/v1`.
+## API и безопасность
 
-Обязательные соглашения:
+Основной namespace — `/api/v1`. Для эволюции отдельных read-контрактов существуют `/api/v2/results`, `/api/v3/results` и `/api/v2/mobile/work-items`.
 
-- REST-first endpoints;
-- `problem+json` для ошибок;
-- correlation-id;
-- OpenAPI specification;
-- optimistic locking для изменяемых сущностей;
-- idempotency keys для тяжелых write операций;
-- раздельные endpoint groups для browser, mobile, internal jobs и admin.
+Действующие соглашения:
 
-## Realtime и фоновые задачи
+- REST-oriented controllers и Problem Details для ошибок;
+- отдельные web/mobile authentication schemes;
+- fallback authorization policy для web API;
+- `RequirePermission` для действий и чувствительных read-моделей;
+- rate limiting для web/mobile login;
+- forwarded headers с allowlist известных proxy;
+- CORS allowlist для локальных web origins;
+- optimistic/version checks в изменяемых сценариях;
+- идемпотентность и reconciliation мобильного outbox;
+- неизменяемые route revisions для исторических результатов.
 
-Для realtime веб-дашбордов целевой вариант: SignalR.
+OpenAPI generation и автоматический TypeScript DTO codegen пока не подключены. До их появления C# contracts и клиентские schemas должны изменяться синхронно и проверяться тестами.
 
-Для Android/mobile на период миграции сохраняется совместимость с FCM + refresh/polling.
+## Данные и миграции
 
-Hangfire и RabbitMQ не подключаются бездумно:
-
-- Hangfire: расписания, retries, операторские фоновые задачи, отчеты.
-- RabbitMQ: event-driven pipeline, outbox delivery, декомпозиция тяжелых асинхронных процессов.
-
-Границы будут уточнены после NFR discovery: RPS, SLA, объем файлов, окно cutover, retention.
+- Основная БД — PostgreSQL `patrol360`.
+- EF migrations находятся в `libs/infrastructure/Persistence/Migrations`.
+- Инициализация production-like контура выполняется отдельным compose-сервисом `migrate`.
+- API не должен принимать трафик до успешного завершения миграций.
+- DB-backed integration tests включаются отдельным флагом и требуют PostgreSQL.
+- Повторный Inventory legacy-import выполняется только из миграционной копии, не из production legacy БД.
 
 ## Файлы и отчеты
 
-Целевой контур:
+Файлы принадлежат профильным модулям: mobile uploads, patrol attachments, вложения EMU, шаблоны и печатные формы Inventory, mobile diagnostics.
 
-- MinIO/S3 для фото, вложений и отчетов;
-- app-level таблицы `files` и `file_versions`;
-- bucket versioning на уровне MinIO;
-- Gotenberg/document-service для PDF;
-- Open XML SDK для DOCX;
-- ClosedXML/CsvHelper для XLSX/CSV.
+Универсальный Files bounded context и единая очередь report jobs пока не выделены. MinIO/S3 остается целевым вариантом для будущего production object storage, но текущий код использует локальный/volume-контур.
 
-## UI baseline
+## Frontend и UI
 
-Первый UI-релиз: вкладки административной панели без backend.
+Административная панель содержит рабочие API-backed экраны:
 
-Включено:
+- обходы: dashboard, results, assignments, employees, schedule, mobile accounts, routes;
+- управление web-пользователями и RBAC;
+- Inventory;
+- EMU;
+- PERCo-Web.
 
-- дашборд;
-- результаты обходов;
-- текущее назначение;
-- планирование;
-- мобильные аккаунты;
-- маршруты и точки.
-- сотрудники;
-- пользователи сайта.
+Schedule — частично реализованный контур: grid строится из реальных заявок, назначений и справочников, но собственного schedule CRUD/persistence пока нет.
 
-Исключено из первого UI-прохода:
+## Realtime и согласованность
 
-- worklog;
-- полноценная мобильная переработка;
-- backend persistence;
-- авторизация и роли.
+Текущая модель обновления:
+
+- web — запросы API, refresh после mutations и системные уведомления;
+- mobile — foreground/background sync, push-triggered refresh и polling/retry;
+- worker — периодические maintenance loops.
+
+SignalR может быть добавлен для realtime dashboard после отдельного решения. До этого UI не должен предполагать мгновенную доставку всех изменений.

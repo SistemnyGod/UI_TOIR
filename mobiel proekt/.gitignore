@@ -12,6 +12,7 @@ ios/
 *.p12
 *.key
 *.mobileprovision
+secrets/
 *.orig.*
 npm-debug.*
 yarn-debug.*
