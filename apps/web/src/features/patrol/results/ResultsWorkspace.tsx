@@ -22,6 +22,7 @@ import { useResultsWorkspace } from "../../../hooks/useResultsWorkspace";
 import type { DataSourceMode, PatrolResult, PatrolResultAttachment, ResultMode, RouteDirectoryItem, ScreenId } from "../../../types";
 import { PatrolResultDetails } from "./PatrolResultDetails";
 import { ResultMediaViewer, type ResultMediaPreviewState } from "./ResultMediaViewer";
+import { FoundRemarksView } from "./FoundRemarksView";
 import type { DurationSummary, ResultGroup } from "./resultTypes";
 
 export interface ResultsScreenProps {
@@ -89,6 +90,7 @@ export function ResultsWorkspace({
   const detailRequestsRef = useRef(new Map<string, Promise<PatrolResult>>());
   const [photoLoadingResultId, setPhotoLoadingResultId] = useState<string | null>(null);
   const [mediaPreview, setMediaPreview] = useState<ResultMediaPreviewState | null>(null);
+  const [activeView, setActiveView] = useState<"results" | "remarks">("results");
   const [exportInProgress, setExportInProgress] = useState(false);
   const apiResultsRepository = useMemo(() => createApiResultsRepository(), []);
   useEffect(() => {
@@ -340,6 +342,21 @@ export function ResultsWorkspace({
         </div>
       </div>
 
+      <nav className="results-review-view-tabs" aria-label={"\u0420\u0430\u0437\u0434\u0435\u043b\u044b \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u043e\u0432"}>
+        <button className={activeView === "results" ? "is-active" : ""} onClick={() => setActiveView("results")} type="button">
+          {"\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043e\u0431\u0445\u043e\u0434\u043e\u0432"}
+        </button>
+        <button className={activeView === "remarks" ? "is-active" : ""} onClick={() => setActiveView("remarks")} type="button">
+          <AlertTriangle size={16} />
+          {"\u041d\u0430\u0439\u0434\u0435\u043d\u043d\u044b\u0435 \u0437\u0430\u043c\u0435\u0447\u0430\u043d\u0438\u044f"}
+        </button>
+      </nav>
+
+      {activeView === "remarks" ? (
+        <FoundRemarksView dataSourceMode={dataSourceMode} onNotify={onNotify} />
+      ) : (
+        <>
+
       <section className="results-review-metrics" aria-label="Сводка результатов обходов">
         <MetricCard icon={FileText} title="Всего обходов" value={metrics.total} caption={loadedSampleCaption} />
         <MetricCard icon={AlertTriangle} title="С замечаниями" value={metrics.issues} caption={loadedSampleCaption} tone="orange" />
@@ -447,6 +464,8 @@ export function ResultsWorkspace({
           )}
         </aside> : null}
       </section>
+        </>
+      )}
 
       {contextMenu && contextGroup ? (
         <div

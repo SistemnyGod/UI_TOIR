@@ -83,7 +83,6 @@ export function EmuWorkAccountingScreen({
   );
   const [workFilter, setWorkFilter] = useState<WorkCardFilter>(preferences.workFilter);
   const [sectionFilter, setSectionFilter] = useState(preferences.sectionFilter);
-  const [sourceFilter, setSourceFilter] = useState<"all" | "mobile" | "web">("all");
   const [density, setDensity] = useState<WorkDensity>(preferences.density);
   const [collapsedSections, setCollapsedSections] = useState<string[]>(preferences.collapsedSections);
   const [createPresetEmployeeId, setCreatePresetEmployeeId] = useState("");
@@ -97,8 +96,8 @@ export function EmuWorkAccountingScreen({
     [workspace.workSessions.rows],
   );
   const sectionFilteredBoardWork = useMemo(
-    () => filterEmuWorkBySection(boardWork, sectionFilter).filter((work) => sourceFilter === "all" || work.source === sourceFilter),
-    [boardWork, sectionFilter, sourceFilter],
+    () => filterEmuWorkBySection(boardWork, sectionFilter),
+    [boardWork, sectionFilter],
   );
   const ongoingWork = sectionFilteredBoardWork;
   const visibleShiftRemarks = useMemo(
@@ -355,14 +354,7 @@ export function EmuWorkAccountingScreen({
                 </button>
               ) : null}
               <SectionQuickFilter sections={activeSections(workspace)} value={sectionFilter} onChange={setSectionFilter} />
-              <label className="emu-source-filter">
-                <span className="sr-only">Источник работы</span>
-                <select aria-label="Источник работы" onChange={(event) => setSourceFilter(event.target.value as "all" | "mobile" | "web")} value={sourceFilter}>
-                  <option value="all">Все источники</option>
-                  <option value="mobile">Мобильное приложение</option>
-                  <option value="web">Web ЭМУ</option>
-                </select>
-              </label>
+
               <DensitySwitch value={density} onChange={setDensity} />
               <WorkFilterTabs counts={workFilterCounts} onChange={setWorkFilter} value={workFilter} />
             </div>

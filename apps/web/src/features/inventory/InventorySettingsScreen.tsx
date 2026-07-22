@@ -20,6 +20,7 @@ import type {
   InventorySettingsDto,
 } from "../../api/contracts";
 import { useInventoryRepository } from "../../repositories/inventoryRepositoryContext";
+import { PpeNormSetsAdmin } from "./PpeNormSetsAdmin";
 import "./inventoryWeb.css";
 
 type InventorySettingsScreenProps = {
@@ -292,7 +293,7 @@ export function InventorySettingsScreen({
             </section>
           ) : null}
 
-          {tab === "norms" ? <NormsPanel norms={effectiveSettings.positionNorms} onCreate={() => openNormModal({})} onEdit={(row) => openNormModal({ row })} /> : null}
+          {tab === "norms" ? <NormsPanel norms={effectiveSettings.positionNorms} onCreate={() => openNormModal({})} onEdit={(row) => openNormModal({ row })} onNotify={onNotify} /> : null}
           {tab === "sets" ? <ItemSetsPanel itemSets={effectiveSettings.itemSets} onCreate={() => openItemSetModal({})} onEdit={(row) => openItemSetModal({ row })} onToggle={(row) => void toggleItemSet(row)} /> : null}
           {tab === "health" ? <HealthPanel health={health} loading={healthLoading} /> : null}
         </>
@@ -398,13 +399,17 @@ function NormsPanel({
   norms,
   onCreate,
   onEdit,
+  onNotify,
 }: {
   norms: InventorySettingsDto["positionNorms"];
   onCreate: () => void;
   onEdit: (row: InventorySettingsDto["positionNorms"][number]) => void;
+  onNotify: (message: string) => void;
 }) {
   return (
-    <section className="inventory-settings-table-card">
+    <div className="inventory-ppe-norms-workspace">
+      <PpeNormSetsAdmin onNotify={onNotify} />
+      <section className="inventory-settings-table-card inventory-ppe-manual-rules">
       <div className="inventory-settings-panel-head">
         <div>
           <h2>Нормы СИЗ по должности</h2>
@@ -448,7 +453,8 @@ function NormsPanel({
           </table>
         </div>
       )}
-    </section>
+      </section>
+    </div>
   );
 }
 

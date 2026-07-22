@@ -3,6 +3,8 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { currentContourId } from "@/core/environments";
 import { listPointFiles } from "@/db/repositories/filesRepository";
 import { getAssignmentById, getPointForFill, listMissingCompleteAssignmentAttachmentIds, PointForFill, PointListItem } from "@/db/repositories/patrolRepository";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
@@ -24,15 +26,23 @@ export function PointDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      void Promise.all([getAssignmentById(assignmentId), getPointForFill(assignmentId, pointId), listPointFiles(assignmentId, pointId), listMissingCompleteAssignmentAttachmentIds(assignmentId, pointId)]).then(([loadedAssignment, loadedPoint, files, missingIds]) => {
-        if (isMounted) {
-          setAssignment(loadedAssignment);
-          setPoint(loadedPoint);
-          setAttachments(files);
-          setMissingAttachmentIds(missingIds);
+      void (async () => {
+        const ownerUserId = await getStoredOwnerUserId();
+        const [loadedAssignment, loadedPoint, files, missingIds] = await Promise.all([
+          getAssignmentById(assignmentId),
+          ownerUserId ? getPointForFill(assignmentId, pointId, ownerUserId, currentContourId) : Promise.resolve(null),
+          listPointFiles(assignmentId, pointId),
+          listMissingCompleteAssignmentAttachmentIds(assignmentId, pointId)
+        ]);
+        if (!isMounted) {
+          return;
         }
-      });
+        setAssignment(loadedAssignment);
+        setPoint(loadedPoint);
+        setAttachments(files);
+        setMissingAttachmentIds(missingIds);
 
+      })();
       return () => {
         isMounted = false;
       };

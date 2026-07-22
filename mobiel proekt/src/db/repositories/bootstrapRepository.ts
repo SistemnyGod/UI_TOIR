@@ -426,6 +426,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
           INSERT INTO patrol_assignments (
             assignment_id,
             owner_user_id,
+            contour_id,
             request_id,
             route_id,
             status,
@@ -434,9 +435,10 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             revision,
             route_version_no
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(assignment_id) DO UPDATE SET
             owner_user_id = excluded.owner_user_id,
+            contour_id = excluded.contour_id,
             request_id = excluded.request_id,
             route_id = excluded.route_id,
             status = CASE
@@ -456,6 +458,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
         [
           assignment.assignmentId,
           ownerUserId,
+          currentContourId,
           assignment.requestId,
           assignment.routeId,
           assignment.status,

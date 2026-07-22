@@ -3,6 +3,8 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { currentContourId } from "@/core/environments";
 import { listPointFiles } from "@/db/repositories/filesRepository";
 import { deferPoint, getPointForFill, getReportReadiness, PointForFill, savePointIssue, savePointOk, skipPoint } from "@/db/repositories/patrolRepository";
 import { isPhotoEvidenceRequired } from "@/domain/patrol/photoEvidencePolicy";
@@ -35,7 +37,13 @@ export function PointFillScreen() {
   const [openMenu, setOpenMenu] = useState<"attachments" | "more" | null>(null);
 
   const reload = useCallback(async () => {
-    const [loaded, files] = await Promise.all([getPointForFill(assignmentId, pointId), listPointFiles(assignmentId, pointId)]);
+    const ownerUserId = await getStoredOwnerUserId();
+    if (!ownerUserId) {
+      setPoint(null);
+      setAttachments([]);
+      return;
+    }
+    const [loaded, files] = await Promise.all([getPointForFill(assignmentId, pointId, ownerUserId, currentContourId), listPointFiles(assignmentId, pointId)]);
     setPoint(loaded);
     setComment(loaded?.comment ?? "");
     setIssueTypeId(loaded?.issueTypeId ?? "Неисправность");
@@ -197,8 +205,14 @@ export function PointFillScreen() {
   }
 
   async function reloadPointAndAttachments() {
+    const ownerUserId = await getStoredOwnerUserId();
+    if (!ownerUserId) {
+      setPoint(null);
+      setAttachments([]);
+      return;
+    }
     const [updatedPoint, files] = await Promise.all([
-      getPointForFill(assignmentId, pointId),
+      getPointForFill(assignmentId, pointId, ownerUserId, currentContourId),
       listPointFiles(assignmentId, pointId)
     ]);
     setPoint(updatedPoint);

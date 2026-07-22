@@ -231,14 +231,11 @@ export function AssignmentScreen({
   const favoriteEmployees = employees
     .filter((employee) => favoriteEmployeeSet.has(employee.id))
     .sort((left, right) => left.name.localeCompare(right.name, "ru"));
-  const visibleEmployees = employees
-    .filter((employee) => !normalizedSearch || [employee.name, employee.role, employee.zone].join(" ").toLowerCase().includes(normalizedSearch))
-    .sort((left, right) => {
-      const leftFavorite = favoriteEmployeeSet.has(left.id) ? 0 : 1;
-      const rightFavorite = favoriteEmployeeSet.has(right.id) ? 0 : 1;
-      if (leftFavorite !== rightFavorite) return leftFavorite - rightFavorite;
-      return left.name.localeCompare(right.name, "ru");
-    });
+  const visibleEmployees = favoriteEmployees.filter(
+    (employee) =>
+      !normalizedSearch ||
+      [employee.name, employee.role, employee.zone].join(" ").toLowerCase().includes(normalizedSearch),
+  );
   const visibleRoutes = routes;
   const assignableRequests = useMemo(() => requests.filter(isAssignableRequest), [requests]);
   const referencePanelStatus = assignments.referenceStatus === "idle" ? "loading" : assignments.referenceStatus;
@@ -363,8 +360,7 @@ export function AssignmentScreen({
     }
 
     const serverFavoriteIds = assignments.assignmentSettings.favoriteEmployeeIds ?? [];
-    const hasLocalFavoriteIds = hasStoredAssignmentFavoriteEmployeeIds();
-    const nextFavoriteIds = hasLocalFavoriteIds ? favoriteEmployeeIds : serverFavoriteIds;
+    const nextFavoriteIds = serverFavoriteIds;
     const nextShiftSettings = normalizeShiftSettings(assignments.assignmentSettings.shiftSettings);
 
     setFavoriteEmployeeIds(nextFavoriteIds);
@@ -669,7 +665,7 @@ export function AssignmentScreen({
           canManage={canManage}
           comment={comment}
           employee={selectedEmployee}
-          favoriteEmployees={visibleEmployees}
+          favoriteEmployees={favoriteEmployees}
           fieldErrors={assignments.fieldErrors}
           hasConflict={hasConflict}
           isCreating={isCreatingRequest || assignments.isCreating}

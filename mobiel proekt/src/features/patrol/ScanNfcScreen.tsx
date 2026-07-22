@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
+import { getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { currentContourId } from "@/core/environments";
 import {
   AssignmentProgress,
   getAssignmentById,
@@ -30,9 +32,10 @@ export function ScanNfcScreen() {
   const [nextPoint, setNextPoint] = useState<PointListItem | null>(null);
 
   const loadRouteProgress = useCallback(async () => {
+    const ownerUserId = await getStoredOwnerUserId();
     const [assignment, points] = await Promise.all([
       getAssignmentById(assignmentId),
-      listAssignmentPoints(assignmentId)
+      ownerUserId ? listAssignmentPoints(assignmentId, ownerUserId, currentContourId) : Promise.resolve([])
     ]);
 
     setRouteName(assignment?.routeName ?? null);

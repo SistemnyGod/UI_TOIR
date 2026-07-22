@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, PackageSearch, Search, X } from "lucide-react";
-import type { InventoryItemDto, InventoryPpeCardNormRowDto, InventoryReferenceOptionDto, UpsertInventoryPpeNormMappingDto } from "../../../api/contracts";
+import type { InventoryItemDto, InventoryPpeCardNormRowDto, InventoryPpeNormMappingDto, InventoryReferenceOptionDto, UpsertInventoryPpeNormMappingDto } from "../../../api/contracts";
 import { useInventoryRepository } from "../../../repositories/inventoryRepositoryContext";
 
 export function PpeCatalogModal({
@@ -84,6 +84,24 @@ export function PpeCatalogModal({
     setPrice(item.defaultUnitPriceMinor ? String(item.defaultUnitPriceMinor / 100) : "");
   }
 
+  async function selectMapped(mapping: InventoryPpeNormMappingDto) {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await repository.getPpeItems({ page: 1, pageSize: 50, query: mapping.itemSku || mapping.itemName });
+      const item = result.rows.find((candidate) => candidate.id === mapping.itemId);
+      if (!item) throw new Error("Допустимая позиция нормы отсутствует в активном каталоге");
+      select(item);
+      setModel(mapping.brandModelArticle || [item.brandName, item.modelName, item.article].filter(Boolean).join(" · "));
+      setPrice(mapping.defaultUnitPriceMinor ? String(mapping.defaultUnitPriceMinor / 100) : "");
+      setIsDefault(mapping.isDefault);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось выбрать позицию по норме");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function save() {
     if (!selected) {
       setError("Выберите позицию номенклатуры");
@@ -120,6 +138,15 @@ export function PpeCatalogModal({
 
         <div className="ppe-v2-catalog-layout">
           <div className="ppe-v2-catalog-list-pane">
+            {normRow.mappings.length ? (
+              <section className="ppe-v2-norm-options">
+                <header><div><strong>Допустимые позиции по норме</strong><span>Выберите утверждённую номенклатуру. Общий каталог ниже нужен для нового сопоставления.</span></div><b>{normRow.mappings.length}</b></header>
+                <div>{[...normRow.mappings].sort((left, right) => Number(right.isDefault) - Number(left.isDefault) || left.itemName.localeCompare(right.itemName)).map((mapping) => (
+                  <button className={selectedId === mapping.itemId ? "is-selected" : ""} key={mapping.id} onClick={() => void selectMapped(mapping)} type="button"><span><strong>{mapping.itemName}</strong><small>{[mapping.itemSku, mapping.brandModelArticle].filter(Boolean).join(" · ") || "Без артикула"}</small></span>{mapping.isDefault ? <em>По умолчанию</em> : null}</button>
+                ))}</div>
+              </section>
+            ) : <div className="ppe-v2-norm-options is-empty"><strong>Для нормы ещё нет допустимых позиций</strong><span>Найдите товар в каталоге и сохраните первую связь.</span></div>}
+            <div className="ppe-v2-catalog-section-label"><div><strong>Общий каталог СИЗ</strong><span>Используйте поиск только если подходящего варианта ещё нет среди допустимых.</span></div></div>
             <div className="ppe-v2-catalog-filters">
               <label className="ppe-v2-search">
                 <Search size={17} />
@@ -162,7 +189,7 @@ export function PpeCatalogModal({
                 </div>
                 <label>Модель / марка / артикул<input onChange={(event) => setModel(event.target.value)} value={model} /></label>
                 <label>Цена, ₽<input inputMode="decimal" onChange={(event) => setPrice(event.target.value)} value={price} /></label>
-                <label className="ppe-v2-check"><input checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} type="checkbox" /> Использовать по умолчанию</label>
+                <label className="ppe-v2-check"><input checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} type="checkbox" /> Использовать по умолчанию для этой нормы</label>
               </>
             ) : <div className="ppe-v2-state"><PackageSearch size={32} /><strong>Выберите позицию</strong><span>Сопоставление не создает фактическую выдачу.</span></div>}
           </aside>
@@ -171,7 +198,7 @@ export function PpeCatalogModal({
         {error ? <p className="ppe-v2-error">{error}</p> : null}
         <footer className="ppe-v2-modal-actions">
           <button className="button" onClick={onClose} type="button">Отмена</button>
-          <button className="button primary" disabled={!selected || saving} onClick={() => void save()} type="button">{saving ? "Сохранение…" : "Сохранить связь"}</button>
+          <button className="button primary" disabled={!selected || saving} onClick={() => void save()} type="button">{saving ? "Сохранение…" : "Сохранить и выбрать"}</button>
         </footer>
       </section>
     </div>

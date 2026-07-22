@@ -821,6 +821,20 @@ export interface InventoryPpeNormSetDto {
   rowsCount: number;
 }
 
+export interface InventoryPpeNormImportResultDto {
+  sourceRows: number;
+  normSetsCreated: number;
+  groupsCreated: number;
+  itemsCreated: number;
+  skippedRows: number;
+  warnings: string[];
+  normSets: InventoryPpeNormSetDto[];
+}
+
+export interface PublishInventoryPpeNormSetDto {
+  expectedVersion: number;
+  confirmReviewed: boolean;
+}
 export interface InventoryPpeNormMappingDto {
   id: string;
   normRowId: string;

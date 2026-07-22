@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronRight, CircleDollarSign, FileText, MoreVertical, Printer, Search, ShieldCheck, UserRound } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, CircleDollarSign, FileText, MoreVertical, Printer, Search, ShieldCheck, UserRound, X } from "lucide-react";
 import type {
   InventoryEmployeeDto,
   InventoryItemDto,
@@ -34,6 +34,7 @@ export function InventoryPpeScreen({
 }) {
   const repository = useInventoryRepository();
   const [query, setQuery] = useState("");
+  const [employeePaneCollapsed, setEmployeePaneCollapsed] = useState(false);
   const deferredQuery = useDeferredValue(query);
   const [employees, setEmployees] = useState<InventoryEmployeeDto[]>([]);
   const [employeesLoading, setEmployeesLoading] = useState(true);
@@ -91,6 +92,7 @@ export function InventoryPpeScreen({
 
   function selectEmployee(employeeId: string) {
     setSelectedEmployeeId(employeeId);
+    setEmployeePaneCollapsed(true);
     window.localStorage.setItem("patrol360.inventory.ppe.employee", employeeId);
   }
 
@@ -117,27 +119,26 @@ export function InventoryPpeScreen({
     if (issueRow?.id === catalogRow.id) setIssueItem(item);
     if (catalogRow.sourceNormRowId) {
       await repository.upsertPpeNormRowMapping(catalogRow.sourceNormRowId, mapping);
-    } else {
-      await repository.updatePpeCardNormRows(card.id, {
-        expectedVersion: card.version ?? 0,
-        rows: normRows.map((row) => ({
-          brandModelArticle: row.id === catalogRow.id ? mapping.brandModelArticle : row.brandModelArticle,
-          defaultUnitPriceMinor: row.id === catalogRow.id ? mapping.defaultUnitPriceMinor : row.defaultUnitPriceMinor,
-          id: row.id,
-          issuePeriodText: row.issuePeriodText,
-          lifeMonths: row.lifeMonths,
-          mappedItemId: row.id === catalogRow.id ? item.id : row.mappedItemId,
-          normItemName: row.normItemName,
-          normPoint: row.normPoint,
-          parentRowId: row.parentRowId,
-          quantity: row.quantity,
-          quantityText: row.quantityText,
-          rowType: row.rowType,
-          sortOrder: row.sortOrder,
-          sourceNormRowId: row.sourceNormRowId,
-        })),
-      });
     }
+    await repository.updatePpeCardNormRows(card.id, {
+      expectedVersion: card.version ?? 0,
+      rows: normRows.map((row) => ({
+        brandModelArticle: row.id === catalogRow.id ? mapping.brandModelArticle : row.brandModelArticle,
+        defaultUnitPriceMinor: row.id === catalogRow.id ? mapping.defaultUnitPriceMinor : row.defaultUnitPriceMinor,
+        id: row.id,
+        issuePeriodText: row.issuePeriodText,
+        lifeMonths: row.lifeMonths,
+        mappedItemId: row.id === catalogRow.id ? item.id : row.mappedItemId,
+        normItemName: row.normItemName,
+        normPoint: row.normPoint,
+        parentRowId: row.parentRowId,
+        quantity: row.quantity,
+        quantityText: row.quantityText,
+        rowType: row.rowType,
+        sortOrder: row.sortOrder,
+        sourceNormRowId: row.sourceNormRowId,
+      })),
+    });
     await reloadWorkspace();
     onNotify("Норма сопоставлена с номенклатурой. Фактическая выдача не создана.");
   }
@@ -157,9 +158,15 @@ export function InventoryPpeScreen({
       </header>
 
       <div className="ppe-v2-workspace">
-        <aside className="ppe-v2-employee-pane">
-          <div className="ppe-v2-pane-title"><div><strong>Сотрудники</strong><span>{employees.length} в выборке</span></div></div>
-          <label className="ppe-v2-search"><Search size={17} /><input aria-label="Поиск сотрудников" onChange={(event) => setQuery(event.target.value)} placeholder="ФИО или табельный номер" value={query} /></label>
+        <aside className={`ppe-v2-employee-pane ${employeePaneCollapsed ? "is-collapsed" : ""}`}>
+          <div className="ppe-v2-pane-title">
+            <div><strong>Сотрудники</strong><span>{workspace?.employee.fullName || `${employees.length} в выборке`}</span></div>
+            <button aria-expanded={!employeePaneCollapsed} aria-label={employeePaneCollapsed ? "Показать список сотрудников" : "Скрыть список сотрудников"} className="ppe-v2-pane-toggle" onClick={() => setEmployeePaneCollapsed((value) => !value)} type="button">
+              {employeePaneCollapsed ? <ChevronDown size={17} /> : <ChevronUp size={17} />}
+              {employeePaneCollapsed ? "Выбрать" : "Скрыть"}
+            </button>
+          </div>
+          <label className="ppe-v2-search ppe-v2-employee-search"><Search size={17} /><input aria-label="Поиск сотрудников" onChange={(event) => setQuery(event.target.value)} placeholder="ФИО или табельный номер" value={query} />{query ? <button aria-label="Очистить поиск" onClick={() => setQuery("")} type="button"><X size={15} /></button> : null}</label>
           <div className="ppe-v2-employee-list">
             {employeesLoading ? <div className="ppe-v2-state">Загрузка сотрудников…</div> : employees.length === 0 ? <div className="ppe-v2-state"><UserRound size={28} /><strong>Сотрудники не найдены</strong></div> : employees.map((employee) => (
               <button className={selectedEmployeeId === employee.id ? "is-selected" : ""} key={employee.id} onClick={() => selectEmployee(employee.id)} type="button">
@@ -208,6 +215,10 @@ function EmployeeHeader({ workspace }: { workspace: InventoryPpeWorkspaceDto }) 
     <section className="ppe-v2-employee-head">
       <div className="ppe-v2-employee-identity"><span className="ppe-v2-avatar is-large">{initials(employee.fullName)}</span><div><span className="ppe-v2-eyebrow">Личная карточка сотрудника</span><h2>{employee.fullName}</h2><p>{employee.position} · {employee.department}</p></div></div>
       <dl className="ppe-v2-employee-meta"><div><dt>Табельный номер</dt><dd>{employee.personnelNo || "Не указан"}</dd></div><div><dt>Дата карточки</dt><dd>{card ? formatDate(card.createdAt) : "Нет карточки"}</dd></div></dl>
+      <div className={"ppe-v2-norm-context " + (workspace.activeNormSet ? "is-ready" : "is-missing")}>
+        <ShieldCheck size={18} />
+        <div><strong>{workspace.activeNormSet ? "Применяются нормы должности" : "Опубликованные нормы не найдены"}</strong><span>{workspace.activeNormSet ? workspace.activeNormSet.positionName + " · версия " + workspace.activeNormSet.versionName + " · " + workspace.activeNormSet.sourceName : "Должность: " + employee.position + ". Карточку можно вести вручную, но нормативный источник не подтверждён."}</span></div>
+      </div>
       <div className="ppe-v2-kpis">
         <Kpi label="Нормы" value={workspace.normsTotal} />
         <Kpi label="Выдано" tone="good" value={workspace.issued} />
@@ -225,11 +236,12 @@ function Kpi({ label, tone = "", value }: { label: string; tone?: string; value:
 }
 
 function NormRowsTable({ rows, onIssue, onMap }: { rows: InventoryPpeCardNormRowDto[]; onIssue: (row: InventoryPpeCardNormRowDto) => void; onMap: (row: InventoryPpeCardNormRowDto) => void }) {
+  if (!rows.length) return <div className="ppe-v2-state ppe-v2-state-large"><ShieldCheck size={34} /><strong>В карточке нет строк норм</strong><span>Добавьте нормы вручную или создайте карточку из опубликованного набора должности.</span></div>;
   return (
     <div className="ppe-v2-table-wrap">
-      <table className="ppe-v2-table ppe-v2-norm-table"><thead><tr><th>Наименование СИЗ</th><th>Пункт норм</th><th>Периодичность</th><th>Количество</th><th>Номенклатура</th><th>Покрытие</th><th aria-label="Действия" /></tr></thead>
+      <table className="ppe-v2-table ppe-v2-norm-table ppe-v2-responsive-table"><thead><tr><th>Наименование СИЗ</th><th>Пункт норм</th><th>Периодичность</th><th>Количество</th><th>Номенклатура</th><th>Покрытие</th><th aria-label="Действия" /></tr></thead>
         <tbody>{rows.map((row) => row.rowType === "group" ? <tr className="ppe-v2-group-row" key={row.id}><th colSpan={7}>{row.normItemName}</th></tr> : (
-          <tr key={row.id}><td><strong>{row.normItemName}</strong></td><td>{row.normPoint || "—"}</td><td>{row.issuePeriodText || "—"}</td><td>{row.quantityText || row.quantity}</td><td><button className="ppe-v2-link-button" onClick={() => onMap(row)} type="button">{row.mappedItemName || "Не сопоставлено"}</button>{row.brandModelArticle ? <small>{row.brandModelArticle}</small> : null}</td><td><Coverage status={row.coverageStatus} /></td><td><button className="button primary ppe-v2-row-action" onClick={() => onIssue(row)} type="button">Выдать</button></td></tr>
+          <tr key={row.id}><td data-label="СИЗ"><strong>{row.normItemName}</strong></td><td data-label="Пункт норм">{row.normPoint || "—"}</td><td data-label="Периодичность">{row.issuePeriodText || "—"}</td><td data-label="Количество">{row.quantityText || row.quantity}</td><td data-label="Номенклатура"><button className="ppe-v2-link-button" onClick={() => onMap(row)} type="button">{row.mappedItemName || "Выбрать по норме"}</button>{row.mappings.length > 1 ? <small>Допустимых вариантов: {row.mappings.length}</small> : row.brandModelArticle ? <small>{row.brandModelArticle}</small> : null}</td><td data-label="Покрытие"><Coverage status={row.coverageStatus} /></td><td className="ppe-v2-actions-cell"><button className="button primary ppe-v2-row-action" onClick={() => onIssue(row)} type="button">Выдать</button></td></tr>
         ))}</tbody>
       </table>
     </div>
@@ -244,7 +256,7 @@ function Coverage({ status }: { status: InventoryPpeCardNormRowDto["coverageStat
 function IssuedTable({ card, onAction }: { card: InventoryPpeCardDetailDto; onAction: (line: InventoryPpeCardLineDto, action: ApplyInventoryPpeLineActionDto["action"]) => void }) {
   const rows = [...card.lines].filter((line) => line.status !== "archived").sort((a, b) => (b.issuedAt ?? "").localeCompare(a.issuedAt ?? ""));
   if (!rows.length) return <div className="ppe-v2-state ppe-v2-state-large"><ShieldCheck size={34} /><strong>Фактов выдачи пока нет</strong><span>Нормы остаются в личной карточке, лист подписи пуст.</span></div>;
-  return <div className="ppe-v2-table-wrap"><table className="ppe-v2-table"><thead><tr><th>СИЗ</th><th>Модель / артикул</th><th>Дата</th><th>Количество</th><th>Способ</th><th>Статус</th><th /></tr></thead><tbody>{rows.map((line) => <tr key={line.id}><td><strong>{line.printItemName || line.itemName}</strong><small>{line.itemName}</small></td><td>{line.brandModelArticle || "—"}</td><td>{formatDate(line.issuedAt)}</td><td>{line.quantity} {line.unit}</td><td>{line.issueMethod === "dispenser" ? "Дозатор" : "Лично"}</td><td><span className={`ppe-v2-status is-${line.status}`}>{issueStatusLabel(line.status)}</span></td><td><details className="ppe-v2-row-menu"><summary aria-label="Действия"><MoreVertical size={18} /></summary><div><button onClick={() => onAction(line, "returned")} type="button">Оформить возврат</button><button onClick={() => onAction(line, "written_off")} type="button">Оформить списание</button><button onClick={() => onAction(line, "defective")} type="button">Отметить неисправным</button></div></details></td></tr>)}</tbody></table></div>;
+  return <div className="ppe-v2-table-wrap"><table className="ppe-v2-table ppe-v2-responsive-table"><thead><tr><th>СИЗ</th><th>Модель / артикул</th><th>Дата</th><th>Количество</th><th>Способ</th><th>Статус</th><th /></tr></thead><tbody>{rows.map((line) => <tr key={line.id}><td data-label="СИЗ"><strong>{line.printItemName || line.itemName}</strong><small>{line.itemName}</small></td><td data-label="Модель / артикул">{line.brandModelArticle || "—"}</td><td data-label="Дата">{formatDate(line.issuedAt)}</td><td data-label="Количество">{line.quantity} {line.unit}</td><td data-label="Способ">{line.issueMethod === "dispenser" ? "Дозатор" : "Лично"}</td><td data-label="Статус"><span className={`ppe-v2-status is-${line.status}`}>{issueStatusLabel(line.status)}</span></td><td className="ppe-v2-actions-cell"><details className="ppe-v2-row-menu"><summary aria-label="Действия"><MoreVertical size={18} /></summary><div><button onClick={() => onAction(line, "returned")} type="button">Оформить возврат</button><button onClick={() => onAction(line, "written_off")} type="button">Оформить списание</button><button onClick={() => onAction(line, "defective")} type="button">Отметить неисправным</button></div></details></td></tr>)}</tbody></table></div>;
 }
 
 function PrintWorkspace({ cardData, sheetData, onDownload, onPreview }: { cardData: PrintData; sheetData: PrintData; onDownload: (type: "card" | "sheet") => Promise<void>; onPreview: (mode: PrintMode) => void }) {

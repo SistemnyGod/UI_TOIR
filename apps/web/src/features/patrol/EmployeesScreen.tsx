@@ -7,12 +7,13 @@ import {
   employeesFallback,
   findEmployee,
 } from "../../repositories/employeesRepository";
+import { createApiAssignmentsRepository } from "../../repositories/assignmentsRepository";
 import {
   loadAssignmentFavoriteEmployeeIds,
   saveAssignmentFavoriteEmployeeIds,
   subscribeAssignmentFavoriteEmployeeIds,
 } from "./assignments/assignmentStorage";
-import type { EmployeeDirectoryItem, EmployeeFormPayload, ScreenId } from "../../types";
+import type { DataSourceMode, EmployeeDirectoryItem, EmployeeFormPayload, ScreenId } from "../../types";
 
 type EmployeeFormState =
   | { mode: "create" }
@@ -22,6 +23,7 @@ type EmployeeFormState =
 export function EmployeesScreen({
   employees,
   canManage = true,
+  dataSourceMode,
   employeeCreateIntent,
   selectedEmployeeId,
   onCreateEmployee,
@@ -32,6 +34,7 @@ export function EmployeesScreen({
 }: {
   employees: EmployeeDirectoryItem[];
   canManage?: boolean;
+  dataSourceMode: DataSourceMode;
   employeeCreateIntent: number;
   selectedEmployeeId: string;
   onCreateEmployee: (payload: EmployeeFormPayload) => Promise<string> | string;
@@ -41,6 +44,7 @@ export function EmployeesScreen({
   onSelectEmployee: (id: string) => void;
   onUpdateEmployee: (employeeId: string, payload: EmployeeFormPayload) => Promise<void> | void;
 }) {
+  const apiAssignments = useMemo(() => createApiAssignmentsRepository(), []);
   const [formState, setFormState] = useState<EmployeeFormState>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [patrolEmployeeIds, setPatrolEmployeeIds] = useState<string[]>(() => loadAssignmentFavoriteEmployeeIds());
@@ -64,6 +68,25 @@ export function EmployeesScreen({
   useEffect(() => {
     return subscribeAssignmentFavoriteEmployeeIds(setPatrolEmployeeIds);
   }, []);
+
+  useEffect(() => {
+    if (dataSourceMode !== "api") return;
+
+    const controller = new AbortController();
+    void apiAssignments
+      .getSettings({ signal: controller.signal })
+      .then((settings) => {
+        const serverEmployeeIds = settings.favoriteEmployeeIds ?? [];
+        setPatrolEmployeeIds(serverEmployeeIds);
+        saveAssignmentFavoriteEmployeeIds(serverEmployeeIds);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        onNotify(error instanceof Error ? error.message : "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u043e\u0432 \u043e\u0431\u0445\u043e\u0434\u0430.");
+      });
+
+    return () => controller.abort();
+  }, [apiAssignments, dataSourceMode, onNotify]);
 
   useEffect(() => {
     if (selectedEmployeeId && !patrolEmployeeSet.has(selectedEmployeeId)) {
@@ -120,6 +143,11 @@ export function EmployeesScreen({
     const uniqueIds = Array.from(new Set(nextIds));
     setPatrolEmployeeIds(uniqueIds);
     saveAssignmentFavoriteEmployeeIds(uniqueIds);
+    if (dataSourceMode === "api") {
+      void apiAssignments.updateSettings({ favoriteEmployeeIds: uniqueIds }).catch((error: unknown) => {
+        onNotify(error instanceof Error ? error.message : "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u043e\u0432 \u043e\u0431\u0445\u043e\u0434\u0430.");
+      });
+    }
   }
 
   return (

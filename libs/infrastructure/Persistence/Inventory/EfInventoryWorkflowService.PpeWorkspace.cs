@@ -23,10 +23,11 @@ internal sealed partial class EfInventoryWorkflowService
             .FirstOrDefault();
         var cardDetail = card == Guid.Empty ? null : LoadPpeCard(card);
 
+        var normalizedPosition = NormalizeOptional(employee.Position).ToLowerInvariant();
         var activeNormSet = dbContext.InventoryPpeNormSets
             .AsNoTracking()
             .Include(row => row.Rows)
-            .Where(row => row.PositionName == employee.Position && row.Status == "active" && row.ArchivedAt == null)
+            .Where(row => row.PositionName.ToLower() == normalizedPosition && row.Status == "active" && row.ArchivedAt == null)
             .OrderByDescending(row => row.EffectiveFrom)
             .ThenByDescending(row => row.UpdatedAt)
             .FirstOrDefault();
@@ -138,10 +139,11 @@ internal sealed partial class EfInventoryWorkflowService
         InventoryPpeNormSetEntity? normSet = null;
         if (source == "active_norms")
         {
+            var normalizedPosition = NormalizeOptional(employee.Position).ToLowerInvariant();
             normSet = request.NormSetId is not null
                 ? dbContext.InventoryPpeNormSets.Include(row => row.Rows).ThenInclude(row => row.Mappings).FirstOrDefault(row => row.Id == request.NormSetId && row.Status == "active")
                 : dbContext.InventoryPpeNormSets.Include(row => row.Rows).ThenInclude(row => row.Mappings)
-                    .Where(row => row.PositionName == employee.Position && row.Status == "active" && row.ArchivedAt == null)
+                    .Where(row => row.PositionName.ToLower() == normalizedPosition && row.Status == "active" && row.ArchivedAt == null)
                     .OrderByDescending(row => row.EffectiveFrom).FirstOrDefault();
             if (normSet is null)
             {
@@ -259,7 +261,10 @@ internal sealed partial class EfInventoryWorkflowService
 
     public InventoryCommandResult<InventoryPpeCardLineDto> CreatePpeIssue(Guid cardId, CreateInventoryPpeIssueDto request)
     {
-        var normRow = dbContext.InventoryPpeCardNormRows.Include(row => row.Card).FirstOrDefault(row => row.Id == request.CardNormRowId && row.CardId == cardId);
+        var normRow = dbContext.InventoryPpeCardNormRows
+            .Include(row => row.Card)
+            .Include(row => row.SourceNormRow).ThenInclude(row => row!.Mappings)
+            .FirstOrDefault(row => row.Id == request.CardNormRowId && row.CardId == cardId);
         if (normRow is null) return Failure<InventoryPpeCardLineDto>("cardNormRowId", "PPE norm row not found");
         if (request.ExpectedVersion is not null && normRow.Card.Version != request.ExpectedVersion)
         {
@@ -268,6 +273,14 @@ internal sealed partial class EfInventoryWorkflowService
         if (normRow.RowType != "item") return Failure<InventoryPpeCardLineDto>("cardNormRowId", "PPE group cannot be issued");
         var item = dbContext.InventoryItems.FirstOrDefault(row => row.Id == request.ItemId && row.IsActive);
         if (item is null) return Failure<InventoryPpeCardLineDto>("itemId", "PPE item not found");
+        var allowedItemIds = normRow.SourceNormRow?.Mappings
+            .Where(row => row.ArchivedAt == null)
+            .Select(row => row.ItemId)
+            .ToHashSet() ?? [];
+        if (allowedItemIds.Count > 0 && !allowedItemIds.Contains(item.Id))
+        {
+            return Failure<InventoryPpeCardLineDto>("itemId", "Selected PPE item is not allowed by the published norm mapping");
+        }
         if (request.Quantity <= 0) return Failure<InventoryPpeCardLineDto>("quantity", "Quantity must be greater than zero");
         var issueMethod = NormalizeStatus(request.IssueMethod);
         if (issueMethod is not ("personal" or "dispenser")) return Failure<InventoryPpeCardLineDto>("issueMethod", "Unsupported issue method");

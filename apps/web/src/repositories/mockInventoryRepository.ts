@@ -612,6 +612,25 @@ export function createMockInventoryRepository(): InventoryRepository {
       return mapping;
     },
 
+    async getPpeNormSets() {
+      return pageRows([], {});
+    },
+
+    async importPpeNormSetsDraft() {
+      return {
+        groupsCreated: 0,
+        itemsCreated: 0,
+        normSets: [],
+        normSetsCreated: 0,
+        skippedRows: 0,
+        sourceRows: 0,
+        warnings: [],
+      };
+    },
+
+    async publishPpeNormSet() {
+      throw new Error("В демонстрационном режиме публикация нормативных наборов недоступна");
+    },
     async getPpeCard(cardId) {
       return required(readStore().ppeCards.find((row) => row.id === cardId), "Карточка СИЗ не найдена");
     },

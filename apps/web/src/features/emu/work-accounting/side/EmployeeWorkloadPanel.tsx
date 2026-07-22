@@ -31,11 +31,10 @@ export function EmployeeWorkloadPanel({
     <div className="emu-workload-panel">
       <div className="emu-side-heading">
         <div>
-          <h3>Занятость сотрудников</h3>
-          <span>{counts.free} свободны · {counts.working + counts.waiting} заняты</span>
+          <h3>Сотрудники</h3>
         </div>
       </div>
-      <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по ФИО, табельному, должности" />
+      <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Поиск сотрудников" placeholder="Поиск сотрудника" />
       <div className="emu-workload-filters">
         {(["all", "free", "working", "waiting", "conflict"] as const).map((item) => (
           <button className={status === item ? "active" : ""} key={item} onClick={() => setStatus(item)} type="button">

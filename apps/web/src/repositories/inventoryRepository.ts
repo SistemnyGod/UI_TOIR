@@ -38,7 +38,9 @@ import type {
   InventoryPpeCardLineDto,
   InventoryPpeMovementDto,
   InventoryPpeHistoryRowDto,
+  InventoryPpeNormImportResultDto,
   InventoryPpeNormMappingDto,
+  InventoryPpeNormSetDto,
   InventoryPpeWorkspaceDto,
   InventoryPpeModuleOptionsDto,
   InventoryPpeCardsResponseDto,
@@ -60,6 +62,7 @@ import type {
   UpsertInventoryItemSetItemsDto,
   UpsertInventoryPpeCardLineDto,
   UpdateInventoryPpeCardNormRowsDto,
+  PublishInventoryPpeNormSetDto,
   UpsertInventoryPpeNormMappingDto,
   UpsertInventoryPositionNormDto,
   UpsertInventoryItemDto,
@@ -277,6 +280,27 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
       );
     },
 
+    getPpeNormSets(params: InventoryListParams = {}) {
+      return client.get<InventoryListResponseDto<InventoryPpeNormSetDto>>(
+        `/api/v1/inventory/ppe/norm-sets${toQueryString(params)}`,
+      );
+    },
+
+    importPpeNormSetsDraft(file: File) {
+      const formData = new FormData();
+      formData.append("file", file);
+      return client.postForm<InventoryPpeNormImportResultDto>(
+        "/api/v1/inventory/ppe/norm-sets/import-draft",
+        formData,
+      );
+    },
+
+    publishPpeNormSet(normSetId: string, payload: PublishInventoryPpeNormSetDto) {
+      return client.post<InventoryPpeNormSetDto, PublishInventoryPpeNormSetDto>(
+        `/api/v1/inventory/ppe/norm-sets/${normSetId}/publish`,
+        payload,
+      );
+    },
     getPpeCard(id: string) {
       return client.get<InventoryPpeCardDetailDto>(`/api/v1/inventory/ppe/cards/${id}`);
     },

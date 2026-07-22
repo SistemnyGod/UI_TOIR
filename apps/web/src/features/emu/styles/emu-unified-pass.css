@@ -1748,3 +1748,6 @@
     white-space: normal;
   }
 }
+
+/* Compact employee workload panel */
+.emu-shell .emu-workload-panel{gap:8px}.emu-shell .emu-workload-panel>.emu-side-heading h3{font-size:14px}.emu-shell .emu-workload-panel>.emu-side-heading span{display:none}.emu-shell .emu-workload-panel>input{min-height:34px;border-radius:7px;font-size:12px}.emu-shell .emu-workload-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;padding:3px}.emu-shell .emu-workload-filters button{font-size:10px;min-height:26px;min-width:0;padding:3px 4px}.emu-shell .emu-workload-filters button span{font-size:10px;margin-left:2px}.emu-shell .emu-workload-list{gap:4px;max-height:280px}.emu-shell .emu-workload-list button{gap:1px;padding:7px 8px}.emu-shell .emu-workload-list button strong{font-size:12px}.emu-shell .emu-workload-list button span,.emu-shell .emu-workload-list button em{font-size:10px}

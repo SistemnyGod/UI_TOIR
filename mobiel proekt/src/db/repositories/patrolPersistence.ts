@@ -155,10 +155,11 @@ export async function upsertPointResultInTransaction(executor: SqlExecutor, inpu
       FROM point_results
       WHERE owner_user_id = ?
         AND assignment_id = ?
+        AND contour_id = ?
         AND point_id = ?
       LIMIT 1
     `,
-    [input.ownerUserId, input.assignmentId, input.pointId]
+    [input.ownerUserId, input.assignmentId, currentContourId, input.pointId]
   );
   const localResultId = existing?.localResultId ?? Crypto.randomUUID();
 
@@ -167,6 +168,7 @@ export async function upsertPointResultInTransaction(executor: SqlExecutor, inpu
       INSERT OR REPLACE INTO point_results (
         local_result_id,
         owner_user_id,
+        contour_id,
         assignment_id,
         point_id,
         status,
@@ -181,11 +183,12 @@ export async function upsertPointResultInTransaction(executor: SqlExecutor, inpu
         scanned_at_local,
         photo_client_file_ids_json
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       localResultId,
       input.ownerUserId,
+      currentContourId,
       input.assignmentId,
       input.pointId,
       input.status,

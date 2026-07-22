@@ -1,0 +1,257 @@
+/* Responsive product-design layer shared by every workspace module. */
+:root {
+  --ui-page-gutter: clamp(10px, 1.6vw, 24px);
+  --ui-page-gap: clamp(10px, 1.25vw, 18px);
+  --ui-readable-width: 1680px;
+}
+
+.screen-area {
+  padding-inline: var(--ui-page-gutter);
+}
+
+.screen-area > .page-transition {
+  margin-inline: auto;
+  max-width: var(--ui-readable-width);
+  min-width: 0;
+  width: 100%;
+}
+
+.screen-area :where(
+  .dashboard-am, .assign-am-screen, .results-review-screen, .employees-screen,
+  .routes-screen, .schedule-screen, .mobile-am-screen, .inventory-am-screen,
+  .inventory-web-workspace, .emu-shell, .perco-shell, .user-admin-screen,
+  .dashboard-am-panel, .assign-am-panel, .results-review-panel,
+  .inventory-am-panel, .emu-panel, .perco-card, .site-users-table-panel
+) {
+  min-width: 0;
+}
+
+.screen-area :where(
+  .dashboard-am-hero-actions, .results-review-actions, .assign-am-actions,
+  .inventory-am-actions, .emu-actions, .perco-hero-actions, .workspace-actions
+) {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.screen-area :where(
+  .dashboard-am-kpis, .results-review-kpis, .inventory-dashboard-kpis,
+  .emu-dashboard-kpis, .emu-work-kpis, .perco-dashboard-kpis, .metric-grid
+) {
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+}
+
+.screen-area :where(
+  .table-scroll, .table-wrap, .table-wrapper, .results-review-table-wrapper,
+  .inventory-table-wrapper, .emu-history-table, .perco-table-wrapper
+) {
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+}
+
+.screen-area :where(.modal-close, .emu-modal-close, .perco-modal .perco-icon-button, .site-user-modal .icon-button) {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 38px;
+  height: 38px;
+  justify-content: center;
+  line-height: 1;
+  min-height: 38px;
+  min-width: 38px;
+  padding: 0;
+  width: 38px;
+}
+
+:where(
+  .modal-backdrop, .assign-am-modal-backdrop, .results-review-modal-backdrop,
+  .inventory-settings-modal-backdrop, .inventory-operations-dialog-backdrop,
+  .inventory-employees-dialog-backdrop, .inventory-ppe-picker-backdrop,
+  .emu-modal-backdrop, .perco-modal-backdrop, .site-user-modal-backdrop
+) {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+:where(
+  .modal-window, .edit-modal, .assign-am-complete-modal, .assign-am-shift-modal,
+  .assign-am-request-modal, .assign-am-employee-picker, .results-review-modal,
+  .inventory-settings-modal, .inventory-operations-dialog,
+  .inventory-employees-dialog, .inventory-ppe-picker,
+  .inventory-ppe-document-modal, .emu-modal, .perco-modal, .site-user-modal,
+  .account-create-modal-card, .account-panel-card
+) {
+  max-height: calc(100dvh - 32px);
+  max-width: min(calc(100vw - 32px), 1180px);
+}
+
+@media (max-width: 1500px) {
+  .app-shell:not(.sidebar-collapsed) {
+    grid-template-columns: 236px minmax(0, 1fr);
+  }
+
+  .app-shell:not(.sidebar-collapsed) .sidebar {
+    padding-inline: 12px;
+  }
+
+  .screen-area {
+    padding-bottom: 30px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .screen-area :where(
+    .dashboard-am-top-grid, .dashboard-am-lists, .assign-am-workspace,
+    .assign-am-bottom, .two-column, .two-column.wide-left,
+    .results-review-layout, .inventory-dashboard-layout,
+    .inventory-ppe-workspace, .emu-work-layout, .emu-dashboard-main-grid,
+    .perco-grid, .perco-dashboard-main-grid, .user-admin-layout
+  ) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .screen-area :where(
+    .results-review-detail, .inventory-ppe-inspector,
+    .site-user-access-panel, .emu-history-detail
+  ) {
+    position: static;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell:not(.sidebar-collapsed) .sidebar,
+  .app-shell.sidebar-collapsed .sidebar {
+    border-bottom: 1px solid var(--ui-line, #dbe7f7);
+    border-right: 0;
+    height: auto;
+    max-width: 100vw;
+    padding: 10px 12px;
+    position: relative;
+  }
+
+  .sidebar .brand {
+    margin-bottom: 8px;
+    padding: 0 4px 8px;
+  }
+
+  .sidebar .brand-mark {
+    height: 34px;
+    width: 34px;
+  }
+
+  .app-shell .sidebar .nav-list {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 0 6px;
+    scrollbar-width: thin;
+  }
+
+  .app-shell .sidebar .module-nav {
+    flex: 0 0 min(220px, 74vw);
+  }
+
+  .app-shell .sidebar .sidebar-footer,
+  .app-shell .sidebar .sidebar-section-label {
+    display: none;
+  }
+
+  .app-shell .sidebar .sidebar-submenu {
+    margin: 4px 0 0;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  .topbar {
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    min-height: 58px;
+    padding-inline: 12px;
+  }
+
+  .topbar .user-copy,
+  .topbar-search kbd {
+    display: none;
+  }
+
+  .topbar .user-pill {
+    gap: 6px;
+    padding-inline: 6px;
+  }
+
+  .screen-area {
+    padding-block: 10px 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .sidebar .brand > div:last-child {
+    display: none;
+  }
+
+  .topbar-search,
+  .topbar-search input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .screen-area :where(
+    .dashboard-am-hero, .results-review-hero, .assign-am-hero,
+    .inventory-am-hero, .emu-page-heading, .perco-toolbar, .workspace-header
+  ) {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .screen-area :where(
+    .dashboard-am-hero-actions, .results-review-actions, .assign-am-actions,
+    .inventory-am-actions, .emu-actions, .perco-hero-actions, .workspace-actions
+  ) > :where(button, a) {
+    flex: 1 1 150px;
+  }
+
+  .screen-area :where(
+    .dashboard-am-kpis, .results-review-kpis, .inventory-dashboard-kpis,
+    .emu-dashboard-kpis, .emu-work-kpis, .perco-dashboard-kpis,
+    .metric-grid, .metric-grid.compact
+  ) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  :where(
+    .modal-backdrop, .assign-am-modal-backdrop, .results-review-modal-backdrop,
+    .inventory-settings-modal-backdrop, .inventory-operations-dialog-backdrop,
+    .inventory-employees-dialog-backdrop, .inventory-ppe-picker-backdrop,
+    .emu-modal-backdrop, .perco-modal-backdrop, .site-user-modal-backdrop
+  ) {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  :where(
+    .modal-window, .edit-modal, .assign-am-complete-modal,
+    .assign-am-shift-modal, .assign-am-request-modal, .assign-am-employee-picker,
+    .results-review-modal, .inventory-settings-modal,
+    .inventory-operations-dialog, .inventory-employees-dialog,
+    .inventory-ppe-picker, .inventory-ppe-document-modal, .emu-modal,
+    .perco-modal, .site-user-modal, .account-create-modal-card,
+    .account-panel-card
+  ) {
+    border-radius: 16px 16px 0 0;
+    max-height: 96dvh;
+    max-width: 100vw;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-area *,
+  .screen-area *::before,
+  .screen-area *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

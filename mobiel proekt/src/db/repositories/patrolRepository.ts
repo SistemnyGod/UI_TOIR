@@ -7,6 +7,7 @@ import { getDatabase } from "@/db/database";
 import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { insertOutboxCommandInTransaction } from "@/db/repositories/outboxSql";
+import { getPointForFillOwnedSql, listAssignmentPointsOwnedSql } from "@/db/repositories/patrolPointOwnershipQueries";
 import { parseStringArray, supersedePendingPointStatusCommands, updateLatestPendingMarkPhotoPayloadInTransaction, upsertPointResult, upsertPointResultInTransaction } from "@/db/repositories/patrolPersistence";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
@@ -256,6 +257,7 @@ export async function takeRequestLocally(requestId: string) {
         INSERT INTO patrol_assignments (
           assignment_id,
           owner_user_id,
+          contour_id,
           request_id,
           route_id,
           status,
@@ -264,9 +266,9 @@ export async function takeRequestLocally(requestId: string) {
           revision,
           route_version_no
         )
-        VALUES (?, ?, ?, ?, 'inProgress', ?, NULL, 0, 0)
+        VALUES (?, ?, ?, ?, ?, 'inProgress', ?, NULL, 0, 0)
       `,
-      [assignmentId, ownerUserId, request.requestId, request.routeId, takenAtLocal]
+      [assignmentId, ownerUserId, currentContourId, request.requestId, request.routeId, takenAtLocal]
     );
 
     await tx.runAsync(
@@ -522,7 +524,7 @@ export async function handoffAssignmentLocally(assignmentId: string) {
   return updateAssignmentLifecycleLocally(assignmentId, "handoffPatrolAssignment", "needsDispatcherDecision");
 }
 
-export async function listAssignmentPoints(assignmentId: string) {
+export async function listAssignmentPoints(assignmentId: string, ownerUserId: string, contourId: string) {
   const db = await getDatabase();
 
   const rows = await db.getAllAsync<{
@@ -540,31 +542,8 @@ export async function listAssignmentPoints(assignmentId: string) {
     confirmationType: PointListItem["confirmationType"];
     photoClientFileIdsJson: string | null;
   }>(
-    `
-      SELECT
-        point.point_id AS pointId,
-        point.route_id AS routeId,
-        point.name,
-        point.description,
-        point.instruction,
-        point.order_index AS orderIndex,
-        point.required AS required,
-        point.requires_photo AS requiresPhoto,
-        COALESCE(result.status, 'pending') AS status,
-        result.comment AS comment,
-        result.issue_type_id AS issueTypeId,
-        result.confirmation_type AS confirmationType,
-        result.photo_client_file_ids_json AS photoClientFileIdsJson
-      FROM patrol_assignments assignment
-      JOIN assignment_route_points point ON point.assignment_id = assignment.assignment_id
-      LEFT JOIN point_results result
-        ON result.owner_user_id = assignment.owner_user_id
-       AND result.assignment_id = assignment.assignment_id
-       AND result.point_id = point.point_id
-      WHERE assignment.assignment_id = ?
-      ORDER BY point.order_index ASC
-    `,
-    [assignmentId]
+    listAssignmentPointsOwnedSql,
+    [assignmentId, ownerUserId, contourId]
   );
 
   return rows.map((row) => ({
@@ -883,7 +862,7 @@ export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
   };
 }
 
-export async function getPointForFill(assignmentId: string, pointId: string) {
+export async function getPointForFill(assignmentId: string, pointId: string, ownerUserId: string, contourId: string) {
   const db = await getDatabase();
 
   const row = await db.getFirstAsync<{
@@ -907,38 +886,8 @@ export async function getPointForFill(assignmentId: string, pointId: string) {
     deferredReason: string | null;
     photoClientFileIdsJson: string | null;
   }>(
-    `
-      SELECT
-        assignment.assignment_id AS assignmentId,
-        point.point_id AS pointId,
-        point.route_id AS routeId,
-        point.name,
-        point.description,
-        point.instruction,
-        point.order_index AS orderIndex,
-        point.required AS required,
-        point.requires_photo AS requiresPhoto,
-        point.nfc_uid_hash AS nfcUidHash,
-        point.qr_code_hash AS qrCodeHash,
-        result.status AS status,
-        result.comment AS comment,
-        result.confirmation_type AS confirmationType,
-        result.scanned_at_local AS scannedAtLocal,
-        result.completed_at_local AS completedAtLocal,
-        result.issue_type_id AS issueTypeId,
-        result.deferred_reason AS deferredReason,
-        result.photo_client_file_ids_json AS photoClientFileIdsJson
-      FROM patrol_assignments assignment
-      JOIN assignment_route_points point ON point.assignment_id = assignment.assignment_id
-      LEFT JOIN point_results result
-        ON result.owner_user_id = assignment.owner_user_id
-       AND result.assignment_id = assignment.assignment_id
-       AND result.point_id = point.point_id
-      WHERE assignment.assignment_id = ?
-        AND point.point_id = ?
-      LIMIT 1
-    `,
-    [assignmentId, pointId]
+    getPointForFillOwnedSql,
+    [assignmentId, pointId, ownerUserId, contourId]
   );
 
   if (!row) {
@@ -991,7 +940,7 @@ export async function savePointIssue(assignmentId: string, pointId: string, comm
 export async function deferPoint(assignmentId: string, pointId: string, input: DeferPointInput = {}) {
   const ownerUserId = await requireOwnerUserId();
   await assertPointActionAllowed(assignmentId);
-  const point = await getPointForFill(assignmentId, pointId);
+  const point = await getPointForFill(assignmentId, pointId, ownerUserId, currentContourId);
   if (!point) {
     throw new Error("Метка не загружена на телефон.");
   }
@@ -1030,7 +979,7 @@ export async function deferPoint(assignmentId: string, pointId: string, input: D
 export async function skipPoint(assignmentId: string, pointId: string, input: Pick<DeferPointInput, "comment" | "photoClientFileIds"> = {}) {
   const ownerUserId = await requireOwnerUserId();
   await assertPointActionAllowed(assignmentId);
-  const point = await getPointForFill(assignmentId, pointId);
+  const point = await getPointForFill(assignmentId, pointId, ownerUserId, currentContourId);
   if (!point) {
     throw new Error("Метка не загружена на телефон.");
   }
@@ -1065,7 +1014,7 @@ export async function skipPoint(assignmentId: string, pointId: string, input: Pi
 export async function attachPhotoToPoint(assignmentId: string, pointId: string, file: LocalMobileFile) {
   const ownerUserId = await requireOwnerUserId();
   await assertPointActionAllowed(assignmentId);
-  const point = await getPointForFill(assignmentId, pointId);
+  const point = await getPointForFill(assignmentId, pointId, ownerUserId, currentContourId);
   if (!point) {
     throw new Error("Метка не загружена на телефон.");
   }
@@ -1106,8 +1055,9 @@ export async function attachPhotoToPoint(assignmentId: string, pointId: string, 
 
 export async function getReportReadiness(assignmentId: string): Promise<ReportReadiness> {
   const db = await getDatabase();
+  const ownerUserId = await requireOwnerUserId();
   const assignment = await getAssignmentById(assignmentId);
-  const points = await listAssignmentPoints(assignmentId);
+  const points = await listAssignmentPoints(assignmentId, ownerUserId, currentContourId);
   const problems: ReportProblem[] = [];
 
   if (assignment?.routeVersionNo) {
@@ -1323,7 +1273,8 @@ export async function completeAssignmentLocally(assignmentId: string) {
 }
 
 export async function getAssignmentProgress(assignmentId: string): Promise<AssignmentProgress> {
-  const points = await listAssignmentPoints(assignmentId);
+  const ownerUserId = await requireOwnerUserId();
+  const points = await listAssignmentPoints(assignmentId, ownerUserId, currentContourId);
 
   return {
     total: points.length,
@@ -1911,7 +1862,7 @@ async function savePointResult({
 }) {
   const ownerUserId = await requireOwnerUserId();
   await assertPointActionAllowed(assignmentId);
-  const point = await getPointForFill(assignmentId, pointId);
+  const point = await getPointForFill(assignmentId, pointId, ownerUserId, currentContourId);
   if (!point) {
     throw new Error("Метка не загружена на телефон.");
   }

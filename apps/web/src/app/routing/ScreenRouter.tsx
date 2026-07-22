@@ -323,6 +323,7 @@ export function ScreenRouter({
         {screen === "employees" ? (
           <EmployeesScreen
             canManage={hasPermission(currentUser, "employees.write")}
+            dataSourceMode={dataSourceMode}
             employees={employeeDirectory}
             employeeCreateIntent={employeeCreateIntent}
             selectedEmployeeId={selectedDirectoryEmployeeId}

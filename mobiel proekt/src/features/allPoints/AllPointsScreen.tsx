@@ -2,6 +2,8 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { ListRenderItem, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { currentContourId } from "@/core/environments";
 import { getActiveAssignment, getAssignmentById, listAssignmentPoints, PointListItem } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { Card } from "@/ui/Card";
@@ -26,11 +28,12 @@ export function AllPointsScreen() {
 
       async function load() {
         const active = routeAssignmentId ? null : await getActiveAssignment();
+        const ownerUserId = await getStoredOwnerUserId();
         const targetAssignmentId = routeAssignmentId ?? active?.assignmentId ?? null;
         const targetAssignment = targetAssignmentId && routeAssignmentId
           ? await getAssignmentById(targetAssignmentId)
           : active;
-        const rows = targetAssignmentId ? await listAssignmentPoints(targetAssignmentId) : [];
+        const rows = targetAssignmentId && ownerUserId ? await listAssignmentPoints(targetAssignmentId, ownerUserId, currentContourId) : [];
 
         if (isMounted) {
           setAssignmentId(targetAssignmentId);
