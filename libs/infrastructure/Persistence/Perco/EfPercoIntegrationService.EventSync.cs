@@ -215,16 +215,20 @@ internal sealed partial class EfPercoIntegrationService
             .FirstOrDefaultAsync(row => row.SyncType == EventsSyncType, cancellationToken);
 
         var started = 0;
-        if (employeesState?.LastSuccessAt is null || IsSyncDue(employeesState.LastSuccessAt.Value, now, settings.EmployeesSyncMinutes))
+        var employeesDue = employeesState?.LastSuccessAt is null || IsSyncDue(employeesState.LastSuccessAt.Value, now, settings.EmployeesSyncMinutes);
+        var employeesSucceeded = true;
+        if (employeesDue)
         {
             var result = await SyncEmployeesAsync(null, cancellationToken);
+            employeesSucceeded = result.Success;
             if (result.Success)
             {
                 started++;
             }
         }
 
-        if (eventsState?.LastSuccessAt is null || IsSyncDue(eventsState.LastSuccessAt.Value, now, settings.EventsSyncMinutes))
+        var eventsDue = eventsState?.LastSuccessAt is null || IsSyncDue(eventsState.LastSuccessAt.Value, now, settings.EventsSyncMinutes);
+        if (employeesSucceeded && eventsDue)
         {
             var result = await SyncEventsAsync(null, cancellationToken);
             if (result.Success)

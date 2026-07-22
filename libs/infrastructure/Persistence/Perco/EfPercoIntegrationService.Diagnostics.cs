@@ -213,8 +213,8 @@ internal sealed partial class EfPercoIntegrationService
         {
             return new PercoPresenceAnalysis(
                 "PERCo прислал подтвержденный выход, но длительность интервала больше допустимых 18 часов.",
-                "Проверить журнал проходов и подтвердить корректировку смены; сотрудник не считается сейчас на заводе.",
-                85);
+                "Интервал автоматически закрыт по подтвержденному выходу; оставить предупреждение для разбора аномальной длительности.",
+                95);
         }
 
         if (stateCode == "old_open")
@@ -273,6 +273,11 @@ internal sealed partial class EfPercoIntegrationService
         }
 
         var durationMinutes = Math.Max(0, (int)Math.Round((row.EndedAt.Value - row.StartedAt).TotalMinutes));
+        if (string.Equals(row.Source, "PERCO_REVIEW", StringComparison.OrdinalIgnoreCase))
+        {
+            return "outside_review";
+        }
+
         if (durationMinutes >= MaxReliablePresenceMinutes)
         {
             return "stale";
@@ -321,13 +326,13 @@ internal sealed partial class EfPercoIntegrationService
             ? Math.Max(0, (int)Math.Round((now - row.StartedAt).TotalMinutes))
             : Math.Max(0, (int)Math.Round((row.EndedAt.Value - row.StartedAt).TotalMinutes));
 
+        if (string.Equals(row.Source, "PERCO_REVIEW", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Вышел по подтвержденному событию PERCo, длительность требует разбора";
+        }
+
         if (durationMinutes >= MaxReliablePresenceMinutes)
         {
-            if (string.Equals(row.Source, "PERCO_REVIEW", StringComparison.OrdinalIgnoreCase))
-            {
-                return "Закрыто по найденному выходу PERCo, требует проверки";
-            }
-
             return "Длительный интервал, требует проверки";
         }
 

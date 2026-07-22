@@ -91,6 +91,19 @@ export function SiteUsersScreen({
     closeFormModal();
   }
 
+  async function updateUserRole(userId: string, role: SiteUser["role"]) {
+    const target = findSiteUser(siteUsers, userId);
+    if (!target) return;
+
+    await siteUsersWorkspace.updateUser(userId, {
+      fullName: target.fullName,
+      login: target.login,
+      permissionCodes: target.directPermissions ?? [],
+      role,
+      status: target.status,
+    });
+  }
+
   async function resetProfilePassword() {
     if (!profileUser) return;
     await siteUsersWorkspace.resetPassword(profileUser);
@@ -125,13 +138,14 @@ export function SiteUsersScreen({
                 action={<button className="button ghost" onClick={siteUsersWorkspace.refreshUsers} type="button">Повторить загрузку</button>}
               />
             ) : (
-              <RoleAccessPanel onNotify={onNotify} users={siteUsers} />
+              <RoleAccessPanel users={siteUsers} />
             )}
           </div>
 
           <SiteUserAccessPanel
             canManage={canManage}
             loadAccess={siteUsersWorkspace.loadUserAccess}
+            onChangeRole={updateUserRole}
             onNotify={onNotify}
             onOpenProfile={openProfileModal}
             onSavePermissions={siteUsersWorkspace.saveUserPermissions}

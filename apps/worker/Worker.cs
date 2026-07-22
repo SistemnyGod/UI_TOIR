@@ -49,11 +49,22 @@ public class Worker(ILogger<Worker> logger, IServiceProvider serviceProvider) : 
 
                 using (var scope = serviceProvider.CreateScope())
                 {
-                    var percoIntegration = scope.ServiceProvider.GetRequiredService<IPercoIntegrationService>();
-                    var startedCount = await percoIntegration.RunAutomaticSyncIfDueAsync(now, stoppingToken);
-                    if (startedCount > 0)
+                    try
                     {
-                        logger.LogInformation("PERCo automatic sync started {Count} operation(s).", startedCount);
+                        var percoIntegration = scope.ServiceProvider.GetRequiredService<IPercoIntegrationService>();
+                        var startedCount = await percoIntegration.RunAutomaticSyncIfDueAsync(now, stoppingToken);
+                        if (startedCount > 0)
+                        {
+                            logger.LogInformation("PERCo automatic sync started {Count} operation(s).", startedCount);
+                        }
+                    }
+                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception exception)
+                    {
+                        logger.LogError(exception, "PERCO automatic sync cycle failed; worker loop will continue.");
                     }
                 }
             }

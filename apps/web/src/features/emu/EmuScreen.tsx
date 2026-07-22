@@ -70,7 +70,11 @@ export function EmuScreen({
   }
 
   return (
-    <div className="emu-shell">
+    <div
+      className={`emu-shell ${
+        screen === "emu-dashboard" ? "emu-shell-dashboard" : ""
+      } ${screen === "emu-work-accounting" ? "emu-shell-work-accounting" : ""}`}
+    >
       {screen === "emu-dashboard" ? (
         <EmuDashboardScreen employeeDirectory={employeeDirectory} onNotify={onNotify} workspace={workspace} />
       ) : null}

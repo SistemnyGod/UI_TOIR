@@ -105,6 +105,31 @@ const permissionGroups: Array<{ module: string; description: string; items: Perm
   },
 ];
 
+type PermissionFilter = "all" | PermissionCategory;
+
+const permissionPresets = [
+  {
+    id: "read-only",
+    label: "Только просмотр",
+    description: "Просмотр доступных модулей без действий",
+    codes: permissionGroups.flatMap((group) => group.items.filter((item) => item.category === "Просмотр").map((item) => item.code)),
+  },
+  {
+    id: "patrol-operator",
+    label: "Оператор обходов",
+    description: "Обходы, сотрудники, результаты и назначения",
+    codes: permissionGroups.find((group) => group.module === "Обход")?.items.map((item) => item.code) ?? [],
+  },
+  {
+    id: "emu-creator",
+    label: "ЭМУ: создание",
+    description: "Просмотр ЭМУ и создание работ",
+    codes: permissionGroups.find((group) => group.module === "ЭМУ")?.items
+      .filter((item) => item.category === "Просмотр" || item.code === "emu.work.create")
+      .map((item) => item.code) ?? [],
+  },
+] as const;
+
 const accessTabs: Array<{ id: AccessTab; label: string }> = [
   { id: "permissions", label: "Права" },
   { id: "scopes", label: "Участки" },
@@ -114,13 +139,16 @@ const accessTabs: Array<{ id: AccessTab; label: string }> = [
 export function SiteUserAccessPanel({
   canManage,
   loadAccess,
+  onChangeRole,
   onOpenProfile,
+  onNotify,
   onSavePermissions,
   onSaveScopes,
   user,
 }: {
   canManage: boolean;
   loadAccess: (userId: string) => Promise<SiteUserAccessDto | null>;
+  onChangeRole?: (userId: string, role: SiteUser["role"]) => Promise<void> | void;
   onNotify: (message: string) => void;
   onOpenProfile?: (user: SiteUser) => void;
   onSavePermissions: (userId: string, permissionCodes: string[]) => Promise<unknown>;
@@ -130,10 +158,12 @@ export function SiteUserAccessPanel({
   const [access, setAccess] = useState<SiteUserAccessDto | null>(null);
   const [activeTab, setActiveTab] = useState<AccessTab>("permissions");
   const [permissionSearch, setPermissionSearch] = useState("");
+  const [permissionFilter, setPermissionFilter] = useState<PermissionFilter>("all");
   const [sections, setSections] = useState<EmuSectionOption[]>([]);
   const [sectionSearch, setSectionSearch] = useState("");
   const [directPermissions, setDirectPermissions] = useState<string[]>([]);
   const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([]);
+  const [roleDraft, setRoleDraft] = useState<SiteUser["role"]>(user?.role ?? "Оператор");
   const [baselineDirectPermissions, setBaselineDirectPermissions] = useState<string[]>([]);
   const [baselineSectionIds, setBaselineSectionIds] = useState<string[]>([]);
   const [sectionsStatus, setSectionsStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -141,6 +171,7 @@ export function SiteUserAccessPanel({
   const [loading, setLoading] = useState(false);
   const [savingPermissions, setSavingPermissions] = useState(false);
   const [savingScopes, setSavingScopes] = useState(false);
+  const [savingRole, setSavingRole] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -148,6 +179,7 @@ export function SiteUserAccessPanel({
     async function load() {
       if (!user) {
         setAccess(null);
+        setRoleDraft("Оператор");
         setDirectPermissions([]);
         setSelectedSectionIds([]);
         setBaselineDirectPermissions([]);
@@ -161,6 +193,7 @@ export function SiteUserAccessPanel({
         if (!isMounted) return;
 
         setAccess(result);
+        setRoleDraft(user.role);
         const nextDirectPermissions = result?.directPermissions ?? user.directPermissions ?? [];
         setDirectPermissions(nextDirectPermissions);
         setBaselineDirectPermissions(nextDirectPermissions);
@@ -178,6 +211,10 @@ export function SiteUserAccessPanel({
       isMounted = false;
     };
   }, [loadAccess, user]);
+
+  useEffect(() => {
+    if (user) setRoleDraft(user.role);
+  }, [user?.id, user?.role]);
 
   useEffect(() => {
     let isMounted = true;
@@ -224,19 +261,19 @@ export function SiteUserAccessPanel({
   }), [direct, effective]);
   const filteredPermissionGroups = useMemo(() => {
     const normalizedSearch = permissionSearch.trim().toLowerCase();
-    if (!normalizedSearch) return permissionGroups;
-
     return permissionGroups
       .map((group) => ({
         ...group,
         items: group.items.filter((item) =>
-          item.code.toLowerCase().includes(normalizedSearch)
-          || item.label.toLowerCase().includes(normalizedSearch)
-          || item.category.toLowerCase().includes(normalizedSearch)
-          || group.module.toLowerCase().includes(normalizedSearch)),
+          (permissionFilter === "all" || item.category === permissionFilter)
+          && (!normalizedSearch
+            || item.code.toLowerCase().includes(normalizedSearch)
+            || item.label.toLowerCase().includes(normalizedSearch)
+            || item.category.toLowerCase().includes(normalizedSearch)
+            || group.module.toLowerCase().includes(normalizedSearch))),
       }))
       .filter((group) => group.items.length > 0);
-  }, [permissionSearch]);
+  }, [permissionFilter, permissionSearch]);
 
   const hasEmuWorkAccess = effective.has("emu.work-accounting.view") || direct.has("emu.work-accounting.view");
   const hasFullEmuScope = user?.role === "Администратор" || user?.role === "Руководитель" || effective.has("emu.scope.all") || direct.has("emu.scope.all");
@@ -246,6 +283,7 @@ export function SiteUserAccessPanel({
     () => !sameStringSet(directPermissions, baselineDirectPermissions),
     [baselineDirectPermissions, directPermissions],
   );
+  const roleDirty = Boolean(user && roleDraft !== user.role);
   const scopesDirty = useMemo(
     () => !sameStringSet(selectedSectionIds, baselineSectionIds),
     [baselineSectionIds, selectedSectionIds],
@@ -268,6 +306,20 @@ export function SiteUserAccessPanel({
     setDirectPermissions((current) => current.includes(code) ? current.filter((item) => item !== code) : [...current, code]);
   }
 
+  function applyPermissionPreset(codes: readonly string[]) {
+    const next = Array.from(new Set([...directPermissions, ...codes]));
+    setDirectPermissions(next);
+  }
+
+  function clearModulePermissions(codes: string[]) {
+    const codeSet = new Set(codes);
+    setDirectPermissions((current) => current.filter((code) => !codeSet.has(code)));
+  }
+
+  function addModulePermissions(codes: string[]) {
+    setDirectPermissions((current) => Array.from(new Set([...current, ...codes])));
+  }
+
   function toggleSection(sectionId: string) {
     setSelectedSectionIds((current) => current.includes(sectionId) ? current.filter((item) => item !== sectionId) : [...current, sectionId]);
   }
@@ -283,6 +335,17 @@ export function SiteUserAccessPanel({
       setBaselineDirectPermissions(nextDirectPermissions);
     } finally {
       setSavingPermissions(false);
+    }
+  }
+
+  async function saveRole() {
+    if (!user || !onChangeRole || !roleDirty) return;
+
+    setSavingRole(true);
+    try {
+      await onChangeRole(user.id, roleDraft);
+    } finally {
+      setSavingRole(false);
     }
   }
 
@@ -320,6 +383,34 @@ export function SiteUserAccessPanel({
         </div>
       </div>
 
+      <div className="site-user-role-source">
+        <div>
+          <span>Базовая роль</span>
+          <select
+            aria-label="Базовая роль пользователя"
+            disabled={!canManage || savingRole || !onChangeRole}
+            onChange={(event) => setRoleDraft(event.target.value as SiteUser["role"])}
+            value={roleDraft}
+          >
+            {(["Оператор", "Оператор ЭМУ", "Руководитель", "Аудитор", "Администратор"] as SiteUser["role"][]).map((role) => <option key={role}>{role}</option>)}
+          </select>
+        </div>
+        {roleDirty ? (
+          <div className="site-user-role-source-actions">
+            <button className="button ghost small" disabled={savingRole} onClick={() => setRoleDraft(user.role)} type="button">
+              Отменить
+            </button>
+            <button className="button primary small" disabled={savingRole} onClick={saveRole} type="button">
+              {savingRole ? "Сохраняем..." : "Применить"}
+            </button>
+          </div>
+        ) : (
+          <button className="button ghost small" onClick={() => onOpenProfile?.(user)} type="button">
+            Профиль
+          </button>
+        )}
+      </div>
+
       <div className="site-user-access-tabs" role="tablist">
         {accessTabs.map((tab) => (
           <button
@@ -353,12 +444,50 @@ export function SiteUserAccessPanel({
               </button>
             </div>
           </div>
-          <input
-            className="site-user-scope-search"
-            onChange={(event) => setPermissionSearch(event.target.value)}
-            placeholder="Поиск права или модуля"
-            value={permissionSearch}
-          />
+          <div className="site-user-permission-presets">
+            <div className="site-user-permission-presets-head">
+              <div>
+                <strong>Быстрые наборы</strong>
+                <span>Добавляют персональные права поверх базовой роли.</span>
+              </div>
+              <small>Их можно изменить вручную ниже</small>
+            </div>
+            <div className="site-user-permission-preset-grid">
+              {permissionPresets.map((preset) => (
+                <button
+                  className="site-user-permission-preset"
+                  disabled={!canManage || loading || savingPermissions}
+                  key={preset.id}
+                  onClick={() => {
+                    applyPermissionPreset(preset.codes);
+                    onNotify(`Набор «${preset.label}» добавлен в персональные права`);
+                  }}
+                  type="button"
+                >
+                  <b>{preset.label}</b>
+                  <span>{preset.description}</span>
+                  <em>Добавить</em>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="site-user-permission-toolbar">
+            <input
+              aria-label="Поиск права или модуля"
+              className="site-user-scope-search"
+              onChange={(event) => setPermissionSearch(event.target.value)}
+              placeholder="Поиск права или модуля"
+              value={permissionSearch}
+            />
+            <select
+              aria-label="Фильтр по типу разрешения"
+              value={permissionFilter}
+              onChange={(event) => setPermissionFilter(event.target.value as PermissionFilter)}
+            >
+              <option value="all">Все типы</option>
+              {categoryOrder.map((category) => <option key={category} value={category}>{category}</option>)}
+            </select>
+          </div>
           <div className="site-user-module-summary">
             {moduleSummaries.map((item) => (
               <span key={item.module}>
@@ -370,19 +499,28 @@ export function SiteUserAccessPanel({
           </div>
           <div className="site-user-permissions-list">
             {filteredPermissionGroups.map((group) => (
-              <details className="site-user-permission-module" key={group.module} open={permissionSearch.trim().length > 0}>
+              <details className="site-user-permission-module" key={group.module} open={permissionSearch.trim().length > 0 || permissionFilter !== "all"}>
                 <summary>
                   <strong>{group.module}</strong>
                   <small>{group.description}</small>
                   <em>{group.items.filter((item) => effective.has(item.code)).length}/{group.items.length}</em>
                 </summary>
+                <div className="site-user-permission-module-actions">
+                  <span>{group.items.filter((item) => direct.has(item.code)).length} личных прав в модуле</span>
+                  <button disabled={!canManage || loading || savingPermissions} onClick={() => addModulePermissions(group.items.map((item) => item.code))} type="button">
+                    Выдать модуль
+                  </button>
+                  <button disabled={!canManage || loading || savingPermissions} onClick={() => clearModulePermissions(group.items.map((item) => item.code))} type="button">
+                    Очистить личные
+                  </button>
+                </div>
                 {categoryOrder.map((category) => {
                   const items = group.items.filter((item) => item.category === category);
                   if (items.length === 0) return null;
 
                   return (
                     <div className="site-user-permission-category" key={category}>
-                      <span>{category}</span>
+                      <span>{category}<em>{items.filter((item) => effective.has(item.code)).length}/{items.length}</em></span>
                       {items.map((permission) => (
                         <label className="site-user-permission-row" key={permission.code}>
                           <input

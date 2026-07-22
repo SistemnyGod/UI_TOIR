@@ -47,11 +47,15 @@ export function SiteUserFormPanel({
 }) {
   const [payload, setPayload] = useState<SiteUserFormPayload>(() => payloadFromUser(initialUser));
   const [passwordNotice, setPasswordNotice] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setPayload(payloadFromUser(initialUser));
     setPasswordNotice(false);
+    setShowPassword(false);
+    setShowConfirmPassword(false);
   }, [initialUser]);
 
   const isEdit = mode === "edit" && Boolean(initialUser);
@@ -59,6 +63,16 @@ export function SiteUserFormPanel({
   const confirmPassword = payload.confirmPassword?.trim() ?? "";
   const passwordIsValid = isEdit || (password.length >= 8 && password === confirmPassword);
   const isValid = payload.login.trim().length > 0 && payload.fullName.trim().length > 0 && passwordIsValid;
+  const passwordStatus = !isEdit && password.length > 0
+    ? password.length < 8
+      ? "Минимум 8 символов"
+      : confirmPassword.length === 0
+        ? "Введите подтверждение пароля"
+        : password === confirmPassword
+          ? "Пароль подтверждён"
+          : "Пароли не совпадают"
+    : "";
+  const passwordStatusTone = passwordStatus === "Пароль подтверждён" ? "is-valid" : passwordStatus === "Пароли не совпадают" ? "is-error" : "";
   const roleHint = useMemo(() => {
     if (payload.role === "Администратор") return "Полный доступ ко всем модулям. Используйте только для системных администраторов.";
     if (payload.role === "Оператор ЭМУ") return "Базовая роль для учета работ. Точные права и участки задаются в правой панели доступа.";
@@ -70,6 +84,8 @@ export function SiteUserFormPanel({
   function clearForm() {
     setPayload(payloadFromUser(initialUser));
     setPasswordNotice(false);
+    setShowPassword(false);
+    setShowConfirmPassword(false);
     onNotify(isEdit ? "Форма редактирования восстановлена" : "Форма пользователя очищена");
   }
 
@@ -127,10 +143,13 @@ export function SiteUserFormPanel({
       <div className="site-user-form-layout">
         <section className="site-user-form-section">
           <h4>Профиль</h4>
+          <p className="site-user-form-intro">Заполните обязательные поля, затем проверьте роль и статус перед сохранением.</p>
           <div className="site-user-form-grid">
             <label>
               Логин
               <input
+                autoComplete="username"
+                required
                 value={payload.login}
                 onChange={(event) => setPayload((current) => ({ ...current, login: event.target.value }))}
                 placeholder="login"
@@ -140,6 +159,7 @@ export function SiteUserFormPanel({
             <label>
               ФИО
               <input
+                required
                 value={payload.fullName}
                 onChange={(event) => setPayload((current) => ({ ...current, fullName: event.target.value }))}
                 placeholder="Фамилия Имя Отчество"
@@ -157,34 +177,57 @@ export function SiteUserFormPanel({
                 {SITE_USER_STATUSES.map((status) => <option key={status}>{status}</option>)}
               </select>
             </label>
-            <label className="span-2">
-              Комментарий администратора
-              <textarea placeholder="Например: закрепить за участком после создания, проверить права на ЭМУ" rows={3} />
-            </label>
             {!isEdit ? (
               <>
                 <label>
                   Временный пароль
-                  <input
-                    autoComplete="new-password"
-                    minLength={8}
-                    onChange={(event) => setPayload((current) => ({ ...current, initialPassword: event.target.value }))}
-                    placeholder="Минимум 8 символов"
-                    type="password"
-                    value={payload.initialPassword ?? ""}
-                  />
+                  <span className="site-user-secret-field">
+                    <input
+                      aria-describedby="site-user-password-hint"
+                      autoComplete="new-password"
+                      minLength={8}
+                      onChange={(event) => setPayload((current) => ({ ...current, initialPassword: event.target.value }))}
+                      placeholder="Минимум 8 символов"
+                      required
+                      type={showPassword ? "text" : "password"}
+                      value={payload.initialPassword ?? ""}
+                    />
+                    <button
+                      aria-label={showPassword ? "Скрыть временный пароль" : "Показать временный пароль"}
+                      className="site-user-secret-toggle"
+                      onClick={() => setShowPassword((current) => !current)}
+                      type="button"
+                    >
+                      {showPassword ? "Скрыть" : "Показать"}
+                    </button>
+                  </span>
                 </label>
                 <label>
                   Подтвердите пароль
-                  <input
-                    autoComplete="new-password"
-                    minLength={8}
-                    onChange={(event) => setPayload((current) => ({ ...current, confirmPassword: event.target.value }))}
-                    placeholder="Повторите пароль"
-                    type="password"
-                    value={payload.confirmPassword ?? ""}
-                  />
+                  <span className="site-user-secret-field">
+                    <input
+                      aria-describedby="site-user-password-hint"
+                      autoComplete="new-password"
+                      minLength={8}
+                      onChange={(event) => setPayload((current) => ({ ...current, confirmPassword: event.target.value }))}
+                      placeholder="Повторите пароль"
+                      required
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={payload.confirmPassword ?? ""}
+                    />
+                    <button
+                      aria-label={showConfirmPassword ? "Скрыть подтверждение пароля" : "Показать подтверждение пароля"}
+                      className="site-user-secret-toggle"
+                      onClick={() => setShowConfirmPassword((current) => !current)}
+                      type="button"
+                    >
+                      {showConfirmPassword ? "Скрыть" : "Показать"}
+                    </button>
+                  </span>
                 </label>
+                <p className={`site-user-password-hint span-2 ${passwordStatusTone}`} id="site-user-password-hint">
+                  {passwordStatus || "Минимум 8 символов. Пароль не хранится в открытом виде."}
+                </p>
               </>
             ) : null}
           </div>

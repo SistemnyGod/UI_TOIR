@@ -1115,6 +1115,367 @@
   }
 }
 
+/* User access workspace: compact vertical directory with a wider permissions editor. */
+.screen-area .user-admin-layout {
+  align-items: start;
+  gap: 16px;
+  grid-template-columns: minmax(270px, 310px) minmax(0, 1fr);
+}
+
+.screen-area .users-main-column {
+  min-width: 0;
+}
+
+.screen-area .site-users-table-panel .panel-head {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.screen-area .site-users-table-panel .panel-head .panel-actions,
+.screen-area .site-users-table-panel .panel-head .panel-actions .button {
+  width: 100%;
+}
+
+.screen-area .site-users-toolbar {
+  grid-template-columns: 1fr;
+}
+
+.screen-area .site-users-list {
+  max-height: min(560px, calc(100vh - 390px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.screen-area .site-user-row {
+  align-items: stretch;
+  gap: 8px;
+  grid-template-columns: 1fr;
+  min-height: 82px;
+}
+
+.screen-area .site-user-row-actions,
+.screen-area .site-user-row-actions .button {
+  width: 100%;
+}
+
+.screen-area .site-user-row-actions {
+  justify-content: stretch;
+}
+
+.screen-area .site-users-table-footer {
+  display: grid;
+  gap: 8px;
+  justify-content: stretch;
+}
+
+.screen-area .site-users-pagination-actions {
+  justify-content: space-between;
+  margin-left: 0;
+}
+
+.screen-area .site-user-roles-panel {
+  margin-top: 0;
+}
+
+.screen-area .site-user-roles-panel .role-card-grid {
+  grid-template-columns: 1fr;
+}
+
+.screen-area .site-user-roles-panel .role-card-grid article {
+  min-height: 0;
+}
+
+.screen-area .site-user-roles-hint {
+  margin: 10px 0 0;
+  color: #71839d;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.screen-area .site-user-access-panel {
+  max-height: calc(100vh - 112px);
+  min-width: 0;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.screen-area .site-user-access-tabs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.screen-area .site-user-role-source {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 9px 10px;
+  border: 1px solid #dce8f7;
+  border-radius: 10px;
+  background: #f7faff;
+}
+
+.screen-area .site-user-role-source > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.screen-area .site-user-role-source span {
+  color: #70829c;
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.screen-area .site-user-role-source strong {
+  color: #17345d;
+  font-size: 13px;
+}
+
+.screen-area .site-user-role-source select {
+  min-height: 30px;
+  max-width: 220px;
+  border: 1px solid #cddcf0;
+  border-radius: 7px;
+  background: #fff;
+  color: #17345d;
+  font-size: 12px;
+  font-weight: 850;
+  padding: 0 8px;
+}
+
+.screen-area .site-user-role-source-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.screen-area .site-user-permission-presets {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #dce8f7;
+  border-radius: 10px;
+  background: #f7faff;
+}
+
+.screen-area .site-user-permission-presets-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.screen-area .site-user-permission-presets-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.screen-area .site-user-permission-presets-head strong {
+  color: #1b3962;
+  font-size: 12px;
+}
+
+.screen-area .site-user-permission-presets-head span,
+.screen-area .site-user-permission-presets-head small {
+  color: #71839d;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.screen-area .site-user-permission-preset-grid {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.screen-area .site-user-permission-preset {
+  align-content: start;
+  display: grid;
+  gap: 4px;
+  min-height: 76px;
+  padding: 9px;
+  border: 1px solid #d5e3f5;
+  border-radius: 9px;
+  background: #fff;
+  color: #27476e;
+  text-align: left;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.screen-area .site-user-permission-preset:hover:not(:disabled),
+.screen-area .site-user-permission-preset:focus-visible {
+  border-color: #71a8f4;
+  box-shadow: 0 5px 14px rgba(25, 92, 180, 0.1);
+  outline: 0;
+  transform: translateY(-1px);
+}
+
+.screen-area .site-user-permission-preset b {
+  color: #163b6b;
+  font-size: 11px;
+}
+
+.screen-area .site-user-permission-preset span {
+  color: #7487a2;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.screen-area .site-user-permission-preset em {
+  color: #1769df;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.screen-area .site-user-permission-toolbar {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 160px;
+}
+
+.screen-area .site-user-permission-toolbar select {
+  min-height: 36px;
+  border: 1px solid #cddcf0;
+  border-radius: 8px;
+  background: #fff;
+  color: #27476e;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 9px;
+}
+
+.screen-area .site-user-permission-module {
+  background: #fff;
+}
+
+.screen-area .site-user-permission-module > summary {
+  align-items: center;
+  display: grid;
+  gap: 3px 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  list-style-position: outside;
+}
+
+.screen-area .site-user-permission-module > summary strong,
+.screen-area .site-user-permission-module > summary small {
+  grid-column: 1;
+}
+
+.screen-area .site-user-permission-module > summary em {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  white-space: nowrap;
+}
+
+.screen-area .site-user-permission-module-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  padding: 3px 0 2px;
+}
+
+.screen-area .site-user-permission-module-actions span {
+  color: #71839d;
+  font-size: 10px;
+  font-weight: 750;
+  margin-right: auto;
+}
+
+.screen-area .site-user-permission-module-actions button {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid #c9dcf5;
+  border-radius: 7px;
+  background: #f3f8ff;
+  color: #1769df;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.screen-area .site-user-permission-module-actions button:hover:not(:disabled),
+.screen-area .site-user-permission-module-actions button:focus-visible {
+  border-color: #6ba3f4;
+  background: #e7f1ff;
+  outline: 0;
+}
+
+.screen-area .site-user-permission-category > span {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.screen-area .site-user-permission-category > span em {
+  color: #8b9bb0;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: none;
+}
+
+.screen-area .site-user-permission-row {
+  border: 1px solid transparent;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.screen-area .site-user-permission-row:hover {
+  border-color: #d8e6f7;
+  background: #f7faff;
+}
+
+.screen-area .site-user-permission-row input {
+  accent-color: #1769df;
+  height: 17px;
+  width: 17px;
+}
+
+@media (max-width: 760px) {
+  .screen-area .user-admin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .screen-area .site-users-list {
+    max-height: none;
+  }
+
+  .screen-area .site-user-access-panel {
+    max-height: none;
+    position: static;
+  }
+
+  .screen-area .site-user-permission-preset-grid,
+  .screen-area .site-user-permission-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .screen-area .site-user-permission-presets-head,
+  .screen-area .site-user-role-source {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .screen-area .site-user-role-source select {
+    max-width: none;
+    width: 100%;
+  }
+
+  .screen-area .site-user-permission-module-actions {
+    justify-content: stretch;
+  }
+
+  .screen-area .site-user-permission-module-actions button {
+    flex: 1 1 140px;
+  }
+}
+
 @media (max-width: 420px) {
   .account-create-eyebrow,
   .account-create-action-hint {
@@ -28763,4 +29124,424 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
   .results-found-remarks { padding: 12px; }
   .results-found-remarks-head { align-items: stretch; flex-direction: column; }
   .results-found-remarks-actions { justify-content: space-between; }
+}
+
+/* Users directory refinement: keep rows readable and aligned with the actual two-column markup. */
+.screen-area .site-users-list {
+  display: grid;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  overflow: visible;
+}
+
+.screen-area .site-user-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 1px solid #dbe7f7;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.96);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.screen-area .site-user-row:hover {
+  border-color: #a9c8f4;
+  box-shadow: 0 8px 18px rgba(30, 84, 160, 0.08);
+  transform: translateY(-1px);
+}
+
+.screen-area .site-user-row:focus-visible {
+  outline: 3px solid rgba(31, 107, 255, 0.22);
+  outline-offset: 2px;
+}
+
+.screen-area .site-user-row-meta-line {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.screen-area .site-user-role-badge,
+.screen-area .site-user-status-badge,
+.screen-area .site-user-access-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.screen-area .site-user-role-badge {
+  background: #f1f6fd;
+  color: #47617f;
+}
+
+.screen-area .site-user-status-badge.is-active {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.screen-area .site-user-status-badge.is-blocked {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.screen-area .site-user-access-count {
+  background: #edf5ff;
+  color: #1769ff;
+}
+
+.screen-area .site-user-row-actions {
+  align-self: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.screen-area .site-user-row-actions .button {
+  min-height: 32px;
+  padding: 0 11px;
+}
+
+.screen-area .site-users-table-footer {
+  align-items: center;
+  border-top: 1px solid #e2ebf8;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.screen-area .site-users-page-size,
+.screen-area .site-users-pagination-actions {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+}
+
+.screen-area .site-users-page-size {
+  color: var(--ui-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.screen-area .site-users-page-size select {
+  min-height: 32px;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ui-text);
+  font-weight: 800;
+  padding: 0 7px;
+}
+
+.screen-area .site-users-pagination-actions {
+  margin-left: auto;
+}
+
+.screen-area .site-users-pagination-actions strong {
+  color: var(--ui-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .screen-area .site-user-row {
+    grid-template-columns: 1fr;
+  }
+
+  .screen-area .site-user-row-actions {
+    justify-content: stretch;
+  }
+
+  .screen-area .site-user-row-actions .button {
+    width: 100%;
+  }
+
+  .screen-area .site-users-pagination-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .screen-area .site-users-pagination-actions .button {
+    flex: 1 1 0;
+  }
+}
+
+/* User form refinement: calmer hierarchy, clearer required states, and safer password entry. */
+.screen-area .site-user-modal .panel-head {
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.screen-area .site-user-modal .panel-head h2 {
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.screen-area .site-user-modal .panel-head p {
+  max-width: 650px;
+  line-height: 1.45;
+}
+
+.screen-area .site-user-form-section,
+.screen-area .site-user-form-aside {
+  align-content: start;
+  background: linear-gradient(180deg, #fbfdff 0%, #f6f9fe 100%);
+  box-shadow: 0 5px 16px rgba(37, 88, 158, 0.04);
+}
+
+.screen-area .site-user-form-section > h4,
+.screen-area .site-user-form-aside > h4 {
+  margin-bottom: -3px;
+}
+
+.screen-area .site-user-form-intro {
+  margin: 0;
+  color: #71829b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.screen-area .site-user-form-grid label {
+  color: #4f6684;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.screen-area .site-user-form-grid input,
+.screen-area .site-user-form-grid select,
+.screen-area .site-user-form-grid textarea {
+  min-height: 40px;
+  border: 1px solid #cddcf0;
+  border-radius: 9px;
+  background: #fff;
+  color: #183154;
+  font-size: 13px;
+  line-height: 1.3;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.screen-area .site-user-form-grid input,
+.screen-area .site-user-form-grid select {
+  padding: 0 11px;
+}
+
+.screen-area .site-user-form-grid textarea {
+  padding: 10px 11px;
+}
+
+.screen-area .site-user-form-grid input::placeholder,
+.screen-area .site-user-form-grid textarea::placeholder {
+  color: #9aacbf;
+}
+
+.screen-area .site-user-form-grid input:focus,
+.screen-area .site-user-form-grid select:focus,
+.screen-area .site-user-form-grid textarea:focus {
+  border-color: #4c92f7;
+  box-shadow: 0 0 0 3px rgba(31, 107, 255, 0.13);
+  outline: 0;
+}
+
+.screen-area .site-user-form-grid input:disabled {
+  background: #f1f5fa;
+  color: #71829b;
+  cursor: not-allowed;
+}
+
+.screen-area .site-user-secret-field {
+  display: block;
+  position: relative;
+}
+
+.screen-area .site-user-secret-field input {
+  padding-right: 76px;
+  width: 100%;
+}
+
+.screen-area .site-user-secret-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  min-height: 28px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  background: #edf4ff;
+  color: #1769df;
+  font-size: 10px;
+  font-weight: 850;
+  transform: translateY(-50%);
+}
+
+.screen-area .site-user-secret-toggle:hover,
+.screen-area .site-user-secret-toggle:focus-visible {
+  background: #dceaff;
+  color: #0c53bd;
+  outline: 0;
+}
+
+.screen-area .site-user-password-hint {
+  margin: -3px 0 0;
+  color: #7789a2;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.screen-area .site-user-password-hint.is-error {
+  color: #c2410c;
+}
+
+.screen-area .site-user-password-hint.is-valid {
+  color: #087f5b;
+}
+
+.screen-area .site-user-form-summary span {
+  min-height: 58px;
+  justify-content: center;
+  border: 1px solid #dce7f5;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.screen-area .site-user-password-callout {
+  border-color: #cfe0f7;
+  background: #f4f8ff;
+}
+
+.screen-area .site-user-password-callout em {
+  border-radius: 7px;
+  background: #e7f7ef;
+  color: #087f5b;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  padding: 7px 9px;
+}
+
+.screen-area .site-user-modal-actions {
+  align-items: center;
+  gap: 8px;
+}
+
+.screen-area .site-user-modal-actions .button.primary {
+  min-width: 176px;
+}
+
+@media (max-width: 760px) {
+  .screen-area .site-user-modal .panel-head {
+    gap: 10px;
+  }
+
+  .screen-area .site-user-modal .panel-actions {
+    flex: 0 0 auto;
+  }
+
+  .screen-area .site-user-modal-actions {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .screen-area .site-user-modal-actions .button {
+    flex: 1 1 calc(50% - 8px);
+  }
+
+  .screen-area .site-user-modal-actions .button.primary {
+    flex-basis: 100%;
+    min-width: 0;
+    order: -1;
+  }
+}
+
+/* Final user access priority: these rules intentionally sit after the legacy users styles. */
+.screen-area .user-admin-layout {
+  grid-template-columns: minmax(270px, 310px) minmax(0, 1fr);
+}
+
+.screen-area .site-users-table-panel .panel-head {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.screen-area .site-users-table-panel .panel-head .panel-actions,
+.screen-area .site-users-table-panel .panel-head .panel-actions .button {
+  width: 100%;
+}
+
+.screen-area .site-users-toolbar {
+  grid-template-columns: 1fr;
+}
+
+.screen-area .site-users-list {
+  max-height: min(560px, calc(100vh - 390px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.screen-area .site-user-row {
+  align-items: stretch;
+  gap: 8px;
+  grid-template-columns: 1fr;
+  min-height: 82px;
+}
+
+.screen-area .site-user-row-actions,
+.screen-area .site-user-row-actions .button {
+  width: 100%;
+}
+
+.screen-area .site-user-row-actions {
+  justify-content: stretch;
+}
+
+.screen-area .site-users-table-footer {
+  display: grid;
+  gap: 8px;
+  justify-content: stretch;
+}
+
+.screen-area .site-users-pagination-actions {
+  justify-content: space-between;
+  margin-left: 0;
+}
+
+.screen-area .site-user-access-panel {
+  max-height: calc(100vh - 112px);
+  min-width: 0;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.screen-area .site-user-access-tabs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 760px) {
+  .screen-area .user-admin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .screen-area .site-users-list,
+  .screen-area .site-user-access-panel {
+    max-height: none;
+  }
+
+  .screen-area .site-user-access-panel {
+    position: static;
+  }
 }

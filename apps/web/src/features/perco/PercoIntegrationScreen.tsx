@@ -103,8 +103,10 @@ const percoTabs: Array<{ id: PercoTab; label: string }> = [
 const repository = createPercoRepository();
 
 const percoTabOrder = percoTabs.map((tab) => tab.id);
-const defaultListPageSize = 20;
-const diagnosticsListPageSize = 12;
+const pageSizeOptions = [10, 25, 50, 100] as const;
+type PercoPageSize = (typeof pageSizeOptions)[number];
+const defaultListPageSize: PercoPageSize = 10;
+const diagnosticsListPageSize: PercoPageSize = 10;
 
 function getPercoTabLabel(tab: PercoTab) {
   const labels: Record<PercoTab, string> = {
@@ -134,6 +136,7 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
   const [matchSearch, setMatchSearch] = useState("");
   const [selectedMatch, setSelectedMatch] = useState<Record<string, string | null>>({});
   const [syncResult, setSyncResult] = useState<PercoSyncResultDto | null>(null);
+  const [syncSequence, setSyncSequence] = useState<{ employees: PercoSyncResultDto; events: PercoSyncResultDto | null } | null>(null);
   const [unmatchedEmployees, setUnmatchedEmployees] = useState<PercoUnmatchedEmployeeDto[]>([]);
   const [closeInterval, setCloseInterval] = useState<PercoPresenceIntervalDiagnosticsDto | null>(null);
   const [closeForm, setCloseForm] = useState<ClosePercoPresenceIntervalDto>(() => ({
@@ -145,7 +148,7 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
 
   const matchEmployeeOptions = useMemo(() => {
     const query = normalizeSearch(matchSearch);
-    return employeeDirectory
+    const filtered = employeeDirectory
       .filter((employee) => {
         if (!query) return true;
         return normalizeSearch(
@@ -153,7 +156,14 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
         ).includes(query);
       })
       .slice(0, 80);
-  }, [employeeDirectory, matchSearch]);
+    const suggestedIds = new Set(
+      unmatchedEmployees
+        .map((item) => item.suggestedEmployeeId)
+        .filter((employeeId): employeeId is string => Boolean(employeeId)),
+    );
+    const suggested = employeeDirectory.filter((employee) => suggestedIds.has(employee.id));
+    return Array.from(new Map([...filtered, ...suggested].map((employee) => [employee.id, employee])).values());
+  }, [employeeDirectory, matchSearch, unmatchedEmployees]);
 
   const load = useCallback(async () => {
     if (!canView) return;
@@ -295,11 +305,45 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
 
     setStatus("loading");
     setErrorMessage(null);
+    setSyncSequence(null);
     try {
       const result = kind === "employees" ? await repository.syncEmployees() : await repository.syncEvents();
       setSyncResult(result);
       setStatus("ready");
       onNotify(result.message);
+      await Promise.all([refreshDiagnostics(), refreshLogs(), refreshUnmatched()]);
+    } catch (error) {
+      setStatus("error");
+      setErrorMessage(getErrorMessage(error));
+    }
+  }
+
+  async function runFullSync() {
+    if (!canSync) {
+      onNotify("Недостаточно прав для синхронизации PERCo-Web.");
+      return;
+    }
+
+    setStatus("loading");
+    setErrorMessage(null);
+    setSyncSequence(null);
+    try {
+      const employees = await repository.syncEmployees();
+      setSyncResult(employees);
+      if (!employees.success) {
+        setSyncSequence({ employees, events: null });
+        setStatus("error");
+        onNotify("Цикл остановлен: сотрудники не синхронизированы.");
+        await Promise.all([refreshDiagnostics(), refreshLogs(), refreshUnmatched()]);
+        return;
+      }
+
+      setSyncSequence({ employees, events: null });
+      const events = await repository.syncEvents();
+      setSyncResult(events);
+      setSyncSequence({ employees, events });
+      setStatus(events.success ? "ready" : "error");
+      onNotify(events.success ? "Полный цикл PERCo-Web завершён." : "Сотрудники синхронизированы, но проходы требуют проверки.");
       await Promise.all([refreshDiagnostics(), refreshLogs(), refreshUnmatched()]);
     } catch (error) {
       setStatus("error");
@@ -529,7 +573,16 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
       ) : null}
 
       {activeTab === "sync" ? (
-        <SyncTab canSync={canSync} result={syncResult} status={status} onRunSync={runSync} />
+        <SyncTab
+          canSync={canSync}
+          logs={logs}
+          result={syncResult}
+          sequence={syncSequence}
+          settings={settings}
+          status={status}
+          onRunFullSync={runFullSync}
+          onRunSync={runSync}
+        />
       ) : null}
 
       {activeTab === "matching" ? (
@@ -601,6 +654,8 @@ function ConnectionTab({
   onTest: () => void;
   onUpdate: <K extends keyof SettingsForm>(key: K, value: SettingsForm[K]) => void;
 }) {
+  const [visibleSecret, setVisibleSecret] = useState<"password" | "token" | null>(null);
+
   return (
     <section className="perco-grid">
       <form
@@ -613,7 +668,11 @@ function ConnectionTab({
         <header className="perco-form-heading">
           <div>
             <h2>Подключение</h2>
-            <span>Пароль и токен не выводятся при чтении настроек. Пустое поле не сбрасывает сохраненный секрет.</span>
+            <span>Секреты не возвращаются в интерфейс. Введите новое значение для замены, а пустое поле оставит текущее.</span>
+            <div className="perco-secret-policy" role="note">
+              <b>Секреты защищены</b>
+              <span>Хранятся зашифрованно и доступны только API/worker.</span>
+            </div>
           </div>
           <label className="perco-switch">
             <input
@@ -650,7 +709,12 @@ function ConnectionTab({
           <Field label="Режим авторизации">
             <select
               disabled={!canManage || isBusyStatus(status)}
-              onChange={(event) => onUpdate("authMode", event.target.value as SettingsForm["authMode"])}
+              onChange={(event) => {
+                const nextMode = event.target.value as SettingsForm["authMode"];
+                onUpdate("authMode", nextMode);
+                onUpdate(nextMode === "Token" ? "password" : "token", "");
+                setVisibleSecret(null);
+              }}
               value={form.authMode}
             >
               <option value="LoginPassword">Логин и пароль</option>
@@ -658,31 +722,33 @@ function ConnectionTab({
             </select>
           </Field>
           {form.authMode === "Token" ? (
-            <Field label={`Токен${settings?.hasToken ? " сохранен" : ""}`}>
-              <input
-                autoComplete="off"
-                disabled={!canManage || isBusyStatus(status)}
-                onChange={(event) => onUpdate("token", event.target.value)}
-                placeholder={settings?.hasToken ? "Оставьте пустым, чтобы не менять" : "Вставьте Bearer token"}
-                type="password"
-                value={form.token}
-              />
-            </Field>
+            <SecretField
+              disabled={!canManage || isBusyStatus(status)}
+              hasSaved={settings?.hasToken ?? false}
+              id="perco-token-secret"
+              label="Bearer token"
+              onChange={(value) => onUpdate("token", value)}
+              onToggleVisibility={() => setVisibleSecret((current) => current === "token" ? null : "token")}
+              placeholder={settings?.hasToken ? "Введите новый token для замены" : "Вставьте Bearer token"}
+              showValue={visibleSecret === "token"}
+              value={form.token}
+            />
           ) : (
             <>
               <Field label="Логин">
                 <input disabled={!canManage || isBusyStatus(status)} onChange={(event) => onUpdate("username", event.target.value)} value={form.username} />
               </Field>
-              <Field label={`Пароль${settings?.hasPassword ? " сохранен" : ""}`}>
-                <input
-                  autoComplete="off"
-                  disabled={!canManage || isBusyStatus(status)}
-                  onChange={(event) => onUpdate("password", event.target.value)}
-                  placeholder={settings?.hasPassword ? "Оставьте пустым, чтобы не менять" : "Введите пароль"}
-                  type="password"
-                  value={form.password}
-                />
-              </Field>
+              <SecretField
+                disabled={!canManage || isBusyStatus(status)}
+                hasSaved={settings?.hasPassword ?? false}
+                id="perco-password-secret"
+                label="Пароль PERCo"
+                onChange={(value) => onUpdate("password", value)}
+                onToggleVisibility={() => setVisibleSecret((current) => current === "password" ? null : "password")}
+                placeholder={settings?.hasPassword ? "Введите новый пароль для замены" : "Введите пароль"}
+                showValue={visibleSecret === "password"}
+                value={form.password}
+              />
             </>
           )}
         </div>
@@ -747,13 +813,21 @@ function ConnectionTab({
 
 function SyncTab({
   canSync,
+  logs,
   result,
+  sequence,
+  settings,
   status,
+  onRunFullSync,
   onRunSync,
 }: {
   canSync: boolean;
+  logs: PercoIntegrationLogDto[];
   result: PercoSyncResultDto | null;
+  sequence: { employees: PercoSyncResultDto; events: PercoSyncResultDto | null } | null;
+  settings: PercoIntegrationSettingsDto | null;
   status: LoadStatus;
+  onRunFullSync: () => void;
   onRunSync: (kind: "employees" | "events") => void;
 }) {
   return (
@@ -773,9 +847,16 @@ function SyncTab({
             {isBusyStatus(status) ? "Выполняется…" : "Синхронизировать проходы"}
           </button>
         </div>
-        {result ? <SyncSummary result={result} /> : <EmptyBlock title="Синхронизация еще не запускалась" text="Результат появится после ручного запуска или работы worker." />}
+        <div className="perco-full-sync-action">
+          <button className="perco-button perco-button-secondary" disabled={!canSync || isBusyStatus(status)} onClick={onRunFullSync} type="button">
+            {isBusyStatus(status) ? "Выполняется полный цикл…" : "Запустить полный цикл"}
+          </button>
+          <span>Сначала сотрудники, затем проходы. При ошибке первого шага второй не запускается.</span>
+        </div>
+        {sequence ? <SyncSequenceSummary sequence={sequence} /> : result ? <SyncSummary result={result} /> : <EmptyBlock title="Синхронизация еще не запускалась" text="Результат появится после автоматического worker-цикла или ручного запуска." />}
       </div>
       <div className="perco-card">
+        <AutoSyncStatus logs={logs} settings={settings} />
         <h2>Порядок обработки</h2>
         <div className="perco-endpoint-list">
           <article>
@@ -801,6 +882,68 @@ function SyncTab({
     </section>
   );
 }
+
+function AutoSyncStatus({ settings, logs }: { settings: PercoIntegrationSettingsDto | null; logs: PercoIntegrationLogDto[] }) {
+  const latestSyncLog = logs.find((log) =>
+    (log.operation === "SYNC_EMPLOYEES" || log.operation === "SYNC_EVENTS") && log.createdByUserId === null,
+  );
+  const isEnabled = settings?.isEnabled ?? false;
+  const workerStatus = settings?.secretStatus.workerStatus || "не проверен";
+
+  return (
+    <div className="perco-auto-sync-card">
+      <header>
+        <div>
+          <h2>Автоматический цикл</h2>
+          <span>Worker проверяет расписание каждую минуту.</span>
+        </div>
+        <span className={`perco-auto-sync-state ${isEnabled ? "is-active" : "is-paused"}`}>
+          {isEnabled ? "Включён" : "Пауза"}
+        </span>
+      </header>
+      <div className="perco-auto-sync-flow">
+        <article>
+          <strong>1. Сотрудники</strong>
+          <span>каждые {settings?.employeesSyncMinutes ?? "—"} мин</span>
+        </article>
+        <article>
+          <strong>2. Проходы</strong>
+          <span>каждые {settings?.eventsSyncMinutes ?? "—"} мин</span>
+        </article>
+      </div>
+      <p>
+        {isEnabled
+          ? "Цикл запускается автоматически после сохранения настроек и не создаёт дубли при повторной проверке."
+          : "Включите интеграцию на вкладке «Подключение», чтобы worker начал автоматическую синхронизацию."}
+      </p>
+      <small>Секрет worker: {workerStatus}{settings?.secretStatus.workerCheckedAt ? ` · ${formatDateTime(settings.secretStatus.workerCheckedAt)}` : ""}</small>
+      {latestSyncLog ? <small>Последняя запись: {formatOperation(latestSyncLog.operation)} · {formatDateTime(latestSyncLog.startedAt)}</small> : null}
+    </div>
+  );
+}
+
+function SyncSequenceSummary({ sequence }: { sequence: { employees: PercoSyncResultDto; events: PercoSyncResultDto | null } }) {
+  const completed = sequence.events;
+  const success = completed ? completed.success : sequence.employees.success;
+  return (
+    <div className={`perco-sync-sequence ${success ? "success" : "error"}`}>
+      <strong>{completed ? (completed.success ? "Полный цикл завершён" : "Цикл завершён с ошибкой") : "Цикл остановлен после ошибки сотрудников"}</strong>
+      <div>
+        <article>
+          <b>1. Сотрудники</b>
+          <span>{sequence.employees.success ? "Готово" : "Ошибка"}</span>
+          <small>{sequence.employees.message}</small>
+        </article>
+        <article className={completed ? "" : "pending"}>
+          <b>2. Проходы</b>
+          <span>{completed ? (completed.success ? "Готово" : "Ошибка") : "Не запускались"}</span>
+          <small>{completed ? completed.message : "Шаг пропущен, чтобы не обработать проходы без актуального справочника сотрудников."}</small>
+        </article>
+      </div>
+    </div>
+  );
+}
+
 function MatchingTab({
   canMatch,
   employeeOptions,
@@ -824,7 +967,6 @@ function MatchingTab({
 }) {
   const [ignoreCandidate, setIgnoreCandidate] = useState<PercoUnmatchedEmployeeDto | null>(null);
   const [percoQuery, setPercoQuery] = useState("");
-  const [visibleCount, setVisibleCount] = useState(defaultListPageSize);
   const normalizedPercoQuery = useMemo(() => normalizeSearch(percoQuery), [percoQuery]);
   const filteredUnmatchedEmployees = useMemo(
     () =>
@@ -834,10 +976,8 @@ function MatchingTab({
       ),
     [normalizedPercoQuery, unmatchedEmployees],
   );
-
-  useEffect(() => {
-    setVisibleCount(defaultListPageSize);
-  }, [percoQuery, unmatchedEmployees.length]);
+  const suggestedCount = filteredUnmatchedEmployees.filter((item) => item.suggestedEmployeeId).length;
+  const pagination = usePercoPagination(filteredUnmatchedEmployees, defaultListPageSize);
 
   return (
     <section className="perco-card">
@@ -862,21 +1002,27 @@ function MatchingTab({
           type="search"
           value={search}
         />
-        <span>PERCO: {filteredUnmatchedEmployees.length} · кандидатов: {employeeOptions.length}</span>
+        <span>PERCO: {filteredUnmatchedEmployees.length} · готовых рекомендаций: {suggestedCount} · кандидатов: {employeeOptions.length}</span>
       </div>
       {filteredUnmatchedEmployees.length === 0 ? (
         <EmptyBlock title="Несопоставленных сотрудников нет" text="Новые записи появятся после синхронизации сотрудников PERCo." />
       ) : (
         <>
           <div className="perco-table">
-            {filteredUnmatchedEmployees.slice(0, visibleCount).map((item) => (
+            {pagination.pageItems.map((item) => (
               <article key={item.percoEmployeeId}>
               <div>
                 <strong>{item.fullName || "Без ФИО"}</strong>
                 <span>
                   Табельный: {item.personnelNo || "-"} · карта: {item.cardNumber || "-"} · {item.department || "подразделение не указано"}
                 </span>
-                {item.suggestedEmployeeName ? <small>Предложение: {item.suggestedEmployeeName}</small> : null}
+                {item.suggestedEmployeeName ? (
+                  <small className="perco-match-suggestion">
+                    Рекомендация: <b>{item.suggestedEmployeeName}</b> · {getMatchSuggestionReason(item, employeeOptions)} · подставлено автоматически, проверьте перед подтверждением.
+                  </small>
+                ) : (
+                  <small className="perco-match-empty-hint">Совпадение не найдено автоматически. Используйте поиск кандидатов проекта.</small>
+                )}
               </div>
               <div className="perco-match-actions">
                 <select
@@ -885,6 +1031,9 @@ function MatchingTab({
                   value={selectedMatch[item.percoEmployeeId] ?? ""}
                 >
                   <option value="">Выберите сотрудника</option>
+                  {item.suggestedEmployeeId && !employeeOptions.some((employee) => employee.id === item.suggestedEmployeeId) ? (
+                    <option value={item.suggestedEmployeeId}>{item.suggestedEmployeeName} · рекомендация</option>
+                  ) : null}
                   {employeeOptions.map((employee) => (
                     <option key={employee.id} value={employee.id}>
                       {employee.fullName} · {employee.personnelNo || "без таб."}
@@ -892,7 +1041,7 @@ function MatchingTab({
                   ))}
                 </select>
                 <button className="perco-button perco-button-primary" disabled={!canMatch || isBusyStatus(status)} onClick={() => onSubmit(item.percoEmployeeId, "match")} type="button">
-                  {status === "saving" ? "Сохраняем…" : "Связать"}
+                  {status === "saving" ? "Сохраняем…" : item.suggestedEmployeeId && selectedMatch[item.percoEmployeeId] === item.suggestedEmployeeId ? "Подтвердить предложение" : "Связать"}
                 </button>
                 <button className="perco-button perco-button-secondary" disabled={!canMatch || isBusyStatus(status)} onClick={() => setIgnoreCandidate(item)} type="button">
                   Игнорировать
@@ -901,12 +1050,13 @@ function MatchingTab({
               </article>
             ))}
           </div>
-          <ListExpansionControls
-            pageSize={defaultListPageSize}
-            shown={visibleCount}
+          <ListPagination
+            page={pagination.page}
+            pageCount={pagination.pageCount}
+            pageSize={pagination.pageSize}
             total={filteredUnmatchedEmployees.length}
-            onCollapse={() => setVisibleCount(defaultListPageSize)}
-            onShowMore={() => setVisibleCount((current) => current + defaultListPageSize)}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
           />
         </>
       )}
@@ -1171,10 +1321,6 @@ function DiagnosticsTab({
 }) {
   const [presenceQuery, setPresenceQuery] = useState("");
   const [presenceState, setPresenceState] = useState<PresenceFilter>("all");
-  const [visibleActiveCount, setVisibleActiveCount] = useState(diagnosticsListPageSize);
-  const [visibleCompletedCount, setVisibleCompletedCount] = useState(diagnosticsListPageSize);
-  const [visibleProblemCount, setVisibleProblemCount] = useState(diagnosticsListPageSize);
-  const [visibleEventCount, setVisibleEventCount] = useState(defaultListPageSize);
   const analytics = useMemo(() => buildPresenceAnalytics(diagnostics), [diagnostics]);
   const normalizedPresenceQuery = useMemo(() => normalizeSearch(presenceQuery), [presenceQuery]);
   const filteredEmployees = useMemo(
@@ -1234,13 +1380,10 @@ function DiagnosticsTab({
   const hourlyFlow = useMemo(() => buildHourlyFlow(diagnostics?.recentEvents ?? []), [diagnostics?.recentEvents]);
   const durationBuckets = useMemo(() => buildDurationBuckets(diagnostics?.presenceIntervals ?? []), [diagnostics?.presenceIntervals]);
   const dataQuality = useMemo(() => buildPercoQuality(diagnostics, analytics), [analytics, diagnostics]);
-
-  useEffect(() => {
-    setVisibleActiveCount(diagnosticsListPageSize);
-    setVisibleCompletedCount(diagnosticsListPageSize);
-    setVisibleProblemCount(diagnosticsListPageSize);
-    setVisibleEventCount(defaultListPageSize);
-  }, [presenceQuery, presenceState]);
+  const activePagination = usePercoPagination(activeShiftEmployees, diagnosticsListPageSize);
+  const completedPagination = usePercoPagination(completedShiftEmployees, diagnosticsListPageSize);
+  const problemPagination = usePercoPagination(filteredProblemIntervals, diagnosticsListPageSize);
+  const eventPagination = usePercoPagination(filteredRecentEvents, defaultListPageSize);
 
   if (!diagnostics) {
     return <EmptyBlock title="Диагностика еще не загружена" text="Нажмите обновить или проверьте подключение PERCo-Web." />;
@@ -1290,13 +1433,6 @@ function DiagnosticsTab({
             <option value="unmatched">Без сотрудника</option>
           </select>
         </label>
-        <div className="perco-presence-rollup">
-          <span><b>{analytics.insideCount}</b> на заводе</span>
-          <span><b>{analytics.outsideCount}</b> вышли</span>
-          <span><b>{analytics.staleCount}</b> спорные</span>
-          <span><b>{diagnostics.oldOpenPresenceCount ?? 0}</b> старые</span>
-          <span><b>{diagnostics.unmatchedEventsCount}</b> без сотрудника</span>
-        </div>
       </div>
 
       <div className="perco-live-analytics-grid">
@@ -1363,7 +1499,7 @@ function DiagnosticsTab({
               <EmptyBlock title="На заводе сейчас никого нет" text="Открытые входы появятся после синхронизации проходов PERCo." />
             ) : (
               <div className="perco-presence-list">
-                {activeShiftEmployees.slice(0, visibleActiveCount).map((employee) => (
+                {activePagination.pageItems.map((employee) => (
                   <article className="is-active-shift" key={`${employee.employeeId}-${employee.employeeName}`}>
                     <div className="perco-presence-person">
                       <span className="perco-presence-dot inside" />
@@ -1383,12 +1519,13 @@ function DiagnosticsTab({
                 ))}
               </div>
             )}
-            <ListExpansionControls
-              pageSize={diagnosticsListPageSize}
-              shown={visibleActiveCount}
+            <ListPagination
+              page={activePagination.page}
+              pageCount={activePagination.pageCount}
+              pageSize={activePagination.pageSize}
               total={activeShiftEmployees.length}
-              onCollapse={() => setVisibleActiveCount(diagnosticsListPageSize)}
-              onShowMore={() => setVisibleActiveCount((current) => current + diagnosticsListPageSize)}
+              onPageChange={activePagination.setPage}
+              onPageSizeChange={activePagination.setPageSize}
             />
           </section>
 
@@ -1404,7 +1541,7 @@ function DiagnosticsTab({
               <EmptyBlock title="Завершенных смен пока нет" text="Здесь появятся сотрудники, по которым PERCo уже прислал вход и выход." />
             ) : (
               <div className="perco-presence-list">
-                {completedShiftEmployees.slice(0, visibleCompletedCount).map((employee) => (
+                {completedPagination.pageItems.map((employee) => (
                   <article className="is-completed-shift" key={`${employee.employeeId}-${employee.employeeName}`}>
                     <div className="perco-presence-person">
                       <span className="perco-presence-dot outside" />
@@ -1413,6 +1550,9 @@ function DiagnosticsTab({
                         <small>
                           {employee.personnelNo || "без табельного"} · вход: {employee.firstIn ? formatDateTime(employee.firstIn) : "-"} · выход: {employee.lastOut ? formatDateTime(employee.lastOut) : "-"}
                         </small>
+                        {employee.intervals.some((interval) => interval.stateCode === "outside_review") ? (
+                          <small className="perco-auto-resolution-note">Выход подтверждён PERCO; аномальная длительность сохранена в аудите.</small>
+                        ) : null}
                       </div>
                     </div>
                     <div className="perco-presence-metrics">
@@ -1424,12 +1564,13 @@ function DiagnosticsTab({
                 ))}
               </div>
             )}
-            <ListExpansionControls
-              pageSize={diagnosticsListPageSize}
-              shown={visibleCompletedCount}
+            <ListPagination
+              page={completedPagination.page}
+              pageCount={completedPagination.pageCount}
+              pageSize={completedPagination.pageSize}
               total={completedShiftEmployees.length}
-              onCollapse={() => setVisibleCompletedCount(diagnosticsListPageSize)}
-              onShowMore={() => setVisibleCompletedCount((current) => current + diagnosticsListPageSize)}
+              onPageChange={completedPagination.setPage}
+              onPageSizeChange={completedPagination.setPageSize}
             />
           </section>
         </div>
@@ -1445,7 +1586,7 @@ function DiagnosticsTab({
             {filteredProblemIntervals.length === 0 ? (
               <EmptyBlock title="Спорных интервалов нет" text="Все найденные проходы имеют корректные входы и выходы." />
             ) : (
-              filteredProblemIntervals.slice(0, visibleProblemCount).map((interval) => (
+                problemPagination.pageItems.map((interval) => (
                 <article className={isOldOpenInterval(interval) ? "is-archive" : ""} key={interval.id}>
                   <div>
                     <strong>{interval.employeeName}</strong>
@@ -1479,12 +1620,13 @@ function DiagnosticsTab({
               ))
             )}
           </div>
-          <ListExpansionControls
-            pageSize={diagnosticsListPageSize}
-            shown={visibleProblemCount}
+          <ListPagination
+            page={problemPagination.page}
+            pageCount={problemPagination.pageCount}
+            pageSize={problemPagination.pageSize}
             total={filteredProblemIntervals.length}
-            onCollapse={() => setVisibleProblemCount(diagnosticsListPageSize)}
-            onShowMore={() => setVisibleProblemCount((current) => current + diagnosticsListPageSize)}
+            onPageChange={problemPagination.setPage}
+            onPageSizeChange={problemPagination.setPageSize}
           />
         </section>
       </div>
@@ -1496,7 +1638,7 @@ function DiagnosticsTab({
             {filteredRecentEvents.length === 0 ? (
               <EmptyBlock title="Проходов по фильтру нет" text="Измените фильтр или обновите диагностику проходов." />
             ) : (
-              filteredRecentEvents.slice(0, visibleEventCount).map((event) => (
+              eventPagination.pageItems.map((event) => (
                 <article key={event.id}>
                   <div>
                     <strong>{event.employeeName || "Сотрудник не сопоставлен"}</strong>
@@ -1515,12 +1657,13 @@ function DiagnosticsTab({
               ))
             )}
           </div>
-          <ListExpansionControls
-            pageSize={defaultListPageSize}
-            shown={visibleEventCount}
+          <ListPagination
+            page={eventPagination.page}
+            pageCount={eventPagination.pageCount}
+            pageSize={eventPagination.pageSize}
             total={filteredRecentEvents.length}
-            onCollapse={() => setVisibleEventCount(defaultListPageSize)}
-            onShowMore={() => setVisibleEventCount((current) => current + defaultListPageSize)}
+            onPageChange={eventPagination.setPage}
+            onPageSizeChange={eventPagination.setPageSize}
           />
         </section>
 
@@ -1547,20 +1690,16 @@ function DiagnosticsTab({
 }
 function LogsTab({ canView, logs, status, onRefresh }: { canView: boolean; logs: PercoIntegrationLogDto[]; status: LoadStatus; onRefresh: () => void }) {
   const [query, setQuery] = useState("");
-  const [visibleCount, setVisibleCount] = useState(defaultListPageSize);
   const normalizedQuery = useMemo(() => normalizeSearch(query), [query]);
   const filteredLogs = useMemo(
     () =>
       logs.filter((log) =>
         !normalizedQuery ||
-        normalizeSearch(`${formatOperation(log.operation)} ${log.message} ${log.details} ${log.status}`).includes(normalizedQuery),
+        normalizeSearch(`${formatOperation(log.operation)} ${formatLogStatus(log.status)} ${formatLogSource(log.createdByUserId)} ${log.message} ${formatLogDetails(log.details)}`).includes(normalizedQuery),
       ),
     [logs, normalizedQuery],
   );
-
-  useEffect(() => {
-    setVisibleCount(defaultListPageSize);
-  }, [logs.length, query]);
+  const pagination = usePercoPagination(filteredLogs, defaultListPageSize);
 
   if (!canView) {
     return <EmptyBlock title="Нет доступа к журналу" text="Для просмотра журнала требуется integrations.perco.logs.view." />;
@@ -1592,26 +1731,28 @@ function LogsTab({ canView, logs, status, onRefresh }: { canView: boolean; logs:
       ) : (
         <>
           <div className="perco-log-list">
-            {filteredLogs.slice(0, visibleCount).map((log) => (
+            {pagination.pageItems.map((log) => (
               <article key={log.id}>
-              <div>
-                <strong>{formatOperation(log.operation)}</strong>
-                <span>{log.message}</span>
-                {log.details ? <small>{log.details}</small> : null}
-              </div>
-              <aside>
-                <b className={normalizeStatusTone(log.status)}>{log.status}</b>
-                <time>{formatDateTime(log.startedAt)}</time>
-              </aside>
+                <div>
+                  <strong>{formatOperation(log.operation)}</strong>
+                  <small className="perco-log-meta">{formatLogSource(log.createdByUserId)} · код: {log.operation || "-"}</small>
+                  <span>{log.message || "Операция без сообщения"}</span>
+                  {log.details ? <small className="perco-log-details">{formatLogDetails(log.details)}</small> : null}
+                </div>
+                <aside>
+                  <b className={normalizeStatusTone(log.status)}>{formatLogStatus(log.status)}</b>
+                  <time>{formatDateTime(log.startedAt)}</time>
+                </aside>
               </article>
             ))}
           </div>
-          <ListExpansionControls
-            pageSize={defaultListPageSize}
-            shown={visibleCount}
+          <ListPagination
+            page={pagination.page}
+            pageCount={pagination.pageCount}
+            pageSize={pagination.pageSize}
             total={filteredLogs.length}
-            onCollapse={() => setVisibleCount(defaultListPageSize)}
-            onShowMore={() => setVisibleCount((current) => current + defaultListPageSize)}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
           />
         </>
       )}
@@ -1635,6 +1776,14 @@ function SettingsStatus({ settings }: { settings: PercoIntegrationSettingsDto | 
         <div>
           <dt>Авторизация</dt>
           <dd>{settings.authMode === "Token" ? "Token" : "Логин и пароль"}</dd>
+        </div>
+        <div>
+          <dt>Секрет конфигурации</dt>
+          <dd>
+            <span className={`perco-secret-state ${settings.authMode === "Token" ? (settings.hasToken ? "is-saved" : "is-empty") : (settings.hasPassword ? "is-saved" : "is-empty")}`}>
+              {settings.authMode === "Token" ? (settings.hasToken ? "Сохранён" : "Не задан") : (settings.hasPassword ? "Сохранён" : "Не задан")}
+            </span>
+          </dd>
         </div>
         <div>
           <dt>Секрет API</dt>
@@ -1908,19 +2057,24 @@ function ClosePresenceModal({
 }
 function PercoFlowChart({ points }: { points: PercoHourlyFlowPoint[] }) {
   const max = Math.max(1, ...points.flatMap((point) => [point.inCount, point.outCount]));
+  const hasData = points.some((point) => point.inCount > 0 || point.outCount > 0);
   return (
     <div className="perco-flow-chart" aria-label="График входов и выходов по часам">
-      <div className="perco-flow-bars">
-        {points.map((point) => (
-          <div className="perco-flow-hour" key={point.hour}>
-            <div className="perco-flow-stack">
-              <span className="in" style={{ height: `${Math.max(4, (point.inCount / max) * 100)}%` }} title={`Входов: ${point.inCount}`} />
-              <span className="out" style={{ height: `${Math.max(4, (point.outCount / max) * 100)}%` }} title={`Выходов: ${point.outCount}`} />
+      {hasData ? (
+        <div className="perco-flow-bars">
+          {points.map((point) => (
+            <div className="perco-flow-hour" key={point.hour}>
+              <div className="perco-flow-stack">
+                <span className="in" style={{ height: getChartBarHeight(point.inCount, max) }} title={`Входов: ${point.inCount}`} />
+                <span className="out" style={{ height: getChartBarHeight(point.outCount, max) }} title={`Выходов: ${point.outCount}`} />
+              </div>
+              <small>{point.hour}</small>
             </div>
-            <small>{point.hour}</small>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="perco-chart-empty">Нет проходов за выбранный период</div>
+      )}
       <div className="perco-chart-legend">
         <span><i className="in" /> Вход</span>
         <span><i className="out" /> Выход</span>
@@ -1932,22 +2086,23 @@ function PercoFlowChart({ points }: { points: PercoHourlyFlowPoint[] }) {
 function PresenceRatio({ inside, outside, stale }: { inside: number; outside: number; stale: number }) {
   const total = Math.max(inside + outside + stale, 1);
   const insidePercent = Math.round((inside / total) * 100);
+  const outsidePercent = Math.round((outside / total) * 100);
   const stalePercent = Math.round((stale / total) * 100);
   return (
     <div className="perco-presence-ratio">
       <div
         className="perco-presence-ring"
         style={{
-          background: `conic-gradient(#0b63f6 0 ${insidePercent}%, #f97316 ${insidePercent}% ${insidePercent + stalePercent}%, #dbeafe ${insidePercent + stalePercent}% 100%)`,
+          background: `conic-gradient(#0b63f6 0 ${insidePercent}%, #10b981 ${insidePercent}% ${insidePercent + outsidePercent}%, #f97316 ${insidePercent + outsidePercent}% ${insidePercent + outsidePercent + stalePercent}%, #e7eef8 ${insidePercent + outsidePercent + stalePercent}% 100%)`,
         }}
       >
         <span>{inside}</span>
-        <small>на заводе</small>
+        <small>на территории</small>
       </div>
       <dl>
-        <div><dt>На территории</dt><dd>{inside}</dd></div>
-        <div><dt>Вышли</dt><dd>{outside}</dd></div>
-        <div><dt>Спорные</dt><dd>{stale}</dd></div>
+        <div><dt><i aria-hidden={true} />На территории</dt><dd>{inside}</dd></div>
+        <div><dt><i aria-hidden={true} />Вышли</dt><dd>{outside}</dd></div>
+        <div><dt><i aria-hidden={true} />Спорные</dt><dd>{stale}</dd></div>
       </dl>
     </div>
   );
@@ -1955,17 +2110,27 @@ function PresenceRatio({ inside, outside, stale }: { inside: number; outside: nu
 
 function DurationBars({ buckets }: { buckets: PercoDurationBucket[] }) {
   const max = Math.max(1, ...buckets.map((bucket) => bucket.count));
+  const hasData = buckets.some((bucket) => bucket.count > 0);
+  if (!hasData) {
+    return <div className="perco-chart-empty">Нет завершённых интервалов</div>;
+  }
+
   return (
     <div className="perco-duration-bars">
       {buckets.map((bucket) => (
         <div key={bucket.label}>
           <span>{bucket.label}</span>
           <b>{bucket.count}</b>
-          <i style={{ width: `${Math.max(6, (bucket.count / max) * 100)}%` }} />
+          <i style={{ width: bucket.count > 0 ? getChartBarHeight(bucket.count, max) : "0%" }} />
         </div>
       ))}
     </div>
   );
+}
+
+function getChartBarHeight(value: number, max: number) {
+  if (value <= 0) return "0%";
+  return `${Math.max(1, (value / Math.max(1, max)) * 100)}%`;
 }
 
 function PresenceTimeline({ intervals }: { intervals: PercoPresenceIntervalDiagnosticsDto[] }) {
@@ -2014,41 +2179,133 @@ function Field({ children, label }: { children: ReactNode; label: string }) {
   );
 }
 
+function SecretField({
+  disabled,
+  hasSaved,
+  id,
+  label,
+  onChange,
+  onToggleVisibility,
+  placeholder,
+  showValue,
+  value,
+}: {
+  disabled: boolean;
+  hasSaved: boolean;
+  id: string;
+  label: string;
+  onChange: (value: string) => void;
+  onToggleVisibility: () => void;
+  placeholder: string;
+  showValue: boolean;
+  value: string;
+}) {
+  const helperId = `${id}-help`;
+  const hasDraft = value.trim().length > 0;
+
+  return (
+    <div className="perco-secret-field">
+      <div className="perco-secret-field-heading">
+        <label htmlFor={id}>{label}</label>
+        <span className={`perco-secret-state ${hasDraft ? "is-draft" : hasSaved ? "is-saved" : "is-empty"}`}>
+          {hasDraft ? "Новый секрет" : hasSaved ? "Сохранён" : "Не задан"}
+        </span>
+      </div>
+      <div className="perco-secret-input">
+        <input
+          aria-describedby={helperId}
+          autoComplete="new-password"
+          disabled={disabled}
+          id={id}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          type={showValue ? "text" : "password"}
+          value={value}
+        />
+        <button
+          aria-label={showValue ? `Скрыть ${label.toLowerCase()}` : `Показать ${label.toLowerCase()}`}
+          className="perco-secret-toggle"
+          disabled={disabled}
+          onClick={onToggleVisibility}
+          type="button"
+        >
+          {showValue ? "Скрыть" : "Показать"}
+        </button>
+      </div>
+      <small id={helperId}>
+        {hasDraft ? "Новое значение будет зашифровано после сохранения настроек." : hasSaved ? "Введите новое значение для замены. Пустое поле сохранит текущий секрет." : "Секрет ещё не сохранён. Введите значение перед проверкой подключения."}
+      </small>
+    </div>
+  );
+}
+
 function StatusPill({ status }: { status: string }) {
   const normalized = normalizeStatusTone(status);
   return <span className={`perco-status-pill ${normalized}`}>{formatStatus(status)}</span>;
 }
 
-function ListExpansionControls({
-  onCollapse,
-  onShowMore,
+function usePercoPagination<T>(items: T[], initialPageSize: PercoPageSize = defaultListPageSize) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PercoPageSize>(initialPageSize);
+  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const pageItems = useMemo(() => items.slice((safePage - 1) * pageSize, safePage * pageSize), [items, pageSize, safePage]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [items]);
+
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
+
+  function changePageSize(nextPageSize: PercoPageSize) {
+    setPageSize(nextPageSize);
+    setPage(1);
+  }
+
+  return {
+    page: safePage,
+    pageCount,
+    pageItems,
+    pageSize,
+    setPage,
+    setPageSize: changePageSize,
+  };
+}
+
+function ListPagination({
+  onPageChange,
+  onPageSizeChange,
+  page,
+  pageCount,
   pageSize,
-  shown,
   total,
 }: {
-  onCollapse: () => void;
-  onShowMore: () => void;
-  pageSize: number;
-  shown: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: PercoPageSize) => void;
+  page: number;
+  pageCount: number;
+  pageSize: PercoPageSize;
   total: number;
 }) {
-  if (total <= pageSize) return null;
+  if (total === 0) return null;
 
-  const visible = Math.min(shown, total);
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
   return (
     <div className="perco-list-expansion" aria-live="polite">
-      <span>Показано {visible} из {total}</span>
+      <span>Показано {start}-{end} из {total}</span>
+      <label>
+        <span>На странице</span>
+        <select aria-label="Количество записей на странице" onChange={(event) => onPageSizeChange(Number(event.target.value) as PercoPageSize)} value={pageSize}>
+          {pageSizeOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </label>
       <div>
-        {visible < total ? (
-          <button className="perco-button perco-button-secondary" onClick={onShowMore} type="button">
-            Показать ещё
-          </button>
-        ) : null}
-        {shown > pageSize ? (
-          <button className="perco-link-button" onClick={onCollapse} type="button">
-            Свернуть список
-          </button>
-        ) : null}
+        <button className="perco-button perco-button-secondary" disabled={page <= 1} onClick={() => onPageChange(page - 1)} type="button">Назад</button>
+        <span>Страница {page} из {pageCount}</span>
+        <button className="perco-button perco-button-secondary" disabled={page >= pageCount} onClick={() => onPageChange(page + 1)} type="button">Далее</button>
       </div>
     </div>
   );
@@ -2269,6 +2526,19 @@ function buildSuggestedMatches(items: ReadonlyArray<PercoUnmatchedEmployeeDto>) 
   return Object.fromEntries(items.map((item) => [item.percoEmployeeId, item.suggestedEmployeeId ?? null]));
 }
 
+function getMatchSuggestionReason(item: PercoUnmatchedEmployeeDto, employeeOptions: EmployeeDirectoryItem[]) {
+  const suggested = item.suggestedEmployeeId
+    ? employeeOptions.find((employee) => employee.id === item.suggestedEmployeeId)
+    : undefined;
+  if (suggested && item.personnelNo && suggested.personnelNo && normalizeSearch(item.personnelNo) === normalizeSearch(suggested.personnelNo)) {
+    return "точное совпадение по табельному номеру";
+  }
+  if (suggested && normalizeSearch(item.fullName) === normalizeSearch(suggested.fullName)) {
+    return "точное совпадение по ФИО";
+  }
+  return "рекомендация по данным PERCo";
+}
+
 function isStaleInterval(interval: PercoPresenceIntervalDiagnosticsDto) {
   if (interval.stateCode === "stale" || interval.needsReview) {
     return true;
@@ -2321,18 +2591,115 @@ function formatSecretStatus(status: PercoSecretStatusDto) {
 }
 
 function formatOperation(value: string) {
-  switch (value) {
-    case "syncEmployees":
+  const operation = value.trim();
+  const normalized = operation
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .replace(/[\s-]+/g, "_")
+    .toUpperCase();
+  switch (normalized) {
+    case "SYNC_EMPLOYEES":
       return "Синхронизация сотрудников";
-    case "syncEvents":
+    case "SYNC_EVENTS":
       return "Синхронизация проходов";
-    case "testConnection":
+    case "TEST_CONNECTION":
       return "Проверка подключения";
-    case "checkSecret":
+    case "CHECK_SECRET":
       return "Проверка секрета";
+    case "MATCH_EMPLOYEES":
+      return "Сопоставление сотрудников";
+    case "CLOSE_PRESENCE_INTERVAL":
+      return "Ручное закрытие интервала";
+    case "UPDATE_SETTINGS":
+      return "Обновление настроек";
     default:
-      return value;
+      return operation ? `Операция ${operation}` : "Операция без названия";
   }
+}
+
+function formatLogStatus(value: string) {
+  const normalized = value.trim().toUpperCase();
+  switch (normalized) {
+    case "SUCCESS":
+    case "OK":
+      return "Успешно";
+    case "ERROR":
+    case "FAILED":
+      return "Ошибка";
+    case "WARNING":
+    case "WARN":
+      return "Предупреждение";
+    case "RUNNING":
+    case "IN_PROGRESS":
+      return "Выполняется";
+    case "IDLE":
+      return "Не запускалось";
+    default:
+      return value.trim() || "Неизвестно";
+  }
+}
+
+function formatLogSource(createdByUserId: string | null) {
+  return createdByUserId ? "Вручную через API" : "Автоматически, worker";
+}
+
+function formatLogDetails(value: string) {
+  const details = value.trim();
+  if (!details) return "";
+  if (!details.includes("=")) return details;
+
+  return details
+    .split(";")
+    .map((part) => {
+      const separator = part.indexOf("=");
+      if (separator < 0) return part.trim();
+      const key = part.slice(0, separator).trim();
+      const rawValue = part.slice(separator + 1).trim();
+      return `${formatLogDetailKey(key)}: ${formatLogDetailValue(key, rawValue)}`;
+    })
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function formatLogDetailKey(key: string) {
+  const labels: Record<string, string> = {
+    action: "Действие",
+    active: "Активных",
+    backfilledEvents: "Дополнено событий",
+    comment: "Комментарий",
+    created: "Создано",
+    duplicates: "Дубликатов",
+    employee: "Сотрудник",
+    employeeId: "ID сотрудника проекта",
+    endedAt: "Окончание",
+    endpoint: "Адрес API",
+    loaded: "Загружено",
+    loadedRaw: "Получено сырых",
+    mode: "Режим",
+    percoEmployeeId: "ID сотрудника PERCo",
+    skippedInactive: "Неактивных пропущено",
+    skippedInvalidTimestamp: "Некорректное время пропущено",
+    skippedNotFactory: "Вне завода пропущено",
+    startedAt: "Начало",
+    unmatched: "Без сопоставления",
+    updated: "Обновлено",
+  };
+  return labels[key] ?? key;
+}
+
+function formatLogDetailValue(key: string, value: string) {
+  if (!value) return "-";
+  if (key === "mode") {
+    if (value === "accessReports") return "отчёты о проходах";
+    if (value === "cursor") return "курсорный режим";
+  }
+  if (key === "action") {
+    if (value.toLowerCase() === "ignore") return "игнорировать";
+    if (value.toLowerCase() === "link" || value.toLowerCase() === "match") return "сопоставить";
+  }
+  if (key === "startedAt" || key === "endedAt") {
+    return formatDateTime(value);
+  }
+  return value;
 }
 
 function formatDateTime(value: string | null | undefined) {

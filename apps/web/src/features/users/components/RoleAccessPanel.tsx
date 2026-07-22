@@ -2,7 +2,7 @@ import { Chip } from "../../../shared/ui";
 import { countUsersByRole, roleDescriptions } from "../../../repositories/siteUsersRepository";
 import type { SiteUser } from "../../../types";
 
-export function RoleAccessPanel({ users, onNotify }: { users: SiteUser[]; onNotify: (message: string) => void }) {
+export function RoleAccessPanel({ users }: { users: SiteUser[] }) {
   return (
     <section className="site-user-roles-panel role-access-panel">
       <details>
@@ -22,13 +22,7 @@ export function RoleAccessPanel({ users, onNotify }: { users: SiteUser[]; onNoti
             </article>
           ))}
         </div>
-        <button
-          className="button ghost"
-          onClick={() => onNotify("Настройка шаблонов ролей будет отдельным RBAC-экраном")}
-          type="button"
-        >
-          Настроить роли
-        </button>
+        <p className="site-user-roles-hint">Роль задаётся в панели доступа выбранного пользователя, а точные персональные права — ниже в редакторе разрешений.</p>
       </details>
     </section>
   );
