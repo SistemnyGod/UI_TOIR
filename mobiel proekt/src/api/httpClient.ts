@@ -1,4 +1,8 @@
-import { fetchWithTimeout, serverUnavailableMessage } from "@/api/networkTimeout";
+import {
+  classifyMobileNetworkError,
+  fetchWithTimeout,
+  MobileNetworkError
+} from "@/api/networkTimeout";
 import { shouldTryNextMobileServer } from "@/api/serverFailoverPolicy";
 import { loginResponseSchema } from "@/api/schemas";
 import { invalidateServerHealthCache, probeServerHealthCached } from "@/api/serverHealthApi";
@@ -14,7 +18,8 @@ import {
   setStoredOwnerUserId,
   setTokens
 } from "@/auth/tokenStorage";
-import { getMobileRuntimeConfig, getServerCandidateBaseUrls, setServerBaseUrl } from "@/core/serverSettings";
+import { hasUsableNetwork } from "@/core/network";
+import { getMobileRuntimeConfig, getServerCandidateBaseUrls } from "@/core/serverSettings";
 import type { ZodType } from "zod";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -97,7 +102,13 @@ async function sendMobileRequestWithFailover(
     try {
       const health = await probeServerHealthCached(apiBaseUrl);
       if (!health.ok) {
-        lastError = new Error(health.message ?? `Сервер не прошёл проверку контура: ${apiBaseUrl}`);
+        lastError = health.errorKind
+          ? new MobileNetworkError(
+            health.errorKind,
+            undefined,
+            health.message ?? `Сервер не прошёл проверку контура: ${apiBaseUrl}`
+          )
+          : new Error(health.message ?? `Сервер не прошёл проверку контура: ${apiBaseUrl}`);
         continue;
       }
 
@@ -107,7 +118,6 @@ async function sendMobileRequestWithFailover(
         continue;
       }
 
-      await setServerBaseUrl(apiBaseUrl).catch(() => undefined);
       return { apiBaseUrl, response };
     } catch (error) {
       invalidateServerHealthCache(apiBaseUrl);
@@ -120,10 +130,13 @@ async function sendMobileRequestWithFailover(
   }
 
   if (lastError instanceof Error) {
-    throw new Error(`${lastError.message} Проверенные адреса: ${apiBaseUrls.join(", ")}`);
+    throw await appendRequestFailureContext(lastError, `Проверенные адреса: ${apiBaseUrls.join(", ")}`);
   }
 
-  throw new Error(`${serverUnavailableMessage} Проверенные адреса: ${apiBaseUrls.join(", ")}`);
+  throw await appendRequestFailureContext(
+    new MobileNetworkError("network", lastError),
+    `Проверенные адреса: ${apiBaseUrls.join(", ")}`
+  );
 }
 
 function shouldTryNextServer(response: Response, path: string) {
@@ -150,8 +163,8 @@ async function sendMobileRequest(apiBaseUrl: string, path: string, options: Requ
       },
       body: options.body ? JSON.stringify(options.body) : undefined
     });
-  } catch {
-    throw new Error(`${serverUnavailableMessage} Адрес: ${apiBaseUrl}`);
+  } catch (error) {
+    throw await appendRequestFailureContext(error, `Адрес: ${apiBaseUrl}`);
   }
 }
 
@@ -181,7 +194,13 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
     try {
       const health = await probeServerHealthCached(candidateApiBaseUrl);
       if (!health.ok) {
-        lastError = new Error(health.message ?? `Сервер не прошёл проверку контура: ${candidateApiBaseUrl}`);
+        lastError = health.errorKind
+          ? new MobileNetworkError(
+            health.errorKind,
+            undefined,
+            health.message ?? `Сервер не прошёл проверку контура: ${candidateApiBaseUrl}`
+          )
+          : new Error(health.message ?? `Сервер не прошёл проверку контура: ${candidateApiBaseUrl}`);
         continue;
       }
 
@@ -203,7 +222,6 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
       }
 
       activeApiBaseUrl = candidateApiBaseUrl;
-      await setServerBaseUrl(candidateApiBaseUrl).catch(() => undefined);
       break;
     } catch (error) {
       invalidateServerHealthCache(candidateApiBaseUrl);
@@ -213,10 +231,13 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
 
   if (!response && !lastResponse) {
     if (lastError instanceof Error) {
-      throw new Error(`${lastError.message} Проверенные адреса: ${apiBaseUrls.join(", ")}`);
+      throw await appendRequestFailureContext(lastError, `Проверенные адреса: ${apiBaseUrls.join(", ")}`);
     }
 
-    throw new Error(`${serverUnavailableMessage} Проверенные адреса: ${apiBaseUrls.join(", ")}`);
+    throw await appendRequestFailureContext(
+    new MobileNetworkError("network", lastError),
+    `Проверенные адреса: ${apiBaseUrls.join(", ")}`
+  );
   }
 
   if (!response) {
@@ -290,6 +311,19 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
 export async function refreshStoredAccessToken() {
   const runtimeConfig = await getMobileRuntimeConfig();
   return refreshAccessToken(runtimeConfig.apiBaseUrl);
+}
+
+async function appendRequestFailureContext(error: unknown, context: string) {
+  if (!(error instanceof MobileNetworkError)) {
+    return error instanceof Error
+      ? new Error(`${error.message} ${context}`)
+      : classifyMobileNetworkError(error, { context });
+  }
+
+  const networkAvailable = error.kind === "network"
+    ? await hasUsableNetwork().catch(() => true)
+    : undefined;
+  return classifyMobileNetworkError(error, { networkAvailable, context });
 }
 
 async function readErrorMessage(response: Response) {

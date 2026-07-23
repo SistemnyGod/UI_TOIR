@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
-import { bytesToHex, decodeBase64Bytes } from "../src/sync/fileHash.ts";
+import { bytesToHex, decodeBase64Bytes, requiresClientFileHash } from "../src/sync/fileHash.ts";
 
 test("file SHA-256 input is the decoded raw bytes, not the Base64 text", () => {
   const base64 = "/9j/AA==";
@@ -23,4 +23,10 @@ test("native digest bytes are serialized as lowercase hexadecimal", () => {
 test("malformed Base64 is rejected before upload", () => {
   assert.throws(() => decodeBase64Bytes("abcde"), /Invalid Base64/);
   assert.throws(() => decodeBase64Bytes("not;base64"), /Invalid Base64/);
+});
+
+test("video hash is delegated to the streaming server upload", () => {
+  assert.equal(requiresClientFileHash({ mediaKind: "photo", contentType: "image/jpeg" }), true);
+  assert.equal(requiresClientFileHash({ mediaKind: "video", contentType: "video/mp4" }), false);
+  assert.equal(requiresClientFileHash({ mediaKind: null, contentType: "video/mp4" }), false);
 });

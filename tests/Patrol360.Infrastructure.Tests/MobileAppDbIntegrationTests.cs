@@ -836,7 +836,7 @@ public sealed class MobileAppDbIntegrationTests
     }
 
     [DbIntegrationFact]
-    public async Task AssignedPatrolRequestRemainsUnacceptedUntilMobileConfirmation()
+    public async Task AssignedPatrolRequestIsBootstrappedWithServerAssignmentIdUntilMobileStart()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
         using var provider = BuildProvider(database.ConnectionString);
@@ -860,13 +860,15 @@ public sealed class MobileAppDbIntegrationTests
         var bootstrap = UseMobileApp(provider, mobile => mobile.GetBootstrap(session.AccessToken));
         var boardItem = Assert.Single(bootstrap!.RequestBoard, item => item.RequestId == requestId);
         Assert.Equal("assigned", boardItem.Status);
-        Assert.DoesNotContain(bootstrap.Assignments, item => item.RequestId == requestId);
+        var bootstrappedAssignment = Assert.Single(bootstrap.Assignments, item => item.RequestId == requestId);
+        Assert.Equal(created.Assignment!.Id, bootstrappedAssignment.AssignmentId);
+        Assert.Equal("accepted", bootstrappedAssignment.Status);
 
         var accepted = UseMobileApp(provider, mobile => mobile.SaveOutbox(session.AccessToken, new MobileOutboxBatchDto([
             BuildLifecycleCommand(
                 "op-assigned-explicit-accept",
                 "acceptPatrolRequest",
-                Guid.NewGuid(),
+                bootstrappedAssignment.AssignmentId,
                 requestId,
                 new Dictionary<string, object?>
                 {

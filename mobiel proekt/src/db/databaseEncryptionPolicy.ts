@@ -33,3 +33,24 @@ export function haveMatchingTableCounts<TableName extends string>(
 ) {
   return tables.every((table) => expected[table] === actual[table]);
 }
+
+export type ExistingDatabaseResolution =
+  | "migrateLegacy"
+  | "useEncryptedAndDeleteLegacy"
+  | "useEncryptedAndKeepLegacy";
+
+export function resolveExistingDatabaseConflict({
+  encryptedHasApplicationSchema,
+  protectedTableCountsMatch
+}: {
+  encryptedHasApplicationSchema: boolean;
+  protectedTableCountsMatch: boolean;
+}): ExistingDatabaseResolution {
+  if (!encryptedHasApplicationSchema) {
+    return "migrateLegacy";
+  }
+
+  return protectedTableCountsMatch
+    ? "useEncryptedAndDeleteLegacy"
+    : "useEncryptedAndKeepLegacy";
+}

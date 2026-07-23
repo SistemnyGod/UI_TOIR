@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildLocalDashboardMetrics } from "../domain/dashboardMetrics";
-import { createMobileAccountDraft } from "../domain/mobileAccounts";
+import { createMobileAccountDraft, resolveMobileAccountSecurityTarget } from "../domain/mobileAccounts";
 import { moveRoutePoint } from "../domain/routes";
 import { createApiAssignmentsRepository } from "../repositories/assignmentsRepository";
 import { createApiPatrolRequestsRepository, resolveServiceRequests } from "../repositories/patrolRequestsRepository";
@@ -8,7 +8,7 @@ import { createApiResultsRepository } from "../repositories/resultsRepository";
 import { createPercoRepository } from "../repositories/percoRepository";
 import { isTerminalPatrolRequestStatus } from "../domain/patrolRequestStatus";
 import { buildOperationalPatrolDateRange } from "../domain/patrolQueryWindow";
-import { isAssignableRequest } from "../features/patrol/assignments/assignmentUtils";
+import { isAssignableRequest, resolveSelectedAssignmentEmployee } from "../features/patrol/assignments/assignmentUtils";
 import { getPrimaryActionPermission } from "../security/permissions";
 import { shouldCreateAssignmentAfterRequest } from "../screens/AssignmentScreen";
 import type { ServiceRequest } from "../types";
@@ -27,6 +27,12 @@ describe("domain workflows", () => {
     (status) => expect(isTerminalPatrolRequestStatus(status)).toBe(true),
   );
 
+  it("keeps the selected assignment employee when search hides that employee", () => {
+    const selected = { id: "employee-selected", name: "Иванов" } as never;
+    const searchMatch = { id: "employee-search-match", name: "Петров" } as never;
+
+    expect(resolveSelectedAssignmentEmployee([selected, searchMatch], [searchMatch], "employee-selected")).toBe(selected);
+  });
   it("does not offer cancelled or already linked requests for assignment", () => {
     expect(isAssignableRequest({ ...createRequest("request-cancelled"), status: "Отменено" as never })).toBe(false);
     expect(isAssignableRequest({ ...createRequest("request-linked"), assignmentId: "assignment-1" })).toBe(false);
@@ -68,6 +74,10 @@ describe("domain workflows", () => {
     expect(JSON.stringify(account)).not.toContain(temporaryPassword);
   });
 
+  it("refreshes mobile account security for the explicitly requested account", () => {
+    expect(resolveMobileAccountSecurityTarget("account-created", "account-previous")).toBe("account-created");
+    expect(resolveMobileAccountSecurityTarget(undefined, "account-selected")).toBe("account-selected");
+  });
   it("keeps API-created requests separate from local request storage", () => {
     const localRequests = [createRequest("local-1")];
     const apiRequests = [createRequest("api-1")];

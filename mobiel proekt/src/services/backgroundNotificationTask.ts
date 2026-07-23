@@ -3,6 +3,7 @@ import * as TaskManager from "expo-task-manager";
 
 import { initializeDatabase } from "@/db/database";
 import { refreshMobileData } from "@/services/mobileDataRefreshService";
+import { logMobileError } from "@/services/mobileErrorReporter";
 
 export const PATROL360_BACKGROUND_NOTIFICATION_TASK = "patrol360-background-notification";
 
@@ -11,6 +12,7 @@ if (!TaskManager.isTaskDefined(PATROL360_BACKGROUND_NOTIFICATION_TASK)) {
     PATROL360_BACKGROUND_NOTIFICATION_TASK,
     async ({ data, error }) => {
       if (error) {
+        await logMobileError("background.notification.payload.failed", error);
         return Notifications.BackgroundNotificationTaskResult.Failed;
       }
 
@@ -24,7 +26,8 @@ if (!TaskManager.isTaskDefined(PATROL360_BACKGROUND_NOTIFICATION_TASK)) {
         return updated
           ? Notifications.BackgroundNotificationTaskResult.NewData
           : Notifications.BackgroundNotificationTaskResult.NoData;
-      } catch {
+      } catch (error) {
+        await logMobileError("background.notification.failed", error);
         if (!isNotificationResponse(data)) {
           await showLocalNotification(payload).catch(() => undefined);
         }

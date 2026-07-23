@@ -54,8 +54,12 @@ export default function RootLayout() {
     }
 
     const unsubscribeNetworkSync = subscribeToNetworkSync();
-    void registerBackgroundSyncTask().catch(() => undefined);
-    void registerBackgroundNotificationTask().catch(() => undefined);
+    void registerBackgroundSyncTask().catch((error) => {
+      void logMobileError("background.sync.registration.failed", error);
+    });
+    void registerBackgroundNotificationTask().catch((error) => {
+      void logMobileError("background.notification.registration.failed", error);
+    });
     const unsubscribePushEvents = subscribeToMobilePushEvents({
       onNotification: () => {
         void syncMobileNotifications().catch(() => []);

@@ -457,8 +457,6 @@ internal sealed partial class EfMobileAppService
         return dbContext.Assignments
             .AsNoTracking()
             .Where(assignment => boundEmployeeIds.Contains(assignment.EmployeeId))
-            .Where(assignment => assignment.Status != AssignmentStatusValues.Assigned
-                && assignment.Status != AssignmentStatusValues.Waiting)
             .Where(assignment => assignment.Status != AssignmentStatusValues.Completed
                 && assignment.Status != AssignmentStatusValues.Cancelled)
             .Where(assignment => assignment.PatrolRequest != null

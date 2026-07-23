@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { buildNotificationText } from "./components/requests/requestModalUtils";
@@ -26,6 +26,7 @@ import {
   isAssignmentCurrent,
   isRequestCurrent,
   priorityText,
+  resolveSelectedAssignmentEmployee,
   shouldCreateAssignmentAfterRequest,
 } from "./assignments/assignmentUtils";
 import {
@@ -50,7 +51,6 @@ import {
 } from "./assignments/assignmentDateUtils";
 import {
   defaultAssignmentShiftSettings,
-  hasStoredAssignmentFavoriteEmployeeIds,
   loadAssignmentFavoriteEmployeeIds,
   loadAssignmentShiftSettings,
   normalizeShiftSettings,
@@ -59,6 +59,8 @@ import {
   subscribeAssignmentFavoriteEmployeeIds,
 } from "./assignments/assignmentStorage";
 import type { ShiftTimeSettings } from "./assignments/assignmentTypes";
+import { AssignmentSelectionBar } from "./assignments/AssignmentSelectionBar";
+import "./assignments/assignmentWorkspace.css";
 import { useAssignmentsWorkspace } from "../../hooks/useAssignmentsWorkspace";
 import {
   mapEmployeeToAssignable,
@@ -200,6 +202,7 @@ export function AssignmentScreen({
   const [shiftSettings, setShiftSettings] = useState<ShiftTimeSettings>(() => loadAssignmentShiftSettings());
   const [shiftSettingsOpen, setShiftSettingsOpen] = useState(false);
   const [serverSettingsApplied, setServerSettingsApplied] = useState(false);
+  const assignmentCreateInProgressRef = useRef(false);
 
   const employees = useMemo(
     () => {
@@ -239,7 +242,7 @@ export function AssignmentScreen({
   const visibleRoutes = routes;
   const assignableRequests = useMemo(() => requests.filter(isAssignableRequest), [requests]);
   const referencePanelStatus = assignments.referenceStatus === "idle" ? "loading" : assignments.referenceStatus;
-  const selectedEmployee = visibleEmployees.find((employee) => employee.id === selectedEmployeeId) ?? visibleEmployees[0];
+  const selectedEmployee = resolveSelectedAssignmentEmployee(employees, visibleEmployees, selectedEmployeeId);
   const selectedRoute = routes.find((route) => route.id === selectedRouteId) ?? visibleRoutes[0];
   const selectedRequest = assignableRequests.find((request) => request.id === selectedRequestId);
   const notificationText = useMemo(
@@ -322,10 +325,10 @@ export function AssignmentScreen({
   }, [onSelectEmployee, selectedEmployeeId, visibleEmployees]);
 
   useEffect(() => {
-    if (selectedEmployeeId && !visibleEmployees.some((employee) => employee.id === selectedEmployeeId)) {
-      onSelectEmployee(visibleEmployees[0]?.id ?? "");
+    if (selectedEmployeeId && !employees.some((employee) => employee.id === selectedEmployeeId)) {
+      onSelectEmployee(visibleEmployees[0]?.id ?? employees[0]?.id ?? "");
     }
-  }, [onSelectEmployee, selectedEmployeeId, visibleEmployees]);
+  }, [employees, onSelectEmployee, selectedEmployeeId, visibleEmployees]);
 
   useEffect(() => {
     if (!selectedRouteId && visibleRoutes[0]) {
@@ -398,7 +401,7 @@ export function AssignmentScreen({
   }
 
   async function handleAssign() {
-    if (isCreatingRequest || assignments.isCreating) {
+    if (assignmentCreateInProgressRef.current || isCreatingRequest || assignments.isCreating) {
       return;
     }
 
@@ -424,6 +427,7 @@ export function AssignmentScreen({
       return;
     }
 
+    assignmentCreateInProgressRef.current = true;
     setIsCreatingRequest(true);
     try {
       const request = selectedRequest ?? await onCreatePatrolRequest({
@@ -470,6 +474,7 @@ export function AssignmentScreen({
     } catch (error) {
       onNotify(error instanceof Error ? error.message : "Не удалось создать заявку на обход");
     } finally {
+      assignmentCreateInProgressRef.current = false;
       setIsCreatingRequest(false);
     }
   }
@@ -572,12 +577,25 @@ export function AssignmentScreen({
         <label className="assign-am-search">
           <input
             onChange={(event) => setSearch(event.currentTarget.value)}
+            aria-label="Поиск сотрудника для назначения обхода"
             placeholder="Поиск сотрудника по ФИО, должности или подразделению..."
             value={search}
           />
           <Search size={19} />
         </label>
       </section>
+
+      <AssignmentSelectionBar
+        canCreate={canManage && requestListStatus !== "error"}
+        employeeName={selectedEmployee?.name}
+        employeeRole={selectedEmployee?.role}
+        hasConflict={hasConflict}
+        isCreating={isCreatingRequest || assignments.isCreating}
+        onCreate={() => setRequestModalOpen(true)}
+        plannedDate={plannedDate}
+        plannedStart={plannedStart}
+        routeName={selectedRoute?.name}
+      />
 
       {requestListStatus === "error" ? (
         <div className="notice danger-soft">
@@ -1180,7 +1198,6 @@ function EmployeeHistoryPanel({
   );
   const recentRequests = employeeRequests.filter((request) => parseRequestScheduledAt(request) >= historyCutoff);
   const activeAssignments = employeeAssignments.filter(isAssignmentCurrent);
-  const assignmentRequestIds = new Set(activeAssignments.map((assignment) => assignment.patrolRequestId).filter(Boolean));
   const allAssignmentRequestIds = new Set(employeeAssignments.map((assignment) => assignment.patrolRequestId).filter(Boolean));
   const activeRequestItems = [
     ...activeAssignments.map((assignment) => {
@@ -1984,15 +2001,6 @@ function SummaryBlock({ children, label }: { children: ReactNode; label: string 
       <small>{label}</small>
       <div>{children}</div>
     </div>
-  );
-}
-
-function InputField({ label, onChange, type, value }: { label: string; onChange: (value: string) => void; type: string; value: string }) {
-  return (
-    <label className="assign-am-field">
-      <span>{label}</span>
-      <input onChange={(event) => onChange(event.currentTarget.value)} type={type} value={value} />
-    </label>
   );
 }
 

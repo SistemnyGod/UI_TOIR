@@ -6,7 +6,7 @@ import { mergeNotificationReadState } from "@/services/notificationReadState";
 
 export async function saveDevicePushToken(deviceId: string, pushToken: string) {
   const db = await getDatabase();
-  await db.runAsync("UPDATE devices SET push_token = ? WHERE device_id = ?", [pushToken, deviceId]);
+  await withSqliteBusyRetry(() => db.runAsync("UPDATE devices SET push_token = ? WHERE device_id = ?", [pushToken, deviceId]));
 }
 
 export async function saveNotifications(notifications: MobileNotificationDto[]) {
@@ -113,10 +113,10 @@ export async function markLocalNotificationRead(notificationId: string, readAt: 
   }
 
   const db = await getDatabase();
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     "UPDATE mobile_notifications SET read_at = ?, read_sync_pending = ? WHERE notification_id = ? AND owner_user_id = ?",
     [readAt, readSyncPending ? 1 : 0, notificationId, ownerUserId]
-  );
+  ));
 }
 
 export async function listPendingNotificationReads() {

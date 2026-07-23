@@ -6,6 +6,7 @@ interface EmployeeDirectoryPanelProps {
   allEmployeesCount?: number;
   canManage?: boolean;
   employees: EmployeeDirectoryItem[];
+  isSaving?: boolean;
   selectedEmployeeId?: string;
   onOpenAddFromAccounting?: () => void;
   onOpenCreate: () => void;
@@ -16,6 +17,7 @@ export function EmployeeDirectoryPanel({
   allEmployeesCount,
   employees,
   canManage = true,
+  isSaving = false,
   selectedEmployeeId,
   onOpenAddFromAccounting,
   onOpenCreate,
@@ -35,13 +37,10 @@ export function EmployeeDirectoryPanel({
     return employees.filter((employee) => {
       const matchesQuery =
         !normalizedQuery ||
-        [
-          employee.fullName,
-          employee.personnelNo,
-          employee.position,
-          employee.department,
-          employee.employeeGroup,
-        ].join(" ").toLowerCase().includes(normalizedQuery);
+        [employee.fullName, employee.personnelNo, employee.position, employee.department, employee.employeeGroup]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery);
 
       return (
         matchesQuery &&
@@ -52,31 +51,55 @@ export function EmployeeDirectoryPanel({
       );
     });
   }, [department, employees, group, position, query, status]);
+  const hasActiveFilters = Boolean(query.trim()) || department !== "all" || position !== "all" || group !== "all" || status !== "all";
+  const activeCount = employees.filter((employee) => employee.status === "Активен" || employee.status === "На смене").length;
+  const mobileCount = employees.filter((employee) => employee.mobileStatus === "Привязан").length;
+
+  function resetFilters() {
+    setQuery("");
+    setDepartment("all");
+    setPosition("all");
+    setGroup("all");
+    setStatus("all");
+  }
 
   return (
     <Panel
       title="Сотрудники обхода территории"
-      note={`Избранные сотрудники для обходов: ${employees.length}${typeof allEmployeesCount === "number" ? ` из ${allEmployeesCount} в общем справочнике` : ""}`}
+      note={`Рабочий список для назначения маршрутов: ${employees.length}${typeof allEmployeesCount === "number" ? ` из ${allEmployeesCount} в общем справочнике` : ""}`}
       actions={
         <>
           {onOpenAddFromAccounting ? (
-            <button className="button ghost" disabled={!canManage} onClick={onOpenAddFromAccounting} type="button">
-              Добавить из бухгалтерии
+            <button className="button ghost" disabled={!canManage || isSaving} onClick={onOpenAddFromAccounting} type="button">
+              Выбрать из справочника
             </button>
           ) : null}
-          <button className="button primary" disabled={!canManage} onClick={onOpenCreate} title={!canManage ? "Недостаточно прав для управления сотрудниками." : undefined} type="button">
+          <button
+            className="button primary"
+            disabled={!canManage || isSaving}
+            onClick={onOpenCreate}
+            title={!canManage ? "Недостаточно прав для управления сотрудниками." : undefined}
+            type="button"
+          >
             Создать сотрудника
           </button>
         </>
       }
     >
+      <div className="employee-directory-summary" aria-label="Сводка по сотрудникам обхода">
+        <span><strong>{employees.length}</strong> в списке</span>
+        <span><strong>{activeCount}</strong> доступны</span>
+        <span><strong>{mobileCount}</strong> с мобильным входом</span>
+      </div>
+
       <div className="filters employee-filters">
         <label className="wide-filter">
           Поиск
           <input
+            aria-label="Поиск сотрудников обхода"
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
-            placeholder="ФИО, табельный номер, должность, подразделение, группа"
+            placeholder="ФИО, табельный номер, должность, подразделение"
           />
         </label>
         <label>
@@ -112,63 +135,58 @@ export function EmployeeDirectoryPanel({
       {filteredEmployees.length > 0 ? (
         <div className="employee-roster-list">
           {filteredEmployees.map((employee) => (
-              <button
-                className={`employee-roster-row ${selectedEmployeeId === employee.id ? "selected" : ""}`}
-                key={employee.id}
-                onClick={() => onSelectEmployee(employee.id)}
-                type="button"
-              >
-                <div className="identity-cell employee-roster-identity">
-                  <span className="avatar small">{employee.initials}</span>
-                  <div>
-                    <strong>{employee.fullName}</strong>
-                    <span className="muted-line">{employee.position}</span>
-                  </div>
+            <button
+              aria-label={`Открыть профиль: ${employee.fullName}`}
+              aria-pressed={selectedEmployeeId === employee.id}
+              className={`employee-roster-row ${selectedEmployeeId === employee.id ? "selected" : ""}`}
+              key={employee.id}
+              onClick={() => onSelectEmployee(employee.id)}
+              type="button"
+            >
+              <div className="identity-cell employee-roster-identity">
+                <span className="avatar small">{employee.initials}</span>
+                <div>
+                  <strong>{employee.fullName}</strong>
+                  <span className="muted-line">{employee.position || "Должность не указана"}</span>
                 </div>
-                <div className="employee-roster-meta">
-                  <span>{employee.department || employee.zone}</span>
-                  <span>{employee.employeeGroup || "Без группы"}</span>
-                </div>
-                <div className="employee-roster-badges">
-                  <Chip>{employee.status}</Chip>
-                  <Chip>{employee.mobileStatus}</Chip>
-                </div>
-              </button>
+              </div>
+              <div className="employee-roster-meta">
+                <span>{employee.department || employee.zone || "Без подразделения"}</span>
+                <span>{employee.employeeGroup || "Без группы"}</span>
+              </div>
+              <div className="employee-roster-badges">
+                <Chip>{employee.status}</Chip>
+                <Chip>{employee.mobileStatus}</Chip>
+              </div>
+            </button>
           ))}
         </div>
       ) : (
         <EmptyState
           title={employees.length > 0 ? "Сотрудники не найдены" : "Сотрудники обхода не добавлены"}
-          description={employees.length > 0 ? "Измените фильтры или поисковый запрос." : "Добавьте сотрудников из бухгалтерии или создайте нового вручную."}
+          description={employees.length > 0 ? "Измените фильтры или сбросьте поисковый запрос." : "Выберите сотрудников из общего справочника или создайте нового."}
           action={
-            <div className="inline-actions">
-              {onOpenAddFromAccounting ? (
-                <button className="button ghost" disabled={!canManage} onClick={onOpenAddFromAccounting} type="button">
-                  Добавить из бухгалтерии
+            employees.length > 0 && hasActiveFilters ? (
+              <button className="button ghost" onClick={resetFilters} type="button">Сбросить фильтры</button>
+            ) : (
+              <div className="inline-actions">
+                {onOpenAddFromAccounting ? (
+                  <button className="button ghost" disabled={!canManage || isSaving} onClick={onOpenAddFromAccounting} type="button">
+                    Выбрать из справочника
+                  </button>
+                ) : null}
+                <button className="button primary" disabled={!canManage || isSaving} onClick={onOpenCreate} type="button">
+                  Создать сотрудника
                 </button>
-              ) : null}
-              <button className="button primary" disabled={!canManage} onClick={onOpenCreate} title={!canManage ? "Недостаточно прав для управления сотрудниками." : undefined} type="button">
-                Создать сотрудника
-              </button>
-            </div>
+              </div>
+            )
           }
         />
       )}
-      <div className="table-footer">
-        <span>
-          Показано {filteredEmployees.length} из {employees.length}
-        </span>
-        <div className="pagination">
-          <button disabled={filteredEmployees.length === 0} type="button">
-            &lt;
-          </button>
-          <button className="active" type="button">
-            1
-          </button>
-          <button disabled={filteredEmployees.length === 0} type="button">
-            &gt;
-          </button>
-        </div>
+
+      <div className="employee-directory-footer">
+        <span>Показано {filteredEmployees.length} из {employees.length}</span>
+        {hasActiveFilters ? <button className="link-button" onClick={resetFilters} type="button">Сбросить фильтры</button> : null}
       </div>
     </Panel>
   );

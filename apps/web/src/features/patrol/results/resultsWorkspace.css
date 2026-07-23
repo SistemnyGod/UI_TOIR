@@ -1,0 +1,197 @@
+.screen-area .results-review-screen .results-review-toolbar {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-card);
+  background: var(--ui-surface-muted);
+}
+
+.screen-area .results-review-screen .results-review-toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.screen-area .results-review-screen .results-review-list-summary {
+  color: var(--ui-muted);
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.screen-area .results-review-screen .results-review-refresh {
+  min-height: 40px;
+  padding-inline: 12px;
+}
+
+.screen-area .results-review-screen .results-review-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: 0;
+  padding: 0;
+  overflow: visible;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-card);
+  background: var(--ui-surface);
+  box-shadow: none;
+  transition:
+    border-color var(--ui-motion-normal) ease,
+    box-shadow var(--ui-motion-normal) ease;
+}
+
+.screen-area .results-review-screen .results-review-row:hover {
+  border-color: var(--ui-border-strong);
+  box-shadow: var(--ui-shadow-card);
+  transform: none;
+}
+
+.screen-area .results-review-screen .results-review-row.is-active {
+  border-color: var(--ui-blue);
+  background: var(--ui-surface);
+  box-shadow: inset 3px 0 0 var(--ui-blue), var(--ui-shadow-card);
+}
+
+.screen-area .results-review-screen .results-review-row.has-issues.is-active {
+  box-shadow: inset 3px 0 0 var(--ui-warning), var(--ui-shadow-card);
+}
+
+.screen-area .results-review-screen .results-review-row-open-target {
+  display: grid;
+  grid-template-columns: 42px minmax(260px, 1.45fr) minmax(220px, 0.9fr);
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  min-height: 102px;
+  padding: 14px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.screen-area .results-review-screen .results-review-row-open-target:hover {
+  background: var(--ui-surface-muted);
+}
+
+.screen-area .results-review-screen .results-review-row-open-target:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ui-blue) 28%, transparent);
+  outline-offset: -3px;
+}
+
+.screen-area .results-review-screen .results-review-row-main,
+.screen-area .results-review-screen .results-review-row-summary {
+  min-width: 0;
+}
+
+.screen-area .results-review-screen .results-review-row-description {
+  display: block;
+  margin-top: 5px;
+  color: var(--ui-muted);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.screen-area .results-review-screen .results-review-row-actions {
+  align-self: center;
+  padding-right: 12px;
+}
+
+.screen-area .results-review-screen .results-review-row-actions button {
+  min-height: 40px;
+}
+
+.screen-area .results-review-screen .results-review-row-actions .results-review-row-more {
+  width: 40px;
+  min-width: 40px;
+}
+
+@media (max-width: 1180px) {
+  .screen-area .results-review-screen .results-review-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+  }
+
+  .screen-area .results-review-screen .results-review-toolbar-actions {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+
+  .screen-area .results-review-screen .results-review-row-open-target {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .screen-area .results-review-screen .results-review-row-summary {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .screen-area .results-review-screen .results-review-toolbar {
+    grid-template-columns: 1fr;
+    padding: 10px;
+  }
+
+  .screen-area .results-review-screen .results-review-filter-tabs,
+  .screen-area .results-review-screen .results-review-search,
+  .screen-area .results-review-screen .results-review-toolbar-actions {
+    grid-column: auto;
+    width: 100%;
+  }
+
+  .screen-area .results-review-screen .results-review-filter-tabs {
+    flex-wrap: nowrap;
+    padding-bottom: 3px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .screen-area .results-review-screen .results-review-filter-tabs button {
+    flex: 0 0 auto;
+    min-height: 44px;
+  }
+
+  .screen-area .results-review-screen .results-review-toolbar-actions {
+    align-items: stretch;
+  }
+
+  .screen-area .results-review-screen .results-review-refresh {
+    min-height: 44px;
+  }
+
+  .screen-area .results-review-screen .results-review-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .screen-area .results-review-screen .results-review-row-open-target {
+    grid-template-columns: 34px minmax(0, 1fr);
+    min-height: 0;
+    padding: 12px;
+  }
+
+  .screen-area .results-review-screen .results-review-row-summary {
+    grid-column: 1 / -1;
+  }
+
+  .screen-area .results-review-screen .results-review-row-actions {
+    justify-content: stretch;
+    padding: 0 12px 12px;
+  }
+
+  .screen-area .results-review-screen .results-review-row-actions > button {
+    flex: 1 1 120px;
+    min-height: 44px;
+  }
+
+  .screen-area .results-review-screen .results-review-row-actions .results-review-row-more {
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

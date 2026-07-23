@@ -2,7 +2,7 @@ import * as Crypto from "expo-crypto";
 
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { getLocalFileInfo, persistMobileMedia, persistPatrolPhoto, readFileAsBase64 } from "@/services/fileStorageService";
-import { bytesToHex, decodeBase64Bytes } from "@/sync/fileHash";
+import { bytesToHex, decodeBase64Bytes, requiresClientFileHash } from "@/sync/fileHash";
 
 type RegisterLocalPhotoInput = {
   ownerUserId: string;
@@ -35,9 +35,9 @@ export async function prepareLocalMedia(input: RegisterLocalMediaInput) {
     ? await persistMobileMedia(input.localPath, clientFileId, "mp4")
     : await persistPatrolPhoto(input.localPath, clientFileId);
   const info = await getLocalFileInfo(localPath);
-  const base64 = await readFileAsBase64(localPath);
-  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, decodeBase64Bytes(base64));
-  const sha256 = bytesToHex(digest);
+  const sha256 = input.sha256 ?? (requiresClientFileHash(input)
+    ? await calculateClientFileHash(localPath)
+    : null);
 
   return {
     clientFileId,
@@ -45,7 +45,7 @@ export async function prepareLocalMedia(input: RegisterLocalMediaInput) {
     localPath,
     previewPath: input.previewPath ?? null,
     status: "localOnly",
-    sha256: input.sha256 ?? sha256,
+    sha256,
     sizeBytes: input.sizeBytes ?? (info.exists ? info.size : null),
     contentType: input.contentType,
     mediaKind: input.mediaKind,
@@ -55,4 +55,10 @@ export async function prepareLocalMedia(input: RegisterLocalMediaInput) {
     workTaskId: input.workTaskId ?? null,
     createdAtLocal: new Date().toISOString()
   } satisfies LocalMobileFile;
+}
+
+async function calculateClientFileHash(localPath: string) {
+  const base64 = await readFileAsBase64(localPath);
+  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, decodeBase64Bytes(base64));
+  return bytesToHex(digest);
 }

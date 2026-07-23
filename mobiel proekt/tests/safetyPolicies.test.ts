@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import test from "node:test";
 
 import { assertSessionOwner } from "../src/auth/sessionIdentity.ts";
 import { isReauthenticationRequiredError, isSessionExpiredError } from "../src/auth/sessionErrors.ts";
 import { isOfflineSessionValid } from "../src/auth/offlineSession.ts";
+import { normalizePointDraft, restoreDeferredPointSelection, skippedPointDraftReason } from "../src/domain/patrol/pointDraftPolicy.ts";
 import { assertRecordsBelongToOwner } from "../src/sync/ownerIsolation.ts";
 
 test("refresh accepts the stored account and binds a legacy session once", () => {
@@ -49,4 +52,42 @@ test("offline access remains available until explicit revocation", () => {
   assert.equal(isOfflineSessionValid({ ...session, contourId: "patrol360-test" }, "patrol360-local-enterprise"), false);
   assert.equal(isOfflineSessionValid(session, "patrol360-local-enterprise"), false);
   assert.equal(isOfflineSessionValid({ ...session, revokedAt: "2026-07-08T00:00:00.000Z" }), false);
+});
+
+test("work item pruning binds only the owner and returned item identifiers", async () => {
+  const source = await readFile(
+    join(process.cwd(), "src/db/repositories/workTaskRepository.ts"),
+    "utf8"
+  );
+  const pruneCall = source.match(
+    /DELETE FROM work_tasks WHERE owner_user_id = \?[\s\S]*?\[ownerUserId,[^\]]+\]/
+  );
+
+  assert.ok(pruneCall, "Work item pruning query was not found.");
+  assert.match(pruneCall[0], /\[ownerUserId, \.\.\.itemIds\]/);
+  assert.doesNotMatch(pruneCall[0], /\[ownerUserId, currentContourId,/);
+});
+
+test("unfinished point draft preserves the selected status and issue details", () => {
+  const skipped = normalizePointDraft({
+    selectedStatus: "skipped",
+    comment: "Метка демонтирована"
+  });
+  assert.equal(skipped.deferredReason, skippedPointDraftReason);
+  assert.equal(restoreDeferredPointSelection(skipped), "skipped");
+
+  const issue = normalizePointDraft({
+    selectedStatus: "issue",
+    comment: "Повреждён корпус",
+    issueTypeId: "Механическое повреждение"
+  });
+  assert.equal(issue.issueTypeId, "Механическое повреждение");
+  assert.equal(restoreDeferredPointSelection(issue), "issue");
+
+  const ok = normalizePointDraft({
+    selectedStatus: "ok",
+    issueTypeId: "Не должно сохраниться"
+  });
+  assert.equal(ok.issueTypeId, null);
+  assert.equal(restoreDeferredPointSelection(ok), "ok");
 });

@@ -12,6 +12,7 @@ import { parseStringArray, supersedePendingPointStatusCommands, updateLatestPend
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { isPhotoEvidenceRequired } from "@/domain/patrol/photoEvidencePolicy";
+import { normalizePointDraft, PointDraftSelectedStatus } from "@/domain/patrol/pointDraftPolicy";
 import { OutboxCommand } from "@/domain/sync/syncTypes";
 import { getNfcCodeCandidates, normalizeNfcCode } from "@/services/nfcService";
 
@@ -91,7 +92,7 @@ export type ReportReadiness = {
 };
 
 export type DeferPointInput = {
-  selectedStatus?: "ok" | "issue" | null;
+  selectedStatus?: PointDraftSelectedStatus;
   comment?: string | null;
   issueTypeId?: string | null;
   photoClientFileIds?: string[];
@@ -392,6 +393,7 @@ export async function acceptRequestLocally(requestId: string) {
           INSERT INTO patrol_assignments (
             assignment_id,
             owner_user_id,
+            contour_id,
             request_id,
             route_id,
             status,
@@ -400,9 +402,9 @@ export async function acceptRequestLocally(requestId: string) {
             revision,
             route_version_no
           )
-          VALUES (?, ?, ?, ?, 'accepted', NULL, NULL, 0, 0)
+          VALUES (?, ?, ?, ?, ?, 'accepted', NULL, NULL, 0, 0)
         `,
-        [assignmentId, ownerUserId, request.requestId, request.routeId]
+        [assignmentId, ownerUserId, currentContourId, request.requestId, request.routeId]
       );
 
       await snapshotRoutePointsInTransaction(tx, assignmentId, request.routeId);
@@ -512,6 +514,7 @@ export async function startAssignmentLocally(assignmentId: string) {
   return updateAssignmentLifecycleLocally(assignmentId, "startPatrolAssignment", "inProgress", "startedAtLocal");
 }
 
+
 export async function pauseAssignmentLocally(assignmentId: string) {
   return updateAssignmentLifecycleLocally(assignmentId, "pausePatrolAssignment", "paused");
 }
@@ -526,6 +529,7 @@ export async function handoffAssignmentLocally(assignmentId: string) {
 
 export async function listAssignmentPoints(assignmentId: string, ownerUserId: string, contourId: string) {
   const db = await getDatabase();
+  await repairAssignmentContourBinding(db, assignmentId, ownerUserId);
 
   const rows = await db.getAllAsync<{
     pointId: string;
@@ -864,6 +868,7 @@ export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
 
 export async function getPointForFill(assignmentId: string, pointId: string, ownerUserId: string, contourId: string) {
   const db = await getDatabase();
+  await repairAssignmentContourBinding(db, assignmentId, ownerUserId);
 
   const row = await db.getFirstAsync<{
     assignmentId: string;
@@ -938,6 +943,27 @@ export async function savePointIssue(assignmentId: string, pointId: string, comm
 }
 
 export async function deferPoint(assignmentId: string, pointId: string, input: DeferPointInput = {}) {
+  const draft = await persistPointDraft(assignmentId, pointId, input, "pending");
+
+  void logMobileAction({
+    eventType: "patrol.point.deferred",
+    entityType: "patrolPoint",
+    entityId: pointId,
+    message: "Метка отложена на потом.",
+    payload: { assignmentId, selectedStatus: draft.selectedStatus, photoCount: draft.photoCount }
+  }).catch(() => undefined);
+}
+
+export async function savePointDraft(assignmentId: string, pointId: string, input: DeferPointInput = {}) {
+  await persistPointDraft(assignmentId, pointId, input, "localOnly");
+}
+
+async function persistPointDraft(
+  assignmentId: string,
+  pointId: string,
+  input: DeferPointInput,
+  syncStatus: "localOnly" | "pending"
+) {
   const ownerUserId = await requireOwnerUserId();
   await assertPointActionAllowed(assignmentId);
   const point = await getPointForFill(assignmentId, pointId, ownerUserId, currentContourId);
@@ -945,35 +971,30 @@ export async function deferPoint(assignmentId: string, pointId: string, input: D
     throw new Error("Метка не загружена на телефон.");
   }
 
-  const selectedStatus = input.selectedStatus ?? (point.issueTypeId ? "issue" : null);
-  const issueTypeId = selectedStatus === "issue"
-    ? input.issueTypeId?.trim() || point.issueTypeId || "Неисправность"
-    : null;
+  const draft = normalizePointDraft(input, point);
+  const photoClientFileIds = input.photoClientFileIds ?? point.photoClientFileIds;
 
   await upsertPointResult({
     ownerUserId,
     assignmentId,
     pointId,
     status: "deferred",
-    comment: input.comment ?? point.comment,
-    issueTypeId,
+    comment: draft.comment ?? point.comment,
+    issueTypeId: draft.issueTypeId,
     severity: null,
-    deferredReason: input.reason ?? "Заполнить позже",
+    deferredReason: draft.deferredReason,
     completedAtLocal: null,
-    syncStatus: "pending",
+    syncStatus,
     confirmationType: point.confirmationType ?? "manual",
     nfcUidHash: point.nfcUidHash,
     scannedAtLocal: point.scannedAtLocal ?? new Date().toISOString(),
-    photoClientFileIds: input.photoClientFileIds ?? point.photoClientFileIds
+    photoClientFileIds
   });
 
-  void logMobileAction({
-    eventType: "patrol.point.deferred",
-    entityType: "patrolPoint",
-    entityId: pointId,
-    message: "Метка отложена на потом.",
-    payload: { assignmentId, selectedStatus, photoCount: (input.photoClientFileIds ?? point.photoClientFileIds).length }
-  }).catch(() => undefined);
+  return {
+    selectedStatus: draft.selectedStatus,
+    photoCount: photoClientFileIds.length
+  };
 }
 
 export async function skipPoint(assignmentId: string, pointId: string, input: Pick<DeferPointInput, "comment" | "photoClientFileIds"> = {}) {
@@ -1300,6 +1321,7 @@ export async function getActiveAssignmentWithProgress() {
 export async function getAssignmentById(assignmentId: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
+  await repairAssignmentContourBinding(db, assignmentId, ownerUserId);
 
   return db.getFirstAsync<ActiveAssignment>(
     `
@@ -1318,6 +1340,7 @@ export async function getAssignmentById(assignmentId: string) {
       LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
       WHERE assignment.owner_user_id = ?
         AND assignment.assignment_id = ?
+        AND assignment.contour_id = ?
       LIMIT 1
     `,
     [ownerUserId, assignmentId, currentContourId]
@@ -1348,6 +1371,7 @@ async function updateAssignmentLifecycleLocally(
         FROM patrol_assignments
         WHERE owner_user_id = ?
           AND assignment_id <> ?
+          AND contour_id = ?
           AND status IN ('inProgress', 'paused')
         LIMIT 1
       `,
@@ -1393,6 +1417,7 @@ async function updateAssignmentLifecycleLocally(
           FROM patrol_assignments
           WHERE owner_user_id = ?
             AND assignment_id = ?
+            AND contour_id = ?
           LIMIT 1
         `,
         [ownerUserId, assignment.assignmentId, currentContourId]
@@ -1438,6 +1463,7 @@ async function updateAssignmentLifecycleLocally(
             FROM patrol_assignments
             WHERE owner_user_id = ?
               AND assignment_id <> ?
+              AND contour_id = ?
               AND status IN ('inProgress', 'paused')
             LIMIT 1
           `,
@@ -1458,8 +1484,9 @@ async function updateAssignmentLifecycleLocally(
               END
           WHERE owner_user_id = ?
             AND assignment_id = ?
+            AND contour_id = ?
         `,
-        [nextStatus, timestampMode ?? "", now, ownerUserId, assignment.assignmentId]
+        [nextStatus, timestampMode ?? "", now, ownerUserId, assignment.assignmentId, currentContourId]
       );
 
       await tx.runAsync(
@@ -1522,6 +1549,42 @@ async function snapshotRoutePointsInTransaction(executor: SqlExecutor, assignmen
   if ((snapshot?.count ?? 0) === 0) {
     throw new Error("Маршрут не загружен на телефон.");
   }
+}
+
+async function repairAssignmentContourBinding(
+  db: SQLite.SQLiteDatabase,
+  assignmentId: string,
+  ownerUserId: string
+) {
+  const legacyAssignment = await db.getFirstAsync<{ assignmentId: string }>(
+    `
+      SELECT assignment_id AS assignmentId
+      FROM patrol_assignments
+      WHERE assignment_id = ?
+        AND owner_user_id = ?
+        AND contour_id IS NULL
+      LIMIT 1
+    `,
+    [assignmentId, ownerUserId]
+  );
+  if (!legacyAssignment) {
+    return;
+  }
+
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      await tx.runAsync(
+        `
+          UPDATE patrol_assignments
+          SET contour_id = ?
+          WHERE assignment_id = ?
+            AND owner_user_id = ?
+            AND contour_id IS NULL
+        `,
+        [currentContourId, assignmentId, ownerUserId]
+      );
+    })
+  );
 }
 
 async function buildCompletedPointResults(assignmentId: string) {

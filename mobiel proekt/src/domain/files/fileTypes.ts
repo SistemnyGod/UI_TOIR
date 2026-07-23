@@ -29,7 +29,7 @@ export type LocalMobileFile = {
 
 export type MobileFileUploadRequest = {
   clientFileId: string;
-  sha256: string;
+  sha256?: string | null;
   mimeType: "image/jpeg" | "video/mp4";
   sizeBytes: number;
   assignmentId?: string | null;

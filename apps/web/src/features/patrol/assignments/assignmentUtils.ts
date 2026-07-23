@@ -1,4 +1,4 @@
-import type { ActivePatrol, DataSourceMode, ServiceRequest } from "../../../types";
+import type { ActivePatrol, DataSourceMode, Employee, ServiceRequest } from "../../../types";
 import { isTerminalPatrolRequestStatus } from "../../../domain/patrolRequestStatus";
 
 export function assignmentStatusText(value: string) {
@@ -33,6 +33,13 @@ export function priorityText(value: string) {
   return "Обычный";
 }
 
+export function resolveSelectedAssignmentEmployee(
+  employees: Employee[],
+  visibleEmployees: Employee[],
+  selectedEmployeeId: string,
+) {
+  return employees.find((employee) => employee.id === selectedEmployeeId) ?? visibleEmployees[0] ?? employees[0];
+}
 export function isAssignableRequest(request: ServiceRequest) {
   if (request.assignmentId || isTerminalPatrolRequestStatus(request.status)) {
     return false;

@@ -1,7 +1,8 @@
-import { fetchWithTimeout, MobileNetworkError, serverHealthTimeoutMs, serverUnavailableMessage, type NetworkErrorKind } from "@/api/networkTimeout";
+import { classifyMobileNetworkError, fetchWithTimeout, MobileNetworkError, serverHealthTimeoutMs, serverUnavailableMessage, type NetworkErrorKind } from "@/api/networkTimeout";
 import { ServerHealthCache } from "@/api/serverHealthCache";
 import { getServerBaseUrl, getServerCandidateBaseUrls, isAllowedServerBaseUrl, normalizeServerBaseUrl, setServerBaseUrl } from "@/core/serverSettings";
 import { currentContourId } from "@/core/environments";
+import { hasUsableNetwork } from "@/core/network";
 
 export type ServerConnectionCheckResult = {
   ok: boolean;
@@ -9,6 +10,7 @@ export type ServerConnectionCheckResult = {
   status?: number;
   url?: string;
   contourId?: string;
+  errorKind?: NetworkErrorKind;
 };
 
 export type ServerHealthProbe = {
@@ -62,10 +64,14 @@ export async function probeServerHealth(serverBaseUrl: string, expectedContourId
 
     return { ok: true, status: response.status, contourId: body.contourId };
   } catch (error) {
+    const networkAvailable = error instanceof MobileNetworkError && error.kind === "network"
+      ? await hasUsableNetwork().catch(() => true)
+      : undefined;
+    const classifiedError = classifyMobileNetworkError(error, { networkAvailable });
     return {
       ok: false,
-      message: serverUnavailableMessage,
-      ...(error instanceof MobileNetworkError ? { errorKind: error.kind } : {})
+      message: classifiedError.message,
+      errorKind: classifiedError.kind
     };
   }
 }
@@ -105,6 +111,7 @@ export async function checkServerConnection(rawServerBaseUrl?: string): Promise<
   const checkedUrls: string[] = [];
   let lastStatus: number | undefined;
   let lastProblem: string | null = null;
+  let lastErrorKind: NetworkErrorKind | undefined;
 
   for (const serverBaseUrl of serverBaseUrls) {
     checkedUrls.push(serverBaseUrl);
@@ -123,6 +130,7 @@ export async function checkServerConnection(rawServerBaseUrl?: string): Promise<
     }
 
     lastProblem = probe.message ?? lastProblem;
+    lastErrorKind = probe.errorKind;
   }
 
   return {
@@ -131,7 +139,8 @@ export async function checkServerConnection(rawServerBaseUrl?: string): Promise<
       ? `${lastProblem} Проверенные адреса: ${checkedUrls.join(", ")}`
       : `${serverUnavailableMessage} Проверенные адреса: ${checkedUrls.join(", ")}`,
     status: lastStatus,
-    url: checkedUrls.map((value) => `${value}/api/v1/mobile/health`).join(", ")
+    url: checkedUrls.map((value) => `${value}/api/v1/mobile/health`).join(", "),
+    errorKind: lastErrorKind
   };
 }
 

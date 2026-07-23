@@ -157,7 +157,7 @@ public sealed class MobileController(IMobileAppService mobileAppService, IConfig
         [FromForm] Guid? pointId,
         [FromForm] string? remarkId,
         [FromForm] Guid? workTaskId,
-        [FromForm] string sha256,
+        [FromForm] string? sha256,
         [FromForm] long sizeBytes,
         [FromForm] DateTimeOffset capturedAtLocal,
         [FromForm] IFormFile file)

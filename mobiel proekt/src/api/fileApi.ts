@@ -2,12 +2,13 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import { refreshStoredAccessToken } from "@/api/httpClient";
 import { invalidateServerHealthCache, probeServerHealthCached } from "@/api/serverHealthApi";
-import { photoUploadTimeoutMs, serverUnavailableMessage, videoUploadTimeoutMs, withTimeout } from "@/api/networkTimeout";
+import { MobileNetworkError, photoUploadTimeoutMs, serverUnavailableMessage, videoUploadTimeoutMs, withTimeout } from "@/api/networkTimeout";
 import { shouldTryNextMobileServer } from "@/api/serverFailoverPolicy";
 import { getAccessToken } from "@/auth/tokenStorage";
-import { getMobileRuntimeConfig, getServerCandidateBaseUrls, setServerBaseUrl } from "@/core/serverSettings";
+import { getMobileRuntimeConfig, getServerCandidateBaseUrls } from "@/core/serverSettings";
 import { LocalMobileFile, MobileFileUploadResponse } from "@/domain/files/fileTypes";
 import { currentContourId } from "@/core/environments";
+import { requiresClientFileHash } from "@/sync/fileHash";
 
 const maxPhotoBytes = 6 * 1024 * 1024;
 const maxVideoBytes = 25 * 1024 * 1024;
@@ -70,8 +71,11 @@ async function validateMobileFileBeforeUpload(file: LocalMobileFile) {
     throw new Error("Файл не привязан к точке обхода, замечанию смены или работе.");
   }
 
-  if (!file.clientFileId || !file.localPath || !file.sha256 || !file.sizeBytes) {
+  if (!file.clientFileId || !file.localPath || !file.sizeBytes) {
     throw new Error("Локальные данные файла неполные.");
+  }
+  if (requiresClientFileHash(file) && !file.sha256) {
+    throw new Error("Локальные данные фото не содержат контрольную сумму.");
   }
 
   if (file.contentType !== "image/jpeg" && file.contentType !== "video/mp4") {
@@ -107,7 +111,10 @@ async function uploadFileWithFailover(
     try {
       const health = await probeServerHealthCached(apiBaseUrl, contourId);
       if (!health.ok) {
-        lastError = new Error(health.message ?? "Сервер не прошёл проверку контура: " + apiBaseUrl);
+        const message = health.message ?? "Сервер не прошёл проверку контура: " + apiBaseUrl;
+        lastError = health.errorKind
+          ? new MobileNetworkError(health.errorKind, undefined, message)
+          : new Error(message);
         continue;
       }
 
@@ -118,7 +125,6 @@ async function uploadFileWithFailover(
         continue;
       }
 
-      await setServerBaseUrl(apiBaseUrl).catch(() => undefined);
       return { apiBaseUrl, result };
     } catch (error) {
       invalidateServerHealthCache(apiBaseUrl, contourId);
@@ -128,6 +134,14 @@ async function uploadFileWithFailover(
 
   if (lastResult) {
     return { apiBaseUrl: apiBaseUrls[apiBaseUrls.length - 1], result: lastResult };
+  }
+
+  if (lastError instanceof MobileNetworkError) {
+    throw new MobileNetworkError(
+      lastError.kind,
+      lastError,
+      `${lastError.message} Проверенные адреса: ${apiBaseUrls.join(", ")}`
+    );
   }
 
   if (lastError instanceof Error) {
@@ -147,8 +161,7 @@ async function uploadFileWithToken(
   const contentType = file.contentType ?? "image/jpeg";
   const timeoutMs = file.mediaKind === "video" || contentType === "video/mp4" ? videoUploadTimeoutMs : photoUploadTimeoutMs;
   try {
-    return await withTimeout(
-      FileSystem.uploadAsync(`${apiBaseUrl}/api/v1/mobile/files`, file.localPath, {
+    const uploadTask = FileSystem.createUploadTask(`${apiBaseUrl}/api/v1/mobile/files`, file.localPath, {
         fieldName: "file",
         headers: {
           Accept: "application/json",
@@ -171,10 +184,18 @@ async function uploadFileWithToken(
           sizeBytes: String(file.sizeBytes ?? 0)
         },
         uploadType: FileSystem.FileSystemUploadType.MULTIPART
-      }),
-      timeoutMs
-    );
-  } catch {
-    throw new Error(serverUnavailableMessage);
+      });
+    const result = await withTimeout(uploadTask.uploadAsync(), timeoutMs, serverUnavailableMessage, () => uploadTask.cancelAsync());
+    if (!result) {
+      throw new Error("Сервер не вернул ответ при загрузке файла. Файл сохранён для повторной отправки.");
+    }
+
+    return result;
+  } catch (error) {
+    if (error instanceof MobileNetworkError) {
+      throw error;
+    }
+
+    throw new MobileNetworkError("network", error);
   }
 }

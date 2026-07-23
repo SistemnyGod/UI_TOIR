@@ -2,6 +2,7 @@ import * as BackgroundTask from "expo-background-task";
 import * as TaskManager from "expo-task-manager";
 
 import { initializeDatabase } from "@/db/database";
+import { logMobileError } from "@/services/mobileErrorReporter";
 import { triggerDailyDiagnosticReportUpload } from "@/services/diagnosticReportService";
 import { recoverStaleSendingOutboxCommands, runForegroundSync } from "@/sync/syncEngine";
 
@@ -16,7 +17,8 @@ if (!TaskManager.isTaskDefined(PATROL360_BACKGROUND_SYNC_TASK)) {
       await triggerDailyDiagnosticReportUpload();
 
       return BackgroundTask.BackgroundTaskResult.Success;
-    } catch {
+    } catch (error) {
+      await logMobileError("background.sync.failed", error);
       return BackgroundTask.BackgroundTaskResult.Failed;
     }
   });

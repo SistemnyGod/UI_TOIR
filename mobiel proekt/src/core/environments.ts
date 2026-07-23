@@ -8,9 +8,11 @@ const configuredProductionApiBaseUrl = typeof Constants.expoConfig?.extra?.produ
 const configuredPublicApiBaseUrl = typeof Constants.expoConfig?.extra?.publicApiBaseUrl === "string"
   ? Constants.expoConfig.extra.publicApiBaseUrl.trim()
   : "";
+export const publicFallbackServerBaseUrl = "http://31.173.110.118";
 const localEnterpriseAllowedBaseUrls = uniqueValues([
   "http://192.168.2.194:5173",
   "http://192.168.2.194",
+  publicFallbackServerBaseUrl,
   configuredPublicApiBaseUrl
 ]);
 

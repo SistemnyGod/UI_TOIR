@@ -260,9 +260,14 @@ export async function listSyncQueueFiles(ownerUserId: string, limit = 100) {
         FROM files file
         LEFT JOIN patrol_assignments assignment
           ON assignment.assignment_id = file.assignment_id
+          AND assignment.owner_user_id = file.owner_user_id
         WHERE file.owner_user_id = ?
           AND file.contour_id = '${currentContourId}'
           AND file.status NOT IN ('uploaded', 'linked')
+          AND (
+            assignment.assignment_id IS NULL
+            OR assignment.status NOT IN ('cancelled', 'cancelledServer')
+          )
         ORDER BY file.created_at_local DESC
         LIMIT ?
       `,
@@ -279,14 +284,14 @@ export async function markFileUploading(clientFileId: string) {
 
   const db = await getDatabase();
 
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     `
       UPDATE files
       SET status = 'uploading'
       WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ?
     `,
     [ownerUserId, currentContourId, clientFileId]
-  );
+  ));
 }
 
 export async function markFileUploaded(clientFileId: string, serverFileId: string) {
@@ -297,7 +302,7 @@ export async function markFileUploaded(clientFileId: string, serverFileId: strin
 
   const db = await getDatabase();
 
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     `
       UPDATE files
       SET status = 'uploaded',
@@ -305,7 +310,7 @@ export async function markFileUploaded(clientFileId: string, serverFileId: strin
       WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ?
     `,
     [serverFileId, ownerUserId, currentContourId, clientFileId]
-  );
+  ));
 }
 
 export async function markFileUploadFailed(clientFileId: string) {
@@ -316,14 +321,14 @@ export async function markFileUploadFailed(clientFileId: string) {
 
   const db = await getDatabase();
 
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     `
       UPDATE files
       SET status = 'retryLater'
       WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ?
     `,
     [ownerUserId, currentContourId, clientFileId]
-  );
+  ));
 }
 
 export async function listLinkedLocalFiles(ownerUserId: string, clientFileIds?: readonly string[]) {
@@ -348,8 +353,8 @@ export async function listLinkedLocalFiles(ownerUserId: string, clientFileIds?: 
 
 export async function deleteLinkedLocalFileRecord(ownerUserId: string, clientFileId: string) {
   const db = await getDatabase();
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     "DELETE FROM files WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ? AND status = 'linked'",
     [ownerUserId, currentContourId, clientFileId]
-  );
+  ));
 }

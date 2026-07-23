@@ -27,20 +27,12 @@ export async function cancelNfcRead() {
 }
 
 export async function readNfcTag() {
-  let lastError: unknown = null;
-
-  for (const tech of nfcTechFallbackOrder) {
-    try {
-      await NfcManager.requestTechnology(tech);
-      return await NfcManager.getTag();
-    } catch (error) {
-      lastError = error;
-    } finally {
-      await NfcManager.cancelTechnologyRequest().catch(() => undefined);
-    }
+  try {
+    await NfcManager.requestTechnology(nfcTechFallbackOrder);
+    return await NfcManager.getTag();
+  } finally {
+    await NfcManager.cancelTechnologyRequest({ delayMsAndroid: 0 }).catch(() => undefined);
   }
-
-  throw lastError ?? new Error("NFC tag is not available.");
 }
 
 export function getNfcCode(tag: unknown) {

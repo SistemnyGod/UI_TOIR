@@ -29,7 +29,7 @@ import {
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { completePendingLogoutIntents, enqueueLogoutIntent, getPendingLogoutContourId } from "@/db/repositories/logoutQueueRepository";
 import { registerPushNotifications, syncMobileNotifications } from "@/services/notificationService";
-import { syncWorkTasks } from "@/services/workTaskService";
+import { syncWorkItems } from "@/services/workTaskService";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import { currentContourId } from "@/core/environments";
 
@@ -124,7 +124,7 @@ export async function signIn(loginName: string, password: string) {
     throw error;
   }
 
-  await syncWorkTasks().catch(() => []);
+  await syncWorkItems().catch(() => []);
   await registerPushNotifications().catch(() => null);
   await syncMobileNotifications().catch(() => []);
   // Resume reports and patrol actions that were safely retained while the
@@ -166,7 +166,7 @@ export async function restoreSessionWithRefreshToken() {
   }
   await setStoredOwnerUserId(bootstrap.user.serverUserId);
 
-  await syncWorkTasks().catch(() => []);
+  await syncWorkItems().catch(() => []);
   await registerPushNotifications().catch(() => null);
   await syncMobileNotifications().catch(() => []);
   void triggerForegroundSyncWithRetry({ forceRetry: true });

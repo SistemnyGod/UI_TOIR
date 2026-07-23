@@ -8,7 +8,7 @@ import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { MobileEmployeeDto, MobileEmuSectionDto, WorkItemDto, WorkTaskDto } from "@/domain/emu/emuTypes";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { WorkTaskRow, createWorkTaskOutboxCommand, mapWorkItemRow, mapWorkTaskRow, statusForPendingAction } from "@/db/repositories/workTaskMappers";
-import { insertOutboxCommandInTransaction } from "@/db/repositories/outboxSql";
+import { insertOutboxCommandInTransaction, type SqlExecutor } from "@/db/repositories/outboxSql";
 
 export async function saveWorkItems(items: WorkItemDto[]) {
   const ownerUserId = await requireOwnerUserId();
@@ -19,7 +19,12 @@ export async function saveWorkItems(items: WorkItemDto[]) {
       const placeholders = itemIds.map(() => "?").join(", ");
       await tx.runAsync(
         `DELETE FROM work_tasks WHERE owner_user_id = ? AND sync_status = 'synced' AND task_id NOT IN (${placeholders})`,
-        [ownerUserId, currentContourId, ...itemIds]
+        [ownerUserId, ...itemIds]
+      );
+    } else {
+      await tx.runAsync(
+        "DELETE FROM work_tasks WHERE owner_user_id = ? AND sync_status = 'synced'",
+        [ownerUserId]
       );
     }
 
@@ -404,8 +409,36 @@ export async function startPlannedWorkLocally(item: WorkItemDto, employee: Mobil
     taskId,
     createdAtLocal: startedAtLocal
   });
-  await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
-    await tx.runAsync("DELETE FROM work_tasks WHERE task_id = ? AND owner_user_id = ?", [item.itemId, ownerUserId]);
+  return withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    const existing = await tx.getFirstAsync<{ taskId: string }>(
+      `
+        SELECT task_id AS taskId
+        FROM work_tasks
+        WHERE owner_user_id = ?
+          AND item_kind = 'workSession'
+          AND plan_task_id = ?
+        ORDER BY created_at_local ASC
+        LIMIT 1
+      `,
+      [ownerUserId, item.planTaskId]
+    );
+    await tx.runAsync(
+      `
+        UPDATE work_tasks
+        SET capabilities_json = ?
+        WHERE task_id = ?
+          AND owner_user_id = ?
+          AND item_kind = 'planTask'
+      `,
+      [
+        JSON.stringify({ canStart: false, canJoin: false, canReplace: false, canPause: false, canResume: false, canComplete: false }),
+        item.itemId,
+        ownerUserId
+      ]
+    );
+    if (existing) {
+      return existing.taskId;
+    }
     await tx.runAsync(
       `INSERT INTO work_tasks (
         task_id, owner_user_id, title, status, planned_at, revision, completed_at_local,
@@ -422,6 +455,7 @@ export async function startPlannedWorkLocally(item: WorkItemDto, employee: Mobil
       ]
     );
     await insertOutboxCommandInTransaction(tx, command);
+    return taskId;
   }));
 }
 
@@ -536,7 +570,11 @@ export async function pauseWorkTaskLocally(task: WorkTaskDto, comment: string) {
 
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
-    await tx.runAsync(
+      if (await hasActiveWorkTaskCommand(tx, ownerUserId, task.taskId, "pauseWorkTask")) {
+        return;
+      }
+
+      await tx.runAsync(
       `
         UPDATE work_tasks
         SET status = 'paused',
@@ -571,7 +609,11 @@ export async function resumeWorkTaskLocally(task: WorkTaskDto, comment: string) 
 
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
-    await tx.runAsync(
+      if (await hasActiveWorkTaskCommand(tx, ownerUserId, task.taskId, "resumeWorkTask")) {
+        return;
+      }
+
+      await tx.runAsync(
       `
         UPDATE work_tasks
         SET status = 'inProgress',
@@ -613,7 +655,11 @@ export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: 
 
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
-    await tx.runAsync(
+      if (await hasActiveWorkTaskCommand(tx, ownerUserId, task.taskId, "completeWorkTask")) {
+        return;
+      }
+
+      await tx.runAsync(
       `
         UPDATE work_tasks
         SET status = 'completedLocal',
@@ -644,6 +690,31 @@ export async function attachMediaToWorkTask(workTaskId: string, file: LocalMobil
 
     await insertLocalFileInTransaction(tx, { ...file, status: "queued", workTaskId });
   }));
+}
+
+type WorkTaskTransitionCommand = "pauseWorkTask" | "resumeWorkTask" | "completeWorkTask";
+
+async function hasActiveWorkTaskCommand(
+  tx: SqlExecutor,
+  ownerUserId: string,
+  taskId: string,
+  commandType: WorkTaskTransitionCommand
+) {
+  const rows = await tx.getAllAsync<{ client_operation_id: string }>(
+    `
+      SELECT client_operation_id
+      FROM outbox_commands
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND entity_local_id = ?
+        AND command_type = ?
+        AND status IN ('pending', 'sending', 'retryLater', 'waiting_auth', 'waiting_network', 'wrong_contour', 'blocked')
+      LIMIT 1
+    `,
+    [ownerUserId, currentContourId, taskId, commandType]
+  );
+
+  return rows.length > 0;
 }
 
 async function requireOwnerUserId() {

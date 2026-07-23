@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   MobileAccountCreateDrawer,
   MobileAccountDeletePanel,
@@ -10,6 +10,7 @@ import {
 import { MobileAccountListPanel, type MobileAccountWorkspacePanel } from "./components/MobileAccountListPanel";
 import { MobileAccountSecurityPanels } from "./components/MobileAccountSecurityPanels";
 import { createApiMobileAccountsRepository } from "../../repositories/mobileAccountsRepository";
+import "./mobileAccountsWorkspace.css";
 import type {
   AccountMode,
   CreateMobileAccountPayload,
@@ -83,6 +84,8 @@ export function MobileAccountsScreen({
   const [activePanel, setActivePanel] = useState<MobileAccountWorkspacePanel | null>(null);
   const [fallbackEmployees, setFallbackEmployees] = useState<EmployeeDirectoryItem[]>([]);
   const [fallbackEmployeeAccountId, setFallbackEmployeeAccountId] = useState("");
+  const [panelBusy, setPanelBusy] = useState(false);
+  const panelBusyRef = useRef(false);
 
   useEffect(() => {
     if (accountCreateIntent === 0) return;
@@ -107,6 +110,7 @@ export function MobileAccountsScreen({
   }, [activePanel]);
 
   function openPanel(panel: MobileAccountWorkspacePanel) {
+    if (panelBusyRef.current) return;
     if (!canManage && panel !== "view") {
       onNotify("Недостаточно прав для управления мобильными аккаунтами.");
       return;
@@ -116,9 +120,26 @@ export function MobileAccountsScreen({
   }
 
   function closePanel() {
+    if (panelBusyRef.current) return;
     setActivePanel(null);
   }
 
+  async function runPanelOperation(operation: () => MaybePromise<void>) {
+    if (panelBusyRef.current) return;
+    panelBusyRef.current = true;
+    setPanelBusy(true);
+    try {
+      await operation();
+    } finally {
+      panelBusyRef.current = false;
+      setPanelBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!activePanel || activePanel === "create" || accountListStatus !== "ready" || selected || panelBusy) return;
+    setActivePanel(null);
+  }, [accountListStatus, activePanel, panelBusy, selected]);
   useEffect(() => {
     if (activePanel !== "link" || dataSourceMode !== "api" || employeeDirectory.length > 0 || !selected?.id) {
       return;
@@ -127,6 +148,7 @@ export function MobileAccountsScreen({
     let cancelled = false;
     const repository = createApiMobileAccountsRepository();
     setFallbackEmployeeAccountId(selected.id);
+    setFallbackEmployees([]);
     repository
       .getAvailableEmployees(selected.id)
       .then((employees) => {
@@ -149,7 +171,7 @@ export function MobileAccountsScreen({
       return (
         <MobileAccountCreateDrawer
           onClose={closePanel}
-          onCreateAccount={onCreateAccount}
+          onCreateAccount={(payload) => runPanelOperation(() => onCreateAccount(payload))}
           onNotify={onNotify}
           selected={selected}
         />
@@ -166,10 +188,10 @@ export function MobileAccountsScreen({
                 ? fallbackEmployees
                 : []
           }
-          onAttachEmployee={onAttachEmployee}
-          onBindEmployees={onBindEmployees}
+          onAttachEmployee={(employeeId, employeeName) => runPanelOperation(() => onAttachEmployee(employeeId, employeeName))}
+          onBindEmployees={(employeeIds) => runPanelOperation(() => onBindEmployees(employeeIds))}
           onClose={closePanel}
-          onDetachEmployee={onDetachEmployee}
+          onDetachEmployee={(employeeId) => runPanelOperation(() => onDetachEmployee(employeeId))}
           onNotify={onNotify}
           selected={selected}
         />
@@ -182,7 +204,7 @@ export function MobileAccountsScreen({
           onClose={closePanel}
           onNotify={onNotify}
           onOpenLink={() => openPanel("link")}
-          onUpdateAccount={onUpdateAccount}
+          onUpdateAccount={(payload) => runPanelOperation(() => onUpdateAccount(payload))}
           selected={selected}
         />
       );
@@ -204,7 +226,7 @@ export function MobileAccountsScreen({
       return (
         <MobileAccountDeletePanel
           onClose={closePanel}
-          onDeleteAccount={onDeleteAccount}
+          onDeleteAccount={() => runPanelOperation(onDeleteAccount)}
           selected={selected}
         />
       );
@@ -214,14 +236,14 @@ export function MobileAccountsScreen({
       <MobileAccountPasswordPanel
         onClose={closePanel}
         onNotify={onNotify}
-        onResetPassword={onResetPassword}
+        onResetPassword={() => runPanelOperation(onResetPassword)}
         selected={selected}
       />
     );
   }
 
   return (
-    <div className="screen-stack mobile-am-screen">
+    <div className="screen-stack mobile-am-screen mobile-accounts-workspace">
       <header className="mobile-am-page-head">
         <div>
           <h1>Мобильные аккаунты</h1>
@@ -234,29 +256,31 @@ export function MobileAccountsScreen({
         accounts={accounts}
         canManage={canManage}
         errorMessage={accountListErrorMessage}
+        isBusy={panelBusy}
         mode={mode}
         selectedAccountId={selectedAccountId}
         status={accountListStatus}
         onDeleteAccount={onDeleteAccount}
-        onDetachEmployee={onDetachEmployee}
+        onDetachEmployee={(employeeId, accountId) => runPanelOperation(() => onDetachEmployee(employeeId, accountId))}
         onModeChange={onModeChange}
         onNotify={onNotify}
         onOpenPanel={openPanel}
         onRetry={onRetryAccounts}
         onSelectAccount={onSelectAccount}
-        onToggleBlockAccount={onToggleBlockAccount}
+        onToggleBlockAccount={(accountId) => runPanelOperation(() => onToggleBlockAccount(accountId))}
       />
 
       {activePanel ? (
         <div
           aria-label="Окно управления мобильным аккаунтом"
           className={`account-panel-dock ${activePanel === "create" ? "account-panel-dock-create" : ""}`}
-          onMouseDown={closePanel}
+          onMouseDown={panelBusy ? undefined : closePanel}
           role="presentation"
         >
           <div
             aria-label={accountPanelTitles[activePanel]}
             aria-modal="true"
+            aria-busy={panelBusy}
             className={`account-panel-slot active ${activePanel}`}
             onMouseDown={(event) => event.stopPropagation()}
             role="dialog"

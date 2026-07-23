@@ -17,6 +17,7 @@ import { createMockInventoryRepository } from "../repositories/mockInventoryRepo
 import { PointResultTable } from "../features/patrol/results/PointResultTable";
 import { filterGroups, mapWithConcurrency, ResultsWorkspace } from "../features/patrol/results/ResultsWorkspace";
 import { AssignmentScreen } from "../features/patrol/AssignmentScreen";
+import { PatrolEmployeePickerModal } from "../features/patrol/EmployeesScreen";
 import { ScheduleScreen } from "../features/patrol/ScheduleScreen";
 import {
   loadAssignmentFavoriteEmployeeIds,
@@ -904,9 +905,10 @@ describe("shared UI primitives", () => {
         />
         <EmployeeProfileDrawer
           employee={employee}
-          onDeleteEmployee={vi.fn()}
+          onDeactivateEmployee={vi.fn()}
           onEditEmployee={vi.fn()}
           onNavigate={vi.fn()}
+          onRemoveFromPatrol={vi.fn()}
         />
       </>,
     );
@@ -919,6 +921,51 @@ describe("shared UI primitives", () => {
     expect(screen.queryByText("Мобильный вход")).not.toBeInTheDocument();
   });
 
+  it("applies patrol employee selection only after explicit save", async () => {
+    const user = userEvent.setup();
+    const onApply = vi.fn().mockResolvedValue(true);
+    const onClose = vi.fn();
+    const employeeBase = {
+      initials: "ТС",
+      personnelNo: "001",
+      position: "Контролёр",
+      department: "Цех 1",
+      employeeGroup: "Атом",
+      birthDate: "",
+      zone: "Цех 1",
+      status: "Активен",
+      routesDone: 0,
+      routesTotal: 0,
+      mobileStatus: "Привязан",
+      lastSeen: "",
+      phone: "",
+      hiredAt: "",
+      brigade: "",
+      shift: "День",
+      leader: "",
+      email: "",
+    };
+
+    render(
+      <PatrolEmployeePickerModal
+        allEmployees={[
+          { ...employeeBase, id: "employee-1", fullName: "Тестов Первый" },
+          { ...employeeBase, id: "employee-2", fullName: "Тестов Второй", personnelNo: "002" },
+        ] as never}
+        initialSelectedIds={["employee-1"]}
+        onApply={onApply}
+        onClose={onClose}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Тестов Второй/ }));
+    expect(onApply).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Сохранить список" }));
+    expect(onApply).toHaveBeenCalledTimes(1);
+    expect(onApply).toHaveBeenCalledWith(["employee-1", "employee-2"]);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
   it("opens patrol result details on result row double click", async () => {
     const user = userEvent.setup();
     const onSelectResult = vi.fn();
@@ -933,10 +980,10 @@ describe("shared UI primitives", () => {
     );
 
     await waitFor(() => expect(container.querySelectorAll("article.results-review-row").length).toBeGreaterThan(0));
-    const row = container.querySelector<HTMLElement>("article.results-review-row");
-    expect(row).not.toBeNull();
+    const openTarget = screen.getAllByRole("button", { name: /Открыть результат обхода/ })[0];
+    expect(openTarget).toBeInTheDocument();
 
-    await user.dblClick(row!);
+    await user.dblClick(openTarget);
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(onSelectResult).toHaveBeenCalled();
@@ -982,6 +1029,25 @@ describe("shared UI primitives", () => {
     expect(screen.getByLabelText("Маршрут")).toBeInTheDocument();
   });
 
+  it("does not keep header actions bound to a result hidden by the current filter", async () => {
+    const { container } = render(
+      <ResultsWorkspace
+        dataSourceMode="mock"
+        onSelectResult={vi.fn()}
+        onCreateRequest={vi.fn()}
+        onOpenRequest={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(container.querySelectorAll("article.results-review-row").length).toBeGreaterThan(0));
+    expect(screen.getByRole("button", { name: "Открыть заявку" })).toBeEnabled();
+
+    fireEvent.change(screen.getByLabelText("Поиск по результатам обходов"), { target: { value: "результат-которого-нет" } });
+
+    await waitFor(() => expect(container.querySelectorAll("article.results-review-row")).toHaveLength(0));
+    expect(screen.getByRole("button", { name: "Открыть заявку" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Создать заявку" })).toBeDisabled();
+  });
   it("debounces API result search and labels metrics as a loaded sample", async () => {
     const fetcher = vi.fn<typeof fetch>(async () =>
       new Response(JSON.stringify({ items: [], page: 1, pageSize: 100, total: 250, totalPages: 3, hasNext: true }), {

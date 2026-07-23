@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../api/client";
 import type {
   AccountMode,
@@ -25,6 +25,7 @@ import {
   unblockMobileAccountLocal,
   updateMobileAccountLocal,
 } from "../repositories/mobileAccountsRepository";
+import { resolveMobileAccountSecurityTarget } from "../domain/mobileAccounts";
 import { useStoredState } from "./useStoredState";
 
 export interface TemporaryPasswordNotice {
@@ -64,6 +65,8 @@ export function useMobileAccountsWorkspace({
   );
   const [mobileAccountSecurityStatus, setMobileAccountSecurityStatus] = useState<DataSourceStatus>("idle");
   const [mobileAccountSecurityErrorMessage, setMobileAccountSecurityErrorMessage] = useState<string | undefined>();
+  const mutationLocksRef = useRef(new Set<string>());
+  const securityRequestIdRef = useRef(0);
 
   const visibleAccounts = dataSourceMode === "api" ? apiAccounts : accounts;
 
@@ -90,7 +93,6 @@ export function useMobileAccountsWorkspace({
         if (signal?.aborted) return;
 
         const message = error instanceof Error ? error.message : "Не удалось загрузить мобильные аккаунты API";
-        setApiAccounts([]);
         setAccountListStatus("error");
         setAccountListErrorMessage(message);
         showToast(`Не удалось загрузить мобильные аккаунты API: ${message}`);
@@ -100,16 +102,19 @@ export function useMobileAccountsWorkspace({
   );
 
   const refreshMobileAccountSecurity = useCallback(
-    async ({ signal }: { signal?: AbortSignal } = {}) => {
-    if (dataSourceMode !== "api" || !enabled) {
-      setMobileAccountSessions([]);
-      setMobileAccountSecurityEvents(dataSourceMode === "mock" && enabled ? mapFallbackSecurityEvents() : []);
-      setMobileAccountSecurityStatus("idle");
+    async ({ signal, accountId }: { signal?: AbortSignal; accountId?: string } = {}) => {
+      if (dataSourceMode !== "api" || !enabled) {
+        setMobileAccountSessions([]);
+        setMobileAccountSecurityEvents(dataSourceMode === "mock" && enabled ? mapFallbackSecurityEvents() : []);
+        setMobileAccountSecurityStatus("idle");
         setMobileAccountSecurityErrorMessage(undefined);
         return;
       }
 
-      if (!selectedAccountId) {
+      const requestId = securityRequestIdRef.current + 1;
+      securityRequestIdRef.current = requestId;
+      const targetAccountId = resolveMobileAccountSecurityTarget(accountId, selectedAccountId);
+      if (!targetAccountId) {
         setMobileAccountSessions([]);
         setMobileAccountSecurityEvents([]);
         setMobileAccountSecurityStatus("ready");
@@ -122,16 +127,16 @@ export function useMobileAccountsWorkspace({
 
       try {
         const [sessions, securityEvents] = await Promise.all([
-          apiMobileAccounts.getSessions(selectedAccountId),
-          apiMobileAccounts.getSecurityEvents(selectedAccountId),
+          apiMobileAccounts.getSessions(targetAccountId),
+          apiMobileAccounts.getSecurityEvents(targetAccountId),
         ]);
-        if (signal?.aborted) return;
+        if (signal?.aborted || requestId !== securityRequestIdRef.current) return;
 
         setMobileAccountSessions(sessions);
         setMobileAccountSecurityEvents(securityEvents);
         setMobileAccountSecurityStatus("ready");
       } catch (error) {
-        if (signal?.aborted) return;
+        if (signal?.aborted || requestId !== securityRequestIdRef.current) return;
 
         const message = error instanceof Error ? error.message : "Не удалось загрузить сессии и журнал безопасности";
         setMobileAccountSessions([]);
@@ -157,7 +162,7 @@ export function useMobileAccountsWorkspace({
   }, [dataSourceMode, enabled, selectedAccountId, visibleAccounts]);
 
   useEffect(() => {
-    if (dataSourceMode !== "api" || !enabled) {
+      if (dataSourceMode !== "api" || !enabled) {
       setAccountListStatus("idle");
       setAccountListErrorMessage(undefined);
       return;
@@ -182,40 +187,43 @@ export function useMobileAccountsWorkspace({
   }
 
   async function createMobileAccount(payload: CreateMobileAccountPayload) {
-    if (dataSourceMode === "api") {
-      try {
-        const result = await apiMobileAccounts.createAccount(payload);
-        await refreshMobileAccounts();
-        setSelectedAccountId(result.account.id);
-        setAccountMode("accounts");
-        await refreshMobileAccountSecurity();
-        if (result.temporaryPassword) {
-          showTemporaryPassword({
-            accountLogin: result.account.login,
-            password: result.temporaryPassword,
-            title: "Временный пароль для нового аккаунта",
-          });
+    return runExclusiveMutation("create", async () => {
+      if (dataSourceMode === "api") {
+        try {
+          const result = await apiMobileAccounts.createAccount(payload);
+          setApiAccounts((current) => [result.account, ...current.filter((account) => account.id !== result.account.id)]);
+          setSelectedAccountId(result.account.id);
+          setAccountMode("accounts");
+          await refreshMobileAccounts();
+          await refreshMobileAccountSecurity({ accountId: result.account.id });
+          if (result.temporaryPassword) {
+            showTemporaryPassword({
+              accountLogin: result.account.login,
+              password: result.temporaryPassword,
+              title: "Временный пароль для нового аккаунта",
+            });
+          }
+          showToast(`Мобильный аккаунт ${result.account.login} создан`);
+        } catch (error) {
+          showToast(getErrorMessage(error, "Не удалось создать мобильный аккаунт"));
+          throw error;
         }
-        showToast(`Мобильный аккаунт ${result.account.login} создан`);
-      } catch (error) {
-        showToast(getErrorMessage(error, "Не удалось создать мобильный аккаунт"));
-        throw error;
+        return;
       }
-      return;
-    }
 
-    const { account, accounts: nextAccounts, temporaryPassword } = createLocalMobileAccount(accounts, payload);
-    setAccounts(nextAccounts);
-    setSelectedAccountId(account.id);
-    setAccountMode("accounts");
-    if (temporaryPassword) {
-      showTemporaryPassword({
-        accountLogin: account.login,
-        password: temporaryPassword,
-        title: "Временный пароль для локального аккаунта",
-      });
-    }
-    showToast(`Мобильный аккаунт ${account.login} создан: ${account.employee}`);
+      const { account, accounts: nextAccounts, temporaryPassword } = createLocalMobileAccount(accounts, payload);
+      setAccounts(nextAccounts);
+      setSelectedAccountId(account.id);
+      setAccountMode("accounts");
+      if (temporaryPassword) {
+        showTemporaryPassword({
+          accountLogin: account.login,
+          password: temporaryPassword,
+          title: "Временный пароль для локального аккаунта",
+        });
+      }
+      showToast(`Мобильный аккаунт ${account.login} создан: ${account.employee}`);
+    });
   }
 
   async function attachEmployeeToSelectedAccount(employeeId: string, employeeName: string) {
@@ -338,7 +346,7 @@ export function useMobileAccountsWorkspace({
           ? await apiMobileAccounts.unblockAccount(targetAccountId)
           : await apiMobileAccounts.blockAccount(targetAccountId);
         await refreshMobileAccounts();
-        await refreshMobileAccountSecurity();
+        await refreshMobileAccountSecurity({ accountId: targetAccountId });
         showToast(isBlocked ? `Аккаунт ${nextAccount.login} разблокирован` : `Аккаунт ${nextAccount.login} заблокирован`);
       } catch (error) {
         showToast(getErrorMessage(error, isBlocked ? "Не удалось разблокировать аккаунт" : "Не удалось заблокировать аккаунт"));
@@ -369,7 +377,7 @@ export function useMobileAccountsWorkspace({
       try {
         await apiMobileAccounts.detachEmployee(targetAccountId, resolvedEmployeeId!);
         await refreshMobileAccounts();
-        await refreshMobileAccountSecurity();
+        await refreshMobileAccountSecurity({ accountId: targetAccountId });
         showToast("Сотрудник отвязан от аккаунта");
       } catch (error) {
         showToast(getErrorMessage(error, "Не удалось отвязать сотрудника"));
@@ -383,66 +391,89 @@ export function useMobileAccountsWorkspace({
   }
 
   async function deleteSelectedAccount() {
-    if (!selectedAccountId) {
-      showToast("Сначала выберите мобильный аккаунт");
-      return;
-    }
-
-    const account = visibleAccounts.find((item) => item.id === selectedAccountId);
-
-    if (dataSourceMode === "api") {
-      try {
-        await apiMobileAccounts.deleteAccount(selectedAccountId);
-        await refreshMobileAccounts();
-        await refreshMobileAccountSecurity();
-        showToast(account ? `Аккаунт ${account.login} удален` : "Аккаунт удален");
-      } catch (error) {
-        showToast(getErrorMessage(error, "Не удалось удалить аккаунт"));
-        throw error;
+    return runExclusiveMutation("delete", async () => {
+      const targetAccountId = selectedAccountId;
+      if (!targetAccountId) {
+        showToast("Сначала выберите мобильный аккаунт");
+        return;
       }
-      return;
-    }
 
-    const nextAccounts = deleteMobileAccount(accounts, selectedAccountId);
-    setAccounts(nextAccounts);
-    setSelectedAccountId(nextAccounts[0]?.id ?? "");
-    showToast(account ? `Аккаунт ${account.login} удален из локального прототипа` : "Аккаунт удален");
+      const account = visibleAccounts.find((item) => item.id === targetAccountId);
+      const remainingAccounts = visibleAccounts.filter((item) => item.id !== targetAccountId);
+      const nextSelectedAccountId = remainingAccounts[0]?.id ?? "";
+
+      if (dataSourceMode === "api") {
+        try {
+          await apiMobileAccounts.deleteAccount(targetAccountId);
+          setApiAccounts(remainingAccounts);
+          setSelectedAccountId(nextSelectedAccountId);
+          await refreshMobileAccounts();
+          await refreshMobileAccountSecurity({ accountId: nextSelectedAccountId });
+          showToast(account ? `Аккаунт ${account.login} удален` : "Аккаунт удален");
+        } catch (error) {
+          showToast(getErrorMessage(error, "Не удалось удалить аккаунт"));
+          throw error;
+        }
+        return;
+      }
+
+      const nextAccounts = deleteMobileAccount(accounts, targetAccountId);
+      setAccounts(nextAccounts);
+      setSelectedAccountId(nextAccounts[0]?.id ?? "");
+      showToast(account ? `Аккаунт ${account.login} удален из локального прототипа` : "Аккаунт удален");
+    });
   }
 
   async function resetSelectedPassword() {
-    if (!selectedAccountId) {
-      showToast("Сначала выберите мобильный аккаунт");
-      return;
-    }
-
-    if (dataSourceMode === "api") {
-      try {
-        const result = await apiMobileAccounts.resetPassword(selectedAccountId);
-        await refreshMobileAccounts();
-        await refreshMobileAccountSecurity();
-        const account = visibleAccounts.find((item) => item.id === selectedAccountId);
-        showTemporaryPassword({
-          accountLogin: account?.login ?? selectedAccountId,
-          password: result.temporaryPassword,
-          title: "Временный пароль после сброса",
-        });
-        showToast("Временный пароль выдан");
-      } catch (error) {
-        showToast(getErrorMessage(error, "Не удалось сбросить пароль"));
-        throw error;
+    return runExclusiveMutation("reset-password", async () => {
+      const targetAccountId = selectedAccountId;
+      if (!targetAccountId) {
+        showToast("Сначала выберите мобильный аккаунт");
+        return;
       }
-      return;
+
+      if (dataSourceMode === "api") {
+        try {
+          const account = visibleAccounts.find((item) => item.id === targetAccountId);
+          const result = await apiMobileAccounts.resetPassword(targetAccountId);
+          await refreshMobileAccounts();
+          await refreshMobileAccountSecurity({ accountId: targetAccountId });
+          showTemporaryPassword({
+            accountLogin: account?.login ?? targetAccountId,
+            password: result.temporaryPassword,
+            title: "Временный пароль после сброса",
+          });
+          showToast("Временный пароль выдан");
+        } catch (error) {
+          showToast(getErrorMessage(error, "Не удалось сбросить пароль"));
+          throw error;
+        }
+        return;
+      }
+
+      const result = resetMobileAccountLocalPassword(accounts, targetAccountId);
+      setAccounts(result.accounts);
+      const account = visibleAccounts.find((item) => item.id === targetAccountId);
+      showTemporaryPassword({
+        accountLogin: account?.login ?? targetAccountId,
+        password: result.temporaryPassword,
+        title: "Временный пароль после локального сброса",
+      });
+      showToast("Пароль обновлен");
+    });
+  }
+
+  async function runExclusiveMutation<T>(key: string, operation: () => Promise<T> | T) {
+    if (mutationLocksRef.current.has(key)) {
+      throw new Error("Операция с мобильным аккаунтом уже выполняется.");
     }
 
-    const result = resetMobileAccountLocalPassword(accounts, selectedAccountId);
-    setAccounts(result.accounts);
-    const account = visibleAccounts.find((item) => item.id === selectedAccountId);
-    showTemporaryPassword({
-      accountLogin: account?.login ?? selectedAccountId,
-      password: result.temporaryPassword,
-      title: "Временный пароль после локального сброса",
-    });
-    showToast("Пароль обновлен");
+    mutationLocksRef.current.add(key);
+    try {
+      return await operation();
+    } finally {
+      mutationLocksRef.current.delete(key);
+    }
   }
 
   return {

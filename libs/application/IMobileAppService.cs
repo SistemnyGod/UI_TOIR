@@ -52,7 +52,7 @@ public sealed record MobileFileUploadCommand(
     Guid? PointId,
     string? RemarkId,
     Guid? WorkTaskId,
-    string Sha256,
+    string? Sha256,
     long SizeBytes,
     DateTimeOffset CapturedAtLocal,
     string FileName,

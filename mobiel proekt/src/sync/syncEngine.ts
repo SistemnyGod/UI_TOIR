@@ -1,6 +1,7 @@
 import { uploadMobileFile } from "@/api/fileApi";
 import { refreshStoredAccessToken } from "@/api/httpClient";
 import { getOutboxResult, postOutbox } from "@/api/mobileApi";
+import { MobileNetworkError } from "@/api/networkTimeout";
 import { checkServerConnection } from "@/api/serverHealthApi";
 import { getAccessToken, getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { isReauthenticationRequiredError } from "@/auth/sessionErrors";
@@ -38,6 +39,7 @@ import { processOrderedOutboxBatch } from "@/sync/orderedOutboxBatch";
 import { mapWithConcurrency } from "@/sync/boundedAsync";
 import { shouldContinueOutboxSync } from "@/sync/outboxContinuationPolicy";
 import { emitSyncEvent } from "@/sync/syncEvents";
+import { extractUploadClientFileIds } from "@/sync/uploadCandidatePolicy";
 
 export type ForegroundSyncResult = {
   sent: number;
@@ -89,6 +91,11 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
 
   const serverCheck = await checkServerConnection();
   if (!serverCheck.ok) {
+    if (serverCheck.errorKind === "offline") {
+      await markPendingOutboxCommandsWaitingNetwork(ownerUserId, serverCheck.message);
+      return { sent: 0, skipped: "offline" as const, hasMore: false };
+    }
+
     await markPendingOutboxCommandsRetryLater(ownerUserId, serverCheck.message);
     return { sent: 0, skipped: "serverUnavailable" as const, hasMore: false };
   }
@@ -122,7 +129,7 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
 
     const batchResult = await processOrderedOutboxBatch(commands, {
       getDependencyKey: getCommandDependencyKey,
-      isFatal: isAuthRequiredError,
+      isFatal: (error) => isAuthRequiredError(error) || isOfflineNetworkError(error),
       process: async (command) => {
         const commandIds = [command.clientOperationId];
         await markOutboxCommandsSending(ownerUserId, commandIds);
@@ -141,6 +148,8 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
             await markOutboxCommandsWrongContour(ownerUserId, commandIds, readableError);
           } else if (isAuthRequiredError(error)) {
             await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError);
+          } else if (isOfflineNetworkError(error)) {
+            await markPendingOutboxCommandsWaitingNetwork(ownerUserId, readableError);
           } else {
             await markOutboxCommandsRetryLater(ownerUserId, commandIds, readableError);
           }
@@ -178,6 +187,11 @@ async function ensureAccessTokenForSync(ownerUserId: string): Promise<"ok" | "se
     if (isAuthRequiredError(error)) {
       await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError);
       return "unauthenticated";
+    }
+
+    if (isOfflineNetworkError(error)) {
+      await markPendingOutboxCommandsWaitingNetwork(ownerUserId, readableError);
+      return "serverUnavailable";
     }
 
     await markPendingOutboxCommandsRetryLater(ownerUserId, readableError);
@@ -364,7 +378,11 @@ async function uploadFilesForCompleteCommands(ownerUserId: string, commands: Out
       if (isAuthRequiredError(error)) {
         throw error;
       }
-      throw new Error("Не удалось отправить файл на сервер. Отчет останется в очереди восстановления.");
+      const message = "Не удалось отправить файл на сервер. Отчет останется в очереди восстановления.";
+      if (error instanceof MobileNetworkError) {
+        throw new MobileNetworkError(error.kind, error, `${message} ${error.message}`);
+      }
+      throw new Error(message);
     }
   }
 }
@@ -376,36 +394,6 @@ async function listWorkFilesForCommands(commands: OutboxCommand[]) {
     .filter((value): value is string => Boolean(value))));
   const files = await Promise.all(workTaskIds.map((workTaskId) => listWorkTaskFiles(workTaskId)));
   return files.flat();
-}
-
-function extractUploadClientFileIds(command: OutboxCommand) {
-  if (command.commandType === "createShiftRemark" || command.commandType === "attachShiftRemarkMedia") {
-    const mediaClientFileIds = command.payload.mediaClientFileIds;
-    return Array.isArray(mediaClientFileIds)
-      ? mediaClientFileIds.filter((item): item is string => typeof item === "string")
-      : [];
-  }
-
-  if (command.commandType === "completePatrolAssignment") {
-    return extractPatrolPhotoClientFileIds(command);
-  }
-
-  return [];
-}
-
-function extractPatrolPhotoClientFileIds(command: OutboxCommand) {
-  const pointResults = command.payload.pointResults;
-  if (!Array.isArray(pointResults)) {
-    return [];
-  }
-
-  return pointResults.flatMap((result) => {
-    if (!isRecord(result) || !Array.isArray(result.photoClientFileIds)) {
-      return [];
-    }
-
-    return result.photoClientFileIds.filter((item): item is string => typeof item === "string");
-  });
 }
 
 function getAcceptedCompletionFileIds(commands: OutboxCommand[], responses: OutboxResponse[]) {
@@ -422,14 +410,11 @@ function getAcceptedCompletionFileIds(commands: OutboxCommand[], responses: Outb
           (command) =>
             command.commandType === "completePatrolAssignment" && acceptedOperationIds.has(command.clientOperationId)
         )
-        .flatMap(extractPatrolPhotoClientFileIds)
+        .flatMap(extractUploadClientFileIds)
     )
   );
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function logAcceptedReports(commands: OutboxCommand[], responses: OutboxResponse[]) {
   const acceptedIds = new Set(
@@ -467,4 +452,8 @@ function isAuthRequiredError(error: unknown) {
 
 function isWrongContourError(error: unknown) {
   return error instanceof Error && /wrong_contour|друг(ого|ому|ом)\s+(?:серверн(ого|ом)\s+)?контур/i.test(error.message);
+}
+
+function isOfflineNetworkError(error: unknown) {
+  return error instanceof MobileNetworkError && error.kind === "offline";
 }

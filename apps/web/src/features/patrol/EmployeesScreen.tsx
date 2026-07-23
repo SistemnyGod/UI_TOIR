@@ -1,12 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EmployeeDirectoryPanel } from "./components/employees/EmployeeDirectoryPanel";
 import { EmployeeFormModal } from "./components/employees/EmployeeFormModal";
 import { EmployeeMobileAccessPanel } from "./components/employees/EmployeeMobileAccessPanel";
 import { EmployeeProfileDrawer } from "./components/employees/EmployeeProfileDrawer";
-import {
-  employeesFallback,
-  findEmployee,
-} from "../../repositories/employeesRepository";
+import { employeesFallback, findEmployee } from "../../repositories/employeesRepository";
 import { createApiAssignmentsRepository } from "../../repositories/assignmentsRepository";
 import {
   loadAssignmentFavoriteEmployeeIds,
@@ -14,6 +11,7 @@ import {
   subscribeAssignmentFavoriteEmployeeIds,
 } from "./assignments/assignmentStorage";
 import type { DataSourceMode, EmployeeDirectoryItem, EmployeeFormPayload, ScreenId } from "../../types";
+import "./employees/employeesWorkspace.css";
 
 type EmployeeFormState =
   | { mode: "create" }
@@ -27,6 +25,7 @@ export function EmployeesScreen({
   employeeCreateIntent,
   selectedEmployeeId,
   onCreateEmployee,
+  onDeleteEmployee,
   onNavigate,
   onNotify,
   onSelectEmployee,
@@ -47,8 +46,10 @@ export function EmployeesScreen({
   const apiAssignments = useMemo(() => createApiAssignmentsRepository(), []);
   const [formState, setFormState] = useState<EmployeeFormState>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [isPatrolListSaving, setIsPatrolListSaving] = useState(false);
+  const patrolListSavingRef = useRef(false);
   const [patrolEmployeeIds, setPatrolEmployeeIds] = useState<string[]>(() => loadAssignmentFavoriteEmployeeIds());
-  const allEmployees = employees.length > 0 ? employees : employeesFallback;
+  const allEmployees = dataSourceMode === "api" ? employees : employees.length > 0 ? employees : employeesFallback;
   const patrolEmployeeSet = useMemo(() => new Set(patrolEmployeeIds), [patrolEmployeeIds]);
   const employeeDirectory = useMemo(
     () => allEmployees.filter((employee) => patrolEmployeeSet.has(employee.id)),
@@ -62,12 +63,10 @@ export function EmployeesScreen({
       groups: uniqueValues(["Атом", "Атом Экология", ...employeeDirectory.map((employee) => employee.employeeGroup)]),
       positions: uniqueValues(allEmployees.map((employee) => employee.position)),
     }),
-    [allEmployees],
+    [allEmployees, employeeDirectory],
   );
 
-  useEffect(() => {
-    return subscribeAssignmentFavoriteEmployeeIds(setPatrolEmployeeIds);
-  }, []);
+  useEffect(() => subscribeAssignmentFavoriteEmployeeIds(setPatrolEmployeeIds), []);
 
   useEffect(() => {
     if (dataSourceMode !== "api") return;
@@ -82,7 +81,7 @@ export function EmployeesScreen({
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        onNotify(error instanceof Error ? error.message : "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u043e\u0432 \u043e\u0431\u0445\u043e\u0434\u0430.");
+        onNotify(error instanceof Error ? error.message : "Не удалось загрузить список сотрудников обхода.");
       });
 
     return () => controller.abort();
@@ -100,14 +99,13 @@ export function EmployeesScreen({
   }, [employeeDirectory, onSelectEmployee, patrolEmployeeSet, selectedEmployeeId]);
 
   useEffect(() => {
-    if (employeeCreateIntent > 0) {
-      if (!canManage) {
-        onNotify("Недостаточно прав для управления сотрудниками.");
-        return;
-      }
-
-      setFormState({ mode: "create" });
+    if (employeeCreateIntent <= 0) return;
+    if (!canManage) {
+      onNotify("Недостаточно прав для управления сотрудниками.");
+      return;
     }
+
+    setFormState({ mode: "create" });
   }, [canManage, employeeCreateIntent, onNotify]);
 
   async function submitEmployee(payload: EmployeeFormPayload) {
@@ -122,36 +120,56 @@ export function EmployeesScreen({
     }
 
     const employeeId = await onCreateEmployee(payload);
-    updatePatrolEmployeeIds([...patrolEmployeeIds, employeeId]);
-    onSelectEmployee(employeeId);
+    const added = await updatePatrolEmployeeIds([...patrolEmployeeIds, employeeId]);
+    if (added) onSelectEmployee(employeeId);
   }
 
-  async function deleteEmployee(employeeId: string) {
+  async function removeEmployeeFromPatrol(employeeId: string) {
     if (!canManage) {
       onNotify("Недостаточно прав для управления сотрудниками.");
       return;
     }
 
-    updatePatrolEmployeeIds(patrolEmployeeIds.filter((id) => id !== employeeId));
-    if (selectedEmployeeId === employeeId) {
-      onSelectEmployee("");
-    }
-    onNotify("Сотрудник убран из списка Обхода. В общем справочнике он остается.");
+    const removed = await updatePatrolEmployeeIds(patrolEmployeeIds.filter((id) => id !== employeeId));
+    if (!removed) return;
+    if (selectedEmployeeId === employeeId) onSelectEmployee("");
+    onNotify("Сотрудник убран из списка обхода. В общем справочнике он остаётся.");
   }
 
-  function updatePatrolEmployeeIds(nextIds: string[]) {
-    const uniqueIds = Array.from(new Set(nextIds));
-    setPatrolEmployeeIds(uniqueIds);
-    saveAssignmentFavoriteEmployeeIds(uniqueIds);
-    if (dataSourceMode === "api") {
-      void apiAssignments.updateSettings({ favoriteEmployeeIds: uniqueIds }).catch((error: unknown) => {
-        onNotify(error instanceof Error ? error.message : "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u043e\u0432 \u043e\u0431\u0445\u043e\u0434\u0430.");
-      });
+  async function deactivateEmployee(employeeId: string) {
+    if (!canManage) {
+      onNotify("Недостаточно прав для управления сотрудниками.");
+      return;
+    }
+
+    await onDeleteEmployee(employeeId);
+    await updatePatrolEmployeeIds(patrolEmployeeIds.filter((id) => id !== employeeId));
+    if (selectedEmployeeId === employeeId) onSelectEmployee("");
+  }
+
+  async function updatePatrolEmployeeIds(nextIds: string[]) {
+    if (patrolListSavingRef.current) return false;
+    patrolListSavingRef.current = true;
+    const uniqueIds = Array.from(new Set(nextIds.filter(Boolean)));
+    setIsPatrolListSaving(true);
+    try {
+      if (dataSourceMode === "api") {
+        await apiAssignments.updateSettings({ favoriteEmployeeIds: uniqueIds });
+      }
+      setPatrolEmployeeIds(uniqueIds);
+      saveAssignmentFavoriteEmployeeIds(uniqueIds);
+      return true;
+    } catch (error) {
+      onNotify(error instanceof Error ? error.message : "Не удалось сохранить список сотрудников обхода.");
+      return false;
+    } finally {
+      patrolListSavingRef.current = false;
+      setIsPatrolListSaving(false);
     }
   }
 
   return (
-    <div className="screen-stack employees-screen">
+    <div className="screen-stack employees-screen employees-workspace-screen">
       <EmployeeMobileAccessPanel onNavigate={onNavigate} onNotify={onNotify} />
 
       <div className="two-column wide-left employees-workspace">
@@ -159,13 +177,13 @@ export function EmployeesScreen({
           employees={employeeDirectory}
           canManage={canManage}
           allEmployeesCount={allEmployees.length}
+          isSaving={isPatrolListSaving}
           onOpenAddFromAccounting={() => setPickerOpen(true)}
           onOpenCreate={() => {
             if (!canManage) {
               onNotify("Недостаточно прав для управления сотрудниками.");
               return;
             }
-
             setFormState({ mode: "create" });
           }}
           onSelectEmployee={onSelectEmployee}
@@ -174,33 +192,37 @@ export function EmployeesScreen({
         <EmployeeProfileDrawer
           employee={selected}
           canManage={canManage}
-          onDeleteEmployee={deleteEmployee}
+          isSaving={isPatrolListSaving}
+          onDeactivateEmployee={deactivateEmployee}
           onEditEmployee={(employee) => {
             if (!canManage) {
               onNotify("Недостаточно прав для управления сотрудниками.");
               return;
             }
-
             setFormState({ mode: "edit", employeeId: employee.id });
           }}
           onNavigate={onNavigate}
+          onRemoveFromPatrol={removeEmployeeFromPatrol}
         />
       </div>
+
       {formState ? (
         <EmployeeFormModal
           employee={editedEmployee}
           mode={formState.mode}
           onClose={() => setFormState(null)}
-          onDelete={deleteEmployee}
+          onDelete={deactivateEmployee}
           onSubmit={submitEmployee}
           referenceOptions={referenceOptions}
         />
       ) : null}
+
       {pickerOpen ? (
         <PatrolEmployeePickerModal
           allEmployees={allEmployees}
-          selectedIds={patrolEmployeeIds}
-          onChange={updatePatrolEmployeeIds}
+          initialSelectedIds={patrolEmployeeIds}
+          isSaving={isPatrolListSaving}
+          onApply={updatePatrolEmployeeIds}
           onClose={() => setPickerOpen(false)}
         />
       ) : null}
@@ -208,19 +230,23 @@ export function EmployeesScreen({
   );
 }
 
-function PatrolEmployeePickerModal({
+export function PatrolEmployeePickerModal({
   allEmployees,
-  selectedIds,
-  onChange,
+  initialSelectedIds,
+  isSaving = false,
+  onApply,
   onClose,
 }: {
   allEmployees: EmployeeDirectoryItem[];
-  selectedIds: string[];
-  onChange: (ids: string[]) => void;
+  initialSelectedIds: string[];
+  isSaving?: boolean;
+  onApply: (ids: string[]) => Promise<boolean> | boolean;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const [draftIds, setDraftIds] = useState(() => Array.from(new Set(initialSelectedIds)));
+  const [isApplying, setIsApplying] = useState(false);
+  const selectedSet = useMemo(() => new Set(draftIds), [draftIds]);
   const visibleEmployees = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return allEmployees
@@ -235,50 +261,88 @@ function PatrolEmployeePickerModal({
   }, [allEmployees, query]);
 
   function toggle(employeeId: string) {
-    if (selectedSet.has(employeeId)) {
-      onChange(selectedIds.filter((id) => id !== employeeId));
-      return;
-    }
-
-    onChange([...selectedIds, employeeId]);
+    setDraftIds((current) =>
+      current.includes(employeeId) ? current.filter((id) => id !== employeeId) : [...current, employeeId],
+    );
   }
 
+  async function applySelection() {
+    if (isApplying || isSaving) return;
+    setIsApplying(true);
+    try {
+      const applied = await onApply(draftIds);
+      if (applied) onClose();
+    } finally {
+      setIsApplying(false);
+    }
+  }
+
+  const pending = isApplying || isSaving;
+
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <section className="modal-window patrol-employee-picker-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
+    <div className="modal-backdrop" onMouseDown={pending ? undefined : onClose}>
+      <section
+        aria-labelledby="patrol-employee-picker-title"
+        aria-modal="true"
+        className="modal-window patrol-employee-picker-modal"
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && !pending) onClose();
+        }}
+        onMouseDown={(event) => event.stopPropagation()}
+        role="dialog"
+      >
         <header className="modal-head">
           <div>
-            <h2>Добавить сотрудников в Обход</h2>
-            <p>Выберите сотрудников из общего справочника бухгалтерии. Здесь хранится только список для обхода территории.</p>
+            <h2 id="patrol-employee-picker-title">Сотрудники для обходов</h2>
+            <p>Выберите сотрудников из общего справочника. Изменения применятся одной операцией после сохранения.</p>
           </div>
-          <button className="icon-button" onClick={onClose} type="button">×</button>
+          <button aria-label="Закрыть" className="icon-button" disabled={pending} onClick={onClose} type="button">×</button>
         </header>
+
         <div className="patrol-employee-picker-toolbar">
           <label>
             Поиск
-            <input autoFocus value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="ФИО, табельный номер, должность, подразделение" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(event) => setQuery(event.currentTarget.value)}
+              placeholder="ФИО, табельный номер, должность, подразделение"
+            />
           </label>
-          <strong>{selectedIds.length} добавлено из {allEmployees.length}</strong>
+          <strong>{draftIds.length} выбрано из {allEmployees.length}</strong>
         </div>
+
         <div className="patrol-employee-picker-list">
-          {visibleEmployees.map((employee) => {
+          {visibleEmployees.length > 0 ? visibleEmployees.map((employee) => {
             const selected = selectedSet.has(employee.id);
             return (
-              <button className={`patrol-employee-picker-row ${selected ? "selected" : ""}`} key={employee.id} onClick={() => toggle(employee.id)} type="button">
+              <button
+                aria-pressed={selected}
+                className={`patrol-employee-picker-row ${selected ? "selected" : ""}`}
+                key={employee.id}
+                onClick={() => toggle(employee.id)}
+                type="button"
+              >
                 <span className="avatar small">{employee.initials}</span>
                 <span>
                   <strong>{employee.fullName}</strong>
                   <small>{employee.position}</small>
                   <em>{employee.department || employee.zone || "Без подразделения"}</em>
                 </span>
-                <b>{selected ? "Добавлен" : "Добавить"}</b>
+                <b>{selected ? "Выбран" : "Выбрать"}</b>
               </button>
             );
-          })}
+          }) : <p className="patrol-employee-picker-empty">По запросу сотрудники не найдены.</p>}
         </div>
+
         <footer className="modal-actions">
-          <button className="button ghost" onClick={() => onChange([])} type="button">Очистить список</button>
-          <button className="button primary" onClick={onClose} type="button">Готово</button>
+          <button className="button ghost" disabled={pending || draftIds.length === 0} onClick={() => setDraftIds([])} type="button">
+            Очистить выбор
+          </button>
+          <button className="button ghost" disabled={pending} onClick={onClose} type="button">Отмена</button>
+          <button className="button primary" disabled={pending} onClick={applySelection} type="button">
+            {pending ? "Сохранение..." : "Сохранить список"}
+          </button>
         </footer>
       </section>
     </div>

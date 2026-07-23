@@ -11,6 +11,7 @@ export function MobileAccountListPanel({
   accounts,
   canManage = true,
   errorMessage,
+  isBusy = false,
   mode,
   selectedAccountId,
   status = "idle",
@@ -26,6 +27,7 @@ export function MobileAccountListPanel({
   accounts: MobileAccount[];
   canManage?: boolean;
   errorMessage?: string;
+  isBusy?: boolean;
   mode: AccountMode;
   selectedAccountId: string;
   status?: DataSourceStatus;
@@ -127,22 +129,22 @@ export function MobileAccountListPanel({
           <p>Создание, управление и привязка сотрудников к мобильным аккаунтам</p>
         </div>
         <div className="mobile-am-actions">
-          <button className={activePanel === "create" ? "primary" : ""} disabled={!canManage} onClick={() => onOpenPanel("create")} type="button">
+          <button className={activePanel === "create" ? "primary" : ""} disabled={!canManage || isBusy} onClick={() => onOpenPanel("create")} type="button">
             <span aria-hidden="true">+</span> Создать аккаунт
           </button>
-          <button disabled={!canManage} onClick={() => onOpenPanel("link")} type="button">
+          <button disabled={!canManage || isBusy || !selected} onClick={() => onOpenPanel("link")} type="button">
             <span aria-hidden="true">↔</span> Привязать сотрудника
           </button>
-          <button disabled={!canManage} onClick={() => onOpenPanel("password")} type="button">
+          <button disabled={!canManage || isBusy || !selected} onClick={() => onOpenPanel("password")} type="button">
             <span aria-hidden="true">⌘</span> Изменить пароль
           </button>
-          <button disabled={!canManage} onClick={() => onOpenPanel("edit")} type="button">
+          <button disabled={!canManage || isBusy || !selected} onClick={() => onOpenPanel("edit")} type="button">
             <span aria-hidden="true">✎</span> Редактировать
           </button>
-          <button onClick={() => onOpenPanel("view")} type="button">
+          <button disabled={isBusy || !selected} onClick={() => onOpenPanel("view")} type="button">
             <span aria-hidden="true">◎</span> Просмотр
           </button>
-          <button className="danger" disabled={!canManage} onClick={() => onOpenPanel("delete")} type="button">
+          <button className="danger" disabled={!canManage || isBusy || !selected} onClick={() => onOpenPanel("delete")} type="button">
             <span aria-hidden="true">×</span> Удалить
           </button>
         </div>
@@ -160,7 +162,7 @@ export function MobileAccountListPanel({
         <FilterSelect label="Роль" onChange={setRoleFilter} value={roleFilter} values={roles} />
         <FilterSelect label="Статус аккаунта" onChange={setAccountStatusFilter} value={accountStatusFilter} values={accountStatuses} />
         <FilterSelect label="Статус сессии" onChange={setSessionStatusFilter} value={sessionStatusFilter} values={sessionStatuses} />
-        <button className="mobile-am-reset" onClick={resetFilters} type="button">
+        <button className="mobile-am-reset" disabled={isBusy} onClick={resetFilters} type="button">
           Сбросить фильтры
         </button>
       </div>
@@ -191,7 +193,7 @@ export function MobileAccountListPanel({
           description={errorMessage ?? "Проверьте доступность backend API и повторите загрузку."}
           action={
             onRetry ? (
-              <button className="button ghost" onClick={() => void onRetry()} type="button">
+              <button className="button ghost" disabled={isBusy} onClick={() => void onRetry()} type="button">
                 Повторить загрузку
               </button>
             ) : undefined
@@ -204,6 +206,7 @@ export function MobileAccountListPanel({
           <MobileAccountsTable
             accounts={filteredAccounts}
             canManage={canManage}
+            isBusy={isBusy}
             openMenuId={openMenuId}
             selectedAccountId={selected?.id ?? ""}
             setOpenMenuId={setOpenMenuId}
@@ -306,6 +309,7 @@ function FilterSelect({
 function MobileAccountsTable({
   accounts,
   canManage,
+  isBusy,
   openMenuId,
   selectedAccountId,
   setOpenMenuId,
@@ -316,6 +320,7 @@ function MobileAccountsTable({
 }: {
   accounts: MobileAccount[];
   canManage: boolean;
+  isBusy: boolean;
   openMenuId: string | null;
   selectedAccountId: string;
   setOpenMenuId: (id: string | null) => void;
@@ -346,25 +351,25 @@ function MobileAccountsTable({
               key={account.id}
               onClick={() => onSelectAccount(account.id)}
             >
-              <td>
+              <td data-label="Логин">
                 <strong className="mobile-am-login">{account.login}</strong>
               </td>
-              <td>
+              <td data-label="Сотрудники">
                 <EmployeeChipList account={account} />
               </td>
-              <td>{displayKnownValue(account.role)}</td>
-              <td>
+              <td data-label="Роль">{displayKnownValue(account.role)}</td>
+              <td data-label="Статус аккаунта">
                 <StatusBadge value={account.status} />
               </td>
-              <td>
+              <td data-label="Статус сессии">
                 <SessionBadge value={account.session} />
               </td>
-              <td>{account.lastSeen || "-"}</td>
-              <td>
+              <td data-label="Последняя активность">{account.lastSeen || "-"}</td>
+              <td data-label="Устройство">
                 <span className="mobile-am-device">{account.device || "-"}</span>
                 <span className="muted-line">{account.version || ""}</span>
               </td>
-              <td className="mobile-am-actions-cell">
+              <td className="mobile-am-actions-cell" data-label="Действия">
                 <button
                   aria-label={`Просмотр ${account.login}`}
                   onClick={(event) => {
@@ -377,7 +382,7 @@ function MobileAccountsTable({
                 </button>
                 <button
                   aria-label={`Редактировать ${account.login}`}
-                  disabled={!canManage}
+                  disabled={!canManage || isBusy}
                   onClick={(event) => {
                     event.stopPropagation();
                     onOpenPanel("edit", account);
@@ -388,7 +393,7 @@ function MobileAccountsTable({
                 </button>
                 <button
                   aria-label={`Действия ${account.login}`}
-                  disabled={!canManage}
+                  disabled={!canManage || isBusy}
                   onClick={(event) => {
                     event.stopPropagation();
                     setOpenMenuId(openMenuId === account.id ? null : account.id);
@@ -400,6 +405,7 @@ function MobileAccountsTable({
                 {openMenuId === account.id ? (
                   <AccountActionMenu
                     account={account}
+                    isBusy={isBusy}
                     onDetachEmployee={onDetachEmployee}
                     onOpenPanel={onOpenPanel}
                     onToggleBlockAccount={onToggleBlockAccount}
@@ -410,14 +416,7 @@ function MobileAccountsTable({
           ))}
         </tbody>
       </table>
-      <div className="mobile-am-pagination">
-        <span>Показано {accounts.length} из {accounts.length}</span>
-        <div>
-          <button type="button">‹</button>
-          <button className="active" type="button">1</button>
-          <button type="button">›</button>
-        </div>
-      </div>
+      <div className="mobile-am-list-footer">Показано аккаунтов: {accounts.length}</div>
     </div>
   );
 }
@@ -464,11 +463,13 @@ function SessionBadge({ value }: { value: MobileAccount["session"] }) {
 
 function AccountActionMenu({
   account,
+  isBusy,
   onDetachEmployee,
   onOpenPanel,
   onToggleBlockAccount,
 }: {
   account: MobileAccount;
+  isBusy: boolean;
   onDetachEmployee: (account?: MobileAccount) => MaybePromise<void>;
   onOpenPanel: (panel: MobileAccountWorkspacePanel, account?: MobileAccount) => void;
   onToggleBlockAccount: (account?: MobileAccount) => MaybePromise<void>;
@@ -477,16 +478,16 @@ function AccountActionMenu({
 
   return (
     <div className="mobile-am-menu" onClick={(event) => event.stopPropagation()}>
-      <button onClick={() => onOpenPanel("view", account)} type="button">◎ Просмотр</button>
-      <button onClick={() => onOpenPanel("edit", account)} type="button">✎ Редактировать</button>
-      <button onClick={() => onOpenPanel("password", account)} type="button">⌘ Изменить пароль</button>
-      <button onClick={() => onOpenPanel("link", account)} type="button">+ Привязать сотрудника</button>
-      <button onClick={() => onDetachEmployee(account)} type="button">- Отвязать сотрудника</button>
+      <button disabled={isBusy} onClick={() => onOpenPanel("view", account)} type="button">◎ Просмотр</button>
+      <button disabled={isBusy} onClick={() => onOpenPanel("edit", account)} type="button">✎ Редактировать</button>
+      <button disabled={isBusy} onClick={() => onOpenPanel("password", account)} type="button">⌘ Изменить пароль</button>
+      <button disabled={isBusy} onClick={() => onOpenPanel("link", account)} type="button">+ Привязать сотрудника</button>
+      <button disabled={isBusy} onClick={() => onDetachEmployee(account)} type="button">- Отвязать сотрудника</button>
       <hr />
-      <button className="danger-text" onClick={() => onToggleBlockAccount(account)} type="button">
+      <button className="danger-text" disabled={isBusy} onClick={() => onToggleBlockAccount(account)} type="button">
         ! {isBlocked ? "Разблокировать" : "Заблокировать"}
       </button>
-      <button className="danger-text" onClick={() => onOpenPanel("delete", account)} type="button">
+      <button className="danger-text" disabled={isBusy} onClick={() => onOpenPanel("delete", account)} type="button">
         × Удалить
       </button>
     </div>

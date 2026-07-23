@@ -111,6 +111,10 @@ export function getMobileAccountBindingCount(account: MobileAccount) {
   return account.employeeScope === "all" ? ALL_EMPLOYEES : `${(account.boundEmployees ?? []).length} привязано`;
 }
 
+export function resolveMobileAccountSecurityTarget(requestedAccountId: string | undefined, selectedAccountId: string) {
+  return requestedAccountId?.trim() || selectedAccountId;
+}
+
 function normalizeLogin(value: string) {
   const normalized = value
     .trim()

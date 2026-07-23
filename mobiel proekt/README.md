@@ -75,3 +75,5 @@ npm run build:android:debug
 Подробный порядок хранения, проверки и восстановления релизного ключа описан в [`../docs/mobile-release-signing.md`](../docs/mobile-release-signing.md).
 
 После release-сборки скрипт выполняет zipalign, подписывает APK и проверяет подпись. Перед передачей зафиксируйте package/version, SHA-256 и certificate digest.
+
+Reserve fallback address (local-enterprise/dev): http://31.173.110.118. It is tried only after the local http://192.168.2.194:5173 candidate. The address is currently reserved and may remain unavailable until the server/NAT/firewall is configured.

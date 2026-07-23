@@ -10,8 +10,8 @@ import {
   EyeOff,
   FileText,
   MapPinned,
-  MoreVertical,
   PlusCircle,
+  RefreshCw,
   Search,
   Timer,
   User,
@@ -23,7 +23,9 @@ import type { DataSourceMode, PatrolResult, PatrolResultAttachment, ResultMode, 
 import { PatrolResultDetails } from "./PatrolResultDetails";
 import { ResultMediaViewer, type ResultMediaPreviewState } from "./ResultMediaViewer";
 import { FoundRemarksView } from "./FoundRemarksView";
+import { ResultsListRow } from "./ResultsListRow";
 import type { DurationSummary, ResultGroup } from "./resultTypes";
+import "./resultsWorkspace.css";
 
 export interface ResultsScreenProps {
   canCreateRequest?: boolean;
@@ -130,7 +132,7 @@ export function ResultsWorkspace({
 
   const selectedGroup =
     (openGroupId ? visibleGroups.find((group) => group.id === openGroupId) : undefined) ??
-    (selectedResult ? visibleGroups.find((group) => group.results.some((result) => result.id === selectedResult.id)) : undefined) ??
+    (selectedResult ? filteredGroups.find((group) => group.results.some((result) => result.id === selectedResult.id)) : undefined) ??
     filteredGroups[0];
   const modalGroup = openGroupId ? visibleGroups.find((group) => group.id === openGroupId) : undefined;
   const contextGroup = contextMenu ? visibleGroups.find((group) => group.id === contextMenu.groupId) : undefined;
@@ -329,12 +331,12 @@ export function ResultsWorkspace({
           <p>Контроль статусов точек, замечаний, ручных отметок и вложений по завершенным обходам.</p>
         </div>
         <div className="results-review-actions">
-          <button type="button" className="secondary-action" onClick={() => onOpenRequest?.(selectedGroup?.results[0]?.id)}>
+          <button type="button" className="secondary-action" disabled={!selectedGroup} onClick={() => onOpenRequest?.(selectedGroup?.results[0]?.id)}>
             <ExternalLink size={17} />
             Открыть заявку
           </button>
           {canCreateRequest ? (
-            <button type="button" className="primary-action" onClick={() => void createRequest()}>
+            <button type="button" className="primary-action" disabled={!selectedGroup} onClick={() => void createRequest()}>
               <PlusCircle size={17} />
               Создать заявку
             </button>
@@ -400,8 +402,23 @@ export function ResultsWorkspace({
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Поиск по маршруту, сотруднику или точке..."
+                aria-label="Поиск по результатам обходов"
               />
             </label>
+            <div className="results-review-toolbar-actions">
+              <span className="results-review-list-summary" aria-live="polite">
+                Показано {filteredGroups.length} из {visibleGroups.length}
+              </span>
+              <button
+                className="secondary-action results-review-refresh"
+                disabled={loading}
+                onClick={() => void refreshResults()}
+                type="button"
+              >
+                <RefreshCw aria-hidden="true" size={16} />
+                {loading ? "Обновляем…" : "Обновить"}
+              </button>
+            </div>
           </div>
 
           {loading && groups.length === 0 ? (
@@ -423,11 +440,11 @@ export function ResultsWorkspace({
           ) : (
             <div className="results-review-list">
               {filteredGroups.map((group) => (
-                <ResultRow
+                <ResultsListRow
                   key={group.id}
                   group={group}
                   active={selectedGroup?.id === group.id}
-                  onClick={() => selectGroup(group)}
+                  onSelect={() => selectGroup(group)}
                   onOpen={() => openDetails(group)}
                   onCreateRequest={() => void createRequest(group)}
                   menuOpen={actionMenuGroupId === group.id}
@@ -561,118 +578,6 @@ function MetricCard({
         <small>{title}</small>
         <strong>{value}</strong>
         <p>{caption}</p>
-      </div>
-    </article>
-  );
-}
-
-function ResultRow({
-  active,
-  canCreateRequest,
-  group,
-  menuOpen,
-  onArchive,
-  onClick,
-  onCreateRequest,
-  onDelete,
-  onOpen,
-  onOpenContextMenu,
-  onOpenMenu,
-}: {
-  active?: boolean;
-  canCreateRequest: boolean;
-  group: ResultGroup;
-  menuOpen: boolean;
-  onArchive: () => void;
-  onClick: () => void;
-  onCreateRequest: () => void;
-  onDelete: () => void;
-  onOpen: () => void;
-  onOpenContextMenu: (event: MouseEvent<HTMLElement>) => void;
-  onOpenMenu: () => void;
-}) {
-  const hasIssue = group.issuePoints > 0 || group.issues > 0;
-  const handleClick = (event: MouseEvent<HTMLElement>) => {
-    onClick();
-    if (event.detail >= 2) {
-      onOpen();
-    }
-  };
-
-  return (
-    <article
-      className={`results-review-row ${active ? "is-active" : ""} ${hasIssue ? "has-issues" : ""}`}
-      onClick={handleClick}
-      onContextMenu={onOpenContextMenu}
-    >
-      <div className="results-review-row-status">
-        {hasIssue ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
-      </div>
-      <div className="results-review-row-main">
-        <div className="results-review-row-title">
-          <strong>{group.route}</strong>
-          <StatusPill issue={hasIssue} />
-        </div>
-        <p>
-          {group.employee} · {group.territory}
-        </p>
-        <div className="results-review-row-meta">
-          <span>{group.points} точек</span>
-          <span>{group.duration.label}</span>
-          <span>{group.firstScanAt ?? "нет времени"}</span>
-        </div>
-      </div>
-      <div className="results-review-row-summary">
-        <span className="ok">Исправно: {group.okPoints}</span>
-        <span className={group.issuePoints > 0 ? "issue" : ""}>Неисправно: {group.issuePoints}</span>
-        <span>Медиа: {group.photos}</span>
-      </div>
-      <div className="results-review-row-actions" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
-        <button
-          type="button"
-          className="secondary-action"
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpen();
-          }}
-        >
-          Подробнее
-        </button>
-        {canCreateRequest ? (
-          <button
-            type="button"
-            className="primary-action"
-            onClick={(event) => {
-              event.stopPropagation();
-              onCreateRequest();
-            }}
-          >
-            Заявка
-          </button>
-        ) : null}
-        <div className="results-review-row-menu-wrap">
-          <button
-            type="button"
-            className="results-review-row-more"
-            aria-label={`Действия результата: ${group.route}, ${group.employee}`}
-            aria-expanded={menuOpen}
-            onClick={onOpenMenu}
-          >
-            <MoreVertical size={18} />
-          </button>
-          {menuOpen ? (
-            <div className="results-review-row-menu" role="menu">
-              <button type="button" role="menuitem" data-action="archive" onClick={onArchive}>
-                <EyeOff size={16} />
-                Скрыть на этом устройстве
-              </button>
-              <button type="button" role="menuitem" data-action="delete" className="is-danger" onClick={onDelete}>
-                <EyeOff size={16} />
-                Скрыть из списка на этом устройстве
-              </button>
-            </div>
-          ) : null}
-        </div>
       </div>
     </article>
   );

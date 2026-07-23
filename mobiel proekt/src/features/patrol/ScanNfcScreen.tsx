@@ -26,6 +26,7 @@ export function ScanNfcScreen() {
   const { colors } = useAppTheme();
   const { assignmentId } = useLocalSearchParams<{ assignmentId: string }>();
   const autoScanStartedRef = useRef(false);
+  const scanInProgressRef = useRef(false);
   const [status, setStatus] = useState<NfcStatus>("idle");
   const [routeName, setRouteName] = useState<string | null>(null);
   const [progress, setProgress] = useState<AssignmentProgress | null>(null);
@@ -45,6 +46,11 @@ export function ScanNfcScreen() {
   const [message, setMessage] = useState("Поднесите телефон к NFC-метке.");
 
   const handleScan = useCallback(async () => {
+    if (scanInProgressRef.current) {
+      return;
+    }
+
+    scanInProgressRef.current = true;
     setStatus("reading");
     setMessage("Ожидание NFC-метки...");
     try {
@@ -82,6 +88,8 @@ export function ScanNfcScreen() {
     } catch {
       setStatus("error");
       setMessage("NFC недоступен или чтение отменено.");
+    } finally {
+      scanInProgressRef.current = false;
     }
   }, [assignmentId, router]);
 

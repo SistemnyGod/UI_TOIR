@@ -2,14 +2,17 @@ import * as Crypto from "expo-crypto";
 
 import { currentContourId } from "@/core/environments";
 import { getDatabase } from "@/db/database";
+import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 
 export async function enqueueLogoutIntent(ownerUserId: string | null) {
   const db = await getDatabase();
-  await db.runAsync(
+  const logoutIntentId = Crypto.randomUUID();
+  const createdAtLocal = new Date().toISOString();
+  await withSqliteBusyRetry(() => db.runAsync(
     "INSERT INTO mobile_logout_queue (id, owner_user_id, contour_id, created_at_local, status) " +
     "VALUES (?, ?, ?, ?, 'pending')",
-    [Crypto.randomUUID(), ownerUserId, currentContourId, new Date().toISOString()]
-  );
+    [logoutIntentId, ownerUserId, currentContourId, createdAtLocal]
+  ));
 }
 
 export async function getPendingLogoutContourId(): Promise<string | null | undefined> {
@@ -26,8 +29,8 @@ export async function hasPendingLogoutIntent() {
 
 export async function completePendingLogoutIntents() {
   const db = await getDatabase();
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     "DELETE FROM mobile_logout_queue WHERE contour_id = ? AND status = 'pending'",
     [currentContourId]
-  );
+  ));
 }

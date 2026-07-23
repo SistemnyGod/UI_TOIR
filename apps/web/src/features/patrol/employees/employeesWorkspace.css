@@ -1,0 +1,192 @@
+.employees-workspace-screen {
+  min-width: 0;
+}
+
+.employees-workspace-screen .employee-access-help-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -4px;
+}
+
+.employees-workspace-screen .employee-directory-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface-muted);
+}
+
+.employees-workspace-screen .employee-directory-summary span {
+  min-width: 0;
+  color: var(--ui-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.employees-workspace-screen .employee-directory-summary strong {
+  margin-right: 4px;
+  color: var(--ui-text);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.employees-workspace-screen .employee-filters {
+  padding: 12px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.employees-workspace-screen .employee-roster-row {
+  border-radius: 10px;
+}
+
+.employees-workspace-screen .employee-roster-row:focus-visible,
+.employees-workspace-screen .patrol-employee-picker-row:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ui-primary, #1769ff) 28%, transparent);
+  outline-offset: 2px;
+}
+
+.employees-workspace-screen .employee-directory-footer {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--ui-border);
+  color: var(--ui-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.employees-workspace-screen .employee-directory-footer .link-button {
+  min-height: 36px;
+}
+
+.employees-workspace-screen .employee-profile-primary-action {
+  margin-bottom: 8px;
+}
+
+.employees-workspace-screen .employee-profile-primary-action .button {
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+}
+
+.employees-workspace-screen .employee-profile-actions {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.employees-workspace-screen .employee-profile-actions .danger-text {
+  margin-top: 4px;
+}
+
+.patrol-employee-picker-modal .patrol-employee-picker-empty {
+  grid-column: 1 / -1;
+  margin: auto;
+  padding: 30px 16px;
+  color: var(--ui-muted);
+  text-align: center;
+}
+
+.patrol-employee-picker-modal .modal-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+@media (max-width: 1050px) {
+  .employees-workspace-screen .employee-directory-summary {
+    grid-template-columns: repeat(3, minmax(120px, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .employees-workspace-screen .employee-access-help-row {
+    margin-bottom: 0;
+  }
+
+  .employees-workspace-screen .employee-access-help-row .button {
+    min-height: 44px;
+  }
+
+  .employees-workspace-screen .employee-directory-summary {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .employees-workspace-screen .employee-directory-summary span {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .employees-workspace-screen .employee-filters {
+    gap: 10px;
+  }
+
+  .employees-workspace-screen .employee-roster-list {
+    padding: 8px;
+  }
+
+  .employees-workspace-screen .employee-roster-row {
+    min-height: 44px;
+    padding: 12px;
+  }
+
+  .employees-workspace-screen .employee-directory-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .employees-workspace-screen .employee-directory-footer .link-button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .employees-workspace-screen .employee-profile-actions .button,
+  .employees-workspace-screen .employee-profile-primary-action .button {
+    min-height: 44px;
+  }
+
+  .screen-area .patrol-employee-picker-modal {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .screen-area .patrol-employee-picker-toolbar,
+  .screen-area .patrol-employee-picker-list {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .screen-area .patrol-employee-picker-row {
+    grid-template-columns: 40px minmax(0, 1fr);
+    height: auto;
+    min-height: 82px;
+  }
+
+  .screen-area .patrol-employee-picker-row b {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .screen-area .patrol-employee-picker-modal .modal-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .screen-area .patrol-employee-picker-modal .modal-actions .button {
+    min-height: 44px;
+  }
+
+  .screen-area .patrol-employee-picker-modal .modal-actions .button.primary {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+}

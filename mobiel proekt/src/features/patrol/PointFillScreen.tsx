@@ -1,14 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, AppState, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
 import { listPointFiles } from "@/db/repositories/filesRepository";
-import { deferPoint, getPointForFill, getReportReadiness, PointForFill, savePointIssue, savePointOk, skipPoint } from "@/db/repositories/patrolRepository";
+import { deferPoint, getPointForFill, getReportReadiness, PointForFill, savePointDraft, savePointIssue, savePointOk, skipPoint } from "@/db/repositories/patrolRepository";
 import { isPhotoEvidenceRequired } from "@/domain/patrol/photoEvidencePolicy";
+import { restoreDeferredPointSelection } from "@/domain/patrol/pointDraftPolicy";
 import { useAppTheme } from "@/features/settings/themePreference";
+import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import {
   attachPointPhotoFromCamera,
   attachPointMediaFromGallery,
@@ -35,8 +37,57 @@ export function PointFillScreen() {
   const [isMediaBusy, setIsMediaBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<"attachments" | "more" | null>(null);
+  const draftReadyRef = useRef(false);
+  const finalizingRef = useRef(false);
+  const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const latestDraftRef = useRef({
+    selectedStatus: null as SelectedStatus | null,
+    comment: "",
+    issueTypeId: "Неисправность",
+    photoClientFileIds: [] as string[]
+  });
+
+  latestDraftRef.current = {
+    selectedStatus,
+    comment,
+    issueTypeId,
+    photoClientFileIds: attachments.map((attachment) => attachment.clientFileId)
+  };
+
+  const clearDraftSaveTimer = useCallback(() => {
+    if (draftSaveTimerRef.current) {
+      clearTimeout(draftSaveTimerRef.current);
+      draftSaveTimerRef.current = null;
+    }
+  }, []);
+
+  const persistDraft = useCallback(async () => {
+    if (!draftReadyRef.current || finalizingRef.current) {
+      return;
+    }
+
+    const draft = latestDraftRef.current;
+    if (!draft.selectedStatus) {
+      return;
+    }
+
+    const save = draftSaveChainRef.current
+      .catch(() => undefined)
+      .then(() => savePointDraft(assignmentId, pointId, draft));
+    draftSaveChainRef.current = save;
+    await save;
+  }, [assignmentId, pointId]);
+
+  const flushDraft = useCallback(async () => {
+    clearDraftSaveTimer();
+    await persistDraft();
+  }, [clearDraftSaveTimer, persistDraft]);
 
   const reload = useCallback(async () => {
+    clearDraftSaveTimer();
+    draftReadyRef.current = false;
+    finalizingRef.current = false;
     const ownerUserId = await getStoredOwnerUserId();
     if (!ownerUserId) {
       setPoint(null);
@@ -53,13 +104,14 @@ export function PointFillScreen() {
       setSelectedStatus(loaded.status);
       setPhase("details");
     } else if (loaded?.status === "deferred") {
-      setSelectedStatus(loaded.issueTypeId ? "issue" : "ok");
+      setSelectedStatus(restoreDeferredPointSelection(loaded));
       setPhase("details");
     } else {
       setSelectedStatus(null);
       setPhase("status");
     }
-  }, [assignmentId, pointId]);
+    draftReadyRef.current = Boolean(loaded);
+  }, [assignmentId, clearDraftSaveTimer, pointId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -73,9 +125,35 @@ export function PointFillScreen() {
 
       return () => {
         isMounted = false;
+        clearDraftSaveTimer();
+        void persistDraft().catch(() => undefined);
       };
-    }, [reload])
+    }, [clearDraftSaveTimer, persistDraft, reload])
   );
+
+  useEffect(() => {
+    if (!draftReadyRef.current || finalizingRef.current || !selectedStatus) {
+      return;
+    }
+
+    clearDraftSaveTimer();
+    draftSaveTimerRef.current = setTimeout(() => {
+      draftSaveTimerRef.current = null;
+      void persistDraft().catch(() => setError("Не удалось сохранить черновик точки."));
+    }, 400);
+
+    return clearDraftSaveTimer;
+  }, [attachments, clearDraftSaveTimer, comment, issueTypeId, persistDraft, selectedStatus]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState !== "active") {
+        void flushDraft().catch(() => undefined);
+      }
+    });
+
+    return () => subscription.remove();
+  }, [flushDraft]);
 
   function selectStatus(status: SelectedStatus) {
     setSelectedStatus(status);
@@ -109,8 +187,12 @@ export function PointFillScreen() {
       return;
     }
 
+    clearDraftSaveTimer();
+    finalizingRef.current = true;
     setIsSubmitting(true);
+    let pointSaved = false;
     try {
+      await draftSaveChainRef.current.catch(() => undefined);
       if (selectedStatus === "issue") {
         await savePointIssue(assignmentId, pointId, comment.trim(), issueTypeId.trim() || "Неисправность");
       } else if (selectedStatus === "skipped") {
@@ -121,36 +203,49 @@ export function PointFillScreen() {
       } else {
         await savePointOk(assignmentId, pointId, comment.trim());
       }
+      pointSaved = true;
       await continuePatrolFlow();
     } catch {
-      setError("Не удалось сохранить метку.");
+      if (!pointSaved) {
+        finalizingRef.current = false;
+        void persistDraft().catch(() => undefined);
+      }
+      setError(pointSaved ? "Метка сохранена, но переход к следующей точке не выполнен." : "Не удалось сохранить метку.");
     } finally {
       setIsSubmitting(false);
     }
   }
-
   async function handleDefer() {
     setError(null);
+    clearDraftSaveTimer();
+    finalizingRef.current = true;
     setIsSubmitting(true);
+    let deferred = false;
     try {
+      await draftSaveChainRef.current.catch(() => undefined);
       await deferPoint(assignmentId, pointId, {
-        selectedStatus: selectedStatus === "skipped" ? null : selectedStatus,
+        selectedStatus,
         comment: comment.trim(),
         issueTypeId: issueTypeId.trim() || "Неисправность",
         photoClientFileIds: attachments.map((attachment) => attachment.clientFileId)
       });
+      deferred = true;
       await continuePatrolFlow();
     } catch {
-      setError("Не удалось отложить метку.");
+      if (!deferred) {
+        finalizingRef.current = false;
+        void persistDraft().catch(() => undefined);
+      }
+      setError(deferred ? "Точка отложена, но переход к следующей точке не выполнен." : "Не удалось отложить метку.");
     } finally {
       setIsSubmitting(false);
     }
   }
-
   async function handleAddPhoto() {
     setError(null);
     setIsMediaBusy(true);
     try {
+      await flushDraft();
       const result = await attachPointPhotoFromCamera(assignmentId, pointId);
 
       if (result === "attached") {
@@ -167,6 +262,7 @@ export function PointFillScreen() {
     setError(null);
     setIsMediaBusy(true);
     try {
+      await flushDraft();
       const result = await attachPointVideoFromCamera(assignmentId, pointId);
 
       if (result === "attached") {
@@ -183,6 +279,7 @@ export function PointFillScreen() {
     setError(null);
     setIsMediaBusy(true);
     try {
+      await flushDraft();
       const result = await attachPointMediaFromGallery(assignmentId, pointId);
       if (result.status === "attached") {
         await reloadPointAndAttachments();
@@ -198,6 +295,7 @@ export function PointFillScreen() {
   }
 
   async function continuePatrolFlow() {
+    void triggerForegroundSyncWithRetry();
     const readiness = await getReportReadiness(assignmentId);
     router.replace(readiness.ready
       ? `/patrol/assignment/${assignmentId}/submit`
@@ -315,7 +413,7 @@ export function PointFillScreen() {
       {selectedStatus === "issue" ? (
         <Card>
           <Text style={[styles.label, { color: colors.text }]}>Тип неисправности</Text>
-          <TextInput editable={!isSubmitting} onChangeText={setIssueTypeId} style={styles.input} value={issueTypeId} />
+          <TextInput editable={!isSubmitting} onBlur={() => void flushDraft().catch(() => setError("Не удалось сохранить черновик точки."))} onChangeText={setIssueTypeId} style={styles.input} value={issueTypeId} />
         </Card>
       ) : null}
 
@@ -324,6 +422,7 @@ export function PointFillScreen() {
         <TextInput
           editable={!isSubmitting}
           multiline
+          onBlur={() => void flushDraft().catch(() => setError("Не удалось сохранить черновик точки."))}
           onChangeText={setComment}
           placeholder={commentPlaceholder(selectedStatus)}
           placeholderTextColor="#9ca3af"

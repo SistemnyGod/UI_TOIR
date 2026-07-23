@@ -9,7 +9,8 @@ import {
   databaseEncryptionKeyBytes,
   escapeSqliteString,
   haveMatchingTableCounts,
-  isValidDatabaseEncryptionKey
+  isValidDatabaseEncryptionKey,
+  resolveExistingDatabaseConflict
 } from "../src/db/databaseEncryptionPolicy.ts";
 
 test("database encryption key is exactly 256 random bits encoded as hex", () => {
@@ -40,6 +41,31 @@ test("plaintext migration is accepted only when every protected table count matc
   assert.equal(haveMatchingTableCounts(tables, expected, { reports: 3, outbox: 2 }), true);
   assert.equal(haveMatchingTableCounts(tables, expected, { reports: 3, outbox: 1 }), false);
 });
+
+test("newer encrypted data is kept when a stale legacy database has different row counts", () => {
+  assert.equal(
+    resolveExistingDatabaseConflict({
+      encryptedHasApplicationSchema: true,
+      protectedTableCountsMatch: false
+    }),
+    "useEncryptedAndKeepLegacy"
+  );
+  assert.equal(
+    resolveExistingDatabaseConflict({
+      encryptedHasApplicationSchema: true,
+      protectedTableCountsMatch: true
+    }),
+    "useEncryptedAndDeleteLegacy"
+  );
+  assert.equal(
+    resolveExistingDatabaseConflict({
+      encryptedHasApplicationSchema: false,
+      protectedTableCountsMatch: false
+    }),
+    "migrateLegacy"
+  );
+});
+
 test("encrypted repositories do not open an unkeyed expo-sqlite transaction connection", async () => {
   const databaseSource = await readFile(join(process.cwd(), "src/db/database.ts"), "utf8");
   const repositoryDirectory = join(process.cwd(), "src/db/repositories");

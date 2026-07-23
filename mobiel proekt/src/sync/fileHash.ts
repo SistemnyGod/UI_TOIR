@@ -30,3 +30,13 @@ export function decodeBase64Bytes(value: string) {
 export function bytesToHex(value: ArrayBuffer) {
   return Array.from(new Uint8Array(value), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
+
+export function requiresClientFileHash({
+  contentType,
+  mediaKind
+}: {
+  contentType?: "image/jpeg" | "video/mp4" | null;
+  mediaKind?: "photo" | "video" | null;
+}) {
+  return mediaKind !== "video" && contentType !== "video/mp4";
+}

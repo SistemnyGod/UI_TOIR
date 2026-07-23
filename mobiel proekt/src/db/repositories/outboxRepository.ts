@@ -3,6 +3,7 @@ import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/databa
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { updatePendingCompleteReportBaseRevisionInTransaction } from "@/db/repositories/outboxSql";
+import { finalizeCancelledAssignmentInTransaction } from "@/db/repositories/patrolCancellationRepository";
 import { MobileEntityType, OutboxCommand, OutboxCommandStatus, OutboxCommandType, OutboxResponse } from "@/domain/sync/syncTypes";
 import { extractAssignmentId, extractCompletionFileIds, isCancelledCompletionResponse, isProblemResponse } from "@/db/repositories/outboxPolicies";
 import { SyncQueueCommandItem } from "@/db/repositories/outboxTypes";
@@ -12,7 +13,7 @@ export type { SyncQueueCommandItem } from "@/db/repositories/outboxTypes";
 export async function insertOutboxCommand(command: OutboxCommand) {
   const db = await getDatabase();
 
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     `
       INSERT INTO outbox_commands (
         client_operation_id,
@@ -44,7 +45,7 @@ export async function insertOutboxCommand(command: OutboxCommand) {
       command.attemptCount,
       command.status
     ]
-  );
+  ));
 }
 
 export async function listPendingOutboxCommands(ownerUserId: string, limit = 25) {
@@ -287,7 +288,7 @@ export async function markOutboxCommandsSending(ownerUserId: string, clientOpera
   const db = await getDatabase();
   const placeholders = clientOperationIds.map(() => "?").join(", ");
   const updatedAtLocal = new Date().toISOString();
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     `
       UPDATE outbox_commands
       SET status = 'sending',
@@ -301,7 +302,7 @@ export async function markOutboxCommandsSending(ownerUserId: string, clientOpera
         AND status IN ('pending', 'retryLater')
     `,
     [updatedAtLocal, ownerUserId, currentContourId, ...clientOperationIds]
-  );
+  ));
 }
 
 export async function markOutboxCommandsRetryLater(
@@ -368,7 +369,7 @@ export async function markPendingOutboxCommandsRetryLater(ownerUserId: string, l
   const updatedAtLocal = new Date().toISOString();
   const nextAttemptAt = new Date(Date.now() + resolveRetryDelaySeconds(null, 1) * 1000).toISOString();
 
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     `
       UPDATE outbox_commands
       SET status = 'retryLater',
@@ -380,27 +381,27 @@ export async function markPendingOutboxCommandsRetryLater(ownerUserId: string, l
         AND status IN ('pending', 'sending', 'retryLater')
     `,
     [lastError, nextAttemptAt, updatedAtLocal, ownerUserId, currentContourId]
-  );
+  ));
 }
 
 export async function markPendingOutboxCommandsWaitingNetwork(ownerUserId: string, lastError: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     "UPDATE outbox_commands SET status = 'waiting_network', last_error = ?, next_attempt_at = NULL, updated_at_local = ? " +
     "WHERE owner_user_id = ? AND contour_id = ? AND status IN ('pending', 'sending', 'retryLater', 'waiting_network')",
     [lastError, updatedAtLocal, ownerUserId, currentContourId]
-  );
+  ));
 }
 
 export async function activateWaitingNetworkOutboxCommands(ownerUserId: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     "UPDATE outbox_commands SET status = 'pending', next_attempt_at = NULL, updated_at_local = ? " +
     "WHERE owner_user_id = ? AND contour_id = ? AND status = 'waiting_network'",
     [updatedAtLocal, ownerUserId, currentContourId]
-  );
+  ));
 }
 export async function markPendingOutboxCommandsAuthRequired(ownerUserId: string, lastError: string) {
   const db = await getDatabase();
@@ -408,7 +409,7 @@ export async function markPendingOutboxCommandsAuthRequired(ownerUserId: string,
 
   // Authentication is a delivery condition, not a patrol lifecycle state.
   // Keep the local report and defer automatic retries until the session is restored.
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     `
       UPDATE outbox_commands
       SET status = 'waiting_auth',
@@ -420,16 +421,16 @@ export async function markPendingOutboxCommandsAuthRequired(ownerUserId: string,
         AND status IN ('pending', 'sending', 'retryLater', 'waiting_auth')
     `,
     [lastError, updatedAtLocal, ownerUserId, currentContourId]
-  );
+  ));
 }
 export async function activateWaitingAuthOutboxCommands(ownerUserId: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     "UPDATE outbox_commands SET status = 'pending', next_attempt_at = NULL, updated_at_local = ? " +
     "WHERE owner_user_id = ? AND contour_id = ? AND status = 'waiting_auth'",
     [updatedAtLocal, ownerUserId, currentContourId]
-  );
+  ));
 }
 
 export async function markOutboxCommandsWrongContour(ownerUserId: string, clientOperationIds: string[], lastError: string) {
@@ -439,17 +440,17 @@ export async function markOutboxCommandsWrongContour(ownerUserId: string, client
   const db = await getDatabase();
   const placeholders = clientOperationIds.map(() => "?").join(", ");
   const updatedAtLocal = new Date().toISOString();
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     "UPDATE outbox_commands SET status = 'wrong_contour', last_error = ?, next_attempt_at = NULL, updated_at_local = ? " +
     "WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id IN (" + placeholders + ")",
     [lastError, updatedAtLocal, ownerUserId, currentContourId, ...clientOperationIds]
-  );
+  ));
 }
 export async function resetStaleSendingOutboxCommands(ownerUserId: string, staleBeforeIso: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
 
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     `
       UPDATE outbox_commands
       SET status = 'retryLater',
@@ -462,14 +463,14 @@ export async function resetStaleSendingOutboxCommands(ownerUserId: string, stale
         AND (updated_at_local IS NULL OR updated_at_local < ?)
     `,
     [updatedAtLocal, updatedAtLocal, ownerUserId, currentContourId, staleBeforeIso]
-  );
+  ));
 }
 
 export async function resetSendingOutboxCommandsForManualRetry(ownerUserId: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
 
-  await db.runAsync(
+  await withSqliteBusyRetry(() => db.runAsync(
     `
       UPDATE outbox_commands
       SET status = 'retryLater',
@@ -481,7 +482,7 @@ export async function resetSendingOutboxCommandsForManualRetry(ownerUserId: stri
         AND status = 'sending'
     `,
     [updatedAtLocal, updatedAtLocal, ownerUserId, currentContourId]
-  );
+  ));
 }
 export async function finalizeAcceptedCompleteReportCommands(ownerUserId: string, assignmentId?: string) {
   const db = await getDatabase();
@@ -773,6 +774,24 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
           );
         }
 
+        if (command?.command_type === "startPlannedWork" && command.entity_local_id) {
+          await tx.runAsync(
+            `
+              DELETE FROM work_tasks
+              WHERE owner_user_id = ?
+                AND item_kind = 'planTask'
+                AND plan_task_id = (
+                  SELECT plan_task_id
+                  FROM work_tasks
+                  WHERE owner_user_id = ?
+                    AND task_id = ?
+                  LIMIT 1
+                )
+            `,
+            [command.owner_user_id, command.owner_user_id, command.entity_local_id]
+          );
+        }
+
         if ((command?.command_type === "createWorkTask"
           || command?.command_type === "updateWorkTask"
           || command?.command_type === "startPlannedWork"
@@ -894,11 +913,14 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
             ? command.entity_local_id
             : isCancelledByServer ? extractAssignmentId(command.payload_json) : null;
           if (assignmentId) {
-            const nextStatus = isCancelledByServer
-              ? "cancelledServer"
-              : response.status === "conflict"
-                ? "needsDispatcherDecision"
-                : isRepairableCompletionRejection ? "inProgress" : "syncError";
+            if (isCancelledByServer) {
+              await finalizeCancelledAssignmentInTransaction(tx, command.owner_user_id, assignmentId);
+              continue;
+            }
+
+            const nextStatus = response.status === "conflict"
+              ? "needsDispatcherDecision"
+              : isRepairableCompletionRejection ? "inProgress" : "syncError";
             await tx.runAsync(
               `
                 UPDATE patrol_assignments
@@ -919,7 +941,7 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
                   LIMIT 1
                 )
               `,
-              [nextStatus === "cancelledServer" ? "cancelledServer" : nextStatus, command.owner_user_id, command.owner_user_id, assignmentId]
+              [nextStatus, command.owner_user_id, command.owner_user_id, assignmentId]
             );
           }
         }

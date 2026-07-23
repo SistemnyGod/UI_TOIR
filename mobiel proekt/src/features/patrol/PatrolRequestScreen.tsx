@@ -10,7 +10,8 @@ import {
   getRequestBoardItem,
   releaseAcceptedRequestLocally,
   RequestBoardItem,
-  startAssignmentLocally
+  startAssignmentLocally,
+  takeRequestLocally
 } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
@@ -68,15 +69,26 @@ export function PatrolRequestScreen() {
   }
 
   async function handleAccept() {
+    if (!request) {
+      return;
+    }
+    const currentRequest = request;
+
     Alert.alert(
-      "Принять эту заявку?",
+      currentRequest.status === "available" ? "Начать этот обход?" : "Принять эту заявку?",
       "Проверьте маршрут и время. После принятия заявка появится в разделе \"Мои\", но до старта ее еще можно вернуть.",
       [
         { text: "Назад", style: "cancel" },
         {
-          text: "Принять",
+          text: currentRequest.status === "available" ? "Начать" : "Принять",
           onPress: () => {
             void runAction(async () => {
+              if (currentRequest.status === "available") {
+                const result = await takeRequestLocally(requestId);
+                router.replace(`/patrol/assignment/${result.assignment.assignmentId}`);
+                return;
+              }
+
               const result = await acceptRequestLocally(requestId);
               setAssignment(result.assignment);
               setRequest((current) => current ? { ...current, status: "accepted" } : current);
@@ -163,7 +175,7 @@ export function PatrolRequestScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {isSubmitting ? <ActivityIndicator /> : null}
 
-      {canAccept ? <PrimaryButton disabled={isSubmitting} icon="checkmark-circle-outline" label="Принять заявку" onPress={handleAccept} size="large" /> : null}
+      {canAccept ? <PrimaryButton disabled={isSubmitting} icon="checkmark-circle-outline" label={request.status === "available" ? "Начать обход" : "Принять назначение"} onPress={handleAccept} size="large" /> : null}
       {canStart ? <PrimaryButton disabled={isSubmitting} icon="play-outline" label={assignment?.status === "paused" ? "Продолжить обход" : "Начать обход"} onPress={handleStart} /> : null}
       {canOpen ? <PrimaryButton disabled={isSubmitting} icon="shield-checkmark-outline" label="Открыть обход" onPress={() => router.replace(`/patrol/assignment/${assignment.assignmentId}`)} /> : null}
       <View style={styles.secondaryRow}>

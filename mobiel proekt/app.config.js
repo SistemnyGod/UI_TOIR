@@ -40,6 +40,7 @@ const allowLocalCleartext = configuredDefaultEnvironment === "dev"
 const localCleartextHosts = allowLocalCleartext
   ? uniqueValues([
       "192.168.2.194",
+      "31.173.110.118",
       "localhost",
       "127.0.0.1",
       configuredPublicApiBaseUrl.startsWith("http://")

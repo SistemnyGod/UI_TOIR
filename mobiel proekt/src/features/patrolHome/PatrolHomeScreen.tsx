@@ -1,212 +1,292 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import {
-  ActiveAssignment,
-  AssignmentProgress,
-  getActiveAssignmentWithProgress,
-  listRequestBoard,
-  RequestBoardItem
-} from "@/db/repositories/patrolRepository";
+import type { ActiveAssignment, AssignmentProgress, RequestBoardItem } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
-import { refreshMobileData } from "@/services/mobileDataRefreshService";
-import { subscribeToSyncEvents } from "@/sync/syncEvents";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
+import { PatrolHomeActive, usePatrolHomeDashboard } from "./usePatrolHomeDashboard";
 
 export function PatrolHomeScreen() {
   const router = useRouter();
-  const { colors } = useAppTheme();
-  const [active, setActive] = useState<{ assignment: ActiveAssignment; progress: AssignmentProgress } | null>(null);
-  const [requests, setRequests] = useState<RequestBoardItem[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-
-  const loadLocal = useCallback(async () => {
-    const [activeAssignment, requestRows] = await Promise.all([
-      getActiveAssignmentWithProgress(),
-      listRequestBoard()
-    ]);
-    setActive(activeAssignment);
-    setRequests(requestRows);
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      let isMounted = true;
-
-      void loadLocal().catch(() => {
-        if (isMounted) {
-          setActive(null);
-        }
-      });
-
-      return () => {
-        isMounted = false;
-      };
-    }, [loadLocal])
-  );
-
-  useEffect(() => {
-    return subscribeToSyncEvents(() => {
-      void loadLocal();
-    });
-  }, [loadLocal]);
-
-  async function handleRefresh() {
-    if (isRefreshing) {
-      return;
-    }
-
-    setIsRefreshing(true);
-    setMessage(null);
-
-    try {
-      const updated = await refreshMobileData();
-      await loadLocal();
-      setMessage(updated ? "Заявки обновлены." : "Нет сети. Показаны данные, сохранённые на телефоне.");
-    } catch (error) {
-      await loadLocal();
-      setMessage(error instanceof Error ? error.message : "Не удалось обновить заявки.");
-    } finally {
-      setIsRefreshing(false);
-    }
-  }
-
-  const summary = useMemo(
-    () => ({
-      available: requests.filter((request) => request.status === "available" || request.status === "assigned").length,
-      mine: requests.filter((request) => ["accepted", "inProgress", "paused"].includes(request.status)).length,
-      unsent: requests.filter((request) => ["completedLocal", "syncing", "retryLater", "syncError", "authRequired", "needsDispatcherDecision"].includes(request.status)).length
-    }),
-    [requests]
-  );
-  const isCompletedLocal = active?.assignment.status === "completedLocal";
-  const isAccepted = active?.assignment.status === "accepted";
-  const isPaused = active?.assignment.status === "paused";
-  const isInProgress = active?.assignment.status === "inProgress";
-  const canUsePatrolAction = isAccepted || isPaused || isInProgress;
-  const primaryAction = getPrimaryAction(active?.assignment.status);
-  const visibleRequests = requests
-    .filter((request) => ["available", "assigned", "accepted"].includes(request.status))
-    .filter((request) => request.requestId !== active?.assignment.requestId)
-    .slice(0, 5);
+  const dashboard = usePatrolHomeDashboard();
 
   return (
-    <Screen title="Обход" subtitle={active ? undefined : "Выберите заявку, проверьте маршрут и подтвердите принятие."}>
-      {active ? (
-        <Card>
-          <View style={styles.headerRow}>
-            <View style={styles.titleBlock}>
-              <Text style={[styles.sectionLabel, { color: colors.mutedText }]}>Текущая заявка</Text>
-              <Text style={[styles.cardTitle, { color: colors.text }]}>{active.assignment.routeName}</Text>
-            </View>
-            <StatusPill
-              label={assignmentStatusLabel(active.assignment.status)}
-              tone={isCompletedLocal || isAccepted || isPaused ? "warning" : isInProgress ? "success" : "neutral"}
-            />
-          </View>
-
-          <View style={styles.progressHeader}>
-            <Text style={[styles.sectionLabel, { color: colors.text }]}>
-              {active.progress.completed} из {active.progress.total} меток
-            </Text>
-            <Text style={[styles.percent, { color: colors.text }]}>{progressPercent(active.progress)}%</Text>
-          </View>
-          <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
-            <View style={[styles.progressFill, { width: `${progressPercent(active.progress)}%` }]} />
-          </View>
-
-          {canUsePatrolAction && !isCompletedLocal ? (
-            <PrimaryButton
-              icon={primaryAction.icon}
-              label={primaryAction.label}
-              onPress={() => router.push(primaryAction.path(active.assignment.assignmentId) as never)}
-              size="large"
-            />
-          ) : !isCompletedLocal ? (
-            <Text style={[styles.text, { color: colors.mutedText }]}>
-              {homeBlockedHint(active.assignment.status)}
-            </Text>
-          ) : (
-            <Text style={[styles.text, { color: colors.mutedText }]}>
-              Отчёт сохранён на телефоне. Он отправится автоматически при связи; статус можно посмотреть в очереди.
-            </Text>
-          )}
-
-          <View style={styles.actions}>
-            <HomeQuickAction icon="list-outline" label="Все метки" onPress={() => router.push(`/patrol/assignment/${active.assignment.assignmentId}/all-points`)} />
-            <HomeQuickAction icon="swap-horizontal-outline" label="Заявки" onPress={() => router.push("/patrol/request-board")} />
-            {isCompletedLocal ? (
-              <HomeQuickAction icon="cloud-upload-outline" label="Очередь" onPress={() => router.push("/settings/sync-queue" as never)} />
-            ) : null}
-          </View>
-        </Card>
+    <Screen
+      title="Обход"
+      subtitle={dashboard.active ? undefined : "Выберите заявку, проверьте маршрут и подтвердите принятие."}
+    >
+      {dashboard.active ? (
+        <ActivePatrolCard
+          active={dashboard.active}
+          onOpenAllPoints={() => router.push(`/patrol/assignment/${dashboard.active!.assignment.assignmentId}/all-points`)}
+          onOpenPatrol={() => {
+            const action = getPrimaryAction(dashboard.active!.assignment.status);
+            router.push(action.path(dashboard.active!.assignment.assignmentId) as never);
+          }}
+          onOpenQueue={() => router.push("/settings/sync-queue" as never)}
+          onOpenRequests={() => router.push("/patrol/request-board")}
+        />
       ) : (
-        <Card>
-          <View style={styles.headerRow}>
-            <View style={styles.titleBlock}>
-              <Text style={[styles.sectionLabel, { color: colors.mutedText }]}>Активный обход</Text>
-              <Text style={[styles.cardTitle, { color: colors.text }]}>Заявка не выбрана</Text>
-            </View>
-            <StatusPill label="Нет обхода" tone="neutral" />
-          </View>
-          <Text style={[styles.text, { color: colors.mutedText }]}>
-            Откройте карточку заявки, проверьте маршрут и подтвердите принятие. Одним касанием из списка заявка не принимается.
-          </Text>
-          <View style={styles.quickStats}>
-            <Text style={[styles.quickStat, { color: colors.text }]}>Доступно: {summary.available}</Text>
-            <Text style={[styles.quickStat, { color: colors.text }]}>Мои: {summary.mine}</Text>
-            <Text style={[styles.quickStat, { color: colors.text }]}>Не отправлено: {summary.unsent}</Text>
-          </View>
-          <PrimaryButton icon="list-outline" label="Выбрать заявку" onPress={() => router.push("/patrol/request-board")} size="large" />
-        </Card>
+        <EmptyPatrolCard
+          onOpenRequests={() => router.push("/patrol/request-board")}
+          summary={dashboard.summary}
+        />
       )}
 
-      <View style={styles.requestSection}>
-        <View style={styles.requestSectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Действующие заявки</Text>
-          <Pressable accessibilityRole="button" disabled={isRefreshing} onPress={() => void handleRefresh()}>
-            <Text style={[styles.link, { color: isRefreshing ? colors.mutedText : colors.primary }]}>
-              {isRefreshing ? "Обновляем..." : "Обновить"}
-            </Text>
-          </Pressable>
-        </View>
+      <RequestSection
+        isRefreshing={dashboard.isRefreshing}
+        onOpenRequest={(requestId) => router.push(`/patrol/request/${requestId}`)}
+        onRefresh={() => void dashboard.refresh()}
+        requests={dashboard.visibleRequests}
+      />
 
-        {visibleRequests.length > 0 ? visibleRequests.map((request) => (
-          <Pressable
-            accessibilityHint="Открыть и проверить заявку"
-            accessibilityRole="button"
-            key={request.requestId}
-            onPress={() => router.push(`/patrol/request/${request.requestId}`)}
-          >
-            <Card style={styles.requestCard}>
-              <View style={styles.headerRow}>
-                <View style={styles.titleBlock}>
-                  <Text style={[styles.requestTitle, { color: colors.text }]}>{request.routeName}</Text>
-                  <Text style={[styles.requestMeta, { color: colors.mutedText }]}>{request.assignedFullName ?? "Свободная заявка"}</Text>
-                  <Text style={[styles.requestMeta, { color: colors.mutedText }]}>План: {formatDateTime(request.plannedStartAt)}</Text>
-                </View>
-                <StatusPill label={requestStatusLabel(request.status)} tone={request.status === "accepted" ? "warning" : "success"} />
-              </View>
-            </Card>
-          </Pressable>
-        )) : (
-          <Card style={styles.requestCard}>
-            <Text style={[styles.requestTitle, { color: colors.text }]}>Заявок нет</Text>
-            <Text style={[styles.text, { color: colors.mutedText }]}>
-              Новые заявки появятся здесь автоматически после push-сигнала или обновления данных.
-            </Text>
-          </Card>
-        )}
+      {dashboard.message ? <DashboardMessage message={dashboard.message} /> : null}
+    </Screen>
+  );
+}
+
+function ActivePatrolCard({
+  active,
+  onOpenAllPoints,
+  onOpenPatrol,
+  onOpenQueue,
+  onOpenRequests
+}: {
+  active: PatrolHomeActive;
+  onOpenAllPoints: () => void;
+  onOpenPatrol: () => void;
+  onOpenQueue: () => void;
+  onOpenRequests: () => void;
+}) {
+  const { colors } = useAppTheme();
+  const status = active.assignment.status;
+  const isCompletedLocal = status === "completedLocal";
+  const isAccepted = status === "accepted";
+  const isPaused = status === "paused";
+  const isInProgress = status === "inProgress";
+  const canUsePatrolAction = isAccepted || isPaused || isInProgress;
+  const primaryAction = getPrimaryAction(status);
+  const percent = progressPercent(active.progress);
+
+  return (
+    <Card>
+      <CardHeading
+        eyebrow="Текущая заявка"
+        statusLabel={assignmentStatusLabel(status)}
+        statusTone={isCompletedLocal || isAccepted || isPaused ? "warning" : isInProgress ? "success" : "neutral"}
+        title={active.assignment.routeName || "Маршрут без названия"}
+      />
+
+      <View
+        accessibilityLabel={`Пройдено ${active.progress.completed} из ${active.progress.total} меток`}
+        accessibilityRole="progressbar"
+        accessibilityValue={{ min: 0, max: 100, now: percent }}
+        style={styles.progressBlock}
+      >
+        <View style={styles.progressHeader}>
+          <Text style={[styles.sectionLabel, { color: colors.text }]}>
+            {active.progress.completed} из {active.progress.total} меток
+          </Text>
+          <Text style={[styles.percent, { color: colors.text }]}>{percent}%</Text>
+        </View>
+        <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+          <View style={[styles.progressFill, { backgroundColor: colors.primary, width: `${percent}%` }]} />
+        </View>
       </View>
 
-      {message ? <Text style={[styles.message, { color: colors.mutedText }]}>{message}</Text> : null}
-    </Screen>
+      {canUsePatrolAction && !isCompletedLocal ? (
+        <PrimaryButton
+          icon={primaryAction.icon}
+          label={primaryAction.label}
+          onPress={onOpenPatrol}
+          size="large"
+        />
+      ) : (
+        <Text style={[styles.bodyText, { color: colors.mutedText }]}>
+          {isCompletedLocal
+            ? "Отчёт сохранён на телефоне. Он отправится автоматически при связи; статус можно посмотреть в очереди."
+            : homeBlockedHint(status)}
+        </Text>
+      )}
+
+      <View style={styles.actions}>
+        <HomeQuickAction icon="list-outline" label="Все метки" onPress={onOpenAllPoints} />
+        <HomeQuickAction icon="swap-horizontal-outline" label="Заявки" onPress={onOpenRequests} />
+        {isCompletedLocal ? (
+          <HomeQuickAction icon="cloud-upload-outline" label="Очередь" onPress={onOpenQueue} />
+        ) : null}
+      </View>
+    </Card>
+  );
+}
+
+function EmptyPatrolCard({
+  onOpenRequests,
+  summary
+}: {
+  onOpenRequests: () => void;
+  summary: { available: number; mine: number; unsent: number };
+}) {
+  const { colors } = useAppTheme();
+
+  return (
+    <Card>
+      <CardHeading eyebrow="Активный обход" statusLabel="Нет обхода" statusTone="neutral" title="Заявка не выбрана" />
+      <View style={styles.emptyDescription}>
+        <View style={[styles.emptyIcon, { backgroundColor: colors.backgroundAccent }]}>
+          <Ionicons color={colors.primary} name="shield-checkmark-outline" size={22} />
+        </View>
+        <Text style={[styles.bodyText, styles.emptyText, { color: colors.mutedText }]}>
+          Откройте карточку заявки, проверьте маршрут и подтвердите принятие. Одним касанием из списка заявка не принимается.
+        </Text>
+      </View>
+      <View style={styles.quickStats}>
+        <SummaryStat label="Доступно" value={summary.available} />
+        <SummaryStat label="Мои" value={summary.mine} />
+        <SummaryStat label="Не отправлено" value={summary.unsent} />
+      </View>
+      <PrimaryButton icon="list-outline" label="Выбрать заявку" onPress={onOpenRequests} size="large" />
+    </Card>
+  );
+}
+
+function CardHeading({
+  eyebrow,
+  statusLabel,
+  statusTone,
+  title
+}: {
+  eyebrow: string;
+  statusLabel: string;
+  statusTone: "neutral" | "success" | "warning" | "danger";
+  title: string;
+}) {
+  const { colors } = useAppTheme();
+
+  return (
+    <View style={styles.headerRow}>
+      <View style={styles.titleBlock}>
+        <Text style={[styles.sectionLabel, { color: colors.mutedText }]}>{eyebrow}</Text>
+        <Text style={[styles.cardTitle, { color: colors.text }]}>{title}</Text>
+      </View>
+      <View style={styles.statusSlot}>
+        <StatusPill label={statusLabel} tone={statusTone} />
+      </View>
+    </View>
+  );
+}
+
+function SummaryStat({ label, value }: { label: string; value: number }) {
+  const { colors } = useAppTheme();
+
+  return (
+    <View style={[styles.quickStat, { backgroundColor: colors.backgroundAccent, borderColor: colors.border }]}>
+      <Text style={[styles.quickStatValue, { color: colors.text }]}>{value}</Text>
+      <Text style={[styles.quickStatLabel, { color: colors.mutedText }]}>{label}</Text>
+    </View>
+  );
+}
+
+function RequestSection({
+  isRefreshing,
+  onOpenRequest,
+  onRefresh,
+  requests
+}: {
+  isRefreshing: boolean;
+  onOpenRequest: (requestId: string) => void;
+  onRefresh: () => void;
+  requests: RequestBoardItem[];
+}) {
+  const { colors } = useAppTheme();
+
+  return (
+    <View style={styles.requestSection}>
+      <View style={styles.requestSectionHeader}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Действующие заявки</Text>
+        <Pressable
+          accessibilityLabel="Обновить список заявок"
+          accessibilityRole="button"
+          accessibilityState={{ busy: isRefreshing, disabled: isRefreshing }}
+          disabled={isRefreshing}
+          hitSlop={8}
+          onPress={onRefresh}
+          style={({ pressed }) => [styles.refreshButton, pressed ? styles.pressed : null]}
+        >
+          <Ionicons color={isRefreshing ? colors.mutedText : colors.primary} name="refresh-outline" size={17} />
+          <Text style={[styles.link, { color: isRefreshing ? colors.mutedText : colors.primary }]}>
+            {isRefreshing ? "Обновляем..." : "Обновить"}
+          </Text>
+        </Pressable>
+      </View>
+
+      {requests.length > 0 ? requests.map((request) => (
+        <Pressable
+          accessibilityHint="Открыть и проверить заявку"
+          accessibilityLabel={`${request.routeName}. ${requestStatusLabel(request.status)}`}
+          accessibilityRole="button"
+          key={request.requestId}
+          onPress={() => onOpenRequest(request.requestId)}
+          style={({ pressed }) => pressed ? styles.requestPressed : null}
+        >
+          <RequestCard request={request} />
+        </Pressable>
+      )) : (
+        <Card style={styles.requestCard}>
+          <View style={styles.emptyRequestRow}>
+            <Ionicons color={colors.mutedText} name="file-tray-outline" size={21} />
+            <View style={styles.emptyRequestText}>
+              <Text style={[styles.requestTitle, { color: colors.text }]}>Заявок нет</Text>
+              <Text style={[styles.bodyText, { color: colors.mutedText }]}>
+                Новые заявки появятся после push-сигнала или обновления данных.
+              </Text>
+            </View>
+          </View>
+        </Card>
+      )}
+    </View>
+  );
+}
+
+function RequestCard({ request }: { request: RequestBoardItem }) {
+  const { colors } = useAppTheme();
+
+  return (
+    <Card style={styles.requestCard}>
+      <View style={styles.headerRow}>
+        <View style={styles.titleBlock}>
+          <Text style={[styles.requestTitle, { color: colors.text }]}>{request.routeName}</Text>
+          <Text style={[styles.requestMeta, { color: colors.mutedText }]}>
+            {request.assignedFullName ?? "Свободная заявка"}
+          </Text>
+          <Text style={[styles.requestMeta, { color: colors.mutedText }]}>План: {formatDateTime(request.plannedStartAt)}</Text>
+        </View>
+        <View style={styles.statusSlot}>
+          <StatusPill
+            label={requestStatusLabel(request.status)}
+            tone={request.status === "accepted" ? "warning" : "success"}
+          />
+        </View>
+      </View>
+    </Card>
+  );
+}
+
+function DashboardMessage({ message }: { message: string }) {
+  const { colors } = useAppTheme();
+
+  return (
+    <View
+      accessibilityLiveRegion="polite"
+      style={[styles.message, { backgroundColor: colors.backgroundAccent, borderColor: colors.border }]}
+    >
+      <Ionicons color={colors.primary} name="information-circle-outline" size={18} />
+      <Text style={[styles.messageText, { color: colors.mutedText }]}>{message}</Text>
+    </View>
   );
 }
 
@@ -228,10 +308,10 @@ function HomeQuickAction({
       style={({ pressed }) => [
         styles.quickAction,
         { borderColor: colors.border, backgroundColor: colors.card },
-        pressed ? styles.quickActionPressed : null
+        pressed ? styles.pressed : null
       ]}
     >
-      <Ionicons color={colors.primary} name={icon} size={17} />
+      <Ionicons color={colors.primary} name={icon} size={18} />
       <Text style={[styles.quickActionText, { color: colors.primary }]}>{label}</Text>
     </Pressable>
   );
@@ -279,11 +359,9 @@ function requestStatusLabel(status: RequestBoardItem["status"]) {
   if (status === "accepted") {
     return "Принята";
   }
-
   if (status === "assigned") {
     return "Назначена";
   }
-
   return "Доступна";
 }
 
@@ -307,19 +385,15 @@ function homeBlockedHint(status: ActiveAssignment["status"]) {
   if (status === "cancelledServer" || status === "cancelled") {
     return "Заявка отменена диспетчером. Действия по меткам заблокированы.";
   }
-
   if (status === "authRequired") {
     return "Сессия требует входа. Отчет и локальные действия сохранены в очереди.";
   }
-
   if (status === "needsDispatcherDecision" || status === "conflict") {
     return "Нужно решение диспетчера. Откройте карточку обхода и очередь синхронизации.";
   }
-
   if (status === "syncError") {
     return "Отправка остановлена из-за ошибки. Данные сохранены, повтор доступен в очереди.";
   }
-
   return "Действия по обходу временно недоступны. Проверьте статус и синхронизацию.";
 }
 
@@ -329,15 +403,44 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8
   },
+  bodyText: {
+    fontSize: 15,
+    lineHeight: 21
+  },
   cardTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "900",
-    lineHeight: 30
+    lineHeight: 28
+  },
+  emptyDescription: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 11
+  },
+  emptyIcon: {
+    alignItems: "center",
+    borderRadius: 10,
+    height: 42,
+    justifyContent: "center",
+    width: 42
+  },
+  emptyRequestRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 10
+  },
+  emptyRequestText: {
+    flex: 1,
+    gap: 4
+  },
+  emptyText: {
+    flex: 1
   },
   headerRow: {
     alignItems: "flex-start",
     flexDirection: "row",
-    gap: 12,
+    flexWrap: "wrap",
+    gap: 10,
     justifyContent: "space-between"
   },
   link: {
@@ -345,17 +448,31 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   message: {
+    alignItems: "flex-start",
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    padding: 11
+  },
+  messageText: {
+    flex: 1,
     fontSize: 13,
-    lineHeight: 18,
-    textAlign: "center"
+    lineHeight: 18
   },
   percent: {
     fontSize: 18,
     fontWeight: "900"
   },
+  pressed: {
+    opacity: 0.72
+  },
+  progressBlock: {
+    gap: 8
+  },
   progressFill: {
-    backgroundColor: "#1e5bff",
-    height: 12
+    borderRadius: 999,
+    height: 10
   },
   progressHeader: {
     alignItems: "center",
@@ -364,21 +481,8 @@ const styles = StyleSheet.create({
   },
   progressTrack: {
     borderRadius: 999,
-    height: 12,
+    height: 10,
     overflow: "hidden"
-  },
-  quickStats: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
-  },
-  quickStat: {
-    backgroundColor: "#eef4ff",
-    borderRadius: 999,
-    fontSize: 12,
-    fontWeight: "900",
-    paddingHorizontal: 10,
-    paddingVertical: 6
   },
   quickAction: {
     alignItems: "center",
@@ -386,16 +490,46 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: "row",
     gap: 6,
-    minHeight: 42,
-    paddingHorizontal: 12,
-    paddingVertical: 8
-  },
-  quickActionPressed: {
-    opacity: 0.72
+    minHeight: 44,
+    paddingHorizontal: 13,
+    paddingVertical: 9
   },
   quickActionText: {
     fontSize: 13,
     fontWeight: "900"
+  },
+  quickStat: {
+    borderRadius: 10,
+    borderWidth: 1,
+    flexBasis: 96,
+    flexGrow: 1,
+    gap: 2,
+    minHeight: 62,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  quickStatLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 14
+  },
+  quickStatValue: {
+    fontSize: 20,
+    fontWeight: "900",
+    lineHeight: 24
+  },
+  quickStats: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  refreshButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 5,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 4
   },
   requestCard: {
     padding: 14
@@ -404,33 +538,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18
   },
+  requestPressed: {
+    opacity: 0.76,
+    transform: [{ scale: 0.995 }]
+  },
   requestSection: {
     gap: 10
   },
   requestSectionHeader: {
     alignItems: "center",
     flexDirection: "row",
+    gap: 10,
     justifyContent: "space-between"
   },
   requestTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "900",
-    lineHeight: 23
+    lineHeight: 22
   },
   sectionLabel: {
     fontSize: 13,
     fontWeight: "800"
   },
   sectionTitle: {
+    flex: 1,
     fontSize: 20,
     fontWeight: "900"
   },
-  text: {
-    fontSize: 15,
-    lineHeight: 21
+  statusSlot: {
+    flexShrink: 1,
+    maxWidth: "100%"
   },
   titleBlock: {
-    flex: 1,
-    gap: 6
+    flexGrow: 1,
+    flexShrink: 1,
+    gap: 5,
+    minWidth: 190
   }
 });

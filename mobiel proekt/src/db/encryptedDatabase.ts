@@ -10,7 +10,8 @@ import {
   databaseEncryptionKeyBytes,
   escapeSqliteString,
   haveMatchingTableCounts,
-  isValidDatabaseEncryptionKey
+  isValidDatabaseEncryptionKey,
+  resolveExistingDatabaseConflict
 } from "@/db/databaseEncryptionPolicy";
 
 const legacyDatabaseName = "patrol360-mobile.db";
@@ -56,9 +57,9 @@ export async function openProtectedDatabase() {
         return encryptedDatabase;
       }
 
-      if (await hasApplicationSchema(encryptedDatabase)
-        && await hasSameProtectedTableCountsAsLegacy(encryptedDatabase)) {
-        await deleteDatabaseFiles(legacyDatabaseName);
+      const encryptedHasApplicationSchema = await hasApplicationSchema(encryptedDatabase);
+      if (encryptedHasApplicationSchema) {
+        await cleanUpLegacyDatabaseIfSafe(encryptedDatabase);
         return encryptedDatabase;
       }
     } catch (error) {
@@ -75,6 +76,22 @@ export async function openProtectedDatabase() {
   }
 
   return openEncryptedDatabase(key);
+}
+
+async function cleanUpLegacyDatabaseIfSafe(encryptedDatabase: SQLite.SQLiteDatabase) {
+  try {
+    const protectedTableCountsMatch = await hasSameProtectedTableCountsAsLegacy(encryptedDatabase);
+    const resolution = resolveExistingDatabaseConflict({
+      encryptedHasApplicationSchema: true,
+      protectedTableCountsMatch
+    });
+
+    if (resolution === "useEncryptedAndDeleteLegacy") {
+      await deleteDatabaseFiles(legacyDatabaseName);
+    }
+  } catch (error) {
+    console.warn("Legacy database cleanup was skipped; encrypted data remains authoritative.", error);
+  }
 }
 
 export async function openProtectedDatabaseConnection() {

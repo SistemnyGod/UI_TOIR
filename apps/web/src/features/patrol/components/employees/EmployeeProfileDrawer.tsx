@@ -4,24 +4,28 @@ import type { EmployeeDirectoryItem, ScreenId } from "../../../../types";
 interface EmployeeProfileDrawerProps {
   canManage?: boolean;
   employee?: EmployeeDirectoryItem;
-  onDeleteEmployee: (id: string) => void;
+  isSaving?: boolean;
+  onDeactivateEmployee: (id: string) => Promise<void> | void;
   onEditEmployee: (employee: EmployeeDirectoryItem) => void;
   onNavigate: (screen: ScreenId) => void;
+  onRemoveFromPatrol: (id: string) => Promise<void> | void;
 }
 
 export function EmployeeProfileDrawer({
   employee,
   canManage = true,
-  onDeleteEmployee,
+  isSaving = false,
+  onDeactivateEmployee,
   onEditEmployee,
   onNavigate,
+  onRemoveFromPatrol,
 }: EmployeeProfileDrawerProps) {
   return (
-    <aside className="side-drawer profile-drawer">
+    <aside className="side-drawer profile-drawer employee-profile-drawer">
       {!employee ? (
         <EmptyState
           title="Сотрудник не выбран"
-          description="Профиль сотрудника появится после загрузки справочника или выбора строки."
+          description="Выберите сотрудника в рабочем списке, чтобы открыть профиль и действия."
         />
       ) : (
         <>
@@ -29,19 +33,26 @@ export function EmployeeProfileDrawer({
             <span className="avatar profile-avatar">{employee.initials}</span>
             <div className="employee-profile-title">
               <h2>{employee.fullName}</h2>
-              <p>{employee.position}</p>
+              <p>{employee.position || "Должность не указана"}</p>
             </div>
             <Chip>{employee.status}</Chip>
           </div>
-          <div className="drawer-actions employee-profile-actions">
-            <button className="button primary" disabled={!canManage} onClick={() => onEditEmployee(employee)} type="button">
-              Редактировать
-            </button>
-            <button className="button ghost" onClick={() => onNavigate("assign")} type="button">
+
+          <div className="employee-profile-primary-action">
+            <button className="button primary" onClick={() => onNavigate("assign")} type="button">
               Назначить маршрут
             </button>
-            <button className="button ghost danger-text" disabled={!canManage} onClick={() => onDeleteEmployee(employee.id)} type="button">
-              Деактивировать
+          </div>
+
+          <div className="drawer-actions employee-profile-actions">
+            <button className="button ghost" disabled={!canManage || isSaving} onClick={() => onEditEmployee(employee)} type="button">
+              Редактировать
+            </button>
+            <button className="button ghost" disabled={!canManage || isSaving} onClick={() => onRemoveFromPatrol(employee.id)} type="button">
+              Убрать из обхода
+            </button>
+            <button className="button ghost danger-text" disabled={!canManage || isSaving} onClick={() => onDeactivateEmployee(employee.id)} type="button">
+              Деактивировать в справочнике
             </button>
           </div>
 
@@ -52,14 +63,14 @@ export function EmployeeProfileDrawer({
               <Field label="Подразделение" value={employee.department || "Не указано"} />
               <Field label="Группа" value={employee.employeeGroup || "Не указана"} />
               <Field label="Бригада" value={employee.brigade || "Не указана"} />
-              <Field label="Смена" value={employee.shift} />
+              <Field label="Смена" value={employee.shift || "Не указана"} />
             </dl>
           </section>
 
           <section className="employee-profile-section">
             <h3>Кадровая информация</h3>
             <dl className="meta-list compact-meta">
-              <Field label="Дата приема" value={employee.hiredAt || "Не указана"} />
+              <Field label="Дата приёма" value={employee.hiredAt || "Не указана"} />
               <Field label="Дата рождения" value={employee.birthDate || "Не указана"} />
               <Field label="Руководитель" value={employee.leader || "Не указан"} />
               <Field label="Телефон" value={employee.phone || "Не указан"} />

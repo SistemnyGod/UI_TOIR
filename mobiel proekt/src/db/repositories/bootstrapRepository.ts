@@ -3,12 +3,196 @@ import { currentContourId } from "@/core/environments";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { BootstrapDto } from "@/domain/patrol/patrolTypes";
+import { finalizeCancelledAssignmentInTransaction } from "@/db/repositories/patrolCancellationRepository";
 import { deletePatrolPhotoDirectory } from "@/services/fileStorageService";
 
 const bootstrapScope = `bootstrap:${currentContourId}`;
 
 const contourGuardTableNames = ["files", "outbox_commands", "sync_cursors", "sync_conflicts"] as const;
 type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "getFirstAsync" | "runAsync">;
+type BootstrapAssignment = BootstrapDto["assignments"][number];
+
+async function reconcileAssignmentIdentityInTransaction(
+  tx: SqlExecutor,
+  ownerUserId: string,
+  serverAssignment: BootstrapAssignment
+) {
+  const localAssignments = await tx.getAllAsync<{
+    assignmentId: string;
+    status: string;
+    startedAtLocal: string | null;
+    completedAtLocal: string | null;
+  }>(
+    `
+      SELECT
+        assignment_id AS assignmentId,
+        status,
+        started_at_local AS startedAtLocal,
+        completed_at_local AS completedAtLocal
+      FROM patrol_assignments
+      WHERE owner_user_id = ?
+        AND request_id = ?
+        AND assignment_id <> ?
+        AND (contour_id = ? OR contour_id IS NULL)
+    `,
+    [ownerUserId, serverAssignment.requestId, serverAssignment.assignmentId, currentContourId]
+  );
+
+  for (const local of localAssignments) {
+    const handoff = await tx.getFirstAsync<{ clientOperationId: string }>(
+      `
+        SELECT client_operation_id AS clientOperationId
+        FROM outbox_commands
+        WHERE owner_user_id = ?
+          AND (contour_id = ? OR contour_id IS NULL)
+          AND command_type = 'handoffPatrolAssignment'
+          AND entity_local_id = ?
+          AND status NOT IN ('superseded', 'rejected')
+        LIMIT 1
+      `,
+      [ownerUserId, currentContourId, local.assignmentId]
+    );
+
+    const preserveLocalStatus = [
+      "inProgress",
+      "paused",
+      "completedLocal",
+      "syncing",
+      "syncError",
+      "authRequired"
+    ].includes(local.status) || (local.status === "needsDispatcherDecision" && Boolean(handoff));
+
+    await tx.runAsync(
+      `
+        INSERT OR REPLACE INTO assignment_route_points (
+          assignment_id, point_id, route_id, name, description, instruction,
+          order_index, nfc_uid_hash, qr_code_hash, required, requires_photo, revision
+        )
+        SELECT ?, point_id, route_id, name, description, instruction,
+          order_index, nfc_uid_hash, qr_code_hash, required, requires_photo, revision
+        FROM assignment_route_points
+        WHERE assignment_id = ?
+      `,
+      [serverAssignment.assignmentId, local.assignmentId]
+    );
+    await tx.runAsync(
+      "UPDATE point_results SET assignment_id = ? WHERE owner_user_id = ? AND assignment_id = ?",
+      [serverAssignment.assignmentId, ownerUserId, local.assignmentId]
+    );
+    await tx.runAsync(
+      "UPDATE files SET assignment_id = ?, contour_id = COALESCE(contour_id, ?) WHERE owner_user_id = ? AND assignment_id = ?",
+      [serverAssignment.assignmentId, currentContourId, ownerUserId, local.assignmentId]
+    );
+
+    const commands = await tx.getAllAsync<{
+      clientOperationId: string;
+      entityLocalId: string | null;
+      entityServerId: string | null;
+      payloadJson: string;
+      status: string;
+      lastError: string | null;
+    }>(
+      `
+        SELECT
+          client_operation_id AS clientOperationId,
+          entity_local_id AS entityLocalId,
+          entity_server_id AS entityServerId,
+          payload_json AS payloadJson,
+          status,
+          last_error AS lastError
+        FROM outbox_commands
+        WHERE owner_user_id = ?
+          AND (contour_id = ? OR contour_id IS NULL)
+          AND (entity_local_id = ? OR entity_server_id = ? OR instr(payload_json, ?) > 0)
+      `,
+      [ownerUserId, currentContourId, local.assignmentId, local.assignmentId, local.assignmentId]
+    );
+
+    for (const command of commands) {
+      let payloadJson = command.payloadJson;
+      try {
+        const payload = JSON.parse(command.payloadJson) as Record<string, unknown>;
+        if (payload.assignmentId === local.assignmentId) {
+          payload.assignmentId = serverAssignment.assignmentId;
+          payloadJson = JSON.stringify(payload);
+        }
+      } catch {
+        payloadJson = command.payloadJson;
+      }
+
+      const staleMissingAssignmentConflict = !handoff
+        && (command.status === "conflict" || command.status === "rejected")
+        && command.lastError?.includes("Assignment is not available") === true;
+      const nextStatus = staleMissingAssignmentConflict ? "superseded" : command.status;
+
+      await tx.runAsync(
+        `
+          UPDATE outbox_commands
+          SET contour_id = COALESCE(contour_id, ?),
+              entity_local_id = CASE WHEN entity_local_id = ? THEN ? ELSE entity_local_id END,
+              entity_server_id = CASE WHEN entity_server_id = ? THEN ? ELSE entity_server_id END,
+              payload_json = ?,
+              status = ?,
+              last_error = CASE WHEN ? = 'superseded' THEN NULL ELSE last_error END
+          WHERE client_operation_id = ?
+        `,
+        [
+          currentContourId,
+          local.assignmentId,
+          serverAssignment.assignmentId,
+          local.assignmentId,
+          serverAssignment.assignmentId,
+          payloadJson,
+          nextStatus,
+          nextStatus,
+          command.clientOperationId
+        ]
+      );
+
+      if (staleMissingAssignmentConflict) {
+        await tx.runAsync(
+          `
+            UPDATE sync_conflicts
+            SET status = 'resolved'
+            WHERE owner_user_id = ?
+              AND (contour_id = ? OR contour_id IS NULL)
+              AND client_operation_id = ?
+              AND status NOT IN ('resolved', 'dismissed')
+          `,
+          [ownerUserId, currentContourId, command.clientOperationId]
+        );
+      }
+    }
+
+    if (preserveLocalStatus) {
+      await tx.runAsync(
+        `
+          UPDATE patrol_assignments
+          SET status = ?,
+              started_at_local = COALESCE(started_at_local, ?),
+              completed_at_local = COALESCE(completed_at_local, ?)
+          WHERE owner_user_id = ?
+            AND assignment_id = ?
+            AND contour_id = ?
+        `,
+        [
+          local.status,
+          local.startedAtLocal,
+          local.completedAtLocal,
+          ownerUserId,
+          serverAssignment.assignmentId,
+          currentContourId
+        ]
+      );
+    }
+
+    await tx.runAsync("DELETE FROM assignment_route_points WHERE assignment_id = ?", [local.assignmentId]);
+    await tx.runAsync(
+      "DELETE FROM patrol_assignments WHERE owner_user_id = ? AND assignment_id = ?",
+      [ownerUserId, local.assignmentId]
+    );
+  }
+}
 
 export async function clearLocalUserData() {
   const db = await getDatabase();
@@ -66,7 +250,14 @@ export async function countBlockingLocalUserData() {
                 AND assignment.status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
             )) +
         (SELECT COUNT(*) FROM files
-          WHERE status NOT IN ('uploaded', 'linked')) +
+          WHERE status NOT IN ('uploaded', 'linked')
+            AND NOT EXISTS (
+              SELECT 1
+              FROM patrol_assignments assignment
+              WHERE assignment.assignment_id = files.assignment_id
+                AND assignment.owner_user_id = files.owner_user_id
+                AND assignment.status IN ('cancelled', 'cancelledServer')
+            )) +
         (SELECT COUNT(*) FROM outbox_commands
           WHERE status IN ('pending', 'sending', 'retryLater', 'waiting_auth', 'waiting_network', 'wrong_contour', 'blocked')) +
         (SELECT COUNT(*) FROM sync_conflicts
@@ -468,6 +659,11 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
           assignment.routeVersionNo ?? 0
         ]
       );
+      await reconcileAssignmentIdentityInTransaction(tx, ownerUserId, assignment);
+    }
+
+    for (const assignmentId of cancelledAssignmentIds) {
+      await finalizeCancelledAssignmentInTransaction(tx, ownerUserId, assignmentId);
     }
 
     const protectedRoutes = await tx.getAllAsync<{ route_id: string }>(
@@ -475,7 +671,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
         SELECT DISTINCT route_id
         FROM patrol_assignments
         WHERE owner_user_id = ?
-          AND status IN ('inProgress', 'completedLocal')
+          AND status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
       `,
       [ownerUserId]
     );
@@ -518,7 +714,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
               SELECT route_id
               FROM patrol_assignments
               WHERE owner_user_id = ?
-                AND status IN ('inProgress', 'completedLocal')
+                AND status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
             )
         `,
         [...serverRouteIds, ownerUserId]
@@ -531,7 +727,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
               SELECT route_id
               FROM patrol_assignments
               WHERE owner_user_id = ?
-                AND status IN ('inProgress', 'completedLocal')
+                AND status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
             )
         `,
         [...serverRouteIds, ownerUserId]
@@ -544,7 +740,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             SELECT route_id
             FROM patrol_assignments
             WHERE owner_user_id = ?
-              AND status IN ('inProgress', 'completedLocal')
+              AND status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
           )
         `,
         [ownerUserId]
@@ -556,7 +752,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             SELECT route_id
             FROM patrol_assignments
             WHERE owner_user_id = ?
-              AND status IN ('inProgress', 'completedLocal')
+              AND status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
           )
         `,
         [ownerUserId]

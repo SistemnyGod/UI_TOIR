@@ -1,6 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 
 import { currentContourId, defaultEnvironment } from "@/core/environments";
+import { orderServerCandidateBaseUrls } from "@/core/serverCandidatePolicy";
 
 const serverBaseUrlKey = `patrol360.serverBaseUrl.${currentContourId}`;
 
@@ -42,11 +43,12 @@ export async function getServerBaseUrl() {
 
 export async function getServerCandidateBaseUrls(preferredBaseUrl?: string) {
   const storedValue = await SecureStore.getItemAsync(serverBaseUrlKey);
-  const candidates = [
+  const candidates = orderServerCandidateBaseUrls({
+    primaryBaseUrl: isLocalEnvironment() ? localLanServerBaseUrl : undefined,
     preferredBaseUrl,
-    storedValue,
-    ...defaultEnvironment.allowedBaseUrls
-  ];
+    storedBaseUrl: storedValue ?? undefined,
+    allowedBaseUrls: defaultEnvironment.allowedBaseUrls
+  });
 
   return uniqueNormalizedUrls(candidates).filter(isAllowedServerBaseUrl);
 }
@@ -98,6 +100,10 @@ function uniqueNormalizedUrls(values: (string | null | undefined)[]) {
   }
 
   return result;
+}
+
+function isLocalEnvironment() {
+  return defaultEnvironment.name === "dev" || defaultEnvironment.name === "local-enterprise";
 }
 
 export function isAllowedServerBaseUrl(value: string) {

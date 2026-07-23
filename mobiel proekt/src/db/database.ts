@@ -689,7 +689,7 @@ async function ensureAssignmentSnapshotAndOutboxRecovery(db: SqlExecutor) {
       point.revision
     FROM patrol_assignments assignment
     INNER JOIN route_points point ON point.route_id = assignment.route_id
-    WHERE assignment.status IN ('inProgress', 'completedLocal');
+    WHERE assignment.status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision');
   `);
 }
 
