@@ -2,6 +2,18 @@ import Constants from "expo-constants";
 
 export type EnvironmentName = "dev" | "test" | "local-enterprise" | "production";
 
+const configuredProductionApiBaseUrl = typeof Constants.expoConfig?.extra?.productionApiBaseUrl === "string"
+  ? Constants.expoConfig.extra.productionApiBaseUrl.trim()
+  : "";
+const configuredPublicApiBaseUrl = typeof Constants.expoConfig?.extra?.publicApiBaseUrl === "string"
+  ? Constants.expoConfig.extra.publicApiBaseUrl.trim()
+  : "";
+const localEnterpriseAllowedBaseUrls = uniqueValues([
+  "http://192.168.2.194:5173",
+  "http://192.168.2.194",
+  configuredPublicApiBaseUrl
+]);
+
 export type MobileEnvironment = {
   name: EnvironmentName;
   apiBaseUrl: string;
@@ -15,7 +27,7 @@ export const environments: Record<EnvironmentName, MobileEnvironment> = {
     name: "dev",
     apiBaseUrl: "http://192.168.2.194:5173",
     contourId: "patrol360-dev",
-    allowedBaseUrls: ["http://192.168.2.194:5173", "http://192.168.2.194"],
+    allowedBaseUrls: localEnterpriseAllowedBaseUrls,
     syncProtocolVersion: "1.0"
   },
   test: {
@@ -29,14 +41,14 @@ export const environments: Record<EnvironmentName, MobileEnvironment> = {
     name: "local-enterprise",
     apiBaseUrl: "http://192.168.2.194:5173",
     contourId: "patrol360-local-enterprise",
-    allowedBaseUrls: ["http://192.168.2.194:5173", "http://192.168.2.194"],
+    allowedBaseUrls: localEnterpriseAllowedBaseUrls,
     syncProtocolVersion: "1.0"
   },
   production: {
     name: "production",
-    apiBaseUrl: "https://patrol360.example.com",
+    apiBaseUrl: configuredProductionApiBaseUrl,
     contourId: "patrol360-production",
-    allowedBaseUrls: ["https://patrol360.example.com"],
+    allowedBaseUrls: configuredProductionApiBaseUrl ? [configuredProductionApiBaseUrl] : [],
     syncProtocolVersion: "1.0"
   }
 };
@@ -54,4 +66,8 @@ function isEnvironmentName(value: string): value is EnvironmentName {
     || value === "test"
     || value === "local-enterprise"
     || value === "production";
+}
+
+function uniqueValues(values: string[]) {
+  return [...new Set(values.filter(Boolean))];
 }

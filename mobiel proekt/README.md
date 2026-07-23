@@ -34,6 +34,16 @@ $env:PATROL360_ENVIRONMENT = 'local-enterprise'
 .\scripts\build-release-apk.ps1
 ```
 
+Локальный адрес `http://192.168.2.194:5173` остаётся основным. При наличии белого IP можно встроить второй разрешённый адрес того же контура:
+
+```powershell
+$env:PATROL360_ENVIRONMENT = 'local-enterprise'
+$env:PATROL360_PUBLIC_API_URL = 'https://<белый-ip>'
+.\scripts\build-release-apk.ps1
+```
+
+Также адрес можно передать параметром `-PublicApiBaseUrl`. Приложение сначала проверяет локальный адрес, затем резервный. Публиковать mobile API в Интернет по незашифрованному HTTP нельзя; для белого IP требуется HTTPS, VPN либо другой защищённый канал. Проброс порта и правила внешнего firewall настраиваются отдельно от APK.
+
 Wrapper автоматически выбирает доступную DPAPI-копию существующего ключа и сверяет сертификат с публичным отпечатком из `release-signing.json`. Проверить ключ без сборки:
 
 ```powershell

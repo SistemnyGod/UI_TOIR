@@ -9,6 +9,7 @@ import type {
   CreateInventoryOperationDto,
   CreateInventoryPpeCardDto,
   CreateInventoryPpeCardDraftDto,
+  CreateInventoryPpeIssueBatchDto,
   CreateInventoryPpeIssueDto,
   CreateInventorySimpleReferenceDto,
   CreateInventoryUnitDto,
@@ -61,6 +62,7 @@ import type {
   UpdateInventoryWarehouseDto,
   UpsertInventoryItemSetItemsDto,
   UpsertInventoryPpeCardLineDto,
+  UpdateInventoryPpeCardDraftDto,
   UpdateInventoryPpeCardNormRowsDto,
   PublishInventoryPpeNormSetDto,
   UpsertInventoryPpeNormMappingDto,
@@ -248,6 +250,13 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
       );
     },
 
+    updatePpeCardDraft(cardId: string, payload: UpdateInventoryPpeCardDraftDto) {
+      return client.put<InventoryPpeCardDetailDto, UpdateInventoryPpeCardDraftDto>(
+        `/api/v1/inventory/ppe/cards/${cardId}/draft`,
+        payload,
+      );
+    },
+
     updatePpeCardNormRows(cardId: string, payload: UpdateInventoryPpeCardNormRowsDto) {
       return client.put<InventoryPpeCardDetailDto, UpdateInventoryPpeCardNormRowsDto>(
         `/api/v1/inventory/ppe/cards/${cardId}/norm-rows`,
@@ -258,6 +267,13 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
     createPpeIssue(cardId: string, payload: CreateInventoryPpeIssueDto) {
       return client.post<InventoryPpeCardLineDto, CreateInventoryPpeIssueDto>(
         `/api/v1/inventory/ppe/cards/${cardId}/issues`,
+        payload,
+      );
+    },
+
+    createPpeIssueBatch(cardId: string, payload: CreateInventoryPpeIssueBatchDto) {
+      return client.post<InventoryPpeCardDetailDto, CreateInventoryPpeIssueBatchDto>(
+        `/api/v1/inventory/ppe/cards/${cardId}/issues/batch`,
         payload,
       );
     },

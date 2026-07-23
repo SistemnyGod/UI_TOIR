@@ -19,6 +19,7 @@ import { PpeCatalogModal } from "./ppe/PpeCatalogModal";
 import { PpeIssueModal } from "./ppe/PpeIssueModal";
 import { PpeLineActionModal } from "./ppe/PpeLineActionModal";
 import { PpeModuleNav } from "./ppe/PpeModuleNav";
+import { PpeButton } from "./ppe/PpeUi";
 
 type WorkspaceMode = "norms" | "issued" | "print";
 
@@ -183,7 +184,7 @@ export function InventoryPpeScreen({
             <>
               <EmployeeHeader workspace={workspace} />
               {!card ? (
-                <div className="ppe-v2-state ppe-v2-state-large"><FileText size={34} /><strong>У сотрудника нет карточки СИЗ</strong><span>Создайте карточку из действующих норм, предыдущей карточки или пустого шаблона.</span><button className="button primary" onClick={() => onNavigate("inventory-ppe-create")} type="button">Создать карточку</button></div>
+                <div className="ppe-v2-state ppe-v2-state-large"><FileText size={34} /><strong>У сотрудника нет карточки СИЗ</strong><span>Создайте карточку из действующих норм, предыдущей карточки или пустого шаблона.</span><PpeButton onClick={() => onNavigate("inventory-ppe-create")} variant="primary">Создать карточку</PpeButton></div>
               ) : (
                 <>
                   <div className="ppe-v2-mode-tabs" role="tablist">
@@ -241,7 +242,7 @@ function NormRowsTable({ rows, onIssue, onMap }: { rows: InventoryPpeCardNormRow
     <div className="ppe-v2-table-wrap">
       <table className="ppe-v2-table ppe-v2-norm-table ppe-v2-responsive-table"><thead><tr><th>Наименование СИЗ</th><th>Пункт норм</th><th>Периодичность</th><th>Количество</th><th>Номенклатура</th><th>Покрытие</th><th aria-label="Действия" /></tr></thead>
         <tbody>{rows.map((row) => row.rowType === "group" ? <tr className="ppe-v2-group-row" key={row.id}><th colSpan={7}>{row.normItemName}</th></tr> : (
-          <tr key={row.id}><td data-label="СИЗ"><strong>{row.normItemName}</strong></td><td data-label="Пункт норм">{row.normPoint || "—"}</td><td data-label="Периодичность">{row.issuePeriodText || "—"}</td><td data-label="Количество">{row.quantityText || row.quantity}</td><td data-label="Номенклатура"><button className="ppe-v2-link-button" onClick={() => onMap(row)} type="button">{row.mappedItemName || "Выбрать по норме"}</button>{row.mappings.length > 1 ? <small>Допустимых вариантов: {row.mappings.length}</small> : row.brandModelArticle ? <small>{row.brandModelArticle}</small> : null}</td><td data-label="Покрытие"><Coverage status={row.coverageStatus} /></td><td className="ppe-v2-actions-cell"><button className="button primary ppe-v2-row-action" onClick={() => onIssue(row)} type="button">Выдать</button></td></tr>
+          <tr key={row.id}><td data-label="СИЗ"><strong>{row.normItemName}</strong></td><td data-label="Пункт норм">{row.normPoint || "—"}</td><td data-label="Периодичность">{row.issuePeriodText || "—"}</td><td data-label="Количество">{row.quantityText || row.quantity}</td><td data-label="Номенклатура"><button className="ppe-v2-link-button" onClick={() => onMap(row)} type="button">{row.mappedItemName || "Выбрать по норме"}</button>{row.mappings.length > 1 ? <small>Допустимых вариантов: {row.mappings.length}</small> : row.brandModelArticle ? <small>{row.brandModelArticle}</small> : null}</td><td data-label="Покрытие"><Coverage status={row.coverageStatus} /></td><td className="ppe-v2-actions-cell"><PpeButton className="ppe-v2-row-action" onClick={() => onIssue(row)} size="compact" variant="primary">Выдать</PpeButton></td></tr>
         ))}</tbody>
       </table>
     </div>
@@ -260,7 +261,7 @@ function IssuedTable({ card, onAction }: { card: InventoryPpeCardDetailDto; onAc
 }
 
 function PrintWorkspace({ cardData, sheetData, onDownload, onPreview }: { cardData: PrintData; sheetData: PrintData; onDownload: (type: "card" | "sheet") => Promise<void>; onPreview: (mode: PrintMode) => void }) {
-  return <div className="ppe-v2-print-grid"><article><header><FileText size={20} /><div><strong>Личная карточка СИЗ</strong><span>Нормы и группы в нормативном порядке</span></div></header><div className="ppe-v2-print-preview"><PrintPaper data={cardData} mode="card" /></div><footer><button className="button" onClick={() => onPreview("card")} type="button">Предпросмотр</button><button className="button primary" onClick={() => void onDownload("card")} type="button"><Printer size={16} /> DOCX</button></footer></article><article><header><CircleDollarSign size={20} /><div><strong>Лист подписи</strong><span>Только фактические выдачи по дате</span></div></header><div className="ppe-v2-print-preview"><PrintPaper data={sheetData} mode="sheet" /></div><footer><button className="button" onClick={() => onPreview("sheet")} type="button">Предпросмотр</button><button className="button primary" onClick={() => void onDownload("sheet")} type="button"><Printer size={16} /> DOCX</button></footer></article></div>;
+  return <div className="ppe-v2-print-grid"><article><header><FileText size={20} /><div><strong>Личная карточка СИЗ</strong><span>Нормы и группы в нормативном порядке</span></div></header><div className="ppe-v2-print-preview"><PrintPaper data={cardData} mode="card" /></div><footer><PpeButton onClick={() => onPreview("card")} variant="secondary">Предпросмотр</PpeButton><PpeButton icon={<Printer size={16} />} onClick={() => void onDownload("card")} variant="primary">DOCX</PpeButton></footer></article><article><header><CircleDollarSign size={20} /><div><strong>Лист подписи</strong><span>Только фактические выдачи по дате</span></div></header><div className="ppe-v2-print-preview"><PrintPaper data={sheetData} mode="sheet" /></div><footer><PpeButton onClick={() => onPreview("sheet")} variant="secondary">Предпросмотр</PpeButton><PpeButton icon={<Printer size={16} />} onClick={() => void onDownload("sheet")} variant="primary">DOCX</PpeButton></footer></article></div>;
 }
 
 function buildPrintData(card: InventoryPpeCardDetailDto, normRows: InventoryPpeCardNormRowDto[], mode: PrintMode) {

@@ -66,6 +66,9 @@ internal sealed class InventoryPpeCardEntity
     public string Position { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public string Comment { get; set; } = string.Empty;
+    public string IssueType { get; set; } = "planned";
+    public string ResponsibleName { get; set; } = string.Empty;
+    public string Basis { get; set; } = string.Empty;
     public string Gender { get; set; } = string.Empty;
     public string Height { get; set; } = string.Empty;
     public string ClothingSize { get; set; } = string.Empty;

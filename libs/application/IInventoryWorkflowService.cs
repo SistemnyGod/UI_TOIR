@@ -60,9 +60,13 @@ public interface IInventoryWorkflowService
 
     InventoryCommandResult<InventoryPpeCardDetailDto> CreatePpeCardDraft(CreateInventoryPpeCardDraftDto request);
 
+    InventoryCommandResult<InventoryPpeCardDetailDto> UpdatePpeCardDraft(Guid cardId, UpdateInventoryPpeCardDraftDto request);
+
     InventoryCommandResult<InventoryPpeCardDetailDto> UpdatePpeCardNormRows(Guid cardId, UpdateInventoryPpeCardNormRowsDto request);
 
     InventoryCommandResult<InventoryPpeCardLineDto> CreatePpeIssue(Guid cardId, CreateInventoryPpeIssueDto request);
+
+    InventoryCommandResult<InventoryPpeCardDetailDto> CreatePpeIssueBatch(Guid cardId, CreateInventoryPpeIssueBatchDto request);
 
     InventoryCommandResult<InventoryPpeCardLineDto> ApplyPpeLineAction(Guid cardId, Guid lineId, ApplyInventoryPpeLineActionDto request);
 

@@ -1,7 +1,7 @@
 import * as FileSystem from "expo-file-system/legacy";
 
 import { refreshStoredAccessToken } from "@/api/httpClient";
-import { probeServerHealth } from "@/api/serverHealthApi";
+import { invalidateServerHealthCache, probeServerHealthCached } from "@/api/serverHealthApi";
 import { photoUploadTimeoutMs, serverUnavailableMessage, videoUploadTimeoutMs, withTimeout } from "@/api/networkTimeout";
 import { shouldTryNextMobileServer } from "@/api/serverFailoverPolicy";
 import { getAccessToken } from "@/auth/tokenStorage";
@@ -105,7 +105,7 @@ async function uploadFileWithFailover(
 
   for (const apiBaseUrl of apiBaseUrls) {
     try {
-      const health = await probeServerHealth(apiBaseUrl, contourId);
+      const health = await probeServerHealthCached(apiBaseUrl, contourId);
       if (!health.ok) {
         lastError = new Error(health.message ?? "Сервер не прошёл проверку контура: " + apiBaseUrl);
         continue;
@@ -121,6 +121,7 @@ async function uploadFileWithFailover(
       await setServerBaseUrl(apiBaseUrl).catch(() => undefined);
       return { apiBaseUrl, result };
     } catch (error) {
+      invalidateServerHealthCache(apiBaseUrl, contourId);
       lastError = error;
     }
   }

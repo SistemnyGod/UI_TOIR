@@ -19,13 +19,34 @@ if (isReleaseBuild && !configuredEnvironment) {
   throw new Error("PATROL360_ENVIRONMENT must be explicitly set for a Release build (for example: production or local-enterprise).");
 }
 const configuredDefaultEnvironment = configuredEnvironment ?? "local-enterprise";
+const configuredProductionApiBaseUrl = normalizeConfiguredApiBaseUrl(
+  "PATROL360_PRODUCTION_API_URL",
+  process.env.PATROL360_PRODUCTION_API_URL
+);
+const configuredPublicApiBaseUrl = normalizeConfiguredApiBaseUrl(
+  "PATROL360_PUBLIC_API_URL",
+  process.env.PATROL360_PUBLIC_API_URL
+);
 
 if (!supportedDefaultEnvironments.has(configuredDefaultEnvironment)) {
   throw new Error(`Unsupported PATROL360_ENVIRONMENT: ${configuredDefaultEnvironment}`);
 }
+if (configuredDefaultEnvironment === "production" && !configuredProductionApiBaseUrl) {
+  throw new Error("PATROL360_PRODUCTION_API_URL must be set for a production build. The placeholder domain is disabled.");
+}
 
 const allowLocalCleartext = configuredDefaultEnvironment === "dev"
   || configuredDefaultEnvironment === "local-enterprise";
+const localCleartextHosts = allowLocalCleartext
+  ? uniqueValues([
+      "192.168.2.194",
+      "localhost",
+      "127.0.0.1",
+      configuredPublicApiBaseUrl.startsWith("http://")
+        ? new URL(configuredPublicApiBaseUrl).hostname
+        : ""
+    ])
+  : [];
 
 const androidConfig = {
   package: "ru.patrol360.mobile",
@@ -83,11 +104,9 @@ function withPilotNetworkSecurityConfig(config) {
       const configPath = path.join(resourcePath, "network_security_config.xml");
       const backupRulesPath = path.join(resourcePath, "backup_rules.xml");
       const dataExtractionRulesPath = path.join(resourcePath, "data_extraction_rules.xml");
-      const localCleartextDomains = allowLocalCleartext
+      const localCleartextDomains = localCleartextHosts.length > 0
         ? `    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">192.168.2.194</domain>
-        <domain includeSubdomains="true">localhost</domain>
-        <domain includeSubdomains="true">127.0.0.1</domain>
+${localCleartextHosts.map((host) => `        <domain includeSubdomains="true">${host}</domain>`).join("\n")}
     </domain-config>
 `
         : "";
@@ -221,7 +240,39 @@ module.exports = {
     },
     extra: {
       syncProtocolVersion: "1.0",
-      defaultEnvironment: configuredDefaultEnvironment
+      defaultEnvironment: configuredDefaultEnvironment,
+      productionApiBaseUrl: configuredProductionApiBaseUrl,
+      publicApiBaseUrl: configuredPublicApiBaseUrl
     }
   }
 };
+function normalizeConfiguredApiBaseUrl(name, value) {
+  const trimmedValue = value?.trim() ?? "";
+  if (!trimmedValue) {
+    return "";
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(trimmedValue);
+  } catch {
+    throw new Error(`${name} must be an absolute http(s) URL.`);
+  }
+
+  if ((parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:")
+      || !parsedUrl.hostname
+      || parsedUrl.username
+      || parsedUrl.password
+      || (parsedUrl.pathname !== "/" && parsedUrl.pathname !== "")) {
+    throw new Error(`${name} must contain only an http(s) origin without credentials or a path.`);
+  }
+
+  parsedUrl.pathname = "";
+  parsedUrl.search = "";
+  parsedUrl.hash = "";
+  return parsedUrl.toString().replace(/\/+$/, "");
+}
+
+function uniqueValues(values) {
+  return [...new Set(values.filter(Boolean))];
+}

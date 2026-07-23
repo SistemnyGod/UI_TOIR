@@ -1,7 +1,7 @@
 import { fetchWithTimeout, serverUnavailableMessage } from "@/api/networkTimeout";
 import { shouldTryNextMobileServer } from "@/api/serverFailoverPolicy";
 import { loginResponseSchema } from "@/api/schemas";
-import { probeServerHealth } from "@/api/serverHealthApi";
+import { invalidateServerHealthCache, probeServerHealthCached } from "@/api/serverHealthApi";
 import { getOrCreateDeviceId } from "@/auth/deviceRegistration";
 import { assertSessionOwner } from "@/auth/sessionIdentity";
 import {
@@ -95,7 +95,7 @@ async function sendMobileRequestWithFailover(
 
   for (const apiBaseUrl of apiBaseUrls) {
     try {
-      const health = await probeServerHealth(apiBaseUrl);
+      const health = await probeServerHealthCached(apiBaseUrl);
       if (!health.ok) {
         lastError = new Error(health.message ?? `Сервер не прошёл проверку контура: ${apiBaseUrl}`);
         continue;
@@ -110,6 +110,7 @@ async function sendMobileRequestWithFailover(
       await setServerBaseUrl(apiBaseUrl).catch(() => undefined);
       return { apiBaseUrl, response };
     } catch (error) {
+      invalidateServerHealthCache(apiBaseUrl);
       lastError = error;
     }
   }
@@ -178,7 +179,7 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
 
   for (const candidateApiBaseUrl of apiBaseUrls) {
     try {
-      const health = await probeServerHealth(candidateApiBaseUrl);
+      const health = await probeServerHealthCached(candidateApiBaseUrl);
       if (!health.ok) {
         lastError = new Error(health.message ?? `Сервер не прошёл проверку контура: ${candidateApiBaseUrl}`);
         continue;
@@ -205,6 +206,7 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
       await setServerBaseUrl(candidateApiBaseUrl).catch(() => undefined);
       break;
     } catch (error) {
+      invalidateServerHealthCache(candidateApiBaseUrl);
       lastError = error;
     }
   }

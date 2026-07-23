@@ -2,6 +2,7 @@ import * as Crypto from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";
 import * as SecureStore from "expo-secure-store";
 import * as SQLite from "expo-sqlite";
+import type { SQLiteOpenOptions } from "expo-sqlite";
 
 import {
   buildSqlCipherKeyPragma,
@@ -76,6 +77,14 @@ export async function openProtectedDatabase() {
   return openEncryptedDatabase(key);
 }
 
+export async function openProtectedDatabaseConnection() {
+  const storedKey = await SecureStore.getItemAsync(databaseEncryptionKeyName);
+  if (!isValidDatabaseEncryptionKey(storedKey)) {
+    throw new Error("Ключ локальной базы отсутствует или повреждён.");
+  }
+
+  return openEncryptedDatabase(storedKey.toLowerCase(), { useNewConnection: true }, false);
+}
 async function getOrCreateDatabaseEncryptionKey(encryptedDatabaseExists: boolean) {
   const storedKey = await SecureStore.getItemAsync(databaseEncryptionKeyName);
   if (isValidDatabaseEncryptionKey(storedKey)) {
@@ -97,13 +106,15 @@ async function getOrCreateDatabaseEncryptionKey(encryptedDatabaseExists: boolean
   return key;
 }
 
-async function openEncryptedDatabase(key: string) {
-  const database = await SQLite.openDatabaseAsync(encryptedDatabaseName);
+async function openEncryptedDatabase(key: string, options?: SQLiteOpenOptions, verifyIntegrity = true) {
+  const database = await SQLite.openDatabaseAsync(encryptedDatabaseName, options);
   try {
     await database.execAsync(buildSqlCipherKeyPragma(key));
-    const integrity = await database.getFirstAsync<{ integrity_check: string }>("PRAGMA integrity_check;");
-    if (integrity?.integrity_check !== "ok") {
-      throw new Error("Encrypted SQLite integrity check failed.");
+    if (verifyIntegrity) {
+      const integrity = await database.getFirstAsync<{ integrity_check: string }>("PRAGMA integrity_check;");
+      if (integrity?.integrity_check !== "ok") {
+        throw new Error("Encrypted SQLite integrity check failed.");
+      }
     }
     return database;
   } catch (error) {

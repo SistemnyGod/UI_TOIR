@@ -323,6 +323,11 @@ public sealed class InventoryController(
     public ActionResult<InventoryPpeCardDetailDto> CreatePpeCardDraft(CreateInventoryPpeCardDraftDto request) =>
         ToActionResult(inventoryWorkflowService.CreatePpeCardDraft(request));
 
+    [HttpPut("ppe/cards/{id:guid}/draft")]
+    [RequirePermission("inventory.ppe.manage")]
+    public ActionResult<InventoryPpeCardDetailDto> UpdatePpeCardDraft(Guid id, UpdateInventoryPpeCardDraftDto request) =>
+        ToActionResult(inventoryWorkflowService.UpdatePpeCardDraft(id, request));
+
     [HttpPut("ppe/cards/{id:guid}/norm-rows")]
     [RequirePermission("inventory.ppe.manage")]
     public ActionResult<InventoryPpeCardDetailDto> UpdatePpeCardNormRows(Guid id, UpdateInventoryPpeCardNormRowsDto request) =>
@@ -332,6 +337,11 @@ public sealed class InventoryController(
     [RequirePermission("inventory.ppe.manage")]
     public ActionResult<InventoryPpeCardLineDto> CreatePpeIssue(Guid id, CreateInventoryPpeIssueDto request) =>
         ToActionResult(inventoryWorkflowService.CreatePpeIssue(id, request));
+
+    [HttpPost("ppe/cards/{id:guid}/issues/batch")]
+    [RequirePermission("inventory.ppe.manage")]
+    public ActionResult<InventoryPpeCardDetailDto> CreatePpeIssueBatch(Guid id, CreateInventoryPpeIssueBatchDto request) =>
+        ToActionResult(inventoryWorkflowService.CreatePpeIssueBatch(id, request));
 
     [HttpGet("ppe/norm-rows/{normRowId:guid}/mappings")]
     public ActionResult<InventoryListResponseDto<InventoryPpeNormMappingDto>> PpeNormRowMappings(

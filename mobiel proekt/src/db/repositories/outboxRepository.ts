@@ -1,5 +1,6 @@
 import { currentContourId } from "@/core/environments";
-import { getDatabase } from "@/db/database";
+import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
+import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { updatePendingCompleteReportBaseRevisionInTransaction } from "@/db/repositories/outboxSql";
 import { MobileEntityType, OutboxCommand, OutboxCommandStatus, OutboxCommandType, OutboxResponse } from "@/domain/sync/syncTypes";
@@ -315,7 +316,8 @@ export async function markOutboxCommandsRetryLater(
 
   const db = await getDatabase();
   const placeholders = clientOperationIds.map(() => "?").join(", ");
-  await db.withExclusiveTransactionAsync(async (tx) => {
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
     const rows = await tx.getAllAsync<{ client_operation_id: string; attempt_count: number }>(
       `
         SELECT client_operation_id, attempt_count
@@ -348,7 +350,8 @@ export async function markOutboxCommandsRetryLater(
         [lastError ?? null, nextAttemptAt, updatedAtLocal, ownerUserId, currentContourId, row.client_operation_id]
       );
     }
-  });
+    })
+  );
 }
 
 function resolveRetryDelaySeconds(retryAfterSeconds: number | null | undefined, attemptCount: number) {
@@ -484,7 +487,8 @@ export async function finalizeAcceptedCompleteReportCommands(ownerUserId: string
   const db = await getDatabase();
   let finalized = 0;
 
-  await db.withExclusiveTransactionAsync(async (tx) => {
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
     const assignmentFilter = assignmentId ? "AND command.entity_local_id = ?" : "";
     const params = assignmentId ? [ownerUserId, currentContourId, assignmentId] : [ownerUserId, currentContourId];
     const rows = await tx.getAllAsync<{ assignment_id: string }>(
@@ -529,7 +533,8 @@ export async function finalizeAcceptedCompleteReportCommands(ownerUserId: string
     }
 
     finalized = rows.length;
-  });
+    })
+  );
 
   return { finalized };
 }
@@ -537,7 +542,8 @@ export async function finalizeAcceptedCompleteReportCommands(ownerUserId: string
 export async function applyOutboxResponses(ownerUserId: string, responses: OutboxResponse[]) {
   const db = await getDatabase();
 
-  await db.withExclusiveTransactionAsync(async (tx) => {
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
     for (const response of responses) {
       const nextAttemptAt = response.status === "retryLater"
         ? new Date(Date.now() + resolveRetryDelaySeconds(response.retryAfterSeconds, 1) * 1000).toISOString()
@@ -919,7 +925,8 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
         }
       }
     }
-  });
+    })
+  );
 
   for (const response of responses) {
     if (response.status !== "conflict" && response.status !== "rejected") {

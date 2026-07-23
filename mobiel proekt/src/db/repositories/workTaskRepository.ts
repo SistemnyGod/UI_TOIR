@@ -2,7 +2,7 @@ import * as Crypto from "expo-crypto";
 
 import { currentContourId } from "@/core/environments";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
-import { getDatabase } from "@/db/database";
+import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { MobileEmployeeDto, MobileEmuSectionDto, WorkItemDto, WorkTaskDto } from "@/domain/emu/emuTypes";
@@ -13,7 +13,7 @@ import { insertOutboxCommandInTransaction } from "@/db/repositories/outboxSql";
 export async function saveWorkItems(items: WorkItemDto[]) {
   const ownerUserId = await requireOwnerUserId();
   const db = await getDatabase();
-  await withSqliteBusyRetry(() => db.withExclusiveTransactionAsync(async (tx) => {
+  await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
     const itemIds = items.map((item) => item.itemId);
     if (itemIds.length > 0) {
       const placeholders = itemIds.map(() => "?").join(", ");
@@ -133,7 +133,7 @@ export async function saveWorkTasks(tasks: WorkTaskDto[]) {
 
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
     const pendingActions = await tx.getAllAsync<{
       task_id: string;
       command_type: string;
@@ -342,7 +342,7 @@ export async function createWorkTaskLocally(input: CreateWorkTaskInput) {
   });
 
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       await tx.runAsync(
         `
           INSERT INTO work_tasks (
@@ -404,7 +404,7 @@ export async function startPlannedWorkLocally(item: WorkItemDto, employee: Mobil
     taskId,
     createdAtLocal: startedAtLocal
   });
-  await withSqliteBusyRetry(() => db.withExclusiveTransactionAsync(async (tx) => {
+  await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
     await tx.runAsync("DELETE FROM work_tasks WHERE task_id = ? AND owner_user_id = ?", [item.itemId, ownerUserId]);
     await tx.runAsync(
       `INSERT INTO work_tasks (
@@ -468,7 +468,7 @@ async function enqueueParticipantChange(
     taskId,
     createdAtLocal: now
   });
-  await withSqliteBusyRetry(() => db.withExclusiveTransactionAsync(async (tx) => {
+  await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
     await tx.runAsync("UPDATE work_tasks SET sync_status = 'pending', status = 'inProgress' WHERE task_id = ? AND owner_user_id = ?", [item.itemId, ownerUserId]);
     await insertOutboxCommandInTransaction(tx, command);
   }));
@@ -498,7 +498,7 @@ export async function updateWorkTaskLocally(input: UpdateWorkTaskInput) {
   });
 
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       await tx.runAsync(
         `
           UPDATE work_tasks
@@ -535,7 +535,7 @@ export async function pauseWorkTaskLocally(task: WorkTaskDto, comment: string) {
   });
 
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
     await tx.runAsync(
       `
         UPDATE work_tasks
@@ -570,7 +570,7 @@ export async function resumeWorkTaskLocally(task: WorkTaskDto, comment: string) 
   });
 
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
     await tx.runAsync(
       `
         UPDATE work_tasks
@@ -612,7 +612,7 @@ export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: 
   });
 
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
     await tx.runAsync(
       `
         UPDATE work_tasks
@@ -633,7 +633,7 @@ export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: 
 export async function attachMediaToWorkTask(workTaskId: string, file: LocalMobileFile) {
   const ownerUserId = await requireOwnerUserId();
   const db = await getDatabase();
-  await withSqliteBusyRetry(() => db.withExclusiveTransactionAsync(async (tx) => {
+  await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
     const task = await tx.getFirstAsync<{ task_id: string }>(
       "SELECT task_id FROM work_tasks WHERE task_id = ? AND owner_user_id = ?",
       [workTaskId, ownerUserId]

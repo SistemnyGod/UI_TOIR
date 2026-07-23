@@ -2280,6 +2280,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("archived_at");
 
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)")
+                        .HasColumnName("basis");
+
                     b.Property<string>("ClothingSize")
                         .IsRequired()
                         .HasMaxLength(80)
@@ -2324,6 +2330,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("height");
 
+                    b.Property<string>("IssueType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("issue_type");
+
                     b.Property<int?>("LegacyId")
                         .HasColumnType("integer")
                         .HasColumnName("legacy_id");
@@ -2337,6 +2349,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasMaxLength(160)
                         .HasColumnType("character varying(160)")
                         .HasColumnName("position");
+
+                    b.Property<string>("ResponsibleName")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)")
+                        .HasColumnName("responsible_name");
 
                     b.Property<string>("RespiratorSize")
                         .IsRequired()

@@ -65,13 +65,21 @@ export function CatalogsModal({ onClose, onNotify, workspace }: { onClose: () =>
   );
 
   return (
-    <ModalFrame wide onClose={onClose} title="Справочники ЭМУ">
+    <ModalFrame
+      className="emu-catalogs-modal-frame"
+      onClose={onClose}
+      subtitle="Настройте участки, причины и типовые работы для оперативной доски."
+      title="Справочники ЭМУ"
+      wide
+    >
       <div className="emu-catalog-modal">
         <nav className="emu-catalog-tabs" aria-label="Разделы справочников">
           {tabs.map((tab) => (
             <button
+              aria-controls={`emu-catalog-panel-${tab.id}`}
               aria-selected={activeTab === tab.id}
               className="emu-catalog-tab"
+              id={`emu-catalog-tab-${tab.id}`}
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               role="tab"
@@ -82,12 +90,20 @@ export function CatalogsModal({ onClose, onNotify, workspace }: { onClose: () =>
             </button>
           ))}
         </nav>
-        <div className="emu-catalog-content" role="tabpanel">
+        <div
+          aria-labelledby={`emu-catalog-tab-${activeTab}`}
+          className="emu-catalog-content"
+          id={`emu-catalog-panel-${activeTab}`}
+          role="tabpanel"
+        >
           {content}
         </div>
         <footer className="emu-catalog-footer">
-          <span>Изменения сохраняются сразу после добавления или редактирования.</span>
-          <button className="emu-primary-button" onClick={onClose} type="button">Сохранить и закрыть</button>
+          <div className="emu-catalog-save-note">
+            <span className="emu-catalog-save-dot" aria-hidden="true" />
+            <span>Изменения сохраняются автоматически после добавления или редактирования.</span>
+          </div>
+          <button className="emu-primary-button" onClick={onClose} type="button"><span aria-hidden="true">✓</span> Сохранить и закрыть</button>
         </footer>
       </div>
     </ModalFrame>
@@ -162,7 +178,7 @@ export function ReferenceBlock({
   }
 
   return (
-    <section className="emu-reference-block">
+    <section className={`emu-reference-block emu-catalog-reference-block ${protectSystemOther ? "is-sections" : ""}`}>
       <div className="emu-reference-heading">
         <div>
           <h4>{title}</h4>
@@ -170,30 +186,41 @@ export function ReferenceBlock({
         </div>
         <em>{items.length}</em>
       </div>
-      <div className="emu-inline-form">
-        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Новое значение" />
-        <button disabled={!name.trim()} onClick={() => void create()} type="button">Добавить</button>
+      <div className="emu-catalog-create">
+        <div className="emu-catalog-create-copy">
+          <strong>Добавить запись</strong>
+          <span>Название будет доступно в карточках работ.</span>
+        </div>
+        <div className="emu-inline-form">
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Введите название" />
+          <button disabled={!name.trim()} onClick={() => void create()} type="button"><span aria-hidden="true">+</span> Добавить</button>
+        </div>
       </div>
-      <input className="emu-reference-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск по справочнику" />
+      <label className="emu-catalog-search">
+        <span>Поиск по справочнику</span>
+        <input className="emu-reference-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Начните вводить название" />
+      </label>
       <div className="emu-reference-list">
         {filteredItems.map((item) => (
-          <div className="emu-reference-row" key={item.id}>
+          <div className={`emu-reference-row ${item.isActive ? "is-active" : "is-hidden"}`} key={item.id}>
             {editingId === item.id ? (
               <input value={editingName} onChange={(event) => setEditingName(event.target.value)} aria-label={`Название ${title}`} />
             ) : (
-              <span>{item.name}</span>
+              <span className="emu-reference-name">{item.name}</span>
             )}
-            <em>{protectSystemOther && isSystemOtherSection(item) ? "системный" : item.isActive ? "активно" : "скрыто"}</em>
+            <em className={`emu-reference-state ${protectSystemOther && isSystemOtherSection(item) ? "is-system" : item.isActive ? "is-active" : "is-hidden"}`}>
+              {protectSystemOther && isSystemOtherSection(item) ? "системный" : item.isActive ? "активно" : "скрыто"}
+            </em>
             <div className="emu-reference-actions">
               {editingId === item.id ? (
                 <>
-                  <button onClick={() => void saveEdit(item)} type="button">Сохранить</button>
-                  <button onClick={() => { setEditingId(""); setEditingName(""); }} type="button">Отмена</button>
+                  <button className="emu-reference-save" onClick={() => void saveEdit(item)} type="button">Сохранить</button>
+                  <button className="emu-reference-cancel" onClick={() => { setEditingId(""); setEditingName(""); }} type="button">Отмена</button>
                 </>
               ) : (
                 <>
-                  <button onClick={() => startEdit(item)} type="button">Изменить</button>
-                  <button disabled={protectSystemOther && isSystemOtherSection(item) && item.isActive} onClick={() => void toggleActive(item)} type="button">{item.isActive ? "Скрыть" : "Вернуть"}</button>
+                  <button className="emu-reference-edit" onClick={() => startEdit(item)} type="button">Изменить</button>
+                  <button className={`emu-reference-toggle ${item.isActive ? "is-hide" : "is-restore"}`} disabled={protectSystemOther && isSystemOtherSection(item) && item.isActive} onClick={() => void toggleActive(item)} type="button">{item.isActive ? "Скрыть" : "Вернуть"}</button>
                 </>
               )}
             </div>
@@ -275,13 +302,13 @@ export function TemplateBlock({ onNotify, workspace }: { onNotify: (message: str
       </div>
       <div className="emu-reference-list">
         {filteredTemplates.map((template) => (
-          <div className="emu-reference-row emu-template-row" key={template.id}>
+          <div className={`emu-reference-row emu-template-row ${template.isActive ? "is-active" : "is-hidden"}`} key={template.id}>
             <span>
               <strong>{template.name}</strong>
               <small>{template.sectionName || "Любой участок"}</small>
             </span>
-            <em>{template.isActive ? "активно" : "скрыто"}</em>
-            <button onClick={() => void toggleTemplate(template)} type="button">{template.isActive ? "Скрыть" : "Вернуть"}</button>
+            <em className={`emu-reference-state ${template.isActive ? "is-active" : "is-hidden"}`}>{template.isActive ? "активно" : "скрыто"}</em>
+            <button className={`emu-reference-toggle ${template.isActive ? "is-hide" : "is-restore"}`} onClick={() => void toggleTemplate(template)} type="button">{template.isActive ? "Скрыть" : "Вернуть"}</button>
           </div>
         ))}
         {filteredTemplates.length === 0 ? <div className="emu-empty-state">Типовые работы не найдены</div> : null}
@@ -409,4 +436,3 @@ export function FavoritesModal({
     </ModalFrame>
   );
 }
-

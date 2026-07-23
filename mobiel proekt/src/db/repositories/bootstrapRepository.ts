@@ -1,6 +1,6 @@
 import * as SQLite from "expo-sqlite";
 import { currentContourId } from "@/core/environments";
-import { getDatabase } from "@/db/database";
+import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { BootstrapDto } from "@/domain/patrol/patrolTypes";
 import { deletePatrolPhotoDirectory } from "@/services/fileStorageService";
@@ -13,7 +13,7 @@ type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "getFirstAsync" |
 export async function clearLocalUserData() {
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       await clearLocalUserTablesInTransaction(tx);
     })
   );
@@ -121,7 +121,7 @@ export async function saveBootstrap(bootstrap: BootstrapDto) {
 
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       await saveBootstrapInTransaction(tx, bootstrap);
     })
   );
@@ -140,7 +140,7 @@ export async function getBootstrapSyncCursor() {
 export async function replaceLocalUserDataWithBootstrap(bootstrap: BootstrapDto) {
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       await clearLocalUserTablesInTransaction(tx);
       await saveBootstrapInTransaction(tx, bootstrap);
     })

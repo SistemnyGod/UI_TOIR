@@ -64,6 +64,7 @@ export type PpeWizardLine = {
   dueAt: string;
   existingLineId?: string;
   issuePeriodText: string;
+  issueMethod?: "personal" | "dispenser";
   issuedAt: string;
   isSectionTitle?: boolean;
   item: InventoryItemDto;

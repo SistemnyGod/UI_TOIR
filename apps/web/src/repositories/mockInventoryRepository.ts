@@ -7,6 +7,7 @@ import type {
   CreateInventoryOperationDto,
   CreateInventoryPpeCardDto,
   CreateInventoryPpeCardDraftDto,
+  CreateInventoryPpeIssueBatchDto,
   CreateInventoryPpeIssueDto,
   CreateInventorySimpleReferenceDto,
   CreateInventoryUnitDto,
@@ -58,6 +59,7 @@ import type {
   UpsertInventoryItemDto,
   UpsertInventoryItemSetItemsDto,
   UpsertInventoryPpeCardLineDto,
+  UpdateInventoryPpeCardDraftDto,
   UpdateInventoryPpeCardNormRowsDto,
   UpsertInventoryPpeNormMappingDto,
   UpsertInventoryPositionNormDto,
@@ -474,6 +476,9 @@ export function createMockInventoryRepository(): InventoryRepository {
         normRows: [],
         position: employee.position,
         status: "draft",
+        issueType: payload.issueType ?? "planned",
+        responsibleName: payload.responsibleName ?? "",
+        basis: payload.basis ?? "",
         version: 1,
       };
       if (payload.source === "previous_card" && sourceCard) {
@@ -487,6 +492,20 @@ export function createMockInventoryRepository(): InventoryRepository {
       }
       store.ppeCards.unshift(card);
       addHistory(store, "ppe_card", "created", `Создан черновик карточки СИЗ: ${employee.fullName}`, "Mock", card.id);
+      writeStore(store);
+      return card;
+    },
+
+    async updatePpeCardDraft(cardId, payload: UpdateInventoryPpeCardDraftDto) {
+      const store = readStore();
+      const card = required(store.ppeCards.find((row) => row.id === cardId), "Карточка СИЗ не найдена");
+      if ((card.version ?? 1) !== payload.expectedVersion) throw new Error("Карточка была изменена другим пользователем");
+      card.createdAt = payload.cardDate;
+      card.issueType = payload.issueType;
+      card.responsibleName = payload.responsibleName;
+      card.basis = payload.basis;
+      card.employeeDetails = payload.employeeDetails ?? card.employeeDetails;
+      card.version = (card.version ?? 1) + 1;
       writeStore(store);
       return card;
     },
@@ -556,6 +575,42 @@ export function createMockInventoryRepository(): InventoryRepository {
       addHistory(store, "ppe_line", "issued", `Выдано СИЗ: ${normRow.normItemName}`, "Mock", card.id);
       writeStore(store);
       return line;
+    },
+
+    async createPpeIssueBatch(cardId, payload: CreateInventoryPpeIssueBatchDto) {
+      const store = readStore();
+      const card = required(store.ppeCards.find((row) => row.id === cardId), "Карточка СИЗ не найдена");
+      if ((card.version ?? 1) !== payload.expectedVersion) throw new Error("Карточка СИЗ была изменена другим пользователем");
+      if (!payload.lines.length) throw new Error("Добавьте хотя бы одну позицию СИЗ");
+      const seen = new Set<string>();
+      const prepared = payload.lines.map((linePayload) => {
+        if (seen.has(linePayload.cardNormRowId)) throw new Error("Строка нормы повторяется в документе");
+        seen.add(linePayload.cardNormRowId);
+        const normRow = required(card.normRows?.find((row) => row.id === linePayload.cardNormRowId), "Строка нормы не найдена");
+        const item = required(store.items.find((row) => row.id === linePayload.itemId && row.isActive), "Номенклатура не найдена");
+        if (linePayload.quantity <= 0) throw new Error("Количество должно быть больше нуля");
+        const unitPriceMinor = linePayload.unitPriceMinor ?? item.defaultUnitPriceMinor ?? 0;
+        return { linePayload, normRow, item, unitPriceMinor };
+      });
+      for (const { linePayload, normRow, item, unitPriceMinor } of prepared) {
+        card.lines.push({
+          amountMinor: unitPriceMinor * linePayload.quantity,
+          brandModelArticle: linePayload.brandModelArticle ?? normRow.brandModelArticle,
+          cardNormRowId: normRow.id,
+          dueAt: normRow.lifeMonths ? addMonthsIso(linePayload.issuedAt, normRow.lifeMonths) : null,
+          id: id("ppe-line"), issueMethod: linePayload.issueMethod, issuedAt: linePayload.issuedAt,
+          issuePeriodText: normRow.issuePeriodText, itemId: item.id, itemName: item.name,
+          modelDescription: linePayload.brandModelArticle ?? "", normPoint: normRow.normPoint,
+          printItemName: normRow.normItemName, quantity: linePayload.quantity,
+          quantityText: normRow.quantityText, sizeText: linePayload.sizeText ?? "", status: "issued",
+          unit: item.unit, unitPriceMinor, warehouseId: linePayload.warehouseId ?? null, warehouseName: "",
+        });
+        addHistory(store, "ppe_line", "issued", `Выдано СИЗ: ${normRow.normItemName}`, "Mock", card.id);
+      }
+      card.status = "active";
+      card.version = (card.version ?? 1) + 1;
+      writeStore(store);
+      return card;
     },
 
     async applyPpeLineAction(cardId, lineId, payload: ApplyInventoryPpeLineActionDto) {

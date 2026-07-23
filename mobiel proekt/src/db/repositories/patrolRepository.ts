@@ -3,7 +3,7 @@ import * as SQLite from "expo-sqlite";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
-import { getDatabase } from "@/db/database";
+import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { insertOutboxCommandInTransaction } from "@/db/repositories/outboxSql";
@@ -251,7 +251,7 @@ export async function takeRequestLocally(requestId: string) {
   };
 
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       await tx.runAsync(
       `
         INSERT INTO patrol_assignments (
@@ -386,7 +386,7 @@ export async function acceptRequestLocally(requestId: string) {
   };
 
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       await tx.runAsync(
         `
           INSERT INTO patrol_assignments (
@@ -485,7 +485,7 @@ export async function releaseAcceptedRequestLocally(assignmentId: string) {
   };
 
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       const releaseAlreadyQueued = await tx.getFirstAsync<{ clientOperationId: string }>(
         `
           SELECT client_operation_id AS clientOperationId
@@ -701,7 +701,7 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
   };
 
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       await upsertPointResultInTransaction(tx, {
         ownerUserId,
         assignmentId,
@@ -824,7 +824,7 @@ export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
   };
 
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       await upsertPointResultInTransaction(tx, {
         ownerUserId,
         assignmentId,
@@ -1022,7 +1022,7 @@ export async function attachPhotoToPoint(assignmentId: string, pointId: string, 
   const photoClientFileIds = Array.from(new Set([...point.photoClientFileIds, file.clientFileId]));
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       await insertLocalFileInTransaction(tx, { ...file, status: "queued", assignmentId, pointId });
       await upsertPointResultInTransaction(tx, {
         ownerUserId,
@@ -1207,7 +1207,7 @@ export async function completeAssignmentLocally(assignmentId: string) {
   const completionResultRef: { current: CompletionResult | null } = { current: null };
 
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       // The duplicate check must be inside the same exclusive transaction as
       // the insert. This protects double taps and concurrent lifecycle callbacks
       // from creating two completion commands for one assignment.
@@ -1386,7 +1386,7 @@ async function updateAssignmentLifecycleLocally(
   };
 
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       const current = await tx.getFirstAsync<{ status: string }>(
         `
           SELECT status
@@ -1658,7 +1658,7 @@ export async function restoreMissingPointAttachment(
   const resultRef: { clientOperationId: string | null } = { clientOperationId: null };
 
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       const command = await tx.getFirstAsync<{
         clientOperationId: string;
         payloadJson: string;
@@ -1895,7 +1895,7 @@ async function savePointResult({
 
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       await supersedePendingPointStatusCommands(tx, ownerUserId, assignmentId, pointId);
       await upsertPointResultInTransaction(tx, {
         ownerUserId,

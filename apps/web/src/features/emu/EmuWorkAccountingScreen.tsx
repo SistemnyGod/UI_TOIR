@@ -338,11 +338,11 @@ export function EmuWorkAccountingScreen({
       <div className="emu-work-layout">
         <section className="emu-panel emu-work-main">
           <div className="emu-panel-header">
-            <div>
+            <div className="emu-work-panel-title">
               <h3>Карточки работ</h3>
               <span>Доска показывает незавершенные карточки; завершенные доступны в истории</span>
             </div>
-            <div className="emu-panel-actions">
+            <div className="emu-panel-actions emu-work-panel-actions">
               {canManageDirectories ? (
                 <button className="emu-secondary-button" onClick={() => openModal("catalogs")} type="button">
                   Справочники
@@ -353,8 +353,15 @@ export function EmuWorkAccountingScreen({
                   Избранные
                 </button>
               ) : null}
-              <SectionQuickFilter sections={activeSections(workspace)} value={sectionFilter} onChange={setSectionFilter} />
+            </div>
+          </div>
 
+          <div className="emu-work-board-toolbar" aria-label="Фильтры карточек работ">
+            <div className="emu-work-board-toolbar-main">
+              <span className="emu-work-board-toolbar-label">Фильтры доски</span>
+              <SectionQuickFilter sections={activeSections(workspace)} value={sectionFilter} onChange={setSectionFilter} />
+            </div>
+            <div className="emu-work-board-toolbar-secondary">
               <DensitySwitch value={density} onChange={setDensity} />
               <WorkFilterTabs counts={workFilterCounts} onChange={setWorkFilter} value={workFilter} />
             </div>

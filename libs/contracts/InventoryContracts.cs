@@ -384,7 +384,10 @@ public sealed record InventoryPpeCardDetailDto(
     IReadOnlyList<InventoryPpeCardLineDto> Lines,
     long Version = 0,
     Guid? NormSetId = null,
-    IReadOnlyList<InventoryPpeCardNormRowDto>? NormRows = null);
+    IReadOnlyList<InventoryPpeCardNormRowDto>? NormRows = null,
+    string IssueType = "planned",
+    string ResponsibleName = "",
+    string Basis = "");
 
 public sealed record InventoryPpeEmployeeDetailsDto(
     string Gender = "",
@@ -499,6 +502,17 @@ public sealed record CreateInventoryPpeCardDraftDto(
     Guid? SourceCardId = null,
     Guid? NormSetId = null,
     string? Comment = null,
+    InventoryPpeEmployeeDetailsDto? EmployeeDetails = null,
+    string IssueType = "planned",
+    string ResponsibleName = "",
+    string Basis = "");
+
+public sealed record UpdateInventoryPpeCardDraftDto(
+    long ExpectedVersion,
+    DateTimeOffset CardDate,
+    string IssueType,
+    string ResponsibleName,
+    string Basis,
     InventoryPpeEmployeeDetailsDto? EmployeeDetails = null);
 
 public sealed record UpsertInventoryPpeCardNormRowDto(
@@ -533,6 +547,22 @@ public sealed record CreateInventoryPpeIssueDto(
     string? Comment = null,
     Guid? WarehouseId = null,
     long? ExpectedVersion = null);
+
+public sealed record CreateInventoryPpeIssueBatchLineDto(
+    Guid CardNormRowId,
+    Guid ItemId,
+    DateTimeOffset IssuedAt,
+    decimal Quantity,
+    long? UnitPriceMinor,
+    string IssueMethod,
+    string? SizeText = null,
+    string? BrandModelArticle = null,
+    string? Comment = null,
+    Guid? WarehouseId = null);
+
+public sealed record CreateInventoryPpeIssueBatchDto(
+    long ExpectedVersion,
+    IReadOnlyList<CreateInventoryPpeIssueBatchLineDto> Lines);
 
 public sealed record ApplyInventoryPpeLineActionDto(
     string Action,

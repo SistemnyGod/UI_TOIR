@@ -2,7 +2,7 @@ import { currentContourId } from "@/core/environments";
 import * as Crypto from "expo-crypto";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
-import { getDatabase } from "@/db/database";
+import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
@@ -49,7 +49,7 @@ export async function createShiftRemarkLocally(input: {
   const mediaClientFileIds = input.mediaClientFileIds ?? [];
 
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       await tx.runAsync(
         `
           INSERT INTO shift_remarks (
@@ -162,7 +162,7 @@ export async function attachMediaToShiftRemark(remarkId: string, file: LocalMobi
   const createdAtLocal = new Date().toISOString();
 
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       await insertLocalFileInTransaction(tx, { ...file, status: "queued", remarkId });
       await tx.runAsync(
         `

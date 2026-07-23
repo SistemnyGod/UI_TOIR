@@ -1,7 +1,8 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, PackageSearch, Search, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, PackageSearch, Search } from "lucide-react";
 import type { InventoryItemDto, InventoryPpeCardNormRowDto, InventoryPpeNormMappingDto, InventoryReferenceOptionDto, UpsertInventoryPpeNormMappingDto } from "../../../api/contracts";
 import { useInventoryRepository } from "../../../repositories/inventoryRepositoryContext";
+import { PpeButton, PpeModalShell } from "./PpeUi";
 
 export function PpeCatalogModal({
   normRow,
@@ -125,82 +126,87 @@ export function PpeCatalogModal({
   }
 
   return (
-    <div className="ppe-v2-modal-backdrop" onMouseDown={onClose} role="presentation">
-      <section aria-label="Сопоставить норму с номенклатурой" className="ppe-v2-modal ppe-v2-catalog-modal" onMouseDown={(event) => event.stopPropagation()}>
-        <header className="ppe-v2-modal-head">
-          <div>
-            <span className="ppe-v2-eyebrow">Сопоставление нормы</span>
-            <h2>{normRow.normItemName}</h2>
-            <p>{[normRow.normPoint, normRow.issuePeriodText, normRow.quantityText].filter(Boolean).join(" · ")}</p>
-          </div>
-          <button aria-label="Закрыть" className="ppe-v2-icon-button" onClick={onClose} type="button"><X size={20} /></button>
-        </header>
-
-        <div className="ppe-v2-catalog-layout">
-          <div className="ppe-v2-catalog-list-pane">
-            {normRow.mappings.length ? (
-              <section className="ppe-v2-norm-options">
-                <header><div><strong>Допустимые позиции по норме</strong><span>Выберите утверждённую номенклатуру. Общий каталог ниже нужен для нового сопоставления.</span></div><b>{normRow.mappings.length}</b></header>
-                <div>{[...normRow.mappings].sort((left, right) => Number(right.isDefault) - Number(left.isDefault) || left.itemName.localeCompare(right.itemName)).map((mapping) => (
-                  <button className={selectedId === mapping.itemId ? "is-selected" : ""} key={mapping.id} onClick={() => void selectMapped(mapping)} type="button"><span><strong>{mapping.itemName}</strong><small>{[mapping.itemSku, mapping.brandModelArticle].filter(Boolean).join(" · ") || "Без артикула"}</small></span>{mapping.isDefault ? <em>По умолчанию</em> : null}</button>
-                ))}</div>
-              </section>
-            ) : <div className="ppe-v2-norm-options is-empty"><strong>Для нормы ещё нет допустимых позиций</strong><span>Найдите товар в каталоге и сохраните первую связь.</span></div>}
-            <div className="ppe-v2-catalog-section-label"><div><strong>Общий каталог СИЗ</strong><span>Используйте поиск только если подходящего варианта ещё нет среди допустимых.</span></div></div>
-            <div className="ppe-v2-catalog-filters">
-              <label className="ppe-v2-search">
-                <Search size={17} />
-                <input aria-label="Поиск номенклатуры" onChange={(event) => setQuery(event.target.value)} placeholder="Название или артикул" value={query} />
-              </label>
-              <select aria-label="Категория номенклатуры" onChange={(event) => setCategoryId(event.target.value)} value={categoryId}>
-                <option value="">Все категории</option>
-                {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-              </select>
-            </div>
-            <div className="ppe-v2-catalog-list">
-              {loading ? <div className="ppe-v2-state">Загрузка номенклатуры…</div> : rows.length === 0 ? (
-                <div className="ppe-v2-state"><PackageSearch size={30} /><strong>Ничего не найдено</strong><span>Измените поисковый запрос.</span></div>
-              ) : rows.map((item) => (
-                <button className={selectedId === item.id ? "is-selected" : ""} key={item.id} onClick={() => select(item)} type="button">
-                  <span><strong>{item.name}</strong><small>{[item.sku, item.article, item.category].filter(Boolean).join(" · ")}</small></span>
-                  {selectedId === item.id ? <Check size={18} /> : null}
+    <PpeModalShell
+      ariaLabel="Сопоставить норму с номенклатурой"
+      bodyClassName="ppe-v2-catalog-modal-body"
+      className="ppe-v2-catalog-modal"
+      description={[normRow.normPoint, normRow.issuePeriodText, normRow.quantityText].filter(Boolean).join(" · ")}
+      eyebrow="Сопоставление нормы"
+      footer={(
+        <>
+          <PpeButton onClick={onClose} variant="ghost">Отмена</PpeButton>
+          <PpeButton disabled={!selected} loading={saving} onClick={() => void save()} variant="primary">Сохранить и выбрать</PpeButton>
+        </>
+      )}
+      initialFocusSelector="[data-ppe-initial-focus]"
+      onClose={onClose}
+      title={normRow.normItemName}
+    >
+      <div className="ppe-v2-catalog-layout">
+        <div className="ppe-v2-catalog-list-pane">
+          {normRow.mappings.length ? (
+            <section className="ppe-v2-norm-options">
+              <header>
+                <div><strong>Допустимые позиции по норме</strong><span>Сначала проверьте утверждённые варианты. Общий каталог ниже нужен для нового сопоставления.</span></div>
+                <b>{normRow.mappings.length}</b>
+              </header>
+              <div>{[...normRow.mappings].sort((left, right) => Number(right.isDefault) - Number(left.isDefault) || left.itemName.localeCompare(right.itemName)).map((mapping) => (
+                <button className={selectedId === mapping.itemId ? "is-selected" : ""} key={mapping.id} onClick={() => void selectMapped(mapping)} type="button">
+                  <span><strong>{mapping.itemName}</strong><small>{[mapping.itemSku, mapping.brandModelArticle].filter(Boolean).join(" · ") || "Без артикула"}</small></span>
+                  {mapping.isDefault ? <em>По умолчанию</em> : null}
                 </button>
-              ))}
-            </div>
-            <div className="ppe-v2-pagination">
-              <button aria-label="Предыдущая страница" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} type="button"><ChevronLeft size={17} /></button>
-              <span>{page} / {pageCount}</span>
-              <button aria-label="Следующая страница" disabled={page >= pageCount} onClick={() => setPage((value) => value + 1)} type="button"><ChevronRight size={17} /></button>
-            </div>
+              ))}</div>
+            </section>
+          ) : <div className="ppe-v2-norm-options is-empty"><strong>Для нормы ещё нет допустимых позиций</strong><span>Найдите товар в каталоге и сохраните первую связь.</span></div>}
+          <div className="ppe-v2-catalog-section-label"><div><strong>Общий каталог СИЗ</strong><span>Используйте поиск, если подходящего варианта нет среди допустимых.</span></div></div>
+          <div className="ppe-v2-catalog-filters">
+            <label className="ppe-v2-search">
+              <Search size={17} />
+              <input aria-label="Поиск номенклатуры" data-ppe-initial-focus onChange={(event) => setQuery(event.target.value)} placeholder="Название или артикул" value={query} />
+            </label>
+            <select aria-label="Категория номенклатуры" onChange={(event) => setCategoryId(event.target.value)} value={categoryId}>
+              <option value="">Все категории</option>
+              {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+            </select>
           </div>
-
-          <aside className="ppe-v2-catalog-detail">
-            {selected ? (
-              <>
-                <div className="ppe-v2-selected-item">
-                  <span className="ppe-v2-eyebrow">Выбранная позиция</span>
-                  <h3>{selected.name}</h3>
-                  <dl>
-                    <div><dt>Артикул</dt><dd>{selected.article || "Не указан"}</dd></div>
-                    <div><dt>Модель</dt><dd>{selected.modelName || "Не указана"}</dd></div>
-                    <div><dt>Класс защиты</dt><dd>{selected.protectionClass || "Не указан"}</dd></div>
-                    <div><dt>Единица</dt><dd>{selected.unit || "шт."}</dd></div>
-                  </dl>
-                </div>
-                <label>Модель / марка / артикул<input onChange={(event) => setModel(event.target.value)} value={model} /></label>
-                <label>Цена, ₽<input inputMode="decimal" onChange={(event) => setPrice(event.target.value)} value={price} /></label>
-                <label className="ppe-v2-check"><input checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} type="checkbox" /> Использовать по умолчанию для этой нормы</label>
-              </>
-            ) : <div className="ppe-v2-state"><PackageSearch size={32} /><strong>Выберите позицию</strong><span>Сопоставление не создает фактическую выдачу.</span></div>}
-          </aside>
+          <div className="ppe-v2-catalog-list">
+            {loading ? <div className="ppe-v2-state">Загрузка номенклатуры…</div> : rows.length === 0 ? (
+              <div className="ppe-v2-state"><PackageSearch size={30} /><strong>Ничего не найдено</strong><span>Измените поисковый запрос.</span></div>
+            ) : rows.map((item) => (
+              <button className={selectedId === item.id ? "is-selected" : ""} key={item.id} onClick={() => select(item)} type="button">
+                <span><strong>{item.name}</strong><small>{[item.sku, item.article, item.category].filter(Boolean).join(" · ")}</small></span>
+                {selectedId === item.id ? <Check size={18} /> : null}
+              </button>
+            ))}
+          </div>
+          <div className="ppe-v2-pagination">
+            <button aria-label="Предыдущая страница" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} type="button"><ChevronLeft size={17} /></button>
+            <span>{page} / {pageCount}</span>
+            <button aria-label="Следующая страница" disabled={page >= pageCount} onClick={() => setPage((value) => value + 1)} type="button"><ChevronRight size={17} /></button>
+          </div>
         </div>
 
-        {error ? <p className="ppe-v2-error">{error}</p> : null}
-        <footer className="ppe-v2-modal-actions">
-          <button className="button" onClick={onClose} type="button">Отмена</button>
-          <button className="button primary" disabled={!selected || saving} onClick={() => void save()} type="button">{saving ? "Сохранение…" : "Сохранить и выбрать"}</button>
-        </footer>
-      </section>
-    </div>
+        <aside className="ppe-v2-catalog-detail">
+          {selected ? (
+            <>
+              <div className="ppe-v2-selected-item">
+                <span className="ppe-v2-eyebrow">Выбранная позиция</span>
+                <h3>{selected.name}</h3>
+                <dl>
+                  <div><dt>Артикул</dt><dd>{selected.article || "Не указан"}</dd></div>
+                  <div><dt>Модель</dt><dd>{selected.modelName || "Не указана"}</dd></div>
+                  <div><dt>Класс защиты</dt><dd>{selected.protectionClass || "Не указан"}</dd></div>
+                  <div><dt>Единица</dt><dd>{selected.unit || "шт."}</dd></div>
+                </dl>
+              </div>
+              <label>Модель / марка / артикул<input onChange={(event) => setModel(event.target.value)} value={model} /></label>
+              <label>Цена, ₽<input inputMode="decimal" onChange={(event) => setPrice(event.target.value)} value={price} /></label>
+              <label className="ppe-v2-check"><input checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} type="checkbox" /> Использовать по умолчанию для этой нормы</label>
+            </>
+          ) : <div className="ppe-v2-state"><PackageSearch size={32} /><strong>Выберите позицию</strong><span>Сопоставление не создаёт фактическую выдачу.</span></div>}
+        </aside>
+      </div>
+      {error ? <p className="ppe-v2-error" role="alert">{error}</p> : null}
+    </PpeModalShell>
   );
 }

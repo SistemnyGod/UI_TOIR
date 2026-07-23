@@ -5,6 +5,8 @@ param(
   [ValidateSet("dev", "test", "local-enterprise", "production")]
   [string]$Patrol360Environment = $env:PATROL360_ENVIRONMENT,
 
+  [string]$PublicApiBaseUrl = $env:PATROL360_PUBLIC_API_URL,
+
   [string]$BuildRoot = "",
 
   [string]$AndroidSdk = $env:ANDROID_HOME,
@@ -27,6 +29,9 @@ if ($Configuration -eq "Release" -and [string]::IsNullOrWhiteSpace($Patrol360Env
 }
 if (-not [string]::IsNullOrWhiteSpace($Patrol360Environment)) {
   $env:PATROL360_ENVIRONMENT = $Patrol360Environment
+}
+if (-not [string]::IsNullOrWhiteSpace($PublicApiBaseUrl)) {
+  $env:PATROL360_PUBLIC_API_URL = $PublicApiBaseUrl.Trim()
 }
 
 function Invoke-Checked {

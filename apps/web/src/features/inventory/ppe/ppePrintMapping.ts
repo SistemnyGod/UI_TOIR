@@ -150,6 +150,7 @@ export function printDataFromWizard(wizard: PpeWizardState, employee: InventoryE
       issuePeriodText: isSectionTitle ? "" : line.issuePeriodText || getDefaultIssuePeriodText(line.item.defaultLifeMonths),
       issuedAt: !isSectionTitle && isPpeSignatureLineStatus(line.status) ? line.issuedAt || new Date().toISOString() : null,
       isSectionTitle,
+      issueMethod: line.issueMethod ?? "personal",
       itemName: line.item.name,
       model: line.brandModelArticle || itemModelDescription(line.item),
       modelOptions: itemModelOptions(line.item, wizard.lines.map((wizardLine) => wizardLine.item)),

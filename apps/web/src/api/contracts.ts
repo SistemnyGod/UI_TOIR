@@ -767,6 +767,9 @@ export interface InventoryPpeCardDetailDto {
   version?: number;
   normSetId?: string | null;
   normRows?: InventoryPpeCardNormRowDto[];
+  issueType?: "primary" | "planned" | "replacement" | "additional";
+  responsibleName?: string;
+  basis?: string;
 }
 
 export interface InventoryPpeEmployeeDetailsDto {
@@ -890,6 +893,18 @@ export interface CreateInventoryPpeCardDraftDto {
   normSetId?: string | null;
   comment?: string | null;
   employeeDetails?: InventoryPpeEmployeeDetailsDto | null;
+  issueType?: "primary" | "planned" | "replacement" | "additional";
+  responsibleName?: string;
+  basis?: string;
+}
+
+export interface UpdateInventoryPpeCardDraftDto {
+  expectedVersion: number;
+  cardDate: string;
+  issueType: "primary" | "planned" | "replacement" | "additional";
+  responsibleName: string;
+  basis: string;
+  employeeDetails?: InventoryPpeEmployeeDetailsDto | null;
 }
 
 export interface UpsertInventoryPpeCardNormRowDto {
@@ -926,6 +941,24 @@ export interface CreateInventoryPpeIssueDto {
   comment?: string | null;
   warehouseId?: string | null;
   expectedVersion?: number | null;
+}
+
+export interface CreateInventoryPpeIssueBatchLineDto {
+  cardNormRowId: string;
+  itemId: string;
+  issuedAt: string;
+  quantity: number;
+  unitPriceMinor?: number | null;
+  issueMethod: "personal" | "dispenser";
+  sizeText?: string | null;
+  brandModelArticle?: string | null;
+  comment?: string | null;
+  warehouseId?: string | null;
+}
+
+export interface CreateInventoryPpeIssueBatchDto {
+  expectedVersion: number;
+  lines: CreateInventoryPpeIssueBatchLineDto[];
 }
 
 export interface ApplyInventoryPpeLineActionDto {

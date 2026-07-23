@@ -255,3 +255,339 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Mobile shell hardening: keep navigation labels reachable and overlays inside the viewport. */
+@media (max-width: 640px) {
+  body .app-shell,
+  body .app-shell:not(.sidebar-collapsed),
+  body .app-shell.sidebar-collapsed {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body .app-shell .sidebar {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100vw;
+    overflow: visible;
+    padding: 8px 10px 6px;
+  }
+
+  body .app-shell .brand {
+    justify-content: flex-start;
+    margin: 0 2px 6px;
+    padding: 0 4px 8px;
+  }
+
+  body .app-shell .brand strong,
+  body .app-shell .brand span,
+  body .app-shell .brand > div:last-child {
+    display: block !important;
+  }
+
+  body .app-shell .nav-list {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 6px;
+    max-width: 100%;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    padding: 0 0 4px;
+    scrollbar-gutter: auto;
+  }
+
+  body .app-shell .module-nav {
+    flex: 0 0 118px !important;
+    min-width: 118px;
+  }
+
+  body .app-shell .module-nav.is-open {
+    flex-basis: min(184px, 78vw) !important;
+    min-width: min(184px, 78vw);
+  }
+
+  body .app-shell .module-trigger,
+  body .app-shell .nav-list > .nav-item {
+    width: 100% !important;
+    min-width: 118px !important;
+    min-height: 42px;
+    padding: 0 8px !important;
+  }
+
+  body .app-shell .nav-item-main {
+    gap: 7px;
+  }
+
+  body .app-shell .nav-item-label,
+  body .app-shell .nav-chevron {
+    display: inline !important;
+  }
+
+  body .app-shell .nav-item-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body .app-shell .sidebar-submenu {
+    width: 100%;
+    max-height: 164px;
+    margin: 4px 0 6px !important;
+    overflow-y: auto;
+    padding: 4px !important;
+    border: 1px solid var(--ui-line, #dbe7f7);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.94);
+  }
+
+  body .app-shell .sidebar-submenu-item {
+    width: 100% !important;
+    min-width: 0 !important;
+    grid-template-columns: 28px minmax(0, 1fr) !important;
+    justify-content: stretch;
+    padding: 5px 6px !important;
+  }
+
+  body .app-shell .sidebar-submenu-item strong,
+  body .app-shell .sidebar-submenu-item small {
+    display: block !important;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body .app-shell .sidebar-section-label {
+    display: block !important;
+    align-self: center;
+    margin: 0 4px 4px;
+    white-space: nowrap;
+  }
+
+  body .app-shell .sidebar-footer {
+    display: none !important;
+  }
+
+  body .topbar-alerts {
+    position: static;
+  }
+
+  body .notification-panel {
+    position: fixed;
+    top: calc(60px + env(safe-area-inset-top));
+    right: 8px;
+    left: 8px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh - 76px);
+    overflow: auto;
+  }
+
+  body .notification-panel::before {
+    right: 62px;
+  }
+
+  body .notification-list {
+    max-height: calc(100dvh - 154px);
+  }
+}
+
+/* PPE picker mobile pass: stack the catalog and summary instead of squeezing two columns. */
+@media (max-width: 640px) {
+  body .inventory-ppe-picker-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  body .inventory-ppe-picker:not(.inventory-ppe-print-modal) {
+    width: 100%;
+    max-width: 100%;
+    max-height: 96dvh;
+    border-radius: 16px 16px 0 0;
+  }
+
+  body .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-head {
+    padding: 12px;
+  }
+
+  body .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-head h2 {
+    font-size: 18px;
+  }
+
+  body .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-tabs {
+    flex-wrap: nowrap;
+    max-width: 100%;
+    overflow-x: auto;
+    padding: 8px 12px;
+  }
+
+  body .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-tabs button {
+    flex: 0 0 auto;
+    min-height: 38px;
+  }
+
+  body .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 10px 12px;
+  }
+
+  body .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-main {
+    overflow: visible;
+  }
+
+  body .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-filters {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    max-height: 38dvh;
+  }
+
+  body .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-summary {
+    order: 2;
+  }
+
+  body .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-selected {
+    max-height: 24dvh;
+    overflow: auto;
+    padding: 0 12px 10px;
+  }
+
+  body .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-actions {
+    flex-wrap: wrap;
+    padding: 10px 12px 12px;
+  }
+
+  body .inventory-ppe-picker:not(.inventory-ppe-print-modal) .inventory-ppe-picker-actions > button {
+    flex: 1 1 140px;
+    min-height: 42px;
+  }
+}
+
+/* Phone safe-area pass: keep workspace content and bottom actions above system UI. */
+@media (max-width: 640px) {
+  body .workspace {
+    min-height: 100dvh;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  body .workspace > .topbar {
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+
+  body .workspace > .screen-area {
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+  }
+
+  body .inventory-ppe-picker-actions,
+  body .site-user-modal-actions,
+  body .account-create-actions,
+  body .account-edit-actions {
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  body .account-create-modal-card > form,
+  body .account-panel-slot.edit .account-edit-form {
+    scroll-padding-bottom: calc(112px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Compact laptop/tablet shell: the horizontal sidebar needs the full row. */
+@media (max-width: 900px) {
+  body .app-shell,
+  body .app-shell:not(.sidebar-collapsed),
+  body .app-shell.sidebar-collapsed {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body .app-shell .sidebar,
+  body .app-shell .workspace {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+/* User administration: keep the access inspector below the list before phone width. */
+@media (max-width: 1180px) {
+  body .screen-area .user-admin-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body .screen-area .site-user-access-panel {
+    max-height: none;
+    position: static;
+  }
+}
+
+/* EMU history range picker: keep the calendar reachable above the phone viewport. */
+@media (max-width: 640px) {
+  body .emu-shell .emu-history-period-popover {
+    max-height: calc(100dvh - 120px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+/* PERCO pagination: keep page controls compact instead of stacking three full-width buttons on phones. */
+@media (max-width: 640px) {
+  body .perco-shell .perco-list-expansion {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+  }
+
+  body .perco-shell .perco-list-expansion > span {
+    grid-column: 1 / -1;
+  }
+
+  body .perco-shell .perco-list-expansion > label {
+    flex-direction: row;
+    min-width: 0;
+  }
+
+  body .perco-shell .perco-list-expansion > div {
+    flex-direction: row;
+    justify-content: flex-end;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  body .perco-shell .perco-list-expansion > div > span {
+    max-width: 96px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  body .perco-shell .perco-list-expansion .perco-button {
+    width: auto;
+    flex: 0 0 auto;
+    padding-inline: 10px;
+  }
+}
+
+/* EMU history header: keep refresh and view-mode actions visible in one compact mobile row. */
+@media (max-width: 640px) {
+  body .emu-shell .emu-history-v2-header .emu-history-view-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  body .emu-shell .emu-history-v2-header .emu-history-view-actions > span {
+    grid-column: 1 / -1;
+    white-space: nowrap;
+  }
+
+  body .emu-shell .emu-history-v2-header .emu-history-view-actions > button {
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding-inline: 6px;
+  }
+}

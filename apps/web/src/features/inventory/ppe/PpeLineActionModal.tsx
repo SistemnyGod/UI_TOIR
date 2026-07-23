@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { X } from "lucide-react";
 import type { ApplyInventoryPpeLineActionDto, InventoryPpeCardLineDto } from "../../../api/contracts";
+import { PpeButton, PpeModalShell } from "./PpeUi";
 
 export function PpeLineActionModal({ action, line, onClose, onSubmit }: { action: ApplyInventoryPpeLineActionDto["action"]; line: InventoryPpeCardLineDto; onClose: () => void; onSubmit: (payload: ApplyInventoryPpeLineActionDto) => Promise<void> }) {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -36,27 +36,37 @@ export function PpeLineActionModal({ action, line, onClose, onSubmit }: { action
     }
   }
 
+  const confirmVariant = action === "written_off" || action === "defective" ? "danger" : "primary";
+
   return (
-    <div className="ppe-v2-modal-backdrop" onMouseDown={onClose} role="presentation">
-      <section aria-label={labels[action]} className="ppe-v2-modal ppe-v2-action-modal" onMouseDown={(event) => event.stopPropagation()}>
-        <header className="ppe-v2-modal-head">
-          <div><span className="ppe-v2-eyebrow">Операция по факту выдачи</span><h2>{labels[action]}</h2><p>Изменение будет записано в журнал СИЗ.</p></div>
-          <button aria-label="Закрыть" className="ppe-v2-icon-button" onClick={onClose} type="button"><X size={20} /></button>
-        </header>
-        <div className="ppe-v2-modal-body">
-          <div className="ppe-v2-operation-summary"><div><small>СИЗ</small><strong>{line.printItemName || line.itemName}</strong><span>{line.itemName}</span></div><div><small>Выдано</small><strong>{line.quantity} {line.unit}</strong><span>{line.issuedAt ? new Date(line.issuedAt).toLocaleDateString("ru-RU") : "Дата не указана"}</span></div></div>
-          <div className="ppe-v2-form-grid">
-            <div className="ppe-v2-form-section-title ppe-v2-field-wide"><strong>Параметры операции</strong><span>Проверьте дату и заполните основание.</span></div>
-            <label>Дата операции<input max="2999-12-31" onChange={(event) => setDate(event.target.value)} type="date" value={date} /></label>
-            {action === "returned" ? <label>Количество возврата<input inputMode="decimal" max={line.quantity} min="0" onChange={(event) => setQuantity(event.target.value)} value={quantity} /></label> : null}
-            {action === "written_off" ? <label>Номер акта<input onChange={(event) => setActNumber(event.target.value)} placeholder="Необязательно" value={actNumber} /></label> : null}
-            <label className="ppe-v2-field-wide">Комментарий<textarea onChange={(event) => setComment(event.target.value)} placeholder="Причина или пояснение к операции" rows={3} value={comment} /></label>
-          </div>
-          {date > new Date().toISOString().slice(0, 10) ? <p className="ppe-v2-warning">Дата находится в будущем. Проверьте дату операции.</p> : null}
-          {error ? <p className="ppe-v2-error">{error}</p> : null}
-        </div>
-        <footer className="ppe-v2-modal-actions"><button className="button" onClick={onClose} type="button">Отмена</button><button className="button primary" disabled={saving} onClick={() => void submit()} type="button">{saving ? "Сохранение…" : labels[action]}</button></footer>
-      </section>
-    </div>
+    <PpeModalShell
+      ariaLabel={labels[action]}
+      className="ppe-v2-action-modal"
+      description="Изменение будет записано в журнал СИЗ."
+      eyebrow="Операция по факту выдачи"
+      footer={(
+        <>
+          <PpeButton onClick={onClose} variant="ghost">Отмена</PpeButton>
+          <PpeButton loading={saving} onClick={() => void submit()} variant={confirmVariant}>{labels[action]}</PpeButton>
+        </>
+      )}
+      initialFocusSelector="[data-ppe-initial-focus]"
+      onClose={onClose}
+      title={labels[action]}
+    >
+      <div className="ppe-v2-operation-summary">
+        <div><small>СИЗ</small><strong>{line.printItemName || line.itemName}</strong><span>{line.itemName}</span></div>
+        <div><small>Выдано</small><strong>{line.quantity} {line.unit}</strong><span>{line.issuedAt ? new Date(line.issuedAt).toLocaleDateString("ru-RU") : "Дата не указана"}</span></div>
+      </div>
+      <div className="ppe-v2-form-grid">
+        <div className="ppe-v2-form-section-title ppe-v2-field-wide"><strong>Параметры операции</strong><span>Проверьте дату и заполните основание.</span></div>
+        <label>Дата операции<input data-ppe-initial-focus max="2999-12-31" onChange={(event) => setDate(event.target.value)} type="date" value={date} /></label>
+        {action === "returned" ? <label>Количество возврата<input inputMode="decimal" max={line.quantity} min="0" onChange={(event) => setQuantity(event.target.value)} value={quantity} /></label> : null}
+        {action === "written_off" ? <label>Номер акта<input onChange={(event) => setActNumber(event.target.value)} placeholder="Необязательно" value={actNumber} /></label> : null}
+        <label className="ppe-v2-field-wide">Комментарий<textarea onChange={(event) => setComment(event.target.value)} placeholder="Причина или пояснение к операции" rows={3} value={comment} /></label>
+      </div>
+      {date > new Date().toISOString().slice(0, 10) ? <p className="ppe-v2-warning">Дата находится в будущем. Проверьте дату операции.</p> : null}
+      {error ? <p className="ppe-v2-error" role="alert">{error}</p> : null}
+    </PpeModalShell>
   );
 }

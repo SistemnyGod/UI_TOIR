@@ -1469,6 +1469,9 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(row => row.Position).HasColumnName("position").HasMaxLength(160).IsRequired();
             entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(40).IsRequired();
             entity.Property(row => row.Comment).HasColumnName("comment").HasMaxLength(1200).IsRequired();
+            entity.Property(row => row.IssueType).HasColumnName("issue_type").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.ResponsibleName).HasColumnName("responsible_name").HasMaxLength(240).IsRequired();
+            entity.Property(row => row.Basis).HasColumnName("basis").HasMaxLength(600).IsRequired();
             entity.Property(row => row.Gender).HasColumnName("gender").HasMaxLength(40).IsRequired();
             entity.Property(row => row.Height).HasColumnName("height").HasMaxLength(40).IsRequired();
             entity.Property(row => row.ClothingSize).HasColumnName("clothing_size").HasMaxLength(80).IsRequired();

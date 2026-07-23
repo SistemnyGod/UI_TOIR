@@ -1,15 +1,11 @@
 import { usePathname, useRouter, useSegments } from "expo-router";
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { isOfflineSessionValid } from "@/auth/offlineSession";
-import { currentContourId } from "@/core/environments";
+import { resolveSessionRestoreDecision } from "@/auth/sessionRestorePolicy";
+import { markSessionUnlocked, isSessionUnlocked, setPendingSessionRoute, subscribeToSessionGate } from "@/auth/sessionGateState";
 import { clearAuthTokens, getAccessToken, getOfflineSession, getStoredOwnerUserId } from "@/auth/tokenStorage";
-import {
-  isSessionUnlocked,
-  setPendingSessionRoute,
-  subscribeToSessionGate
-} from "@/auth/sessionGateState";
+import { currentContourId } from "@/core/environments";
 
 type SessionGateContextValue = {
   isUnlocked: boolean;
@@ -36,13 +32,14 @@ export function SessionGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const segments = useSegments();
-  const [status, setStatus] = useState<"checking" | "locked">("checking");
+  const [status, setStatus] = useState<"checking" | "locked" | "error">("checking");
   const [authRoute, setAuthRoute] = useState<"/(auth)/login" | "/(auth)/offline-login" | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [checkAttempt, setCheckAttempt] = useState(0);
   const firstSegment = segments[0] as string | undefined;
   const isAuthRoute = firstSegment === "(auth)";
   const isIndexRoute = !firstSegment || firstSegment === "index";
   const isProtectedRoute = !isAuthRoute && !isIndexRoute;
-  const effectiveStatus = isUnlocked ? "unlocked" : status;
 
   useEffect(() => {
     if (isUnlocked) {
@@ -50,47 +47,77 @@ export function SessionGuard({ children }: { children: ReactNode }) {
     }
 
     let isMounted = true;
-    void Promise.all([getAccessToken(), getStoredOwnerUserId(), getOfflineSession()])
-      .then(async ([token, ownerUserId, offlineSession]) => {
-        const offlineAvailable = Boolean(
-          ownerUserId
-          && offlineSession
-          && offlineSession.userId === ownerUserId
-          && isOfflineSessionValid(offlineSession, currentContourId)
-        );
 
-        if (token && offlineSession && !isOfflineSessionValid(offlineSession, currentContourId)) {
+    void Promise.all([getAccessToken(), getStoredOwnerUserId(), getOfflineSession()])
+      .then(async ([accessToken, ownerUserId, offlineSession]) => {
+        const decision = resolveSessionRestoreDecision({
+          accessToken,
+          ownerUserId,
+          offlineSession,
+          contourId: currentContourId
+        });
+
+        if (accessToken && offlineSession && decision === "login") {
           await clearAuthTokens();
         }
 
-        if (isMounted) {
-          setAuthRoute(offlineAvailable ? "/(auth)/offline-login" : "/(auth)/login");
-          setStatus("locked");
+        if (!isMounted) {
+          return;
         }
+
+        if (decision === "resume") {
+          markSessionUnlocked();
+          return;
+        }
+
+        setAuthRoute(decision === "offline-unlock" ? "/(auth)/offline-login" : "/(auth)/login");
+        setStatus("locked");
       })
       .catch(() => {
         if (isMounted) {
-          setAuthRoute("/(auth)/login");
-          setStatus("locked");
+          setAuthRoute(null);
+          setErrorMessage("Не удалось проверить сохранённую сессию. Данные не удалены. Повторите попытку.");
+          setStatus("error");
         }
       });
 
     return () => {
       isMounted = false;
     };
-  }, [isUnlocked]);
+  }, [checkAttempt, isUnlocked]);
 
   useEffect(() => {
-    if (!isProtectedRoute || isUnlocked || effectiveStatus !== "locked" || !authRoute) {
+    if (!isProtectedRoute || isUnlocked || status !== "locked" || !authRoute) {
       return;
     }
 
     setPendingSessionRoute(pathname);
     router.replace(authRoute);
-  }, [authRoute, effectiveStatus, isProtectedRoute, isUnlocked, pathname, router]);
+  }, [authRoute, isProtectedRoute, isUnlocked, pathname, router, status]);
 
   if (isAuthRoute || isIndexRoute || isUnlocked) {
     return <>{children}</>;
+  }
+
+  if (isProtectedRoute && status === "error") {
+    return (
+      <View style={styles.errorScreen}>
+        <Text accessibilityRole="header" style={styles.errorTitle}>Не удалось восстановить доступ</Text>
+        <Text style={styles.errorMessage}>{errorMessage}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Повторить проверку сессии"
+          onPress={() => {
+            setErrorMessage(null);
+            setStatus("checking");
+            setCheckAttempt((value) => value + 1);
+          }}
+          style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}
+        >
+          <Text style={styles.retryButtonText}>Повторить</Text>
+        </Pressable>
+      </View>
+    );
   }
 
   return (
@@ -114,5 +141,42 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flex: 1,
     justifyContent: "center"
+  },
+  errorScreen: {
+    alignItems: "center",
+    backgroundColor: "#f4f7fb",
+    flex: 1,
+    justifyContent: "center",
+    padding: 28
+  },
+  errorTitle: {
+    color: "#14233d",
+    fontSize: 22,
+    fontWeight: "800",
+    textAlign: "center"
+  },
+  errorMessage: {
+    color: "#53627b",
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 12,
+    maxWidth: 420,
+    textAlign: "center"
+  },
+  retryButton: {
+    backgroundColor: "#1769e0",
+    borderRadius: 12,
+    marginTop: 24,
+    minWidth: 144,
+    paddingHorizontal: 22,
+    paddingVertical: 13
+  },
+  retryButtonPressed: {
+    opacity: 0.78
+  },
+  retryButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "800"
   }
 });

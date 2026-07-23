@@ -416,7 +416,7 @@ export function EmuWorkHistoryWorkspace({
   }, []);
 
   return (
-    <section className="emu-page emu-history-v2">
+    <section className={`emu-page emu-history-v2 view-mode-${displayMode}`}>
       <div className="emu-history-v2-header">
         <div>
           <h2>История выполненных работ</h2>
@@ -425,10 +425,10 @@ export function EmuWorkHistoryWorkspace({
         <div className="emu-history-view-actions">
           <span>Обновлено {new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span>
           <button className="emu-secondary-button" onClick={() => void workspace.reload()} type="button">Обновить</button>
-          <button className={displayMode === "detailed" ? "emu-primary-button" : "emu-secondary-button"} onClick={() => setDisplayMode("detailed")} type="button">
+          <button aria-pressed={displayMode === "detailed"} className={displayMode === "detailed" ? "emu-primary-button" : "emu-secondary-button"} onClick={() => setDisplayMode("detailed")} type="button">
             <LayoutList size={16} /> Подробный вид
           </button>
-          <button className={displayMode === "compact" ? "emu-primary-button" : "emu-secondary-button"} onClick={() => setDisplayMode("compact")} type="button">
+          <button aria-pressed={displayMode === "compact"} className={displayMode === "compact" ? "emu-primary-button" : "emu-secondary-button"} onClick={() => setDisplayMode("compact")} type="button">
             <Grid3X3 size={16} /> Компактный вид
           </button>
         </div>

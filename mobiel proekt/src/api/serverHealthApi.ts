@@ -1,4 +1,5 @@
-import { fetchWithTimeout, serverHealthTimeoutMs, serverUnavailableMessage } from "@/api/networkTimeout";
+import { fetchWithTimeout, MobileNetworkError, serverHealthTimeoutMs, serverUnavailableMessage, type NetworkErrorKind } from "@/api/networkTimeout";
+import { ServerHealthCache } from "@/api/serverHealthCache";
 import { getServerBaseUrl, getServerCandidateBaseUrls, isAllowedServerBaseUrl, normalizeServerBaseUrl, setServerBaseUrl } from "@/core/serverSettings";
 import { currentContourId } from "@/core/environments";
 
@@ -15,7 +16,14 @@ export type ServerHealthProbe = {
   status?: number;
   contourId?: string;
   message?: string;
+  errorKind?: NetworkErrorKind;
 };
+
+const healthCache = new ServerHealthCache<ServerHealthProbe>();
+
+function healthCacheKey(serverBaseUrl: string, expectedContourId: string) {
+  return expectedContourId + String.fromCharCode(0) + serverBaseUrl;
+}
 
 export async function probeServerHealth(serverBaseUrl: string, expectedContourId = currentContourId): Promise<ServerHealthProbe> {
   const healthUrl = `${serverBaseUrl}/api/v1/mobile/health`;
@@ -53,9 +61,26 @@ export async function probeServerHealth(serverBaseUrl: string, expectedContourId
     }
 
     return { ok: true, status: response.status, contourId: body.contourId };
-  } catch {
-    return { ok: false, message: serverUnavailableMessage };
+  } catch (error) {
+    return {
+      ok: false,
+      message: serverUnavailableMessage,
+      ...(error instanceof MobileNetworkError ? { errorKind: error.kind } : {})
+    };
   }
+}
+
+/** Used by ordinary API calls; explicit connection checks stay uncached. */
+export async function probeServerHealthCached(
+  serverBaseUrl: string,
+  expectedContourId = currentContourId
+): Promise<ServerHealthProbe> {
+  const key = healthCacheKey(serverBaseUrl, expectedContourId);
+  return healthCache.getOrProbe(key, () => probeServerHealth(serverBaseUrl, expectedContourId));
+}
+
+export function invalidateServerHealthCache(serverBaseUrl?: string, expectedContourId = currentContourId) {
+  healthCache.invalidate(serverBaseUrl ? healthCacheKey(serverBaseUrl, expectedContourId) : undefined);
 }
 
 export async function checkServerConnection(rawServerBaseUrl?: string): Promise<ServerConnectionCheckResult> {

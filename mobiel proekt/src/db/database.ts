@@ -1,11 +1,33 @@
 import * as SQLite from "expo-sqlite";
 
-import { openProtectedDatabase } from "@/db/encryptedDatabase";
+import { openProtectedDatabase, openProtectedDatabaseConnection } from "@/db/encryptedDatabase";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let initializationPromise: Promise<void> | null = null;
 
 type SqlExecutor = Pick<SQLite.SQLiteDatabase, "execAsync" | "getAllAsync" | "getFirstAsync" | "runAsync">;
+
+export async function withProtectedExclusiveTransactionAsync<T>(
+  _db: SQLite.SQLiteDatabase,
+  task: (tx: SQLite.SQLiteDatabase) => Promise<T>,
+): Promise<T> {
+  const transactionDb = await openProtectedDatabaseConnection();
+  let completed = false;
+  try {
+    await transactionDb.execAsync("PRAGMA busy_timeout = 5000; BEGIN IMMEDIATE;");
+    const result = await task(transactionDb);
+    await transactionDb.execAsync("COMMIT;");
+    completed = true;
+    return result;
+  } catch (error) {
+    if (!completed) {
+      await transactionDb.execAsync("ROLLBACK;").catch(() => undefined);
+    }
+    throw error;
+  } finally {
+    await transactionDb.closeAsync().catch(() => undefined);
+  }
+}
 
 export function getDatabase() {
   databasePromise ??= openProtectedDatabase().catch((error) => {
@@ -36,7 +58,7 @@ async function initializeDatabaseOnce() {
     PRAGMA foreign_keys = ON;
   `);
 
-  await db.withExclusiveTransactionAsync(async (tx) => {
+  await withProtectedExclusiveTransactionAsync(db, async (tx) => {
     await tx.execAsync("PRAGMA busy_timeout = 5000;");
     await tx.execAsync(`
     CREATE TABLE IF NOT EXISTS schema_migrations (

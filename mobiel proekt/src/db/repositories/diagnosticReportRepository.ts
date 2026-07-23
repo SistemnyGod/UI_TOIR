@@ -1,7 +1,7 @@
 import * as Crypto from "expo-crypto";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
-import { getDatabase } from "@/db/database";
+import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { countPendingOutboxCommands } from "@/db/repositories/outboxRepository";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import {
@@ -138,7 +138,7 @@ export async function getOrCreatePendingDiagnosticReport(
 
   return withSqliteBusyRetry(async () => {
     let existingPayloadJson: string | null = null;
-    await db.withExclusiveTransactionAsync(async (tx) => {
+    await withProtectedExclusiveTransactionAsync(db, async (tx) => {
       const existing = await tx.getFirstAsync<{ payload_json: string }>(
         `
           SELECT payload_json
@@ -238,7 +238,7 @@ export async function markDiagnosticReportSent(report: MobileDiagnosticReport) {
 
   const sentAt = new Date().toISOString();
   await withSqliteBusyRetry(() =>
-    db.withExclusiveTransactionAsync(async (tx) => {
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
       const row = await tx.getFirstAsync<{ owner_user_id: string }>(
         "SELECT owner_user_id FROM mobile_diagnostic_reports WHERE report_id = ?",
         [report.reportId]

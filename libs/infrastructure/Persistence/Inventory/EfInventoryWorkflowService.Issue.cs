@@ -504,7 +504,10 @@ internal sealed partial class EfInventoryWorkflowService
                 .ToList(),
             card.Version,
             card.NormSetId,
-            card.NormRows.OrderBy(row => row.SortOrder).Select(MapCardNormRow).ToList());
+            card.NormRows.OrderBy(row => row.SortOrder).Select(MapCardNormRow).ToList(),
+            string.IsNullOrWhiteSpace(card.IssueType) ? "planned" : card.IssueType,
+            card.ResponsibleName,
+            card.Basis);
 
     private static DateTimeOffset PpeLineCreatedAt(InventoryPpeCardLineEntity line) =>
         line.Events.Count == 0 ? DateTimeOffset.MaxValue : line.Events.Min(row => row.CreatedAt);

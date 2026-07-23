@@ -21,6 +21,8 @@ export default function OfflineLoginRoute() {
   const router = useRouter();
   const [profile, setProfile] = useState<LocalUserProfile | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [requiresReenrollment, setRequiresReenrollment] = useState(false);
@@ -30,6 +32,10 @@ export default function OfflineLoginRoute() {
 
     void Promise.all([getStoredOwnerUserId(), getOfflineSession()])
       .then(([ownerUserId, offlineSession]) => {
+        if (!isMounted) {
+          return null;
+        }
+
         setRequiresReenrollment(Boolean(offlineSession?.requiresReenrollment));
         if (!ownerUserId || !offlineSession || offlineSession.userId !== ownerUserId || !isOfflineSessionValid(offlineSession, currentContourId)) {
           return null;
@@ -42,12 +48,18 @@ export default function OfflineLoginRoute() {
           setProfile(loaded);
           setIsReady(true);
         }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setLoadError("Не удалось открыть локальную сессию. Данные не удалены. Повторите попытку.");
+          setIsReady(true);
+        }
       });
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [loadAttempt]);
 
   async function continueOffline() {
     if (isAuthenticating) {
@@ -80,15 +92,31 @@ export default function OfflineLoginRoute() {
 
   if (!isReady) {
     return (
-      <Screen title="Офлайн-доступ" subtitle="Проверка локальных данных на телефоне.">
+      <Screen title="Проверка сохранённой сессии" subtitle="Читаем локальные данные на телефоне.">
         <ActivityIndicator />
+      </Screen>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Screen title="Не удалось открыть сессию" subtitle="Локальные данные не изменены.">
+        <Card>
+          <Text style={styles.text}>{loadError}</Text>
+        </Card>
+        <PrimaryButton label="Повторить" onPress={() => {
+          setIsReady(false);
+          setLoadError(null);
+          setLoadAttempt((value) => value + 1);
+        }} />
+        <PrimaryButton label="Войти онлайн" onPress={() => router.replace("/(auth)/login")} />
       </Screen>
     );
   }
 
   if (!profile) {
     return (
-      <Screen title="Офлайн-доступ" subtitle="На телефоне нет сохраненного пользователя.">
+      <Screen title="Офлайн-доступ" subtitle="На телефоне нет сохранённого пользователя.">
         <Card>
           <Text style={styles.text}>Для первого входа нужен сервер. Проверьте Wi-Fi и адрес сервера.</Text>
         </Card>
@@ -99,14 +127,14 @@ export default function OfflineLoginRoute() {
 
   return (
     <Screen
-      title="Офлайн-доступ"
-      subtitle="Сервер временно недоступен. Сохранённая сессия устройства действует, а отчёты останутся на телефоне до восстановления связи."
+      title="Разблокировка приложения"
+      subtitle="Сессия сохранена на устройстве. Подтвердите доступ, чтобы открыть загруженные задания без сервера."
     >
       <Card>
-        <Text style={styles.label}>Сохраненный пользователь</Text>
+        <Text style={styles.label}>Сохранённый пользователь</Text>
         <Text style={styles.title}>{profile.fullName}</Text>
         <Text style={styles.text}>
-          Загруженные обходы доступны локально. После онлайн-входа приложение автоматически продолжит отправку очереди.
+          Новые данные появятся после восстановления связи. Локальные действия сохранятся на телефоне и отправятся позже.
         </Text>
       </Card>
       {requiresReenrollment ? (

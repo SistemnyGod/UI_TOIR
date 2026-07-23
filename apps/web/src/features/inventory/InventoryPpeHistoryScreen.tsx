@@ -5,6 +5,7 @@ import type { ScreenId } from "../../types";
 import { useInventoryRepository } from "../../repositories/inventoryRepositoryContext";
 import { formatDate } from "./ppe/ppeCommon";
 import { PpeModuleNav } from "./ppe/PpeModuleNav";
+import { PpeButton } from "./ppe/PpeUi";
 
 export function InventoryPpeHistoryScreen({ onNavigate }: { onNavigate: (screen: ScreenId) => void }) {
   const repository = useInventoryRepository();
@@ -60,11 +61,11 @@ export function InventoryPpeHistoryScreen({ onNavigate }: { onNavigate: (screen:
           <label><span>по</span><input onChange={(event) => setDateTo(event.target.value)} type="date" value={dateTo} /></label>
           <label><span>Действие</span><select onChange={(event) => setAction(event.target.value)} value={action}><option value="">Все действия</option><option value="issued">Выдано</option><option value="returned">Возвращено</option><option value="written_off">Списано</option><option value="defective">Неисправно</option></select></label>
           <label><span>Статус</span><select onChange={(event) => setStatus(event.target.value)} value={status}><option value="">Все статусы</option><option value="issued">Выдано</option><option value="returned">Возвращено</option><option value="written_off">Списано</option><option value="defective">Неисправно</option></select></label>
-          <button className="button ppe-v2-reset-filters" disabled={!hasFilters} onClick={clearFilters} type="button"><RotateCcw size={15} /> Сбросить</button>
+          <PpeButton className="ppe-v2-reset-filters" disabled={!hasFilters} icon={<RotateCcw size={15} />} onClick={clearFilters} variant="secondary">Сбросить</PpeButton>
         </div>
         <div className="ppe-v2-history-summary"><div><strong>{total}</strong><span>событий в выборке</span></div><small>{hasFilters ? "Применены фильтры" : "Все операции"} · новые сверху</small></div>
         {error ? <div className="ppe-v2-state ppe-v2-state-large"><strong>Ошибка загрузки</strong><span>{error}</span></div> : loading ? <div className="ppe-v2-state ppe-v2-state-large">Загрузка истории…</div> : rows.length === 0 ? <div className="ppe-v2-state ppe-v2-state-large"><FileClock size={34} /><strong>Событий нет</strong><span>Измените период или фильтры.</span></div> : (
-          <div className="ppe-v2-table-wrap"><table className="ppe-v2-table ppe-v2-responsive-table"><thead><tr><th>Дата и время</th><th>Сотрудник</th><th>СИЗ / норма</th><th>Действие</th><th>Количество</th><th>Статус</th><th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td data-label="Дата">{formatDateTime(row.createdAt)}</td><td data-label="Сотрудник"><strong>{row.employeeName}</strong></td><td data-label="СИЗ / норма"><strong>{row.normItemName || row.itemName}</strong><small>{row.itemName}</small></td><td data-label="Действие">{row.actionLabel}</td><td data-label="Количество">{row.quantity} {row.unit}</td><td data-label="Статус"><span className={`ppe-v2-status is-${row.toStatus}`}>{statusLabel(row.toStatus)}</span></td><td className="ppe-v2-actions-cell"><button className="ppe-v2-icon-button" aria-label="Открыть детали" onClick={() => setSelected(row)} type="button"><ChevronRight size={18} /></button></td></tr>)}</tbody></table></div>
+          <div className="ppe-v2-table-wrap"><table className="ppe-v2-table ppe-v2-responsive-table"><thead><tr><th>Дата и время</th><th>Сотрудник</th><th>СИЗ / норма</th><th>Действие</th><th>Количество</th><th>Статус</th><th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td data-label="Дата">{formatDateTime(row.createdAt)}</td><td data-label="Сотрудник"><strong>{row.employeeName}</strong></td><td data-label="СИЗ / норма"><strong>{row.normItemName || row.itemName}</strong><small>{row.itemName}</small></td><td data-label="Действие">{row.actionLabel}</td><td data-label="Количество">{row.quantity} {row.unit}</td><td data-label="Статус"><span className={`ppe-v2-status is-${row.toStatus}`}>{statusLabel(row.toStatus)}</span></td><td className="ppe-v2-actions-cell"><PpeButton aria-label="Открыть детали" icon={<ChevronRight size={18} />} onClick={() => setSelected(row)} size="compact" variant="icon" /></td></tr>)}</tbody></table></div>
         )}
         <div className="ppe-v2-pagination"><button aria-label="Предыдущая страница" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} type="button"><ChevronLeft size={17} /></button><span>{page} / {pageCount}</span><button aria-label="Следующая страница" disabled={page >= pageCount} onClick={() => setPage((value) => value + 1)} type="button"><ChevronRight size={17} /></button></div>
       </section>
@@ -88,7 +89,7 @@ function HistoryEventDrawer({ onClose, onOpenEmployee, row }: { onClose: () => v
       <aside aria-label="Детали события" aria-modal="true" className="ppe-v2-drawer" onMouseDown={(event) => event.stopPropagation()} role="dialog">
         <header>
           <div><span className="ppe-v2-eyebrow">Операция СИЗ</span><h2>{row.actionLabel}</h2><p>{formatDateTime(row.createdAt)}</p></div>
-          <button aria-label="Закрыть" className="ppe-v2-icon-button" onClick={onClose} type="button"><X size={20} /></button>
+          <PpeButton aria-label="Закрыть" icon={<X size={20} />} onClick={onClose} variant="icon" />
         </header>
         <div className="ppe-v2-drawer-summary">
           <strong>{row.normItemName || row.itemName}</strong>
@@ -101,7 +102,7 @@ function HistoryEventDrawer({ onClose, onOpenEmployee, row }: { onClose: () => v
           <div><dt>Инициатор</dt><dd>{row.actor || "Система"}</dd></div>
           <div className="is-wide"><dt>Комментарий</dt><dd>{row.comment || "Без комментария"}</dd></div>
         </dl>
-        <footer><button className="button primary" onClick={onOpenEmployee} type="button">Открыть карточку сотрудника</button></footer>
+        <footer><PpeButton onClick={onOpenEmployee} variant="primary">Открыть карточку сотрудника</PpeButton></footer>
       </aside>
     </div>
   );

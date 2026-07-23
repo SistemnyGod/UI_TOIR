@@ -14,8 +14,8 @@ export async function fetchWithTimeout(input: RequestInfo | URL, init: RequestIn
       ...init,
       signal: controller.signal
     });
-  } catch {
-    throw new Error(serverUnavailableMessage);
+  } catch (error) {
+    throw new MobileNetworkError(controller.signal.aborted ? "timeout" : "network", error);
   } finally {
     clearTimeout(timeoutId);
   }
@@ -34,5 +34,18 @@ export async function withTimeout<T>(operation: Promise<T>, timeoutMs: number, m
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
+  }
+}
+
+export type NetworkErrorKind = "timeout" | "network";
+
+export class MobileNetworkError extends Error {
+  readonly kind: NetworkErrorKind;
+
+  constructor(kind: NetworkErrorKind, cause?: unknown) {
+    super(serverUnavailableMessage);
+    this.name = "MobileNetworkError";
+    this.kind = kind;
+    this.cause = cause;
   }
 }

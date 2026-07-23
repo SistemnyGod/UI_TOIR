@@ -1,5 +1,6 @@
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
-import { getDatabase } from "@/db/database";
+import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
+import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { MobileNotificationDto } from "@/domain/patrol/patrolTypes";
 import { mergeNotificationReadState } from "@/services/notificationReadState";
 
@@ -15,7 +16,8 @@ export async function saveNotifications(notifications: MobileNotificationDto[]) 
   }
 
   const db = await getDatabase();
-  await db.withExclusiveTransactionAsync(async (tx) => {
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
     for (const notification of notifications) {
       const local = await tx.getFirstAsync<{ read_at: string | null; read_sync_pending: number }>(
         `
@@ -73,7 +75,8 @@ export async function saveNotifications(notifications: MobileNotificationDto[]) 
         ]
       );
     }
-  });
+    })
+  );
 }
 
 export async function listLocalNotifications(limit = 5) {

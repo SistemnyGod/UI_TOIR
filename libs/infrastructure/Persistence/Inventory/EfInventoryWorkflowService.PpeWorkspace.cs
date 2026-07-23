@@ -158,6 +158,9 @@ internal sealed partial class EfInventoryWorkflowService
             Position = employee.Position,
             Status = "draft",
             Comment = NormalizeOptional(request.Comment),
+            IssueType = NormalizePpeDraftIssueType(request.IssueType),
+            ResponsibleName = NormalizePrintField(request.ResponsibleName, string.Empty, 240),
+            Basis = NormalizePrintField(request.Basis, string.Empty, 600),
             NormSetId = normSet?.Id,
             Version = 1,
             CreatedAt = request.CardDate.ToUniversalTime()
@@ -189,6 +192,37 @@ internal sealed partial class EfInventoryWorkflowService
         var now = DateTimeOffset.UtcNow;
         AddSystemLog("ppe_card", card.Id, "draft_created", $"{employee.FullName}; source={source}", now);
         dbContext.SaveChanges();
+        return Success(MapPpeCardDetail(LoadPpeCard(card.Id)!));
+    }
+
+    public InventoryCommandResult<InventoryPpeCardDetailDto> UpdatePpeCardDraft(Guid cardId, UpdateInventoryPpeCardDraftDto request)
+    {
+        var card = dbContext.InventoryPpeCards.FirstOrDefault(row => row.Id == cardId && row.ArchivedAt == null);
+        if (card is null) return Failure<InventoryPpeCardDetailDto>("cardId", "PPE card not found");
+        if (card.Version != request.ExpectedVersion) return Failure<InventoryPpeCardDetailDto>("conflict", "PPE card was changed by another user");
+        if (card.Status != "draft") return Failure<InventoryPpeCardDetailDto>("status", "Only a PPE draft can be edited");
+
+        var issueType = NormalizePpeDraftIssueType(request.IssueType);
+        var responsibleName = NormalizePrintField(request.ResponsibleName, string.Empty, 240);
+        var basis = NormalizePrintField(request.Basis, string.Empty, 600);
+        if (responsibleName.Length == 0) return Failure<InventoryPpeCardDetailDto>("responsibleName", "Responsible person is required");
+        if (basis.Length == 0) return Failure<InventoryPpeCardDetailDto>("basis", "Issue basis is required");
+
+        card.CreatedAt = request.CardDate.ToUniversalTime();
+        card.IssueType = issueType;
+        card.ResponsibleName = responsibleName;
+        card.Basis = basis;
+        ApplyPpeEmployeeDetails(card, request.EmployeeDetails);
+        card.Version += 1;
+        AddSystemLog("ppe_card", card.Id, "draft_updated", $"type={issueType}; responsible={responsibleName}", DateTimeOffset.UtcNow);
+        try
+        {
+            dbContext.SaveChanges();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Failure<InventoryPpeCardDetailDto>("conflict", "PPE card was changed by another user");
+        }
         return Success(MapPpeCardDetail(LoadPpeCard(card.Id)!));
     }
 
@@ -326,6 +360,81 @@ internal sealed partial class EfInventoryWorkflowService
         return Success(MapPpeCardLine(LoadPpeLine(line.Id)!));
     }
 
+    public InventoryCommandResult<InventoryPpeCardDetailDto> CreatePpeIssueBatch(Guid cardId, CreateInventoryPpeIssueBatchDto request)
+    {
+        if (request.Lines.Count == 0) return Failure<InventoryPpeCardDetailDto>("lines", "At least one PPE issue line is required");
+        if (request.Lines.Select(row => row.CardNormRowId).Distinct().Count() != request.Lines.Count)
+        {
+            return Failure<InventoryPpeCardDetailDto>("lines", "A PPE norm row can only be issued once per document");
+        }
+
+        var card = dbContext.InventoryPpeCards
+            .Include(row => row.NormRows).ThenInclude(row => row.SourceNormRow).ThenInclude(row => row!.Mappings)
+            .FirstOrDefault(row => row.Id == cardId && row.ArchivedAt == null);
+        if (card is null) return Failure<InventoryPpeCardDetailDto>("cardId", "PPE card not found");
+        if (card.Version != request.ExpectedVersion) return Failure<InventoryPpeCardDetailDto>("conflict", "PPE card was changed by another user");
+
+        var normRows = card.NormRows.ToDictionary(row => row.Id);
+        var itemIds = request.Lines.Select(row => row.ItemId).Distinct().ToList();
+        var items = dbContext.InventoryItems.Where(row => itemIds.Contains(row.Id) && row.IsActive).ToDictionary(row => row.Id);
+        var prepared = new List<(CreateInventoryPpeIssueBatchLineDto Request, InventoryPpeCardNormRowEntity NormRow, InventoryItemEntity Item, string Method)>();
+        foreach (var requested in request.Lines)
+        {
+            if (!normRows.TryGetValue(requested.CardNormRowId, out var normRow) || normRow.RowType != "item")
+            {
+                return Failure<InventoryPpeCardDetailDto>("cardNormRowId", "PPE norm row not found or is not issuable");
+            }
+            if (!items.TryGetValue(requested.ItemId, out var item)) return Failure<InventoryPpeCardDetailDto>("itemId", "PPE item not found");
+            if (requested.Quantity <= 0) return Failure<InventoryPpeCardDetailDto>("quantity", "Quantity must be greater than zero");
+            var method = NormalizeStatus(requested.IssueMethod);
+            if (method is not ("personal" or "dispenser")) return Failure<InventoryPpeCardDetailDto>("issueMethod", "Unsupported issue method");
+            var allowedItemIds = normRow.SourceNormRow?.Mappings.Where(row => row.ArchivedAt == null).Select(row => row.ItemId).ToHashSet() ?? [];
+            if (allowedItemIds.Count > 0 && !allowedItemIds.Contains(item.Id))
+            {
+                return Failure<InventoryPpeCardDetailDto>("itemId", "Selected PPE item is not allowed by the published norm mapping");
+            }
+            prepared.Add((requested, normRow, item, method));
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var preparedLine in prepared)
+        {
+            var requested = preparedLine.Request;
+            var normRow = preparedLine.NormRow;
+            var item = preparedLine.Item;
+            var line = new InventoryPpeCardLineEntity
+            {
+                Id = Guid.NewGuid(), CardId = card.Id, CardNormRowId = normRow.Id, ItemId = item.Id,
+                WarehouseId = requested.WarehouseId, Quantity = requested.Quantity,
+                UnitPriceMinor = requested.UnitPriceMinor ?? normRow.DefaultUnitPriceMinor ?? item.DefaultUnitPriceMinor,
+                Status = "issued", IssuedAt = requested.IssuedAt.ToUniversalTime(),
+                DueAt = normRow.LifeMonths is null ? null : requested.IssuedAt.ToUniversalTime().AddMonths(normRow.LifeMonths.Value),
+                Comment = NormalizeOptional(requested.Comment), PrintItemName = normRow.NormItemName,
+                NormPoint = normRow.NormPoint, IssuePeriodText = normRow.IssuePeriodText,
+                QuantityText = normRow.QuantityText, IsSectionTitle = false,
+                BrandModelArticle = NormalizePrintField(requested.BrandModelArticle, normRow.BrandModelArticle, 600),
+                IssueMethod = preparedLine.Method, SizeText = NormalizeOptional(requested.SizeText), WriteOffActNumber = string.Empty
+            };
+            dbContext.InventoryPpeCardLines.Add(line);
+            normRow.MappedItemId ??= item.Id;
+            AddPpeEvent(line.Id, "issued", string.Empty, "issued", line.Comment, now);
+            AddPpeLineSystemLog(line, "issued", "PPE issue fact created in batch", now);
+        }
+
+        card.Status = "active";
+        card.Version += 1;
+        AddSystemLog("ppe_card", card.Id, "issue_batch_created", $"lines={prepared.Count}", now);
+        try
+        {
+            dbContext.SaveChanges();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Failure<InventoryPpeCardDetailDto>("conflict", "PPE card was changed by another user");
+        }
+        return Success(MapPpeCardDetail(LoadPpeCard(card.Id)!));
+    }
+
     public InventoryListResponseDto<InventoryPpeNormMappingDto> GetPpeNormRowMappings(Guid normRowId, InventoryListQuery query)
     {
         var paging = NormalizePaging(query);
@@ -366,6 +475,14 @@ internal sealed partial class EfInventoryWorkflowService
         mapping.Item = item;
         return Success(MapNormMapping(mapping));
     }
+
+    private static string NormalizePpeDraftIssueType(string? value) => NormalizeStatus(value) switch
+    {
+        "primary" => "primary",
+        "replacement" => "replacement",
+        "additional" => "additional",
+        _ => "planned"
+    };
 
     private List<InventoryPpeCardNormRowEntity> LoadCardNormRows(Guid cardId) =>
         dbContext.InventoryPpeCardNormRows.AsNoTracking()

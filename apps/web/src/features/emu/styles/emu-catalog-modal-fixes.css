@@ -326,3 +326,568 @@
     width: 100%;
   }
 }
+
+/* Catalog editor refinement: stronger hierarchy, calmer surfaces, and clearer actions. */
+.emu-catalogs-modal-frame {
+  background: #f7faff !important;
+  border: 1px solid #a9c9f4;
+  border-radius: 20px;
+  box-shadow: 0 32px 90px rgba(15, 35, 70, 0.3);
+  padding: 0 22px 16px;
+}
+
+.emu-catalogs-modal-frame > header {
+  align-items: flex-start;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f8ff 100%);
+  margin: 0 -22px 14px;
+  padding: 17px 22px 15px;
+}
+
+.emu-catalogs-modal-frame > header h3 {
+  color: #10244a;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.emu-catalogs-modal-frame > header p {
+  color: #607594;
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 5px;
+}
+
+.emu-catalogs-modal-frame > header button {
+  border-color: #c7daf4;
+  border-radius: 50%;
+  color: #486487;
+  height: 34px;
+  width: 34px;
+}
+
+.emu-catalogs-modal-frame > header button:hover {
+  background: #eef6ff;
+  border-color: #82b3f5;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-modal {
+  gap: 12px;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-tabs {
+  background: #eaf2ff;
+  border: 1px solid #d3e2f7;
+  border-radius: 14px;
+  gap: 5px;
+  padding: 5px;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-tab {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 10px;
+  color: #466487;
+  min-height: 48px;
+  padding: 8px 11px;
+  position: relative;
+  transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease, color 160ms ease;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-tab > span {
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-tab > em {
+  background: #d7e7fc;
+  color: #2d5b91;
+  font-size: 11px;
+  min-width: 25px;
+  padding: 4px 7px;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-tab:hover {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: #bdd6f6;
+  color: #1457a6;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-tab[aria-selected="true"] {
+  background: #ffffff;
+  border-color: #9fc5f4;
+  box-shadow: 0 7px 16px rgba(33, 92, 167, 0.12);
+  color: #0b52c5;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-tab[aria-selected="true"]::after {
+  background: #1d6fff;
+  border-radius: 999px;
+  bottom: 4px;
+  content: "";
+  height: 3px;
+  left: 12px;
+  position: absolute;
+  right: 12px;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-tab[aria-selected="true"] > em {
+  background: #dbeafe;
+  color: #0d5de8;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-content {
+  background: #ffffff;
+  border: 1px solid #d8e5f7;
+  border-radius: 15px;
+  box-shadow: 0 8px 22px rgba(30, 64, 119, 0.05);
+  padding: 14px;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-content > .emu-reference-block {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.emu-catalogs-modal-frame .emu-reference-heading {
+  align-items: center;
+  border-bottom: 1px solid #e2ebf8;
+  margin: -2px 0 12px;
+  padding: 0 0 12px;
+}
+
+.emu-catalogs-modal-frame .emu-reference-heading h4 {
+  color: #17345f;
+  font-size: 16px;
+}
+
+.emu-catalogs-modal-frame .emu-reference-heading span {
+  color: #6a7e9b;
+  font-size: 11px;
+}
+
+.emu-catalogs-modal-frame .emu-reference-heading > em {
+  background: #edf5ff;
+  border: 1px solid #cfe1f9;
+  color: #1769e8;
+  min-height: 30px;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-create {
+  align-items: center;
+  background: linear-gradient(135deg, #f5f9ff 0%, #edf5ff 100%);
+  border: 1px solid #d2e2f7;
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(150px, 0.55fr) minmax(0, 1.45fr);
+  padding: 10px;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-create-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-create-copy strong {
+  color: #21436e;
+  font-size: 12px;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-create-copy span {
+  color: #70839d;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-create .emu-inline-form {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-create .emu-inline-form input {
+  min-height: 38px;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-create .emu-inline-form button {
+  background: #ffffff;
+  min-height: 38px;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-create .emu-inline-form button span,
+.emu-catalogs-modal-frame .emu-catalog-footer .emu-primary-button span {
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-search {
+  display: grid;
+  gap: 5px;
+  margin-top: 11px;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-search > span {
+  color: #647a98;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-search .emu-reference-search {
+  margin-top: 0;
+  min-height: 38px;
+}
+
+.emu-catalogs-modal-frame .emu-reference-list {
+  background: #f8fbff;
+  border: 1px solid #e0eaf7;
+  border-radius: 11px;
+  gap: 5px;
+  margin-top: 12px;
+  padding: 6px;
+}
+
+.emu-catalogs-modal-frame .emu-reference-row {
+  background: #ffffff;
+  border-color: #e0eaf7;
+  border-radius: 9px;
+  gap: 10px;
+  min-height: 48px;
+  padding: 7px 8px 7px 11px;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.emu-catalogs-modal-frame .emu-reference-row:hover {
+  border-color: #b5d1f4;
+  box-shadow: 0 6px 14px rgba(30, 64, 119, 0.07);
+  transform: translateY(-1px);
+}
+
+.emu-catalogs-modal-frame .emu-reference-row.is-hidden {
+  background: #fbfcfe;
+}
+
+.emu-catalogs-modal-frame .emu-reference-name {
+  color: #1b355d;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.emu-catalogs-modal-frame .emu-reference-state {
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+
+.emu-catalogs-modal-frame .emu-reference-state.is-active {
+  background: #e9f9f0;
+  color: #168052;
+}
+
+.emu-catalogs-modal-frame .emu-reference-state.is-hidden {
+  background: #f1f4f8;
+  color: #7b8798;
+}
+
+.emu-catalogs-modal-frame .emu-reference-state.is-system {
+  background: #edf3ff;
+  color: #2862ae;
+}
+
+.emu-catalogs-modal-frame .emu-reference-actions {
+  gap: 5px;
+}
+
+.emu-catalogs-modal-frame .emu-reference-actions button {
+  border-radius: 8px;
+  font-size: 11px;
+  min-height: 30px;
+  padding-inline: 9px;
+}
+
+.emu-catalogs-modal-frame .emu-reference-edit,
+.emu-catalogs-modal-frame .emu-reference-save {
+  background: #edf5ff;
+  border-color: #c9def8;
+  color: #1457a6;
+}
+
+.emu-catalogs-modal-frame .emu-reference-toggle.is-hide {
+  background: #ffffff;
+  border-color: #d7e3f2;
+  color: #5e708a;
+}
+
+.emu-catalogs-modal-frame .emu-reference-toggle.is-restore {
+  background: #f0fbf5;
+  border-color: #c4ecd4;
+  color: #168052;
+}
+
+.emu-catalogs-modal-frame .emu-reference-cancel {
+  background: #ffffff;
+  border-color: #d7e3f2;
+  color: #6c7c93;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-footer {
+  align-items: center;
+  border-top-color: #d8e5f6;
+  gap: 16px;
+  padding: 12px 2px 0;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-save-note {
+  align-items: center;
+  color: #66809e;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 750;
+  gap: 7px;
+  min-width: 0;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-save-dot {
+  background: #18a66d;
+  border: 3px solid #d9f6e7;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #9be2bf;
+  flex: 0 0 auto;
+  height: 10px;
+  width: 10px;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-footer .emu-primary-button {
+  min-height: 38px;
+  min-width: 204px;
+}
+
+@media (max-width: 760px) {
+  .emu-catalogs-modal-frame {
+    padding-inline: 14px;
+  }
+
+  .emu-catalogs-modal-frame > header {
+    margin-inline: -14px;
+    padding-inline: 14px;
+  }
+
+  .emu-catalogs-modal-frame .emu-catalog-create {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emu-catalogs-modal-frame .emu-reference-row {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .emu-catalogs-modal-frame .emu-reference-state {
+    justify-self: end;
+  }
+
+  .emu-catalogs-modal-frame .emu-reference-actions {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+
+  .emu-catalogs-modal-frame .emu-reference-actions button {
+    flex: 1 1 0;
+  }
+
+  .emu-catalogs-modal-frame .emu-catalog-save-note {
+    align-items: flex-start;
+  }
+}
+
+/* Stable modal geometry: tab changes keep the same frame and only the inner list scrolls. */
+.emu-catalogs-modal-frame {
+  height: min(700px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
+  min-height: 520px;
+  width: min(1040px, calc(100vw - 32px));
+}
+
+.emu-catalogs-modal-frame .emu-catalog-modal {
+  height: 100%;
+  min-height: 0;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-tabs {
+  flex: 0 0 58px;
+  min-height: 58px;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-tab {
+  min-height: 46px;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-content {
+  flex: 1 1 auto;
+  height: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-content > .emu-reference-block {
+  height: 100%;
+  min-height: 0;
+}
+
+.emu-catalogs-modal-frame .emu-catalog-content .emu-reference-list {
+  flex: 1 1 auto;
+  height: 0;
+  max-height: none;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.emu-catalogs-modal-frame .emu-reference-row {
+  border-left: 3px solid #b9d6f5;
+  grid-template-columns: minmax(0, 1fr) 78px 152px;
+}
+
+.emu-catalogs-modal-frame .emu-reference-row.is-active {
+  border-left-color: #36b77c;
+}
+
+.emu-catalogs-modal-frame .emu-reference-row.is-hidden {
+  border-left-color: #c4cedc;
+}
+
+.emu-catalogs-modal-frame .emu-reference-name {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.emu-catalogs-modal-frame .emu-reference-name::before {
+  background: #35b978;
+  border: 3px solid #e0f6ea;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #a3e3bf;
+  content: "";
+  flex: 0 0 auto;
+  height: 8px;
+  width: 8px;
+}
+
+.emu-catalogs-modal-frame .emu-reference-row.is-hidden .emu-reference-name::before {
+  background: #9aa7b8;
+  border-color: #eef1f5;
+  box-shadow: 0 0 0 1px #d3dbe5;
+}
+
+.emu-catalogs-modal-frame .emu-reference-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 152px;
+}
+
+.emu-catalogs-modal-frame .emu-reference-actions button {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 900px) {
+  .emu-catalogs-modal-frame {
+    height: calc(100dvh - 24px);
+    max-height: calc(100dvh - 24px);
+    min-height: 480px;
+    width: calc(100vw - 24px);
+  }
+
+  .emu-catalogs-modal-frame .emu-reference-row {
+    grid-template-columns: minmax(0, 1fr) 72px 144px;
+  }
+
+  .emu-catalogs-modal-frame .emu-reference-actions {
+    width: 144px;
+  }
+}
+
+@media (max-width: 760px) {
+  .emu-catalogs-modal-frame {
+    height: calc(100dvh - 20px);
+    max-height: calc(100dvh - 20px);
+    min-height: 0;
+    width: calc(100vw - 20px);
+  }
+
+  .emu-catalogs-modal-frame .emu-catalog-tabs {
+    flex-basis: auto;
+    min-height: 0;
+  }
+
+  .emu-catalogs-modal-frame .emu-catalog-tab {
+    min-height: 44px;
+  }
+
+  .emu-catalogs-modal-frame .emu-reference-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .emu-catalogs-modal-frame .emu-reference-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+@media (max-width: 440px) {
+  .emu-catalogs-modal-frame {
+    border-radius: 14px;
+    padding-inline: 10px;
+  }
+
+  .emu-catalogs-modal-frame > header {
+    margin-inline: -10px;
+    padding-inline: 12px;
+  }
+
+  .emu-catalogs-modal-frame .emu-catalog-content {
+    padding: 10px;
+  }
+
+  .emu-catalogs-modal-frame .emu-catalog-tabs {
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .emu-catalogs-modal-frame .emu-catalog-tab {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+    justify-content: center;
+    min-height: 52px;
+  }
+
+  .emu-catalogs-modal-frame .emu-catalog-create .emu-inline-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emu-catalogs-modal-frame .emu-catalog-create .emu-inline-form button {
+    width: 100%;
+  }
+
+  .emu-catalogs-modal-frame .emu-catalog-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .emu-catalogs-modal-frame .emu-catalog-footer .emu-primary-button {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+@media (max-height: 620px) and (min-width: 761px) {
+  .emu-catalogs-modal-frame {
+    height: calc(100dvh - 24px);
+    max-height: calc(100dvh - 24px);
+    min-height: 0;
+  }
+}

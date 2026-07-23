@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -37,4 +39,18 @@ test("plaintext migration is accepted only when every protected table count matc
 
   assert.equal(haveMatchingTableCounts(tables, expected, { reports: 3, outbox: 2 }), true);
   assert.equal(haveMatchingTableCounts(tables, expected, { reports: 3, outbox: 1 }), false);
+});
+test("encrypted repositories do not open an unkeyed expo-sqlite transaction connection", async () => {
+  const databaseSource = await readFile(join(process.cwd(), "src/db/database.ts"), "utf8");
+  const repositoryDirectory = join(process.cwd(), "src/db/repositories");
+  const repositoryEntries = await readdir(repositoryDirectory);
+  const repositorySources = await Promise.all(
+    repositoryEntries
+      .filter((entry) => entry.endsWith(".ts"))
+      .map((entry) => readFile(join(repositoryDirectory, entry), "utf8")),
+  );
+  const productionSource = [databaseSource, ...repositorySources].join("\n");
+
+  assert.equal(productionSource.includes(".withExclusiveTransactionAsync("), false);
+  assert.equal(productionSource.includes("withProtectedExclusiveTransactionAsync"), true);
 });

@@ -427,7 +427,7 @@ describe("shared UI primitives", () => {
     expect(screen.getByRole("button", { name: "Печать" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Каска защитная" }));
-    expect(await screen.findByRole("region", { name: "Сопоставить норму с номенклатурой" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Сопоставить норму с номенклатурой" })).toBeInTheDocument();
     expect(screen.getByLabelText("Поиск номенклатуры")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Отмена" }));
 

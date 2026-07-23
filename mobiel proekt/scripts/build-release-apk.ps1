@@ -2,10 +2,24 @@ param(
   [string]$SecretPath = '',
   [string]$BuildRoot = '',
   [string]$JavaHome = $env:JAVA_HOME,
-  [switch]$ValidateOnly
+  [switch]$ValidateOnly,
+
+  [ValidateSet("dev", "test", "local-enterprise", "production")]
+  [string]$Patrol360Environment = $env:PATROL360_ENVIRONMENT,
+
+  [string]$PublicApiBaseUrl = $env:PATROL360_PUBLIC_API_URL
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ([string]::IsNullOrWhiteSpace($Patrol360Environment)) {
+  $Patrol360Environment = 'local-enterprise'
+}
+$env:PATROL360_ENVIRONMENT = $Patrol360Environment
+if (-not [string]::IsNullOrWhiteSpace($PublicApiBaseUrl)) {
+  $env:PATROL360_PUBLIC_API_URL = $PublicApiBaseUrl.Trim()
+}
+
 Add-Type -AssemblyName System.Security
 $ProjectRoot = Split-Path $PSScriptRoot -Parent
 $PolicyPath = Join-Path $ProjectRoot 'release-signing.json'
@@ -169,7 +183,11 @@ try {
     Write-Host 'Release signing validation passed. APK build was not started.'
   }
   else {
-    $arguments = @{ Configuration = 'Release' }
+    $arguments = @{
+      Configuration = 'Release'
+      Patrol360Environment = $Patrol360Environment
+      PublicApiBaseUrl = $PublicApiBaseUrl
+    }
     if (-not [string]::IsNullOrWhiteSpace($BuildRoot)) {
       $arguments.BuildRoot = $BuildRoot
     }
