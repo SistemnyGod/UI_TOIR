@@ -43,6 +43,7 @@ export function MobileAccountListPanel({
   const selected = accounts.find((account) => account.id === selectedAccountId);
   const isLoading = status === "loading";
   const isError = status === "error";
+  const hasCachedAccounts = accounts.length > 0;
   const onlineSessions = accounts.filter((account) => isOnline(account.session)).length;
   const boundAccounts = accounts.filter((account) => account.boundEmployees.length > 0 || account.employeeScope === "all").length;
   const [searchQuery, setSearchQuery] = useState("");
@@ -170,7 +171,7 @@ export function MobileAccountListPanel({
       <div className="mobile-am-tabs-row">
         <SectionTabs
           value={mode}
-          onChange={onModeChange}
+          onChange={(nextMode) => { if (!isBusy) onModeChange(nextMode); }}
           tabs={[
             { id: "accounts", label: "Аккаунты", count: filteredAccounts.length },
             { id: "sessions", label: "Сессии", count: onlineSessions },
@@ -180,14 +181,14 @@ export function MobileAccountListPanel({
         <span>{filteredAccounts.length} из {accounts.length}</span>
       </div>
 
-      {isLoading ? (
+      {isLoading && !hasCachedAccounts ? (
         <EmptyState
           title="Мобильные аккаунты загружаются"
           description="Получаем список из backend API. Локальные записи в API mode не подмешиваются."
         />
       ) : null}
 
-      {isError ? (
+      {isError && !hasCachedAccounts ? (
         <EmptyState
           title="Мобильные аккаунты API не загружены"
           description={errorMessage ?? "Проверьте доступность backend API и повторите загрузку."}
@@ -201,7 +202,15 @@ export function MobileAccountListPanel({
         />
       ) : null}
 
-      {!isLoading && !isError && mode === "accounts" ? (
+      {isError && hasCachedAccounts ? (
+        <div aria-live="polite" className="mobile-am-inline-error" role="status">
+          <span>Не удалось обновить список. Показаны последние загруженные данные.</span>
+          {onRetry ? (
+            <button disabled={isBusy} onClick={() => void onRetry()} type="button">Повторить</button>
+          ) : null}
+        </div>
+      ) : null}
+      {(!isLoading || hasCachedAccounts) && mode === "accounts" ? (
         filteredAccounts.length > 0 ? (
           <MobileAccountsTable
             accounts={filteredAccounts}
@@ -233,13 +242,14 @@ export function MobileAccountListPanel({
         )
       ) : null}
 
-      {!isLoading && !isError && mode === "sessions" ? (
+      {(!isLoading || hasCachedAccounts) && mode === "sessions" ? (
         filteredAccounts.length > 0 ? (
           <div className="mobile-am-card-grid">
             {filteredAccounts.map((account) => (
               <button
                 className={`mobile-am-card ${selected?.id === account.id ? "active" : ""}`}
                 key={account.id}
+                disabled={isBusy}
                 onClick={() => onSelectAccount(account.id)}
                 type="button"
               >
@@ -255,13 +265,14 @@ export function MobileAccountListPanel({
         )
       ) : null}
 
-      {!isLoading && !isError && mode === "bindings" ? (
+      {(!isLoading || hasCachedAccounts) && mode === "bindings" ? (
         filteredAccounts.length > 0 ? (
           <div className="mobile-am-card-grid">
             {filteredAccounts.map((account) => (
               <button
                 className={`mobile-am-card ${selected?.id === account.id ? "active" : ""}`}
                 key={account.id}
+                disabled={isBusy}
                 onClick={() => onSelectAccount(account.id)}
                 type="button"
               >
@@ -349,7 +360,7 @@ function MobileAccountsTable({
             <tr
               className={selectedAccountId === account.id ? "selected" : ""}
               key={account.id}
-              onClick={() => onSelectAccount(account.id)}
+              onClick={() => { if (!isBusy) onSelectAccount(account.id); }}
             >
               <td data-label="Логин">
                 <strong className="mobile-am-login">{account.login}</strong>
@@ -372,6 +383,7 @@ function MobileAccountsTable({
               <td className="mobile-am-actions-cell" data-label="Действия">
                 <button
                   aria-label={`Просмотр ${account.login}`}
+                  disabled={isBusy}
                   onClick={(event) => {
                     event.stopPropagation();
                     onOpenPanel("view", account);

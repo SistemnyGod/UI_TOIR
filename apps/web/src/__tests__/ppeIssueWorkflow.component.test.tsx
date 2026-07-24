@@ -19,6 +19,7 @@ describe("PPE issue workflow", () => {
     expect(employee).toBeTruthy();
     window.localStorage.setItem("patrol360.inventory.ppe.employee", employee!.id);
     const createBatch = vi.spyOn(repository, "createPpeIssueBatch");
+    const printPpeCard = vi.spyOn(repository, "printPpeCard");
     const notify = vi.fn();
 
     render(
@@ -51,6 +52,8 @@ describe("PPE issue workflow", () => {
 
     expect(await screen.findByRole("heading", { name: "Печать и предпросмотр" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Сохранить документ выдачи/ }));
+    await user.click(screen.getByRole("button", { name: "PDF" }));
+    await waitFor(() => expect(printPpeCard).toHaveBeenCalledWith(expect.any(String), "sheet", "pdf"));
     await waitFor(() => expect(createBatch).toHaveBeenCalledTimes(1));
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("Документ выдачи сохранён"));
   });

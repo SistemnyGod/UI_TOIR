@@ -70,6 +70,9 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
   const [printMode, setPrintMode] = useState<PrintMode>("sheet");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [downloadFormat, setDownloadFormat] = useState<"pdf" | "docx" | null>(null);
+  const downloadRef = useRef<"pdf" | "docx" | null>(null);
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -148,13 +151,25 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
 
   function patchEmployeeDetails(field: keyof PpeEmployeeCardDetails, value: string) { setEmployeeDetails((current) => ({ ...current, [field]: value })); }
 
+  function beginSaving() {
+    if (savingRef.current) return false;
+    savingRef.current = true;
+    setSaving(true);
+    return true;
+  }
+
+  function endSaving() {
+    savingRef.current = false;
+    setSaving(false);
+  }
+
   async function saveDocumentDraft() {
     if (!employeeId) return setError("Выберите сотрудника");
     if (!issueDate) return setError("Укажите дату выдачи");
     if (!responsible.trim()) return setError("Укажите ответственное лицо");
     if (!basis.trim()) return setError("Укажите основание выдачи");
     if (source === "active_norms" && workspace && !workspace.activeNormSet) return setError("Для должности не найден опубликованный набор норм");
-    setSaving(true); setError("");
+    if (!beginSaving()) return; setError("");
     try {
       const saved = draft
         ? await repository.updatePpeCardDraft(draft.id, { basis: basis.trim(), cardDate: toApiDate(issueDate), employeeDetails: toApiEmployeeDetails(employeeDetails), expectedVersion: draft.version ?? 0, issueType, responsibleName: responsible.trim() })
@@ -165,12 +180,12 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
       setStep(2);
       onNotify(draft ? "Реквизиты черновика сохранены" : "Черновик документа выдачи подготовлен");
     } catch (reason) { setError(messageOf(reason, "Не удалось сохранить черновик")); }
-    finally { setSaving(false); }
+    finally { endSaving(); }
   }
 
   async function saveMapping(item: InventoryItemDto, mapping: UpsertInventoryPpeNormMappingDto) {
     if (!draft || !mappingRow) return;
-    setSaving(true); setError("");
+    if (!beginSaving()) return; setError("");
     try {
       if (mappingRow.sourceNormRowId) await repository.upsertPpeNormRowMapping(mappingRow.sourceNormRowId, mapping);
       const nextRows = rows.map((row) => row.id === mappingRow.id ? {
@@ -194,12 +209,12 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
       });
       onNotify("Номенклатура сопоставлена с нормой");
     } catch (reason) { setError(messageOf(reason, "Не удалось сохранить номенклатуру")); }
-    finally { setSaving(false); setMappingRow(null); }
+    finally { endSaving(); setMappingRow(null); }
   }
 
   async function addCatalogRow() {
     if (!draft || saving) return;
-    setSaving(true); setError("");
+    if (!beginSaving()) return; setError("");
     try {
       const existingGroup = rows.find((row) => row.rowType === "group" && row.normItemName === "Дополнительная выдача");
       const group = existingGroup ?? createExtraGroup(rows.length);
@@ -210,14 +225,14 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
       setDraft(saved); setRows(savedRows); setSelectionTab("catalog");
       setMappingRow(savedRows.find((candidate) => candidate.id === row.id) ?? row);
     } catch (reason) { setError(messageOf(reason, "Не удалось добавить дополнительную позицию")); }
-    finally { setSaving(false); }
+    finally { endSaving(); }
   }
 
   async function removeExtraRow(rowId: string) {
     if (!draft) return;
     const target = rows.find((row) => row.id === rowId);
     if (!target || target.sourceNormRowId) return;
-    setSaving(true); setError("");
+    if (!beginSaving()) return; setError("");
     try {
       let nextRows = rows.filter((row) => row.id !== rowId);
       if (target.parentRowId && !nextRows.some((row) => row.parentRowId === target.parentRowId)) nextRows = nextRows.filter((row) => row.id !== target.parentRowId);
@@ -227,20 +242,20 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
       setIssueLines((current) => current.filter((line) => line.cardNormRowId !== rowId));
       onNotify("Дополнительная позиция удалена");
     } catch (reason) { setError(messageOf(reason, "Не удалось удалить позицию")); }
-    finally { setSaving(false); }
+    finally { endSaving(); }
   }
 
   async function applySet(set: InventoryItemSetDetailDto) {
     if (!draft) throw new Error("Сначала создайте черновик");
     const result = applyItemSetToDraft(rows, issueLines, set, issueDate);
     if (!result.added && !result.matched) { onNotify("Все позиции набора уже выбраны"); return; }
-    setSaving(true); setError("");
+    if (!beginSaving()) return; setError("");
     try {
       const saved = await repository.updatePpeCardNormRows(draft.id, { expectedVersion: draft.version ?? 0, rows: result.rows.map(toNormPayload) });
       setDraft(saved); setRows([...(saved.normRows ?? result.rows)].sort((left, right) => left.sortOrder - right.sortOrder)); setIssueLines(result.lines);
       onNotify(`Набор добавлен: по норме ${result.matched}, дополнительно ${result.added}, пропущено дублей ${result.skipped}`);
     } catch (reason) { const message = messageOf(reason, "Не удалось применить набор"); setError(message); throw new Error(message); }
-    finally { setSaving(false); }
+    finally { endSaving(); }
   }
 
   function toggleRow(row: InventoryPpeCardNormRowDto) {
@@ -267,7 +282,7 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
 
   async function commitIssue() {
     if (!draft || committed || blockingErrors.length) return;
-    setSaving(true); setError("");
+    if (!beginSaving()) return; setError("");
     try {
       const saved = await repository.createPpeIssueBatch(draft.id, {
         expectedVersion: draft.version ?? 0,
@@ -276,13 +291,16 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
       setDraft(saved); setCommitted(true); clearPpeIssueWorkflowCache();
       onNotify(`Документ выдачи сохранён: ${issueLines.length} позиций`);
     } catch (reason) { setError(messageOf(reason, "Не удалось сохранить выдачу")); }
-    finally { setSaving(false); }
+    finally { endSaving(); }
   }
 
   async function download(format: "pdf" | "docx") {
-    if (!draft) return;
+    if (!draft || downloadRef.current) return;
+    downloadRef.current = format;
+    setDownloadFormat(format);
     try { const file = await repository.printPpeCard(draft.id, printMode === "sheet" ? "sheet" : "card", format); saveApiFile(file); onNotify(`${format.toUpperCase()} сформирован`); }
     catch (reason) { setError(messageOf(reason, `Не удалось сформировать ${format.toUpperCase()}`)); }
+    finally { downloadRef.current = null; setDownloadFormat(null); }
   }
 
   return <section className="ppe-issue-workflow">
@@ -292,7 +310,7 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
     {step === 1 ? <EmployeeDocumentStep basis={basis} details={employeeDetails} draftExists={Boolean(draft)} employee={selectedEmployee} employees={employees} employeeId={employeeId} issueDate={issueDate} issueType={issueType} loading={loadingEmployees || loadingWorkspace} onBasisChange={setBasis} onDetailsChange={patchEmployeeDetails} onEmployeeChange={setEmployeeId} onIssueDateChange={setIssueDate} onIssueTypeChange={setIssueType} onQueryChange={setQuery} query={query} responsible={responsible} onResponsibleChange={setResponsible} source={source} sourceReady={Boolean(workspace?.activeNormSet)} onSourceChange={setSource} onContinue={() => void saveDocumentDraft()} saving={saving} /> : null}
     {step === 2 ? <SelectionStep categories={categories} issueLines={issueLines} itemRows={itemRows} loadingItems={loadingItems || saving} onAddCatalog={() => void addCatalogRow()} onApplySet={applySet} onOpenCatalog={setMappingRow} onRemoveExtra={(id) => void removeExtraRow(id)} onSelectAll={selectAllMapped} onToggle={toggleRow} selectionTab={selectionTab} setSelectionTab={setSelectionTab} settings={settings} /> : null}
     {step === 3 ? <CompositionStep issueLines={issueLines} onChange={patchIssueLine} onOpenCatalog={setMappingRow} onRemove={removeIssueLine} rows={rows} selectedEmployee={selectedEmployee} /> : null}
-    {step === 4 ? <PrintStep committed={committed} data={printData} errors={blockingErrors} mode={printMode} onDownload={(format) => void download(format)} onModeChange={setPrintMode} onPreview={() => setPreviewOpen(true)} onPrint={() => printDocument(printData, printMode)} onSave={() => void commitIssue()} saving={saving} /> : null}
+    {step === 4 ? <PrintStep committed={committed} data={printData} errors={blockingErrors} mode={printMode} downloadFormat={downloadFormat} onDownload={(format) => void download(format)} onModeChange={setPrintMode} onPreview={() => setPreviewOpen(true)} onPrint={() => printDocument(printData, printMode)} onSave={() => void commitIssue()} saving={saving} /> : null}
     <footer className="ppe-issue-workflow-footer"><PpeButton disabled={step === 1} icon={<ArrowLeft size={16} />} onClick={() => setStep((current) => Math.max(1, current - 1) as WorkflowStep)} variant="secondary">Назад</PpeButton><span>{step} из 4</span>{step === 2 ? <PpeButton icon={<ArrowRight size={16} />} onClick={goToComposition} variant="primary">К составу</PpeButton> : null}{step === 3 ? <PpeButton icon={<ArrowRight size={16} />} onClick={goToPrint} variant="primary">Предпросмотр печати</PpeButton> : null}{step === 4 && committed ? <PpeButton icon={<ArrowRight size={16} />} onClick={() => onNavigate("inventory-ppe")} variant="primary">Открыть карточку</PpeButton> : null}</footer>
     {mappingRow ? <PpeCatalogModal normRow={mappingRow} onClose={() => setMappingRow(null)} onConfirm={saveMapping} /> : null}
     {previewOpen ? <PrintPreviewModal data={printData} mode={printMode} onClose={() => setPreviewOpen(false)} onModeChange={setPrintMode} onPrint={printDocument} /> : null}

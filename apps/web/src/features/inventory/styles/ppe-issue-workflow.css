@@ -16,10 +16,10 @@
 
 .ppe-issue-workflow-head {
   align-items: flex-start;
-  background: linear-gradient(135deg, #ffffff 0%, #f3f8ff 100%);
+  background: var(--ppe-ui-surface);
   border: 1px solid var(--issue-line);
   border-radius: 16px;
-  box-shadow: 0 12px 28px rgba(30, 73, 122, 0.06);
+  box-shadow: var(--ppe-ui-shadow-panel);
   display: flex;
   gap: 20px;
   justify-content: space-between;
@@ -174,7 +174,7 @@
 .ppe-issue-badge.is-warning { background: #fff2df; color: #b66c20; }
 
 .ppe-issue-catalog-start { display: grid; gap: 12px; }
-.ppe-issue-catalog-hero { align-items: center; background: linear-gradient(135deg, #f1f7ff, #fbfdff); border: 1px solid #d4e4f4; border-radius: 12px; display: flex; gap: 12px; padding: 18px; }
+.ppe-issue-catalog-hero { align-items: center; background: var(--ppe-ui-primary-soft); border: 1px solid var(--ppe-ui-border); border-radius: 12px; display: flex; gap: 12px; padding: 18px; }
 .ppe-issue-catalog-hero > svg { color: var(--issue-blue); flex: 0 0 auto; }
 .ppe-issue-catalog-hero > div { flex: 1; }
 .ppe-issue-catalog-hero h3 { font-size: 15px; }

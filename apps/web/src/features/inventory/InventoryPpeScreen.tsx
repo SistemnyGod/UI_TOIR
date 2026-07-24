@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, CircleDollarSign, FileText, MoreVertical, Printer, Search, ShieldCheck, UserRound, X } from "lucide-react";
 import type {
   InventoryEmployeeDto,
@@ -49,6 +49,8 @@ export function InventoryPpeScreen({
   const [issueItem, setIssueItem] = useState<InventoryItemDto | null>(null);
   const [selectedItems, setSelectedItems] = useState<Record<string, InventoryItemDto>>({});
   const [previewMode, setPreviewMode] = useState<PrintMode | null>(null);
+  const [downloadAction, setDownloadAction] = useState<string | null>(null);
+  const downloadActionRef = useRef<string | null>(null);
   const [lineAction, setLineAction] = useState<{ action: ApplyInventoryPpeLineActionDto["action"]; line: InventoryPpeCardLineDto } | null>(null);
 
   useEffect(() => {
@@ -144,11 +146,22 @@ export function InventoryPpeScreen({
     onNotify("Норма сопоставлена с номенклатурой. Фактическая выдача не создана.");
   }
 
-  async function downloadDocx(type: "card" | "sheet") {
+  async function downloadPrint(type: "card" | "sheet", format: "pdf" | "docx") {
     if (!card) return;
-    const file = await repository.printPpeCard(card.id, type, "docx");
-    saveApiFile(file);
-    onNotify(type === "card" ? "Личная карточка DOCX сформирована" : "Лист подписи DOCX сформирован");
+    const actionKey = `${type}:${format}`;
+    if (downloadActionRef.current) return;
+    downloadActionRef.current = actionKey;
+    setDownloadAction(actionKey);
+    try {
+      const file = await repository.printPpeCard(card.id, type, format);
+      saveApiFile(file);
+      onNotify(`${type === "card" ? "Личная карточка" : "Лист подписи"} ${format.toUpperCase()} сформирован`);
+    } catch (reason) {
+      onNotify(reason instanceof Error ? reason.message : `Не удалось сформировать ${format.toUpperCase()}`);
+    } finally {
+      downloadActionRef.current = null;
+      setDownloadAction(null);
+    }
   }
 
   return (
@@ -194,7 +207,7 @@ export function InventoryPpeScreen({
                   </div>
                   {mode === "norms" ? <NormRowsTable rows={normRows} onIssue={(row) => void openIssue(row)} onMap={setCatalogRow} /> : null}
                   {mode === "issued" ? <IssuedTable card={card} onAction={(line, action) => setLineAction({ action, line })} /> : null}
-                  {mode === "print" && cardPrintData && sheetPrintData ? <PrintWorkspace cardData={cardPrintData} sheetData={sheetPrintData} onDownload={downloadDocx} onPreview={setPreviewMode} /> : null}
+                  {mode === "print" && cardPrintData && sheetPrintData ? <PrintWorkspace cardData={cardPrintData} sheetData={sheetPrintData} downloadAction={downloadAction} onDownload={downloadPrint} onPreview={setPreviewMode} /> : null}
                 </>
               )}
             </>
@@ -260,8 +273,24 @@ function IssuedTable({ card, onAction }: { card: InventoryPpeCardDetailDto; onAc
   return <div className="ppe-v2-table-wrap"><table className="ppe-v2-table ppe-v2-responsive-table"><thead><tr><th>СИЗ</th><th>Модель / артикул</th><th>Дата</th><th>Количество</th><th>Способ</th><th>Статус</th><th /></tr></thead><tbody>{rows.map((line) => <tr key={line.id}><td data-label="СИЗ"><strong>{line.printItemName || line.itemName}</strong><small>{line.itemName}</small></td><td data-label="Модель / артикул">{line.brandModelArticle || "—"}</td><td data-label="Дата">{formatDate(line.issuedAt)}</td><td data-label="Количество">{line.quantity} {line.unit}</td><td data-label="Способ">{line.issueMethod === "dispenser" ? "Дозатор" : "Лично"}</td><td data-label="Статус"><span className={`ppe-v2-status is-${line.status}`}>{issueStatusLabel(line.status)}</span></td><td className="ppe-v2-actions-cell"><details className="ppe-v2-row-menu"><summary aria-label="Действия"><MoreVertical size={18} /></summary><div><button onClick={() => onAction(line, "returned")} type="button">Оформить возврат</button><button onClick={() => onAction(line, "written_off")} type="button">Оформить списание</button><button onClick={() => onAction(line, "defective")} type="button">Отметить неисправным</button></div></details></td></tr>)}</tbody></table></div>;
 }
 
-function PrintWorkspace({ cardData, sheetData, onDownload, onPreview }: { cardData: PrintData; sheetData: PrintData; onDownload: (type: "card" | "sheet") => Promise<void>; onPreview: (mode: PrintMode) => void }) {
-  return <div className="ppe-v2-print-grid"><article><header><FileText size={20} /><div><strong>Личная карточка СИЗ</strong><span>Нормы и группы в нормативном порядке</span></div></header><div className="ppe-v2-print-preview"><PrintPaper data={cardData} mode="card" /></div><footer><PpeButton onClick={() => onPreview("card")} variant="secondary">Предпросмотр</PpeButton><PpeButton icon={<Printer size={16} />} onClick={() => void onDownload("card")} variant="primary">DOCX</PpeButton></footer></article><article><header><CircleDollarSign size={20} /><div><strong>Лист подписи</strong><span>Только фактические выдачи по дате</span></div></header><div className="ppe-v2-print-preview"><PrintPaper data={sheetData} mode="sheet" /></div><footer><PpeButton onClick={() => onPreview("sheet")} variant="secondary">Предпросмотр</PpeButton><PpeButton icon={<Printer size={16} />} onClick={() => void onDownload("sheet")} variant="primary">DOCX</PpeButton></footer></article></div>;
+function PrintWorkspace({ cardData, downloadAction, onDownload, onPreview, sheetData }: { cardData: PrintData; downloadAction: string | null; onDownload: (type: "card" | "sheet", format: "pdf" | "docx") => Promise<void>; onPreview: (mode: PrintMode) => void; sheetData: PrintData }) {
+  const exportButton = (type: "card" | "sheet", format: "pdf" | "docx", label: string) => {
+    const actionKey = `${type}:${format}`;
+    return <PpeButton disabled={Boolean(downloadAction && downloadAction !== actionKey)} icon={format === "pdf" ? <FileText size={16} /> : <Printer size={16} />} loading={downloadAction === actionKey} onClick={() => void onDownload(type, format)} variant="primary">{label}</PpeButton>;
+  };
+
+  return <div className="ppe-v2-print-grid">
+    <article>
+      <header><FileText size={20} /><div><strong>Личная карточка СИЗ</strong><span>Нормы и группы в нормативном порядке</span></div></header>
+      <div className="ppe-v2-print-preview"><PrintPaper data={cardData} mode="card" /></div>
+      <footer><PpeButton onClick={() => onPreview("card")} variant="secondary">Предпросмотр</PpeButton>{exportButton("card", "pdf", "PDF")}{exportButton("card", "docx", "DOCX")}</footer>
+    </article>
+    <article>
+      <header><CircleDollarSign size={20} /><div><strong>Лист подписи</strong><span>Только фактические выдачи по дате</span></div></header>
+      <div className="ppe-v2-print-preview"><PrintPaper data={sheetData} mode="sheet" /></div>
+      <footer><PpeButton onClick={() => onPreview("sheet")} variant="secondary">Предпросмотр</PpeButton>{exportButton("sheet", "pdf", "PDF")}{exportButton("sheet", "docx", "DOCX")}</footer>
+    </article>
+  </div>;
 }
 
 function buildPrintData(card: InventoryPpeCardDetailDto, normRows: InventoryPpeCardNormRowDto[], mode: PrintMode) {

@@ -7,6 +7,8 @@ import type {
 import {
   applyItemSetToDraft,
   createIssueDraftLine,
+  readPpeIssueWorkflowCache,
+  PPE_ISSUE_WORKFLOW_STORAGE_KEY,
   validateIssueDraftLine,
 } from "../features/inventory/ppe/ppeIssueDraft";
 import { createMockInventoryRepository } from "../repositories/mockInventoryRepository";
@@ -79,6 +81,16 @@ function normRow(id: string, mappedItemId: string | null, quantity = 2): Invento
 }
 
 describe("PPE issue workflow draft", () => {
+  it("ignores a malformed persisted draft instead of restoring invalid issue rows", () => {
+    window.localStorage.setItem(PPE_ISSUE_WORKFLOW_STORAGE_KEY, JSON.stringify({
+      employeeId: "employee-1",
+      issueDate: "2026-07-23",
+      issueLines: [{ cardNormRowId: "row-1", quantity: "not-a-number" }],
+    }));
+
+    expect(readPpeIssueWorkflowCache()).toBeNull();
+  });
+
   it("applies a set without duplicate products and separates matched and additional rows", () => {
     const mapped = item("item-mapped", "Костюм");
     const extra = item("item-extra", "Очки");

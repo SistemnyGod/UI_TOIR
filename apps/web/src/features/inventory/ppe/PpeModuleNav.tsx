@@ -9,17 +9,15 @@ export function PpeModuleNav({ active, onNavigate }: { active: ScreenId; onNavig
   ];
 
   return (
-    <nav aria-label="Разделы СИЗ" className="ppe-v2-module-nav" role="tablist">
+    <nav aria-label="Разделы СИЗ" className="ppe-v2-module-nav">
       {items.map((item) => {
         const Icon = item.icon;
         return (
           <button
             aria-current={active === item.id ? "page" : undefined}
-            aria-selected={active === item.id}
             className={active === item.id ? "is-active" : ""}
             key={item.id}
             onClick={() => onNavigate(item.id)}
-            role="tab"
             type="button"
           >
             <Icon aria-hidden="true" size={16} />

@@ -410,6 +410,7 @@ describe("shared UI primitives", () => {
     window.localStorage.setItem("patrol360.inventory.ppe.employee", "emp-1");
     const repository = createMockInventoryRepository();
     const getPpeWorkspace = vi.spyOn(repository, "getPpeWorkspace");
+    const printPpeCard = vi.spyOn(repository, "printPpeCard");
 
     render(
       <InventoryRepositoryProvider value={repository}>
@@ -433,7 +434,7 @@ describe("shared UI primitives", () => {
     await user.click(screen.getByRole("button", { name: "Отмена" }));
 
     await user.click(screen.getByRole("button", { name: "Выдать" }));
-    expect(await screen.findByRole("region", { name: "Выдать СИЗ" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Выдать СИЗ" })).toBeInTheDocument();
     expect(screen.getAllByText("Пункт норм").length).toBeGreaterThan(0);
     expect(screen.getByText("Способ выдачи")).toBeInTheDocument();
     expect(screen.getByText("Комментарий")).toBeInTheDocument();
@@ -444,6 +445,11 @@ describe("shared UI primitives", () => {
     await user.click(screen.getByRole("button", { name: "Печать" }));
     expect(screen.getByText("Личная карточка СИЗ")).toBeInTheDocument();
     expect(screen.getByText("Лист подписи")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "PDF" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "DOCX" })).toHaveLength(2);
+
+    await user.click(screen.getAllByRole("button", { name: "PDF" })[0]);
+    await waitFor(() => expect(printPpeCard).toHaveBeenCalledWith(expect.any(String), "card", "pdf"));
   });
 
   it("shows a clear request fallback instead of an empty view modal", () => {
@@ -1443,6 +1449,45 @@ describe("shared UI primitives", () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
+  it("keeps the last mobile account list visible when refresh fails", () => {
+    render(
+      <MobileAccountListPanel
+        activePanel={null}
+        accounts={[
+          {
+            id: "account-1",
+            login: "mobile.operator",
+            passwordState: "Установлен",
+            employee: "Иванов Иван Иванович",
+            employeeScope: "selected",
+            boundEmployeeIds: ["employee-1"],
+            boundEmployees: ["Иванов Иван Иванович"],
+            role: "Маршрутный обходчик",
+            status: "Активен",
+            session: "Офлайн",
+            lastSeen: "23.07.2026 10:00",
+            device: "Xiaomi",
+            version: "Android 14",
+          },
+        ]}
+        errorMessage="Network timeout"
+        mode="accounts"
+        selectedAccountId="account-1"
+        status="error"
+        onDeleteAccount={vi.fn()}
+        onDetachEmployee={vi.fn()}
+        onModeChange={vi.fn()}
+        onNotify={vi.fn()}
+        onOpenPanel={vi.fn()}
+        onSelectAccount={vi.fn()}
+        onToggleBlockAccount={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("mobile.operator")).toBeInTheDocument();
+    expect(screen.getByText("Не удалось обновить список. Показаны последние загруженные данные.")).toBeInTheDocument();
+    expect(screen.queryByText("Мобильные аккаунты API не загружены")).not.toBeInTheDocument();
+  });
   it("renders mobile account sessions and security events", async () => {
     const user = userEvent.setup();
     const onRefresh = vi.fn();

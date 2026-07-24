@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, PackageSearch, Search } from "lucide-react";
 import type { InventoryItemDto, InventoryPpeCardNormRowDto, InventoryPpeNormMappingDto, InventoryReferenceOptionDto, UpsertInventoryPpeNormMappingDto } from "../../../api/contracts";
 import { useInventoryRepository } from "../../../repositories/inventoryRepositoryContext";
@@ -28,6 +28,7 @@ export function PpeCatalogModal({
   const [isDefault, setIsDefault] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -103,17 +104,29 @@ export function PpeCatalogModal({
     }
   }
 
+  const requestClose = useCallback(() => {
+    if (!savingRef.current) onClose();
+  }, [onClose]);
+
   async function save() {
+    if (savingRef.current) return;
     if (!selected) {
       setError("Выберите позицию номенклатуры");
       return;
     }
+    const normalizedPrice = price.trim().replace(",", ".");
+    const parsedPrice = normalizedPrice ? Number(normalizedPrice) : null;
+    if (parsedPrice !== null && (!Number.isFinite(parsedPrice) || parsedPrice < 0)) {
+      setError("Укажите цену числом не меньше нуля");
+      return;
+    }
+    savingRef.current = true;
     setSaving(true);
     setError("");
     try {
       await onConfirm(selected, {
         brandModelArticle: model.trim(),
-        defaultUnitPriceMinor: price.trim() ? Math.round(Number(price.replace(",", ".")) * 100) : null,
+        defaultUnitPriceMinor: parsedPrice === null ? null : Math.round(parsedPrice * 100),
         isDefault,
         itemId: selected.id,
       });
@@ -121,6 +134,7 @@ export function PpeCatalogModal({
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось сохранить сопоставление");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -134,12 +148,12 @@ export function PpeCatalogModal({
       eyebrow="Сопоставление нормы"
       footer={(
         <>
-          <PpeButton onClick={onClose} variant="ghost">Отмена</PpeButton>
+          <PpeButton disabled={saving} onClick={requestClose} variant="ghost">Отмена</PpeButton>
           <PpeButton disabled={!selected} loading={saving} onClick={() => void save()} variant="primary">Сохранить и выбрать</PpeButton>
         </>
       )}
       initialFocusSelector="[data-ppe-initial-focus]"
-      onClose={onClose}
+      onClose={requestClose}
       title={normRow.normItemName}
     >
       <div className="ppe-v2-catalog-layout">
@@ -151,7 +165,7 @@ export function PpeCatalogModal({
                 <b>{normRow.mappings.length}</b>
               </header>
               <div>{[...normRow.mappings].sort((left, right) => Number(right.isDefault) - Number(left.isDefault) || left.itemName.localeCompare(right.itemName)).map((mapping) => (
-                <button className={selectedId === mapping.itemId ? "is-selected" : ""} key={mapping.id} onClick={() => void selectMapped(mapping)} type="button">
+                <button className={selectedId === mapping.itemId ? "is-selected" : ""} disabled={loading || saving} key={mapping.id} onClick={() => void selectMapped(mapping)} type="button">
                   <span><strong>{mapping.itemName}</strong><small>{[mapping.itemSku, mapping.brandModelArticle].filter(Boolean).join(" · ") || "Без артикула"}</small></span>
                   {mapping.isDefault ? <em>По умолчанию</em> : null}
                 </button>
@@ -173,7 +187,7 @@ export function PpeCatalogModal({
             {loading ? <div className="ppe-v2-state">Загрузка номенклатуры…</div> : rows.length === 0 ? (
               <div className="ppe-v2-state"><PackageSearch size={30} /><strong>Ничего не найдено</strong><span>Измените поисковый запрос.</span></div>
             ) : rows.map((item) => (
-              <button className={selectedId === item.id ? "is-selected" : ""} key={item.id} onClick={() => select(item)} type="button">
+              <button className={selectedId === item.id ? "is-selected" : ""} disabled={loading || saving} key={item.id} onClick={() => select(item)} type="button">
                 <span><strong>{item.name}</strong><small>{[item.sku, item.article, item.category].filter(Boolean).join(" · ")}</small></span>
                 {selectedId === item.id ? <Check size={18} /> : null}
               </button>

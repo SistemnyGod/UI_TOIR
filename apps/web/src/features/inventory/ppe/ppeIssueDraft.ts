@@ -158,11 +158,43 @@ export function applyItemSetToDraft(
 export function readPpeIssueWorkflowCache(): PpeIssueWorkflowCache | null {
   if (typeof window === "undefined") return null;
   try {
-    const value = JSON.parse(window.localStorage.getItem(PPE_ISSUE_WORKFLOW_STORAGE_KEY) ?? "null");
-    return value && typeof value === "object" ? value as PpeIssueWorkflowCache : null;
+    const value: unknown = JSON.parse(window.localStorage.getItem(PPE_ISSUE_WORKFLOW_STORAGE_KEY) ?? "null");
+    return isPpeIssueWorkflowCache(value) ? value : null;
   } catch {
     return null;
   }
+}
+
+function isPpeIssueWorkflowCache(value: unknown): value is PpeIssueWorkflowCache {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<PpeIssueWorkflowCache>;
+  const issueTypes = ["primary", "planned", "replacement", "additional"];
+  const sources = ["active_norms", "previous_card", "empty"];
+  if (
+    typeof candidate.employeeId !== "string" ||
+    typeof candidate.issueDate !== "string" ||
+    typeof candidate.basis !== "string" ||
+    typeof candidate.responsibleName !== "string" ||
+    (candidate.draftId !== undefined && typeof candidate.draftId !== "string") ||
+    !issueTypes.includes(candidate.issueType ?? "") ||
+    !sources.includes(candidate.source ?? "") ||
+    !Number.isInteger(candidate.step) || candidate.step! < 1 || candidate.step! > 4 ||
+    !Array.isArray(candidate.issueLines)
+  ) return false;
+
+  return candidate.issueLines.every((line) => {
+    if (!line || typeof line !== "object") return false;
+    const draftLine = line as Partial<PpeIssueDraftLine>;
+    return (
+      typeof draftLine.brandModelArticle === "string" &&
+      typeof draftLine.cardNormRowId === "string" &&
+      typeof draftLine.itemId === "string" &&
+      typeof draftLine.issuedAt === "string" &&
+      (draftLine.issueMethod === "personal" || draftLine.issueMethod === "dispenser") &&
+      typeof draftLine.quantity === "number" && Number.isFinite(draftLine.quantity) && draftLine.quantity > 0 &&
+      (draftLine.unitPriceMinor === null || (typeof draftLine.unitPriceMinor === "number" && Number.isFinite(draftLine.unitPriceMinor)))
+    );
+  });
 }
 
 export function writePpeIssueWorkflowCache(value: PpeIssueWorkflowCache) {

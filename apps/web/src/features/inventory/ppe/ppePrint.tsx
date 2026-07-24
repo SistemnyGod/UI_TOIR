@@ -1,9 +1,9 @@
-import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
-import { Printer, X } from "lucide-react";
+import { Printer } from "lucide-react";
 import { escapeHtml, formatDate, formatQuantity, isConsumableLine, isPpeSignatureLineStatus, sortPpeSignatureLines } from "./ppeCommon";
 import { PPE_STATUS } from "./ppeStatusCatalog";
 import type { PrintData, PrintLine, PrintMode } from "./ppeTypes";
+import { PpeButton, PpeModalShell } from "./PpeUi";
 
 export const PPE_NORM_TEXT =
   "Выдача предусмотрена Приказом Минтруда России от 27.12.2017 N 882н \"Об утверждении Типовых норм бесплатной выдачи специальной одежды, специальной обуви и других средств индивидуальной защиты работникам промышленности строительных материалов, стекольной и фарфоро-фаянсовой промышленности, занятым на работах с вредными и (или) опасными условиями труда, а также на работах, выполняемых в особых температурных условиях или связанных с загрязнением\" (Зарегистрировано в Минюсте России 01.03.2018 N 50193); Межотраслевыми правилами обеспечения работников специальной одеждой, специальной обувью и другими средствами индивидуальной защиты (утв. Приказом Минздравсоцразвития России от 01.06.2009 N 290н).";
@@ -34,40 +34,33 @@ export function PrintPreviewModal({
     }));
   }
 
-  return createPortal(
-    <div className="inventory-ppe-picker-backdrop" onMouseDown={onClose} role="presentation">
-      <section
-        className="inventory-ppe-picker inventory-ppe-print-modal"
-        onMouseDown={(event) => event.stopPropagation()}
-        aria-label="Предпросмотр печати"
-      >
-        <header className="inventory-ppe-picker-head inventory-ppe-print-head">
-          <div>
-            <p>Печатные формы СИЗ</p>
-            <h2>Предпросмотр документа</h2>
-            <span>Проверьте сотрудника, строки выдачи и подписи перед печатью.</span>
-          </div>
-          <button className="inventory-ppe-icon-button" onClick={onClose} type="button" aria-label="Закрыть">
-            <X size={20} />
-          </button>
-        </header>
-        <div className="inventory-ppe-preview-tabs">
-          <button className={mode === "card" ? "is-active" : ""} onClick={() => onModeChange("card")} type="button">
-            Личная карточка
-          </button>
-          <button className={mode === "sheet" ? "is-active" : ""} onClick={() => onModeChange("sheet")} type="button">
-            Лист подписи
-          </button>
-          <button className="button primary" onClick={() => onPrint(draftData, mode)} type="button">
-            <Printer size={16} /> Печать
-          </button>
-        </div>
-        <div className="inventory-ppe-print-scroll">
-          <PrintPaper data={draftData} mode={mode} onPatchLine={patchLine} />
-        </div>
-      </section>
-    </div>,
-    document.body,
+  return (
+    <PpeModalShell
+      ariaLabel="Предпросмотр печати"
+      bodyClassName="inventory-ppe-print-modal-body"
+      className="inventory-ppe-picker inventory-ppe-print-modal"
+      description="Проверьте сотрудника, строки выдачи и подписи перед печатью."
+      eyebrow="Печатные формы СИЗ"
+      footer={
+        <PpeButton icon={<Printer size={16} />} onClick={() => onPrint(draftData, mode)} variant="primary">
+          Печать
+        </PpeButton>
+      }
+      onClose={onClose}
+      title="Предпросмотр документа"
+    >
+      <div className="inventory-ppe-preview-tabs">
+        <button className={mode === "card" ? "is-active" : ""} onClick={() => onModeChange("card")} type="button">
+          Личная карточка
+        </button>
+        <button className={mode === "sheet" ? "is-active" : ""} onClick={() => onModeChange("sheet")} type="button">
+          Лист подписи
+        </button>
+      </div>
+      <div className="inventory-ppe-print-scroll">
+        <PrintPaper data={draftData} mode={mode} onPatchLine={patchLine} />
+      </div>
+    </PpeModalShell>
   );
 }
 

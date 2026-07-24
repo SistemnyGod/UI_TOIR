@@ -66,12 +66,16 @@ export function useMobileAccountsWorkspace({
   const [mobileAccountSecurityStatus, setMobileAccountSecurityStatus] = useState<DataSourceStatus>("idle");
   const [mobileAccountSecurityErrorMessage, setMobileAccountSecurityErrorMessage] = useState<string | undefined>();
   const mutationLocksRef = useRef(new Set<string>());
+  const accountListRequestIdRef = useRef(0);
   const securityRequestIdRef = useRef(0);
 
   const visibleAccounts = dataSourceMode === "api" ? apiAccounts : accounts;
 
   const refreshMobileAccounts = useCallback(
     async ({ signal }: { signal?: AbortSignal } = {}) => {
+      const requestId = accountListRequestIdRef.current + 1;
+      accountListRequestIdRef.current = requestId;
+
       if (dataSourceMode !== "api") {
         setAccountListStatus("idle");
         setAccountListErrorMessage(undefined);
@@ -83,6 +87,8 @@ export function useMobileAccountsWorkspace({
 
       try {
         const nextAccounts = await apiMobileAccounts.getAccounts({ signal });
+        if (signal?.aborted || requestId !== accountListRequestIdRef.current) return;
+
         setApiAccounts(nextAccounts);
         setSelectedAccountId((currentId) => {
           if (nextAccounts.some((account) => account.id === currentId)) return currentId;
@@ -90,7 +96,7 @@ export function useMobileAccountsWorkspace({
         });
         setAccountListStatus("ready");
       } catch (error) {
-        if (signal?.aborted) return;
+        if (signal?.aborted || requestId !== accountListRequestIdRef.current) return;
 
         const message = error instanceof Error ? error.message : "Не удалось загрузить мобильные аккаунты API";
         setAccountListStatus("error");
