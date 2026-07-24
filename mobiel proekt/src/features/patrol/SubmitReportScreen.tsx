@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
@@ -9,6 +9,8 @@ import { completeAssignmentLocally, getReportReadiness, ReportReadiness } from "
 import { getReportDeliveryPresentation } from "@/features/patrol/reportDeliveryPresentation";
 import { groupReportProblems, ReportProblemGroup } from "@/features/patrol/reportReadinessPresentation";
 import { useAppTheme } from "@/features/settings/themePreference";
+import { logMobileError } from "@/services/mobileErrorReporter";
+import { shouldReloadAssignmentAfterSync, subscribeToSyncEvents } from "@/sync/syncEvents";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -24,22 +26,41 @@ export function SubmitReportScreen() {
   const [readiness, setReadiness] = useState<ReportReadiness | null>(null);
   const [delivery, setDelivery] = useState<DeliveryState>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadRevision, setReloadRevision] = useState(0);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
+
+  useEffect(
+    () => subscribeToSyncEvents((event) => {
+      if (shouldReloadAssignmentAfterSync(event, assignmentId)) {
+        setReloadRevision((value) => value + 1);
+      }
+    }),
+    [assignmentId]
+  );
 
   const load = useCallback(() => {
     let isMounted = true;
 
-    void Promise.all([getReportReadiness(assignmentId), loadDelivery(assignmentId)]).then(([loadedReadiness, loadedDelivery]) => {
-      if (isMounted) {
-        setReadiness(loadedReadiness);
-        setDelivery(loadedDelivery);
-      }
-    });
+    setLoadError(null);
+    void Promise.all([getReportReadiness(assignmentId), loadDelivery(assignmentId)])
+      .then(([loadedReadiness, loadedDelivery]) => {
+        if (isMounted) {
+          setReadiness(loadedReadiness);
+          setDelivery(loadedDelivery);
+        }
+      })
+      .catch((error) => {
+        void logMobileError("report.screen.load.failed", error);
+        if (isMounted) {
+          setLoadError(error instanceof Error ? error.message : "Не удалось прочитать локальный отчёт.");
+        }
+      });
 
     return () => {
       isMounted = false;
     };
-  }, [assignmentId]);
+  }, [assignmentId, reloadRevision]);
 
   useFocusEffect(load);
 
@@ -131,7 +152,17 @@ export function SubmitReportScreen() {
   if (!readiness) {
     return (
       <Screen title="Отправка отчета" subtitle="Проверяем точки и локально сохраненные данные.">
-        <ActivityIndicator />
+        {loadError ? (
+          <Card>
+            <Text style={styles.loadError}>{loadError}</Text>
+            <PrimaryButton
+              icon="refresh-outline"
+              label="Повторить проверку"
+              onPress={() => setReloadRevision((value) => value + 1)}
+              variant="secondary"
+            />
+          </Card>
+        ) : <ActivityIndicator />}
       </Screen>
     );
   }
@@ -180,6 +211,7 @@ export function SubmitReportScreen() {
       ) : null}
 
       {syncNotice ? <Text accessibilityLiveRegion="polite" style={styles.notice}>{syncNotice}</Text> : null}
+      {loadError ? <Text accessibilityLiveRegion="polite" style={styles.loadError}>{loadError}</Text> : null}
 
       <View style={styles.primaryAction}>
         <PrimaryButton
@@ -351,6 +383,11 @@ const styles = StyleSheet.create({
   deliveryTitle: {
     fontSize: 17,
     fontWeight: "900"
+  },
+  loadError: {
+    color: "#b91c1c",
+    fontSize: 14,
+    lineHeight: 20
   },
   notice: {
     backgroundColor: "#f8fafc",

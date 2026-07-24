@@ -65,6 +65,7 @@ import type {
   UpsertInventoryPositionNormDto,
 } from "../api/contracts";
 import type { ApiFileResponse } from "../api/client";
+import { createClientUuid } from "../shared/clientUuid";
 import type { InventoryListParams, InventoryRepository } from "./inventoryRepository";
 
 const STORAGE_KEY = "patrol360.inventory.mock.v1";
@@ -2177,10 +2178,7 @@ function operationLabel(type: string) {
 }
 
 function id(prefix: string) {
-  const random = typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : Math.random().toString(16).slice(2);
-  return `${prefix}-${random}`;
+  return `${prefix}-${createClientUuid()}`;
 }
 
 function clone<T>(value: T): T {

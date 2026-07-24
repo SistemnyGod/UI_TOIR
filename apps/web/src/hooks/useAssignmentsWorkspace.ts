@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError } from "../api/client";
 import { buildOperationalPatrolDateRange } from "../domain/patrolQueryWindow";
+import { createClientUuid } from "../shared/clientUuid";
 import type { AssignmentSettingsDto, UpdateAssignmentSettingsDto } from "../api/contracts";
 import {
   assignableEmployeesFallback,
@@ -354,7 +355,7 @@ function createLocalAssignment(payload: CreateAssignmentPayload): ActivePatrol {
   const plannedAt = payload.plannedAt ? new Date(payload.plannedAt) : new Date();
 
   return {
-    id: `local-assignment-${crypto.randomUUID()}`,
+    id: `local-assignment-${createClientUuid()}`,
     patrolRequestId: payload.patrolRequestId,
     employee: payload.employeeName || payload.employeeId || "Сотрудник",
     employeeId: payload.employeeId || "",

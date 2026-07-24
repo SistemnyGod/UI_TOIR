@@ -250,7 +250,7 @@ internal sealed partial class EfInventoryWorkflowService
         else if (IsPpeSignatureLineStatus(oldStatus) && nextStatus == PpeIssueStatusCatalog.Returned)
         {
             moveType = "ppe_return";
-            quantityDelta = line.Quantity;
+            quantityDelta = line.ReturnedQuantity ?? line.Quantity;
         }
         else if (IsPpeSignatureLineStatus(oldStatus) && nextStatus == PpeIssueStatusCatalog.WrittenOff)
         {

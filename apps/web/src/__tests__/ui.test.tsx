@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+﻿import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -411,10 +411,12 @@ describe("shared UI primitives", () => {
     const repository = createMockInventoryRepository();
     const getPpeWorkspace = vi.spyOn(repository, "getPpeWorkspace");
     const printPpeCard = vi.spyOn(repository, "printPpeCard");
+    const onNavigate = vi.fn();
 
     render(
       <InventoryRepositoryProvider value={repository}>
         <InventoryPpeScreen
+          onNavigate={onNavigate}
           onNotify={vi.fn()}
         />
       </InventoryRepositoryProvider>,
@@ -424,9 +426,11 @@ describe("shared UI primitives", () => {
     expect(screen.getByRole("navigation", { name: "Разделы СИЗ" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Карточки СИЗ" })).toBeInTheDocument();
     expect(screen.getAllByText("Каска защитная").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: /Нормы/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Выдано/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Печать" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /^Нормы/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /^Фактическая выдача/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /^Печать/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Оформить выдачу" }));
+    expect(onNavigate).toHaveBeenCalledWith("inventory-ppe-create");
 
     await user.click(screen.getByRole("button", { name: "Каска защитная" }));
     expect(await screen.findByRole("dialog", { name: "Сопоставить норму с номенклатурой" })).toBeInTheDocument();
@@ -440,16 +444,35 @@ describe("shared UI primitives", () => {
     expect(screen.getByText("Комментарий")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Закрыть" }));
-    await user.click(screen.getByRole("button", { name: /Выдано/ }));
+    await user.click(screen.getByRole("tab", { name: /^Фактическая выдача/ }));
     expect(screen.getByText("Модель / артикул")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Печать" }));
+    await user.click(screen.getByRole("tab", { name: /^Печать/ }));
     expect(screen.getByText("Личная карточка СИЗ")).toBeInTheDocument();
-    expect(screen.getByText("Лист подписи")).toBeInTheDocument();
+    expect(screen.getByText("Лист выдачи")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "PDF" })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: "DOCX" })).toHaveLength(2);
 
     await user.click(screen.getAllByRole("button", { name: "PDF" })[0]);
     await waitFor(() => expect(printPpeCard).toHaveBeenCalledWith(expect.any(String), "card", "pdf"));
+  });
+
+  it("retries loading the PPE card after a request error", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("patrol360.inventory.ppe.employee", "emp-1");
+    const repository = createMockInventoryRepository();
+    const loadWorkspace = repository.getPpeWorkspace.bind(repository);
+    const getPpeWorkspace = vi.spyOn(repository, "getPpeWorkspace");
+    getPpeWorkspace.mockRejectedValueOnce(new Error("Сервер временно недоступен")).mockImplementation((employeeId) => loadWorkspace(employeeId));
+
+    render(
+      <InventoryRepositoryProvider value={repository}>
+        <InventoryPpeScreen onNavigate={vi.fn()} onNotify={vi.fn()} />
+      </InventoryRepositoryProvider>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Повторить" }));
+    await waitFor(() => expect(getPpeWorkspace).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("heading", { name: "Карточки СИЗ" })).toBeInTheDocument();
   });
 
   it("shows a clear request fallback instead of an empty view modal", () => {
@@ -1771,4 +1794,3 @@ describe("shared UI primitives", () => {
     expect(screen.getByText("mobile_02")).toBeInTheDocument();
   });
 });
-

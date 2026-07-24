@@ -39,7 +39,8 @@ async function refreshMobileDataInternal() {
   emitSyncEvent({
     acceptedOperationIds: [],
     completedAssignmentIds: [],
-    cancelledAssignmentIds: bootstrap.cancelledAssignmentIds ?? []
+    cancelledAssignmentIds: bootstrap.cancelledAssignmentIds ?? [],
+    snapshotRefreshed: true
   });
   await Promise.all([
     syncMobileNotifications().catch(() => []),

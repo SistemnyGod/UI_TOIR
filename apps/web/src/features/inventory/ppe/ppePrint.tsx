@@ -14,19 +14,36 @@ export function PrintPreviewModal({
   onClose,
   onModeChange,
   onPrint,
+  printing = false,
 }: {
   data: PrintData;
   mode: PrintMode;
   onClose: () => void;
   onModeChange: (mode: PrintMode) => void;
   onPrint: (data: PrintData, mode: PrintMode) => void;
+  printing?: boolean;
 }) {
   const [draftData, setDraftData] = useState(data);
+  const [localPrinting, setLocalPrinting] = useState(false);
+  const printBusy = printing || localPrinting;
 
   useEffect(() => {
     setDraftData(data);
   }, [data]);
 
+  function closeModal() {
+    if (!printBusy) onClose();
+  }
+
+  function handlePrint() {
+    if (printBusy) return;
+    setLocalPrinting(true);
+    try {
+      onPrint(draftData, mode);
+    } finally {
+      window.setTimeout(() => setLocalPrinting(false), 1200);
+    }
+  }
   function patchLine(index: number, patch: Partial<PrintLine>) {
     setDraftData((current) => ({
       ...current,
@@ -39,21 +56,25 @@ export function PrintPreviewModal({
       ariaLabel="Предпросмотр печати"
       bodyClassName="inventory-ppe-print-modal-body"
       className="inventory-ppe-picker inventory-ppe-print-modal"
+      closeDisabled={printBusy}
       description="Проверьте сотрудника, строки выдачи и подписи перед печатью."
       eyebrow="Печатные формы СИЗ"
       footer={
-        <PpeButton icon={<Printer size={16} />} onClick={() => onPrint(draftData, mode)} variant="primary">
-          Печать
-        </PpeButton>
+        <>
+          <PpeButton disabled={printBusy} onClick={closeModal} variant="ghost">Закрыть</PpeButton>
+          <PpeButton disabled={printBusy} icon={<Printer size={16} />} loading={printBusy} onClick={handlePrint} variant="primary">
+            Печать
+          </PpeButton>
+        </>
       }
-      onClose={onClose}
+      onClose={closeModal}
       title="Предпросмотр документа"
     >
       <div className="inventory-ppe-preview-tabs">
-        <button className={mode === "card" ? "is-active" : ""} onClick={() => onModeChange("card")} type="button">
+        <button className={mode === "card" ? "is-active" : ""} disabled={printBusy} onClick={() => onModeChange("card")} type="button">
           Личная карточка
         </button>
-        <button className={mode === "sheet" ? "is-active" : ""} onClick={() => onModeChange("sheet")} type="button">
+        <button className={mode === "sheet" ? "is-active" : ""} disabled={printBusy} onClick={() => onModeChange("sheet")} type="button">
           Лист подписи
         </button>
       </div>

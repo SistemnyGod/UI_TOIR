@@ -1,11 +1,13 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ListRenderItem, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
 import { getActiveAssignment, getAssignmentById, listAssignmentPoints, PointListItem } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
+import { logMobileError } from "@/services/mobileErrorReporter";
+import { shouldReloadAssignmentAfterSync, subscribeToSyncEvents } from "@/sync/syncEvents";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { ScreenList } from "@/ui/Screen";
@@ -21,6 +23,15 @@ export function AllPointsScreen() {
   const [assignmentStatus, setAssignmentStatus] = useState<string | null>(null);
   const [points, setPoints] = useState<PointListItem[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadRevision, setReloadRevision] = useState(0);
+  const [syncRevision, setSyncRevision] = useState(0);
+
+  useEffect(() => subscribeToSyncEvents((event) => {
+    if (assignmentId && shouldReloadAssignmentAfterSync(event, assignmentId)) {
+      setSyncRevision((value) => value + 1);
+    }
+  }), [assignmentId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -36,22 +47,29 @@ export function AllPointsScreen() {
         const rows = targetAssignmentId && ownerUserId ? await listAssignmentPoints(targetAssignmentId, ownerUserId, currentContourId) : [];
 
         if (isMounted) {
+          setLoadError(null);
           setAssignmentId(targetAssignmentId);
           setAssignmentStatus(targetAssignment?.status ?? null);
           setPoints(rows);
         }
       }
 
-      void load();
+      void load().catch((error) => {
+        void logMobileError("patrol.points.load.failed", error);
+        if (isMounted) {
+          setLoadError(error instanceof Error ? error.message : "Не удалось прочитать список меток.");
+        }
+      });
 
       return () => {
         isMounted = false;
       };
-    }, [routeAssignmentId])
+    }, [reloadRevision, routeAssignmentId, syncRevision])
   );
 
   const summary = useMemo(() => buildSummary(points), [points]);
   const percent = progressPercent(summary);
+  const isReadyForReport = assignmentStatus === "inProgress" && summary.total > 0 && summary.completed >= summary.total;
 
   const visiblePoints = useMemo(() => {
     if (filter === "all") {
@@ -89,8 +107,20 @@ export function AllPointsScreen() {
       title="Метки"
       subtitle="Обзор точек активного маршрута."
       headerContent={
-        assignmentId ? (
-          <>
+        <>
+          {loadError ? (
+            <Card>
+              <Text style={[styles.text, { color: "#b91c1c" }]}>{loadError}</Text>
+              <PrimaryButton
+                icon="refresh-outline"
+                label="Повторить загрузку"
+                onPress={() => setReloadRevision((value) => value + 1)}
+                variant="secondary"
+              />
+            </Card>
+          ) : null}
+          {assignmentId ? (
+            <>
             <Card>
               <View style={styles.progressHeader}>
                 <Text style={[styles.title, { color: colors.text }]}>Прогресс маршрута</Text>
@@ -106,9 +136,11 @@ export function AllPointsScreen() {
 
             {assignmentStatus === "inProgress" ? (
               <PrimaryButton
-                icon="scan-outline"
-                label="Сканировать NFC"
-                onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-nfc`)}
+                icon={isReadyForReport ? "document-text-outline" : "scan-outline"}
+                label={isReadyForReport ? "Проверить и отправить отчёт" : "Сканировать NFC"}
+                onPress={() => router.push(isReadyForReport
+                  ? `/patrol/assignment/${assignmentId}/submit`
+                  : `/patrol/assignment/${assignmentId}/scan-nfc`)}
               />
             ) : (
               <Card>
@@ -123,8 +155,9 @@ export function AllPointsScreen() {
               <FilterChip count={summary.skipped} label="Метка недоступна" selected={filter === "skipped"} onPress={() => setFilter("skipped")} />
               <FilterChip count={summary.deferred} label="Отложено" selected={filter === "deferred"} onPress={() => setFilter("deferred")} />
             </View>
-          </>
-        ) : null
+            </>
+          ) : null}
+        </>
       }
     />
   );

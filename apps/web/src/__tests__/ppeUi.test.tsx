@@ -4,7 +4,7 @@ import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { PpeButton, PpeModalShell } from "../features/inventory/ppe/PpeUi";
 
-function ModalHarness() {
+function ModalHarness({ closeDisabled = false }: { closeDisabled?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -12,6 +12,7 @@ function ModalHarness() {
       {open ? (
         <PpeModalShell
           ariaLabel="Каталог СИЗ"
+          closeDisabled={closeDisabled}
           footer={<PpeButton onClick={() => setOpen(false)}>Готово</PpeButton>}
           initialFocusSelector="[data-autofocus]"
           onClose={() => setOpen(false)}
@@ -42,6 +43,19 @@ describe("PPE UI primitives", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     await waitFor(() => expect(opener).toHaveFocus());
     expect(document.body.style.overflow).toBe("");
+  });
+
+  it("keeps a busy modal open and disables its close action", async () => {
+    const user = userEvent.setup();
+    render(<ModalHarness closeDisabled />);
+    await user.click(screen.getByRole("button", { name: "Открыть каталог" }));
+    const dialog = await screen.findByRole("dialog", { name: "Каталог СИЗ" });
+    const closeButton = dialog.querySelector<HTMLButtonElement>("header button");
+    expect(closeButton).toBeDisabled();
+    expect(dialog).toHaveAttribute("aria-busy", "true");
+
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog", { name: "Каталог СИЗ" })).toBeInTheDocument();
   });
 
   it("disables a loading action and exposes busy state", () => {

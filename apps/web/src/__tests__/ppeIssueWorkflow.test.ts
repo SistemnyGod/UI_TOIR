@@ -7,6 +7,7 @@ import type {
 import {
   applyItemSetToDraft,
   createIssueDraftLine,
+  mergeIssueDraftLine,
   readPpeIssueWorkflowCache,
   PPE_ISSUE_WORKFLOW_STORAGE_KEY,
   validateIssueDraftLine,
@@ -89,6 +90,21 @@ describe("PPE issue workflow draft", () => {
     }));
 
     expect(readPpeIssueWorkflowCache()).toBeNull();
+  });
+
+  it("preserves actual quantity and method when replacing a mapped item", () => {
+    const currentRow = normRow("norm-current", "item-current", 2);
+    const replacementRow = normRow("norm-current", "item-replacement", 2);
+    const existing = createIssueDraftLine(currentRow, "2026-07-23", 1)!;
+    existing.issueMethod = "dispenser";
+    existing.issuedAt = "2026-07-24";
+    const created = createIssueDraftLine(replacementRow, "2026-07-23", 2)!;
+    const merged = mergeIssueDraftLine(created, existing);
+
+    expect(merged.itemId).toBe("item-replacement");
+    expect(merged.quantity).toBe(1);
+    expect(merged.issueMethod).toBe("dispenser");
+    expect(merged.issuedAt).toBe("2026-07-24");
   });
 
   it("applies a set without duplicate products and separates matched and additional rows", () => {

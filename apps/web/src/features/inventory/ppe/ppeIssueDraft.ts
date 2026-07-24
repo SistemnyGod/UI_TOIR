@@ -2,6 +2,7 @@ import type {
   InventoryItemSetDetailDto,
   InventoryPpeCardNormRowDto,
 } from "../../../api/contracts";
+import { createClientUuid } from "../../../shared/clientUuid";
 
 export type PpeIssueDraftLine = {
   brandModelArticle: string;
@@ -49,6 +50,16 @@ export function createIssueDraftLine(
   };
 }
 
+export function mergeIssueDraftLine(created: PpeIssueDraftLine, existing?: PpeIssueDraftLine): PpeIssueDraftLine {
+  if (!existing) return created;
+  return {
+    ...created,
+    issuedAt: existing.issuedAt,
+    issueMethod: existing.issueMethod,
+    quantity: existing.quantity,
+  };
+}
+
 export function validateIssueDraftLine(
   line: PpeIssueDraftLine,
   row?: InventoryPpeCardNormRowDto,
@@ -67,7 +78,7 @@ export function applyItemSetToDraft(
   sourceLines: PpeIssueDraftLine[],
   set: InventoryItemSetDetailDto,
   issuedAt: string,
-  idFactory: () => string = () => crypto.randomUUID(),
+  idFactory: () => string = createClientUuid,
 ) {
   const rows = sourceRows.map((row) => ({ ...row }));
   const lines = sourceLines.map((line) => ({ ...line }));

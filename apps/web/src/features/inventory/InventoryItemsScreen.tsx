@@ -17,7 +17,6 @@ import {
   Send,
   SlidersHorizontal,
   Wrench,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import type {
@@ -31,6 +30,7 @@ import type {
 import { useInventoryRepository } from "../../repositories/inventoryRepositoryContext";
 import type { ScreenId } from "../../types";
 import { PpeMovementHistoryPanel } from "./PpeMovementHistoryPanel";
+import { PpeButton, PpeModalShell } from "./ppe/PpeUi";
 
 const emptyFacets: InventoryItemFacetsDto = {
   total: 0,
@@ -88,6 +88,8 @@ type ItemFormState = {
   trackLife: boolean;
   unitId: string;
 };
+
+type ItemFormErrors = Partial<Record<"name" | "defaultLifeMonths" | "defaultUnitPrice" | "minStockQty", string>>;
 
 type FormMode = "create" | "edit";
 
@@ -468,7 +470,7 @@ export function InventoryItemsScreen({
                         className={item.id === selectedItem?.id ? "is-selected" : undefined}
                         onClick={() => setSelectedItemId(item.id)}
                       >
-                        <td className="inventory-table-main-cell">
+                        <td className="inventory-table-main-cell" data-label="Предмет">
                           <span className={`inventory-item-thumb ${getItemTone(item)}`}>
                             {renderItemIcon(item)}
                           </span>
@@ -477,20 +479,20 @@ export function InventoryItemsScreen({
                             <small>{item.comment || item.normItemName || "Карточка номенклатуры"}</small>
                           </span>
                         </td>
-                        <td>{item.article || item.sku || "-"}</td>
-                        <td>{item.category || "-"}</td>
-                        <td>{item.unit || "-"}</td>
-                        <td>{item.defaultLifeMonths ? `${item.defaultLifeMonths} мес.` : "-"}</td>
-                        <td>{formatMoney(item.defaultUnitPriceMinor)}</td>
-                        <td>
+                        <td data-label="Артикул">{item.article || item.sku || "-"}</td>
+                        <td data-label="Категория">{item.category || "-"}</td>
+                        <td data-label="Единица">{item.unit || "-"}</td>
+                        <td data-label="Срок">{item.defaultLifeMonths ? `${item.defaultLifeMonths} мес.` : "-"}</td>
+                        <td data-label="Цена">{formatMoney(item.defaultUnitPriceMinor)}</td>
+                        <td data-label="Тип учета">
                           <span className="inventory-chip inventory-chip-blue">{getTrackingLabel(item.trackingType)}</span>
                         </td>
-                        <td>
+                        <td data-label="Статус">
                           <span className={item.isActive ? "inventory-status active" : "inventory-status inactive"}>
                             {item.isActive ? "Активная" : "Скрыта"}
                           </span>
                         </td>
-                        <td>
+                        <td data-label="Действия">
                           <div className="inventory-row-actions">
                             <IconButton label="Открыть карточку" onClick={() => setDetailItem(item)}>
                               <Eye size={16} aria-hidden="true" />
@@ -720,28 +722,58 @@ function ItemFormDialog({
   settings?: InventorySettingsDto;
 }) {
   const [form, setForm] = useState<ItemFormState>(() => (item ? itemToForm(item) : createEmptyForm(settings)));
+  const [errors, setErrors] = useState<ItemFormErrors>({});
 
   function patchForm(patch: Partial<ItemFormState>) {
     setForm((value) => ({ ...value, ...patch }));
+    setErrors({});
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    const nextErrors = validateItemForm(form);
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      return;
+    }
     await onSubmit(form);
   }
 
+  const closeSafely = () => {
+    if (!saving) onClose();
+  };
+
   return (
-    <div className="inventory-dialog-backdrop" onMouseDown={onClose} role="presentation">
-      <form className="inventory-dialog inventory-item-form-dialog" onMouseDown={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
-        <DialogHead
-          subtitle="Данные сохраняются через текущий Inventory API."
-          title={mode === "edit" ? "Редактировать позицию" : "Создать позицию"}
-          onClose={onClose}
-        />
+    <PpeModalShell
+      ariaLabel={mode === "edit" ? "Редактировать позицию номенклатуры" : "Создать позицию номенклатуры"}
+      bodyClassName="inventory-item-dialog-body"
+      className="inventory-item-form-dialog ppe-inventory-item-modal"
+      closeDisabled={saving}
+      description="Нормативное и фактическое наименования хранятся раздельно. Поля со звёздочкой обязательны."
+      eyebrow="Номенклатура СИЗ"
+      footer={(
+        <>
+          <PpeButton disabled={saving} onClick={closeSafely} variant="ghost">Отмена</PpeButton>
+          <PpeButton disabled={saving} form="inventory-item-form" icon={<Save size={16} aria-hidden="true" />} loading={saving} type="submit" variant="primary">
+            Сохранить позицию
+          </PpeButton>
+        </>
+      )}
+      initialFocusSelector="[data-item-initial-focus]"
+      onClose={closeSafely}
+      title={mode === "edit" ? "Редактировать позицию" : "Создать позицию"}
+    >
+      <form className="inventory-item-form" id="inventory-item-form" onSubmit={handleSubmit}>
+        {Object.keys(errors).length > 0 ? (
+          <div className="inventory-item-form-alert" role="alert">
+            Проверьте обязательные и числовые поля перед сохранением.
+          </div>
+        ) : null}
 
         <div className="inventory-form-grid">
-          <Field label="Название" wide>
-            <input value={form.name} onChange={(event) => patchForm({ name: event.target.value })} autoFocus />
+          <div className="inventory-item-form-section wide"><strong>Основные сведения</strong><span>Название, категория и единица используются в каталоге и документах выдачи.</span></div>
+          <Field error={errors.name} label="Название" required wide>
+            <input aria-invalid={Boolean(errors.name)} data-item-initial-focus required value={form.name} onChange={(event) => patchForm({ name: event.target.value })} />
           </Field>
           <Field label="Артикул / SKU">
             <input value={form.article} onChange={(event) => patchForm({ article: event.target.value, sku: event.target.value })} />
@@ -749,21 +781,13 @@ function ItemFormDialog({
           <Field label="Категория">
             <select value={form.categoryId} onChange={(event) => patchForm({ categoryId: event.target.value })}>
               <option value="">Без категории</option>
-              {(settings?.categories ?? []).map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
+              {(settings?.categories ?? []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
             </select>
           </Field>
           <Field label="Единица">
             <select value={form.unitId} onChange={(event) => patchForm({ unitId: event.target.value })}>
               <option value="">Не выбрана</option>
-              {(settings?.units ?? []).map((unit) => (
-                <option key={unit.id} value={unit.id}>
-                  {unit.name}
-                </option>
-              ))}
+              {(settings?.units ?? []).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
             </select>
           </Field>
           <Field label="Тип учета">
@@ -776,10 +800,12 @@ function ItemFormDialog({
           <Field label="Вид позиции">
             <input value={form.itemKind} onChange={(event) => patchForm({ itemKind: event.target.value })} placeholder="Например: СИЗОД" />
           </Field>
-          <Field label="Нормативное название">
+
+          <div className="inventory-item-form-section wide"><strong>Норма и конкретное изделие</strong><span>Нормативное название отвечает на вопрос «что положено», фактическое — «что выдаём».</span></div>
+          <Field label="Нормативное название" wide>
             <input value={form.normItemName} onChange={(event) => patchForm({ normItemName: event.target.value })} />
           </Field>
-          <Field label="Фактическое название">
+          <Field label="Фактическое название" wide>
             <input value={form.actualItemName} onChange={(event) => patchForm({ actualItemName: event.target.value })} />
           </Field>
           <Field label="Марка">
@@ -788,56 +814,39 @@ function ItemFormDialog({
           <Field label="Модель">
             <input value={form.modelName} onChange={(event) => patchForm({ modelName: event.target.value })} />
           </Field>
-          <Field label="Срок, мес.">
-            <input inputMode="numeric" value={form.defaultLifeMonths} onChange={(event) => patchForm({ defaultLifeMonths: event.target.value })} />
-          </Field>
-          <Field label="Цена">
-            <input inputMode="decimal" value={form.defaultUnitPrice} onChange={(event) => patchForm({ defaultUnitPrice: event.target.value })} />
-          </Field>
-          <Field label="Минимальное количество">
-            <input inputMode="decimal" value={form.minStockQty} onChange={(event) => patchForm({ minStockQty: event.target.value })} />
-          </Field>
           <Field label="Класс защиты">
             <input value={form.protectionClass} onChange={(event) => patchForm({ protectionClass: event.target.value })} />
           </Field>
-          <Field label="Размеры" wide>
+
+          <div className="inventory-item-form-section wide"><strong>Учёт и параметры выдачи</strong><span>Числовые значения должны быть неотрицательными.</span></div>
+          <Field error={errors.defaultLifeMonths} label="Срок, мес.">
+            <input aria-invalid={Boolean(errors.defaultLifeMonths)} inputMode="numeric" value={form.defaultLifeMonths} onChange={(event) => patchForm({ defaultLifeMonths: event.target.value })} />
+          </Field>
+          <Field error={errors.defaultUnitPrice} label="Цена, ₽">
+            <input aria-invalid={Boolean(errors.defaultUnitPrice)} inputMode="decimal" value={form.defaultUnitPrice} onChange={(event) => patchForm({ defaultUnitPrice: event.target.value })} />
+          </Field>
+          <Field error={errors.minStockQty} label="Минимальное количество">
+            <input aria-invalid={Boolean(errors.minStockQty)} inputMode="decimal" value={form.minStockQty} onChange={(event) => patchForm({ minStockQty: event.target.value })} />
+          </Field>
+          <Field label="Размерные параметры" wide>
             <div className="inventory-size-grid">
-              <input value={form.clothingSize} onChange={(event) => patchForm({ clothingSize: event.target.value })} placeholder="Одежда" />
-              <input value={form.shoeSize} onChange={(event) => patchForm({ shoeSize: event.target.value })} placeholder="Обувь" />
-              <input value={form.gloveSize} onChange={(event) => patchForm({ gloveSize: event.target.value })} placeholder="Перчатки" />
-              <input value={form.respiratorSize} onChange={(event) => patchForm({ respiratorSize: event.target.value })} placeholder="Респиратор" />
+              <input aria-label="Размер одежды" value={form.clothingSize} onChange={(event) => patchForm({ clothingSize: event.target.value })} placeholder="Одежда" />
+              <input aria-label="Размер обуви" value={form.shoeSize} onChange={(event) => patchForm({ shoeSize: event.target.value })} placeholder="Обувь" />
+              <input aria-label="Размер перчаток" value={form.gloveSize} onChange={(event) => patchForm({ gloveSize: event.target.value })} placeholder="Перчатки" />
+              <input aria-label="Размер респиратора" value={form.respiratorSize} onChange={(event) => patchForm({ respiratorSize: event.target.value })} placeholder="Респиратор" />
             </div>
           </Field>
           <Field label="Комментарий" wide>
             <textarea value={form.comment} onChange={(event) => patchForm({ comment: event.target.value })} rows={4} />
           </Field>
-          <div className="inventory-toggle-row">
-            <label>
-              <input type="checkbox" checked={form.isConsumable} onChange={(event) => patchForm({ isConsumable: event.target.checked })} />
-              Расходник
-            </label>
-            <label>
-              <input type="checkbox" checked={form.trackLife} onChange={(event) => patchForm({ trackLife: event.target.checked })} />
-              Контролировать срок
-            </label>
-            <label>
-              <input type="checkbox" checked={form.isActive} onChange={(event) => patchForm({ isActive: event.target.checked })} />
-              Активная позиция
-            </label>
+          <div className="inventory-toggle-row wide">
+            <label><input type="checkbox" checked={form.isConsumable} onChange={(event) => patchForm({ isConsumable: event.target.checked })} />Расходник</label>
+            <label><input type="checkbox" checked={form.trackLife} onChange={(event) => patchForm({ trackLife: event.target.checked })} />Контролировать срок</label>
+            <label><input type="checkbox" checked={form.isActive} onChange={(event) => patchForm({ isActive: event.target.checked })} />Активная позиция</label>
           </div>
         </div>
-
-        <footer className="inventory-dialog-actions">
-          <button className="inventory-btn inventory-btn-ghost" type="button" onClick={onClose}>
-            Отмена
-          </button>
-          <button className="inventory-btn inventory-btn-primary" type="submit" disabled={saving || !form.name.trim()}>
-            <Save size={16} aria-hidden="true" />
-            {saving ? "Сохранение..." : "Сохранить"}
-          </button>
-        </footer>
       </form>
-    </div>
+    </PpeModalShell>
   );
 }
 
@@ -851,45 +860,33 @@ function ItemDetailDialog({
   onEdit: (item: InventoryItemDto) => void;
 }) {
   return (
-    <div className="inventory-dialog-backdrop" onMouseDown={onClose} role="presentation">
-      <article className="inventory-dialog inventory-detail-dialog" onMouseDown={(event) => event.stopPropagation()}>
-        <DialogHead subtitle="Полная карточка позиции из Inventory API." title={item.name} onClose={onClose} />
-        <div className="inventory-detail-grid">
-          <DetailStat icon={FileText} label="Артикул" value={item.article || item.sku || "-"} />
-          <DetailStat icon={Package} label="Категория" value={item.category || "-"} />
-          <DetailStat icon={Wrench} label="Тип учета" value={getTrackingLabel(item.trackingType)} />
-          <DetailStat icon={HardHat} label="Срок службы" value={item.defaultLifeMonths ? `${item.defaultLifeMonths} мес.` : "-"} />
-          <DetailStat icon={Package} label="Цена" value={formatMoney(item.defaultUnitPriceMinor)} />
-        </div>
-        <section className="inventory-detail-comment">
-          <h3>Описание</h3>
-          <p>{item.comment || "Описание пока не заполнено."}</p>
-        </section>
-        <PpeMovementHistoryPanel
-          emptyText="По этому предмету пока нет выдач, возвратов или списаний СИЗ."
-          hideItem
-          itemId={item.id}
-          pageSize={8}
-          title="История движения по предмету"
-        />
-        <footer className="inventory-dialog-actions">
-          <button className="inventory-btn inventory-btn-ghost" type="button" onClick={onClose}>
-            Закрыть
-          </button>
-          <button
-            className="inventory-btn inventory-btn-primary"
-            type="button"
-            onClick={() => {
-              onClose();
-              onEdit(item);
-            }}
-          >
-            <Pencil size={16} aria-hidden="true" />
-            Редактировать
-          </button>
-        </footer>
-      </article>
-    </div>
+    <PpeModalShell
+      ariaLabel="Карточка позиции номенклатуры"
+      className="inventory-detail-dialog ppe-inventory-item-modal"
+      description={[item.category, item.article || item.sku].filter(Boolean).join(" · ") || "Карточка позиции"}
+      eyebrow="Номенклатура СИЗ"
+      footer={(
+        <>
+          <PpeButton onClick={onClose} variant="ghost">Закрыть</PpeButton>
+          <PpeButton icon={<Pencil size={16} aria-hidden="true" />} onClick={() => { onClose(); onEdit(item); }} variant="primary">Редактировать</PpeButton>
+        </>
+      )}
+      onClose={onClose}
+      title={item.name}
+    >
+      <div className="inventory-detail-grid">
+        <DetailStat icon={FileText} label="Артикул" value={item.article || item.sku || "-"} />
+        <DetailStat icon={Package} label="Категория" value={item.category || "-"} />
+        <DetailStat icon={Wrench} label="Тип учета" value={getTrackingLabel(item.trackingType)} />
+        <DetailStat icon={HardHat} label="Срок службы" value={item.defaultLifeMonths ? `${item.defaultLifeMonths} мес.` : "-"} />
+        <DetailStat icon={Package} label="Цена" value={formatMoney(item.defaultUnitPriceMinor)} />
+      </div>
+      <section className="inventory-detail-comment">
+        <h3>Описание</h3>
+        <p>{item.comment || "Описание пока не заполнено."}</p>
+      </section>
+      <PpeMovementHistoryPanel emptyText="По этому предмету пока нет выдач, возвратов или списаний СИЗ." hideItem itemId={item.id} pageSize={8} title="История движения по предмету" />
+    </PpeModalShell>
   );
 }
 
@@ -904,54 +901,47 @@ function ConfirmHideDialog({
   onConfirm: () => Promise<void>;
   saving: boolean;
 }) {
+  const closeSafely = () => {
+    if (!saving) onCancel();
+  };
   return (
-    <div className="inventory-dialog-backdrop" onMouseDown={onCancel} role="presentation">
-      <article className="inventory-dialog inventory-confirm-dialog" onMouseDown={(event) => event.stopPropagation()}>
-        <DialogHead subtitle="Позиция останется в базе, но уйдет из активного каталога." title="Скрыть позицию" onClose={onCancel} />
-        <p>
-          Скрыть <strong>{item.name}</strong> из активной номенклатуры?
-        </p>
-        <footer className="inventory-dialog-actions">
-          <button className="inventory-btn inventory-btn-ghost" type="button" onClick={onCancel}>
-            Отмена
-          </button>
-          <button className="inventory-btn inventory-btn-danger" type="button" disabled={saving} onClick={() => void onConfirm()}>
-            <Archive size={16} aria-hidden="true" />
-            {saving ? "Скрываем..." : "Скрыть позицию"}
-          </button>
-        </footer>
-      </article>
-    </div>
+    <PpeModalShell
+      ariaLabel="Скрыть позицию номенклатуры"
+      className="inventory-confirm-dialog ppe-inventory-confirm-modal"
+      closeDisabled={saving}
+      description="Позиция останется в базе и истории, но исчезнет из активного каталога."
+      eyebrow="Опасное действие"
+      footer={(
+        <>
+          <PpeButton disabled={saving} onClick={closeSafely} variant="ghost">Отмена</PpeButton>
+          <PpeButton icon={<Archive size={16} aria-hidden="true" />} loading={saving} onClick={() => void onConfirm()} variant="danger">Скрыть позицию</PpeButton>
+        </>
+      )}
+      onClose={closeSafely}
+      title="Скрыть позицию"
+    >
+      <p className="inventory-confirm-copy">Скрыть <strong>{item.name}</strong> из активной номенклатуры?</p>
+    </PpeModalShell>
   );
 }
-
-function DialogHead({
-  onClose,
-  subtitle,
-  title,
+function Field({
+  children,
+  error,
+  label,
+  required = false,
+  wide = false,
 }: {
-  onClose: () => void;
-  subtitle: string;
-  title: string;
+  children: ReactNode;
+  error?: string;
+  label: string;
+  required?: boolean;
+  wide?: boolean;
 }) {
   return (
-    <header className="inventory-dialog-head">
-      <div>
-        <h2>{title}</h2>
-        <p>{subtitle}</p>
-      </div>
-      <button className="inventory-icon-btn" type="button" onClick={onClose} aria-label="Закрыть">
-        <X size={18} aria-hidden="true" />
-      </button>
-    </header>
-  );
-}
-
-function Field({ children, label, wide = false }: { children: ReactNode; label: string; wide?: boolean }) {
-  return (
-    <label className={`inventory-field ${wide ? "wide" : ""}`}>
-      <span>{label}</span>
+    <label className={`inventory-field ${wide ? "wide" : ""} ${error ? "has-error" : ""}`.trim()}>
+      <span>{label}{required ? <em> *</em> : null}</span>
       {children}
+      {error ? <small role="alert">{error}</small> : null}
     </label>
   );
 }
@@ -1043,6 +1033,23 @@ function itemToForm(item: InventoryItemDto): ItemFormState {
   };
 }
 
+function validateItemForm(form: ItemFormState): ItemFormErrors {
+  const errors: ItemFormErrors = {};
+  if (!form.name.trim()) errors.name = "Укажите название позиции";
+  if (form.defaultLifeMonths.trim()) {
+    const value = Number(form.defaultLifeMonths.replace(",", "."));
+    if (!Number.isInteger(value) || value < 0) errors.defaultLifeMonths = "Укажите целое число месяцев от нуля";
+  }
+  if (form.defaultUnitPrice.trim()) {
+    const value = Number(form.defaultUnitPrice.replace(/\s/g, "").replace(",", "."));
+    if (!Number.isFinite(value) || value < 0) errors.defaultUnitPrice = "Цена должна быть неотрицательным числом";
+  }
+  if (form.minStockQty.trim()) {
+    const value = Number(form.minStockQty.replace(/\s/g, "").replace(",", "."));
+    if (!Number.isFinite(value) || value < 0) errors.minStockQty = "Количество должно быть неотрицательным числом";
+  }
+  return errors;
+}
 function itemFormToPayload(form: ItemFormState): UpsertInventoryItemDto {
   return {
     actualItemName: trimToNull(form.actualItemName),

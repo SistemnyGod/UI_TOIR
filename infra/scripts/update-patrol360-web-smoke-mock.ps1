@@ -9,7 +9,12 @@ $ErrorActionPreference = "Stop"
 function Get-ContainerId {
     param([Parameter(Mandatory = $true)][string]$Name)
 
-    $id = docker inspect --format "{{.Id}}" $Name 2>$null
+    try {
+        $id = docker inspect --format "{{.Id}}" $Name 2>$null
+    }
+    catch {
+        return ""
+    }
     if ($LASTEXITCODE -ne 0) {
         return ""
     }
@@ -54,6 +59,7 @@ $composeArgs = @(
     "-f", "compose.yaml",
     "-f", "infra\docker\compose.web-prebuilt.yaml",
     "-f", "infra\docker\compose.web-smoke-mock.yaml",
+    "-f", "infra\docker\compose.existing-network.yaml",
     "--profile", "app"
 )
 
@@ -70,7 +76,13 @@ if (-not $SkipNpmBuild) {
 }
 
 docker compose @composeArgs build web
+if ($LASTEXITCODE -ne 0) {
+    throw "Web image build failed."
+}
 docker compose @composeArgs up -d --no-deps web
+if ($LASTEXITCODE -ne 0) {
+    throw "Web container update failed."
+}
 
 Wait-Healthy -Name "patrol360-web"
 

@@ -48,6 +48,7 @@ export type PpeModalShellProps = {
   bodyClassName?: string;
   children: ReactNode;
   className?: string;
+  closeDisabled?: boolean;
   description?: ReactNode;
   eyebrow?: ReactNode;
   footer?: ReactNode;
@@ -65,11 +66,14 @@ const focusableSelector = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
+const ppeModalStack: symbol[] = [];
+
 export function PpeModalShell({
   ariaLabel,
   bodyClassName = "",
   children,
   className = "",
+  closeDisabled = false,
   description,
   eyebrow,
   footer,
@@ -79,8 +83,21 @@ export function PpeModalShell({
 }: PpeModalShellProps) {
   const titleId = useId();
   const modalRef = useRef<HTMLElement>(null);
+  const modalIdRef = useRef(Symbol("ppe-modal"));
+  const onCloseRef = useRef(onClose);
+  const closeDisabledRef = useRef(closeDisabled);
 
   useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    closeDisabledRef.current = closeDisabled;
+  }, [closeDisabled]);
+
+  useEffect(() => {
+    const modalId = modalIdRef.current;
+    ppeModalStack.push(modalId);
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -93,9 +110,10 @@ export function PpeModalShell({
     window.requestAnimationFrame(() => firstFocusable?.focus());
 
     function handleKeyDown(event: KeyboardEvent) {
+      if (ppeModalStack[ppeModalStack.length - 1] !== modalId) return;
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        if (!closeDisabledRef.current) onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !modal) return;
@@ -121,23 +139,27 @@ export function PpeModalShell({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => {
+      const stackIndex = ppeModalStack.lastIndexOf(modalId);
+      if (stackIndex >= 0) ppeModalStack.splice(stackIndex, 1);
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
       window.requestAnimationFrame(() => previouslyFocused?.focus());
     };
-  }, [initialFocusSelector, onClose]);
+  }, [initialFocusSelector]);
 
   return createPortal(
     <div
       className="ppe-v2-modal-backdrop ppe-ui-modal-backdrop"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget && !closeDisabled) onClose();
       }}
       role="presentation"
     >
       <section
+        aria-busy={closeDisabled || undefined}
         aria-label={ariaLabel}
         aria-modal="true"
+        aria-describedby={description ? `${titleId}-description` : undefined}
         className={`ppe-v2-modal ppe-ui-modal ${className}`.trim()}
         ref={modalRef}
         role="dialog"
@@ -147,9 +169,9 @@ export function PpeModalShell({
           <div>
             {eyebrow ? <span className="ppe-v2-eyebrow">{eyebrow}</span> : null}
             <h2 id={titleId}>{title}</h2>
-            {description ? <p>{description}</p> : null}
+            {description ? <p id={`${titleId}-description`}>{description}</p> : null}
           </div>
-          <PpeButton aria-label="Закрыть" icon={<X size={20} />} onClick={onClose} variant="icon" />
+          <PpeButton aria-label="Закрыть" disabled={closeDisabled} icon={<X size={20} />} onClick={onClose} variant="icon" />
         </header>
         <div className={`ppe-v2-modal-body ppe-ui-modal-body ${bodyClassName}`.trim()}>{children}</div>
         {footer ? <footer className="ppe-v2-modal-actions ppe-ui-modal-actions">{footer}</footer> : null}

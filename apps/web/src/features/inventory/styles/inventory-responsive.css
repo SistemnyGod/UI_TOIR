@@ -802,3 +802,50 @@
   text-transform: uppercase;
 }
 
+
+/* Nomenclature rows become compact cards on phone-sized screens. */
+@media (max-width: 640px) {
+  .inventory-items-table-wrap { overflow: visible; }
+  .inventory-items-table { min-width: 0; table-layout: auto; }
+  .inventory-items-table thead { display: none; }
+  .inventory-items-table tbody { display: grid; gap: 8px; }
+  .inventory-items-table tbody tr {
+    background: var(--inventory-surface, #fff);
+    border: 1px solid var(--inventory-border, #d4e2f5);
+    border-left: 3px solid var(--inventory-border-strong, #b7cdf0);
+    border-radius: 10px;
+    display: grid;
+    overflow: hidden;
+  }
+  .inventory-items-table tbody tr.is-selected { border-left-color: var(--inventory-primary, #2563eb); box-shadow: 0 7px 18px rgb(37 99 235 / 10%); }
+  .inventory-items-table tbody tr > td {
+    align-items: start;
+    background: transparent !important;
+    border-bottom: 1px solid #edf1f6;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(92px, .34fr) minmax(0, 1fr);
+    padding: 8px 10px;
+    width: auto !important;
+  }
+  .inventory-items-table tbody tr > td::before {
+    color: var(--inventory-muted, #647694);
+    content: attr(data-label);
+    font-size: 9px;
+    font-weight: 850;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+  }
+  .inventory-items-table tbody tr > td:last-child { border-bottom: 0; }
+  .inventory-items-table tbody tr > td.inventory-table-main-cell { align-items: center; display: flex; padding-block: 11px; }
+  .inventory-items-table tbody tr > td.inventory-table-main-cell::before { display: none; }
+  .inventory-items-table tbody tr > td:nth-child(4),
+  .inventory-items-table tbody tr > td:nth-child(5),
+  .inventory-items-table tbody tr > td:nth-child(7) { display: none; }
+  .inventory-items-table .inventory-row-actions { display: grid; grid-template-columns: repeat(3, minmax(44px, 1fr)); width: 100%; }
+  .inventory-items-table .inventory-row-actions .inventory-icon-btn { min-height: 44px; width: 100%; }
+  .inventory-items-table td[colspan] { display: block; padding: 0; }
+  .inventory-items-table td[colspan]::before { display: none; }
+  .inventory-items-table-card .inventory-table-head { align-items: stretch; gap: 8px; }
+  .inventory-items-table-card .inventory-table-head select { min-height: 44px; }
+}

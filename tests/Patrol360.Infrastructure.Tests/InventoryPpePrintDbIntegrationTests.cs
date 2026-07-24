@@ -705,6 +705,69 @@ public sealed class InventoryPpePrintDbIntegrationTests
     }
 
     [DbIntegrationFact]
+    public async Task PartialPpeReturnUsesReturnedQuantityForMovementDocument()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+
+        await provider.InitializePatrolDatabaseAsync();
+
+        var employee = UseWorkflow(provider, workflow => workflow.GetEmployees(new InventoryListQuery(PageSize: 1)).Rows.Single());
+        var warehouse = UseCommand(provider, command => command.CreateWarehouse(new CreateInventoryWarehouseDto("PPE partial return warehouse", true)));
+        Assert.True(warehouse.Succeeded);
+        Assert.NotNull(warehouse.Value);
+        var item = CreatePpeItem(provider, "Каска для частичного возврата", brand: "СОМЗ");
+
+        var initialStock = UseCommand(provider, command => command.SetInitialStock(new InventoryInitialStockDto(
+            item.Id,
+            warehouse.Value!.Id,
+            4,
+            DateTimeOffset.UtcNow,
+            "PPE partial return stock")));
+        Assert.True(initialStock.Succeeded);
+
+        var card = UseWorkflow(provider, workflow => workflow.CreatePpeCard(new CreateInventoryPpeCardDto(employee.Id, "PPE partial return test")));
+        Assert.True(card.Succeeded);
+        Assert.NotNull(card.Value);
+
+        var issued = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(
+            card.Value!.Id,
+            new UpsertInventoryPpeCardLineDto(
+                item.Id,
+                warehouse.Value!.Id,
+                2,
+                10_000,
+                "issued",
+                DateTimeOffset.UtcNow.AddYears(1),
+                "Partial return line",
+                PrintItemName: "Каска для частичного возврата",
+                NormPoint: "п. 1",
+                IssuePeriodText: "шт., 1 год",
+                BrandModelArticle: "СОМЗ",
+                IssuedAt: DateTimeOffset.UtcNow)));
+        Assert.True(issued.Succeeded);
+        Assert.NotNull(issued.Value);
+
+        var returned = UseWorkflow(provider, workflow => workflow.ApplyPpeLineAction(
+            card.Value!.Id,
+            issued.Value!.Id,
+            new ApplyInventoryPpeLineActionDto(
+                "returned",
+                DateTimeOffset.UtcNow,
+                Quantity: 0.5m,
+                Comment: "Partial return")));
+        Assert.True(returned.Succeeded);
+        Assert.NotNull(returned.Value);
+        Assert.Equal(0.5m, returned.Value!.ReturnedQuantity);
+
+        var returnDocument = UseQuery(provider, query => query.GetDocuments(new InventoryListQuery(
+                PageSize: 10,
+                Status: "ppe_return")))
+            .Rows
+            .Single();
+        Assert.Equal(0.5m, returnDocument.Quantity);
+    }
+    [DbIntegrationFact]
     public async Task InventoryIssueOperationCanBeRecordedWithoutUserWarehouse()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();

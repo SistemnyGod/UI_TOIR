@@ -1,8 +1,10 @@
 import NetInfo from "@react-native-community/netinfo";
 import { canAttemptServerConnection } from "@/core/networkPolicy";
 import { isReauthenticationRequiredError } from "@/auth/sessionErrors";
+import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 
 import { refreshMobileData } from "@/services/mobileDataRefreshService";
+import { logMobileError } from "@/services/mobileErrorReporter";
 import { triggerDailyDiagnosticReportUpload } from "@/services/diagnosticReportService";
 import { ForegroundSyncResult, prepareManualSyncRetry, runForegroundSync } from "@/sync/syncEngine";
 import { getRetryDelayMs } from "@/sync/retryPolicy";
@@ -16,6 +18,7 @@ let scheduledRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
 let retryAttempt = 0;
 let lastRefreshStartedAt = 0;
 let activeRefreshPromise: Promise<boolean> | null = null;
+let lastNetworkUsable: boolean | null = null;
 
 export type MobileDataRefreshReason = "push" | "notificationResponse" | "network" | "appActive" | "fallback" | "manual";
 
@@ -25,7 +28,19 @@ export function subscribeToNetworkSync() {
   }, fallbackRefreshMs);
 
   const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
-    if (canAttemptServerConnection(state)) {
+    const networkUsable = canAttemptServerConnection(state);
+    if (networkUsable !== lastNetworkUsable) {
+      lastNetworkUsable = networkUsable;
+      void logMobileAction({
+        eventType: networkUsable ? "network.available" : "network.unavailable",
+        entityType: "mobileApp",
+        message: networkUsable
+          ? "Сеть доступна. Запущены обновление данных и отправка очереди."
+          : "Сеть недоступна. Операции остаются в локальной очереди."
+      }).catch(() => undefined);
+    }
+
+    if (networkUsable) {
       requestMobileDataRefresh("network");
       triggerForegroundSyncWithRetry();
       void triggerDailyDiagnosticReportUpload();
@@ -72,6 +87,7 @@ export async function triggerForegroundSyncWithRetry(
     void triggerDailyDiagnosticReportUpload();
     return result;
   } catch (error) {
+    void logMobileError("sync.trigger.failed", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (isReauthenticationRequiredError(errorMessage)) {
       return { sent: 0, skipped: "unauthenticated", hasMore: false };
@@ -105,7 +121,10 @@ export function requestMobileDataRefresh(
 
   lastRefreshStartedAt = now;
   activeRefreshPromise = refreshMobileData()
-    .catch(() => false)
+    .catch((error) => {
+      void logMobileError("mobile.data.refresh.failed", error);
+      return false;
+    })
     .finally(() => {
       activeRefreshPromise = null;
     });

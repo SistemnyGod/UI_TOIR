@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent, MouseEvent as ReactMouseEvent } from "react";
 import type { RouteFormPayload, RoutePoint, RoutePointFormPayload } from "../../../../types";
+import { createClientUuid } from "../../../../shared/clientUuid";
 import { emptyPointDraft } from "./PointEditorForm";
 
 type MaybePromise<T> = T | Promise<T>;
@@ -104,7 +105,7 @@ export function RouteCreateModal({
         ...current,
         {
           ...pointDraft,
-          id: `draft-point-${crypto.randomUUID()}`,
+          id: `draft-point-${createClientUuid()}`,
           order: current.length + 1,
         },
       ]),

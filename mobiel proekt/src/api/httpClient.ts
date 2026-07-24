@@ -20,6 +20,8 @@ import {
 } from "@/auth/tokenStorage";
 import { hasUsableNetwork } from "@/core/network";
 import { getMobileRuntimeConfig, getServerCandidateBaseUrls } from "@/core/serverSettings";
+import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
+import { logMobileError } from "@/services/mobileErrorReporter";
 import type { ZodType } from "zod";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -47,9 +49,16 @@ export async function mobileRequest<TResponse>(
   // locally while the refresh token is still valid. Login/refresh/logout opt
   // out explicitly, so a normal API request should always try recovery.
   if (response.status === 401 && !options.skipAuthRefresh) {
-    const refreshedToken = await refreshAccessToken(apiBaseUrl);
-    refreshedSession = true;
-    ({ response } = await sendMobileRequestWithFailover(apiBaseUrl, path, options, refreshedToken));
+    const latestStoredToken = options.accessToken === undefined ? await getAccessToken() : null;
+    if (latestStoredToken && latestStoredToken !== token) {
+      ({ response } = await sendMobileRequestWithFailover(apiBaseUrl, path, options, latestStoredToken));
+    }
+
+    if (response.status === 401) {
+      const refreshedToken = await refreshAccessToken(apiBaseUrl);
+      refreshedSession = true;
+      ({ response } = await sendMobileRequestWithFailover(apiBaseUrl, path, options, refreshedToken));
+    }
   }
 
   if (!response.ok) {
@@ -169,9 +178,22 @@ async function sendMobileRequest(apiBaseUrl: string, path: string, options: Requ
 }
 
 async function refreshAccessToken(apiBaseUrl: string) {
-  refreshPromise ??= refreshAccessTokenInternal(apiBaseUrl).finally(() => {
-    refreshPromise = null;
-  });
+  refreshPromise ??= refreshAccessTokenInternal(apiBaseUrl)
+    .then((accessToken) => {
+      void logMobileAction({
+        eventType: "auth.refresh.recovered",
+        entityType: "mobileSession",
+        message: "Мобильная сессия успешно восстановлена."
+      }).catch(() => undefined);
+      return accessToken;
+    })
+    .catch((error) => {
+      void logMobileError("auth.refresh.failed", error);
+      throw error;
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
 
   return refreshPromise;
 }

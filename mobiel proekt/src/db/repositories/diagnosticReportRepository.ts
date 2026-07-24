@@ -2,7 +2,7 @@ import * as Crypto from "expo-crypto";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
-import { countPendingOutboxCommands } from "@/db/repositories/outboxRepository";
+import { countPendingOutboxCommands, listSyncQueueCommands } from "@/db/repositories/outboxRepository";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import {
   diagnosticReportIntervalMs,
@@ -73,6 +73,9 @@ export async function getOrCreatePendingDiagnosticReport(
     return null;
   }
 
+  const queueCommands = await listSyncQueueCommands(ownerUserId, 100);
+  const queueEntries = buildQueueDiagnosticEntries(queueCommands);
+  const actionLogLimit = Math.max(1, 100 - queueEntries.length);
   const rows = await db.getAllAsync<{
     event_type: string;
     message: string;
@@ -97,19 +100,31 @@ export async function getOrCreatePendingDiagnosticReport(
           OR LOWER(event_type) LIKE '%rejected%'
           OR LOWER(event_type) LIKE '%conflict%'
           OR LOWER(event_type) LIKE '%crash%'
+          OR LOWER(event_type) LIKE 'auth.refresh.%'
+          OR LOWER(event_type) LIKE 'network.%'
+          OR LOWER(event_type) LIKE 'sync.%'
+          OR LOWER(event_type) LIKE 'mobile.data.refresh.%'
         )
       GROUP BY event_type, message
       ORDER BY event_count DESC, last_seen_at DESC
-      LIMIT 100
+      LIMIT ?
     `,
-    [periodStart.toISOString(), now.toISOString(), ownerUserId]
+    [periodStart.toISOString(), now.toISOString(), ownerUserId, actionLogLimit]
   );
 
-  if (rows.length === 0 && !options.includeEmpty) {
+  if (rows.length === 0 && queueEntries.length === 0 && !options.includeEmpty) {
     await advanceDiagnosticPeriod(ownerUserId, now.toISOString());
     return null;
   }
 
+  const actionLogEntries = rows.map((row) => ({
+    eventType: truncateDiagnosticValue(row.event_type, 120),
+    message: sanitizeDiagnosticMessage(row.message),
+    count: row.event_count,
+    firstSeenAt: row.first_seen_at,
+    lastSeenAt: row.last_seen_at
+  }));
+  const entries = [...queueEntries, ...actionLogEntries];
   const report: MobileDiagnosticReport = {
     reportId: Crypto.randomUUID(),
     deviceId: device.deviceId,
@@ -119,14 +134,8 @@ export async function getOrCreatePendingDiagnosticReport(
     periodEnd: now.toISOString(),
     generatedAt: now.toISOString(),
     pendingOutboxCount: await countPendingOutboxCommands(ownerUserId),
-    entries: rows.length > 0
-      ? rows.map((row) => ({
-          eventType: truncateDiagnosticValue(row.event_type, 120),
-          message: sanitizeDiagnosticMessage(row.message),
-          count: row.event_count,
-          firstSeenAt: row.first_seen_at,
-          lastSeenAt: row.last_seen_at
-        }))
+    entries: entries.length > 0
+      ? entries
       : [{
           eventType: "diagnostic.manual",
           message: "Ручной диагностический отчет без критических ошибок за период.",
@@ -179,6 +188,51 @@ export async function getOrCreatePendingDiagnosticReport(
 
     return stored ? JSON.parse(stored.payload_json) as MobileDiagnosticReport : report;
   });
+}
+
+function buildQueueDiagnosticEntries(
+  commands: Awaited<ReturnType<typeof listSyncQueueCommands>>
+): MobileDiagnosticEntry[] {
+  const groups = new Map<string, {
+    commandType: string;
+    count: number;
+    firstSeenAt: string;
+    lastSeenAt: string;
+    status: string;
+  }>();
+
+  for (const command of commands) {
+    const key = `${command.status}:${command.commandType}`;
+    const seenAt = command.updatedAtLocal ?? command.createdAtLocal;
+    const current = groups.get(key);
+    if (current) {
+      current.count += 1;
+      current.firstSeenAt = current.firstSeenAt < command.createdAtLocal
+        ? current.firstSeenAt
+        : command.createdAtLocal;
+      current.lastSeenAt = current.lastSeenAt > seenAt ? current.lastSeenAt : seenAt;
+      continue;
+    }
+
+    groups.set(key, {
+      commandType: command.commandType,
+      count: 1,
+      firstSeenAt: command.createdAtLocal,
+      lastSeenAt: seenAt,
+      status: command.status
+    });
+  }
+
+  return Array.from(groups.values())
+    .sort((left, right) => right.count - left.count || right.lastSeenAt.localeCompare(left.lastSeenAt))
+    .slice(0, 25)
+    .map((group) => ({
+      eventType: truncateDiagnosticValue(`sync.queue.${group.status}`, 120),
+      message: sanitizeDiagnosticMessage(`Команда ${group.commandType} находится в очереди со статусом ${group.status}.`),
+      count: group.count,
+      firstSeenAt: group.firstSeenAt,
+      lastSeenAt: group.lastSeenAt
+    }));
 }
 
 export async function listDiagnosticReports(limit = 10): Promise<MobileDiagnosticReportRow[]> {
