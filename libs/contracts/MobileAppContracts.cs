@@ -159,7 +159,17 @@ public sealed record MobileBootstrapDto(
 {
     public string ContourId { get; init; } = string.Empty;
     public IReadOnlyList<Guid> CancelledAssignmentIds { get; init; } = [];
+    public IReadOnlyList<MobileBootstrapConflictResolutionDto> ConflictResolutions { get; init; } = [];
 }
+
+public sealed record MobileBootstrapConflictResolutionDto(
+    string ClientOperationId,
+    string? EntityLocalId,
+    string? EntityServerId,
+    string OperationStatus,
+    string ResolutionStatus,
+    object? ResponseSnapshot,
+    DateTimeOffset ResolvedAt);
 
 public sealed record MobilePatrolRequestBoardItemDto(
     Guid RequestId,

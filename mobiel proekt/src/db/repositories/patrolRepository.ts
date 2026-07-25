@@ -4,7 +4,7 @@ import * as SQLite from "expo-sqlite";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
-import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
+import { insertLocalFileInTransaction, listFilesByClientIds } from "@/db/repositories/filesRepository";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { insertOutboxCommandInTransaction } from "@/db/repositories/outboxSql";
 import { getPointForFillOwnedSql, listAssignmentPointsOwnedSql } from "@/db/repositories/patrolPointOwnershipQueries";
@@ -13,8 +13,12 @@ import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { isPhotoEvidenceRequired } from "@/domain/patrol/photoEvidencePolicy";
 import { normalizePointDraft, PointDraftSelectedStatus } from "@/domain/patrol/pointDraftPolicy";
+import { canCreateCompletionCommand, evaluateRequiredPointReadiness, isTerminalPointStatus } from "@/domain/patrol/reportReadinessPolicy";
+import { canPatrolAction, patrolActionError } from "@/domain/patrol/patrolStateMachine";
 import { OutboxCommand } from "@/domain/sync/syncTypes";
 import { getNfcCodeCandidates, normalizeNfcCode } from "@/services/nfcService";
+import { getLocalFileInfo } from "@/services/fileStorageService";
+import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 
 type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "getFirstAsync" | "runAsync">;
 
@@ -39,6 +43,9 @@ export type ActiveAssignment = {
   completedAtLocal: string | null;
   revision: number;
   routeVersionNo: number;
+  snapshotVersion?: number;
+  snapshotCreatedAt?: string | null;
+  snapshotSource?: string | null;
 };
 
 export type PointListItem = {
@@ -90,6 +97,11 @@ export type ReportReadiness = {
   problems: ReportProblem[];
   ready: boolean;
 };
+function assertPatrolAction(action: Parameters<typeof canPatrolAction>[0], status: string) {
+  if (!canPatrolAction(action, status)) {
+    throw new Error(patrolActionError(action, status) ?? "Действие недоступно для текущего статуса назначения.");
+  }
+}
 
 export type DeferPointInput = {
   selectedStatus?: PointDraftSelectedStatus;
@@ -160,7 +172,10 @@ export async function getActiveAssignment() {
         assignment.started_at_local AS startedAtLocal,
         assignment.completed_at_local AS completedAtLocal,
         assignment.revision,
-        assignment.route_version_no AS routeVersionNo
+        assignment.route_version_no AS routeVersionNo,
+        assignment.snapshot_version AS snapshotVersion,
+        assignment.snapshot_created_at AS snapshotCreatedAt,
+        assignment.snapshot_source AS snapshotSource
       FROM patrol_assignments assignment
       LEFT JOIN routes route ON route.route_id = assignment.route_id
       LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
@@ -196,7 +211,10 @@ export async function getAssignmentByRequestId(requestId: string) {
         assignment.started_at_local AS startedAtLocal,
         assignment.completed_at_local AS completedAtLocal,
         assignment.revision,
-        assignment.route_version_no AS routeVersionNo
+        assignment.route_version_no AS routeVersionNo,
+        assignment.snapshot_version AS snapshotVersion,
+        assignment.snapshot_created_at AS snapshotCreatedAt,
+        assignment.snapshot_source AS snapshotSource
       FROM patrol_assignments assignment
       LEFT JOIN routes route ON route.route_id = assignment.route_id
       LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
@@ -230,7 +248,9 @@ export async function takeRequestLocally(requestId: string) {
   if (!request) {
     throw new Error("Заявка не загружена на телефон.");
   }
-
+  assertPatrolAction("acceptRequest", request.status);
+  const route = await db.getFirstAsync<{ version: number }>("SELECT version FROM routes WHERE route_id = ? LIMIT 1", [request.routeId]);
+  const snapshotVersion = route?.version ?? 0;
   const assignmentId = Crypto.randomUUID();
   const takenAtLocal = new Date().toISOString();
   const command: OutboxCommand = {
@@ -253,6 +273,21 @@ export async function takeRequestLocally(requestId: string) {
 
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const currentRequest = await tx.getFirstAsync<{ status: string }>(
+        `
+          SELECT status
+          FROM patrol_request_board
+          WHERE owner_user_id = ?
+            AND request_id = ?
+          LIMIT 1
+        `,
+        [ownerUserId, request.requestId]
+      );
+      if (!currentRequest) {
+        throw new Error("Заявка больше не доступна на телефоне.");
+      }
+      assertPatrolAction("acceptRequest", currentRequest.status);
+
       await tx.runAsync(
       `
         INSERT INTO patrol_assignments (
@@ -265,11 +300,14 @@ export async function takeRequestLocally(requestId: string) {
           started_at_local,
           completed_at_local,
           revision,
-          route_version_no
+          route_version_no,
+          snapshot_version,
+          snapshot_created_at,
+          snapshot_source
         )
-        VALUES (?, ?, ?, ?, ?, 'inProgress', ?, NULL, 0, 0)
+        VALUES (?, ?, ?, ?, ?, 'inProgress', ?, NULL, 0, ?, ?, ?, 'local')
       `,
-      [assignmentId, ownerUserId, currentContourId, request.requestId, request.routeId, takenAtLocal]
+      [assignmentId, ownerUserId, currentContourId, request.requestId, request.routeId, takenAtLocal, snapshotVersion, snapshotVersion, takenAtLocal]
     );
 
     await tx.runAsync(
@@ -329,6 +367,7 @@ export async function takeRequestLocally(requestId: string) {
     })
   );
 
+  requestSyncAfterMutation();
   void logMobileAction({
     eventType: "patrol.request.taken",
     entityType: "patrolAssignment",
@@ -347,7 +386,10 @@ export async function takeRequestLocally(requestId: string) {
       startedAtLocal: takenAtLocal,
       completedAtLocal: null,
       revision: 0,
-      routeVersionNo: 0
+      routeVersionNo: snapshotVersion,
+      snapshotVersion,
+      snapshotCreatedAt: takenAtLocal,
+      snapshotSource: "local"
     } satisfies ActiveAssignment,
     created: true
   };
@@ -365,7 +407,9 @@ export async function acceptRequestLocally(requestId: string) {
   if (!request) {
     throw new Error("Заявка не загружена на телефон.");
   }
-
+  assertPatrolAction("acceptRequest", request.status);
+  const route = await db.getFirstAsync<{ version: number }>("SELECT version FROM routes WHERE route_id = ? LIMIT 1", [request.routeId]);
+  const snapshotVersion = route?.version ?? 0;
   const assignmentId = Crypto.randomUUID();
   const acceptedAtLocal = new Date().toISOString();
   const command: OutboxCommand = {
@@ -388,6 +432,21 @@ export async function acceptRequestLocally(requestId: string) {
 
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const currentRequest = await tx.getFirstAsync<{ status: string }>(
+        `
+          SELECT status
+          FROM patrol_request_board
+          WHERE owner_user_id = ?
+            AND request_id = ?
+          LIMIT 1
+        `,
+        [ownerUserId, request.requestId]
+      );
+      if (!currentRequest) {
+        throw new Error("Заявка больше не доступна на телефоне.");
+      }
+      assertPatrolAction("acceptRequest", currentRequest.status);
+
       await tx.runAsync(
         `
           INSERT INTO patrol_assignments (
@@ -400,11 +459,14 @@ export async function acceptRequestLocally(requestId: string) {
             started_at_local,
             completed_at_local,
             revision,
-            route_version_no
+            route_version_no,
+            snapshot_version,
+            snapshot_created_at,
+            snapshot_source
           )
-          VALUES (?, ?, ?, ?, ?, 'accepted', NULL, NULL, 0, 0)
+          VALUES (?, ?, ?, ?, ?, 'accepted', NULL, NULL, 0, ?, ?, ?, 'local')
         `,
-        [assignmentId, ownerUserId, currentContourId, request.requestId, request.routeId]
+        [assignmentId, ownerUserId, currentContourId, request.requestId, request.routeId, snapshotVersion, snapshotVersion, new Date().toISOString()]
       );
 
       await snapshotRoutePointsInTransaction(tx, assignmentId, request.routeId);
@@ -423,6 +485,7 @@ export async function acceptRequestLocally(requestId: string) {
     })
   );
 
+  requestSyncAfterMutation();
   return {
     assignment: {
       assignmentId,
@@ -433,7 +496,10 @@ export async function acceptRequestLocally(requestId: string) {
       startedAtLocal: null,
       completedAtLocal: null,
       revision: 0,
-      routeVersionNo: 0
+      routeVersionNo: snapshotVersion,
+      snapshotVersion,
+      snapshotCreatedAt: takenAtLocal,
+      snapshotSource: "local"
     } satisfies ActiveAssignment,
     created: true
   };
@@ -447,8 +513,9 @@ export async function releaseAcceptedRequestLocally(assignmentId: string) {
     throw new Error("Назначение не найдено на телефоне.");
   }
 
-  if (assignment.status !== "accepted" || assignment.startedAtLocal) {
-    throw new Error("Вернуть можно только принятую заявку до начала обхода.");
+  assertPatrolAction("releaseAssignment", assignment.status);
+  if (assignment.startedAtLocal) {
+    throw new Error("Заявку можно вернуть только до начала обхода.");
   }
 
   const pendingRelease = await db.getFirstAsync<{ client_operation_id: string }>(
@@ -488,6 +555,22 @@ export async function releaseAcceptedRequestLocally(assignmentId: string) {
 
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const currentAssignment = await tx.getFirstAsync<{ status: string }>(
+        `
+          SELECT status
+          FROM patrol_assignments
+          WHERE owner_user_id = ?
+            AND assignment_id = ?
+            AND contour_id = ?
+          LIMIT 1
+        `,
+        [ownerUserId, assignment.assignmentId, currentContourId]
+      );
+      if (!currentAssignment) {
+        throw new Error("Назначение больше не доступно на телефоне.");
+      }
+      assertPatrolAction("releaseAssignment", currentAssignment.status);
+
       const releaseAlreadyQueued = await tx.getFirstAsync<{ clientOperationId: string }>(
         `
           SELECT client_operation_id AS clientOperationId
@@ -508,6 +591,7 @@ export async function releaseAcceptedRequestLocally(assignmentId: string) {
       await insertOutboxCommandInTransaction(tx, command);
     })
   );
+  requestSyncAfterMutation();
 }
 
 export async function startAssignmentLocally(assignmentId: string) {
@@ -601,14 +685,11 @@ async function getExistingPointResultForScan(
   );
 }
 
-function isTerminalPointStatus(status: PointListItem["status"] | null | undefined): status is "ok" | "issue" | "skipped" {
-  return status === "ok" || status === "issue" || status === "skipped";
-}
 
 export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
-  await assertPointActionAllowed(assignmentId);
+  await assertPointActionAllowed(assignmentId, "scanAssignment");
   const scannedCandidates = getNfcCodeCandidates(nfcCode);
   const points = await db.getAllAsync<{
     pointId: string;
@@ -727,6 +808,7 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
     })
   );
 
+  requestSyncAfterMutation();
   void logMobileAction({
     eventType: "patrol.nfc.scanned",
     entityType: "patrolPoint",
@@ -754,7 +836,7 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
 export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
-  await assertPointActionAllowed(assignmentId);
+  await assertPointActionAllowed(assignmentId, "scanAssignment");
   const normalizedQr = qrCodeHash.trim();
   const point = await db.getFirstAsync<{
     pointId: string;
@@ -849,6 +931,7 @@ export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
       await insertOutboxCommandInTransaction(tx, command);
     })
   );
+  requestSyncAfterMutation();
 
   return {
     matched: true as const,
@@ -965,7 +1048,7 @@ async function persistPointDraft(
   syncStatus: "localOnly" | "pending"
 ) {
   const ownerUserId = await requireOwnerUserId();
-  await assertPointActionAllowed(assignmentId);
+  await assertPointActionAllowed(assignmentId, "editPoint");
   const point = await getPointForFill(assignmentId, pointId, ownerUserId, currentContourId);
   if (!point) {
     throw new Error("Метка не загружена на телефон.");
@@ -999,7 +1082,7 @@ async function persistPointDraft(
 
 export async function skipPoint(assignmentId: string, pointId: string, input: Pick<DeferPointInput, "comment" | "photoClientFileIds"> = {}) {
   const ownerUserId = await requireOwnerUserId();
-  await assertPointActionAllowed(assignmentId);
+  await assertPointActionAllowed(assignmentId, "editPoint");
   const point = await getPointForFill(assignmentId, pointId, ownerUserId, currentContourId);
   if (!point) {
     throw new Error("Метка не загружена на телефон.");
@@ -1034,7 +1117,7 @@ export async function skipPoint(assignmentId: string, pointId: string, input: Pi
 
 export async function attachPhotoToPoint(assignmentId: string, pointId: string, file: LocalMobileFile) {
   const ownerUserId = await requireOwnerUserId();
-  await assertPointActionAllowed(assignmentId);
+  await assertPointActionAllowed(assignmentId, "attachMedia");
   const point = await getPointForFill(assignmentId, pointId, ownerUserId, currentContourId);
   if (!point) {
     throw new Error("Метка не загружена на телефон.");
@@ -1065,6 +1148,7 @@ export async function attachPhotoToPoint(assignmentId: string, pointId: string, 
     })
   );
 
+  requestSyncAfterMutation();
   void logMobileAction({
     eventType: file.mediaKind === "video" ? "patrol.video.added" : "patrol.photo.added",
     entityType: "patrolPoint",
@@ -1106,32 +1190,6 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
   }
 
   for (const point of points) {
-    if (point.status === "scanned") {
-      problems.push({
-        pointId: point.pointId,
-        pointName: point.name,
-        orderIndex: point.orderIndex,
-        reason: "Выберите состояние метки после сканирования"
-      });
-    }
-
-    if (point.required && point.status === "pending") {
-      problems.push({
-        pointId: point.pointId,
-        pointName: point.name,
-        orderIndex: point.orderIndex,
-        reason: "Обязательная метка не заполнена"
-      });
-    }
-
-    if (point.required && point.status === "deferred") {
-      problems.push({
-        pointId: point.pointId,
-        pointName: point.name,
-        orderIndex: point.orderIndex,
-        reason: "Обязательная метка отложена"
-      });
-    }
 
     if (point.status === "issue" && !point.comment?.trim()) {
       problems.push({
@@ -1171,26 +1229,43 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
   }
 
   const progress = await getAssignmentProgress(assignmentId);
+  const requiredPointReadiness = evaluateRequiredPointReadiness(points.map((point) => ({
+    pointId: point.pointId,
+    pointName: point.name,
+    orderIndex: point.orderIndex,
+    required: point.required,
+    status: point.status
+  })));
+
+  for (const problem of requiredPointReadiness.problems) {
+    problems.push(problem);
+  }
 
   return {
     assignment,
     progress,
     problems,
-    ready: assignment !== null && problems.length === 0
+    ready: assignment !== null
+      && requiredPointReadiness.requiredCount === requiredPointReadiness.terminalRequiredCount
+      && problems.length === 0
   };
 }
 
 export async function completeAssignmentLocally(assignmentId: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
-  await assertPointActionAllowed(assignmentId);
+  await assertPointActionAllowed(assignmentId, "completeAssignment");
   const readiness = await getReportReadiness(assignmentId);
-  if (!readiness.assignment || !readiness.ready) {
+  if (!readiness.assignment) {
+    throw new Error("Отчет еще не готов к отправке.");
+  }
+  if (!canCreateCompletionCommand(true, readiness.ready)) {
     throw new Error("Отчет еще не готов к отправке.");
   }
 
   const completedAtLocal = new Date().toISOString();
   const pointResults = await buildCompletedPointResults(assignmentId);
+  await assertCompletionAttachmentsAvailable(pointResults);
   const photoCount = pointResults.reduce((sum, result) => sum + result.photoClientFileIds.length, 0);
   const command: OutboxCommand = {
     clientOperationId: Crypto.randomUUID(),
@@ -1273,6 +1348,8 @@ export async function completeAssignmentLocally(assignmentId: string) {
     })
   );
 
+  requestSyncAfterMutation();
+
   const completionResult = completionResultRef.current;
   if (!completionResult) {
     throw new Error("Не удалось сохранить отчет в очередь отправки.");
@@ -1299,7 +1376,7 @@ export async function getAssignmentProgress(assignmentId: string): Promise<Assig
 
   return {
     total: points.length,
-    completed: points.filter((point) => point.status === "ok" || point.status === "issue" || point.status === "skipped").length,
+    completed: points.filter((point) => isTerminalPointStatus(point.status)).length,
     deferred: points.filter((point) => point.status === "deferred").length,
     issues: points.filter((point) => point.status === "issue").length,
     skipped: points.filter((point) => point.status === "skipped").length
@@ -1334,7 +1411,10 @@ export async function getAssignmentById(assignmentId: string) {
         assignment.started_at_local AS startedAtLocal,
         assignment.completed_at_local AS completedAtLocal,
         assignment.revision,
-        assignment.route_version_no AS routeVersionNo
+        assignment.route_version_no AS routeVersionNo,
+        assignment.snapshot_version AS snapshotVersion,
+        assignment.snapshot_created_at AS snapshotCreatedAt,
+        assignment.snapshot_source AS snapshotSource
       FROM patrol_assignments assignment
       LEFT JOIN routes route ON route.route_id = assignment.route_id
       LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
@@ -1353,11 +1433,22 @@ async function updateAssignmentLifecycleLocally(
   nextStatus: "inProgress" | "paused" | "needsDispatcherDecision",
   timestampMode?: "startedAtLocal"
 ) {
+  const action = commandType === "startPatrolAssignment"
+    ? "startAssignment"
+    : commandType === "pausePatrolAssignment"
+      ? "pauseAssignment"
+      : commandType === "resumePatrolAssignment"
+        ? "resumeAssignment"
+        : null;
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
   const assignment = await getAssignmentById(assignmentId);
   if (!assignment) {
     throw new Error("Назначение не найдено на телефоне.");
+  }
+
+  if (action) {
+    assertPatrolAction(action, assignment.status);
   }
 
   if (commandType === "startPatrolAssignment" && !["accepted", "paused", "inProgress"].includes(assignment.status)) {
@@ -1390,6 +1481,9 @@ async function updateAssignmentLifecycleLocally(
     throw new Error("Продолжить можно только приостановленный обход.");
   }
 
+  if (commandType === "handoffPatrolAssignment" && assignment.status !== "inProgress") {
+    throw new Error("Only an in-progress patrol can be handed off.");
+  }
   const now = new Date().toISOString();
   const command: OutboxCommand = {
     clientOperationId: Crypto.randomUUID(),
@@ -1425,6 +1519,10 @@ async function updateAssignmentLifecycleLocally(
       if (!current) {
         throw new Error("Assignment is no longer available on this device.");
       }
+      if (action) {
+        assertPatrolAction(action, current.status);
+      }
+
 
       const releasePending = await tx.getFirstAsync<{ clientOperationId: string }>(
         `
@@ -1456,6 +1554,9 @@ async function updateAssignmentLifecycleLocally(
         throw new Error("Only a paused patrol can be resumed.");
       }
 
+      if (commandType === "handoffPatrolAssignment" && current.status !== "inProgress") {
+        throw new Error("Only an in-progress patrol can be handed off.");
+      }
       if (commandType === "startPatrolAssignment" || commandType === "resumePatrolAssignment") {
         const competing = await tx.getFirstAsync<{ assignmentId: string }>(
           `
@@ -1503,17 +1604,22 @@ async function updateAssignmentLifecycleLocally(
     })
   );
 
+  requestSyncAfterMutation();
+
   return getAssignmentById(assignment.assignmentId);
 }
 
 async function snapshotRoutePointsInTransaction(executor: SqlExecutor, assignmentId: string, routeId: string) {
+  await executor.runAsync("DELETE FROM assignment_route_points WHERE assignment_id = ?", [assignmentId]);
   await executor.runAsync(
     `
-      INSERT OR REPLACE INTO assignment_route_points (
+      INSERT INTO assignment_route_points (
         assignment_id,
         point_id,
         route_id,
         name,
+        description,
+        instruction,
         order_index,
         nfc_uid_hash,
         qr_code_hash,
@@ -1526,6 +1632,8 @@ async function snapshotRoutePointsInTransaction(executor: SqlExecutor, assignmen
         point_id,
         route_id,
         name,
+        description,
+        instruction,
         order_index,
         nfc_uid_hash,
         qr_code_hash,
@@ -1550,7 +1658,6 @@ async function snapshotRoutePointsInTransaction(executor: SqlExecutor, assignmen
     throw new Error("Маршрут не загружен на телефон.");
   }
 }
-
 async function repairAssignmentContourBinding(
   db: SQLite.SQLiteDatabase,
   assignmentId: string,
@@ -1591,7 +1698,7 @@ async function buildCompletedPointResults(assignmentId: string) {
   const db = await getDatabase();
   const rows = await db.getAllAsync<{
     pointId: string;
-    status: "ok" | "issue" | "skipped";
+    status: string | null;
     comment: string | null;
     issueTypeId: string | null;
     photoClientFileIdsJson: string | null;
@@ -1616,7 +1723,6 @@ async function buildCompletedPointResults(assignmentId: string) {
        AND result.assignment_id = assignment.assignment_id
        AND result.point_id = point.point_id
       WHERE assignment.assignment_id = ?
-        AND result.status IN ('ok', 'issue', 'skipped')
       ORDER BY point.order_index ASC
     `,
     [assignmentId]
@@ -1624,7 +1730,7 @@ async function buildCompletedPointResults(assignmentId: string) {
 
   const fallbackCompletedAtLocal = new Date().toISOString();
 
-  return rows.map((row) => ({
+  return rows.filter((row): row is typeof row & { status: "ok" | "issue" | "skipped" } => isTerminalPointStatus(row.status)).map((row) => ({
     pointId: row.pointId,
     status: row.status,
     comment: row.comment ?? "",
@@ -1634,6 +1740,34 @@ async function buildCompletedPointResults(assignmentId: string) {
     nfcUidHash: row.nfcUidHash,
     completedAtLocal: row.completedAtLocal ?? fallbackCompletedAtLocal
   }));
+}
+
+async function assertCompletionAttachmentsAvailable(pointResults: { photoClientFileIds: string[] }[]) {
+  const clientFileIds = Array.from(new Set(pointResults.flatMap((result) => result.photoClientFileIds)));
+  if (clientFileIds.length === 0) {
+    return;
+  }
+
+  const files = await listFilesByClientIds(clientFileIds);
+  const filesById = new Map(files.map((file) => [file.clientFileId, file]));
+  const missing = await Promise.all(clientFileIds.map(async (clientFileId) => {
+    const file = filesById.get(clientFileId);
+    if (!file) {
+      return clientFileId;
+    }
+
+    try {
+      const info = await getLocalFileInfo(file.localPath);
+      return info.exists ? null : clientFileId;
+    } catch {
+      return clientFileId;
+    }
+  }));
+
+  const missingCount = missing.filter((clientFileId): clientFileId is string => clientFileId !== null).length;
+  if (missingCount > 0) {
+    throw new Error(`Report cannot be completed because ${missingCount} local attachment(s) are missing.`);
+  }
 }
 
 export async function listMissingCompleteAssignmentAttachmentIds(assignmentId: string, pointId: string) {
@@ -1709,6 +1843,7 @@ export async function restoreMissingPointAttachment(
     throw new Error("Для восстановления требуется новый файл.");
   }
 
+  await assertPointActionAllowed(assignmentId, "attachMedia");
   const assignment = await getAssignmentById(assignmentId);
   if (!assignment) {
     throw new Error("Назначение не найдено на телефоне.");
@@ -1891,25 +2026,17 @@ async function requireOwnerUserId() {
   return ownerUserId;
 }
 
-async function assertPointActionAllowed(assignmentId: string) {
+async function assertPointActionAllowed(
+  assignmentId: string,
+  action: "scanAssignment" | "editPoint" | "attachMedia" | "completeAssignment"
+) {
   const assignment = await getAssignmentById(assignmentId);
   if (!assignment) {
     throw new Error("Назначение не найдено на телефоне.");
   }
 
-  if (assignment.status === "cancelled" || assignment.status === "cancelledServer") {
-    throw new Error("Заявка отменена диспетчером. Действия по обходу заблокированы.");
-  }
-
-  if (["completed", "completedServer", "completedLocal"].includes(assignment.status)) {
-    throw new Error("Обход уже завершён. Изменение точек недоступно.");
-  }
-
-  if (assignment.status !== "inProgress") {
-    throw new Error("Действия с метками доступны только после начала обхода.");
-  }
+  assertPatrolAction(action, assignment.status);
 }
-
 async function savePointResult({
   assignmentId,
   pointId,
@@ -1924,7 +2051,7 @@ async function savePointResult({
   issueTypeId: string | null;
 }) {
   const ownerUserId = await requireOwnerUserId();
-  await assertPointActionAllowed(assignmentId);
+  await assertPointActionAllowed(assignmentId, "editPoint");
   const point = await getPointForFill(assignmentId, pointId, ownerUserId, currentContourId);
   if (!point) {
     throw new Error("Метка не загружена на телефон.");
@@ -1981,6 +2108,7 @@ async function savePointResult({
     })
   );
 
+  requestSyncAfterMutation();
   void logMobileAction({
     eventType: "patrol.point.saved",
     entityType: "patrolPoint",

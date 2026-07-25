@@ -2,8 +2,9 @@ import * as Crypto from "expo-crypto";
 
 import { insertOutboxCommand, listPendingOutboxCommands } from "@/db/repositories/outboxRepository";
 import { MobileEntityType, OutboxCommand, OutboxCommandType } from "@/domain/sync/syncTypes";
-import { selectNextOutboxCommands as selectNextByAssignment } from "@/sync/outboxOrderingPolicy";
+import { getCommandAssignmentId, selectNextOutboxCommands as selectNextByAssignment } from "@/sync/outboxOrderingPolicy";
 import { assertRecordsBelongToOwner } from "@/sync/ownerIsolation";
+import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 
 type CreateOutboxCommandInput = {
   ownerUserId: string;
@@ -32,16 +33,21 @@ export function createOutboxCommand(input: CreateOutboxCommandInput): OutboxComm
 export async function enqueueOutboxCommand(input: CreateOutboxCommandInput) {
   const command = createOutboxCommand(input);
   await insertOutboxCommand(command);
+  requestSyncAfterMutation();
 
   return command;
 }
 
-export async function getPendingOutboxBatch(ownerUserId: string, limit?: number) {
+export async function getPendingOutboxBatch(
+  ownerUserId: string,
+  limit?: number,
+  excludedClientOperationIds: ReadonlySet<string> = new Set()
+) {
   const batchLimit = limit ?? 25;
   const commands = assertRecordsBelongToOwner(
     ownerUserId,
     await listPendingOutboxCommands(ownerUserId, Math.max(batchLimit * 4, 100))
-  );
+  ).filter((command) => !excludedClientOperationIds.has(command.clientOperationId));
   return selectNextByAssignment(
     commands.map((command) => ({ command, assignmentId: getCommandAssignmentId(command), createdAtLocal: command.createdAtLocal })),
     batchLimit
@@ -52,20 +58,11 @@ export async function getPendingOutboxBatch(ownerUserId: string, limit?: number)
 export function selectNextOutboxCommands(commands: OutboxCommand[], batchLimit: number) {
   // A patrol is a state machine, not an independently sortable set of jobs.
   // Sending `start` before the preceding `accept` used to be possible because
-  // of global command priorities.  Select only the oldest pending command per
-  // patrol in a pass; after its server acknowledgement the next pass advances
-  // that same patrol.  Commands from different patrols remain independent.
+  // of global command priorities.  Commands for one patrol stay FIFO;
+  // commands from different patrols remain independent aggregates.
+
   return selectNextByAssignment(
     commands.map((command) => ({ command, assignmentId: getCommandAssignmentId(command), createdAtLocal: command.createdAtLocal })),
     batchLimit
   ).map((item) => item.command);
-}
-
-function getCommandAssignmentId(command: OutboxCommand) {
-  if (command.commandType === "takePatrolRequest" || command.commandType === "startPatrolAssignment") {
-    return command.entityLocalId ?? null;
-  }
-
-  const payloadAssignmentId = command.payload.assignmentId;
-  return typeof payloadAssignmentId === "string" ? payloadAssignmentId : command.entityLocalId ?? null;
 }

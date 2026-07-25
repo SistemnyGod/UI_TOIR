@@ -13,7 +13,9 @@
     "verify": "npm run test:sync && npm run check:encoding && npm run typecheck && npm run lint",
     "check:encoding": "node scripts/check-encoding.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test": "vitest run",
+    "test:file": "vitest run"
   },
   "dependencies": {
     "@expo/vector-icons": "15.1.1",
@@ -53,7 +55,8 @@
     "@types/react": "19.2.15",
     "eslint": "9.39.4",
     "eslint-config-expo": "56.0.4",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
   },
   "overrides": {
     "uuid": "11.1.1"

@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, Text, View } f
 
 import { listMobileActionLog, MobileActionLogItem } from "@/db/repositories/mobileActionLogRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
+import { logMobileError } from "@/services/mobileErrorReporter";
 import {
   DiagnosticUploadResult,
   getDiagnosticSettingsSnapshot,
@@ -26,6 +27,7 @@ export function DiagnosticsSettingsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -38,6 +40,10 @@ export function DiagnosticsSettingsScreen() {
       setAutomaticUploadEnabledState(snapshot.automaticUploadEnabled);
       setReports(snapshot.recentReports);
       setEvents(recentEvents.filter(isDiagnosticEvent));
+      setLoadError(null);
+    } catch (caught) {
+      setLoadError(caught instanceof Error ? caught.message : "Не удалось прочитать локальную диагностику.");
+      void logMobileError("diagnostics.local-load.failed", caught);
     } finally {
       setIsLoading(false);
     }
@@ -101,8 +107,19 @@ export function DiagnosticsSettingsScreen() {
     );
   }
 
+  if (loadError) {
+    return (
+      <Screen title="Диагностика" subtitle="Ошибки, краш-логи и ручная отправка отчёта на сервер.">
+        <Card>
+          <Text style={styles.errorText}>{loadError}</Text>
+          <PrimaryButton icon="refresh-outline" label="Повторить загрузку" onPress={() => void load()} variant="secondary" />
+        </Card>
+      </Screen>
+    );
+  }
+
   return (
-    <Screen title="Диагностика" subtitle="Ошибки, краш-логи и ручная отправка отчёта на сервер.">
+    <Screen title="Diagnostics" subtitle="Errors and manual report upload.">
       {isLoading ? <ActivityIndicator /> : null}
 
       <Card>

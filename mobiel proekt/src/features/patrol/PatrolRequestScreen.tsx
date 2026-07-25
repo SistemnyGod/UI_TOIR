@@ -15,6 +15,7 @@ import {
 } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
+import { logMobileError } from "@/services/mobileErrorReporter";
 import { ActionSheet } from "@/ui/ActionSheet";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -28,22 +29,30 @@ export function PatrolRequestScreen() {
   const [request, setRequest] = useState<RequestBoardItem | null>(null);
   const [assignment, setAssignment] = useState<ActiveAssignment | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const load = useCallback(async () => {
-    const [item, existing] = await Promise.all([getRequestBoardItem(requestId), getAssignmentByRequestId(requestId)]);
-    setRequest(item);
-    setAssignment(existing);
+    setIsLoading(true);
+    try {
+      const [item, existing] = await Promise.all([getRequestBoardItem(requestId), getAssignmentByRequestId(requestId)]);
+      setRequest(item);
+      setAssignment(existing);
+      setLoadError(null);
+    } finally {
+      setIsLoading(false);
+    }
   }, [requestId]);
 
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      void load().catch(() => {
+      void load().catch((caught) => {
+        void logMobileError("patrol.request.load.failed", caught);
         if (isMounted) {
-          setRequest(null);
-          setAssignment(null);
+          setLoadError(caught instanceof Error ? caught.message : "Не удалось прочитать заявку.");
         }
       });
       return () => {
@@ -53,7 +62,10 @@ export function PatrolRequestScreen() {
   );
 
   useEffect(() => subscribeToSyncEvents(() => {
-    void load();
+    void load().catch((caught) => {
+      void logMobileError("patrol.request.sync-load.failed", caught);
+      setLoadError(caught instanceof Error ? caught.message : "Не удалось обновить заявку.");
+    });
   }), [load]);
 
   async function runAction(action: () => Promise<void>) {
@@ -137,6 +149,24 @@ export function PatrolRequestScreen() {
     );
   }
 
+  if (isLoading) {
+    return (
+      <Screen title="Заявка" subtitle="Карточка заявки на обход.">
+        <ActivityIndicator />
+      </Screen>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Screen title="Заявка" subtitle="Карточка заявки на обход.">
+        <Card>
+          <Text style={[styles.error, { color: "#b91c1c" }]}>{loadError}</Text>
+          <PrimaryButton icon="refresh-outline" label="Повторить загрузку" onPress={() => void load()} variant="secondary" />
+        </Card>
+      </Screen>
+    );
+  }
   if (!request) {
     return (
       <Screen title="Заявка" subtitle="Карточка заявки на обход.">

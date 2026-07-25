@@ -17,6 +17,7 @@ import {
   markFileUploading
 } from "@/db/repositories/filesRepository";
 import {
+  activateRetryableOutboxCommandsForImmediateRetry,
   applyOutboxResponses,
   activateWaitingAuthOutboxCommands,
   activateWaitingNetworkOutboxCommands,
@@ -36,6 +37,7 @@ import { getPendingOutboxBatch } from "@/sync/outboxProcessor";
 import { findMissingClientFileIds } from "@/sync/fileReferenceIntegrity";
 import { SerializedTaskQueue } from "@/sync/serializedTaskQueue";
 import { processOrderedOutboxBatch } from "@/sync/orderedOutboxBatch";
+import { getCommandAssignmentId } from "@/sync/outboxOrderingPolicy";
 import { mapWithConcurrency } from "@/sync/boundedAsync";
 import { shouldContinueOutboxSync } from "@/sync/outboxContinuationPolicy";
 import { emitSyncEvent } from "@/sync/syncEvents";
@@ -118,7 +120,7 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
   let processedBatches = 0;
   const attemptedOperationIds = new Set<string>();
   for (let batchIndex = 0; batchIndex < maxSyncBatchesPerRun; batchIndex += 1) {
-    const commands = await getPendingOutboxBatch(ownerUserId);
+    const commands = await getPendingOutboxBatch(ownerUserId, undefined, attemptedOperationIds);
 
     if (commands.length === 0) {
       break;
@@ -200,8 +202,8 @@ async function ensureAccessTokenForSync(ownerUserId: string): Promise<"ok" | "se
 }
 
 function getCommandDependencyKey(command: OutboxCommand) {
-  const assignmentId = command.payload.assignmentId;
-  if (typeof assignmentId === "string" && assignmentId) {
+  const assignmentId = getCommandAssignmentId(command);
+  if (assignmentId) {
     return `patrolAssignment:${assignmentId}`;
   }
 
@@ -302,6 +304,7 @@ export async function prepareManualSyncRetry() {
   const ownerUserId = await getStoredOwnerUserId();
   if (ownerUserId) {
     await resetSendingOutboxCommandsForManualRetry(ownerUserId);
+    await activateRetryableOutboxCommandsForImmediateRetry(ownerUserId);
   }
 }
 

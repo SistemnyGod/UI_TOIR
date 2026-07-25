@@ -5,6 +5,7 @@ import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
+import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 
 export type ShiftRemark = {
@@ -122,6 +123,7 @@ export async function createShiftRemarkLocally(input: {
     })
   );
 
+  requestSyncAfterMutation();
   return remarkId;
 }
 
@@ -225,6 +227,7 @@ export async function attachMediaToShiftRemark(remarkId: string, file: LocalMobi
       );
     })
   );
+  requestSyncAfterMutation();
 }
 
 export async function listShiftRemarks(limit = 20) {

@@ -9,6 +9,7 @@ import { MobileEmployeeDto, MobileEmuSectionDto, WorkItemDto, WorkTaskDto } from
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { WorkTaskRow, createWorkTaskOutboxCommand, mapWorkItemRow, mapWorkTaskRow, statusForPendingAction } from "@/db/repositories/workTaskMappers";
 import { insertOutboxCommandInTransaction, type SqlExecutor } from "@/db/repositories/outboxSql";
+import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 
 export async function saveWorkItems(items: WorkItemDto[]) {
   const ownerUserId = await requireOwnerUserId();
@@ -384,6 +385,7 @@ export async function createWorkTaskLocally(input: CreateWorkTaskInput) {
     })
   );
 
+  requestSyncAfterMutation();
   return taskId;
 }
 
@@ -409,7 +411,7 @@ export async function startPlannedWorkLocally(item: WorkItemDto, employee: Mobil
     taskId,
     createdAtLocal: startedAtLocal
   });
-  return withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
+  const result = await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
     const existing = await tx.getFirstAsync<{ taskId: string }>(
       `
         SELECT task_id AS taskId
@@ -457,6 +459,8 @@ export async function startPlannedWorkLocally(item: WorkItemDto, employee: Mobil
     await insertOutboxCommandInTransaction(tx, command);
     return taskId;
   }));
+  requestSyncAfterMutation();
+  return result;
 }
 
 export async function joinWorkTaskLocally(item: WorkItemDto, employee: MobileEmployeeDto, comment: string) {
@@ -506,6 +510,7 @@ async function enqueueParticipantChange(
     await tx.runAsync("UPDATE work_tasks SET sync_status = 'pending', status = 'inProgress' WHERE task_id = ? AND owner_user_id = ?", [item.itemId, ownerUserId]);
     await insertOutboxCommandInTransaction(tx, command);
   }));
+  requestSyncAfterMutation();
 }
 
 export async function updateWorkTaskLocally(input: UpdateWorkTaskInput) {
@@ -549,6 +554,7 @@ export async function updateWorkTaskLocally(input: UpdateWorkTaskInput) {
       await insertOutboxCommandInTransaction(tx, command);
     })
   );
+  requestSyncAfterMutation();
 }
 
 export async function pauseWorkTaskLocally(task: WorkTaskDto, comment: string) {
@@ -588,6 +594,7 @@ export async function pauseWorkTaskLocally(task: WorkTaskDto, comment: string) {
       await insertOutboxCommandInTransaction(tx, command);
     })
   );
+  requestSyncAfterMutation();
 }
 
 export async function resumeWorkTaskLocally(task: WorkTaskDto, comment: string) {
@@ -627,6 +634,7 @@ export async function resumeWorkTaskLocally(task: WorkTaskDto, comment: string) 
       await insertOutboxCommandInTransaction(tx, command);
     })
   );
+  requestSyncAfterMutation();
 }
 
 export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: string) {
@@ -674,6 +682,7 @@ export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: 
       await insertOutboxCommandInTransaction(tx, command);
     })
   );
+  requestSyncAfterMutation();
 }
 
 export async function attachMediaToWorkTask(workTaskId: string, file: LocalMobileFile) {
@@ -690,6 +699,7 @@ export async function attachMediaToWorkTask(workTaskId: string, file: LocalMobil
 
     await insertLocalFileInTransaction(tx, { ...file, status: "queued", workTaskId });
   }));
+  requestSyncAfterMutation();
 }
 
 type WorkTaskTransitionCommand = "pauseWorkTask" | "resumeWorkTask" | "completeWorkTask";

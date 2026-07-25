@@ -14,6 +14,7 @@ import {
   startAssignmentLocally
 } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
+import { logMobileError } from "@/services/mobileErrorReporter";
 import { reconcileAcceptedCompleteReports } from "@/sync/syncEngine";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
@@ -29,25 +30,31 @@ export function ActivePatrolScreen() {
   const { assignmentId } = useLocalSearchParams<{ assignmentId: string }>();
   const [assignment, setAssignment] = useState<ActiveAssignment | null>(null);
   const [progress, setProgress] = useState<AssignmentProgress | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const loadAssignment = useCallback(async () => {
+    setIsLoading(true);
     const [loadedAssignment, loadedProgress] = await Promise.all([
       getAssignmentById(assignmentId),
       getAssignmentProgress(assignmentId)
     ]);
     setAssignment(loadedAssignment);
     setProgress(loadedAssignment ? loadedProgress : null);
+    setLoadError(null);
+    setIsLoading(false);
   }, [assignmentId]);
 
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      void loadAssignment().catch(() => {
+      void loadAssignment().catch((caught) => {
+        void logMobileError("patrol.active-load.failed", caught);
         if (isMounted) {
-          setAssignment(null);
-          setProgress(null);
+          setLoadError(caught instanceof Error ? caught.message : "Не удалось прочитать текущий обход.");
+          setIsLoading(false);
         }
       });
       return () => {
@@ -87,6 +94,24 @@ export function ActivePatrolScreen() {
     });
   }
 
+  if (isLoading) {
+    return (
+      <Screen title="Обход" subtitle="Маршрут, прогресс и безопасные действия.">
+        <Card><Text style={[styles.text, { color: colors.mutedText }]}>Загрузка...</Text></Card>
+      </Screen>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Screen title="Обход" subtitle="Маршрут, прогресс и безопасные действия.">
+        <Card>
+          <Text style={[styles.text, { color: "#b91c1c" }]}>{loadError}</Text>
+          <PrimaryButton icon="refresh-outline" label="Повторить загрузку" onPress={() => void loadAssignment()} variant="secondary" />
+        </Card>
+      </Screen>
+    );
+  }
   if (!assignment || !progress) {
     return (
       <Screen title="Обход" subtitle="Маршрут, прогресс и безопасные действия.">

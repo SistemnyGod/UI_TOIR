@@ -66,6 +66,16 @@ export type PatrolAssignmentStatus =
   | "authRequired"
   | "needsDispatcherDecision";
 
+export type BootstrapConflictResolutionDto = {
+  clientOperationId: string;
+  entityLocalId: string | null;
+  entityServerId: string | null;
+  operationStatus: string;
+  resolutionStatus: string;
+  responseSnapshot: unknown | null;
+  resolvedAt: string;
+};
+
 export type PatrolAssignmentDto = {
   assignmentId: string;
   requestId: string;
@@ -122,6 +132,7 @@ export type BootstrapDto = {
   requestBoard: PatrolRequestBoardItemDto[];
   assignments: PatrolAssignmentDto[];
   cancelledAssignmentIds?: string[];
+  conflictResolutions?: BootstrapConflictResolutionDto[];
   routes: PatrolRouteDto[];
   points: PatrolPointDto[];
   serverTime: string;

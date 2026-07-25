@@ -30,6 +30,7 @@ internal sealed partial class EfMobileAppService
         var requestBoard = BuildRequestBoard(boundEmployeeIds);
         var assignments = BuildAssignments(boundEmployeeIds);
         var cancelledAssignmentIds = BuildCancelledAssignmentIds(boundEmployeeIds);
+        var conflictResolutions = BuildConflictResolutions(account.Id);
         var routeIds = requestBoard.Select(item => item.RouteId)
             .Concat(assignments.Select(item => item.RouteId))
             .ToHashSet();
@@ -82,7 +83,7 @@ internal sealed partial class EfMobileAppService
         var device = MapDevice(account, session);
         var employees = BuildMobileEmployees(boundEmployeeIds);
         var emuSections = BuildMobileEmuSections();
-        var syncCursor = BuildBootstrapCursor(user, device, employees, emuSections, requestBoard, assignments, cancelledAssignmentIds, routeDtos, pointDtos);
+        var syncCursor = BuildBootstrapCursor(user, device, employees, emuSections, requestBoard, assignments, cancelledAssignmentIds, conflictResolutions, routeDtos, pointDtos);
 
         return new MobileBootstrapDto(
             user,
@@ -97,10 +98,47 @@ internal sealed partial class EfMobileAppService
             syncCursor)
         {
             ContourId = MobileContourId,
-            CancelledAssignmentIds = cancelledAssignmentIds
+            CancelledAssignmentIds = cancelledAssignmentIds,
+            ConflictResolutions = conflictResolutions
         };
     }
 
+    private IReadOnlyList<MobileBootstrapConflictResolutionDto> BuildConflictResolutions(Guid mobileAccountId)
+    {
+        return dbContext.MobileSyncConflictResolutions
+            .AsNoTracking()
+            .Include(item => item.Operation)
+            .Where(item => item.MobileAccountId == mobileAccountId)
+            .OrderByDescending(item => item.ResolvedAt)
+            .Take(200)
+            .AsEnumerable()
+            .Select(item => new MobileBootstrapConflictResolutionDto(
+                item.ClientOperationId,
+                item.Operation?.EntityLocalId,
+                item.Operation?.EntityServerId,
+                item.Operation?.Status ?? "conflict",
+                item.Status,
+                ParseResponseSnapshot(item.Operation?.ResponseJson),
+                item.ResolvedAt))
+            .ToArray();
+    }
+
+    private static object? ParseResponseSnapshot(string? responseJson)
+    {
+        if (string.IsNullOrWhiteSpace(responseJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<object>(responseJson);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
     public MobileDeviceRegistrationDto? RegisterPushToken(string accessToken, MobilePushTokenRegistrationDto request)
     {
         var session = FindActiveSession(accessToken);
@@ -432,6 +470,7 @@ internal sealed partial class EfMobileAppService
         IReadOnlyList<MobilePatrolRequestBoardItemDto> requestBoard,
         IReadOnlyList<MobilePatrolAssignmentDto> assignments,
         IReadOnlyList<Guid> cancelledAssignmentIds,
+        IReadOnlyList<MobileBootstrapConflictResolutionDto> conflictResolutions,
         IReadOnlyList<MobilePatrolRouteDto> routes,
         IReadOnlyList<MobilePatrolPointDto> points)
     {
@@ -446,6 +485,7 @@ internal sealed partial class EfMobileAppService
             requestBoard,
             assignments,
             cancelledAssignmentIds,
+            conflictResolutions,
             routes,
             points
         }, JsonOptions);

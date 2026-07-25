@@ -10,7 +10,7 @@ import { deferPoint, getPointForFill, getReportReadiness, PointForFill, savePoin
 import { isPhotoEvidenceRequired } from "@/domain/patrol/photoEvidencePolicy";
 import { restoreDeferredPointSelection } from "@/domain/patrol/pointDraftPolicy";
 import { useAppTheme } from "@/features/settings/themePreference";
-import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { logMobileError } from "@/services/mobileErrorReporter";
 import {
   attachPointPhotoFromCamera,
   attachPointMediaFromGallery,
@@ -36,6 +36,7 @@ export function PointFillScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMediaBusy, setIsMediaBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<"attachments" | "more" | null>(null);
   const draftReadyRef = useRef(false);
   const finalizingRef = useRef(false);
@@ -48,12 +49,14 @@ export function PointFillScreen() {
     photoClientFileIds: [] as string[]
   });
 
-  latestDraftRef.current = {
-    selectedStatus,
-    comment,
-    issueTypeId,
-    photoClientFileIds: attachments.map((attachment) => attachment.clientFileId)
-  };
+  useEffect(() => {
+    latestDraftRef.current = {
+      selectedStatus,
+      comment,
+      issueTypeId,
+      photoClientFileIds: attachments.map((attachment) => attachment.clientFileId)
+    };
+  }, [attachments, comment, issueTypeId, selectedStatus]);
 
   const clearDraftSaveTimer = useCallback(() => {
     if (draftSaveTimerRef.current) {
@@ -95,6 +98,7 @@ export function PointFillScreen() {
       return;
     }
     const [loaded, files] = await Promise.all([getPointForFill(assignmentId, pointId, ownerUserId, currentContourId), listPointFiles(assignmentId, pointId)]);
+    setLoadError(null);
     setPoint(loaded);
     setComment(loaded?.comment ?? "");
     setIssueTypeId(loaded?.issueTypeId ?? "Неисправность");
@@ -117,16 +121,17 @@ export function PointFillScreen() {
     useCallback(() => {
       let isMounted = true;
 
-      void reload().catch(() => {
+      void reload().catch((caught) => {
+        void logMobileError("patrol.point.load.failed", caught);
         if (isMounted) {
-          setPoint(null);
+          setLoadError(caught instanceof Error ? caught.message : "Не удалось загрузить точку обхода.");
         }
       });
 
       return () => {
         isMounted = false;
         clearDraftSaveTimer();
-        void persistDraft().catch(() => undefined);
+        void persistDraft().catch((draftError) => { void logMobileError("patrol.point.draft.save.failed", draftError); });
       };
     }, [clearDraftSaveTimer, persistDraft, reload])
   );
@@ -208,7 +213,7 @@ export function PointFillScreen() {
     } catch {
       if (!pointSaved) {
         finalizingRef.current = false;
-        void persistDraft().catch(() => undefined);
+        void persistDraft().catch((draftError) => { void logMobileError("patrol.point.draft.save.failed", draftError); });
       }
       setError(pointSaved ? "Метка сохранена, но переход к следующей точке не выполнен." : "Не удалось сохранить метку.");
     } finally {
@@ -234,7 +239,7 @@ export function PointFillScreen() {
     } catch {
       if (!deferred) {
         finalizingRef.current = false;
-        void persistDraft().catch(() => undefined);
+        void persistDraft().catch((draftError) => { void logMobileError("patrol.point.draft.save.failed", draftError); });
       }
       setError(deferred ? "Точка отложена, но переход к следующей точке не выполнен." : "Не удалось отложить метку.");
     } finally {
@@ -295,7 +300,6 @@ export function PointFillScreen() {
   }
 
   async function continuePatrolFlow() {
-    void triggerForegroundSyncWithRetry();
     const readiness = await getReportReadiness(assignmentId);
     router.replace(readiness.ready
       ? `/patrol/assignment/${assignmentId}/submit`
@@ -317,6 +321,16 @@ export function PointFillScreen() {
     setAttachments(files.map(toPointAttachment));
   }
 
+  if (loadError) {
+    return (
+      <Screen title="Заполнение метки" subtitle="Статус, комментарий и вложения точки.">
+        <Card>
+          <Text style={[styles.text, { color: "#b91c1c" }]}>{loadError}</Text>
+          <PrimaryButton icon="refresh-outline" label="Повторить загрузку" onPress={() => void reload()} variant="secondary" />
+        </Card>
+      </Screen>
+    );
+  }
   if (!point) {
     return (
       <Screen title="Заполнение метки" subtitle="Статус, комментарий и вложения точки.">

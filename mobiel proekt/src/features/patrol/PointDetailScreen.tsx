@@ -9,6 +9,7 @@ import { listPointFiles } from "@/db/repositories/filesRepository";
 import { getAssignmentById, getPointForFill, listMissingCompleteAssignmentAttachmentIds, PointForFill, PointListItem } from "@/db/repositories/patrolRepository";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { useAppTheme } from "@/features/settings/themePreference";
+import { logMobileError } from "@/services/mobileErrorReporter";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -22,11 +23,14 @@ export function PointDetailScreen() {
   const [point, setPoint] = useState<PointForFill | null>(null);
   const [attachments, setAttachments] = useState<LocalMobileFile[]>([]);
   const [missingAttachmentIds, setMissingAttachmentIds] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
       void (async () => {
+        try {
         const ownerUserId = await getStoredOwnerUserId();
         const [loadedAssignment, loadedPoint, files, missingIds] = await Promise.all([
           getAssignmentById(assignmentId),
@@ -41,7 +45,17 @@ export function PointDetailScreen() {
         setPoint(loadedPoint);
         setAttachments(files);
         setMissingAttachmentIds(missingIds);
-
+        setLoadError(null);
+        } catch (caught) {
+          void logMobileError("patrol.point-detail.load.failed", caught);
+          if (isMounted) {
+            setLoadError(caught instanceof Error ? caught.message : "Не удалось прочитать точку обхода.");
+          }
+        } finally {
+          if (isMounted) {
+            setIsLoading(false);
+          }
+        }
       })();
       return () => {
         isMounted = false;
@@ -49,6 +63,24 @@ export function PointDetailScreen() {
     }, [assignmentId, pointId])
   );
 
+  if (isLoading) {
+    return (
+      <Screen title="Точка маршрута" subtitle="Карточка точки, текущий статус и действия.">
+        <Card><Text style={[styles.text, { color: colors.mutedText }]}>Загрузка...</Text></Card>
+      </Screen>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Screen title="Точка маршрута" subtitle="Карточка точки, текущий статус и действия.">
+        <Card>
+          <Text style={[styles.text, { color: "#b91c1c" }]}>{loadError}</Text>
+          <PrimaryButton icon="refresh-outline" label="Повторить загрузку" onPress={() => router.replace(`/patrol/assignment/${assignmentId}/point/${pointId}`)} variant="secondary" />
+        </Card>
+      </Screen>
+    );
+  }
   if (!point) {
     return (
       <Screen title="Точка маршрута" subtitle="Карточка точки, текущий статус и действия.">

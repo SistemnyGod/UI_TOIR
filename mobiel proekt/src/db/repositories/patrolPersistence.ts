@@ -5,6 +5,7 @@ import { currentContourId } from "@/core/environments";
 import { getDatabase } from "@/db/database";
 import type { PointListItem } from "@/db/repositories/patrolRepository";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
+import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 
 export type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "getFirstAsync" | "runAsync">;
 
@@ -131,6 +132,7 @@ export async function upsertPointResult(input: {
 }) {
   const db = await getDatabase();
   await withSqliteBusyRetry(() => upsertPointResultInTransaction(db, input));
+  requestSyncAfterMutation();
 }
 
 export async function upsertPointResultInTransaction(executor: SqlExecutor, input: {

@@ -80,12 +80,15 @@ export async function finalizeCancelledAssignmentInTransaction(
   await executor.runAsync(
     `
       UPDATE sync_conflicts
-      SET status = 'resolved'
+      SET status = 'resolved',
+          resolution_status = 'resolvedServerWins',
+          resolved_at = ?,
+          resolution_reason = 'Сервер отменил назначение.'
       WHERE owner_user_id = ?
         AND contour_id = ?
         AND status NOT IN ('resolved', 'dismissed')
         AND client_operation_id IN (${placeholders})
     `,
-    [ownerUserId, currentContourId, ...commandIds]
+    [new Date().toISOString(), ownerUserId, currentContourId, ...commandIds]
   );
 }

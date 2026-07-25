@@ -50,3 +50,19 @@ test("active patrol route data and upload error kind survive refresh failures", 
   assert.match(fileApiSource, /lastError instanceof MobileNetworkError[\s\S]*?lastError\.kind/);
   assert.match(syncSource, /error instanceof MobileNetworkError[\s\S]*?new MobileNetworkError\(error\.kind/);
 });
+
+test("offline report becomes immediately retryable when network returns", async () => {
+  const [triggerSource, engineSource, repositorySource] = await Promise.all([
+    readSource("src/sync/syncTriggers.ts"),
+    readSource("src/sync/syncEngine.ts"),
+    readSource("src/db/repositories/outboxRepository.ts")
+  ]);
+
+  assert.match(triggerSource, /networkBecameUsable[\s\S]*forceRetry: networkBecameUsable/);
+  assert.match(triggerSource, /result\.skipped === "serverUnavailable" \|\| result\.skipped === "offline"/);
+  assert.match(engineSource, /activateRetryableOutboxCommandsForImmediateRetry\(ownerUserId\)/);
+  assert.match(
+    repositorySource,
+    /next_attempt_at = NULL[\s\S]*status IN \('retryLater', 'waiting_network'\)/
+  );
+});

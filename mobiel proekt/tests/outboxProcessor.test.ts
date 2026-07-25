@@ -12,7 +12,7 @@ function command(commandType: string, assignmentId: string, createdAtLocal: stri
   };
 }
 
-test("outbox advances one lifecycle step per patrol before later commands", () => {
+test("outbox keeps FIFO order within one patrol before independent commands", () => {
   const selected = selectNextOutboxCommands([
     command("acceptPatrolRequest", "a", "2026-07-16T10:00:00.000Z"),
     command("startPatrolAssignment", "a", "2026-07-16T10:01:00.000Z"),
@@ -22,6 +22,8 @@ test("outbox advances one lifecycle step per patrol before later commands", () =
 
   assert.deepEqual(selected.map((item) => item.id), [
     "a-acceptPatrolRequest-2026-07-16T10:00:00.000Z",
+    "a-startPatrolAssignment-2026-07-16T10:01:00.000Z",
+    "a-scanPatrolPointNfc-2026-07-16T10:02:00.000Z",
     "b-startPatrolAssignment-2026-07-16T10:00:30.000Z"
   ]);
 });

@@ -3,6 +3,7 @@ import { getAccessToken } from "@/auth/tokenStorage";
 import { hasUsableNetwork } from "@/core/network";
 import { saveBootstrap } from "@/db/repositories/bootstrapRepository";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
+import { logMobileError } from "@/services/mobileErrorReporter";
 import { refreshPushRegistrationIfAllowed, syncMobileNotifications } from "@/services/notificationService";
 import { syncWorkItems } from "@/services/workTaskService";
 import { emitSyncEvent } from "@/sync/syncEvents";
@@ -32,7 +33,11 @@ async function refreshMobileDataInternal() {
     return false;
   }
 
-  await refreshPushRegistrationIfAllowed().catch(() => null);
+  try {
+    await refreshPushRegistrationIfAllowed();
+  } catch (error) {
+    void logMobileError("mobile.refresh.push-registration.failed", error);
+  }
 
   const bootstrap = await getBootstrap(accessToken);
   const snapshotUpdated = await saveBootstrap(bootstrap);
@@ -42,10 +47,26 @@ async function refreshMobileDataInternal() {
     cancelledAssignmentIds: bootstrap.cancelledAssignmentIds ?? [],
     snapshotRefreshed: true
   });
-  await Promise.all([
-    syncMobileNotifications().catch(() => []),
-    syncWorkItems().catch(() => [])
-  ]);
+  const refreshTasks = [
+    { name: "notifications", task: syncMobileNotifications() },
+    { name: "work-items", task: syncWorkItems() }
+  ] as const;
+  const refreshResults = await Promise.allSettled(refreshTasks.map(({ task }) => task));
+  const failedTasks = refreshResults.flatMap((result, index) =>
+    result.status === "rejected" ? [{ name: refreshTasks[index].name, reason: result.reason }] : []
+  );
+  for (const failedTask of failedTasks) {
+    void logMobileError(`mobile.refresh.${failedTask.name}.failed`, failedTask.reason);
+  }
+  if (failedTasks.length > 0) {
+    void logMobileAction({
+      eventType: "mobile.refresh.partial",
+      entityType: "bootstrap",
+      message: "Часть мобильных данных не обновилась.",
+      payload: { failedTasks: failedTasks.map(({ name }) => name) }
+    }).catch(() => undefined);
+    return false;
+  }
 
   void logMobileAction({
     eventType: "mobile.refresh.completed",

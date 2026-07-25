@@ -7,10 +7,13 @@ import { refreshMobileData } from "@/services/mobileDataRefreshService";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { triggerDailyDiagnosticReportUpload } from "@/services/diagnosticReportService";
 import { ForegroundSyncResult, prepareManualSyncRetry, runForegroundSync } from "@/sync/syncEngine";
+import { createMutationSyncScheduler } from "@/sync/mutationSyncScheduler";
+import { registerMutationSyncRequester, requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 import { getRetryDelayMs } from "@/sync/retryPolicy";
 
 const fallbackRefreshMs = 300_000;
 const refreshCooldownMs = 15_000;
+const mutationSyncDebounceMs = 50;
 
 let retryTimeout: ReturnType<typeof setTimeout> | null = null;
 let fallbackRefreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -19,6 +22,12 @@ let retryAttempt = 0;
 let lastRefreshStartedAt = 0;
 let activeRefreshPromise: Promise<boolean> | null = null;
 let lastNetworkUsable: boolean | null = null;
+
+const mutationSyncScheduler = createMutationSyncScheduler(
+  () => triggerForegroundSyncWithRetry(),
+  mutationSyncDebounceMs
+);
+registerMutationSyncRequester(() => mutationSyncScheduler.request());
 
 export type MobileDataRefreshReason = "push" | "notificationResponse" | "network" | "appActive" | "fallback" | "manual";
 
@@ -29,20 +38,21 @@ export function subscribeToNetworkSync() {
 
   const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
     const networkUsable = canAttemptServerConnection(state);
+    const networkBecameUsable = networkUsable && lastNetworkUsable !== true;
     if (networkUsable !== lastNetworkUsable) {
       lastNetworkUsable = networkUsable;
       void logMobileAction({
         eventType: networkUsable ? "network.available" : "network.unavailable",
         entityType: "mobileApp",
         message: networkUsable
-          ? "Сеть доступна. Запущены обновление данных и отправка очереди."
-          : "Сеть недоступна. Операции остаются в локальной очереди."
+          ? "РЎРµС‚СЊ РґРѕСЃС‚СѓРїРЅР°. Р—Р°РїСѓС‰РµРЅС‹ РѕР±РЅРѕРІР»РµРЅРёРµ РґР°РЅРЅС‹С… Рё РѕС‚РїСЂР°РІРєР° РѕС‡РµСЂРµРґРё."
+          : "РЎРµС‚СЊ РЅРµРґРѕСЃС‚СѓРїРЅР°. РћРїРµСЂР°С†РёРё РѕСЃС‚Р°СЋС‚СЃСЏ РІ Р»РѕРєР°Р»СЊРЅРѕР№ РѕС‡РµСЂРµРґРё."
       }).catch(() => undefined);
     }
 
     if (networkUsable) {
       requestMobileDataRefresh("network");
-      triggerForegroundSyncWithRetry();
+      void triggerForegroundSyncWithRetry({ forceRetry: networkBecameUsable });
       void triggerDailyDiagnosticReportUpload();
     }
   });
@@ -69,7 +79,9 @@ export type TriggerForegroundSyncResult = ForegroundSyncResult | {
 export async function triggerForegroundSyncWithRetry(
   options: { forceRetry?: boolean } = {}
 ): Promise<TriggerForegroundSyncResult> {
-  clearScheduledRetry();
+  if (options.forceRetry) {
+    clearScheduledRetry();
+  }
   const pendingRefresh = activeRefreshPromise;
 
   try {
@@ -78,7 +90,7 @@ export async function triggerForegroundSyncWithRetry(
     }
     await (pendingRefresh ? pendingRefresh.catch(() => false) : Promise.resolve(false));
     const result = await runForegroundSync();
-    if (result.skipped === "serverUnavailable") {
+    if (result.skipped === "serverUnavailable" || result.skipped === "offline") {
       scheduleRetry();
       return result;
     }
@@ -98,6 +110,7 @@ export async function triggerForegroundSyncWithRetry(
   }
 }
 
+export { requestSyncAfterMutation };
 export function triggerMobileDataRefresh() {
   requestMobileDataRefresh("manual", { force: true });
 }

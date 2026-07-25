@@ -111,7 +111,10 @@ async function initializeDatabaseOnce() {
       started_at_local TEXT,
       completed_at_local TEXT,
       revision INTEGER NOT NULL,
-      route_version_no INTEGER NOT NULL DEFAULT 0
+      route_version_no INTEGER NOT NULL DEFAULT 0,
+      snapshot_version INTEGER NOT NULL DEFAULT 0,
+      snapshot_created_at TEXT,
+      snapshot_source TEXT
     );
 
     CREATE TABLE IF NOT EXISTS assignment_route_points (
@@ -198,6 +201,7 @@ async function initializeDatabaseOnce() {
       created_at_local TEXT NOT NULL,
       updated_at_local TEXT,
       next_attempt_at TEXT,
+      last_attempt_at TEXT,
       attempt_count INTEGER NOT NULL DEFAULT 0,
       last_error TEXT,
       status TEXT NOT NULL
@@ -218,7 +222,10 @@ async function initializeDatabaseOnce() {
       entity_type TEXT NOT NULL,
       reason TEXT NOT NULL,
       payload_snapshot_json TEXT NOT NULL,
-      status TEXT NOT NULL
+      status TEXT NOT NULL,
+      resolution_status TEXT NOT NULL DEFAULT 'open',
+      resolved_at TEXT,
+      resolution_reason TEXT
     );
 
     CREATE TABLE IF NOT EXISTS mobile_notifications (
@@ -368,6 +375,13 @@ async function initializeDatabaseOnce() {
     await runLocalMigration(tx, "20260721_outbox_next_attempt_at", async () => {
       await ensureOutboxNextAttemptAt(tx);
     });
+
+    await runLocalMigration(tx, "20260725_outbox_retry_timestamps", async () => {
+      await ensureOutboxRetryTimestamps(tx);
+    });
+    await runLocalMigration(tx, "20260725_conflict_resolution_state", async () => {
+      await ensureConflictResolutionState(tx);
+    });
   });
 }
 
@@ -401,7 +415,10 @@ async function ensureMobileColumns(db: SqlExecutor) {
   await ensureColumns(db, "patrol_assignments", [
     { name: "completed_at_local", sql: "ALTER TABLE patrol_assignments ADD COLUMN completed_at_local TEXT" },
     { name: "revision", sql: "ALTER TABLE patrol_assignments ADD COLUMN revision INTEGER NOT NULL DEFAULT 0" },
-    { name: "route_version_no", sql: "ALTER TABLE patrol_assignments ADD COLUMN route_version_no INTEGER NOT NULL DEFAULT 0" }
+    { name: "route_version_no", sql: "ALTER TABLE patrol_assignments ADD COLUMN route_version_no INTEGER NOT NULL DEFAULT 0" },
+    { name: "snapshot_version", sql: "ALTER TABLE patrol_assignments ADD COLUMN snapshot_version INTEGER NOT NULL DEFAULT 0" },
+    { name: "snapshot_created_at", sql: "ALTER TABLE patrol_assignments ADD COLUMN snapshot_created_at TEXT" },
+    { name: "snapshot_source", sql: "ALTER TABLE patrol_assignments ADD COLUMN snapshot_source TEXT" }
   ]);
 
   await ensureColumns(db, "route_points", [
@@ -797,6 +814,13 @@ async function ensureMobileActionLogRetention(db: SqlExecutor) {
   `);
 }
 
+async function ensureConflictResolutionState(db: SqlExecutor) {
+  await ensureColumns(db, "sync_conflicts", [
+    { name: "resolution_status", sql: "ALTER TABLE sync_conflicts ADD COLUMN resolution_status TEXT NOT NULL DEFAULT 'open'" },
+    { name: "resolved_at", sql: "ALTER TABLE sync_conflicts ADD COLUMN resolved_at TEXT" },
+    { name: "resolution_reason", sql: "ALTER TABLE sync_conflicts ADD COLUMN resolution_reason TEXT" }
+  ]);
+}
 async function ensureColumns(db: SqlExecutor, tableName: string, additions: { name: string; sql: string }[]) {
   const columns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${tableName})`);
   const existing = new Set(columns.map((column) => column.name));
@@ -869,4 +893,11 @@ async function ensureOutboxNextAttemptAt(db: SqlExecutor) {
     CREATE INDEX IF NOT EXISTS ix_outbox_commands_contour_next_attempt
       ON outbox_commands (contour_id, status, next_attempt_at, created_at_local);
   `);
+}
+
+async function ensureOutboxRetryTimestamps(db: SqlExecutor) {
+  await ensureColumns(db, "outbox_commands", [
+    { name: "next_attempt_at", sql: "ALTER TABLE outbox_commands ADD COLUMN next_attempt_at TEXT" },
+    { name: "last_attempt_at", sql: "ALTER TABLE outbox_commands ADD COLUMN last_attempt_at TEXT" }
+  ]);
 }

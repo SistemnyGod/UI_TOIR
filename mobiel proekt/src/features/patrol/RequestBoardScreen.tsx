@@ -6,8 +6,10 @@ import { ListRenderItem, Pressable, StyleSheet, Text, View } from "react-native"
 import { listRequestBoard, RequestBoardItem } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { refreshMobileData } from "@/services/mobileDataRefreshService";
+import { logMobileError } from "@/services/mobileErrorReporter";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
 import { Card } from "@/ui/Card";
+import { PrimaryButton } from "@/ui/PrimaryButton";
 import { ScreenList } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
 
@@ -24,27 +26,34 @@ export function RequestBoardScreen() {
   const [activeTab, setActiveTab] = useState<RequestTab>("available");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadLocal = useCallback(async () => {
-    setItems(await listRequestBoard());
+    const rows = await listRequestBoard();
+    setItems(rows);
+    setLoadError(null);
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      void listRequestBoard().then((rows) => {
+      void loadLocal().catch((caught) => {
+        void logMobileError("patrol.request-board.load.failed", caught);
         if (isMounted) {
-          setItems(rows);
+          setLoadError(caught instanceof Error ? caught.message : "Не удалось прочитать заявки.");
         }
       });
       return () => {
         isMounted = false;
       };
-    }, [])
+    }, [loadLocal])
   );
 
   useEffect(() => subscribeToSyncEvents(() => {
-    void loadLocal();
+    void loadLocal().catch((caught) => {
+      void logMobileError("patrol.request-board.refresh-load.failed", caught);
+      setLoadError(caught instanceof Error ? caught.message : "Не удалось обновить заявки.");
+    });
   }), [loadLocal]);
 
   async function handleRefresh() {
@@ -55,7 +64,8 @@ export function RequestBoardScreen() {
       await loadLocal();
       setMessage(updated ? "Заявки обновлены." : "Нет связи. Показаны заявки, сохраненные на телефоне.");
     } catch (error) {
-      await loadLocal();
+      void logMobileError("patrol.request-board.refresh.failed", error);
+      setLoadError(error instanceof Error ? error.message : "Не удалось обновить заявки.");
       setMessage(error instanceof Error ? error.message : "Не удалось обновить заявки. Показаны локальные данные.");
     } finally {
       setIsRefreshing(false);
@@ -95,12 +105,17 @@ export function RequestBoardScreen() {
       keyExtractor={(item) => item.requestId}
       onRefresh={() => void handleRefresh()}
       refreshing={isRefreshing}
-      ListEmptyComponent={
+      ListEmptyComponent={loadError ? (
+        <Card>
+          <Text style={[styles.text, { color: "#b91c1c" }]}>{loadError}</Text>
+          <PrimaryButton icon="refresh-outline" label="Повторить загрузку" onPress={() => void loadLocal()} variant="secondary" />
+        </Card>
+      ) : (
         <Card>
           <Text style={[styles.title, { color: colors.text }]}>В этой вкладке пока пусто</Text>
           <Text style={[styles.text, { color: colors.mutedText }]}>Потяните экран вниз для обновления или выберите другую вкладку.</Text>
         </Card>
-      }
+      )}
       renderItem={renderItem}
       title="Заявки на обход"
       subtitle="Откройте заявку, чтобы проверить маршрут."

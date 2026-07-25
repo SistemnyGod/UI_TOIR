@@ -1,3 +1,4 @@
+import * as Crypto from "expo-crypto";
 import { currentContourId } from "@/core/environments";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
@@ -7,6 +8,10 @@ import { finalizeCancelledAssignmentInTransaction } from "@/db/repositories/patr
 import { MobileEntityType, OutboxCommand, OutboxCommandStatus, OutboxCommandType, OutboxResponse } from "@/domain/sync/syncTypes";
 import { extractAssignmentId, extractCompletionFileIds, isCancelledCompletionResponse, isProblemResponse } from "@/db/repositories/outboxPolicies";
 import { SyncQueueCommandItem } from "@/db/repositories/outboxTypes";
+import { isOutboxCommandReady, resolveRetryDelaySeconds } from "@/sync/outboxRetryPolicy";
+import { applyRejectedCancellationTransition, applyServerWinsTransition, ConflictServerSnapshot } from "@/domain/sync/conflictResolutionPolicy";
+import { getCommandAssignmentId } from "@/sync/outboxOrderingPolicy";
+import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 
 export type { SyncQueueCommandItem } from "@/db/repositories/outboxTypes";
 
@@ -53,7 +58,7 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
   const rows = await db.getAllAsync<{
     client_operation_id: string;
     owner_user_id: string;
-     contour_id: string;
+    contour_id: string;
     command_type: string;
     entity_type: string;
     entity_local_id: string | null;
@@ -69,19 +74,18 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
       SELECT *
       FROM outbox_commands
       WHERE owner_user_id = ?
-                AND contour_id = ?
-        AND status IN ('pending', 'retryLater')
-        AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+        AND contour_id = ?
+        AND status NOT IN ('accepted', 'duplicate', 'superseded', 'cancelled')
       ORDER BY created_at_local ASC
       LIMIT ?
     `,
-    [ownerUserId, currentContourId, new Date().toISOString(), limit]
+    [ownerUserId, currentContourId, Math.max(limit * 4, 100)]
   );
 
-  return rows.map((row) => ({
+  const commands = rows.map((row) => ({
     clientOperationId: row.client_operation_id,
     ownerUserId: row.owner_user_id,
-     contourId: row.contour_id,
+    contourId: row.contour_id,
     commandType: row.command_type as OutboxCommandType,
     entityType: row.entity_type as MobileEntityType,
     entityLocalId: row.entity_local_id,
@@ -89,10 +93,27 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
     payload: JSON.parse(row.payload_json) as Record<string, unknown>,
     createdAtLocal: row.created_at_local,
     attemptCount: row.attempt_count,
-    status: row.status as OutboxCommandStatus
+    status: row.status as OutboxCommandStatus,
+    nextAttemptAt: row.next_attempt_at
   }));
-}
+  const terminalStatuses = new Set<OutboxCommandStatus>(["accepted", "duplicate", "superseded", "cancelled"]);
+  const readyCandidates = commands.filter((command) => isOutboxCommandReady(command, new Date().toISOString()));
 
+  return readyCandidates
+    .filter((candidate) => {
+      const aggregateId = getCommandAssignmentId(candidate);
+      if (!aggregateId) {
+        return true;
+      }
+      return !commands.some((previous) =>
+        previous.createdAtLocal < candidate.createdAtLocal
+        && getCommandAssignmentId(previous) === aggregateId
+        && !terminalStatuses.has(previous.status)
+      );
+    })
+    .slice(0, limit)
+    .map(({ nextAttemptAt: _nextAttemptAt, ...command }) => command);
+}
 export async function countPendingOutboxCommands(ownerUserId: string) {
   const db = await getDatabase();
   const row = await db.getFirstAsync<{ count: number }>(
@@ -172,9 +193,11 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
     created_at_local: string;
     updated_at_local: string | null;
     next_attempt_at: string | null;
+    last_attempt_at: string | null;
     attempt_count: number;
     last_error: string | null;
     assignment_route_name: string | null;
+    resolution_status: string | null;
   }>(
     `
       SELECT
@@ -188,9 +211,11 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
         command.created_at_local,
         command.updated_at_local,
         command.next_attempt_at,
+        command.last_attempt_at,
         command.attempt_count,
         command.last_error,
-        assignment.route_name AS assignment_route_name
+        assignment.route_name AS assignment_route_name,
+        (SELECT resolution_status FROM sync_conflicts conflict WHERE conflict.owner_user_id = command.owner_user_id AND conflict.contour_id = command.contour_id AND conflict.client_operation_id = command.client_operation_id ORDER BY conflict.rowid DESC LIMIT 1) AS resolution_status
       FROM outbox_commands command
       LEFT JOIN patrol_assignments assignment
         ON assignment.assignment_id = command.entity_local_id
@@ -221,12 +246,27 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
     createdAtLocal: row.created_at_local,
     updatedAtLocal: row.updated_at_local,
     nextAttemptAt: row.next_attempt_at,
+    lastAttemptAt: row.last_attempt_at,
     attemptCount: row.attempt_count,
     lastError: row.last_error,
+    resolutionStatus: row.resolution_status as SyncQueueCommandItem["resolutionStatus"],
     assignmentRouteName: row.assignment_route_name
   }));
 }
 
+export async function getOutboxCommandEntityLocalId(ownerUserId: string, clientOperationId: string) {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ entityLocalId: string | null }>(
+    `
+      SELECT entity_local_id AS entityLocalId
+      FROM outbox_commands
+      WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
+      LIMIT 1
+    `,
+    [ownerUserId, currentContourId, clientOperationId]
+  );
+  return row?.entityLocalId ?? null;
+}
 export async function listUnconfirmedCompleteReportCommands(
   ownerUserId: string,
   assignmentId?: string,
@@ -295,13 +335,14 @@ export async function markOutboxCommandsSending(ownerUserId: string, clientOpera
           attempt_count = attempt_count + 1,
           last_error = NULL,
           next_attempt_at = NULL,
+          last_attempt_at = ?,
           updated_at_local = ?
       WHERE owner_user_id = ?
                 AND contour_id = ?
         AND client_operation_id IN (${placeholders})
         AND status IN ('pending', 'retryLater')
     `,
-    [updatedAtLocal, ownerUserId, currentContourId, ...clientOperationIds]
+    [updatedAtLocal, updatedAtLocal, ownerUserId, currentContourId, ...clientOperationIds]
   ));
 }
 
@@ -355,35 +396,44 @@ export async function markOutboxCommandsRetryLater(
   );
 }
 
-function resolveRetryDelaySeconds(retryAfterSeconds: number | null | undefined, attemptCount: number) {
-  if (typeof retryAfterSeconds === "number" && Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
-    return Math.min(Math.ceil(retryAfterSeconds), 24 * 60 * 60);
-  }
-
-  const exponent = Math.max(0, Math.min(8, Math.trunc(attemptCount) - 1));
-  return Math.min(60 * 60, 15 * (2 ** exponent));
-}
 
 export async function markPendingOutboxCommandsRetryLater(ownerUserId: string, lastError: string) {
   const db = await getDatabase();
-  const updatedAtLocal = new Date().toISOString();
-  const nextAttemptAt = new Date(Date.now() + resolveRetryDelaySeconds(null, 1) * 1000).toISOString();
 
-  await withSqliteBusyRetry(() => db.runAsync(
-    `
-      UPDATE outbox_commands
-      SET status = 'retryLater',
-          last_error = ?,
-          next_attempt_at = ?,
-          updated_at_local = ?
-      WHERE owner_user_id = ?
-                AND contour_id = ?
-        AND status IN ('pending', 'sending', 'retryLater')
-    `,
-    [lastError, nextAttemptAt, updatedAtLocal, ownerUserId, currentContourId]
-  ));
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const rows = await tx.getAllAsync<{
+        client_operation_id: string;
+        attempt_count: number;
+        next_attempt_at: string | null;
+      }>(
+        "SELECT client_operation_id, attempt_count, next_attempt_at " +
+        "FROM outbox_commands WHERE owner_user_id = ? AND contour_id = ? " +
+        "AND status IN ('pending', 'sending', 'retryLater')",
+        [ownerUserId, currentContourId]
+      );
+      const nowMs = Date.now();
+      const updatedAtLocal = new Date(nowMs).toISOString();
+
+      for (const row of rows) {
+        const computedNextAttemptMs = nowMs + resolveRetryDelaySeconds(null, row.attempt_count) * 1000;
+        const existingNextAttemptMs = row.next_attempt_at ? Date.parse(row.next_attempt_at) : Number.NaN;
+        const nextAttemptAt = new Date(
+          Math.max(
+            computedNextAttemptMs,
+            Number.isFinite(existingNextAttemptMs) ? existingNextAttemptMs : computedNextAttemptMs
+          )
+        ).toISOString();
+
+        await tx.runAsync(
+          "UPDATE outbox_commands SET status = 'retryLater', last_error = ?, next_attempt_at = ?, updated_at_local = ? " +
+          "WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?",
+          [lastError, nextAttemptAt, updatedAtLocal, ownerUserId, currentContourId, row.client_operation_id]
+        );
+      }
+    })
+  );
 }
-
 export async function markPendingOutboxCommandsWaitingNetwork(ownerUserId: string, lastError: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
@@ -403,6 +453,24 @@ export async function activateWaitingNetworkOutboxCommands(ownerUserId: string) 
     [updatedAtLocal, ownerUserId, currentContourId]
   ));
 }
+
+export async function activateRetryableOutboxCommandsForImmediateRetry(ownerUserId: string) {
+  const db = await getDatabase();
+  const updatedAtLocal = new Date().toISOString();
+  await withSqliteBusyRetry(() => db.runAsync(
+    `
+      UPDATE outbox_commands
+      SET status = CASE WHEN status = 'waiting_network' THEN 'pending' ELSE status END,
+          next_attempt_at = NULL,
+          updated_at_local = ?
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND status IN ('retryLater', 'waiting_network')
+    `,
+    [updatedAtLocal, ownerUserId, currentContourId]
+  ));
+}
+
 export async function markPendingOutboxCommandsAuthRequired(ownerUserId: string, lastError: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
@@ -490,6 +558,11 @@ export async function finalizeAcceptedCompleteReportCommands(ownerUserId: string
 
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    await tx.runAsync(
+      "UPDATE outbox_commands SET next_attempt_at = NULL, last_attempt_at = NULL " +
+      "WHERE owner_user_id = ? AND contour_id = ? AND status IN ('accepted', 'duplicate')",
+      [ownerUserId, currentContourId]
+    );
     const assignmentFilter = assignmentId ? "AND command.entity_local_id = ?" : "";
     const params = assignmentId ? [ownerUserId, currentContourId, assignmentId] : [ownerUserId, currentContourId];
     const rows = await tx.getAllAsync<{ assignment_id: string }>(
@@ -546,15 +619,30 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
     for (const response of responses) {
-      const nextAttemptAt = response.status === "retryLater"
-        ? new Date(Date.now() + resolveRetryDelaySeconds(response.retryAfterSeconds, 1) * 1000).toISOString()
+      const attemptRow = response.status === "retryLater"
+        ? await tx.getFirstAsync<{ attempt_count: number }>(
+            `
+              SELECT attempt_count
+              FROM outbox_commands
+              WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
+            `,
+            [ownerUserId, currentContourId, response.clientOperationId]
+          )
         : null;
+      const nextAttemptAt = response.status === "retryLater"
+        ? new Date(
+            Date.now() + resolveRetryDelaySeconds(response.retryAfterSeconds, attemptRow?.attempt_count ?? 1) * 1000
+          ).toISOString()
+        : null;
+      const isSuccessful = response.status === "accepted" || response.status === "duplicate";
+      const updatedAtLocal = new Date().toISOString();
       await tx.runAsync(
         `
           UPDATE outbox_commands
           SET status = ?,
               entity_server_id = COALESCE(?, entity_server_id),
               next_attempt_at = ?,
+              last_attempt_at = ${isSuccessful ? "NULL" : "last_attempt_at"},
               last_error = ?,
               updated_at_local = ?
           WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
@@ -562,9 +650,9 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
         [
           response.status,
           response.serverEntityId,
-           nextAttemptAt,
-           isProblemResponse(response.status) ? response.message : null,
-          new Date().toISOString(),
+          nextAttemptAt,
+          isProblemResponse(response.status) ? response.message : null,
+          updatedAtLocal,
           ownerUserId,
           currentContourId,
           response.clientOperationId
@@ -862,9 +950,12 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
                 entity_type,
                 reason,
                 payload_snapshot_json,
-                status
+                status,
+                resolution_status,
+                resolved_at,
+                resolution_reason
               )
-              VALUES (?, ?, ?, ?, ?, ?, ?, 'open')
+              VALUES (?, ?, ?, ?, ?, ?, ?, 'open', 'open', NULL, NULL)
             `,
             [
               conflictId,
@@ -963,4 +1054,361 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
       payload: response
     }).catch(() => undefined);
   }
+}
+
+export async function markOutboxConflictForDispatcher(
+  ownerUserId: string,
+  clientOperationId: string,
+  reason = "Ожидается решение диспетчера."
+) {
+  const db = await getDatabase();
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const command = await tx.getFirstAsync<{ status: string }>(
+        `SELECT status FROM outbox_commands WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?`,
+        [ownerUserId, currentContourId, clientOperationId]
+      );
+      if (!command || command.status !== "conflict") {
+        throw new Error("Конфликт уже разрешён или недоступен для передачи диспетчеру.");
+      }
+
+      await tx.runAsync(
+        `
+          UPDATE sync_conflicts
+          SET resolution_status = 'dispatcher',
+              resolution_reason = ?,
+              resolved_at = NULL
+          WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
+            AND status NOT IN ('resolved', 'dismissed')
+        `,
+        [reason, ownerUserId, currentContourId, clientOperationId]
+      );
+
+    })
+  );
+
+  void logMobileAction({
+    eventType: "sync.conflict.dispatcher_requested",
+    entityType: "outboxCommand",
+    entityId: clientOperationId,
+    message: reason
+  }).catch(() => undefined);
+}
+
+export async function resolveOutboxConflictAsServerWins(
+  ownerUserId: string,
+  clientOperationId: string,
+  snapshot: ConflictServerSnapshot
+) {
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+  const transition = applyServerWinsTransition(snapshot);
+
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const command = await tx.getFirstAsync<{
+        status: string;
+        entity_type: string;
+        entity_local_id: string | null;
+        command_type: string;
+      }>(
+        `
+          SELECT status, entity_type, entity_local_id, command_type
+          FROM outbox_commands
+          WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
+        `,
+        [ownerUserId, currentContourId, clientOperationId]
+      );
+      if (!command || command.status !== "conflict") {
+        throw new Error("Конфликт уже разрешён или недоступен для принятия состояния сервера.");
+      }
+
+      await tx.runAsync(
+        `
+          UPDATE outbox_commands
+          SET status = ?,
+              last_error = NULL,
+              next_attempt_at = NULL,
+              last_attempt_at = NULL,
+              updated_at_local = ?
+          WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ? AND status = 'conflict'
+        `,
+        [transition.commandStatus, now, ownerUserId, currentContourId, clientOperationId]
+      );
+      await tx.runAsync(
+        `
+          UPDATE sync_conflicts
+          SET status = ?,
+              resolution_status = ?,
+              resolved_at = ?,
+              resolution_reason = ?
+          WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
+            AND status NOT IN ('resolved', 'dismissed')
+        `,
+        [transition.conflictStatus, transition.resolutionStatus, now, "Принято актуальное состояние сервера.", ownerUserId, currentContourId, clientOperationId]
+      );
+
+      if (command.entity_type === "patrolAssignment" && snapshot.assignmentId && snapshot.assignmentStatus) {
+        await tx.runAsync(
+          `
+            UPDATE patrol_assignments
+            SET status = ?,
+                revision = COALESCE(?, revision),
+                started_at_local = ?,
+                completed_at_local = ?
+            WHERE owner_user_id = ? AND assignment_id = ?
+          `,
+          [snapshot.assignmentStatus, snapshot.revision, snapshot.startedAtLocal, snapshot.completedAtLocal, ownerUserId, snapshot.assignmentId]
+        );
+        if (snapshot.requestId && snapshot.requestStatus) {
+          await tx.runAsync(
+            `UPDATE patrol_request_board SET status = ? WHERE owner_user_id = ? AND request_id = ?`,
+            [snapshot.requestStatus, ownerUserId, snapshot.requestId]
+          );
+        }
+        if (["completedServer", "cancelledServer"].includes(snapshot.assignmentStatus)) {
+          await tx.runAsync(
+            `UPDATE point_results SET sync_status = 'synced' WHERE owner_user_id = ? AND assignment_id = ?`,
+            [ownerUserId, snapshot.assignmentId]
+          );
+          await tx.runAsync(
+            `UPDATE files SET status = 'linked' WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ? AND status IN ('uploaded', 'queued', 'localOnly')`,
+            [ownerUserId, currentContourId, snapshot.assignmentId]
+          );
+        }
+      } else if (command.entity_type === "workTask" && command.entity_local_id) {
+        await tx.runAsync(
+          `UPDATE work_tasks SET sync_status = 'synced' WHERE owner_user_id = ? AND task_id = ?`,
+          [ownerUserId, command.entity_local_id]
+        );
+      } else if (command.entity_type === "shiftRemark" && command.entity_local_id) {
+        await tx.runAsync(
+          `UPDATE shift_remarks SET sync_status = 'synced' WHERE owner_user_id = ? AND remark_id = ?`,
+          [ownerUserId, command.entity_local_id]
+        );
+      } else if (command.entity_type === "patrolPoint" && command.entity_local_id) {
+        await tx.runAsync(
+          `UPDATE point_results SET sync_status = 'synced' WHERE owner_user_id = ? AND local_result_id = ?`,
+          [ownerUserId, command.entity_local_id]
+        );
+      }
+    })
+  );
+
+  void logMobileAction({
+    eventType: "sync.conflict.server_wins",
+    entityType: "outboxCommand",
+    entityId: clientOperationId,
+    message: "Локальное состояние заменено актуальным состоянием сервера.",
+    payload: snapshot
+  }).catch(() => undefined);
+}
+
+export async function retryOutboxConflictWithRevision(
+  ownerUserId: string,
+  clientOperationId: string,
+  revision: number
+) {
+  if (!Number.isInteger(revision) || revision < 0) {
+    throw new Error("Сервер не вернул корректную ревизию для повторной отправки.");
+  }
+
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+  const nextClientOperationId = Crypto.randomUUID();
+
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const command = await tx.getFirstAsync<{
+        status: string;
+        command_type: string;
+        entity_type: string;
+        entity_local_id: string | null;
+        entity_server_id: string | null;
+        payload_json: string;
+      }>(
+        `
+          SELECT status, command_type, entity_type, entity_local_id, entity_server_id, payload_json
+          FROM outbox_commands
+          WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
+        `,
+        [ownerUserId, currentContourId, clientOperationId]
+      );
+
+      if (!command || command.status !== "conflict") {
+        throw new Error("Конфликт уже разрешён или недоступен для повторной отправки.");
+      }
+      if (command.command_type !== "completePatrolAssignment" || command.entity_type !== "patrolAssignment") {
+        throw new Error("Для этой команды безопасный повтор с новой ревизией не поддерживается.");
+      }
+
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(command.payload_json) as Record<string, unknown>;
+      } catch {
+        throw new Error("Не удалось прочитать данные конфликтной команды.");
+      }
+      if (typeof payload.assignmentId !== "string" || payload.assignmentId !== command.entity_local_id) {
+        throw new Error("В конфликтной команде отсутствует корректное назначение.");
+      }
+
+      const nextPayload = JSON.stringify({ ...payload, baseRevision: revision });
+      await tx.runAsync(
+        `
+          UPDATE outbox_commands
+          SET status = 'superseded', last_error = NULL, next_attempt_at = NULL,
+              last_attempt_at = NULL, updated_at_local = ?
+          WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ? AND status = 'conflict'
+        `,
+        [now, ownerUserId, currentContourId, clientOperationId]
+      );
+      await tx.runAsync(
+        `
+          INSERT INTO outbox_commands (
+            client_operation_id, owner_user_id, contour_id, command_type, entity_type,
+            entity_local_id, entity_server_id, payload_json, created_at_local,
+            updated_at_local, attempt_count, status
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pending')
+        `,
+        [
+          nextClientOperationId,
+          ownerUserId,
+          currentContourId,
+          command.command_type,
+          command.entity_type,
+          command.entity_local_id,
+          command.entity_server_id,
+          nextPayload,
+          now,
+          now
+        ]
+      );
+      await tx.runAsync(
+        `
+          UPDATE sync_conflicts
+          SET status = 'resolved', resolution_status = 'retryRequested', resolved_at = ?,
+              resolution_reason = ?
+          WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
+            AND status NOT IN ('resolved', 'dismissed')
+        `,
+        [now, "Повторная отправка создана с актуальной ревизией сервера.", ownerUserId, currentContourId, clientOperationId]
+      );
+      await tx.runAsync(
+        `
+          UPDATE patrol_assignments
+          SET status = 'completedLocal'
+          WHERE owner_user_id = ? AND assignment_id = ?
+            AND status IN ('needsDispatcherDecision', 'syncError', 'inProgress')
+        `,
+        [ownerUserId, command.entity_local_id]
+      );
+    })
+  );
+
+  requestSyncAfterMutation();
+  void logMobileAction({
+    eventType: "sync.conflict.retry_requested",
+    entityType: "outboxCommand",
+    entityId: nextClientOperationId,
+    message: "Конфликтная команда поставлена на повторную отправку с актуальной ревизией.",
+    payload: { previousClientOperationId: clientOperationId, revision }
+  }).catch(() => undefined);
+
+  return nextClientOperationId;
+}
+export async function cancelRejectedOutboxCommand(ownerUserId: string, clientOperationId: string, reason: string) {
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+  const transition = applyRejectedCancellationTransition();
+
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const command = await tx.getFirstAsync<{
+        status: string;
+        command_type: string;
+        entity_type: string;
+        entity_local_id: string | null;
+        payload_json: string;
+      }>(
+        `
+          SELECT status, command_type, entity_type, entity_local_id, payload_json
+          FROM outbox_commands
+          WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
+        `,
+        [ownerUserId, currentContourId, clientOperationId]
+      );
+      if (!command || command.status !== "rejected") {
+        throw new Error("Отменить можно только отклонённую локальную команду.");
+      }
+
+      let payload: Record<string, unknown> = {};
+      try {
+        payload = JSON.parse(command.payload_json) as Record<string, unknown>;
+      } catch {
+        // Preserve the rejected command in the audit log when its optional payload is malformed.
+      }
+      const assignmentId = typeof payload.assignmentId === "string" ? payload.assignmentId : null;
+
+      await tx.runAsync(
+        `
+          UPDATE outbox_commands
+          SET status = ?, last_error = ?, next_attempt_at = NULL, last_attempt_at = NULL, updated_at_local = ?
+          WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ? AND status = 'rejected'
+        `,
+        [transition.commandStatus, reason, now, ownerUserId, currentContourId, clientOperationId]
+      );
+      await tx.runAsync(
+        `
+          UPDATE sync_conflicts
+          SET status = ?, resolution_status = ?, resolved_at = ?, resolution_reason = ?
+          WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
+            AND status NOT IN ('resolved', 'dismissed')
+        `,
+        [transition.conflictStatus, transition.resolutionStatus, now, reason, ownerUserId, currentContourId, clientOperationId]
+      );
+      if (command.entity_type === "patrolAssignment" && command.entity_local_id) {
+        await tx.runAsync(
+          `
+            UPDATE patrol_assignments
+            SET status = 'inProgress', completed_at_local = NULL
+            WHERE owner_user_id = ? AND assignment_id = ? AND status IN ('syncError', 'completedLocal', 'needsDispatcherDecision')
+          `,
+          [ownerUserId, command.entity_local_id]
+        );
+        await tx.runAsync(
+          `
+            UPDATE patrol_request_board
+            SET status = 'inProgress'
+            WHERE owner_user_id = ? AND request_id = (
+              SELECT request_id FROM patrol_assignments WHERE owner_user_id = ? AND assignment_id = ? LIMIT 1
+            )
+          `,
+          [ownerUserId, ownerUserId, command.entity_local_id]
+        );
+      } else if (command.entity_type === "workTask" && command.entity_local_id) {
+        await tx.runAsync(
+          `UPDATE work_tasks SET sync_status = 'cancelled' WHERE owner_user_id = ? AND task_id = ?`,
+          [ownerUserId, command.entity_local_id]
+        );
+      } else if (command.entity_type === "shiftRemark" && command.entity_local_id) {
+        await tx.runAsync(
+          `UPDATE shift_remarks SET sync_status = 'cancelled' WHERE owner_user_id = ? AND remark_id = ?`,
+          [ownerUserId, command.entity_local_id]
+        );
+      } else if (command.entity_type === "patrolPoint" && command.entity_local_id) {
+        await tx.runAsync(
+          `UPDATE point_results SET sync_status = 'cancelled' WHERE owner_user_id = ? AND (local_result_id = ? OR (assignment_id = ? AND point_id = ?))`,
+          [ownerUserId, command.entity_local_id, assignmentId, command.entity_local_id]
+        );
+      }
+    })
+  );
+
+  void logMobileAction({
+    eventType: "sync.rejected.cancelled",
+    entityType: "outboxCommand",
+    entityId: clientOperationId,
+    message: reason
+  }).catch(() => undefined);
 }

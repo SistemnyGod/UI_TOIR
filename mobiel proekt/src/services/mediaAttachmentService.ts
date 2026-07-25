@@ -7,7 +7,7 @@ import { attachMediaToShiftRemark } from "@/db/repositories/shiftRemarkRepositor
 import { attachMediaToWorkTask } from "@/db/repositories/workTaskRepository";
 import { getLocalFileInfo, hasEnoughStorageForPhoto } from "@/services/fileStorageService";
 import { prepareLocalMedia, prepareLocalPhoto } from "@/sync/fileUploadQueue";
-import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 
 const maxPhotoSidePx = 1600;
 const maxVideoBytes = 25 * 1024 * 1024;
@@ -46,7 +46,7 @@ export async function restoreMissingPointPhotoFromCamera(assignmentId: string, p
   if (!assets?.length) return "cancelled" satisfies MediaAttachResult;
 
   await restorePointPhotoAsset(ownerUserId, assignmentId, pointId, missingClientFileId, assets[0]);
-  triggerForegroundSyncWithRetry();
+  requestSyncAfterMutation();
   return "attached" satisfies MediaAttachResult;
 }
 
@@ -56,7 +56,7 @@ export async function restoreMissingPointPhotoFromGallery(assignmentId: string, 
   if (!assets?.length) return "cancelled" satisfies MediaAttachResult;
 
   await restorePointPhotoAsset(ownerUserId, assignmentId, pointId, missingClientFileId, assets[0]);
-  triggerForegroundSyncWithRetry();
+  requestSyncAfterMutation();
   return "attached" satisfies MediaAttachResult;
 }
 export async function attachPointVideoFromCamera(assignmentId: string, pointId: string) {
@@ -100,7 +100,6 @@ export async function attachRemarkPhotoFromCamera(remarkId: string) {
   if (!assets?.length) return "cancelled" satisfies MediaAttachResult;
 
   await attachRemarkPhotoAssets(ownerUserId, remarkId, assets);
-  triggerForegroundSyncWithRetry();
   return "attached" satisfies MediaAttachResult;
 }
 
@@ -110,7 +109,6 @@ export async function attachRemarkPhotoFromGallery(remarkId: string) {
   if (!assets?.length) return "cancelled" satisfies MediaAttachResult;
 
   await attachRemarkPhotoAssets(ownerUserId, remarkId, assets);
-  triggerForegroundSyncWithRetry();
   return "attached" satisfies MediaAttachResult;
 }
 
@@ -121,7 +119,6 @@ export async function attachRemarkVideoFromCamera(remarkId: string) {
 
   const file = await prepareRemarkVideo(ownerUserId, remarkId, asset);
   await attachMediaToShiftRemark(remarkId, file);
-  triggerForegroundSyncWithRetry();
   return "attached" satisfies MediaAttachResult;
 }
 
@@ -132,7 +129,6 @@ export async function attachRemarkVideoFromGallery(remarkId: string) {
 
   const file = await prepareRemarkVideo(ownerUserId, remarkId, asset);
   await attachMediaToShiftRemark(remarkId, file);
-  triggerForegroundSyncWithRetry();
   return "attached" satisfies MediaAttachResult;
 }
 
@@ -151,7 +147,6 @@ export async function attachRemarkMediaFromGallery(remarkId: string): Promise<Me
   });
 
   if (summary.attachedCount > 0) {
-    triggerForegroundSyncWithRetry();
   }
   return summary;
 }
@@ -162,7 +157,6 @@ export async function attachWorkPhotoFromCamera(workTaskId: string) {
   if (!assets?.length) return "cancelled" satisfies MediaAttachResult;
 
   await attachWorkPhotoAssets(ownerUserId, workTaskId, assets);
-  triggerForegroundSyncWithRetry();
   return "attached" satisfies MediaAttachResult;
 }
 
@@ -173,7 +167,6 @@ export async function attachWorkVideoFromCamera(workTaskId: string) {
 
   const file = await prepareWorkVideo(ownerUserId, workTaskId, asset);
   await attachMediaToWorkTask(workTaskId, file);
-  triggerForegroundSyncWithRetry();
   return "attached" satisfies MediaAttachResult;
 }
 
@@ -192,7 +185,6 @@ export async function attachWorkMediaFromGallery(workTaskId: string): Promise<Me
   });
 
   if (summary.attachedCount > 0) {
-    triggerForegroundSyncWithRetry();
   }
   return summary;
 }
@@ -218,7 +210,7 @@ async function attachMixedMediaAssets(
         photoCount += 1;
       }
     } catch (error) {
-      errors.push(`Файл ${index + 1}: ${error instanceof Error ? error.message : "не удалось подготовить"}`);
+      errors.push(`Р¤Р°Р№Р» ${index + 1}: ${error instanceof Error ? error.message : "РЅРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРіРѕС‚РѕРІРёС‚СЊ"}`);
     }
   }
 
@@ -234,12 +226,12 @@ async function attachMixedMediaAssets(
 
 async function prepareOwnerAndStorage() {
   if (!(await hasEnoughStorageForPhoto())) {
-    throw new Error("На телефоне мало свободного места. Освободите память и повторите.");
+    throw new Error("РќР° С‚РµР»РµС„РѕРЅРµ РјР°Р»Рѕ СЃРІРѕР±РѕРґРЅРѕРіРѕ РјРµСЃС‚Р°. РћСЃРІРѕР±РѕРґРёС‚Рµ РїР°РјСЏС‚СЊ Рё РїРѕРІС‚РѕСЂРёС‚Рµ.");
   }
 
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
-    throw new Error("Нужно войти в мобильный аккаунт.");
+    throw new Error("РќСѓР¶РЅРѕ РІРѕР№С‚Рё РІ РјРѕР±РёР»СЊРЅС‹Р№ Р°РєРєР°СѓРЅС‚.");
   }
 
   return ownerUserId;
@@ -248,7 +240,7 @@ async function prepareOwnerAndStorage() {
 async function pickImages(source: "camera" | "library") {
   const permissionGranted = source === "camera" ? await ensureCameraPermission() : await ensureLibraryPermission();
   if (!permissionGranted) {
-    throw new Error(source === "camera" ? "Нет доступа к камере." : "Нет доступа к галерее.");
+    throw new Error(source === "camera" ? "РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РєР°РјРµСЂРµ." : "РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РіР°Р»РµСЂРµРµ.");
   }
 
   const result = source === "camera"
@@ -271,7 +263,7 @@ async function pickImages(source: "camera" | "library") {
 async function pickVideo(source: "camera" | "library") {
   const permissionGranted = source === "camera" ? await ensureCameraPermission() : await ensureLibraryPermission();
   if (!permissionGranted) {
-    throw new Error(source === "camera" ? "Нет доступа к камере." : "Нет доступа к галерее.");
+    throw new Error(source === "camera" ? "РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РєР°РјРµСЂРµ." : "РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РіР°Р»РµСЂРµРµ.");
   }
 
   const result = source === "camera"
@@ -291,7 +283,7 @@ async function pickVideo(source: "camera" | "library") {
 
 async function pickMixedMediaFromGallery() {
   if (!(await ensureLibraryPermission())) {
-    throw new Error("Нет доступа к галерее.");
+    throw new Error("РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РіР°Р»РµСЂРµРµ.");
   }
 
   const result = await ImagePicker.launchImageLibraryAsync({
@@ -444,7 +436,7 @@ async function getValidatedVideoSize(asset: ImagePicker.ImagePickerAsset) {
   const info = asset.fileSize ? null : await getLocalFileInfo(asset.uri);
   const sizeBytes = asset.fileSize ?? (info?.exists ? info.size : null);
   if (sizeBytes && sizeBytes > maxVideoBytes) {
-    throw new Error("Видео слишком большое. Выберите файл до 25 МБ.");
+    throw new Error("Р’РёРґРµРѕ СЃР»РёС€РєРѕРј Р±РѕР»СЊС€РѕРµ. Р’С‹Р±РµСЂРёС‚Рµ С„Р°Р№Р» РґРѕ 25 РњР‘.");
   }
 
   return sizeBytes ?? null;

@@ -12,12 +12,13 @@ export type ReportDeliveryStatus =
   | "waiting_network"
   | "wrong_contour"
   | "blocked"
-  | "superseded";
+  | "superseded"
+  | "cancelled";
 
 export type ReportDeliveryAction = "submit" | "retry" | "repair" | "resubmit" | "signIn" | "serverSettings" | "done";
 
 export function getReportDeliveryPresentation(status: ReportDeliveryStatus | null, lastError: string | null) {
-  if (!status || status === "superseded") {
+  if (!status || status === "superseded" || status === "cancelled") {
     return {
       action: "submit" as const,
       buttonLabel: "Завершить обход и отправить",

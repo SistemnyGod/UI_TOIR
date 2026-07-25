@@ -130,6 +130,16 @@ const patrolPointSchema = z.object({
   revision: z.number().int()
 }).passthrough();
 
+const bootstrapConflictResolutionSchema = z.object({
+  clientOperationId: identifier,
+  entityLocalId: nullableString,
+  entityServerId: nullableString,
+  operationStatus: z.string(),
+  resolutionStatus: z.string(),
+  responseSnapshot: z.unknown().nullable(),
+  resolvedAt: timestamp
+}).passthrough();
+
 export const bootstrapResponseSchema = z.object({
   user: mobileUserSchema,
   device: mobileDeviceSchema,
@@ -138,6 +148,7 @@ export const bootstrapResponseSchema = z.object({
   requestBoard: z.array(patrolRequestBoardItemSchema),
   assignments: z.array(patrolAssignmentSchema),
   cancelledAssignmentIds: z.array(identifier).optional(),
+  conflictResolutions: z.array(bootstrapConflictResolutionSchema).optional(),
   routes: z.array(patrolRouteSchema),
   points: z.array(patrolPointSchema),
   serverTime: timestamp,

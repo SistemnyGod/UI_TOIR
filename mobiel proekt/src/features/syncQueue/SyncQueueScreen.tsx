@@ -7,7 +7,9 @@ import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { listSyncQueueFiles, SyncQueueFileItem } from "@/db/repositories/filesRepository";
 import { listSyncQueueCommands, SyncQueueCommandItem } from "@/db/repositories/outboxRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
+import { logMobileError } from "@/services/mobileErrorReporter";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { acceptServerConflict, cancelRejectedCommand, retryConflictWithLatestRevision, sendConflictToDispatcher } from "@/services/conflictResolutionService";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -25,13 +27,16 @@ export function SyncQueueScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedErrorId, setExpandedErrorId] = useState<string | null>(null);
+  const [actionInProgressId, setActionInProgressId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
       const ownerUserId = await getStoredOwnerUserId();
       if (!ownerUserId) {
+        setLoadError(null);
         setState({ commands: [], files: [] });
         return;
       }
@@ -40,6 +45,10 @@ export function SyncQueueScreen() {
         listSyncQueueFiles(ownerUserId)
       ]);
       setState({ commands, files });
+      setLoadError(null);
+    } catch (caught) {
+      setLoadError(caught instanceof Error ? caught.message : "Не удалось прочитать очередь отправки.");
+      void logMobileError("sync.queue.load.failed", caught);
     } finally {
       setIsLoading(false);
     }
@@ -51,6 +60,39 @@ export function SyncQueueScreen() {
     }, [load])
   );
 
+  async function resolveCommand(command: SyncQueueCommandItem, action: "serverWins" | "dispatcher" | "retryRevision" | "cancelRejected") {
+    if (actionInProgressId) {
+      return;
+    }
+
+    setActionInProgressId(command.clientOperationId);
+    setFeedback(null);
+    try {
+      const ownerUserId = await getStoredOwnerUserId();
+      if (!ownerUserId) {
+        throw new Error("Не удалось определить пользователя устройства.");
+      }
+      if (action === "serverWins") {
+        await acceptServerConflict(ownerUserId, command);
+        setFeedback("Состояние сервера принято. Конфликт закрыт, локальная очередь обновлена.");
+      } else if (action === "dispatcher") {
+        await sendConflictToDispatcher(ownerUserId, command);
+        setFeedback("Конфликт сохранён и отмечен как ожидающий решения диспетчера.");
+      } else if (action === "retryRevision") {
+        await retryConflictWithLatestRevision(ownerUserId, command);
+        setFeedback("Конфликт закрыт, команда создана с актуальной ревизией.");
+      } else {
+        await cancelRejectedCommand(ownerUserId, command);
+        setFeedback("Отклонённое локальное действие отменено. Запись сохранена в журнале действий.");
+      }
+      await load();
+    } catch (caught) {
+      setLoadError(caught instanceof Error ? caught.message : "Не удалось изменить состояние команды.");
+      void logMobileError("sync.queue.resolution.failed", caught);
+    } finally {
+      setActionInProgressId(null);
+    }
+  }
   async function retryNow() {
     if (isSyncing) {
       return;
@@ -62,6 +104,9 @@ export function SyncQueueScreen() {
       const result = await triggerForegroundSyncWithRetry({ forceRetry: true });
       await load();
       setFeedback(syncResultMessage(result.skipped));
+    } catch (caught) {
+      setLoadError(caught instanceof Error ? caught.message : "Не удалось проверить очередь отправки.");
+      void logMobileError("sync.queue.retry.failed", caught);
     } finally {
       setIsSyncing(false);
     }
@@ -76,7 +121,14 @@ export function SyncQueueScreen() {
     <Screen title="Очередь отправки">
       {isLoading ? <ActivityIndicator /> : null}
 
-      {!isLoading && pendingCount === 0 ? (
+      {!isLoading && loadError ? (
+        <Card>
+          <Text style={styles.errorText}>{loadError}</Text>
+          <PrimaryButton icon="refresh-outline" label="Повторить загрузку" onPress={() => void load()} variant="secondary" />
+        </Card>
+      ) : null}
+
+      {!isLoading && !loadError && pendingCount === 0 ? (
         <Card>
           <Text style={[styles.title, { color: colors.text }]}>Все данные отправлены</Text>
           <Text style={[styles.text, { color: colors.mutedText }]}>Сервер подтвердил все отчеты, команды и вложения.</Text>
@@ -84,7 +136,7 @@ export function SyncQueueScreen() {
         </Card>
       ) : null}
 
-      {!isLoading && pendingCount > 0 ? (
+      {!isLoading && !loadError && pendingCount > 0 ? (
         <Card>
         <View style={styles.headerRow}>
           <View style={styles.headerText}>
@@ -131,7 +183,7 @@ export function SyncQueueScreen() {
                     {command.assignmentRouteName ?? command.entityLocalId ?? command.clientOperationId}
                   </Text>
                 </View>
-                <StatusPill label={statusLabel(command.status)} tone={statusTone(command.status)} />
+                <StatusPill label={statusLabel(command.status, command.resolutionStatus)} tone={statusTone(command.status, command.resolutionStatus)} />
               </View>
               <View style={styles.metaGrid}>
                 <Meta label="Попытки" value={String(command.attemptCount)} />
@@ -150,6 +202,46 @@ export function SyncQueueScreen() {
                     {command.lastError}
                   </Text>
                 </Pressable>
+              ) : null}
+              {command.status === "conflict" ? (
+                <View style={styles.actionGroup}>
+                  <PrimaryButton
+                    disabled={actionInProgressId === command.clientOperationId}
+                    icon="cloud-done-outline"
+                    label="Принять состояние сервера"
+                    onPress={() => void resolveCommand(command, "serverWins")}
+                    size="large"
+                    variant="secondary"
+                  />
+                  <PrimaryButton
+                    disabled={actionInProgressId === command.clientOperationId}
+                    icon="people-outline"
+                    label="Передать диспетчеру"
+                    onPress={() => void resolveCommand(command, "dispatcher")}
+                    size="large"
+                    variant="ghost"
+                  />
+                  {command.commandType === "completePatrolAssignment" && command.entityLocalId ? (
+                    <PrimaryButton
+                      disabled={actionInProgressId === command.clientOperationId}
+                      icon="refresh-outline"
+                      label="Повторить с актуальной ревизией"
+                      onPress={() => void resolveCommand(command, "retryRevision")}
+                      size="large"
+                      variant="ghost"
+                    />
+                  ) : null}
+                </View>
+              ) : null}
+              {command.status === "rejected" ? (
+                <PrimaryButton
+                  disabled={actionInProgressId === command.clientOperationId}
+                  icon="close-circle-outline"
+                  label="Отменить локальное действие"
+                  onPress={() => void resolveCommand(command, "cancelRejected")}
+                  size="large"
+                  variant="ghost"
+                />
               ) : null}
               {command.commandType === "completePatrolAssignment" && command.entityLocalId ? (
                 <PrimaryButton
@@ -248,7 +340,21 @@ function commandTitle(command: SyncQueueCommandItem) {
   }
 }
 
-function statusLabel(status: string) {
+function statusLabel(status: string, resolutionStatus: string | null = null) {
+  if (status === "conflict" && resolutionStatus === "dispatcher") {
+    return "Ожидает диспетчера";
+  }
+
+  if (resolutionStatus === "resolvedServerWins") {
+    return "Принято состояние сервера";
+  }
+  if (resolutionStatus === "cancelledLocal") {
+    return "Отменено локально";
+  }
+  if (resolutionStatus === "retryRequested") {
+    return "Повтор отправки создан";
+  }
+
   switch (status) {
     case "pending":
       return "Локально сохранено";
@@ -267,12 +373,11 @@ function statusLabel(status: string) {
       return status;
   }
 }
-
 function fileStatusLabel(status: string) {
   switch (status) {
     case "queued":
     case "localOnly":
-      return "Ждет загрузки";
+      return "Ждёт загрузки";
     case "uploading":
       return "Загружается";
     case "retryLater":
@@ -288,10 +393,20 @@ function fileStatusLabel(status: string) {
       return statusLabel(status);
   }
 }
-
-function statusTone(status: string): "success" | "warning" | "danger" {
+function statusTone(status: string, resolutionStatus: string | null = null): "success" | "warning" | "danger" {
   if (status === "accepted" || status === "duplicate" || status === "uploaded" || status === "linked") {
     return "success";
+  }
+
+  if (status === "conflict" && resolutionStatus === "dispatcher") {
+    return "warning";
+  }
+
+  if (resolutionStatus === "resolvedServerWins" || resolutionStatus === "cancelledLocal") {
+    return "success";
+  }
+  if (resolutionStatus === "retryRequested") {
+    return "warning";
   }
 
   if (status === "conflict" || status === "rejected" || status === "failed") {
@@ -300,7 +415,6 @@ function statusTone(status: string): "success" | "warning" | "danger" {
 
   return "warning";
 }
-
 function formatDateTime(value: string | null) {
   if (!value) {
     return "-";
@@ -330,6 +444,9 @@ function syncResultMessage(skipped: "offline" | "serverUnavailable" | "unauthent
 }
 
 const styles = StyleSheet.create({
+  actionGroup: {
+    gap: 8
+  },
   errorPreview: {
     backgroundColor: "#fff7ed",
     borderColor: "#fed7aa",

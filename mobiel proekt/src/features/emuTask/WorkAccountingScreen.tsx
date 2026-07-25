@@ -40,7 +40,6 @@ import {
   attachWorkVideoFromCamera
 } from "@/services/mediaAttachmentService";
 import { loadWorkItemsOfflineFirst } from "@/services/workTaskService";
-import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import { ActionSheet } from "@/ui/ActionSheet";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -197,7 +196,6 @@ export function WorkAccountingScreen() {
 
       setTaskModal(null);
       await reloadLocal();
-      triggerForegroundSyncWithRetry();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Не удалось сохранить работу.");
     } finally {
@@ -229,8 +227,6 @@ export function WorkAccountingScreen() {
 
       if (remarkAttachmentAfterSave === "now") {
         setAttachmentRemark({ remarkId, title: section.name });
-      } else {
-        triggerForegroundSyncWithRetry();
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Не удалось сохранить замечание.");
@@ -247,7 +243,6 @@ export function WorkAccountingScreen() {
       setMenuTask(null);
       await reloadLocal();
       setMessage(successMessage);
-      triggerForegroundSyncWithRetry();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : errorMessage);
     } finally {
@@ -273,7 +268,6 @@ export function WorkAccountingScreen() {
       setCompleteComment("");
       await reloadLocal();
       setMessage("Работа завершена на телефоне и будет отправлена на сервер.");
-      triggerForegroundSyncWithRetry();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Не удалось завершить работу.");
     } finally {
@@ -345,7 +339,6 @@ export function WorkAccountingScreen() {
       await reloadLocal();
       setTaskFilter("mine");
       setMessage("Действие сохранено на телефоне и будет отправлено в ЭМУ.");
-      triggerForegroundSyncWithRetry();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Не удалось изменить исполнителя работы.");
     } finally {

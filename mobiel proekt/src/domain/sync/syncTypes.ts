@@ -10,7 +10,8 @@ export type OutboxCommandStatus =
   | "blocked"
   | "rejected"
   | "conflict"
-  | "superseded";
+  | "superseded"
+  | "cancelled";
 
 export type OutboxCommandType =
   | "takePatrolRequest"
@@ -83,5 +84,8 @@ export type SyncConflict = {
   entityType: MobileEntityType;
   reason: string;
   payloadSnapshot: Record<string, unknown>;
-  status: "open" | "accepted" | "rejected" | "repeatRequested";
+  status: "open" | "resolved" | "dismissed";
+  resolutionStatus: "open" | "dispatcher" | "resolvedServerWins" | "cancelledLocal" | "retryRequested";
+  resolvedAt: string | null;
+  resolutionReason: string | null;
 };
