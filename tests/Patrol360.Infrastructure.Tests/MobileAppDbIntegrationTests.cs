@@ -1056,6 +1056,28 @@ public sealed class MobileAppDbIntegrationTests
             route.Name);
         var secondBootstrap = UseMobileApp(provider, mobile => mobile.GetBootstrap(login.Session!.AccessToken));
         var secondBoardItem = Assert.Single(secondBootstrap!.RequestBoard, item => item.RequestId == secondRequestId);
+        var blockedTakeAssignmentId = Guid.NewGuid();
+        var blockedTake = UseMobileApp(provider, mobile => mobile.SaveOutbox(
+            login.Session!.AccessToken,
+            new MobileOutboxBatchDto([
+                BuildLifecycleCommand(
+                    "op-life-take-while-active",
+                    "takePatrolRequest",
+                    blockedTakeAssignmentId,
+                    secondRequestId,
+                    new Dictionary<string, object?>
+                    {
+                        ["requestId"] = secondRequestId,
+                        ["routeId"] = secondBoardItem.RouteId,
+                        ["requestRevision"] = secondBoardItem.Revision,
+                        ["takenAtLocal"] = DateTimeOffset.UtcNow,
+                    })
+            ])));
+        Assert.Single(blockedTake);
+        Assert.Equal("conflict", blockedTake[0].Status);
+        Assert.Equal("activePatrolExists", blockedTake[0].ReasonCode);
+        Assert.Null(ReadAssignmentStatus(database.ConnectionString, blockedTakeAssignmentId));
+
         var secondAssignmentId = Guid.NewGuid();
         var secondAccept = UseMobileApp(provider, mobile => mobile.SaveOutbox(
             login.Session!.AccessToken,

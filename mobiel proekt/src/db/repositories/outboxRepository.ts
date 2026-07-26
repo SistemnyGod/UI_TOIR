@@ -6,7 +6,7 @@ import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { updatePendingCompleteReportBaseRevisionInTransaction, updatePendingWorkTaskRevisionInTransaction } from "@/db/repositories/outboxSql";
 import { finalizeCancelledAssignmentInTransaction } from "@/db/repositories/patrolCancellationRepository";
 import { MobileEntityType, OutboxCommand, OutboxCommandStatus, OutboxCommandType, OutboxResponse } from "@/domain/sync/syncTypes";
-import { extractAssignmentId, extractCompletionFileIds, isCancelledCompletionResponse, isProblemResponse } from "@/db/repositories/outboxPolicies";
+import { extractAssignmentId, extractCompletionFileIds, isCancelledCompletionResponse, isProblemResponse, parsePatrolPointConflictIdentity } from "@/db/repositories/outboxPolicies";
 import { SyncQueueCommandItem } from "@/db/repositories/outboxTypes";
 import { isOutboxCommandReady, resolveRetryDelaySeconds } from "@/sync/outboxRetryPolicy";
 import { parseOutboxPayloadRows } from "@/sync/outboxPayloadParser";
@@ -751,8 +751,7 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
             await tx.runAsync(
               `
                 UPDATE point_results
-                SET status = CASE WHEN ? = 'conflict' THEN 'conflict' ELSE status END,
-                    sync_status = ?,
+                SET sync_status = ?,
                     server_revision = COALESCE(?, server_revision),
                     accepted_operation_id = ?,
                     last_synced_at = ?
@@ -1016,7 +1015,7 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
                   sync_status = 'synced'
               WHERE owner_user_id = ? AND remark_id = ?
             `,
-            [response.status, response.status, command.owner_user_id, command.entity_local_id]
+            [response.status, command.owner_user_id, command.entity_local_id]
           );
         }
       }
@@ -1238,9 +1237,10 @@ export async function resolveOutboxConflictAsServerWins(
         entity_type: string;
         entity_local_id: string | null;
         command_type: string;
+        payload_json: string;
       }>(
         `
-          SELECT status, entity_type, entity_local_id, command_type
+          SELECT status, entity_type, entity_local_id, command_type, payload_json
           FROM outbox_commands
           WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
         `,
@@ -1249,6 +1249,10 @@ export async function resolveOutboxConflictAsServerWins(
       if (!command || command.status !== "conflict") {
         throw new Error("Конфликт уже разрешён или недоступен для принятия состояния сервера.");
       }
+
+      const patrolPointIdentity = command.entity_type === "patrolPoint"
+        ? parsePatrolPointConflictIdentity(command.payload_json, command.entity_local_id)
+        : null;
 
       await tx.runAsync(
         `
@@ -1313,11 +1317,14 @@ export async function resolveOutboxConflictAsServerWins(
           `UPDATE shift_remarks SET sync_status = 'synced' WHERE owner_user_id = ? AND remark_id = ?`,
           [ownerUserId, command.entity_local_id]
         );
-      } else if (command.entity_type === "patrolPoint" && command.entity_local_id) {
-        await tx.runAsync(
-          `UPDATE point_results SET sync_status = 'synced' WHERE owner_user_id = ? AND local_result_id = ?`,
-          [ownerUserId, command.entity_local_id]
+      } else if (command.entity_type === "patrolPoint" && patrolPointIdentity) {
+        const updateResult = await tx.runAsync(
+          "UPDATE point_results SET sync_status = 'synced' WHERE owner_user_id = ? AND assignment_id = ? AND point_id = ?",
+          [ownerUserId, patrolPointIdentity.assignmentId, patrolPointIdentity.pointId]
         );
+        if (updateResult.changes === 0) {
+          throw new Error("\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u044b\u0439 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442 \u0442\u043e\u0447\u043a\u0438 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d; \u043a\u043e\u043d\u0444\u043b\u0438\u043a\u0442 \u043e\u0441\u0442\u0430\u0432\u043b\u0435\u043d \u043e\u0442\u043a\u0440\u044b\u0442\u044b\u043c.");
+        }
       }
     })
   );

@@ -66,6 +66,25 @@ internal sealed partial class EfMobileAppService
         }
 
         var employeeId = patrolRequest.EmployeeId ?? boundEmployeeIds.First();
+        if (dbContext.Database.IsNpgsql())
+        {
+            var employeePatrolLock = $"patrol-start:{employeeId:N}";
+            dbContext.Database.ExecuteSqlInterpolated(
+                $"SELECT pg_advisory_xact_lock(hashtextextended({employeePatrolLock}, 0))");
+        }
+
+        if (dbContext.Assignments
+            .AsNoTracking()
+            .Any(item => item.EmployeeId == employeeId
+                && (item.Status == AssignmentStatusValues.InProgress
+                    || item.Status == AssignmentStatusValues.Paused)))
+        {
+            return Conflict(
+                command.ClientOperationId,
+                "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0435 \u0438\u043b\u0438 \u043f\u0435\u0440\u0435\u0434\u0430\u0439\u0442\u0435 \u0442\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0431\u0445\u043e\u0434.",
+                "activePatrolExists");
+        }
+
         var employee = dbContext.Employees.FirstOrDefault(item => item.Id == employeeId);
         var route = dbContext.Routes.FirstOrDefault(item => item.Id == routeId.Value && !item.IsArchived);
         if (employee is null || route is null)

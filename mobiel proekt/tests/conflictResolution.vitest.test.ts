@@ -4,9 +4,10 @@ import {
   applyServerWinsTransition,
   isResolutionBlocking
 } from "@/domain/sync/conflictResolutionPolicy";
+import { parsePatrolPointConflictIdentity } from "@/db/repositories/outboxPolicies";
 
-describe("локальное разрешение serverWins", () => {
-  it("закрывает конфликт, заменяет assignment server state и убирает logout blocker", () => {
+describe("Р»РѕРєР°Р»СЊРЅРѕРµ СЂР°Р·СЂРµС€РµРЅРёРµ serverWins", () => {
+  it("Р·Р°РєСЂС‹РІР°РµС‚ РєРѕРЅС„Р»РёРєС‚, Р·Р°РјРµРЅСЏРµС‚ assignment server state Рё СѓР±РёСЂР°РµС‚ logout blocker", () => {
     const serverState = {
       assignmentId: "assignment-A",
       requestId: "request-A",
@@ -26,5 +27,18 @@ describe("локальное разрешение serverWins", () => {
     expect(isResolutionBlocking(transition.conflictStatus, transition.commandStatus)).toBe(false);
     expect(["pending", "sending", "retryLater", "waiting_auth", "waiting_network", "wrong_contour", "blocked"])
       .not.toContain(transition.commandStatus);
+  });
+
+  it("validates patrol point payload before serverWins", () => {
+    expect(parsePatrolPointConflictIdentity(
+      JSON.stringify({ assignmentId: "assignment-A", pointId: "point-A" }),
+      "point-A"
+    )).toEqual({ assignmentId: "assignment-A", pointId: "point-A" });
+    expect(() => parsePatrolPointConflictIdentity("{broken", "point-A")).toThrow();
+    expect(() => parsePatrolPointConflictIdentity(JSON.stringify({ pointId: "point-A" }), "point-A")).toThrow();
+    expect(() => parsePatrolPointConflictIdentity(
+      JSON.stringify({ assignmentId: "assignment-A", pointId: "point-B" }),
+      "point-A"
+    )).toThrow();
   });
 });

@@ -23,6 +23,33 @@ import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 
 type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "getFirstAsync" | "runAsync">;
 
+const activePatrolConflictMessage = "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0435 \u0438\u043b\u0438 \u043f\u0435\u0440\u0435\u0434\u0430\u0439\u0442\u0435 \u0442\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0431\u0445\u043e\u0434.";
+
+async function assertNoOtherActivePatrol(
+  executor: SqlExecutor,
+  ownerUserId: string,
+  excludedAssignmentId?: string
+) {
+  const exclusion = excludedAssignmentId ? "\n          AND assignment_id <> ?" : "";
+  const params = excludedAssignmentId
+    ? [ownerUserId, currentContourId, excludedAssignmentId]
+    : [ownerUserId, currentContourId];
+  const competing = await executor.getFirstAsync<{ assignmentId: string }>(
+    `
+      SELECT assignment_id AS assignmentId
+      FROM patrol_assignments
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND status IN ('inProgress', 'paused')${exclusion}
+      LIMIT 1
+    `,
+    params
+  );
+  if (competing) {
+    throw new Error(activePatrolConflictMessage);
+  }
+}
+
 export type RequestBoardItem = {
   requestId: string;
   displayNumber: string | null;
@@ -250,6 +277,7 @@ export async function takeRequestLocally(requestId: string) {
     throw new Error("Заявка не загружена на телефон.");
   }
   assertPatrolAction("acceptRequest", request.status);
+  await assertNoOtherActivePatrol(db, ownerUserId);
   const route = await db.getFirstAsync<{ version: number }>("SELECT version FROM routes WHERE route_id = ? LIMIT 1", [request.routeId]);
   const snapshotVersion = route?.version ?? 0;
   const assignmentId = Crypto.randomUUID();
@@ -288,6 +316,7 @@ export async function takeRequestLocally(requestId: string) {
         throw new Error("Заявка больше не доступна на телефоне.");
       }
       assertPatrolAction("acceptRequest", currentRequest.status);
+      await assertNoOtherActivePatrol(tx, ownerUserId, assignmentId);
 
       await tx.runAsync(
       `
