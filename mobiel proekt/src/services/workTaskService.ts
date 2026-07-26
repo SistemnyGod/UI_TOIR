@@ -13,18 +13,18 @@ export async function syncWorkItems() {
   return items;
 }
 
-export async function loadWorkItemsOfflineFirst() {
-  try {
-    return await syncWorkItems();
-  } catch {
-    return listLocalWorkItems();
-  }
+export async function loadWorkItemsOfflineFirst(onRefreshed?: () => void | Promise<void>) {
+  const localItems = await listLocalWorkItems();
+  void syncWorkItems()
+    .then(() => onRefreshed?.())
+    .catch(() => undefined);
+  return localItems;
 }
 
-export async function loadWorkTasksOfflineFirst() {
-  try {
-    return await syncWorkTasks();
-  } catch {
-    return listLocalWorkTasks();
-  }
+export async function loadWorkTasksOfflineFirst(onRefreshed?: () => void | Promise<void>) {
+  const localTasks = await listLocalWorkTasks();
+  void syncWorkTasks()
+    .then(() => onRefreshed?.())
+    .catch(() => undefined);
+  return localTasks;
 }

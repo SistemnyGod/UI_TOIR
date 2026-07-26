@@ -1,17 +1,19 @@
 import * as FileSystem from "expo-file-system/legacy";
 
 import { refreshStoredAccessToken } from "@/api/httpClient";
+import { MobileApiProtocolError } from "@/api/protocolValidation";
 import { invalidateServerHealthCache, probeServerHealthCached } from "@/api/serverHealthApi";
-import { MobileNetworkError, photoUploadTimeoutMs, serverUnavailableMessage, videoUploadTimeoutMs, withTimeout } from "@/api/networkTimeout";
+import { MobileNetworkError, photoUploadTimeoutMs, serverUnavailableMessage, videoUploadTimeoutMs } from "@/api/networkTimeout";
 import { shouldTryNextMobileServer } from "@/api/serverFailoverPolicy";
 import { getAccessToken } from "@/auth/tokenStorage";
 import { getMobileRuntimeConfig, getServerCandidateBaseUrls } from "@/core/serverSettings";
 import { LocalMobileFile, MobileFileUploadResponse } from "@/domain/files/fileTypes";
 import { currentContourId } from "@/core/environments";
 import { requiresClientFileHash } from "@/sync/fileHash";
+import { FileUploadHttpError } from "@/domain/files/fileUploadPolicy";
+import { MAX_PHOTO_BYTES, MAX_VIDEO_BYTES } from "@/domain/files/fileUploadLimits";
+import { fileUploadResponseSchema } from "@/api/schemas";
 
-const maxPhotoBytes = 6 * 1024 * 1024;
-const maxVideoBytes = 25 * 1024 * 1024;
 
 export async function uploadMobileFile(file: LocalMobileFile) {
   await validateMobileFileBeforeUpload(file);
@@ -34,24 +36,35 @@ export async function uploadMobileFile(file: LocalMobileFile) {
   }
 
   if (result.status < 200 || result.status >= 300) {
-    throw new Error(`Не удалось загрузить файл: ${result.status}`);
+    throw new FileUploadHttpError(result.status, `Не удалось загрузить файл: ${result.status}`);
   }
 
-  return validateFileUploadResponse(JSON.parse(result.body), file.clientFileId);
+  let payload: unknown;
+  try {
+    payload = JSON.parse(result.body);
+  } catch {
+    throw new MobileApiProtocolError("Ответ загрузки файла не является корректным JSON версии мобильного API. Файл сохранён для повторной отправки.");
+  }
+
+  return validateFileUploadResponse(payload, file.clientFileId);
 }
 
 function validateFileUploadResponse(value: unknown, expectedClientFileId: string): MobileFileUploadResponse {
   if (typeof value !== "object" || value === null) {
-    throw new Error("Сервер вернул некорректный ответ вложения. Файл сохранён для повторной отправки.");
+    throw new MobileApiProtocolError("Ответ загрузки файла не соответствует версии мобильного API. Файл сохранён для повторной отправки.");
   }
 
-  const response = value as Record<string, unknown>;
+  const parsed = fileUploadResponseSchema.safeParse(value);
+  if (!parsed.success || parsed.data.clientFileId !== expectedClientFileId) {
+    throw new MobileApiProtocolError("Ответ загрузки файла не соответствует версии мобильного API. Файл сохранён для повторной отправки.");
+  }
+  const response = parsed.data as Record<string, unknown>;
   if (response.clientFileId !== expectedClientFileId
     || typeof response.serverFileId !== "string"
     || response.serverFileId.trim().length === 0
     || (response.status !== "uploaded" && response.status !== "duplicate")
     || typeof response.uploadedAt !== "string") {
-    throw new Error("Сервер вернул неполный ответ вложения. Файл сохранён для повторной отправки.");
+    throw new MobileApiProtocolError("Ответ загрузки файла не соответствует версии мобильного API. Файл сохранён для повторной отправки.");
   }
 
   return response as unknown as MobileFileUploadResponse;
@@ -82,12 +95,12 @@ async function validateMobileFileBeforeUpload(file: LocalMobileFile) {
     throw new Error("Можно отправлять только фото JPEG и видео MP4.");
   }
 
-  const maxSize = file.contentType === "video/mp4" || file.mediaKind === "video" ? maxVideoBytes : maxPhotoBytes;
+  const maxSize = file.contentType === "video/mp4" || file.mediaKind === "video" ? MAX_VIDEO_BYTES : MAX_PHOTO_BYTES;
   if (file.sizeBytes <= 0 || file.sizeBytes > maxSize) {
     if (file.mediaKind !== "video" && file.contentType !== "video/mp4") {
       throw new Error("Фото слишком большое. Максимум 6 МБ.");
     }
-    throw new Error(file.mediaKind === "video" ? "Видео слишком большое. Максимум 25 МБ." : "Фото слишком большое. Максимум 8 МБ.");
+    throw new Error(file.mediaKind === "video" ? "Видео слишком большое. Максимум 30 МБ." : "Фото слишком большое. Максимум 6 МБ.");
   }
 
   const fileInfo = await FileSystem.getInfoAsync(file.localPath);
@@ -151,6 +164,37 @@ async function uploadFileWithFailover(
   throw new Error(`${serverUnavailableMessage} Проверенные адреса: ${apiBaseUrls.join(", ")}`);
 }
 
+async function uploadTaskWithCancellation(
+  uploadTask: ReturnType<typeof FileSystem.createUploadTask>,
+  timeoutMs: number
+) {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let settled = false;
+
+  return new Promise<Awaited<ReturnType<typeof uploadTask.uploadAsync>>>((resolve, reject) => {
+    const settle = (callback: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      callback();
+    };
+
+    timeoutId = setTimeout(() => {
+      void uploadTask.cancelAsync()
+        .catch(() => undefined)
+        .finally(() => settle(() => reject(new MobileNetworkError("timeout", new Error(serverUnavailableMessage), serverUnavailableMessage))));
+    }, timeoutMs);
+
+    void uploadTask.uploadAsync().then(
+      (result) => settle(() => resolve(result)),
+      (error) => settle(() => reject(error))
+    );
+  });
+}
 async function uploadFileWithToken(
   apiBaseUrl: string,
   syncProtocolVersion: string,
@@ -185,7 +229,7 @@ async function uploadFileWithToken(
         },
         uploadType: FileSystem.FileSystemUploadType.MULTIPART
       });
-    const result = await withTimeout(uploadTask.uploadAsync(), timeoutMs, serverUnavailableMessage, () => uploadTask.cancelAsync());
+    const result = await uploadTaskWithCancellation(uploadTask, timeoutMs);
     if (!result) {
       throw new Error("Сервер не вернул ответ при загрузке файла. Файл сохранён для повторной отправки.");
     }

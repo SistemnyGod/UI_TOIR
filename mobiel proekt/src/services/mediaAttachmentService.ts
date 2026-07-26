@@ -6,11 +6,11 @@ import { attachPhotoToPoint, restoreMissingPointAttachment } from "@/db/reposito
 import { attachMediaToShiftRemark } from "@/db/repositories/shiftRemarkRepository";
 import { attachMediaToWorkTask } from "@/db/repositories/workTaskRepository";
 import { getLocalFileInfo, hasEnoughStorageForPhoto } from "@/services/fileStorageService";
-import { prepareLocalMedia, prepareLocalPhoto } from "@/sync/fileUploadQueue";
+import { MediaPreparationProgressCallback, prepareLocalMedia, prepareLocalPhoto } from "@/sync/fileUploadQueue";
+import { MAX_VIDEO_BYTES } from "@/domain/files/fileUploadLimits";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 
 const maxPhotoSidePx = 1600;
-const maxVideoBytes = 25 * 1024 * 1024;
 
 export type MediaAttachResult = "attached" | "cancelled";
 
@@ -22,21 +22,21 @@ export type MediaAttachSummary = {
   errors: string[];
 };
 
-export async function attachPointPhotoFromCamera(assignmentId: string, pointId: string) {
+export async function attachPointPhotoFromCamera(assignmentId: string, pointId: string, onProgress?: MediaPreparationProgressCallback) {
   const ownerUserId = await prepareOwnerAndStorage();
   const assets = await pickImages("camera");
   if (!assets?.length) return "cancelled" satisfies MediaAttachResult;
 
-  await attachPointPhotoAssets(ownerUserId, assignmentId, pointId, assets);
+  await attachPointPhotoAssets(ownerUserId, assignmentId, pointId, assets, onProgress);
   return "attached" satisfies MediaAttachResult;
 }
 
-export async function attachPointPhotoFromGallery(assignmentId: string, pointId: string) {
+export async function attachPointPhotoFromGallery(assignmentId: string, pointId: string, onProgress?: MediaPreparationProgressCallback) {
   const ownerUserId = await prepareOwnerAndStorage();
   const assets = await pickImages("library");
   if (!assets?.length) return "cancelled" satisfies MediaAttachResult;
 
-  await attachPointPhotoAssets(ownerUserId, assignmentId, pointId, assets);
+  await attachPointPhotoAssets(ownerUserId, assignmentId, pointId, assets, onProgress);
   return "attached" satisfies MediaAttachResult;
 }
 
@@ -59,37 +59,37 @@ export async function restoreMissingPointPhotoFromGallery(assignmentId: string, 
   requestSyncAfterMutation();
   return "attached" satisfies MediaAttachResult;
 }
-export async function attachPointVideoFromCamera(assignmentId: string, pointId: string) {
+export async function attachPointVideoFromCamera(assignmentId: string, pointId: string, onProgress?: MediaPreparationProgressCallback) {
   const ownerUserId = await prepareOwnerAndStorage();
   const asset = await pickVideo("camera");
   if (!asset) return "cancelled" satisfies MediaAttachResult;
 
-  const file = await preparePointVideo(ownerUserId, assignmentId, pointId, asset);
+  const file = await preparePointVideo(ownerUserId, assignmentId, pointId, asset, onProgress);
   await attachPhotoToPoint(assignmentId, pointId, file);
   return "attached" satisfies MediaAttachResult;
 }
 
-export async function attachPointVideoFromGallery(assignmentId: string, pointId: string) {
+export async function attachPointVideoFromGallery(assignmentId: string, pointId: string, onProgress?: MediaPreparationProgressCallback) {
   const ownerUserId = await prepareOwnerAndStorage();
   const asset = await pickVideo("library");
   if (!asset) return "cancelled" satisfies MediaAttachResult;
 
-  const file = await preparePointVideo(ownerUserId, assignmentId, pointId, asset);
+  const file = await preparePointVideo(ownerUserId, assignmentId, pointId, asset, onProgress);
   await attachPhotoToPoint(assignmentId, pointId, file);
   return "attached" satisfies MediaAttachResult;
 }
 
-export async function attachPointMediaFromGallery(assignmentId: string, pointId: string): Promise<MediaAttachSummary> {
+export async function attachPointMediaFromGallery(assignmentId: string, pointId: string, onProgress?: MediaPreparationProgressCallback): Promise<MediaAttachSummary> {
   const ownerUserId = await prepareOwnerAndStorage();
   const assets = await pickMixedMediaFromGallery();
   return attachMixedMediaAssets(assets, async (asset) => {
     if (isVideoAsset(asset)) {
-      const file = await preparePointVideo(ownerUserId, assignmentId, pointId, asset);
+      const file = await preparePointVideo(ownerUserId, assignmentId, pointId, asset, onProgress);
       await attachPhotoToPoint(assignmentId, pointId, file);
       return "video";
     }
 
-    await attachPointPhotoAssets(ownerUserId, assignmentId, pointId, [asset]);
+    await attachPointPhotoAssets(ownerUserId, assignmentId, pointId, [asset], onProgress);
     return "photo";
   });
 }
@@ -112,37 +112,37 @@ export async function attachRemarkPhotoFromGallery(remarkId: string) {
   return "attached" satisfies MediaAttachResult;
 }
 
-export async function attachRemarkVideoFromCamera(remarkId: string) {
+export async function attachRemarkVideoFromCamera(remarkId: string, onProgress?: MediaPreparationProgressCallback) {
   const ownerUserId = await prepareOwnerAndStorage();
   const asset = await pickVideo("camera");
   if (!asset) return "cancelled" satisfies MediaAttachResult;
 
-  const file = await prepareRemarkVideo(ownerUserId, remarkId, asset);
+  const file = await prepareRemarkVideo(ownerUserId, remarkId, asset, onProgress);
   await attachMediaToShiftRemark(remarkId, file);
   return "attached" satisfies MediaAttachResult;
 }
 
-export async function attachRemarkVideoFromGallery(remarkId: string) {
+export async function attachRemarkVideoFromGallery(remarkId: string, onProgress?: MediaPreparationProgressCallback) {
   const ownerUserId = await prepareOwnerAndStorage();
   const asset = await pickVideo("library");
   if (!asset) return "cancelled" satisfies MediaAttachResult;
 
-  const file = await prepareRemarkVideo(ownerUserId, remarkId, asset);
+  const file = await prepareRemarkVideo(ownerUserId, remarkId, asset, onProgress);
   await attachMediaToShiftRemark(remarkId, file);
   return "attached" satisfies MediaAttachResult;
 }
 
-export async function attachRemarkMediaFromGallery(remarkId: string): Promise<MediaAttachSummary> {
+export async function attachRemarkMediaFromGallery(remarkId: string, onProgress?: MediaPreparationProgressCallback): Promise<MediaAttachSummary> {
   const ownerUserId = await prepareOwnerAndStorage();
   const assets = await pickMixedMediaFromGallery();
   const summary = await attachMixedMediaAssets(assets, async (asset) => {
     if (isVideoAsset(asset)) {
-      const file = await prepareRemarkVideo(ownerUserId, remarkId, asset);
+      const file = await prepareRemarkVideo(ownerUserId, remarkId, asset, onProgress);
       await attachMediaToShiftRemark(remarkId, file);
       return "video";
     }
 
-    await attachRemarkPhotoAssets(ownerUserId, remarkId, [asset]);
+    await attachRemarkPhotoAssets(ownerUserId, remarkId, [asset], onProgress);
     return "photo";
   });
 
@@ -160,27 +160,27 @@ export async function attachWorkPhotoFromCamera(workTaskId: string) {
   return "attached" satisfies MediaAttachResult;
 }
 
-export async function attachWorkVideoFromCamera(workTaskId: string) {
+export async function attachWorkVideoFromCamera(workTaskId: string, onProgress?: MediaPreparationProgressCallback) {
   const ownerUserId = await prepareOwnerAndStorage();
   const asset = await pickVideo("camera");
   if (!asset) return "cancelled" satisfies MediaAttachResult;
 
-  const file = await prepareWorkVideo(ownerUserId, workTaskId, asset);
+  const file = await prepareWorkVideo(ownerUserId, workTaskId, asset, onProgress);
   await attachMediaToWorkTask(workTaskId, file);
   return "attached" satisfies MediaAttachResult;
 }
 
-export async function attachWorkMediaFromGallery(workTaskId: string): Promise<MediaAttachSummary> {
+export async function attachWorkMediaFromGallery(workTaskId: string, onProgress?: MediaPreparationProgressCallback): Promise<MediaAttachSummary> {
   const ownerUserId = await prepareOwnerAndStorage();
   const assets = await pickMixedMediaFromGallery();
   const summary = await attachMixedMediaAssets(assets, async (asset) => {
     if (isVideoAsset(asset)) {
-      const file = await prepareWorkVideo(ownerUserId, workTaskId, asset);
+      const file = await prepareWorkVideo(ownerUserId, workTaskId, asset, onProgress);
       await attachMediaToWorkTask(workTaskId, file);
       return "video";
     }
 
-    await attachWorkPhotoAssets(ownerUserId, workTaskId, [asset]);
+    await attachWorkPhotoAssets(ownerUserId, workTaskId, [asset], onProgress);
     return "photo";
   });
 
@@ -328,7 +328,8 @@ async function attachPointPhotoAssets(
   ownerUserId: string,
   assignmentId: string,
   pointId: string,
-  assets: ImagePicker.ImagePickerAsset[]
+  assets: ImagePicker.ImagePickerAsset[],
+  onProgress?: MediaPreparationProgressCallback
 ) {
   for (const asset of assets) {
     const optimizedPhoto = await optimizePhoto(asset);
@@ -336,7 +337,8 @@ async function attachPointPhotoAssets(
       ownerUserId,
       localPath: optimizedPhoto.uri,
       assignmentId,
-      pointId
+      pointId,
+      onProgress
     });
     await attachPhotoToPoint(assignmentId, pointId, file);
   }
@@ -358,25 +360,27 @@ async function restorePointPhotoAsset(
   });
   await restoreMissingPointAttachment(assignmentId, pointId, missingClientFileId, file);
 }
-async function attachRemarkPhotoAssets(ownerUserId: string, remarkId: string, assets: ImagePicker.ImagePickerAsset[]) {
+async function attachRemarkPhotoAssets(ownerUserId: string, remarkId: string, assets: ImagePicker.ImagePickerAsset[], onProgress?: MediaPreparationProgressCallback) {
   for (const asset of assets) {
     const optimizedPhoto = await optimizePhoto(asset);
     const file = await prepareLocalPhoto({
       ownerUserId,
       localPath: optimizedPhoto.uri,
-      remarkId
+      remarkId,
+      onProgress
     });
     await attachMediaToShiftRemark(remarkId, file);
   }
 }
 
-async function attachWorkPhotoAssets(ownerUserId: string, workTaskId: string, assets: ImagePicker.ImagePickerAsset[]) {
+async function attachWorkPhotoAssets(ownerUserId: string, workTaskId: string, assets: ImagePicker.ImagePickerAsset[], onProgress?: MediaPreparationProgressCallback) {
   for (const asset of assets) {
     const optimizedPhoto = await optimizePhoto(asset);
     const file = await prepareLocalPhoto({
       ownerUserId,
       localPath: optimizedPhoto.uri,
-      workTaskId
+      workTaskId,
+      onProgress
     });
     await attachMediaToWorkTask(workTaskId, file);
   }
@@ -386,7 +390,8 @@ async function preparePointVideo(
   ownerUserId: string,
   assignmentId: string,
   pointId: string,
-  asset: ImagePicker.ImagePickerAsset
+  asset: ImagePicker.ImagePickerAsset,
+  onProgress?: MediaPreparationProgressCallback
 ) {
   const sizeBytes = await getValidatedVideoSize(asset);
   return prepareLocalMedia({
@@ -396,11 +401,12 @@ async function preparePointVideo(
     pointId,
     contentType: "video/mp4",
     mediaKind: "video",
-    sizeBytes
+    sizeBytes,
+    onProgress
   });
 }
 
-async function prepareRemarkVideo(ownerUserId: string, remarkId: string, asset: ImagePicker.ImagePickerAsset) {
+async function prepareRemarkVideo(ownerUserId: string, remarkId: string, asset: ImagePicker.ImagePickerAsset, onProgress?: MediaPreparationProgressCallback) {
   const sizeBytes = await getValidatedVideoSize(asset);
   return prepareLocalMedia({
     ownerUserId,
@@ -408,11 +414,12 @@ async function prepareRemarkVideo(ownerUserId: string, remarkId: string, asset: 
     remarkId,
     contentType: "video/mp4",
     mediaKind: "video",
-    sizeBytes
+    sizeBytes,
+    onProgress
   });
 }
 
-async function prepareWorkVideo(ownerUserId: string, workTaskId: string, asset: ImagePicker.ImagePickerAsset) {
+async function prepareWorkVideo(ownerUserId: string, workTaskId: string, asset: ImagePicker.ImagePickerAsset, onProgress?: MediaPreparationProgressCallback) {
   const sizeBytes = await getValidatedVideoSize(asset);
   return prepareLocalMedia({
     ownerUserId,
@@ -420,7 +427,8 @@ async function prepareWorkVideo(ownerUserId: string, workTaskId: string, asset: 
     workTaskId,
     contentType: "video/mp4",
     mediaKind: "video",
-    sizeBytes
+    sizeBytes,
+    onProgress
   });
 }
 
@@ -435,7 +443,7 @@ function buildResizeActions(width?: number, height?: number): ImageManipulator.A
 async function getValidatedVideoSize(asset: ImagePicker.ImagePickerAsset) {
   const info = asset.fileSize ? null : await getLocalFileInfo(asset.uri);
   const sizeBytes = asset.fileSize ?? (info?.exists ? info.size : null);
-  if (sizeBytes && sizeBytes > maxVideoBytes) {
+  if (sizeBytes && sizeBytes > MAX_VIDEO_BYTES) {
     throw new Error("Р’РёРґРµРѕ СЃР»РёС€РєРѕРј Р±РѕР»СЊС€РѕРµ. Р’С‹Р±РµСЂРёС‚Рµ С„Р°Р№Р» РґРѕ 25 РњР‘.");
   }
 

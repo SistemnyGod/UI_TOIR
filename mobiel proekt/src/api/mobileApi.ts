@@ -1,6 +1,7 @@
 import { mobileRequest } from "@/api/httpClient";
+import { MobileApiProtocolError } from "@/api/protocolValidation";
 import { getMobileRuntimeConfig } from "@/core/serverSettings";
-import { bootstrapResponseSchema, unknownResponseSchema } from "@/api/schemas";
+import { bootstrapResponseSchema, outboxResponseSchema, unknownResponseSchema } from "@/api/schemas";
 import { BootstrapDto } from "@/domain/patrol/patrolTypes";
 import { OutboxCommand, OutboxResponse } from "@/domain/sync/syncTypes";
 import { MobileDiagnosticReport } from "@/db/repositories/diagnosticReportRepository";
@@ -23,7 +24,7 @@ export async function postOutbox(commands: OutboxCommand[]) {
 
 export function validateOutboxResponses(value: unknown, commands: OutboxCommand[]): OutboxResponse[] {
   if (!Array.isArray(value)) {
-    throw new Error("Сервер вернул некорректный ответ очереди. Данные сохранены и будут повторены.");
+    throw new MobileApiProtocolError("Сервер вернул некорректный ответ очереди. Данные сохранены и будут повторены.");
   }
 
   const expectedIds = new Set(commands.map((command) => command.clientOperationId));
@@ -37,10 +38,14 @@ export function validateOutboxResponses(value: unknown, commands: OutboxCommand[
   ]);
 
   if (value.length !== expectedIds.size) {
-    throw new Error("Сервер вернул неполный ответ очереди. Данные сохранены и будут повторены.");
+    throw new MobileApiProtocolError("Сервер вернул неполный ответ очереди. Данные сохранены и будут повторены.");
   }
 
   for (const item of value) {
+    const parsed = outboxResponseSchema.safeParse(item);
+    if (!parsed.success) {
+      throw new MobileApiProtocolError("Ответ outbox не соответствует версии мобильного API. Локальные данные сохранены.");
+    }
     if (!isRecord(item)
       || typeof item.clientOperationId !== "string"
       || !expectedIds.has(item.clientOperationId)
@@ -52,14 +57,14 @@ export function validateOutboxResponses(value: unknown, commands: OutboxCommand[
       || (item.serverRevision !== null && typeof item.serverRevision !== "number")
       || (item.conflictId !== null && typeof item.conflictId !== "string")
       || (item.retryAfterSeconds !== null && typeof item.retryAfterSeconds !== "number")) {
-      throw new Error("Сервер вернул некорректный ответ операции. Данные сохранены и будут повторены.");
+      throw new MobileApiProtocolError("Сервер вернул некорректный ответ операции. Данные сохранены и будут повторены.");
     }
 
     responseIds.add(item.clientOperationId);
   }
 
   if (responseIds.size !== expectedIds.size) {
-    throw new Error("Сервер вернул ответ не для всех операций. Данные сохранены и будут повторены.");
+    throw new MobileApiProtocolError("Сервер вернул ответ не для всех операций. Данные сохранены и будут повторены.");
   }
 
   return value as OutboxResponse[];
@@ -90,7 +95,7 @@ export function validateDiagnosticReportReceipt(value: unknown, expectedReportId
     || (value.status !== "stored" && value.status !== "duplicate")
     || typeof value.storedAt !== "string"
     || Number.isNaN(Date.parse(value.storedAt))) {
-    throw new Error("Сервер вернул некорректное подтверждение диагностического отчёта. Отчёт сохранён и будет повторен.");
+    throw new MobileApiProtocolError("Сервер вернул некорректное подтверждение диагностического отчёта. Отчёт сохранён и будет повторен.");
   }
 
   return value as { reportId: string; status: "stored" | "duplicate"; storedAt: string };

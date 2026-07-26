@@ -6,6 +6,7 @@ import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/databa
 import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { MobileEmployeeDto, MobileEmuSectionDto, WorkItemDto, WorkTaskDto } from "@/domain/emu/emuTypes";
+import { emuTaskActionError } from "@/domain/emu/emuStateMachine";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { WorkTaskRow, createWorkTaskOutboxCommand, mapWorkItemRow, mapWorkTaskRow, statusForPendingAction } from "@/db/repositories/workTaskMappers";
 import { insertOutboxCommandInTransaction, type SqlExecutor } from "@/db/repositories/outboxSql";
@@ -331,6 +332,7 @@ export async function createWorkTaskLocally(input: CreateWorkTaskInput) {
   if (!title) {
     throw new Error("Заполните задачу.");
   }
+  assertEmuTaskAction("start", "new");
 
   const db = await getDatabase();
   const command = createWorkTaskOutboxCommand({
@@ -393,6 +395,7 @@ export async function startPlannedWorkLocally(item: WorkItemDto, employee: Mobil
   if (item.kind !== "planTask" || !item.planTaskId) {
     throw new Error("Плановая работа недоступна для запуска.");
   }
+  assertEmuTaskAction("start", item.status);
 
   const ownerUserId = await requireOwnerUserId();
   const taskId = Crypto.randomUUID();
@@ -490,6 +493,7 @@ async function enqueueParticipantChange(
 ) {
   const taskId = item.workSessionId ?? item.itemId;
   const ownerUserId = await requireOwnerUserId();
+  assertEmuTaskAction(commandType === "joinWorkTask" ? "start" : "edit", item.status);
   const now = new Date().toISOString();
   const db = await getDatabase();
   const command = createWorkTaskOutboxCommand({
@@ -515,6 +519,7 @@ async function enqueueParticipantChange(
 
 export async function updateWorkTaskLocally(input: UpdateWorkTaskInput) {
   const ownerUserId = await requireOwnerUserId();
+  assertEmuTaskAction("edit", input.task.status);
   const updatedAtLocal = new Date().toISOString();
   const title = input.taskDescription.trim();
   if (!title) {
@@ -559,6 +564,7 @@ export async function updateWorkTaskLocally(input: UpdateWorkTaskInput) {
 
 export async function pauseWorkTaskLocally(task: WorkTaskDto, comment: string) {
   const ownerUserId = await requireOwnerUserId();
+  assertEmuTaskAction("pause", task.status);
   const pausedAtLocal = new Date().toISOString();
   const db = await getDatabase();
   const command = createWorkTaskOutboxCommand({
@@ -599,6 +605,7 @@ export async function pauseWorkTaskLocally(task: WorkTaskDto, comment: string) {
 
 export async function resumeWorkTaskLocally(task: WorkTaskDto, comment: string) {
   const ownerUserId = await requireOwnerUserId();
+  assertEmuTaskAction("resume", task.status);
   const resumedAtLocal = new Date().toISOString();
   const db = await getDatabase();
   const command = createWorkTaskOutboxCommand({
@@ -639,6 +646,7 @@ export async function resumeWorkTaskLocally(task: WorkTaskDto, comment: string) 
 
 export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: string) {
   const ownerUserId = await requireOwnerUserId();
+  assertEmuTaskAction("complete", task.status);
 
   const comment = resultComment.trim();
   if (!comment) {
@@ -689,14 +697,14 @@ export async function attachMediaToWorkTask(workTaskId: string, file: LocalMobil
   const ownerUserId = await requireOwnerUserId();
   const db = await getDatabase();
   await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
-    const task = await tx.getFirstAsync<{ task_id: string }>(
-      "SELECT task_id FROM work_tasks WHERE task_id = ? AND owner_user_id = ?",
+    const task = await tx.getFirstAsync<{ task_id: string; status: WorkTaskDto["status"] }>(
+      "SELECT task_id, status FROM work_tasks WHERE task_id = ? AND owner_user_id = ?",
       [workTaskId, ownerUserId]
     );
     if (!task) {
       throw new Error("Работа не найдена на телефоне.");
     }
-
+    assertEmuTaskAction("attach", task.status);
     await insertLocalFileInTransaction(tx, { ...file, status: "queued", workTaskId });
   }));
   requestSyncAfterMutation();
@@ -725,6 +733,13 @@ async function hasActiveWorkTaskCommand(
   );
 
   return rows.length > 0;
+}
+
+function assertEmuTaskAction(action: Parameters<typeof emuTaskActionError>[0], status: WorkTaskDto["status"] | string) {
+  const error = emuTaskActionError(action, status);
+  if (error) {
+    throw new Error(error);
+  }
 }
 
 async function requireOwnerUserId() {

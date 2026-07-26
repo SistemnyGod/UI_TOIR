@@ -6,7 +6,7 @@ import { LocalMobileFile } from "@/domain/files/fileTypes";
 
 export type SyncQueueFileItem = Pick<
   LocalMobileFile,
-  "clientFileId" | "localPath" | "serverFileId" | "status" | "contentType" | "mediaKind" | "assignmentId" | "pointId" | "remarkId" | "workTaskId" | "createdAtLocal" | "contourId"
+  "clientFileId" | "localPath" | "previewPath" | "serverFileId" | "status" | "sha256" | "sizeBytes" | "contentType" | "mediaKind" | "assignmentId" | "pointId" | "remarkId" | "workTaskId" | "createdAtLocal" | "contourId" | "linkedAt" | "attemptCount" | "lastError" | "nextAttemptAt" | "lastAttemptAt"
 > & {
   assignmentRouteName: string | null;
 };
@@ -27,6 +27,7 @@ export async function insertLocalFileInTransaction(executor: Pick<Awaited<Return
         local_path,
         preview_path,
         server_file_id,
+        linked_at,
         status,
         sha256,
         size_bytes,
@@ -38,7 +39,7 @@ export async function insertLocalFileInTransaction(executor: Pick<Awaited<Return
         work_task_id,
         created_at_local
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       file.clientFileId,
@@ -47,6 +48,7 @@ export async function insertLocalFileInTransaction(executor: Pick<Awaited<Return
       file.localPath,
       file.previewPath ?? null,
       file.serverFileId ?? null,
+      file.linkedAt ?? null,
       file.status,
       file.sha256 ?? null,
       file.sizeBytes ?? null,
@@ -256,6 +258,10 @@ export async function listSyncQueueFiles(ownerUserId: string, limit = 100) {
           file.remark_id AS remarkId,
           file.work_task_id AS workTaskId,
           file.created_at_local AS createdAtLocal,
+          file.attempt_count AS attemptCount,
+          file.last_error AS lastError,
+          file.next_attempt_at AS nextAttemptAt,
+          file.last_attempt_at AS lastAttemptAt,
           assignment.route_name AS assignmentRouteName
         FROM files file
         LEFT JOIN patrol_assignments assignment
@@ -263,7 +269,7 @@ export async function listSyncQueueFiles(ownerUserId: string, limit = 100) {
           AND assignment.owner_user_id = file.owner_user_id
         WHERE file.owner_user_id = ?
           AND file.contour_id = '${currentContourId}'
-          AND file.status NOT IN ('uploaded', 'linked')
+          AND file.status NOT IN ('uploaded', 'linked', 'deletedAfterRetention')
           AND (
             assignment.assignment_id IS NULL
             OR assignment.status NOT IN ('cancelled', 'cancelledServer')
@@ -283,14 +289,18 @@ export async function markFileUploading(clientFileId: string) {
   }
 
   const db = await getDatabase();
+  const lastAttemptAt = new Date().toISOString();
 
   await withSqliteBusyRetry(() => db.runAsync(
     `
       UPDATE files
-      SET status = 'uploading'
+      SET status = 'uploading',
+          attempt_count = COALESCE(attempt_count, 0) + 1,
+          last_attempt_at = ?,
+          last_error = NULL
       WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ?
     `,
-    [ownerUserId, currentContourId, clientFileId]
+    [lastAttemptAt, ownerUserId, currentContourId, clientFileId]
   ));
 }
 
@@ -306,14 +316,21 @@ export async function markFileUploaded(clientFileId: string, serverFileId: strin
     `
       UPDATE files
       SET status = 'uploaded',
-          server_file_id = ?
+          server_file_id = ?,
+          next_attempt_at = NULL,
+          last_error = NULL
       WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ?
     `,
     [serverFileId, ownerUserId, currentContourId, clientFileId]
   ));
 }
 
-export async function markFileUploadFailed(clientFileId: string) {
+export async function markFileUploadFailed(
+  clientFileId: string,
+  status: "failed" | "retryLater" = "retryLater",
+  lastError: string | null = null,
+  nextAttemptAt: string | null = null
+) {
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
     return;
@@ -324,13 +341,14 @@ export async function markFileUploadFailed(clientFileId: string) {
   await withSqliteBusyRetry(() => db.runAsync(
     `
       UPDATE files
-      SET status = 'retryLater'
+      SET status = ?,
+          last_error = ?,
+          next_attempt_at = ?
       WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ?
     `,
-    [ownerUserId, currentContourId, clientFileId]
+    [status, lastError, nextAttemptAt, ownerUserId, currentContourId, clientFileId]
   ));
 }
-
 export async function listLinkedLocalFiles(ownerUserId: string, clientFileIds?: readonly string[]) {
   const db = await getDatabase();
   if (clientFileIds && clientFileIds.length === 0) {
@@ -340,9 +358,9 @@ export async function listLinkedLocalFiles(ownerUserId: string, clientFileIds?: 
   const clientFileFilter = clientFileIds
     ? ` AND client_file_id IN (${clientFileIds.map(() => "?").join(", ")})`
     : "";
-  return db.getAllAsync<Pick<LocalMobileFile, "clientFileId" | "localPath" | "status">>(
+  return db.getAllAsync<Pick<LocalMobileFile, "clientFileId" | "localPath" | "previewPath" | "serverFileId" | "status" | "sha256" | "sizeBytes" | "mediaKind" | "linkedAt">>(
     `
-      SELECT client_file_id AS clientFileId, local_path AS localPath, status
+      SELECT client_file_id AS clientFileId, local_path AS localPath, preview_path AS previewPath, server_file_id AS serverFileId, status, sha256, size_bytes AS sizeBytes, media_kind AS mediaKind, linked_at AS linkedAt
       FROM files
       WHERE owner_user_id = ? AND contour_id = '${currentContourId}' AND status = 'linked'${clientFileFilter}
       ORDER BY created_at_local ASC
@@ -351,6 +369,21 @@ export async function listLinkedLocalFiles(ownerUserId: string, clientFileIds?: 
   );
 }
 
+export async function hasUnfinishedFileCommand(ownerUserId: string, clientFileId: string) {
+  const db = await getDatabase();
+  const row = await withSqliteBusyRetry(() => db.getFirstAsync<{ count: number }>(
+    "SELECT COUNT(*) AS count FROM outbox_commands WHERE owner_user_id = ? AND contour_id = ? AND status NOT IN ('accepted', 'duplicate', 'superseded', 'rejected', 'conflict', 'cancelledLocal') AND (entity_local_id = ? OR payload_json LIKE '%' || ? || '%')",
+    [ownerUserId, currentContourId, clientFileId, clientFileId]
+  ));
+  return Number(row?.count ?? 0) > 0;
+}
+export async function markFileDeletedAfterRetention(ownerUserId: string, clientFileId: string) {
+  const db = await getDatabase();
+  await withSqliteBusyRetry(() => db.runAsync(
+    "UPDATE files SET status = 'deletedAfterRetention', local_path = '' WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ? AND status = 'linked' AND server_file_id IS NOT NULL",
+    [ownerUserId, currentContourId, clientFileId]
+  ));
+}
 export async function deleteLinkedLocalFileRecord(ownerUserId: string, clientFileId: string) {
   const db = await getDatabase();
   await withSqliteBusyRetry(() => db.runAsync(

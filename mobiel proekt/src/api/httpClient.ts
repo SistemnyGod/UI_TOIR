@@ -4,7 +4,7 @@ import {
   MobileNetworkError
 } from "@/api/networkTimeout";
 import { shouldTryNextMobileServer } from "@/api/serverFailoverPolicy";
-import { loginResponseSchema } from "@/api/schemas";
+import { refreshResponseSchema } from "@/api/schemas";
 import { invalidateServerHealthCache, probeServerHealthCached } from "@/api/serverHealthApi";
 import { getOrCreateDeviceId } from "@/auth/deviceRegistration";
 import { assertSessionOwner } from "@/auth/sessionIdentity";
@@ -22,6 +22,7 @@ import { hasUsableNetwork } from "@/core/network";
 import { getMobileRuntimeConfig, getServerCandidateBaseUrls } from "@/core/serverSettings";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { logMobileError } from "@/services/mobileErrorReporter";
+import { MobileApiProtocolError, parseMobileResponse } from "@/api/protocolValidation";
 import type { ZodType } from "zod";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -86,15 +87,14 @@ export async function mobileRequest<TResponse>(
     return parseMobileResponse(schema, undefined);
   }
 
-  return parseMobileResponse(schema, await response.json());
-}
-
-export function parseMobileResponse<TResponse>(schema: ZodType<TResponse>, value: unknown): TResponse {
+  let payload: unknown;
   try {
-    return schema.parse(value);
+    payload = await response.json();
   } catch {
-    throw new Error("Сервер вернул несовместимый ответ mobile API. Локальные данные сохранены.");
+    throw new MobileApiProtocolError("Ответ сервера не является корректным JSON mobile API. Локальные данные сохранены.");
   }
+
+  return parseMobileResponse(schema, payload);
 }
 
 async function sendMobileRequestWithFailover(
@@ -294,12 +294,14 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
     throw new Error(message ?? `Не удалось обновить сессию: ${response.status}. Адрес: ${activeApiBaseUrl}`);
   }
 
-  let session: ReturnType<typeof loginResponseSchema.parse>;
+  let session: ReturnType<typeof refreshResponseSchema.parse>;
+  let payload: unknown;
   try {
-    session = parseMobileResponse(loginResponseSchema, await response.json());
+    payload = await response.json();
   } catch {
-    throw new Error("Не удалось обновить сессию. Повторите позже.");
+    throw new MobileApiProtocolError("Ответ refresh сессии не является корректным JSON. Локальные данные сохранены.");
   }
+  session = parseMobileResponse(refreshResponseSchema, payload);
 
   if (session.contourId !== runtimeConfig.contourId) {
     throw new Error(`Сервер вернул сессию другого контура (${session.contourId}). Токены не сохранены.`);
@@ -319,7 +321,11 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
     contourId: runtimeConfig.contourId,
     fullName: session.user.fullName,
     lastOnlineLoginAt: new Date().toISOString(),
-    expiresAt: session.refreshExpiresAt
+    expiresAt: session.refreshExpiresAt,
+    offlineExpiresAt: session.refreshExpiresAt,
+    deviceTrusted: session.device.trusted,
+    userBlockedAt: (session.user as typeof session.user & { blockedAt?: string | null }).blockedAt ?? null,
+    deviceBlockedAt: session.device.blockedAt
   });
   // Bind legacy installations that have a valid refresh token but predate the
   // stored owner id. This avoids an unnecessary sign-in while reports are queued.

@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
@@ -8,7 +8,8 @@ import { listSyncQueueFiles, SyncQueueFileItem } from "@/db/repositories/filesRe
 import { listSyncQueueCommands, SyncQueueCommandItem } from "@/db/repositories/outboxRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
-import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { requestMobileDataRefresh, triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { subscribeToSyncEvents } from "@/sync/syncEvents";
 import { acceptServerConflict, cancelRejectedCommand, retryConflictWithLatestRevision, sendConflictToDispatcher } from "@/services/conflictResolutionService";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -57,8 +58,13 @@ export function SyncQueueScreen() {
   useFocusEffect(
     useCallback(() => {
       void load();
+      requestMobileDataRefresh("appActive");
     }, [load])
   );
+
+  useEffect(() => subscribeToSyncEvents(() => {
+    void load();
+  }), [load]);
 
   async function resolveCommand(command: SyncQueueCommandItem, action: "serverWins" | "dispatcher" | "retryRevision" | "cancelRejected") {
     if (actionInProgressId) {
@@ -185,9 +191,12 @@ export function SyncQueueScreen() {
                 </View>
                 <StatusPill label={statusLabel(command.status, command.resolutionStatus)} tone={statusTone(command.status, command.resolutionStatus)} />
               </View>
-              <View style={styles.metaGrid}>
+                            <View style={styles.metaGrid}>
                 <Meta label="Попытки" value={String(command.attemptCount)} />
-                <Meta label="Обновлено" value={formatDateTime(command.updatedAtLocal)} />
+                <Meta label="Последняя попытка" value={formatDateTime(command.lastAttemptAt)} />
+                <Meta label="Следующая попытка" value={formatDateTime(command.nextAttemptAt)} />
+                <Meta label="Отчёт" value={command.assignmentRouteName ?? command.entityLocalId ?? "-"} />
+                <Meta label="Действие" value={commandActionLabel(command.status)} />
               </View>
               {command.lastError ? (
                 <Pressable
@@ -277,10 +286,15 @@ export function SyncQueueScreen() {
                 </View>
                 <StatusPill label={fileStatusLabel(file.status)} tone={statusTone(file.status)} />
               </View>
-              <View style={styles.metaGrid}>
+                            <View style={styles.metaGrid}>
+                <Meta label="Попытки" value={String(file.attemptCount ?? 0)} />
+                <Meta label="Последняя попытка" value={formatDateTime(file.lastAttemptAt ?? null)} />
+                <Meta label="Следующая попытка" value={formatDateTime(file.nextAttemptAt ?? null)} />
+                <Meta label="Отчёт" value={file.assignmentRouteName ?? file.assignmentId ?? "-"} />
                 <Meta label="Точка" value={file.pointId ?? "-"} />
-                <Meta label="Добавлено" value={formatDateTime(file.createdAtLocal)} />
+                <Meta label="Действие" value={file.status === "failed" ? "Повторить загрузку" : "Ожидает отправки"} />
               </View>
+              {file.lastError ? <Text style={styles.errorPreview} numberOfLines={2}>{file.lastError}</Text> : null}
             </View>
           ))}
         </Card>
@@ -340,6 +354,22 @@ function commandTitle(command: SyncQueueCommandItem) {
   }
 }
 
+function commandActionLabel(status: string) {
+  switch (status) {
+    case "conflict":
+      return "Выбрать решение";
+    case "rejected":
+      return "Отменить локально";
+    case "invalidPayload":
+      return "Исправить данные";
+    case "pending":
+    case "sending":
+    case "retryLater":
+      return "Повторить отправку";
+    default:
+      return "-";
+  }
+}
 function statusLabel(status: string, resolutionStatus: string | null = null) {
   if (status === "conflict" && resolutionStatus === "dispatcher") {
     return "Ожидает диспетчера";
@@ -369,6 +399,8 @@ function statusLabel(status: string, resolutionStatus: string | null = null) {
       return "Конфликт";
     case "rejected":
       return "Отклонено";
+    case "invalidPayload":
+      return "Повреждённые данные";
     default:
       return status;
   }
@@ -409,7 +441,7 @@ function statusTone(status: string, resolutionStatus: string | null = null): "su
     return "warning";
   }
 
-  if (status === "conflict" || status === "rejected" || status === "failed") {
+  if (status === "conflict" || status === "rejected" || status === "invalidPayload" || status === "failed") {
     return "danger";
   }
 

@@ -1,15 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
 import { listPointFiles } from "@/db/repositories/filesRepository";
-import { getAssignmentById, getPointForFill, listMissingCompleteAssignmentAttachmentIds, PointForFill, PointListItem } from "@/db/repositories/patrolRepository";
+import { getAssignmentById, getAssignmentScanPolicy, getPointForFill, listMissingCompleteAssignmentAttachmentIds, PointForFill, PointListItem } from "@/db/repositories/patrolRepository";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
+import { requestMobileDataRefresh } from "@/sync/syncTriggers";
+import { shouldReloadAssignmentAfterSync, subscribeToSyncEvents } from "@/sync/syncEvents";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -20,20 +22,32 @@ export function PointDetailScreen() {
   const { assignmentId, pointId } = useLocalSearchParams<{ assignmentId: string; pointId: string }>();
   const { colors } = useAppTheme();
   const [assignment, setAssignment] = useState<{ status: string } | null>(null);
+  const [scanPolicy, setScanPolicy] = useState({ nfcEnabled: false, qrFallbackEnabled: false });
   const [point, setPoint] = useState<PointForFill | null>(null);
   const [attachments, setAttachments] = useState<LocalMobileFile[]>([]);
   const [missingAttachmentIds, setMissingAttachmentIds] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [reloadRevision, setReloadRevision] = useState(0);
+
+
+  useEffect(() => subscribeToSyncEvents((event) => {
+    if (shouldReloadAssignmentAfterSync(event, assignmentId)) {
+      setReloadRevision((value) => value + 1);
+    }
+  }), [assignmentId]);
 
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
+      void reloadRevision;
+      requestMobileDataRefresh("appActive");
       void (async () => {
         try {
         const ownerUserId = await getStoredOwnerUserId();
-        const [loadedAssignment, loadedPoint, files, missingIds] = await Promise.all([
+        const [loadedAssignment, loadedPolicy, loadedPoint, files, missingIds] = await Promise.all([
           getAssignmentById(assignmentId),
+          getAssignmentScanPolicy(assignmentId),
           ownerUserId ? getPointForFill(assignmentId, pointId, ownerUserId, currentContourId) : Promise.resolve(null),
           listPointFiles(assignmentId, pointId),
           listMissingCompleteAssignmentAttachmentIds(assignmentId, pointId)
@@ -42,6 +56,7 @@ export function PointDetailScreen() {
           return;
         }
         setAssignment(loadedAssignment);
+        setScanPolicy(loadedPolicy);
         setPoint(loadedPoint);
         setAttachments(files);
         setMissingAttachmentIds(missingIds);
@@ -60,7 +75,7 @@ export function PointDetailScreen() {
       return () => {
         isMounted = false;
       };
-    }, [assignmentId, pointId])
+    }, [assignmentId, pointId, reloadRevision])
   );
 
   if (isLoading) {
@@ -113,7 +128,7 @@ export function PointDetailScreen() {
           <StatusPill label={confirmationLabel(point)} tone={point.confirmationType ? "success" : "neutral"} />
           {point.scannedAtLocal ? <StatusPill label={formatDateTime(point.scannedAtLocal)} tone="neutral" /> : null}
         </View>
-        <Text style={[styles.text, { color: colors.mutedText }]}>Точку можно подтвердить NFC, QR или открыть вручную из списка меток.</Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>{scanMethodsHint(scanPolicy)}</Text>
       </Card>
 
       {point.status === "issue" || point.comment || point.deferredReason ? (
@@ -131,6 +146,7 @@ export function PointDetailScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Вложения</Text>
           <StatusPill label={attachments.length > 0 ? `${attachments.length}` : "Нет"} tone={attachments.length > 0 ? "success" : "neutral"} />
         </View>
+        <Text style={[styles.text, { color: colors.mutedText }]}>{point.requiresPhoto ? "\u0424\u043e\u0442\u043e \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e \u0434\u043b\u044f \u044d\u0442\u043e\u0439 \u0442\u043e\u0447\u043a\u0438." : "\u0424\u043e\u0442\u043e \u043d\u0435\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e \u0434\u043b\u044f \u044d\u0442\u043e\u0439 \u0442\u043e\u0447\u043a\u0438."}</Text>
         {attachments.length > 0 ? (
           <View style={styles.photoGrid}>
             {attachments.map((attachment) => (
@@ -160,8 +176,8 @@ export function PointDetailScreen() {
             onPress={() => router.push(`/patrol/assignment/${assignmentId}/point/${pointId}/fill`)}
           />
           <View style={styles.actionRow}>
-            <SecondaryAction label="Сканировать NFC" onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-nfc`)} />
-            <SecondaryAction label="QR резерв" onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-qr`)} />
+            {scanPolicy.nfcEnabled ? <SecondaryAction label="NFC" onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-nfc`)} /> : null}
+            {scanPolicy.qrFallbackEnabled ? <SecondaryAction label="QR" onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-qr`)} /> : null}
             <SecondaryAction label="Все метки" onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} />
           </View>
         </>
@@ -247,6 +263,13 @@ function pointStatusTone(status: PointListItem["status"]) {
   }
 
   return "neutral";
+}
+
+function scanMethodsHint(policy: { nfcEnabled: boolean; qrFallbackEnabled: boolean }) {
+  const methods = [policy.nfcEnabled ? "NFC" : null, policy.qrFallbackEnabled ? "QR" : null].filter(Boolean);
+  return methods.length > 0
+    ? `\u0414\u043e\u0441\u0442\u0443\u043f\u043d\u043e: ${methods.join(" \u0438 ")}. \u0422\u043e\u0447\u043a\u0443 \u043c\u043e\u0436\u043d\u043e \u043e\u0442\u043a\u0440\u044b\u0442\u044c \u0432\u0440\u0443\u0447\u043d\u0443\u044e.`
+    : "\u0421\u043a\u0430\u043d\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u043e\u0442\u043a\u043b\u044e\u0447\u0435\u043d\u043e \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u043e\u043c. \u0422\u043e\u0447\u043a\u0443 \u043c\u043e\u0436\u043d\u043e \u0437\u0430\u043a\u0440\u044b\u0442\u044c \u0432\u0440\u0443\u0447\u043d\u0443\u044e.";
 }
 
 function confirmationLabel(point: PointForFill) {

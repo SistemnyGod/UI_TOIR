@@ -7,6 +7,7 @@ import { listRequestBoard, RequestBoardItem } from "@/db/repositories/patrolRepo
 import { useAppTheme } from "@/features/settings/themePreference";
 import { refreshMobileData } from "@/services/mobileDataRefreshService";
 import { logMobileError } from "@/services/mobileErrorReporter";
+import { requestMobileDataRefresh } from "@/sync/syncTriggers";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -43,6 +44,7 @@ export function RequestBoardScreen() {
           setLoadError(caught instanceof Error ? caught.message : "Не удалось прочитать заявки.");
         }
       });
+      requestMobileDataRefresh("appActive");
       return () => {
         isMounted = false;
       };

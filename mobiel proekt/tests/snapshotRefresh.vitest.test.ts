@@ -1,0 +1,19 @@
+import { describe, expect, it } from "vitest";
+
+import { getSnapshotRefreshPlan } from "@/domain/patrol/snapshotPolicy";
+
+describe("обновление snapshot принятого назначения", () => {
+  it("заменяет snapshot v2 на v3 и добавляет новую точку", () => {
+    const plan = getSnapshotRefreshPlan({
+      localStatus: "accepted",
+      localSnapshotVersion: 2,
+      localPointCount: 1,
+      routeVersion: 3,
+      incomingPointIds: ["point-1", "point-2"]
+    });
+
+    expect(plan.shouldReplace).toBe(true);
+    expect(plan.snapshotVersion).toBe(3);
+    expect(plan.pointIds).toEqual(["point-1", "point-2"]);
+  });
+});

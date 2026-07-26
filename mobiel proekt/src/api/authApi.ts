@@ -1,5 +1,5 @@
 import { mobileRequest } from "@/api/httpClient";
-import { emptyResponseSchema, loginResponseSchema } from "@/api/schemas";
+import { emptyResponseSchema, loginResponseSchema, refreshResponseSchema } from "@/api/schemas";
 import { MobileDeviceDto, MobileUserDto } from "@/domain/patrol/patrolTypes";
 import { getMobileRuntimeConfig } from "@/core/serverSettings";
 
@@ -39,7 +39,7 @@ export type RefreshRequest = {
 
 export async function refresh(payload: RefreshRequest) {
   const runtimeConfig = await getMobileRuntimeConfig();
-  return mobileRequest<LoginResponse>("/api/v1/mobile/auth/refresh", loginResponseSchema, {
+  return mobileRequest<LoginResponse>("/api/v1/mobile/auth/refresh", refreshResponseSchema, {
     method: "POST",
     body: { ...payload, contourId: runtimeConfig.contourId },
     accessToken: null,

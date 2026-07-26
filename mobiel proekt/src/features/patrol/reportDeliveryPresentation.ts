@@ -13,7 +13,8 @@ export type ReportDeliveryStatus =
   | "wrong_contour"
   | "blocked"
   | "superseded"
-  | "cancelled";
+  | "cancelled"
+  | "invalidPayload";
 
 export type ReportDeliveryAction = "submit" | "retry" | "repair" | "resubmit" | "signIn" | "serverSettings" | "done";
 
@@ -54,6 +55,16 @@ export function getReportDeliveryPresentation(status: ReportDeliveryStatus | nul
       buttonLabel: status === "rejected" ? "Отправить исправленный отчет" : "Проверить конфликт",
       detail: lastError || "Сервер не принял данные. Проверьте точки обхода и отправьте исправленный отчет.",
       title: status === "conflict" ? "Нужна проверка данных" : "Отчет не принят",
+      tone: "danger" as const
+    };
+  }
+
+  if (status === "invalidPayload") {
+    return {
+      action: "repair" as const,
+      buttonLabel: "Открыть точки отчёта",
+      detail: lastError || "Данные отчёта повреждены. Проверьте точки и сформируйте отчёт заново.",
+      title: "Отчёт требует исправления",
       tone: "danger" as const
     };
   }

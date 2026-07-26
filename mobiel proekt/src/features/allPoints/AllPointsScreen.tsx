@@ -8,6 +8,7 @@ import { getActiveAssignment, getAssignmentById, listAssignmentPoints, PointList
 import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { shouldReloadAssignmentAfterSync, subscribeToSyncEvents } from "@/sync/syncEvents";
+import { requestMobileDataRefresh } from "@/sync/syncTriggers";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { ScreenList } from "@/ui/Screen";
@@ -54,6 +55,7 @@ export function AllPointsScreen() {
         }
       }
 
+      requestMobileDataRefresh("appActive");
       void load().catch((error) => {
         void logMobileError("patrol.points.load.failed", error);
         if (isMounted) {

@@ -61,9 +61,6 @@ export async function getLocalFileInfo(uri: string) {
   return FileSystem.getInfoAsync(uri, { md5: false });
 }
 
-export async function readFileAsBase64(uri: string) {
-  return FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-}
 
 export async function hasEnoughStorageForPhoto() {
   const freeBytes = await FileSystem.getFreeDiskStorageAsync();

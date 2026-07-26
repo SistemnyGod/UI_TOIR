@@ -181,7 +181,7 @@ export function PatrolRequestScreen() {
   const canAccept = !assignment && (request.status === "available" || request.status === "assigned");
   const canStart = assignment?.status === "accepted" || assignment?.status === "paused";
   const canRelease = assignment?.status === "accepted" && !assignment.startedAtLocal;
-  const canOpen = assignment && !canStart;
+  const canOpen = assignment && !canStart && assignment.status !== "releasePending";
 
   return (
     <Screen title="Проверка заявки" subtitle="Проверьте маршрут и выполните следующий шаг.">

@@ -32,7 +32,10 @@ export async function getOfflineSession(): Promise<OfflineSessionState | null> {
 
   try {
     const parsed = JSON.parse(raw) as Partial<OfflineSessionState>;
-    if (!parsed.userId || !parsed.fullName || !parsed.lastOnlineLoginAt || !parsed.expiresAt) {
+    const offlineExpiresAt = typeof parsed.offlineExpiresAt === "string"
+      ? parsed.offlineExpiresAt
+      : parsed.expiresAt;
+    if (!parsed.userId || !parsed.fullName || !parsed.lastOnlineLoginAt || !parsed.expiresAt || !offlineExpiresAt) {
       return null;
     }
 
@@ -44,6 +47,10 @@ export async function getOfflineSession(): Promise<OfflineSessionState | null> {
       fullName: parsed.fullName,
       lastOnlineLoginAt: parsed.lastOnlineLoginAt,
       expiresAt: parsed.expiresAt,
+      offlineExpiresAt,
+      deviceTrusted: parsed.deviceTrusted === true,
+      userBlockedAt: parsed.userBlockedAt ?? null,
+      deviceBlockedAt: parsed.deviceBlockedAt ?? null,
       revokedAt: parsed.revokedAt ?? null,
       revocationReason: parsed.revocationReason ?? null,
       requiresReenrollment: parsed.requiresReenrollment ?? !parsedContourId

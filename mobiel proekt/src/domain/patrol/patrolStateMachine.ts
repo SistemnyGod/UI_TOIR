@@ -14,6 +14,7 @@ const blockedAssignmentStatuses = new Set([
   "syncError",
   "needsDispatcherDecision",
   "cancelledServer",
+  "releasePending",
   "cancelled",
   "completed",
   "completedServer"

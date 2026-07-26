@@ -3,15 +3,18 @@ import { currentContourId } from "@/core/environments";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
-import { updatePendingCompleteReportBaseRevisionInTransaction } from "@/db/repositories/outboxSql";
+import { updatePendingCompleteReportBaseRevisionInTransaction, updatePendingWorkTaskRevisionInTransaction } from "@/db/repositories/outboxSql";
 import { finalizeCancelledAssignmentInTransaction } from "@/db/repositories/patrolCancellationRepository";
 import { MobileEntityType, OutboxCommand, OutboxCommandStatus, OutboxCommandType, OutboxResponse } from "@/domain/sync/syncTypes";
 import { extractAssignmentId, extractCompletionFileIds, isCancelledCompletionResponse, isProblemResponse } from "@/db/repositories/outboxPolicies";
 import { SyncQueueCommandItem } from "@/db/repositories/outboxTypes";
 import { isOutboxCommandReady, resolveRetryDelaySeconds } from "@/sync/outboxRetryPolicy";
+import { parseOutboxPayloadRows } from "@/sync/outboxPayloadParser";
 import { applyRejectedCancellationTransition, applyServerWinsTransition, ConflictServerSnapshot } from "@/domain/sync/conflictResolutionPolicy";
-import { getCommandAssignmentId } from "@/sync/outboxOrderingPolicy";
+import { getCommandAggregateKey } from "@/sync/outboxOrderingPolicy";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
+import { getReleaseResponseResolution } from "@/domain/patrol/releaseResolutionPolicy";
+import { getPointResultSyncUpdate } from "@/domain/patrol/pointResultSyncPolicy";
 
 export type { SyncQueueCommandItem } from "@/db/repositories/outboxTypes";
 
@@ -75,39 +78,48 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
       FROM outbox_commands
       WHERE owner_user_id = ?
         AND contour_id = ?
-        AND status NOT IN ('accepted', 'duplicate', 'superseded', 'cancelled')
+        AND status NOT IN ('accepted', 'duplicate', 'superseded', 'cancelled', 'invalidPayload')
       ORDER BY created_at_local ASC
       LIMIT ?
     `,
     [ownerUserId, currentContourId, Math.max(limit * 4, 100)]
   );
 
-  const commands = rows.map((row) => ({
-    clientOperationId: row.client_operation_id,
-    ownerUserId: row.owner_user_id,
-    contourId: row.contour_id,
-    commandType: row.command_type as OutboxCommandType,
-    entityType: row.entity_type as MobileEntityType,
-    entityLocalId: row.entity_local_id,
-    entityServerId: row.entity_server_id,
-    payload: JSON.parse(row.payload_json) as Record<string, unknown>,
-    createdAtLocal: row.created_at_local,
-    attemptCount: row.attempt_count,
-    status: row.status as OutboxCommandStatus,
-    nextAttemptAt: row.next_attempt_at
-  }));
+  const commands = await parseOutboxPayloadRows(
+    rows,
+    (row) => ({
+      clientOperationId: row.client_operation_id,
+      ownerUserId: row.owner_user_id,
+      contourId: row.contour_id,
+      commandType: row.command_type as OutboxCommandType,
+      entityType: row.entity_type as MobileEntityType,
+      entityLocalId: row.entity_local_id,
+      entityServerId: row.entity_server_id,
+      payload: JSON.parse(row.payload_json) as Record<string, unknown>,
+      createdAtLocal: row.created_at_local,
+      attemptCount: row.attempt_count,
+      status: row.status as OutboxCommandStatus,
+      nextAttemptAt: row.next_attempt_at
+    }),
+    async (row, reason) => {
+      await withSqliteBusyRetry(() => db.runAsync(
+        "UPDATE outbox_commands SET status = 'invalidPayload', last_error = ?, updated_at_local = ? WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?",
+        [`Некорректный JSON payload: ${reason}`, new Date().toISOString(), ownerUserId, currentContourId, row.client_operation_id]
+      ));
+    }
+  );
   const terminalStatuses = new Set<OutboxCommandStatus>(["accepted", "duplicate", "superseded", "cancelled"]);
   const readyCandidates = commands.filter((command) => isOutboxCommandReady(command, new Date().toISOString()));
 
   return readyCandidates
     .filter((candidate) => {
-      const aggregateId = getCommandAssignmentId(candidate);
+      const aggregateId = getCommandAggregateKey(candidate);
       if (!aggregateId) {
         return true;
       }
       return !commands.some((previous) =>
         previous.createdAtLocal < candidate.createdAtLocal
-        && getCommandAssignmentId(previous) === aggregateId
+        && getCommandAggregateKey(previous) === aggregateId
         && !terminalStatuses.has(previous.status)
       );
     })
@@ -221,7 +233,7 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
         ON assignment.assignment_id = command.entity_local_id
       WHERE command.owner_user_id = ?
         AND command.contour_id = ?
-        AND command.status IN ('pending', 'sending', 'retryLater', 'waiting_auth', 'waiting_network', 'wrong_contour', 'blocked', 'rejected', 'conflict')
+        AND command.status IN ('pending', 'sending', 'retryLater', 'waiting_auth', 'waiting_network', 'wrong_contour', 'blocked', 'rejected', 'conflict', 'invalidPayload')
       ORDER BY
         CASE command.status
           WHEN 'sending' THEN 0
@@ -305,19 +317,32 @@ export async function listUnconfirmedCompleteReportCommands(
     [...params, boundedLimit]
   );
 
-  return rows.map((row) => ({
-    clientOperationId: row.client_operation_id,
-    ownerUserId: row.owner_user_id,
-     contourId: row.contour_id,
-    commandType: row.command_type as OutboxCommandType,
-    entityType: row.entity_type as MobileEntityType,
-    entityLocalId: row.entity_local_id,
-    entityServerId: row.entity_server_id,
-    payload: JSON.parse(row.payload_json) as Record<string, unknown>,
-    createdAtLocal: row.created_at_local,
-    attemptCount: row.attempt_count,
-    status: row.status as OutboxCommandStatus
-  }));
+  const commands: OutboxCommand[] = [];
+  for (const row of rows) {
+    try {
+      commands.push({
+        clientOperationId: row.client_operation_id,
+        ownerUserId: row.owner_user_id,
+        contourId: row.contour_id,
+        commandType: row.command_type as OutboxCommandType,
+        entityType: row.entity_type as MobileEntityType,
+        entityLocalId: row.entity_local_id,
+        entityServerId: row.entity_server_id,
+        payload: JSON.parse(row.payload_json) as Record<string, unknown>,
+        createdAtLocal: row.created_at_local,
+        attemptCount: row.attempt_count,
+        status: row.status as OutboxCommandStatus
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Некорректный JSON payload.";
+      await withSqliteBusyRetry(() => db.runAsync(
+        "UPDATE outbox_commands SET status = 'invalidPayload', last_error = ?, updated_at_local = ? WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?",
+        [`Некорректный JSON payload: ${reason}`, new Date().toISOString(), ownerUserId, currentContourId, row.client_operation_id]
+      )).catch(() => undefined);
+    }
+  }
+
+  return commands;
 }
 
 export async function markOutboxCommandsSending(ownerUserId: string, clientOperationIds: string[]) {
@@ -397,6 +422,29 @@ export async function markOutboxCommandsRetryLater(
 }
 
 
+export async function markOutboxCommandsRejected(ownerUserId: string, clientOperationIds: string[], lastError: string) {
+  if (clientOperationIds.length === 0) {
+    return;
+  }
+
+  const db = await getDatabase();
+  const placeholders = clientOperationIds.map(() => "?").join(", ");
+  const updatedAtLocal = new Date().toISOString();
+  await withSqliteBusyRetry(() => db.runAsync(
+    `
+      UPDATE outbox_commands
+      SET status = 'rejected',
+          last_error = ?,
+          next_attempt_at = NULL,
+          updated_at_local = ?
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND client_operation_id IN (${placeholders})
+        AND status = 'sending'
+    `,
+    [lastError, updatedAtLocal, ownerUserId, currentContourId, ...clientOperationIds]
+  ));
+}
 export async function markPendingOutboxCommandsRetryLater(ownerUserId: string, lastError: string) {
   const db = await getDatabase();
 
@@ -663,22 +711,73 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
         const command = await tx.getFirstAsync<{
           owner_user_id: string;
           command_type: string;
+          entity_type: string;
           entity_local_id: string | null;
           payload_json: string;
         }>(
           `
-            SELECT owner_user_id, command_type, entity_local_id, payload_json
+            SELECT owner_user_id, command_type, entity_type, entity_local_id, payload_json
             FROM outbox_commands
             WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
           `,
           [ownerUserId, currentContourId, response.clientOperationId]
         );
 
+        if (command?.entity_type === "workTask" && command.entity_local_id
+          && (response.serverRevision !== null || response.serverEntityId)) {
+          await updatePendingWorkTaskRevisionInTransaction(
+            tx,
+            command.owner_user_id,
+            command.entity_local_id,
+            response.serverRevision,
+            response.serverEntityId
+          );
+        }
+
+
+
+        const pointResultSyncUpdate = command && command.entity_type === "patrolPoint" && command.entity_local_id
+          ? getPointResultSyncUpdate(
+            command.command_type,
+            response.status,
+            response.serverRevision,
+            response.clientOperationId,
+            updatedAtLocal
+          )
+          : null;
+        if (pointResultSyncUpdate && command && command.entity_local_id) {
+          const assignmentId = extractAssignmentId(command.payload_json);
+          if (assignmentId) {
+            await tx.runAsync(
+              `
+                UPDATE point_results
+                SET status = CASE WHEN ? = 'conflict' THEN 'conflict' ELSE status END,
+                    sync_status = ?,
+                    server_revision = COALESCE(?, server_revision),
+                    accepted_operation_id = ?,
+                    last_synced_at = ?
+                WHERE owner_user_id = ?
+                  AND assignment_id = ?
+                  AND point_id = ?
+              `,
+              [
+                pointResultSyncUpdate.syncStatus,
+                pointResultSyncUpdate.serverRevision,
+                pointResultSyncUpdate.acceptedOperationId,
+                pointResultSyncUpdate.lastSyncedAt,
+                ownerUserId,
+                assignmentId,
+                command.entity_local_id
+              ]
+            );
+          }
+        }
+
         if (command?.command_type === "completePatrolAssignment" && command.entity_local_id) {
           for (const clientFileId of extractCompletionFileIds(command.payload_json)) {
             await tx.runAsync(
-              "UPDATE files SET status = 'linked' WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ? AND status = 'uploaded'",
-              [command.owner_user_id, currentContourId, clientFileId]
+              "UPDATE files SET status = 'linked', linked_at = ? WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ? AND status = 'uploaded'",
+              [updatedAtLocal, command.owner_user_id, currentContourId, clientFileId]
             );
           }
 
@@ -917,7 +1016,7 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
                   sync_status = 'synced'
               WHERE owner_user_id = ? AND remark_id = ?
             `,
-            [response.status, command.owner_user_id, command.entity_local_id]
+            [response.status, response.status, command.owner_user_id, command.entity_local_id]
           );
         }
       }
@@ -984,10 +1083,11 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
             await tx.runAsync(
               `
                 UPDATE work_tasks
-                SET sync_status = ?
+                SET status = CASE WHEN ? = 'conflict' THEN 'conflict' ELSE status END,
+                    sync_status = ?
                 WHERE owner_user_id = ? AND task_id = ?
               `,
-              [response.status, command.owner_user_id, command.entity_local_id]
+              [response.status, response.status, command.owner_user_id, command.entity_local_id]
             );
           }
 
@@ -1003,6 +1103,33 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
           const assignmentId = command.entity_type === "patrolAssignment" || command.command_type === "acceptPatrolRequest"
             ? command.entity_local_id
             : isCancelledByServer ? extractAssignmentId(command.payload_json) : null;
+          const releaseResolution = command.command_type === "releasePatrolRequest"
+            ? getReleaseResponseResolution(response.status)
+            : null;
+          if (releaseResolution?.restoreAccepted && command.entity_local_id) {
+            await tx.runAsync(
+              `
+                UPDATE patrol_assignments
+                SET status = ?
+                WHERE owner_user_id = ? AND assignment_id = ?
+              `,
+              [releaseResolution.assignmentStatus, command.owner_user_id, command.entity_local_id]
+            );
+            await tx.runAsync(
+              `
+                UPDATE patrol_request_board
+                SET status = 'accepted'
+                WHERE owner_user_id = ? AND request_id = (
+                  SELECT request_id
+                  FROM patrol_assignments
+                  WHERE owner_user_id = ? AND assignment_id = ?
+                  LIMIT 1
+                )
+              `,
+              [command.owner_user_id, command.owner_user_id, command.entity_local_id]
+            );
+            continue;
+          }
           if (assignmentId) {
             if (isCancelledByServer) {
               await finalizeCancelledAssignmentInTransaction(tx, command.owner_user_id, assignmentId);
@@ -1172,8 +1299,8 @@ export async function resolveOutboxConflictAsServerWins(
             [ownerUserId, snapshot.assignmentId]
           );
           await tx.runAsync(
-            `UPDATE files SET status = 'linked' WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ? AND status IN ('uploaded', 'queued', 'localOnly')`,
-            [ownerUserId, currentContourId, snapshot.assignmentId]
+            `UPDATE files SET status = 'linked', linked_at = ? WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ? AND status IN ('uploaded', 'queued', 'localOnly')`,
+            [now, ownerUserId, currentContourId, snapshot.assignmentId]
           );
         }
       } else if (command.entity_type === "workTask" && command.entity_local_id) {

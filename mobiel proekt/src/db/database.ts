@@ -167,7 +167,10 @@ async function initializeDatabaseOnce() {
       severity TEXT,
       deferred_reason TEXT,
       completed_at_local TEXT,
-      sync_status TEXT NOT NULL
+      sync_status TEXT NOT NULL,
+      server_revision INTEGER,
+      accepted_operation_id TEXT,
+      last_synced_at TEXT
     );
 
     CREATE TABLE IF NOT EXISTS files (
@@ -177,6 +180,7 @@ async function initializeDatabaseOnce() {
       local_path TEXT NOT NULL,
       preview_path TEXT,
       server_file_id TEXT,
+      linked_at TEXT,
       status TEXT NOT NULL,
       sha256 TEXT,
       size_bytes INTEGER,
@@ -186,7 +190,11 @@ async function initializeDatabaseOnce() {
       point_id TEXT,
       remark_id TEXT,
       work_task_id TEXT,
-      created_at_local TEXT NOT NULL
+      created_at_local TEXT NOT NULL,
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      next_attempt_at TEXT,
+      last_attempt_at TEXT
     );
 
     CREATE TABLE IF NOT EXISTS outbox_commands (
@@ -382,6 +390,14 @@ async function initializeDatabaseOnce() {
     await runLocalMigration(tx, "20260725_conflict_resolution_state", async () => {
       await ensureConflictResolutionState(tx);
     });
+
+    await runLocalMigration(tx, "20260726_media_retention", async () => {
+      await ensureMediaRetention(tx);
+    });
+
+    await runLocalMigration(tx, "20260726_file_retry_metadata", async () => {
+      await ensureFileRetryMetadata(tx);
+    });
   });
 }
 
@@ -435,7 +451,10 @@ async function ensureMobileColumns(db: SqlExecutor) {
     { name: "confirmation_type", sql: "ALTER TABLE point_results ADD COLUMN confirmation_type TEXT" },
     { name: "nfc_uid_hash", sql: "ALTER TABLE point_results ADD COLUMN nfc_uid_hash TEXT" },
     { name: "scanned_at_local", sql: "ALTER TABLE point_results ADD COLUMN scanned_at_local TEXT" },
-    { name: "photo_client_file_ids_json", sql: "ALTER TABLE point_results ADD COLUMN photo_client_file_ids_json TEXT NOT NULL DEFAULT '[]'" }
+    { name: "photo_client_file_ids_json", sql: "ALTER TABLE point_results ADD COLUMN photo_client_file_ids_json TEXT NOT NULL DEFAULT '[]'" },
+    { name: "server_revision", sql: "ALTER TABLE point_results ADD COLUMN server_revision INTEGER" },
+    { name: "accepted_operation_id", sql: "ALTER TABLE point_results ADD COLUMN accepted_operation_id TEXT" },
+    { name: "last_synced_at", sql: "ALTER TABLE point_results ADD COLUMN last_synced_at TEXT" }
   ]);
 
   await ensureColumns(db, "files", [
@@ -448,7 +467,8 @@ async function ensureMobileColumns(db: SqlExecutor) {
     { name: "assignment_id", sql: "ALTER TABLE files ADD COLUMN assignment_id TEXT" },
     { name: "point_id", sql: "ALTER TABLE files ADD COLUMN point_id TEXT" },
     { name: "remark_id", sql: "ALTER TABLE files ADD COLUMN remark_id TEXT" },
-    { name: "work_task_id", sql: "ALTER TABLE files ADD COLUMN work_task_id TEXT" }
+    { name: "work_task_id", sql: "ALTER TABLE files ADD COLUMN work_task_id TEXT" },
+    { name: "linked_at", sql: "ALTER TABLE files ADD COLUMN linked_at TEXT" }
   ]);
 
   await ensureColumns(db, "outbox_commands", [
@@ -706,7 +726,7 @@ async function ensureAssignmentSnapshotAndOutboxRecovery(db: SqlExecutor) {
       point.revision
     FROM patrol_assignments assignment
     INNER JOIN route_points point ON point.route_id = assignment.route_id
-    WHERE assignment.status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision');
+    WHERE assignment.status IN ('accepted', 'releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision');
   `);
 }
 
@@ -736,7 +756,8 @@ async function ensureMobileFileScopes(db: SqlExecutor) {
     { name: "content_type", sql: "ALTER TABLE files ADD COLUMN content_type TEXT" },
     { name: "media_kind", sql: "ALTER TABLE files ADD COLUMN media_kind TEXT" },
     { name: "remark_id", sql: "ALTER TABLE files ADD COLUMN remark_id TEXT" },
-    { name: "work_task_id", sql: "ALTER TABLE files ADD COLUMN work_task_id TEXT" }
+    { name: "work_task_id", sql: "ALTER TABLE files ADD COLUMN work_task_id TEXT" },
+    { name: "linked_at", sql: "ALTER TABLE files ADD COLUMN linked_at TEXT" }
   ]);
 }
 
@@ -900,4 +921,22 @@ async function ensureOutboxRetryTimestamps(db: SqlExecutor) {
     { name: "next_attempt_at", sql: "ALTER TABLE outbox_commands ADD COLUMN next_attempt_at TEXT" },
     { name: "last_attempt_at", sql: "ALTER TABLE outbox_commands ADD COLUMN last_attempt_at TEXT" }
   ]);
+}
+
+async function ensureFileRetryMetadata(db: SqlExecutor) {
+  await ensureColumns(db, "files", [
+    { name: "attempt_count", sql: "ALTER TABLE files ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0" },
+    { name: "last_error", sql: "ALTER TABLE files ADD COLUMN last_error TEXT" },
+    { name: "next_attempt_at", sql: "ALTER TABLE files ADD COLUMN next_attempt_at TEXT" },
+    { name: "last_attempt_at", sql: "ALTER TABLE files ADD COLUMN last_attempt_at TEXT" }
+  ]);
+}
+
+async function ensureMediaRetention(db: SqlExecutor) {
+  await ensureColumns(db, "files", [
+    { name: "linked_at", sql: "ALTER TABLE files ADD COLUMN linked_at TEXT" }
+  ]);
+  await db.runAsync(
+    "UPDATE files SET linked_at = COALESCE(linked_at, CURRENT_TIMESTAMP) WHERE status = 'linked' AND linked_at IS NULL"
+  );
 }

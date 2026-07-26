@@ -6,6 +6,7 @@ import { BootstrapDto } from "@/domain/patrol/patrolTypes";
 import { finalizeCancelledAssignmentInTransaction } from "@/db/repositories/patrolCancellationRepository";
 import { deletePatrolPhotoDirectory } from "@/services/fileStorageService";
 import { resolveBootstrapAssignmentStatus } from "@/domain/sync/bootstrapResolutionPolicy";
+import { getSnapshotRefreshPlan } from "@/domain/patrol/snapshotPolicy";
 
 const bootstrapScope = `bootstrap:${currentContourId}`;
 
@@ -280,14 +281,14 @@ export async function countBlockingLocalUserData() {
     SELECT
       (
         (SELECT COUNT(*) FROM patrol_assignments
-          WHERE status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')) +
+          WHERE status IN ('accepted', 'releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')) +
         (SELECT COUNT(*) FROM point_results
           WHERE sync_status <> 'synced'
             AND EXISTS (
               SELECT 1
               FROM patrol_assignments assignment
               WHERE assignment.assignment_id = point_results.assignment_id
-                AND assignment.status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
+                AND assignment.status IN ('accepted', 'releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
             )) +
         (SELECT COUNT(*) FROM files
           WHERE status NOT IN ('uploaded', 'linked')
@@ -515,11 +516,7 @@ async function refreshAssignmentSnapshotInTransaction(
   assignment: BootstrapAssignment,
   bootstrap: BootstrapDto
 ) {
-  const local = await tx.getFirstAsync<{
-    status: string;
-    snapshotVersion: number | null;
-    pointCount: number;
-  }>(
+  const local = await tx.getFirstAsync<{ status: string; snapshotVersion: number | null; pointCount: number }>(
     `
       SELECT
         status,
@@ -539,50 +536,59 @@ async function refreshAssignmentSnapshotInTransaction(
 
   const route = bootstrap.routes.find((item) => item.routeId === assignment.routeId);
   const snapshotVersion = route?.version ?? assignment.routeVersionNo ?? 0;
-  const shouldReplace = local.pointCount === 0
-    || (local.status === "accepted" && local.snapshotVersion !== snapshotVersion);
-  if (!shouldReplace) {
+  const snapshotPlan = getSnapshotRefreshPlan({
+    localStatus: local.status,
+    localSnapshotVersion: local.snapshotVersion,
+    localPointCount: local.pointCount,
+    routeVersion: snapshotVersion,
+    incomingPointIds: bootstrap.points
+      .filter((point) => point.routeId === assignment.routeId)
+      .map((point) => point.pointId)
+  });
+  if (!snapshotPlan.shouldReplace) {
     return;
   }
 
-  await tx.runAsync(
-    "DELETE FROM assignment_route_points WHERE assignment_id = ?",
-    [assignment.assignmentId]
-  );
-  await tx.runAsync(
-    `
-      INSERT INTO assignment_route_points (
-        assignment_id,
-        point_id,
-        route_id,
-        name,
-        description,
-        instruction,
-        order_index,
-        nfc_uid_hash,
-        qr_code_hash,
-        required,
-        requires_photo,
-        revision
-      )
-      SELECT
-        ?,
-        point_id,
-        route_id,
-        name,
-        description,
-        instruction,
-        order_index,
-        nfc_uid_hash,
-        qr_code_hash,
-        required,
-        requires_photo,
-        revision
-      FROM route_points
-      WHERE route_id = ?
-    `,
-    [assignment.assignmentId, assignment.routeId]
-  );
+  await tx.runAsync("DELETE FROM assignment_route_points WHERE assignment_id = ?", [assignment.assignmentId]);
+  for (const point of bootstrap.points) {
+    if (point.routeId !== assignment.routeId) {
+      continue;
+    }
+    await tx.runAsync(
+      `
+        INSERT INTO assignment_route_points (
+          assignment_id,
+          point_id,
+          route_id,
+          name,
+          description,
+          instruction,
+          order_index,
+          nfc_uid_hash,
+          qr_code_hash,
+          required,
+          requires_photo,
+          revision
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        assignment.assignmentId,
+        point.pointId,
+        point.routeId,
+        point.name,
+        point.description,
+        point.instruction,
+        point.orderIndex,
+        point.nfcUidHash,
+        point.qrCodeHash,
+        point.required ? 1 : 0,
+        point.requiresPhoto ? 1 : 0,
+        point.revision
+      ]
+    );
+  }
+
   await tx.runAsync(
     `
       UPDATE patrol_assignments
@@ -594,7 +600,7 @@ async function refreshAssignmentSnapshotInTransaction(
         AND assignment_id = ?
         AND (contour_id = ? OR contour_id IS NULL)
     `,
-    [snapshotVersion, snapshotVersion, bootstrap.serverTime, bootstrap.user.serverUserId, assignment.assignmentId, currentContourId]
+    [snapshotPlan.snapshotVersion, snapshotPlan.snapshotVersion, bootstrap.serverTime, bootstrap.user.serverUserId, assignment.assignmentId, currentContourId]
   );
 }
 async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapDto) {
@@ -709,7 +715,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
               SELECT 1
               FROM patrol_assignments assignment
               WHERE assignment.request_id = patrol_request_board.request_id
-                AND assignment.status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision', 'cancelledServer')
+                AND assignment.status IN ('accepted', 'releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision', 'cancelledServer')
             )
         `,
         [ownerUserId, ...serverRequestIds]
@@ -723,7 +729,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
               SELECT 1
               FROM patrol_assignments assignment
               WHERE assignment.request_id = patrol_request_board.request_id
-                AND assignment.status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision', 'cancelledServer')
+                AND assignment.status IN ('accepted', 'releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision', 'cancelledServer')
             )
         `,
         [ownerUserId]
@@ -763,7 +769,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
               WHEN excluded.status IN ('cancelled', 'cancelledServer')
                 AND patrol_request_board.status NOT IN ('completedLocal', 'syncing') THEN 'cancelledServer'
               WHEN patrol_request_board.status IN ('completed', 'cancelled', 'cancelledServer') THEN patrol_request_board.status
-              WHEN patrol_request_board.status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_request_board.status
+              WHEN patrol_request_board.status IN ('accepted', 'releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_request_board.status
               ELSE excluded.status
             END,
             revision = excluded.revision
@@ -888,7 +894,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
               WHEN excluded.status IN ('cancelled', 'cancelledServer')
                 AND patrol_assignments.status NOT IN ('completedLocal', 'syncing') THEN 'cancelledServer'
               WHEN ? = 1
-                AND patrol_assignments.status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision', 'cancelledServer') THEN patrol_assignments.status
+                AND patrol_assignments.status IN ('accepted', 'releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision', 'cancelledServer') THEN patrol_assignments.status
               ELSE excluded.status
             END,
             started_at_local = COALESCE(patrol_assignments.started_at_local, excluded.started_at_local),
@@ -898,19 +904,19 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             END,
             revision = excluded.revision,
             route_version_no = CASE
-              WHEN patrol_assignments.status IN ('inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.route_version_no
+              WHEN patrol_assignments.status IN ('releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.route_version_no
               ELSE excluded.route_version_no
             END,
             snapshot_version = CASE
-              WHEN patrol_assignments.status IN ('inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.snapshot_version
+              WHEN patrol_assignments.status IN ('releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.snapshot_version
               ELSE excluded.snapshot_version
             END,
             snapshot_created_at = CASE
-              WHEN patrol_assignments.status IN ('inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.snapshot_created_at
+              WHEN patrol_assignments.status IN ('releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.snapshot_created_at
               ELSE excluded.snapshot_created_at
             END,
             snapshot_source = CASE
-              WHEN patrol_assignments.status IN ('inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.snapshot_source
+              WHEN patrol_assignments.status IN ('releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.snapshot_source
               ELSE excluded.snapshot_source
             END
         `,
@@ -950,7 +956,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
         SELECT DISTINCT route_id
         FROM patrol_assignments
         WHERE owner_user_id = ?
-          AND status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
+          AND status IN ('accepted', 'releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
       `,
       [ownerUserId]
     );
@@ -993,7 +999,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
               SELECT route_id
               FROM patrol_assignments
               WHERE owner_user_id = ?
-                AND status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
+                AND status IN ('accepted', 'releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
             )
         `,
         [...serverRouteIds, ownerUserId]
@@ -1006,7 +1012,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
               SELECT route_id
               FROM patrol_assignments
               WHERE owner_user_id = ?
-                AND status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
+                AND status IN ('accepted', 'releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
             )
         `,
         [...serverRouteIds, ownerUserId]
@@ -1019,7 +1025,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             SELECT route_id
             FROM patrol_assignments
             WHERE owner_user_id = ?
-              AND status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
+              AND status IN ('accepted', 'releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
           )
         `,
         [ownerUserId]
@@ -1031,7 +1037,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             SELECT route_id
             FROM patrol_assignments
             WHERE owner_user_id = ?
-              AND status IN ('accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
+              AND status IN ('accepted', 'releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')
           )
         `,
         [ownerUserId]

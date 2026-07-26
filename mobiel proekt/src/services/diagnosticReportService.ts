@@ -1,9 +1,8 @@
-import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
-import { Platform } from "react-native";
 
 import { postDailyDiagnosticReport } from "@/api/mobileApi";
 import { getOrCreateDeviceId } from "@/auth/deviceRegistration";
+import { getAppRuntimeMetadata } from "@/auth/appMetadata";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import {
   getOrCreatePendingDiagnosticReport,
@@ -86,10 +85,11 @@ async function uploadDiagnosticReport(options: {
     return { status: "unauthenticated" };
   }
 
+  const runtimeMetadata = getAppRuntimeMetadata();
   const report = await getOrCreatePendingDiagnosticReport(ownerUserId, {
     deviceId: await getOrCreateDeviceId(),
-    appVersion: Constants.expoConfig?.version ?? "unknown",
-    platform: `Android ${String(Platform.Version)}`
+    appVersion: runtimeMetadata.appVersion,
+    platform: runtimeMetadata.platform
   }, new Date(), { force: options.force, includeEmpty: options.includeEmpty });
   if (!report) {
     return { status: "notDue" };

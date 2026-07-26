@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { bootstrapApplication } from "@/core/bootstrap";
+import { classifyStartupError, StartupState } from "@/core/startupState";
 import { SessionGateProvider, SessionGuard } from "@/auth/SessionGate";
 import { isSessionUnlocked, setPendingSessionRoute } from "@/auth/sessionGateState";
 import { ThemeProvider, useAppTheme } from "@/features/settings/themePreference";
@@ -18,11 +19,15 @@ import { sanitizeDiagnosticMessage } from "@/services/diagnosticReportPolicy";
 import { registerBackgroundSyncTask } from "@/sync/backgroundSyncTask";
 import { registerBackgroundNotificationTask } from "@/services/backgroundNotificationTask";
 import { requestMobileDataRefresh, subscribeToNetworkSync, triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { resolvePushNavigationTarget } from "@/services/pushNavigationResolver";
 
 export default function RootLayout() {
   const queryClient = useMemo(() => new QueryClient(), []);
-  const [isReady, setIsReady] = useState(false);
-  const [bootstrapError, setBootstrapError] = useState<unknown>(null);
+  const [startupState, setStartupState] = useState<StartupState>({ status: "initializing" });
+  const isReady = startupState.status === "ready";
+  const bootstrapError = startupState.status === "recoverableError" || startupState.status === "fatalDatabaseError"
+    ? startupState.error
+    : null;
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
 
   useEffect(() => {
@@ -33,13 +38,13 @@ export default function RootLayout() {
         if (!isMounted) {
           return;
         }
-        setIsReady(true);
+        setStartupState({ status: "ready" });
         installMobileErrorReporter();
       })
       .catch((error) => {
         logMobileError("app.bootstrap.failed", error);
         if (isMounted) {
-          setBootstrapError(error);
+          setStartupState(classifyStartupError(error));
         }
       });
 
@@ -102,8 +107,7 @@ export default function RootLayout() {
         attempt={bootstrapAttempt + 1}
         error={bootstrapError}
         onRetry={() => {
-          setIsReady(false);
-          setBootstrapError(null);
+          setStartupState({ status: "initializing" });
           setBootstrapAttempt((attempt) => attempt + 1);
         }}
       />
@@ -184,13 +188,8 @@ function bootstrapErrorMessage(error: unknown) {
 }
 
 function openNotificationTarget(response: Notifications.NotificationResponse) {
-  const data = response.notification.request.content.data ?? {};
-  const entityType = typeof data.entityType === "string" ? data.entityType : null;
-  const entityId = typeof data.entityId === "string" ? data.entityId : null;
-
-  const target = entityType === "patrolRequest" && entityId
-    ? `/patrol/request/${entityId}`
-    : "/patrol/request-board";
+  const target = resolvePushNavigationTarget(response.notification.request.content.data)?.path
+    ?? "/patrol/request-board";
 
   if (isSessionUnlocked()) {
     router.push(target as never);

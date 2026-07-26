@@ -4,6 +4,10 @@ export type OfflineSessionState = {
   fullName: string;
   lastOnlineLoginAt: string;
   expiresAt: string;
+  offlineExpiresAt?: string;
+  deviceTrusted?: boolean;
+  userBlockedAt?: string | null;
+  deviceBlockedAt?: string | null;
   revokedAt?: string | null;
   revocationReason?: string | null;
   requiresReenrollment?: boolean;

@@ -40,6 +40,7 @@ export function ProfileScreen() {
   const refreshNotifications = useCallback(async () => {
     setIsRefreshingNotifications(true);
     try {
+      setNotifications(await listLocalNotifications(NOTIFICATION_LIMIT));
       await syncMobileNotifications().catch(() => []);
       setNotifications(await listLocalNotifications(NOTIFICATION_LIMIT));
     } finally {
@@ -51,6 +52,11 @@ export function ProfileScreen() {
     useCallback(() => {
       let isMounted = true;
 
+      void listLocalNotifications(NOTIFICATION_LIMIT).then((rows) => {
+        if (isMounted) {
+          setNotifications(rows);
+        }
+      });
       void syncMobileNotifications()
         .catch(() => [])
         .then(() => listLocalNotifications(NOTIFICATION_LIMIT))

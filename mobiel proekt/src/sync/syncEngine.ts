@@ -26,6 +26,7 @@ import {
   markPendingOutboxCommandsAuthRequired,
   markPendingOutboxCommandsWaitingNetwork,
   markOutboxCommandsWrongContour,
+  markOutboxCommandsRejected,
   markOutboxCommandsRetryLater,
   markOutboxCommandsSending,
   markPendingOutboxCommandsRetryLater,
@@ -37,11 +38,12 @@ import { getPendingOutboxBatch } from "@/sync/outboxProcessor";
 import { findMissingClientFileIds } from "@/sync/fileReferenceIntegrity";
 import { SerializedTaskQueue } from "@/sync/serializedTaskQueue";
 import { processOrderedOutboxBatch } from "@/sync/orderedOutboxBatch";
-import { getCommandAssignmentId } from "@/sync/outboxOrderingPolicy";
+import { getCommandAggregateKey } from "@/sync/outboxOrderingPolicy";
 import { mapWithConcurrency } from "@/sync/boundedAsync";
 import { shouldContinueOutboxSync } from "@/sync/outboxContinuationPolicy";
 import { emitSyncEvent } from "@/sync/syncEvents";
 import { extractUploadClientFileIds } from "@/sync/uploadCandidatePolicy";
+import { FileUploadFailureDisposition, PermanentFileUploadError, getFileUploadFailureDisposition } from "@/domain/files/fileUploadPolicy";
 
 export type ForegroundSyncResult = {
   sent: number;
@@ -129,7 +131,7 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
     processedBatches += 1;
     commands.forEach((command) => attemptedOperationIds.add(command.clientOperationId));
 
-    const batchResult = await processOrderedOutboxBatch(commands, {
+    await processOrderedOutboxBatch(commands, {
       getDependencyKey: getCommandDependencyKey,
       isFatal: (error) => isAuthRequiredError(error) || isOfflineNetworkError(error),
       process: async (command) => {
@@ -152,6 +154,8 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
             await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError);
           } else if (isOfflineNetworkError(error)) {
             await markPendingOutboxCommandsWaitingNetwork(ownerUserId, readableError);
+          } else if (error instanceof PermanentFileUploadError) {
+            await markOutboxCommandsRejected(ownerUserId, commandIds, readableError);
           } else {
             await markOutboxCommandsRetryLater(ownerUserId, commandIds, readableError);
           }
@@ -159,10 +163,7 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
         }
       }
     });
-
-    if (batchResult.firstError) {
-      throw batchResult.firstError;
-    }
+    // Нефатальная ошибка изолирована агрегатом; остальные агрегаты продолжают синхронизацию.
   }
 
   const hasMore = shouldContinueOutboxSync(
@@ -202,12 +203,7 @@ async function ensureAccessTokenForSync(ownerUserId: string): Promise<"ok" | "se
 }
 
 function getCommandDependencyKey(command: OutboxCommand) {
-  const assignmentId = getCommandAssignmentId(command);
-  if (assignmentId) {
-    return `patrolAssignment:${assignmentId}`;
-  }
-
-  return `${command.entityType}:${command.entityLocalId ?? command.entityServerId ?? command.clientOperationId}`;
+  return getCommandAggregateKey(command) ?? `${command.entityType}:${command.entityLocalId ?? command.entityServerId ?? command.clientOperationId}`;
 }
 
 async function postOutboxWithServerReconciliation(ownerUserId: string, commands: OutboxCommand[]) {
@@ -377,13 +373,18 @@ async function uploadFilesForCompleteCommands(ownerUserId: string, commands: Out
         payload: { clientFileId: file.clientFileId, serverFileId: response.serverFileId }
       }).catch(() => undefined);
     } catch (error) {
-      await markFileUploadFailed(file.clientFileId);
       if (isAuthRequiredError(error)) {
+        await markFileUploadFailed(file.clientFileId, "retryLater", error instanceof Error ? error.message : "Неизвестная ошибка загрузки файла.");
         throw error;
       }
+      const disposition: FileUploadFailureDisposition = error instanceof MobileNetworkError ? "retryLater" : getFileUploadFailureDisposition(error);
+      await markFileUploadFailed(file.clientFileId, disposition, error instanceof Error ? error.message : "Неизвестная ошибка загрузки файла.");
       const message = "Не удалось отправить файл на сервер. Отчет останется в очереди восстановления.";
       if (error instanceof MobileNetworkError) {
         throw new MobileNetworkError(error.kind, error, `${message} ${error.message}`);
+      }
+      if (disposition === "failed") {
+        throw new PermanentFileUploadError(message, file.clientFileId);
       }
       throw new Error(message);
     }

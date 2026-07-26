@@ -15,6 +15,7 @@ export type LocalMobileFile = {
   localPath: string;
   previewPath?: string | null;
   serverFileId?: string | null;
+  linkedAt?: string | null;
   status: LocalFileStatus;
   sha256?: string | null;
   sizeBytes?: number | null;
@@ -25,6 +26,10 @@ export type LocalMobileFile = {
   remarkId?: string | null;
   workTaskId?: string | null;
   createdAtLocal: string;
+  attemptCount?: number;
+  lastError?: string | null;
+  nextAttemptAt?: string | null;
+  lastAttemptAt?: string | null;
 };
 
 export type MobileFileUploadRequest = {

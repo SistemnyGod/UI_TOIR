@@ -2,7 +2,7 @@ import * as Crypto from "expo-crypto";
 
 import { insertOutboxCommand, listPendingOutboxCommands } from "@/db/repositories/outboxRepository";
 import { MobileEntityType, OutboxCommand, OutboxCommandType } from "@/domain/sync/syncTypes";
-import { getCommandAssignmentId, selectNextOutboxCommands as selectNextByAssignment } from "@/sync/outboxOrderingPolicy";
+import { getCommandAggregateKey, selectNextOutboxCommands as selectNextByAssignment } from "@/sync/outboxOrderingPolicy";
 import { assertRecordsBelongToOwner } from "@/sync/ownerIsolation";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 
@@ -49,7 +49,7 @@ export async function getPendingOutboxBatch(
     await listPendingOutboxCommands(ownerUserId, Math.max(batchLimit * 4, 100))
   ).filter((command) => !excludedClientOperationIds.has(command.clientOperationId));
   return selectNextByAssignment(
-    commands.map((command) => ({ command, assignmentId: getCommandAssignmentId(command), createdAtLocal: command.createdAtLocal })),
+    commands.map((command) => ({ command, assignmentId: getCommandAggregateKey(command), createdAtLocal: command.createdAtLocal })),
     batchLimit
   ).map((item) => item.command);
 }
@@ -62,7 +62,7 @@ export function selectNextOutboxCommands(commands: OutboxCommand[], batchLimit: 
   // commands from different patrols remain independent aggregates.
 
   return selectNextByAssignment(
-    commands.map((command) => ({ command, assignmentId: getCommandAssignmentId(command), createdAtLocal: command.createdAtLocal })),
+    commands.map((command) => ({ command, assignmentId: getCommandAggregateKey(command), createdAtLocal: command.createdAtLocal })),
     batchLimit
   ).map((item) => item.command);
 }

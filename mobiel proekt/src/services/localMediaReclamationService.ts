@@ -1,6 +1,6 @@
 import * as FileSystem from "expo-file-system/legacy";
 
-import { deleteLinkedLocalFileRecord, listLinkedLocalFiles } from "@/db/repositories/filesRepository";
+import { hasUnfinishedFileCommand, listLinkedLocalFiles, markFileDeletedAfterRetention } from "@/db/repositories/filesRepository";
 import { canReclaimLocalMedia } from "@/domain/files/localMediaRetention";
 
 export async function reclaimAcceptedLocalMedia(ownerUserId: string, clientFileIds?: readonly string[]) {
@@ -8,13 +8,13 @@ export async function reclaimAcceptedLocalMedia(ownerUserId: string, clientFileI
   let reclaimed = 0;
 
   for (const file of files) {
-    if (!canReclaimLocalMedia(file.status)) {
+    if (!canReclaimLocalMedia(file) || await hasUnfinishedFileCommand(ownerUserId, file.clientFileId)) {
       continue;
     }
 
     try {
       await FileSystem.deleteAsync(file.localPath, { idempotent: true });
-      await deleteLinkedLocalFileRecord(ownerUserId, file.clientFileId);
+      await markFileDeletedAfterRetention(ownerUserId, file.clientFileId);
       reclaimed += 1;
     } catch {
       // Keep the linked row so a later bootstrap/sync pass retries reclamation.

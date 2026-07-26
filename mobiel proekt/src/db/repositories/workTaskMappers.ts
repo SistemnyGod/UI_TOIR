@@ -1,6 +1,7 @@
 import * as Crypto from "expo-crypto";
 
 import { WorkAttachmentDto, WorkItemCapabilitiesDto, WorkItemDto, WorkParticipantDto, WorkTaskDto } from "@/domain/emu/emuTypes";
+import { canCompleteEmuTask, canPauseEmuTask, canResumeEmuTask, canStartEmuTask } from "@/domain/emu/emuStateMachine";
 import { OutboxCommand } from "@/domain/sync/syncTypes";
 
 export type WorkTaskRow = {
@@ -71,12 +72,12 @@ export function mapWorkItemRow(row: WorkTaskRow): WorkItemDto {
   const actualParticipants = parseJson<WorkParticipantDto[]>(row.actual_participants_json, []);
   const attachments = parseJson<WorkAttachmentDto[]>(row.attachments_json, []);
   const defaultCapabilities: WorkItemCapabilitiesDto = {
-    canStart: row.item_kind === "planTask",
+    canStart: row.item_kind === "planTask" && canStartEmuTask(row.status),
     canJoin: false,
     canReplace: false,
-    canPause: row.status === "inProgress",
-    canResume: row.status === "paused",
-    canComplete: row.status === "inProgress" || row.status === "paused"
+    canPause: canPauseEmuTask(row.status),
+    canResume: canResumeEmuTask(row.status),
+    canComplete: canCompleteEmuTask(row.status)
   };
   const capabilities = {
     ...defaultCapabilities,

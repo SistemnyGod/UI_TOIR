@@ -8,6 +8,7 @@ import {
   AssignmentProgress,
   getAssignmentById,
   getAssignmentProgress,
+  getAssignmentScanPolicy,
   handoffAssignmentLocally,
   pauseAssignmentLocally,
   resumeAssignmentLocally,
@@ -17,7 +18,7 @@ import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { reconcileAcceptedCompleteReports } from "@/sync/syncEngine";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
-import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { requestMobileDataRefresh, triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import { ActionSheet } from "@/ui/ActionSheet";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -30,6 +31,7 @@ export function ActivePatrolScreen() {
   const { assignmentId } = useLocalSearchParams<{ assignmentId: string }>();
   const [assignment, setAssignment] = useState<ActiveAssignment | null>(null);
   const [progress, setProgress] = useState<AssignmentProgress | null>(null);
+  const [scanPolicy, setScanPolicy] = useState({ nfcEnabled: false, qrFallbackEnabled: false });
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,11 +39,13 @@ export function ActivePatrolScreen() {
 
   const loadAssignment = useCallback(async () => {
     setIsLoading(true);
-    const [loadedAssignment, loadedProgress] = await Promise.all([
+    const [loadedAssignment, loadedProgress, loadedScanPolicy] = await Promise.all([
       getAssignmentById(assignmentId),
-      getAssignmentProgress(assignmentId)
+      getAssignmentProgress(assignmentId),
+      getAssignmentScanPolicy(assignmentId)
     ]);
     setAssignment(loadedAssignment);
+    setScanPolicy(loadedScanPolicy);
     setProgress(loadedAssignment ? loadedProgress : null);
     setLoadError(null);
     setIsLoading(false);
@@ -57,6 +61,7 @@ export function ActivePatrolScreen() {
           setIsLoading(false);
         }
       });
+      requestMobileDataRefresh("appActive");
       return () => {
         isMounted = false;
       };
@@ -64,7 +69,7 @@ export function ActivePatrolScreen() {
   );
 
   useEffect(() => subscribeToSyncEvents((event) => {
-    if (event.completedAssignmentIds.includes(assignmentId) || event.cancelledAssignmentIds?.includes(assignmentId)) {
+    if (event.snapshotRefreshed === true || event.completedAssignmentIds.includes(assignmentId) || event.cancelledAssignmentIds?.includes(assignmentId)) {
       void loadAssignment();
     }
   }), [assignmentId, loadAssignment]);
@@ -129,7 +134,7 @@ export function ActivePatrolScreen() {
   const isInProgress = assignment.status === "inProgress";
   const isCompletedLocal = assignment.status === "completedLocal";
   const isCompletedServer = assignment.status === "completedServer";
-  const isBlocked = ["needsDispatcherDecision", "cancelledServer", "authRequired", "syncError", "conflict"].includes(assignment.status);
+  const isBlocked = ["needsDispatcherDecision", "cancelledServer", "authRequired", "syncError", "conflict", "releasePending"].includes(assignment.status);
   const isReadyForReview = progress.total > 0 && progress.completed >= progress.total;
 
   return (
@@ -139,6 +144,7 @@ export function ActivePatrolScreen() {
           <View style={styles.routeTextBox}>
             <Text style={[styles.employeeLine, { color: colors.mutedText }]}>Текущий обход</Text>
             <Text style={[styles.routeTitle, { color: colors.text }]}>{assignment.routeName}</Text>
+            <Text style={[styles.text, { color: colors.mutedText }]}>ID: {assignment.assignmentId}</Text>
             <Text style={[styles.text, { color: colors.mutedText }]}>Начат: {formatDateTime(assignment.startedAtLocal)}</Text>
           </View>
           <StatusPill label={assignmentStatusLabel(assignment.status)} tone={assignmentStatusTone(assignment.status)} />
@@ -201,10 +207,14 @@ export function ActivePatrolScreen() {
       {isInProgress ? (
         <PrimaryButton
           icon={isReadyForReview ? "document-text-outline" : "scan-outline"}
-          label={isReadyForReview ? "Проверить отчёт" : "Сканировать NFC"}
+          label={isReadyForReview ? "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430" : scanPolicy.nfcEnabled ? "NFC" : scanPolicy.qrFallbackEnabled ? "QR" : "\u0421\u043f\u0438\u0441\u043e\u043a"}
           onPress={() => router.push(isReadyForReview
             ? `/patrol/assignment/${assignment.assignmentId}/submit`
-            : `/patrol/assignment/${assignment.assignmentId}/scan-nfc`)}
+            : scanPolicy.nfcEnabled
+              ? `/patrol/assignment/${assignment.assignmentId}/scan-nfc`
+              : scanPolicy.qrFallbackEnabled
+                ? `/patrol/assignment/${assignment.assignmentId}/scan-qr`
+                : `/patrol/assignment/${assignment.assignmentId}/all-points`)}
           size="large"
         />
       ) : null}
@@ -213,7 +223,7 @@ export function ActivePatrolScreen() {
       {isCompletedServer ? <PrimaryButton icon="checkmark-circle-outline" label="К новым заявкам" onPress={() => router.replace("/patrol/request-board")} size="large" /> : null}
 
       <View style={styles.secondaryBar}>
-        {!isCompletedServer ? (
+        {!isCompletedServer && !isBlocked ? (
           <Pressable accessibilityRole="button" onPress={() => router.push(`/patrol/assignment/${assignment.assignmentId}/all-points`)} style={styles.linkButton}>
             <Ionicons color={colors.primary} name="list-outline" size={19} />
             <Text style={[styles.linkLabel, { color: colors.primary }]}>Все метки</Text>
@@ -227,7 +237,7 @@ export function ActivePatrolScreen() {
       </View>
       <ActionSheet
         actions={[
-          { label: "QR-резерв", icon: "qr-code-outline", onPress: () => router.push(`/patrol/assignment/${assignment.assignmentId}/scan-qr`) },
+          ...(scanPolicy.qrFallbackEnabled ? [{ label: "QR", icon: "qr-code-outline" as const, onPress: () => router.push(`/patrol/assignment/${assignment.assignmentId}/scan-qr`) }] : []),
           { label: "Приостановить", icon: "pause-outline", onPress: () => void runAction(async () => { await pauseAssignmentLocally(assignment.assignmentId); }) },
           { label: "Передать диспетчеру", icon: "alert-circle-outline", danger: true, onPress: () => void runAction(async () => { await handoffAssignmentLocally(assignment.assignmentId); }) }
         ]}

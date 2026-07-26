@@ -12,12 +12,14 @@ import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { shouldReloadAssignmentAfterSync, subscribeToSyncEvents } from "@/sync/syncEvents";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { readBackgroundSyncState } from "@/sync/backgroundSyncState";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
+import { OutboxCommandStatus } from "@/domain/sync/syncTypes";
 
-type DeliveryState = Awaited<ReturnType<typeof getCompleteReportDeliveryState>>;
+type DeliveryState = { clientOperationId: string; status: OutboxCommandStatus; lastError: string | null; attemptCount: number; updatedAtLocal: string | null } | null;
 
 export function SubmitReportScreen() {
   const router = useRouter();
@@ -29,6 +31,7 @@ export function SubmitReportScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadRevision, setReloadRevision] = useState(0);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
+  const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState<string | null>(null);
 
   useEffect(
     () => subscribeToSyncEvents((event) => {
@@ -43,17 +46,18 @@ export function SubmitReportScreen() {
     let isMounted = true;
 
     setLoadError(null);
-    void Promise.all([getReportReadiness(assignmentId), loadDelivery(assignmentId)])
-      .then(([loadedReadiness, loadedDelivery]) => {
+    void Promise.all([getReportReadiness(assignmentId), loadDelivery(assignmentId), readBackgroundSyncState()])
+      .then(([loadedReadiness, loadedDelivery, syncState]) => {
         if (isMounted) {
           setReadiness(loadedReadiness);
           setDelivery(loadedDelivery);
+          setLastSuccessfulSyncAt(syncState.lastSuccessfulSyncAt);
         }
       })
       .catch((error) => {
         void logMobileError("report.screen.load.failed", error);
         if (isMounted) {
-          setLoadError(error instanceof Error ? error.message : "Не удалось прочитать локальный отчёт.");
+          setLoadError(error instanceof Error ? error.message : "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ Р»РѕРєР°Р»СЊРЅС‹Р№ РѕС‚С‡С‘С‚.");
         }
       });
 
@@ -115,17 +119,17 @@ export function SubmitReportScreen() {
       setDelivery(await loadDelivery(assignmentId));
 
       if (syncResult.skipped === "offline") {
-        setSyncNotice("Нет подключения. Отчет сохранен и автоматически повторится после появления сети.");
+        setSyncNotice("РќРµС‚ РїРѕРґРєР»СЋС‡РµРЅРёСЏ. РћС‚С‡РµС‚ СЃРѕС…СЂР°РЅРµРЅ Рё Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё РїРѕРІС‚РѕСЂРёС‚СЃСЏ РїРѕСЃР»Рµ РїРѕСЏРІР»РµРЅРёСЏ СЃРµС‚Рё.");
       } else if (syncResult.skipped === "serverUnavailable") {
-        setSyncNotice("Сервер временно недоступен. Отчет остается на телефоне; следующий повтор уже запланирован.");
+        setSyncNotice("РЎРµСЂРІРµСЂ РІСЂРµРјРµРЅРЅРѕ РЅРµРґРѕСЃС‚СѓРїРµРЅ. РћС‚С‡РµС‚ РѕСЃС‚Р°РµС‚СЃСЏ РЅР° С‚РµР»РµС„РѕРЅРµ; СЃР»РµРґСѓСЋС‰РёР№ РїРѕРІС‚РѕСЂ СѓР¶Рµ Р·Р°РїР»Р°РЅРёСЂРѕРІР°РЅ.");
       } else if (syncResult.skipped === "unauthenticated") {
-        setSyncNotice("Сессия действительно истекла. Отчет сохранен на телефоне и отправится после входа.");
+        setSyncNotice("РЎРµСЃСЃРёСЏ РґРµР№СЃС‚РІРёС‚РµР»СЊРЅРѕ РёСЃС‚РµРєР»Р°. РћС‚С‡РµС‚ СЃРѕС…СЂР°РЅРµРЅ РЅР° С‚РµР»РµС„РѕРЅРµ Рё РѕС‚РїСЂР°РІРёС‚СЃСЏ РїРѕСЃР»Рµ РІС…РѕРґР°.");
       } else if (syncResult.skipped === "failed") {
-        setSyncNotice("Отправка прервалась. Данные сохранены — можно повторить сейчас или дождаться автоматической отправки.");
+        setSyncNotice("РћС‚РїСЂР°РІРєР° РїСЂРµСЂРІР°Р»Р°СЃСЊ. Р”Р°РЅРЅС‹Рµ СЃРѕС…СЂР°РЅРµРЅС‹ вЂ” РјРѕР¶РЅРѕ РїРѕРІС‚РѕСЂРёС‚СЊ СЃРµР№С‡Р°СЃ РёР»Рё РґРѕР¶РґР°С‚СЊСЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРѕР№ РѕС‚РїСЂР°РІРєРё.");
       }
     } catch (error) {
       setDelivery(await loadDelivery(assignmentId));
-      setSyncNotice(error instanceof Error ? error.message : "Не удалось запустить отправку. Отчет сохранен на телефоне.");
+      setSyncNotice(error instanceof Error ? error.message : "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ РѕС‚РїСЂР°РІРєСѓ. РћС‚С‡РµС‚ СЃРѕС…СЂР°РЅРµРЅ РЅР° С‚РµР»РµС„РѕРЅРµ.");
     } finally {
       setIsSubmitting(false);
     }
@@ -151,13 +155,13 @@ export function SubmitReportScreen() {
 
   if (!readiness) {
     return (
-      <Screen title="Отправка отчета" subtitle="Проверяем точки и локально сохраненные данные.">
+      <Screen title="РћС‚РїСЂР°РІРєР° РѕС‚С‡РµС‚Р°" subtitle="РџСЂРѕРІРµСЂСЏРµРј С‚РѕС‡РєРё Рё Р»РѕРєР°Р»СЊРЅРѕ СЃРѕС…СЂР°РЅРµРЅРЅС‹Рµ РґР°РЅРЅС‹Рµ.">
         {loadError ? (
           <Card>
             <Text style={styles.loadError}>{loadError}</Text>
             <PrimaryButton
               icon="refresh-outline"
-              label="Повторить проверку"
+              label="РџРѕРІС‚РѕСЂРёС‚СЊ РїСЂРѕРІРµСЂРєСѓ"
               onPress={() => setReloadRevision((value) => value + 1)}
               variant="secondary"
             />
@@ -169,37 +173,38 @@ export function SubmitReportScreen() {
 
   const actionDisabled = isSubmitting || (!readiness.ready && problemGroups.length === 0);
   const primaryLabel = !readiness.ready && problemGroups[0]
-    ? problemGroups[0].pointId === "route-empty" ? "Открыть список точек" : `Перейти к точке ${problemGroups[0].orderIndex}`
+    ? problemGroups[0].pointId === "route-empty" ? "РћС‚РєСЂС‹С‚СЊ СЃРїРёСЃРѕРє С‚РѕС‡РµРє" : `РџРµСЂРµР№С‚Рё Рє С‚РѕС‡РєРµ ${problemGroups[0].orderIndex}`
     : presentation.buttonLabel;
   const primaryIcon = !readiness.ready ? "arrow-forward-outline" : actionIcon(presentation.action);
 
   return (
-    <Screen title="Проверка отчёта" subtitle="Исправьте незаполненные точки или завершите обход.">
+    <Screen title="РџСЂРѕРІРµСЂРєР° РѕС‚С‡С‘С‚Р°" subtitle="РСЃРїСЂР°РІСЊС‚Рµ РЅРµР·Р°РїРѕР»РЅРµРЅРЅС‹Рµ С‚РѕС‡РєРё РёР»Рё Р·Р°РІРµСЂС€РёС‚Рµ РѕР±С…РѕРґ.">
       <Card>
         <View style={styles.row}>
-          <Text style={[styles.title, { color: colors.text }]}>{readiness.assignment?.routeName ?? "Обход"}</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{readiness.assignment?.routeName ?? "РћР±С…РѕРґ"}</Text>
           <StatusPill
-            label={readiness.ready ? "Все точки заполнены" : `Осталось: ${problemGroups.length}`}
+            label={readiness.ready ? "Р’СЃРµ С‚РѕС‡РєРё Р·Р°РїРѕР»РЅРµРЅС‹" : `РћСЃС‚Р°Р»РѕСЃСЊ: ${problemGroups.length}`}
             tone={readiness.ready ? "success" : "warning"}
           />
         </View>
         <View style={styles.progressRow}>
-          <ProgressValue label="Пройдено" value={`${readiness.progress.completed}/${readiness.progress.total}`} />
-          <ProgressValue label="Замечания" value={String(readiness.progress.issues)} />
-          <ProgressValue label="Отложено" value={String(readiness.progress.deferred)} />
+          <ProgressValue label="РџСЂРѕР№РґРµРЅРѕ" value={`${readiness.progress.completed}/${readiness.progress.total}`} />
+          <ProgressValue label="Р—Р°РјРµС‡Р°РЅРёСЏ" value={String(readiness.progress.issues)} />
+          <ProgressValue label="РћС‚Р»РѕР¶РµРЅРѕ" value={String(readiness.progress.deferred)} />
         </View>
       </Card>
 
       <DeliveryCard
         detail={presentation.detail}
         lastUpdate={delivery?.updatedAtLocal ?? null}
-        title={isSubmitting ? "Проверяем доставку…" : presentation.title}
+        title={isSubmitting ? "РџСЂРѕРІРµСЂСЏРµРј РґРѕСЃС‚Р°РІРєСѓвЂ¦" : presentation.title}
         tone={presentation.tone}
+        status={delivery?.status ?? null}
       />
 
-      {readiness.problems.length > 0 && presentation.action === "submit" ? (
+      {readiness.problems.length > 0 ? (
         <Card>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Нужно заполнить перед отправкой</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>РќСѓР¶РЅРѕ Р·Р°РїРѕР»РЅРёС‚СЊ РїРµСЂРµРґ РѕС‚РїСЂР°РІРєРѕР№</Text>
           {problemGroups.map((problem) => (
             <ProblemGroupButton
               key={problem.pointId}
@@ -210,6 +215,7 @@ export function SubmitReportScreen() {
         </Card>
       ) : null}
 
+      <Text style={styles.syncStatusLine}>{"\u041f\u043e\u0441\u043b\u0435\u0434\u043d\u044f\u044f \u0443\u0441\u043f\u0435\u0448\u043d\u0430\u044f \u0441\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0430\u0446\u0438\u044f: "}{lastSuccessfulSyncAt ? formatDateTime(lastSuccessfulSyncAt) : "\u0435\u0449\u0451 \u043d\u0435 \u0432\u044b\u043f\u043e\u043b\u043d\u044f\u043b\u0430\u0441\u044c"}</Text>
       {syncNotice ? <Text accessibilityLiveRegion="polite" style={styles.notice}>{syncNotice}</Text> : null}
       {loadError ? <Text accessibilityLiveRegion="polite" style={styles.loadError}>{loadError}</Text> : null}
 
@@ -217,7 +223,7 @@ export function SubmitReportScreen() {
         <PrimaryButton
           disabled={actionDisabled}
           icon={primaryIcon}
-          label={isSubmitting ? "Проверяем доставку…" : primaryLabel}
+          label={isSubmitting ? "РџСЂРѕРІРµСЂСЏРµРј РґРѕСЃС‚Р°РІРєСѓвЂ¦" : primaryLabel}
           onPress={handleScreenPrimaryAction}
           size="large"
         />
@@ -226,12 +232,12 @@ export function SubmitReportScreen() {
       <View style={styles.secondaryLinks}>
         <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} style={styles.secondaryLink}>
           <Ionicons color={colors.primary} name="list-outline" size={18} />
-          <Text style={[styles.secondaryLinkText, { color: colors.primary }]}>Все точки</Text>
+          <Text style={[styles.secondaryLinkText, { color: colors.primary }]}>Р’СЃРµ С‚РѕС‡РєРё</Text>
         </Pressable>
         {presentation.action !== "done" ? (
           <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push("/settings/sync-queue" as never)} style={styles.secondaryLink}>
             <Ionicons color={colors.primary} name="cloud-upload-outline" size={18} />
-            <Text style={[styles.secondaryLinkText, { color: colors.primary }]}>Подробнее об отправке</Text>
+            <Text style={[styles.secondaryLinkText, { color: colors.primary }]}>РџРѕРґСЂРѕР±РЅРµРµ РѕР± РѕС‚РїСЂР°РІРєРµ</Text>
           </Pressable>
         ) : null}
       </View>
@@ -265,12 +271,14 @@ function DeliveryCard({
   detail,
   lastUpdate,
   title,
-  tone
+  tone,
+  status
 }: {
   detail: string;
   lastUpdate: string | null;
   title: string;
   tone: "neutral" | "success" | "warning" | "danger";
+  status: NonNullable<DeliveryState>["status"] | null;
 }) {
   const palette = deliveryPalette[tone];
   return (
@@ -284,7 +292,8 @@ function DeliveryCard({
       <View style={styles.deliveryText}>
         <Text style={[styles.deliveryTitle, { color: palette.color }]}>{title}</Text>
         <Text style={styles.deliveryDetail}>{detail}</Text>
-        {lastUpdate ? <Text style={styles.deliveryTime}>Обновлено {formatTime(lastUpdate)}</Text> : null}
+        <Text style={styles.deliveryState}>{deliveryStateLabel(status)}</Text>
+        {lastUpdate ? <Text style={styles.deliveryTime}>РћР±РЅРѕРІР»РµРЅРѕ {formatTime(lastUpdate)}</Text> : null}
       </View>
     </View>
   );
@@ -339,8 +348,20 @@ function ProgressValue({ label, value }: { label: string; value: string }) {
   );
 }
 
+function deliveryStateLabel(status: OutboxCommandStatus | null) {
+  if (status === "accepted" || status === "duplicate") return "\u0421\u0435\u0440\u0432\u0435\u0440: \u043f\u0440\u0438\u043d\u044f\u0442";
+  if (status === "pending" || status === "sending") return "\u0422\u0435\u043b\u0435\u0444\u043e\u043d: \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u2014 \u0441\u0435\u0440\u0432\u0435\u0440: \u043e\u0436\u0438\u0434\u0430\u0435\u0442";
+  if (status === "retryLater" || status === "waiting_network") return "\u0422\u0435\u043b\u0435\u0444\u043e\u043d: \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u2014 \u0441\u0435\u0440\u0432\u0435\u0440: \u043f\u043e\u0432\u0442\u043e\u0440 \u043f\u043e\u0437\u0436\u0435";
+  if (status === "rejected" || status === "conflict" || status === "invalidPayload") return "\u0422\u0435\u043b\u0435\u0444\u043e\u043d: \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u2014 \u0441\u0435\u0440\u0432\u0435\u0440: \u043d\u0443\u0436\u043d\u043e \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435";
+  return "\u0422\u0435\u043b\u0435\u0444\u043e\u043d: \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e";
+}
+
 function formatTime(value: string) {
   return new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 }
 
 const deliveryPalette = {
@@ -375,6 +396,11 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4
   },
+  deliveryState: {
+    color: "#334155",
+    fontSize: 12,
+    fontWeight: "800"
+  },
   deliveryTime: {
     color: "#64748b",
     fontSize: 12,
@@ -388,6 +414,11 @@ const styles = StyleSheet.create({
     color: "#b91c1c",
     fontSize: 14,
     lineHeight: 20
+  },
+  syncStatusLine: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "700"
   },
   notice: {
     backgroundColor: "#f8fafc",

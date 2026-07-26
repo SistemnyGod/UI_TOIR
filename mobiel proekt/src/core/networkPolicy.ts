@@ -1,5 +1,6 @@
 type ConnectionState = {
   isConnected: boolean | null | undefined;
+  isInternetReachable?: boolean | null;
 };
 
 /**

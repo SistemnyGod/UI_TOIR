@@ -5,7 +5,8 @@ const localStatusesThatRequirePendingCommand = new Set([
   "syncing",
   "syncError",
   "authRequired",
-  "needsDispatcherDecision"
+  "needsDispatcherDecision",
+  "releasePending"
 ]);
 
 export function resolveBootstrapAssignmentStatus(

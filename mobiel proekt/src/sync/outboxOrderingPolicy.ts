@@ -5,7 +5,9 @@ export type OrderedOutboxItem = {
 
 export type OutboxAggregateCommand = {
   commandType: string;
+  entityType?: string | null;
   entityLocalId?: string | null;
+  entityServerId?: string | null;
   payload: Record<string, unknown>;
 };
 
@@ -16,6 +18,22 @@ export function getCommandAssignmentId(command: OutboxAggregateCommand) {
 
   const payloadAssignmentId = command.payload.assignmentId;
   return typeof payloadAssignmentId === "string" && payloadAssignmentId ? payloadAssignmentId : command.entityLocalId ?? null;
+}
+export function getCommandAggregateKey(command: OutboxAggregateCommand) {
+  const assignmentId = getCommandAssignmentId(command);
+  const isPatrolAggregate = command.entityType === "patrolAssignment"
+    || command.entityType === "patrolPoint"
+    || /Patrol/.test(command.commandType);
+  if (isPatrolAggregate && assignmentId) {
+    return `patrolAssignment:${assignmentId}`;
+  }
+
+  const entityId = command.entityLocalId ?? command.entityServerId ?? assignmentId;
+  if (entityId) {
+    return `${command.entityType ?? "command"}:${entityId}`;
+  }
+
+  return null;
 }
 function compareByCreatedAt(left: OrderedOutboxItem, right: OrderedOutboxItem) {
   return left.createdAtLocal.localeCompare(right.createdAtLocal);

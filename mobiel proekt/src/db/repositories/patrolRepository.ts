@@ -11,6 +11,7 @@ import { getPointForFillOwnedSql, listAssignmentPointsOwnedSql } from "@/db/repo
 import { parseStringArray, supersedePendingPointStatusCommands, updateLatestPendingMarkPhotoPayloadInTransaction, upsertPointResult, upsertPointResultInTransaction } from "@/db/repositories/patrolPersistence";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
+import { getCompletionAttachmentFailure } from "@/domain/files/completionAttachmentPolicy";
 import { isPhotoEvidenceRequired } from "@/domain/patrol/photoEvidencePolicy";
 import { normalizePointDraft, PointDraftSelectedStatus } from "@/domain/patrol/pointDraftPolicy";
 import { canCreateCompletionCommand, evaluateRequiredPointReadiness, isTerminalPointStatus } from "@/domain/patrol/reportReadinessPolicy";
@@ -498,7 +499,7 @@ export async function acceptRequestLocally(requestId: string) {
       revision: 0,
       routeVersionNo: snapshotVersion,
       snapshotVersion,
-      snapshotCreatedAt: takenAtLocal,
+      snapshotCreatedAt: acceptedAtLocal,
       snapshotSource: "local"
     } satisfies ActiveAssignment,
     created: true
@@ -518,9 +519,78 @@ export async function releaseAcceptedRequestLocally(assignmentId: string) {
     throw new Error("Заявку можно вернуть только до начала обхода.");
   }
 
-  const pendingRelease = await db.getFirstAsync<{ client_operation_id: string }>(
+  const pendingAccept = await db.getFirstAsync<{ clientOperationId: string }>(
     `
-      SELECT client_operation_id
+      SELECT client_operation_id AS clientOperationId
+      FROM outbox_commands
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND command_type = 'acceptPatrolRequest'
+        AND entity_local_id = ?
+        AND status = 'pending'
+      LIMIT 1
+    `,
+    [ownerUserId, currentContourId, assignmentId]
+  );
+
+  if (pendingAccept) {
+    await withSqliteBusyRetry(() =>
+      withProtectedExclusiveTransactionAsync(db, async (tx) => {
+        const pendingAcceptInTransaction = await tx.getFirstAsync<{ clientOperationId: string }>(
+          `
+            SELECT client_operation_id AS clientOperationId
+            FROM outbox_commands
+            WHERE owner_user_id = ? AND contour_id = ?
+              AND command_type = "acceptPatrolRequest"
+              AND entity_local_id = ? AND status = "pending"
+            LIMIT 1
+          `,
+          [ownerUserId, currentContourId, assignmentId]
+        );
+        if (!pendingAcceptInTransaction) {
+          throw new Error("Состояние принятия заявки уже изменилось. Повторите возврат.");
+        }
+        await tx.runAsync(
+          `
+            UPDATE outbox_commands
+            SET status = 'cancelled',
+                last_error = ?,
+                next_attempt_at = NULL,
+                last_attempt_at = NULL,
+                updated_at_local = ?
+            WHERE owner_user_id = ?
+              AND contour_id = ?
+              AND client_operation_id = ?
+              AND status = 'pending'
+          `,
+          ["Принятие заявки отменено локально до отправки.", new Date().toISOString(), ownerUserId, currentContourId, pendingAccept.clientOperationId]
+        );
+        await tx.runAsync(
+          `
+            UPDATE patrol_request_board
+            SET status = CASE WHEN assigned_full_name IS NULL THEN 'available' ELSE 'assigned' END
+            WHERE owner_user_id = ? AND request_id = ?
+          `,
+          [ownerUserId, assignment.requestId]
+        );
+        await tx.runAsync(
+          "DELETE FROM point_results WHERE owner_user_id = ? AND assignment_id = ?",
+          [ownerUserId, assignmentId]
+        );
+        await tx.runAsync("DELETE FROM assignment_route_points WHERE assignment_id = ?", [assignmentId]);
+        await tx.runAsync(
+          "DELETE FROM patrol_assignments WHERE owner_user_id = ? AND assignment_id = ?",
+          [ownerUserId, assignmentId]
+        );
+      })
+    );
+    requestSyncAfterMutation();
+    return;
+  }
+
+  const pendingRelease = await db.getFirstAsync<{ clientOperationId: string }>(
+    `
+      SELECT client_operation_id AS clientOperationId
       FROM outbox_commands
       WHERE owner_user_id = ?
         AND command_type = 'releasePatrolRequest'
@@ -588,12 +658,27 @@ export async function releaseAcceptedRequestLocally(assignmentId: string) {
         throw new Error("Возврат заявки уже сохранён и ожидает подтверждения сервера.");
       }
 
+      await tx.runAsync(
+        `
+          UPDATE patrol_assignments
+          SET status = 'releasePending'
+          WHERE owner_user_id = ? AND assignment_id = ? AND contour_id = ?
+        `,
+        [ownerUserId, assignment.assignmentId, currentContourId]
+      );
+      await tx.runAsync(
+        `
+          UPDATE patrol_request_board
+          SET status = 'releasePending'
+          WHERE owner_user_id = ? AND request_id = ?
+        `,
+        [ownerUserId, assignment.requestId]
+      );
       await insertOutboxCommandInTransaction(tx, command);
     })
   );
   requestSyncAfterMutation();
 }
-
 export async function startAssignmentLocally(assignmentId: string) {
   return updateAssignmentLifecycleLocally(assignmentId, "startPatrolAssignment", "inProgress", "startedAtLocal");
 }
@@ -1265,7 +1350,7 @@ export async function completeAssignmentLocally(assignmentId: string) {
 
   const completedAtLocal = new Date().toISOString();
   const pointResults = await buildCompletedPointResults(assignmentId);
-  await assertCompletionAttachmentsAvailable(pointResults);
+  await assertCompletionAttachmentsAvailable(ownerUserId, assignmentId, pointResults);
   const photoCount = pointResults.reduce((sum, result) => sum + result.photoClientFileIds.length, 0);
   const command: OutboxCommand = {
     clientOperationId: Crypto.randomUUID(),
@@ -1395,6 +1480,34 @@ export async function getActiveAssignmentWithProgress() {
   };
 }
 
+export type AssignmentScanPolicy = {
+  nfcEnabled: boolean;
+  qrFallbackEnabled: boolean;
+};
+
+export async function getAssignmentScanPolicy(assignmentId: string): Promise<AssignmentScanPolicy> {
+  const db = await getDatabase();
+  const ownerUserId = await requireOwnerUserId();
+  const row = await db.getFirstAsync<{ nfcEnabled: number | null; qrFallbackEnabled: number | null }>(
+    `
+      SELECT
+        COALESCE(route.nfc_enabled, 0) AS nfcEnabled,
+        COALESCE(route.qr_fallback_enabled, 0) AS qrFallbackEnabled
+      FROM patrol_assignments assignment
+      LEFT JOIN routes route ON route.route_id = assignment.route_id
+      WHERE assignment.owner_user_id = ?
+        AND assignment.assignment_id = ?
+        AND assignment.contour_id = ?
+      LIMIT 1
+    `,
+    [ownerUserId, assignmentId, currentContourId]
+  );
+
+  return {
+    nfcEnabled: row?.nfcEnabled === 1,
+    qrFallbackEnabled: row?.qrFallbackEnabled === 1
+  };
+}
 export async function getAssignmentById(assignmentId: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
@@ -1742,31 +1855,53 @@ async function buildCompletedPointResults(assignmentId: string) {
   }));
 }
 
-async function assertCompletionAttachmentsAvailable(pointResults: { photoClientFileIds: string[] }[]) {
-  const clientFileIds = Array.from(new Set(pointResults.flatMap((result) => result.photoClientFileIds)));
-  if (clientFileIds.length === 0) {
-    return;
+async function findCompletionAttachmentFailures(
+  ownerUserId: string,
+  assignmentId: string,
+  pointResults: { pointId: string; photoClientFileIds: string[] }[]
+) {
+  const references = pointResults.flatMap((result) => result.photoClientFileIds.map((clientFileId) => ({
+    pointId: result.pointId,
+    clientFileId
+  })));
+  if (references.length === 0) {
+    return [];
   }
 
-  const files = await listFilesByClientIds(clientFileIds);
+  const files = await listFilesByClientIds(Array.from(new Set(references.map((reference) => reference.clientFileId))));
   const filesById = new Map(files.map((file) => [file.clientFileId, file]));
-  const missing = await Promise.all(clientFileIds.map(async (clientFileId) => {
-    const file = filesById.get(clientFileId);
-    if (!file) {
-      return clientFileId;
+  const points = await listAssignmentPoints(assignmentId, ownerUserId, currentContourId);
+  const pointsById = new Map(points.map((point) => [point.pointId, point]));
+
+  const failures = await Promise.all(references.map(async (reference) => {
+    const point = pointsById.get(reference.pointId);
+    if (!point) {
+      return `${reference.clientFileId}: point record is missing`;
     }
 
-    try {
-      const info = await getLocalFileInfo(file.localPath);
-      return info.exists ? null : clientFileId;
-    } catch {
-      return clientFileId;
-    }
+    const file = filesById.get(reference.clientFileId);
+    const physicalFile = file ? await getLocalFileInfo(file.localPath).catch(() => null) : null;
+    const reason = getCompletionAttachmentFailure(file, physicalFile, {
+      ownerUserId,
+      contourId: currentContourId,
+      assignmentId,
+      pointId: reference.pointId,
+      requiredPhoto: isPhotoEvidenceRequired(point.requiresPhoto, point.status)
+    });
+    return reason ? `${reference.clientFileId}: ${reason}` : null;
   }));
 
-  const missingCount = missing.filter((clientFileId): clientFileId is string => clientFileId !== null).length;
-  if (missingCount > 0) {
-    throw new Error(`Report cannot be completed because ${missingCount} local attachment(s) are missing.`);
+  return failures.filter((failure): failure is string => failure !== null);
+}
+
+async function assertCompletionAttachmentsAvailable(
+  ownerUserId: string,
+  assignmentId: string,
+  pointResults: { pointId: string; photoClientFileIds: string[] }[]
+) {
+  const failures = await findCompletionAttachmentFailures(ownerUserId, assignmentId, pointResults);
+  if (failures.length > 0) {
+    throw new Error(`Report cannot be completed because a local attachment preflight failed: ${failures[0]}`);
   }
 }
 

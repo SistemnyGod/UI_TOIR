@@ -238,5 +238,26 @@ export const notificationSchema = z.object({
 
 export const notificationListResponseSchema = z.array(notificationSchema);
 
+
+export const refreshResponseSchema = loginResponseSchema;
+
+export const outboxResponseSchema = z.object({
+  clientOperationId: identifier,
+  status: z.enum(["accepted", "duplicate", "retryLater", "rejected", "conflict"]),
+  message: z.string(),
+  serverEntityId: nullableString,
+  serverRevision: z.number().nullable(),
+  conflictId: nullableString,
+  retryAfterSeconds: z.number().nonnegative().nullable()
+}).passthrough();
+
+export const outboxResponseListSchema = z.array(outboxResponseSchema);
+
+export const fileUploadResponseSchema = z.object({
+  clientFileId: identifier,
+  serverFileId: identifier,
+  status: z.enum(["uploaded", "duplicate"]),
+  uploadedAt: timestamp
+}).passthrough();
 export const emptyResponseSchema = z.undefined();
 export const unknownResponseSchema = z.unknown();

@@ -1,12 +1,9 @@
-import Constants from "expo-constants";
-import { Platform } from "react-native";
-
 import { login, logout } from "@/api/authApi";
 import { isReauthenticationRequiredError } from "@/auth/sessionErrors";
 import { refreshStoredAccessToken } from "@/api/httpClient";
 import { getBootstrap } from "@/api/mobileApi";
 import { getOrCreateDeviceId } from "@/auth/deviceRegistration";
-import { getDeviceDisplayName } from "@/auth/deviceInfo";
+import { createLoginPayload, getAppRuntimeMetadata } from "@/auth/appMetadata";
 import {
   clearLocalSessionKeepingRefreshToken,
   clearTokens,
@@ -32,8 +29,6 @@ import { registerPushNotifications, syncMobileNotifications } from "@/services/n
 import { syncWorkItems } from "@/services/workTaskService";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import { currentContourId } from "@/core/environments";
-
-const appVersion = Constants.expoConfig?.version ?? "unknown";
 
 export async function flushPendingLogout() {
   const pendingContourId = await getPendingLogoutContourId();
@@ -78,14 +73,11 @@ export async function signIn(loginName: string, password: string) {
   const previousOwnerUserId = previousSession.ownerUserId;
   const previousContourId = previousSession.offlineSession?.contourId;
   const contourMismatch = Boolean(previousOwnerUserId && previousContourId !== currentContourId);
-  const result = await login({
+  const result = await login(createLoginPayload({
     login: loginName,
     password,
-    deviceId,
-    deviceName: getDeviceDisplayName(),
-    platform: Platform.OS,
-    appVersion
-  });
+    deviceId
+  }, getAppRuntimeMetadata()));
 
   if (result.contourId !== currentContourId) {
     throw new Error(`Сервер вернул сессию другого контура (${result.contourId}). Вход остановлен.`);
@@ -116,7 +108,11 @@ export async function signIn(loginName: string, password: string) {
       contourId: currentContourId,
       fullName: result.user.fullName,
       lastOnlineLoginAt: new Date().toISOString(),
-      expiresAt: result.refreshExpiresAt
+      expiresAt: result.refreshExpiresAt,
+      offlineExpiresAt: result.refreshExpiresAt,
+      deviceTrusted: result.device.trusted,
+      userBlockedAt: (result.user as typeof result.user & { blockedAt?: string | null }).blockedAt ?? null,
+      deviceBlockedAt: result.device.blockedAt
     });
   } catch (error) {
     await logout(result.accessToken).catch(() => undefined);

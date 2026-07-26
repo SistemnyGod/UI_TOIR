@@ -19,6 +19,7 @@ import {
   updateWorkTaskLocally
 } from "@/db/repositories/workTaskRepository";
 import { MobileEmployeeDto, MobileEmuSectionDto, WorkItemDto, WorkTaskDto } from "@/domain/emu/emuTypes";
+import { canAttachEmuMedia, canCompleteEmuTask, canEditEmuTask, canPauseEmuTask, canResumeEmuTask, canStartEmuTask } from "@/domain/emu/emuStateMachine";
 import {
   formatDateTime,
   formatParticipants,
@@ -113,7 +114,7 @@ export function WorkAccountingScreen() {
       let isMounted = true;
       setLoading(true);
 
-      void Promise.all([loadWorkItemsOfflineFirst(), listShiftRemarks(), listMobileEmployees(), listEmuSections()])
+      void Promise.all([loadWorkItemsOfflineFirst(reloadLocal), listShiftRemarks(), listMobileEmployees(), listEmuSections()])
         .then(([nextTasks, nextRemarks, nextEmployees, nextSections]) => {
           if (isMounted) {
             setTasks(nextTasks);
@@ -132,7 +133,7 @@ export function WorkAccountingScreen() {
       return () => {
         isMounted = false;
       };
-    }, [])
+    }, [reloadLocal])
   );
 
   function openCreateTask() {
@@ -873,16 +874,16 @@ function getTaskPrimaryAction(
   task: WorkItemDto,
   handlers: Pick<TaskMenuCallbackMap, "onComplete" | "onJoin" | "onResume" | "onStart">
 ) {
-  if (task.capabilities.canStart) {
+  if (task.capabilities.canStart && canStartEmuTask(task.status)) {
     return { icon: "play-outline" as const, label: "Начать работу", onPress: () => handlers.onStart(task) };
   }
-  if (task.capabilities.canJoin) {
+  if (task.capabilities.canJoin && canStartEmuTask(task.status)) {
     return { icon: "person-add-outline" as const, label: "Присоединиться", onPress: () => handlers.onJoin(task) };
   }
-  if (task.capabilities.canResume) {
+  if (task.capabilities.canResume && canResumeEmuTask(task.status)) {
     return { icon: "play-outline" as const, label: "Продолжить", onPress: () => handlers.onResume(task) };
   }
-  if (task.capabilities.canComplete) {
+  if (task.capabilities.canComplete && canCompleteEmuTask(task.status)) {
     return { icon: "checkmark-circle-outline" as const, label: "Завершить", onPress: () => handlers.onComplete(task) };
   }
   return null;
@@ -899,16 +900,16 @@ function getTaskSecondaryActions(
     onPress: () => void;
   }[] = [];
 
-  if (task.capabilities.canReplace) {
+  if (task.capabilities.canReplace && canStartEmuTask(task.status)) {
     actions.push({ icon: "swap-horizontal-outline", label: "Принять вместо исполнителя", onPress: () => handlers.onReplace(task) });
   }
-  if (task.capabilities.canPause) {
+  if (task.capabilities.canPause && canPauseEmuTask(task.status)) {
     actions.push({ icon: "pause-outline", label: "Остановить", onPress: () => handlers.onPause(task), danger: true });
   }
-  if (task.capabilities.canComplete) {
+  if (task.capabilities.canComplete && canEditEmuTask(task.status)) {
     actions.push({ icon: "create-outline", label: "Изменить", onPress: () => handlers.onEdit(task) });
   }
-  if (task.kind === "workSession") {
+  if (task.kind === "workSession" && canAttachEmuMedia(task.status)) {
     actions.push({ icon: "attach-outline", label: "Добавить вложение", onPress: () => handlers.onAttach(task) });
   }
   return actions;

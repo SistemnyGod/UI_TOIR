@@ -8,6 +8,7 @@ export type OutboxCommandStatus =
   | "waiting_network"
   | "wrong_contour"
   | "blocked"
+  | "invalidPayload"
   | "rejected"
   | "conflict"
   | "superseded"

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text } from "react-native";
 
 import { isOfflineSessionValid } from "@/auth/offlineSession";
+import { evaluateOfflineAccess } from "@/auth/offlineAccessPolicy";
 import { consumePendingSessionRoute, markSessionUnlocked } from "@/auth/sessionGateState";
 import { getOfflineSession, getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
@@ -26,6 +27,7 @@ export default function OfflineLoginRoute() {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [requiresReenrollment, setRequiresReenrollment] = useState(false);
+  const [isExpired, setIsExpired] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -37,6 +39,11 @@ export default function OfflineLoginRoute() {
         }
 
         setRequiresReenrollment(Boolean(offlineSession?.requiresReenrollment));
+        const accessAfterAuthentication = evaluateOfflineAccess(offlineSession, {
+          authenticationSatisfied: true,
+          expectedContourId: currentContourId
+        });
+        setIsExpired(accessAfterAuthentication.reason === "offlineExpired");
         if (!ownerUserId || !offlineSession || offlineSession.userId !== ownerUserId || !isOfflineSessionValid(offlineSession, currentContourId)) {
           return null;
         }
@@ -81,6 +88,19 @@ export default function OfflineLoginRoute() {
         return;
       }
 
+      const offlineSession = await getOfflineSession();
+      const access = evaluateOfflineAccess(offlineSession, {
+        authenticationSatisfied: true,
+        expectedContourId: currentContourId
+      });
+      if (access.mode === "emergency") {
+        router.replace("/(auth)/offline-emergency" as never);
+        return;
+      }
+      if (access.mode !== "full") {
+        setAuthError("пїЅпїЅпїЅпїЅпїЅпїЅ-пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ: пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ.");
+        return;
+      }
       markSessionUnlocked();
       router.replace((consumePendingSessionRoute() ?? "/(tabs)/patrol") as never);
     } catch {
@@ -143,7 +163,7 @@ export default function OfflineLoginRoute() {
       {authError ? <Text style={styles.error}>{authError}</Text> : null}
       <PrimaryButton
         disabled={isAuthenticating}
-        label={isAuthenticating ? "Проверка доступа…" : "Продолжить офлайн"}
+        label={isAuthenticating ? "Checking access..." : isExpired ? "Open emergency view" : "Continue offline"}
         onPress={() => void continueOffline()}
       />
       <PrimaryButton label="Войти онлайн" onPress={() => router.replace("/(auth)/login")} />
