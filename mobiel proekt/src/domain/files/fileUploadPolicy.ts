@@ -20,6 +20,10 @@ export class PermanentFileUploadError extends Error {
   }
 }
 export function getFileUploadFailureDisposition(error: unknown): FileUploadFailureDisposition {
+  if (error instanceof PermanentFileUploadError) {
+    return "failed";
+  }
+
   const status = error instanceof FileUploadHttpError
     ? error.status
     : getNumericStatus(error);

@@ -13,10 +13,12 @@ export interface SnapshotRefreshPlan {
 }
 
 export function getSnapshotRefreshPlan(input: SnapshotRefreshInput): SnapshotRefreshPlan {
+  const shouldReplace = input.localStatus === "accepted"
+    && (input.localPointCount === 0 || input.localSnapshotVersion !== input.routeVersion);
+
   return {
-    shouldReplace: input.localPointCount === 0
-      || (input.localStatus === "accepted" && input.localSnapshotVersion !== input.routeVersion),
-    snapshotVersion: input.routeVersion,
+    shouldReplace,
+    snapshotVersion: shouldReplace ? input.routeVersion : (input.localSnapshotVersion ?? input.routeVersion),
     pointIds: Array.from(new Set(input.incomingPointIds))
   };
 }

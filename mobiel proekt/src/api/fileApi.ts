@@ -10,7 +10,7 @@ import { getMobileRuntimeConfig, getServerCandidateBaseUrls } from "@/core/serve
 import { LocalMobileFile, MobileFileUploadResponse } from "@/domain/files/fileTypes";
 import { currentContourId } from "@/core/environments";
 import { requiresClientFileHash } from "@/sync/fileHash";
-import { FileUploadHttpError } from "@/domain/files/fileUploadPolicy";
+import { FileUploadHttpError, PermanentFileUploadError } from "@/domain/files/fileUploadPolicy";
 import { MAX_PHOTO_BYTES, MAX_VIDEO_BYTES } from "@/domain/files/fileUploadLimits";
 import { fileUploadResponseSchema } from "@/api/schemas";
 
@@ -73,39 +73,48 @@ function validateFileUploadResponse(value: unknown, expectedClientFileId: string
 export const uploadPatrolPhoto = uploadMobileFile;
 
 async function validateMobileFileBeforeUpload(file: LocalMobileFile) {
+  const rejectLocalFile = (message: string): never => {
+    throw new PermanentFileUploadError(message, file.clientFileId || "unknown");
+  };
   if (file.contourId && file.contourId !== currentContourId) {
-    throw new Error(`Вложение относится к другому серверному контуру (${file.contourId}) и не будет отправлено.`);
+    rejectLocalFile(`Вложение относится к другому серверному контуру (${file.contourId}) и не будет отправлено.`);
   }
   const hasPatrolPointScope = Boolean(file.assignmentId && file.pointId);
   const hasRemarkScope = Boolean(file.remarkId);
   const hasWorkTaskScope = Boolean(file.workTaskId);
 
   if (!hasPatrolPointScope && !hasRemarkScope && !hasWorkTaskScope) {
-    throw new Error("Файл не привязан к точке обхода, замечанию смены или работе.");
+    rejectLocalFile("Файл не привязан к точке обхода, замечанию смены или работе.");
   }
 
   if (!file.clientFileId || !file.localPath || !file.sizeBytes) {
-    throw new Error("Локальные данные файла неполные.");
+    rejectLocalFile("Локальные данные файла неполные.");
   }
   if (requiresClientFileHash(file) && !file.sha256) {
-    throw new Error("Локальные данные фото не содержат контрольную сумму.");
+    rejectLocalFile("Локальные данные фото не содержат контрольную сумму.");
   }
 
   if (file.contentType !== "image/jpeg" && file.contentType !== "video/mp4") {
-    throw new Error("Можно отправлять только фото JPEG и видео MP4.");
+    rejectLocalFile("Можно отправлять только фото JPEG и видео MP4.");
   }
 
+  const sizeBytes = file.sizeBytes;
   const maxSize = file.contentType === "video/mp4" || file.mediaKind === "video" ? MAX_VIDEO_BYTES : MAX_PHOTO_BYTES;
-  if (file.sizeBytes <= 0 || file.sizeBytes > maxSize) {
+  if (sizeBytes === null || sizeBytes === undefined || sizeBytes <= 0 || sizeBytes > maxSize) {
     if (file.mediaKind !== "video" && file.contentType !== "video/mp4") {
-      throw new Error("Фото слишком большое. Максимум 6 МБ.");
+      rejectLocalFile("Фото слишком большое. Максимум 6 МБ.");
     }
-    throw new Error(file.mediaKind === "video" ? "Видео слишком большое. Максимум 30 МБ." : "Фото слишком большое. Максимум 6 МБ.");
+    rejectLocalFile(file.mediaKind === "video" ? "Видео слишком большое. Максимум 30 МБ." : "Фото слишком большое. Максимум 6 МБ.");
   }
 
-  const fileInfo = await FileSystem.getInfoAsync(file.localPath);
-  if (!fileInfo.exists) {
-    throw new Error("Файл не найден на телефоне. Добавьте вложение повторно.");
+  let fileInfo: Awaited<ReturnType<typeof FileSystem.getInfoAsync>> | null = null;
+  try {
+    fileInfo = await FileSystem.getInfoAsync(file.localPath);
+  } catch {
+    rejectLocalFile("Local file is unavailable. Replace the attachment.");
+  }
+  if (!fileInfo || !fileInfo.exists) {
+    rejectLocalFile("Файл не найден на телефоне. Добавьте вложение повторно.");
   }
 }
 

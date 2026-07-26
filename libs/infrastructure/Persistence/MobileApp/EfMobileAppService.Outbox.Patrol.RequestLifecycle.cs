@@ -5,6 +5,26 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfMobileAppService
 {
+    private MobileOutboxResponseDto BuildPatrolTransitionResponse(
+        MobileOutboxCommandDto command,
+        AssignmentEntity assignment,
+        PatrolTransitionDecision decision)
+    {
+        return decision.Kind switch
+        {
+            PatrolTransitionKind.Duplicate => new MobileOutboxResponseDto(
+                command.ClientOperationId,
+                "duplicate",
+                assignment.Id.ToString(),
+                assignment.LockVersion,
+                decision.Message,
+                null,
+                null),
+            PatrolTransitionKind.Conflict => Conflict(command.ClientOperationId, decision.Message),
+            _ => Rejected(command.ClientOperationId, decision.Message),
+        };
+    }
+
     private MobileOutboxResponseDto ProcessTakePatrolRequest(MobileAccountEntity account, MobileOutboxCommandDto command)
     {
         var boundEmployeeIds = GetBoundEmployeeIds(account);
@@ -58,6 +78,14 @@ internal sealed partial class EfMobileAppService
         if (patrolRequest.Assignment is not null)
         {
             return Conflict(command.ClientOperationId, "Patrol request is already assigned.");
+        }
+
+        var requestAcceptTransition = PatrolAssignmentStateMachine.Evaluate(
+            "acceptPatrolRequest",
+            patrolRequest.Status);
+        if (requestAcceptTransition.Kind != PatrolTransitionKind.Allowed)
+        {
+            return Conflict(command.ClientOperationId, requestAcceptTransition.Message);
         }
 
         if (dbContext.Assignments.Any(item => item.Id == clientAssignmentId))
@@ -196,6 +224,14 @@ internal sealed partial class EfMobileAppService
                 return Conflict(command.ClientOperationId, "Patrol request is already completed.");
             }
 
+            var acceptTransition = PatrolAssignmentStateMachine.Evaluate(
+                "acceptPatrolRequest",
+                patrolRequest.Assignment.Status);
+            if (acceptTransition.Kind != PatrolTransitionKind.Allowed)
+            {
+                return BuildPatrolTransitionResponse(command, patrolRequest.Assignment, acceptTransition);
+            }
+
             patrolRequest.Assignment.Status = AssignmentStatusValues.Accepted;
             patrolRequest.Assignment.LockVersion += 1;
             patrolRequest.Status = AssignmentStatusValues.Accepted;
@@ -325,6 +361,14 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Closed patrol assignment cannot be started.");
         }
 
+        var startTransition = PatrolAssignmentStateMachine.Evaluate(
+            "startPatrolAssignment",
+            assignment.Status);
+        if (startTransition.Kind != PatrolTransitionKind.Allowed)
+        {
+            return BuildPatrolTransitionResponse(command, assignment, startTransition);
+        }
+
         if (dbContext.Database.IsNpgsql())
         {
             var employeeStartLock = $"patrol-start:{assignment.EmployeeId:N}";
@@ -372,9 +416,12 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Patrol request is already completed.");
         }
 
-        if (assignment.Status != AssignmentStatusValues.InProgress)
+        var pauseTransition = PatrolAssignmentStateMachine.Evaluate(
+            "pausePatrolAssignment",
+            assignment.Status);
+        if (pauseTransition.Kind != PatrolTransitionKind.Allowed)
         {
-            return Rejected(command.ClientOperationId, "Only patrol in progress can be paused.");
+            return BuildPatrolTransitionResponse(command, assignment, pauseTransition);
         }
 
         assignment.Status = AssignmentStatusValues.Paused;
@@ -405,9 +452,12 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Patrol request is already completed.");
         }
 
-        if (assignment.Status != AssignmentStatusValues.Paused)
+        var resumeTransition = PatrolAssignmentStateMachine.Evaluate(
+            "resumePatrolAssignment",
+            assignment.Status);
+        if (resumeTransition.Kind != PatrolTransitionKind.Allowed)
         {
-            return Rejected(command.ClientOperationId, "Only paused patrol can be resumed.");
+            return BuildPatrolTransitionResponse(command, assignment, resumeTransition);
         }
 
         if (dbContext.Assignments.Any(item =>
@@ -446,9 +496,12 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Patrol request is already completed.");
         }
 
-        if (assignment.Status == AssignmentStatusValues.Completed || assignment.Status == AssignmentStatusValues.Cancelled)
+        var handoffTransition = PatrolAssignmentStateMachine.Evaluate(
+            "handoffPatrolAssignment",
+            assignment.Status);
+        if (handoffTransition.Kind != PatrolTransitionKind.Allowed)
         {
-            return Conflict(command.ClientOperationId, "Closed patrol assignment cannot be handed off.");
+            return BuildPatrolTransitionResponse(command, assignment, handoffTransition);
         }
 
         assignment.Status = AssignmentStatusValues.NeedsDispatcherDecision;

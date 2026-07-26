@@ -114,7 +114,10 @@ async function initializeDatabaseOnce() {
       route_version_no INTEGER NOT NULL DEFAULT 0,
       snapshot_version INTEGER NOT NULL DEFAULT 0,
       snapshot_created_at TEXT,
-      snapshot_source TEXT
+      snapshot_source TEXT,
+      snapshot_allow_free_order INTEGER,
+      snapshot_nfc_enabled INTEGER,
+      snapshot_qr_fallback_enabled INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS assignment_route_points (
@@ -328,6 +331,9 @@ async function initializeDatabaseOnce() {
       await ensureMobileColumns(tx);
   });
 
+    await runLocalMigration(tx, "20260726_assignment_snapshot_policy", async () => {
+      await ensureAssignmentSnapshotPolicy(tx);
+    });
     await runLocalMigration(tx, "20260526_assignment_snapshot_outbox_recovery", async () => {
       await ensureAssignmentSnapshotAndOutboxRecovery(tx);
   });
@@ -417,6 +423,37 @@ async function runLocalMigration(db: SqlExecutor, id: string, action: () => Prom
   );
 }
 
+async function ensureAssignmentSnapshotPolicy(db: SqlExecutor) {
+  await ensureColumns(db, "patrol_assignments", [
+    { name: "snapshot_allow_free_order", sql: "ALTER TABLE patrol_assignments ADD COLUMN snapshot_allow_free_order INTEGER" },
+    { name: "snapshot_nfc_enabled", sql: "ALTER TABLE patrol_assignments ADD COLUMN snapshot_nfc_enabled INTEGER" },
+    { name: "snapshot_qr_fallback_enabled", sql: "ALTER TABLE patrol_assignments ADD COLUMN snapshot_qr_fallback_enabled INTEGER" }
+  ]);
+
+  await db.runAsync(
+    `
+      UPDATE patrol_assignments
+      SET snapshot_allow_free_order = COALESCE(
+            snapshot_allow_free_order,
+            (SELECT allow_free_order FROM routes WHERE routes.route_id = patrol_assignments.route_id),
+            1
+          ),
+          snapshot_nfc_enabled = COALESCE(
+            snapshot_nfc_enabled,
+            (SELECT nfc_enabled FROM routes WHERE routes.route_id = patrol_assignments.route_id),
+            0
+          ),
+          snapshot_qr_fallback_enabled = COALESCE(
+            snapshot_qr_fallback_enabled,
+            (SELECT qr_fallback_enabled FROM routes WHERE routes.route_id = patrol_assignments.route_id),
+            1
+          )
+      WHERE snapshot_allow_free_order IS NULL
+         OR snapshot_nfc_enabled IS NULL
+         OR snapshot_qr_fallback_enabled IS NULL
+    `,
+  );
+}
 async function ensureMobileColumns(db: SqlExecutor) {
   await ensureColumns(db, "devices", [
     { name: "push_token", sql: "ALTER TABLE devices ADD COLUMN push_token TEXT" },
@@ -435,6 +472,12 @@ async function ensureMobileColumns(db: SqlExecutor) {
     { name: "snapshot_version", sql: "ALTER TABLE patrol_assignments ADD COLUMN snapshot_version INTEGER NOT NULL DEFAULT 0" },
     { name: "snapshot_created_at", sql: "ALTER TABLE patrol_assignments ADD COLUMN snapshot_created_at TEXT" },
     { name: "snapshot_source", sql: "ALTER TABLE patrol_assignments ADD COLUMN snapshot_source TEXT" }
+  ]);
+
+  await ensureColumns(db, "routes", [
+    { name: "allow_free_order", sql: "ALTER TABLE routes ADD COLUMN allow_free_order INTEGER NOT NULL DEFAULT 1" },
+    { name: "nfc_enabled", sql: "ALTER TABLE routes ADD COLUMN nfc_enabled INTEGER NOT NULL DEFAULT 0" },
+    { name: "qr_fallback_enabled", sql: "ALTER TABLE routes ADD COLUMN qr_fallback_enabled INTEGER NOT NULL DEFAULT 1" }
   ]);
 
   await ensureColumns(db, "route_points", [

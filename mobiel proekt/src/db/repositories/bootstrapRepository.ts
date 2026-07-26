@@ -7,6 +7,7 @@ import { finalizeCancelledAssignmentInTransaction } from "@/db/repositories/patr
 import { deletePatrolPhotoDirectory } from "@/services/fileStorageService";
 import { resolveBootstrapAssignmentStatus } from "@/domain/sync/bootstrapResolutionPolicy";
 import { getSnapshotRefreshPlan } from "@/domain/patrol/snapshotPolicy";
+import { isPatrolAssignmentCommand, resolvePatrolAssignmentIdentity } from "@/db/repositories/outboxPolicies";
 
 const bootstrapScope = `bootstrap:${currentContourId}`;
 
@@ -417,9 +418,17 @@ async function applyBootstrapConflictResolutionsInTransaction(
     const command = await tx.getFirstAsync<{
       entityLocalId: string | null;
       entityServerId: string | null;
+      commandType: string;
+      entityType: string;
+      payloadJson: string;
     }>(
       `
-        SELECT entity_local_id AS entityLocalId, entity_server_id AS entityServerId
+        SELECT
+          entity_local_id AS entityLocalId,
+          entity_server_id AS entityServerId,
+          command_type AS commandType,
+          entity_type AS entityType,
+          payload_json AS payloadJson
         FROM outbox_commands
         WHERE owner_user_id = ?
           AND contour_id = ?
@@ -432,10 +441,83 @@ async function applyBootstrapConflictResolutionsInTransaction(
       continue;
     }
 
-    const assignmentId = resolution.entityLocalId ?? command.entityLocalId;
+    const assignmentInput = {
+      commandType: command.commandType,
+      entityType: command.entityType,
+      entityLocalId: resolution.entityLocalId ?? command.entityLocalId,
+      payload: command.payloadJson
+    };
+    const assignmentCommand = isPatrolAssignmentCommand(assignmentInput);
+    const assignmentId = resolvePatrolAssignmentIdentity(assignmentInput);
     const assignment = assignmentId
       ? bootstrap.assignments.find((item) => item.assignmentId === assignmentId)
       : null;
+    const assignmentWasCancelled = assignmentCommand
+      && Boolean(assignmentId && bootstrap.cancelledAssignmentIds?.includes(assignmentId));
+    if (assignmentCommand && (!assignmentId || (!assignment && !assignmentWasCancelled))) {
+      continue;
+    }
+
+    // Bootstrap currently carries the authoritative state only for assignments.
+    // Closing a point/task/remark conflict without applying that state would
+    // leave the local entity blocking logout while the outbox entry is hidden.
+    if (!assignmentCommand) {
+      switch (command.entityType) {
+        case "patrolPoint":
+        case "workTask":
+        case "shiftRemark":
+          continue;
+        default:
+          continue;
+      }
+    }
+
+
+    if (assignmentWasCancelled && assignmentId) {
+      await finalizeCancelledAssignmentInTransaction(tx, ownerUserId, assignmentId);
+      continue;
+    }
+
+    if (assignment) {
+      const request = bootstrap.requestBoard.find((item) => item.requestId === assignment.requestId);
+      const assignmentUpdate = await tx.runAsync(
+        `
+          UPDATE patrol_assignments
+          SET status = ?,
+              revision = ?,
+              started_at_local = COALESCE(?, started_at_local),
+              completed_at_local = COALESCE(?, completed_at_local)
+          WHERE owner_user_id = ?
+            AND assignment_id = ?
+            AND (contour_id = ? OR contour_id IS NULL)
+        `,
+        [
+          assignment.status,
+          assignment.revision,
+          assignment.startedAtLocal,
+          assignment.completedAtLocal,
+          ownerUserId,
+          assignment.assignmentId,
+          currentContourId
+        ]
+      );
+      if (assignmentUpdate.changes !== 1) {
+        continue;
+      }
+      await tx.runAsync(
+        `
+          UPDATE patrol_request_board
+          SET status = ?, revision = ?
+          WHERE owner_user_id = ? AND request_id = ?
+        `,
+        [
+          request?.status ?? assignment.status,
+          request?.revision ?? assignment.revision,
+          ownerUserId,
+          assignment.requestId
+        ]
+      );
+    }
 
     await tx.runAsync(
       `
@@ -472,43 +554,6 @@ async function applyBootstrapConflictResolutionsInTransaction(
       ]
     );
 
-    if (assignment) {
-      const request = bootstrap.requestBoard.find((item) => item.requestId === assignment.requestId);
-      await tx.runAsync(
-        `
-          UPDATE patrol_assignments
-          SET status = ?,
-              revision = ?,
-              started_at_local = COALESCE(?, started_at_local),
-              completed_at_local = COALESCE(?, completed_at_local)
-          WHERE owner_user_id = ?
-            AND assignment_id = ?
-            AND (contour_id = ? OR contour_id IS NULL)
-        `,
-        [
-          assignment.status,
-          assignment.revision,
-          assignment.startedAtLocal,
-          assignment.completedAtLocal,
-          ownerUserId,
-          assignment.assignmentId,
-          currentContourId
-        ]
-      );
-      await tx.runAsync(
-        `
-          UPDATE patrol_request_board
-          SET status = ?, revision = ?
-          WHERE owner_user_id = ? AND request_id = ?
-        `,
-        [
-          request?.status ?? assignment.status,
-          request?.revision ?? assignment.revision,
-          ownerUserId,
-          assignment.requestId
-        ]
-      );
-    }
   }
 }
 async function refreshAssignmentSnapshotInTransaction(
@@ -535,7 +580,13 @@ async function refreshAssignmentSnapshotInTransaction(
   }
 
   const route = bootstrap.routes.find((item) => item.routeId === assignment.routeId);
-  const snapshotVersion = route?.version ?? assignment.routeVersionNo ?? 0;
+  const frozenSnapshot = ["releasePending", "inProgress", "paused", "completedLocal", "syncing", "syncError", "authRequired", "needsDispatcherDecision"].includes(assignment.status);
+  const snapshotVersion = frozenSnapshot
+    ? (assignment.routeVersionNo || route?.version || 0)
+    : (route?.version ?? assignment.routeVersionNo ?? 0);
+  const snapshotAllowFreeOrder = route?.allowFreeOrder === false ? 0 : 1;
+  const snapshotNfcEnabled = route?.nfcEnabled === true ? 1 : 0;
+  const snapshotQrFallbackEnabled = route?.qrFallbackEnabled === false ? 0 : 1;
   const snapshotPlan = getSnapshotRefreshPlan({
     localStatus: local.status,
     localSnapshotVersion: local.snapshotVersion,
@@ -595,12 +646,15 @@ async function refreshAssignmentSnapshotInTransaction(
       SET route_version_no = ?,
           snapshot_version = ?,
           snapshot_created_at = ?,
-          snapshot_source = 'bootstrap'
+          snapshot_source = 'bootstrap',
+          snapshot_allow_free_order = ?,
+          snapshot_nfc_enabled = ?,
+          snapshot_qr_fallback_enabled = ?
       WHERE owner_user_id = ?
         AND assignment_id = ?
         AND (contour_id = ? OR contour_id IS NULL)
     `,
-    [snapshotPlan.snapshotVersion, snapshotPlan.snapshotVersion, bootstrap.serverTime, bootstrap.user.serverUserId, assignment.assignmentId, currentContourId]
+    [snapshotPlan.snapshotVersion, snapshotPlan.snapshotVersion, bootstrap.serverTime, snapshotAllowFreeOrder, snapshotNfcEnabled, snapshotQrFallbackEnabled, bootstrap.user.serverUserId, assignment.assignmentId, currentContourId]
   );
 }
 async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapDto) {
@@ -851,11 +905,15 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
       [ownerUserId]
     );
 
-    await applyBootstrapConflictResolutionsInTransaction(tx, ownerUserId, bootstrap);
-
     for (const assignment of bootstrap.assignments) {
       const route = bootstrap.routes.find((item) => item.routeId === assignment.routeId);
-      const snapshotVersion = route?.version ?? assignment.routeVersionNo ?? 0;
+      const frozenSnapshot = ["releasePending", "inProgress", "paused", "completedLocal", "syncing", "syncError", "authRequired", "needsDispatcherDecision"].includes(assignment.status);
+      const snapshotVersion = frozenSnapshot
+        ? (assignment.routeVersionNo || route?.version || 0)
+        : (route?.version ?? assignment.routeVersionNo ?? 0);
+      const snapshotAllowFreeOrder = route?.allowFreeOrder === false ? 0 : 1;
+      const snapshotNfcEnabled = route?.nfcEnabled === true ? 1 : 0;
+      const snapshotQrFallbackEnabled = route?.qrFallbackEnabled === false ? 0 : 1;
       const snapshotCreatedAt = bootstrap.serverTime;
       const localAssignment = await tx.getFirstAsync<{ status: string }>(
         `SELECT status FROM patrol_assignments WHERE owner_user_id = ? AND assignment_id = ? AND (contour_id = ? OR contour_id IS NULL)`,
@@ -882,9 +940,12 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             route_version_no,
             snapshot_version,
             snapshot_created_at,
-            snapshot_source
+            snapshot_source,
+            snapshot_allow_free_order,
+            snapshot_nfc_enabled,
+            snapshot_qr_fallback_enabled
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(assignment_id) DO UPDATE SET
             owner_user_id = excluded.owner_user_id,
             contour_id = excluded.contour_id,
@@ -918,6 +979,18 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             snapshot_source = CASE
               WHEN patrol_assignments.status IN ('releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.snapshot_source
               ELSE excluded.snapshot_source
+            END,
+            snapshot_allow_free_order = CASE
+              WHEN patrol_assignments.status IN ('releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.snapshot_allow_free_order
+              ELSE excluded.snapshot_allow_free_order
+            END,
+            snapshot_nfc_enabled = CASE
+              WHEN patrol_assignments.status IN ('releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.snapshot_nfc_enabled
+              ELSE excluded.snapshot_nfc_enabled
+            END,
+            snapshot_qr_fallback_enabled = CASE
+              WHEN patrol_assignments.status IN ('releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.snapshot_qr_fallback_enabled
+              ELSE excluded.snapshot_qr_fallback_enabled
             END
         `,
         [
@@ -934,6 +1007,9 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
           snapshotVersion,
           snapshotCreatedAt,
           "bootstrap",
+          snapshotAllowFreeOrder,
+          snapshotNfcEnabled,
+          snapshotQrFallbackEnabled,
           preserveLocalStatus ? 1 : 0
         ]
       );
@@ -946,6 +1022,8 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
         );
       }
     }
+
+    await applyBootstrapConflictResolutionsInTransaction(tx, ownerUserId, bootstrap);
 
     for (const assignmentId of cancelledAssignmentIds) {
       await finalizeCancelledAssignmentInTransaction(tx, ownerUserId, assignmentId);

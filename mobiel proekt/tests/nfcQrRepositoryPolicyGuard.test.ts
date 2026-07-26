@@ -15,6 +15,7 @@ test("repository enforces assignment scan policy before local point/outbox write
   assert.match(repositorySource, /method === "qr" && !policy\.qrFallbackEnabled/);
   assert.match(repositorySource, /throw new Error\(nfcDisabledMessage\)/);
   assert.match(repositorySource, /throw new Error\(qrDisabledMessage\)/);
+  assert.match(repositorySource, /status NOT IN \(\x27rejected\x27, \x27conflict\x27, \x27superseded\x27, \x27cancelled\x27, \x27invalidPayload\x27\)/);
 
   for (const [functionName, method] of [
     ["scanPointByNfc", "nfc"],
@@ -29,6 +30,13 @@ test("repository enforces assignment scan policy before local point/outbox write
     const outboxWrite = handler.indexOf("insertOutboxCommandInTransaction");
     assert.ok(guard >= 0 && guard < firstLocalWrite, functionName + " must guard before point result write");
     assert.ok(guard < outboxWrite, functionName + " must guard before outbox write");
+    const expectedScanCommand = "scanPatrolPoint" + (method === "nfc" ? "Nfc" : "Qr");
+    assert.ok(
+      handler.includes(
+        "findExistingPointScanCommand(tx, ownerUserId, assignmentId, point.pointId, \"" + expectedScanCommand + "\")"
+      ),
+      functionName + " must reuse an existing scan command"
+    );
     assert.match(handler, /assignment\.owner_user_id = \?/);
     assert.match(handler, /assignment\.contour_id = \?/);
     assert.match(handler, /point\.route_id = assignment\.route_id/);

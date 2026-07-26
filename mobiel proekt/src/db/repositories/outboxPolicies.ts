@@ -26,6 +26,47 @@ export function extractAssignmentId(payloadJson: string) {
   }
 }
 
+export type PatrolAssignmentIdentityInput = {
+  commandType?: string | null;
+  entityType?: string | null;
+  entityLocalId?: string | null;
+  payload?: string | Record<string, unknown> | null;
+};
+
+const patrolAssignmentCommandTypes = new Set([
+  "acceptPatrolRequest",
+  "takePatrolRequest"
+]);
+
+export function isPatrolAssignmentCommand(input: PatrolAssignmentIdentityInput) {
+  return input.entityType === "patrolAssignment"
+    || patrolAssignmentCommandTypes.has(input.commandType ?? "");
+}
+
+export function resolvePatrolAssignmentIdentity(input: PatrolAssignmentIdentityInput) {
+  if (!isPatrolAssignmentCommand(input)) {
+    return null;
+  }
+
+  const localId = typeof input.entityLocalId === "string" ? input.entityLocalId.trim() : "";
+  let payload: Record<string, unknown> | null = null;
+  if (typeof input.payload === "string") {
+    try {
+      const parsed = JSON.parse(input.payload);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        payload = parsed as Record<string, unknown>;
+      }
+    } catch {
+      payload = null;
+    }
+  } else if (input.payload && typeof input.payload === "object") {
+    payload = input.payload;
+  }
+
+  const payloadId = typeof payload?.assignmentId === "string" ? payload.assignmentId.trim() : "";
+  return localId || payloadId || null;
+}
+
 export function isProblemResponse(status: OutboxResponse["status"]) {
   return status === "conflict" || status === "rejected" || status === "retryLater";
 }

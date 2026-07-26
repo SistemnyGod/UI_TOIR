@@ -1,12 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
-import { currentContourId } from "@/core/environments";
 import { listPointFiles } from "@/db/repositories/filesRepository";
-import { getAssignmentById, getAssignmentScanPolicy, getPointForFill, listMissingCompleteAssignmentAttachmentIds, PointForFill, PointListItem } from "@/db/repositories/patrolRepository";
+import { assertPointCanBeOpened, getAssignmentById, getAssignmentScanPolicy, listMissingCompleteAssignmentAttachmentIds, PointForFill, PointListItem } from "@/db/repositories/patrolRepository";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
@@ -48,7 +47,7 @@ export function PointDetailScreen() {
         const [loadedAssignment, loadedPolicy, loadedPoint, files, missingIds] = await Promise.all([
           getAssignmentById(assignmentId),
           getAssignmentScanPolicy(assignmentId),
-          ownerUserId ? getPointForFill(assignmentId, pointId, ownerUserId, currentContourId) : Promise.resolve(null),
+          ownerUserId ? assertPointCanBeOpened(assignmentId, pointId) : Promise.resolve(null),
           listPointFiles(assignmentId, pointId),
           listMissingCompleteAssignmentAttachmentIds(assignmentId, pointId)
         ]);
@@ -173,7 +172,13 @@ export function PointDetailScreen() {
           <PrimaryButton
             icon="create-outline"
             label={point.status === "pending" ? "Заполнить метку" : "Изменить результат"}
-            onPress={() => router.push(`/patrol/assignment/${assignmentId}/point/${pointId}/fill`)}
+            onPress={() => {
+              void assertPointCanBeOpened(assignmentId, pointId).then(() => {
+                router.push(`/patrol/assignment/${assignmentId}/point/${pointId}/fill`);
+              }).catch((caught) => {
+                Alert.alert("\u0422\u043e\u0447\u043a\u0430 \u043f\u043e\u043a\u0430 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430", caught instanceof Error ? caught.message : "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0435 \u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0438\u0435 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u044b\u0435 \u0442\u043e\u0447\u043a\u0438.");
+              });
+            }}
           />
           <View style={styles.actionRow}>
             {scanPolicy.nfcEnabled ? <SecondaryAction label="NFC" onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-nfc`)} /> : null}

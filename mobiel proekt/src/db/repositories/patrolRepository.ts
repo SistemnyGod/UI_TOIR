@@ -26,6 +26,7 @@ type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "getFirstAsync" |
 const activePatrolConflictMessage = "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0435 \u0438\u043b\u0438 \u043f\u0435\u0440\u0435\u0434\u0430\u0439\u0442\u0435 \u0442\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0431\u0445\u043e\u0434.";
 const nfcDisabledMessage = "\u004e\u0046\u0043-\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 \u0434\u043b\u044f \u044d\u0442\u043e\u0433\u043e \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043e\u0442\u043a\u043b\u044e\u0447\u0435\u043d\u043e.";
 const qrDisabledMessage = "\u0051\u0052-\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 \u0434\u043b\u044f \u044d\u0442\u043e\u0433\u043e \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043e\u0442\u043a\u043b\u044e\u0447\u0435\u043d\u043e.";
+const frozenSnapshotAssignmentStatuses = new Set(["releasePending", "inProgress", "paused", "completedLocal", "syncing", "syncError", "authRequired", "needsDispatcherDecision"]);
 
 async function assertNoOtherActivePatrol(
   executor: SqlExecutor,
@@ -76,6 +77,9 @@ export type ActiveAssignment = {
   snapshotVersion?: number;
   snapshotCreatedAt?: string | null;
   snapshotSource?: string | null;
+  snapshotAllowFreeOrder?: number | null;
+  snapshotNfcEnabled?: number | null;
+  snapshotQrFallbackEnabled?: number | null;
 };
 
 export type PointListItem = {
@@ -205,7 +209,10 @@ export async function getActiveAssignment() {
         assignment.route_version_no AS routeVersionNo,
         assignment.snapshot_version AS snapshotVersion,
         assignment.snapshot_created_at AS snapshotCreatedAt,
-        assignment.snapshot_source AS snapshotSource
+        assignment.snapshot_source AS snapshotSource,
+        assignment.snapshot_allow_free_order AS snapshotAllowFreeOrder,
+        assignment.snapshot_nfc_enabled AS snapshotNfcEnabled,
+        assignment.snapshot_qr_fallback_enabled AS snapshotQrFallbackEnabled
       FROM patrol_assignments assignment
       LEFT JOIN routes route ON route.route_id = assignment.route_id
       LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
@@ -244,7 +251,10 @@ export async function getAssignmentByRequestId(requestId: string) {
         assignment.route_version_no AS routeVersionNo,
         assignment.snapshot_version AS snapshotVersion,
         assignment.snapshot_created_at AS snapshotCreatedAt,
-        assignment.snapshot_source AS snapshotSource
+        assignment.snapshot_source AS snapshotSource,
+        assignment.snapshot_allow_free_order AS snapshotAllowFreeOrder,
+        assignment.snapshot_nfc_enabled AS snapshotNfcEnabled,
+        assignment.snapshot_qr_fallback_enabled AS snapshotQrFallbackEnabled
       FROM patrol_assignments assignment
       LEFT JOIN routes route ON route.route_id = assignment.route_id
       LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
@@ -280,8 +290,19 @@ export async function takeRequestLocally(requestId: string) {
   }
   assertPatrolAction("acceptRequest", request.status);
   await assertNoOtherActivePatrol(db, ownerUserId);
-  const route = await db.getFirstAsync<{ version: number }>("SELECT version FROM routes WHERE route_id = ? LIMIT 1", [request.routeId]);
+  const route = await db.getFirstAsync<{
+    version: number;
+    allowFreeOrder: number | null;
+    nfcEnabled: number | null;
+    qrFallbackEnabled: number | null;
+  }>(
+    "SELECT version, allow_free_order AS allowFreeOrder, nfc_enabled AS nfcEnabled, qr_fallback_enabled AS qrFallbackEnabled FROM routes WHERE route_id = ? LIMIT 1",
+    [request.routeId]
+  );
   const snapshotVersion = route?.version ?? 0;
+  const snapshotAllowFreeOrder = route?.allowFreeOrder !== 0 ? 1 : 0;
+  const snapshotNfcEnabled = route?.nfcEnabled === 1 ? 1 : 0;
+  const snapshotQrFallbackEnabled = route?.qrFallbackEnabled !== 0 ? 1 : 0;
   const assignmentId = Crypto.randomUUID();
   const takenAtLocal = new Date().toISOString();
   const command: OutboxCommand = {
@@ -335,11 +356,14 @@ export async function takeRequestLocally(requestId: string) {
           route_version_no,
           snapshot_version,
           snapshot_created_at,
-          snapshot_source
+          snapshot_source,
+          snapshot_allow_free_order,
+          snapshot_nfc_enabled,
+          snapshot_qr_fallback_enabled
         )
-        VALUES (?, ?, ?, ?, ?, 'inProgress', ?, NULL, 0, ?, ?, ?, 'local')
+        VALUES (?, ?, ?, ?, ?, 'inProgress', ?, NULL, 0, ?, ?, ?, 'local', ?, ?, ?)
       `,
-      [assignmentId, ownerUserId, currentContourId, request.requestId, request.routeId, takenAtLocal, snapshotVersion, snapshotVersion, takenAtLocal]
+      [assignmentId, ownerUserId, currentContourId, request.requestId, request.routeId, takenAtLocal, snapshotVersion, snapshotVersion, takenAtLocal, snapshotAllowFreeOrder, snapshotNfcEnabled, snapshotQrFallbackEnabled]
     );
 
     await tx.runAsync(
@@ -421,7 +445,10 @@ export async function takeRequestLocally(requestId: string) {
       routeVersionNo: snapshotVersion,
       snapshotVersion,
       snapshotCreatedAt: takenAtLocal,
-      snapshotSource: "local"
+      snapshotSource: "local",
+      snapshotAllowFreeOrder,
+      snapshotNfcEnabled,
+      snapshotQrFallbackEnabled
     } satisfies ActiveAssignment,
     created: true
   };
@@ -440,8 +467,19 @@ export async function acceptRequestLocally(requestId: string) {
     throw new Error("Заявка не загружена на телефон.");
   }
   assertPatrolAction("acceptRequest", request.status);
-  const route = await db.getFirstAsync<{ version: number }>("SELECT version FROM routes WHERE route_id = ? LIMIT 1", [request.routeId]);
+  const route = await db.getFirstAsync<{
+    version: number;
+    allowFreeOrder: number | null;
+    nfcEnabled: number | null;
+    qrFallbackEnabled: number | null;
+  }>(
+    "SELECT version, allow_free_order AS allowFreeOrder, nfc_enabled AS nfcEnabled, qr_fallback_enabled AS qrFallbackEnabled FROM routes WHERE route_id = ? LIMIT 1",
+    [request.routeId]
+  );
   const snapshotVersion = route?.version ?? 0;
+  const snapshotAllowFreeOrder = route?.allowFreeOrder !== 0 ? 1 : 0;
+  const snapshotNfcEnabled = route?.nfcEnabled === 1 ? 1 : 0;
+  const snapshotQrFallbackEnabled = route?.qrFallbackEnabled !== 0 ? 1 : 0;
   const assignmentId = Crypto.randomUUID();
   const acceptedAtLocal = new Date().toISOString();
   const command: OutboxCommand = {
@@ -494,11 +532,14 @@ export async function acceptRequestLocally(requestId: string) {
             route_version_no,
             snapshot_version,
             snapshot_created_at,
-            snapshot_source
+            snapshot_source,
+            snapshot_allow_free_order,
+            snapshot_nfc_enabled,
+            snapshot_qr_fallback_enabled
           )
-          VALUES (?, ?, ?, ?, ?, 'accepted', NULL, NULL, 0, ?, ?, ?, 'local')
+          VALUES (?, ?, ?, ?, ?, 'accepted', NULL, NULL, 0, ?, ?, ?, 'local', ?, ?, ?)
         `,
-        [assignmentId, ownerUserId, currentContourId, request.requestId, request.routeId, snapshotVersion, snapshotVersion, new Date().toISOString()]
+        [assignmentId, ownerUserId, currentContourId, request.requestId, request.routeId, snapshotVersion, snapshotVersion, new Date().toISOString(), snapshotAllowFreeOrder, snapshotNfcEnabled, snapshotQrFallbackEnabled]
       );
 
       await snapshotRoutePointsInTransaction(tx, assignmentId, request.routeId);
@@ -531,7 +572,10 @@ export async function acceptRequestLocally(requestId: string) {
       routeVersionNo: snapshotVersion,
       snapshotVersion,
       snapshotCreatedAt: acceptedAtLocal,
-      snapshotSource: "local"
+      snapshotSource: "local",
+      snapshotAllowFreeOrder,
+      snapshotNfcEnabled,
+      snapshotQrFallbackEnabled
     } satisfies ActiveAssignment,
     created: true
   };
@@ -802,10 +846,42 @@ async function getExistingPointResultForScan(
 }
 
 
+type PointScanCommandType = "scanPatrolPointNfc" | "scanPatrolPointQr";
+
+async function findExistingPointScanCommand(
+  executor: SqlExecutor,
+  ownerUserId: string,
+  assignmentId: string,
+  pointId: string,
+  commandType: PointScanCommandType
+) {
+  const commands = await executor.getAllAsync<{ payloadJson: string }>(
+    `
+      SELECT payload_json AS payloadJson
+      FROM outbox_commands
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND command_type = ?
+        AND entity_local_id = ?
+        AND status NOT IN ('rejected', 'conflict', 'superseded', 'cancelled', 'invalidPayload')
+      ORDER BY created_at_local ASC
+    `,
+    [ownerUserId, currentContourId, commandType, pointId]
+  );
+
+  return commands.some((command) => {
+    try {
+      const payload = JSON.parse(command.payloadJson) as { assignmentId?: unknown; pointId?: unknown };
+      return payload.assignmentId === assignmentId && payload.pointId === pointId;
+    } catch {
+      return false;
+    }
+  });
+}
 export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
-  await assertScanMethodAllowed(assignmentId, "nfc");
+  const scanPolicy = await assertScanMethodAllowed(assignmentId, "nfc");
   const scannedCandidates = getNfcCodeCandidates(nfcCode);
   const points = await db.getAllAsync<{
     pointId: string;
@@ -882,6 +958,8 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
     };
   }
 
+  await assertPointOrderAllowed(db, ownerUserId, assignmentId, point.pointId, point.orderIndex, scanPolicy.allowFreeOrder);
+
   // The backend validates against RoutePoint.NfcCode, so after a tolerant local match
   // we send the normalized route value rather than a device-specific byte order variant.
 
@@ -904,8 +982,17 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
     status: "pending"
   };
 
+  let duplicateScan = false;
+
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      if (await findExistingPointScanCommand(tx, ownerUserId, assignmentId, point.pointId, "scanPatrolPointNfc")) {
+        duplicateScan = true;
+        return;
+      }
+
+      await assertPointOrderAllowed(tx, ownerUserId, assignmentId, point.pointId, point.orderIndex, scanPolicy.allowFreeOrder);
+
       await upsertPointResultInTransaction(tx, {
         ownerUserId,
         assignmentId,
@@ -920,12 +1007,33 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
         confirmationType: "nfc",
         nfcUidHash: normalizedNfcCode,
         scannedAtLocal,
-        photoClientFileIds: parseStringArray(existingResult?.photoClientFileIdsJson ?? null)
+        photoClientFileIds: parseStringArray(existingResult?.photoClientFileIdsJson ?? null),
+        requireInProgress: true
       });
 
       await insertOutboxCommandInTransaction(tx, command);
     })
   );
+
+  if (duplicateScan) {
+    return {
+      matched: true as const,
+      alreadyScanned: true as const,
+      point: {
+        pointId: point.pointId,
+        routeId: point.routeId,
+        name: point.name,
+        orderIndex: point.orderIndex,
+        required: point.required === 1,
+        requiresPhoto: point.requiresPhoto === 1,
+        status: "scanned" as const,
+        comment: existingResult?.comment ?? null,
+        issueTypeId: existingResult?.issueTypeId ?? null,
+        confirmationType: existingResult?.confirmationType ?? "nfc",
+        photoClientFileIds: parseStringArray(existingResult?.photoClientFileIdsJson ?? null)
+      } satisfies PointListItem
+    };
+  }
 
   requestSyncAfterMutation();
   void logMobileAction({
@@ -955,7 +1063,7 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
 export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
-  await assertScanMethodAllowed(assignmentId, "qr");
+  const scanPolicy = await assertScanMethodAllowed(assignmentId, "qr");
   const normalizedQr = qrCodeHash.trim();
   const point = await db.getFirstAsync<{
     pointId: string;
@@ -1012,6 +1120,8 @@ export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
     };
   }
 
+  await assertPointOrderAllowed(db, ownerUserId, assignmentId, point.pointId, point.orderIndex, scanPolicy.allowFreeOrder);
+
   const scannedAtLocal = new Date().toISOString();
   const command: OutboxCommand = {
     clientOperationId: Crypto.randomUUID(),
@@ -1031,8 +1141,17 @@ export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
     status: "pending"
   };
 
+  let duplicateScan = false;
+
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      if (await findExistingPointScanCommand(tx, ownerUserId, assignmentId, point.pointId, "scanPatrolPointQr")) {
+        duplicateScan = true;
+        return;
+      }
+
+      await assertPointOrderAllowed(tx, ownerUserId, assignmentId, point.pointId, point.orderIndex, scanPolicy.allowFreeOrder);
+
       await upsertPointResultInTransaction(tx, {
         ownerUserId,
         assignmentId,
@@ -1047,12 +1166,33 @@ export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
         confirmationType: "qr",
         nfcUidHash: null,
         scannedAtLocal,
-        photoClientFileIds: parseStringArray(existingResult?.photoClientFileIdsJson ?? null)
+        photoClientFileIds: parseStringArray(existingResult?.photoClientFileIdsJson ?? null),
+        requireInProgress: true
       });
 
       await insertOutboxCommandInTransaction(tx, command);
     })
   );
+
+  if (duplicateScan) {
+    return {
+      matched: true as const,
+      alreadyScanned: true as const,
+      point: {
+        pointId: point.pointId,
+        routeId: point.routeId,
+        name: point.name,
+        orderIndex: point.orderIndex,
+        required: point.required === 1,
+        requiresPhoto: point.requiresPhoto === 1,
+        status: "scanned" as const,
+        comment: existingResult?.comment ?? null,
+        issueTypeId: existingResult?.issueTypeId ?? null,
+        confirmationType: existingResult?.confirmationType ?? "qr",
+        photoClientFileIds: parseStringArray(existingResult?.photoClientFileIdsJson ?? null)
+      } satisfies PointListItem
+    };
+  }
   requestSyncAfterMutation();
 
   return {
@@ -1127,6 +1267,24 @@ export async function getPointForFill(assignmentId: string, pointId: string, own
   } satisfies PointForFill;
 }
 
+export async function assertPointCanBeOpened(
+  assignmentId: string,
+  pointId: string,
+  action: "editPoint" | "attachMedia" = "editPoint"
+) {
+  const ownerUserId = await requireOwnerUserId();
+  await assertPointActionAllowed(assignmentId, action);
+  const point = await getPointForFill(assignmentId, pointId, ownerUserId, currentContourId);
+  if (!point) {
+    throw new Error("\u041c\u0435\u0442\u043a\u0430 \u043d\u0435 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043d\u0430 \u043d\u0430 \u0442\u0435\u043b\u0435\u0444\u043e\u043d.");
+  }
+
+  const scanPolicy = await getAssignmentScanPolicy(assignmentId);
+  const db = await getDatabase();
+  await assertPointOrderAllowed(db, ownerUserId, assignmentId, pointId, point.orderIndex, scanPolicy.allowFreeOrder);
+  return point;
+}
+
 export async function savePointOk(assignmentId: string, pointId: string, comment: string) {
   return savePointResult({
     assignmentId,
@@ -1148,7 +1306,7 @@ export async function savePointIssue(assignmentId: string, pointId: string, comm
 }
 
 export async function deferPoint(assignmentId: string, pointId: string, input: DeferPointInput = {}) {
-  const draft = await persistPointDraft(assignmentId, pointId, input, "pending");
+  const draft = await persistPointDraft(assignmentId, pointId, input, "localOnly");
 
   void logMobileAction({
     eventType: "patrol.point.deferred",
@@ -1167,11 +1325,11 @@ async function persistPointDraft(
   assignmentId: string,
   pointId: string,
   input: DeferPointInput,
-  syncStatus: "localOnly" | "pending"
+  syncStatus: "localOnly"
 ) {
   const ownerUserId = await requireOwnerUserId();
   await assertPointActionAllowed(assignmentId, "editPoint");
-  const point = await getPointForFill(assignmentId, pointId, ownerUserId, currentContourId);
+  const point = await assertPointCanBeOpened(assignmentId, pointId);
   if (!point) {
     throw new Error("Метка не загружена на телефон.");
   }
@@ -1193,7 +1351,8 @@ async function persistPointDraft(
     confirmationType: point.confirmationType ?? "manual",
     nfcUidHash: point.nfcUidHash,
     scannedAtLocal: point.scannedAtLocal ?? new Date().toISOString(),
-    photoClientFileIds
+    photoClientFileIds,
+    requireInProgress: true
   });
 
   return {
@@ -1205,7 +1364,7 @@ async function persistPointDraft(
 export async function skipPoint(assignmentId: string, pointId: string, input: Pick<DeferPointInput, "comment" | "photoClientFileIds"> = {}) {
   const ownerUserId = await requireOwnerUserId();
   await assertPointActionAllowed(assignmentId, "editPoint");
-  const point = await getPointForFill(assignmentId, pointId, ownerUserId, currentContourId);
+  const point = await assertPointCanBeOpened(assignmentId, pointId);
   if (!point) {
     throw new Error("Метка не загружена на телефон.");
   }
@@ -1225,7 +1384,8 @@ export async function skipPoint(assignmentId: string, pointId: string, input: Pi
     confirmationType: "manual",
     nfcUidHash: null,
     scannedAtLocal: point.scannedAtLocal ?? completedAtLocal,
-    photoClientFileIds: input.photoClientFileIds ?? point.photoClientFileIds
+    photoClientFileIds: input.photoClientFileIds ?? point.photoClientFileIds,
+    requireInProgress: true
   });
 
   void logMobileAction({
@@ -1240,7 +1400,7 @@ export async function skipPoint(assignmentId: string, pointId: string, input: Pi
 export async function attachPhotoToPoint(assignmentId: string, pointId: string, file: LocalMobileFile) {
   const ownerUserId = await requireOwnerUserId();
   await assertPointActionAllowed(assignmentId, "attachMedia");
-  const point = await getPointForFill(assignmentId, pointId, ownerUserId, currentContourId);
+  const point = await assertPointCanBeOpened(assignmentId, pointId, "attachMedia");
   if (!point) {
     throw new Error("Метка не загружена на телефон.");
   }
@@ -1280,6 +1440,37 @@ export async function attachPhotoToPoint(assignmentId: string, pointId: string, 
   }).catch(() => undefined);
 }
 
+async function hasConsistentAssignmentSnapshot(
+  db: SqlExecutor,
+  assignment: ActiveAssignment,
+  points: PointListItem[],
+  ownerUserId: string
+): Promise<boolean> {
+  if (points.length === 0 || points.some((point) => point.routeId !== assignment.routeId)) {
+    return false;
+  }
+
+  const pointIds = new Set(points.map((point) => point.pointId));
+  if (pointIds.size !== points.length) {
+    return false;
+  }
+
+  const orphanResult = await db.getFirstAsync<{ count: number }>(
+    `
+      SELECT COUNT(*) AS count
+      FROM point_results result
+      LEFT JOIN assignment_route_points point
+        ON point.assignment_id = result.assignment_id
+       AND point.point_id = result.point_id
+      WHERE result.owner_user_id = ?
+        AND result.assignment_id = ?
+        AND point.point_id IS NULL
+    `,
+    [ownerUserId, assignment.assignmentId]
+  );
+
+  return (orphanResult?.count ?? 0) === 0;
+}
 export async function getReportReadiness(assignmentId: string): Promise<ReportReadiness> {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
@@ -1287,7 +1478,8 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
   const points = await listAssignmentPoints(assignmentId, ownerUserId, currentContourId);
   const problems: ReportProblem[] = [];
 
-  if (assignment?.routeVersionNo) {
+  // An accepted assignment may be refreshed to the current route version.
+  if (assignment?.status === "accepted" && assignment.routeVersionNo) {
     const route = await db.getFirstAsync<{ version: number }>(
       "SELECT version FROM routes WHERE route_id = ? LIMIT 1",
       [assignment.routeId]
@@ -1297,7 +1489,30 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
         pointId: "route-version",
         pointName: assignment.routeName,
         orderIndex: 0,
-        reason: "Маршрут обновлен после назначения. Синхронизируйте данные и получите актуальный чек-лист."
+        reason: "\u041c\u0430\u0440\u0448\u0440\u0443\u0442 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d \u043f\u043e\u0441\u043b\u0435 \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f. \u0421\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0438\u0440\u0443\u0439\u0442\u0435 \u0434\u0430\u043d\u043d\u044b\u0435 \u0438 \u043f\u043e\u043b\u0443\u0447\u0438\u0442\u0435 \u0430\u043a\u0442\u0443\u0430\u043b\u044c\u043d\u044b\u0439 \u0447\u0435\u043a-\u043b\u0438\u0441\u0442.",
+      });
+    }
+  }
+
+  // Once work has started, the assignment owns an immutable snapshot.
+  // The current routes.version is intentionally not consulted here.
+  if (assignment && frozenSnapshotAssignmentStatuses.has(assignment.status)) {
+    if (assignment.snapshotVersion !== assignment.routeVersionNo) {
+      problems.push({
+        pointId: "snapshot-version",
+        pointName: assignment.routeName,
+        orderIndex: 0,
+        reason: "\u0421\u043d\u0438\u043c\u043e\u043a \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043d\u0430\u0447\u0430\u0442\u043e\u0433\u043e \u043e\u0431\u0445\u043e\u0434\u0430 \u043d\u0435 \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u0435\u0442 \u0441 \u0432\u0435\u0440\u0441\u0438\u0435\u0439 \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f.",
+      });
+    }
+
+    const snapshotIsConsistent = await hasConsistentAssignmentSnapshot(db, assignment, points, ownerUserId);
+    if (!snapshotIsConsistent) {
+      problems.push({
+        pointId: "snapshot-integrity",
+        pointName: assignment.routeName,
+        orderIndex: 0,
+        reason: "\u0421\u043d\u0438\u043c\u043e\u043a \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043d\u0430\u0447\u0430\u0442\u043e\u0433\u043e \u043e\u0431\u0445\u043e\u0434\u0430 \u043f\u043e\u0432\u0440\u0435\u0436\u0434\u0451\u043d \u0438\u043b\u0438 \u043d\u0435\u043f\u043e\u043b\u043e\u043d.",
       });
     }
   }
@@ -1384,9 +1599,11 @@ export async function completeAssignmentLocally(assignmentId: string) {
   if (!canCreateCompletionCommand(true, readiness.ready)) {
     throw new Error("Отчет еще не готов к отправке.");
   }
+  const expectedAssignmentRevision = readiness.assignment.revision;
+
 
   const completedAtLocal = new Date().toISOString();
-  const pointResults = await buildCompletedPointResults(assignmentId);
+  const pointResults = await buildCompletedPointResults(db, assignmentId, ownerUserId, completedAtLocal);
   await assertCompletionAttachmentsAvailable(ownerUserId, assignmentId, pointResults);
   const photoCount = pointResults.reduce((sum, result) => sum + result.photoClientFileIds.length, 0);
   const command: OutboxCommand = {
@@ -1430,6 +1647,23 @@ export async function completeAssignmentLocally(assignmentId: string) {
       // the insert. This protects double taps and concurrent lifecycle callbacks
       // from creating two completion commands for one assignment.
       const queuedCompleteCommand = await getQueuedCompleteAssignmentCommand(tx, ownerUserId, assignmentId);
+      if (!queuedCompleteCommand) {
+        const currentAssignment = await tx.getFirstAsync<{ status: string; revision: number }>(
+          "SELECT status, revision FROM patrol_assignments WHERE owner_user_id = ? AND assignment_id = ? AND contour_id = ?",
+          [ownerUserId, assignmentId, currentContourId]
+        );
+        if (!currentAssignment || !canPatrolAction("completeAssignment", currentAssignment.status)) {
+          throw new Error(patrolActionError("completeAssignment", currentAssignment?.status ?? "missing") ?? "Отчет больше нельзя завершить.");
+        }
+        if (currentAssignment.revision !== expectedAssignmentRevision) {
+          throw new Error("Состояние назначения изменилось. Обновите данные и повторите завершение отчета.");
+        }
+        const currentPointResults = await buildCompletedPointResults(tx, assignmentId, ownerUserId, completedAtLocal);
+        if (JSON.stringify(currentPointResults) !== JSON.stringify(pointResults)) {
+          throw new Error("Состав точек изменился во время завершения. Проверьте отчет и повторите действие.");
+        }
+      }
+
       if (queuedCompleteCommand) {
         const existingCompletedAt = readiness.assignment?.completedAtLocal ?? queuedCompleteCommand.createdAtLocal;
         await tx.runAsync(
@@ -1518,6 +1752,7 @@ export async function getActiveAssignmentWithProgress() {
 }
 
 export type AssignmentScanPolicy = {
+  allowFreeOrder: boolean;
   nfcEnabled: boolean;
   qrFallbackEnabled: boolean;
 };
@@ -1525,11 +1760,24 @@ export type AssignmentScanPolicy = {
 export async function getAssignmentScanPolicy(assignmentId: string): Promise<AssignmentScanPolicy> {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
-  const row = await db.getFirstAsync<{ nfcEnabled: number | null; qrFallbackEnabled: number | null }>(
+  const row = await db.getFirstAsync<{
+    status: string;
+    snapshotAllowFreeOrder: number | null;
+    snapshotNfcEnabled: number | null;
+    snapshotQrFallbackEnabled: number | null;
+    allowFreeOrder: number | null;
+    nfcEnabled: number | null;
+    qrFallbackEnabled: number | null;
+  }>(
     `
       SELECT
+        assignment.status,
+        assignment.snapshot_allow_free_order AS snapshotAllowFreeOrder,
+        assignment.snapshot_nfc_enabled AS snapshotNfcEnabled,
+        assignment.snapshot_qr_fallback_enabled AS snapshotQrFallbackEnabled,
+        COALESCE(route.allow_free_order, 1) AS allowFreeOrder,
         COALESCE(route.nfc_enabled, 0) AS nfcEnabled,
-        COALESCE(route.qr_fallback_enabled, 0) AS qrFallbackEnabled
+        COALESCE(route.qr_fallback_enabled, 1) AS qrFallbackEnabled
       FROM patrol_assignments assignment
       LEFT JOIN routes route ON route.route_id = assignment.route_id
       WHERE assignment.owner_user_id = ?
@@ -1540,11 +1788,58 @@ export async function getAssignmentScanPolicy(assignmentId: string): Promise<Ass
     [ownerUserId, assignmentId, currentContourId]
   );
 
+  if (row && frozenSnapshotAssignmentStatuses.has(row.status)) {
+    return {
+      allowFreeOrder: row.snapshotAllowFreeOrder !== 0,
+      nfcEnabled: row.snapshotNfcEnabled === 1,
+      qrFallbackEnabled: row.snapshotQrFallbackEnabled !== 0
+    };
+  }
+
   return {
+    allowFreeOrder: row?.allowFreeOrder !== 0,
     nfcEnabled: row?.nfcEnabled === 1,
-    qrFallbackEnabled: row?.qrFallbackEnabled === 1
+    qrFallbackEnabled: row?.qrFallbackEnabled !== 0
   };
 }
+
+async function assertPointOrderAllowed(
+  db: SqlExecutor,
+  ownerUserId: string,
+  assignmentId: string,
+  pointId: string,
+  orderIndex: number,
+  allowFreeOrder: boolean
+) {
+  if (allowFreeOrder) {
+    return;
+  }
+
+  const unfinished = await db.getFirstAsync<{ pointId: string; name: string }>(
+    `
+      SELECT
+        point.point_id AS pointId,
+        point.name
+      FROM assignment_route_points point
+      LEFT JOIN point_results result
+        ON result.owner_user_id = ?
+       AND result.assignment_id = point.assignment_id
+       AND result.point_id = point.point_id
+      WHERE point.assignment_id = ?
+        AND point.order_index < ?
+        AND point.required = 1
+        AND COALESCE(result.status, 'pending') NOT IN ('ok', 'issue', 'skipped')
+      ORDER BY point.order_index ASC
+      LIMIT 1
+    `,
+    [ownerUserId, assignmentId, orderIndex]
+  );
+
+  if (unfinished && unfinished.pointId !== pointId) {
+    throw new Error(`\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0435 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u0443\u044e \u0442\u043e\u0447\u043a\u0443 \u00ab${unfinished.name}\u00bb.`);
+  }
+}
+
 async function assertScanMethodAllowed(assignmentId: string, method: "nfc" | "qr") {
   await assertPointActionAllowed(assignmentId, "scanAssignment");
   const policy = await getAssignmentScanPolicy(assignmentId);
@@ -1555,6 +1850,8 @@ async function assertScanMethodAllowed(assignmentId: string, method: "nfc" | "qr
   if (method === "qr" && !policy.qrFallbackEnabled) {
     throw new Error(qrDisabledMessage);
   }
+
+  return policy;
 }
 
 export async function getAssignmentById(assignmentId: string) {
@@ -1576,7 +1873,10 @@ export async function getAssignmentById(assignmentId: string) {
         assignment.route_version_no AS routeVersionNo,
         assignment.snapshot_version AS snapshotVersion,
         assignment.snapshot_created_at AS snapshotCreatedAt,
-        assignment.snapshot_source AS snapshotSource
+        assignment.snapshot_source AS snapshotSource,
+        assignment.snapshot_allow_free_order AS snapshotAllowFreeOrder,
+        assignment.snapshot_nfc_enabled AS snapshotNfcEnabled,
+        assignment.snapshot_qr_fallback_enabled AS snapshotQrFallbackEnabled
       FROM patrol_assignments assignment
       LEFT JOIN routes route ON route.route_id = assignment.route_id
       LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
@@ -1613,8 +1913,8 @@ async function updateAssignmentLifecycleLocally(
     assertPatrolAction(action, assignment.status);
   }
 
-  if (commandType === "startPatrolAssignment" && !["accepted", "paused", "inProgress"].includes(assignment.status)) {
-    throw new Error("Начать можно только принятую или приостановленную заявку.");
+  if (commandType === "startPatrolAssignment" && !["accepted", "inProgress"].includes(assignment.status)) {
+    throw new Error("Начать можно только принятую заявку.");
   }
 
   if (commandType === "startPatrolAssignment" || commandType === "resumePatrolAssignment") {
@@ -1704,8 +2004,8 @@ async function updateAssignmentLifecycleLocally(
       }
 
       if (commandType === "startPatrolAssignment"
-        && !["accepted", "paused", "inProgress"].includes(current.status)) {
-        throw new Error("Only an accepted or paused patrol can be started.");
+        && !["accepted", "inProgress"].includes(current.status)) {
+        throw new Error("Only an accepted patrol can be started.");
       }
 
       if (commandType === "pausePatrolAssignment" && current.status !== "inProgress") {
@@ -1856,9 +2156,13 @@ async function repairAssignmentContourBinding(
   );
 }
 
-async function buildCompletedPointResults(assignmentId: string) {
-  const db = await getDatabase();
-  const rows = await db.getAllAsync<{
+async function buildCompletedPointResults(
+  executor: SqlExecutor,
+  assignmentId: string,
+  ownerUserId: string,
+  fallbackCompletedAtLocal: string
+) {
+  const rows = await executor.getAllAsync<{
     pointId: string;
     status: string | null;
     comment: string | null;
@@ -1885,12 +2189,12 @@ async function buildCompletedPointResults(assignmentId: string) {
        AND result.assignment_id = assignment.assignment_id
        AND result.point_id = point.point_id
       WHERE assignment.assignment_id = ?
+        AND assignment.owner_user_id = ?
+        AND assignment.contour_id = ?
       ORDER BY point.order_index ASC
     `,
-    [assignmentId]
+    [assignmentId, ownerUserId, currentContourId]
   );
-
-  const fallbackCompletedAtLocal = new Date().toISOString();
 
   return rows.filter((row): row is typeof row & { status: "ok" | "issue" | "skipped" } => isTerminalPointStatus(row.status)).map((row) => ({
     pointId: row.pointId,
@@ -2027,7 +2331,7 @@ export async function restoreMissingPointAttachment(
     throw new Error("Для восстановления требуется новый файл.");
   }
 
-  await assertPointActionAllowed(assignmentId, "attachMedia");
+
   const assignment = await getAssignmentById(assignmentId);
   if (!assignment) {
     throw new Error("Назначение не найдено на телефоне.");
@@ -2129,7 +2433,7 @@ export async function restoreMissingPointAttachment(
         [ownerUserId, assignmentId, pointId]
       );
       if (!pointRow) {
-        throw new Error("Результат точки не найден; восстановление остановлено без изменения отчёта.");
+    throw new Error("\u041d\u0430\u0447\u0430\u0442\u044c \u043c\u043e\u0436\u043d\u043e \u0442\u043e\u043b\u044c\u043a\u043e \u043f\u0440\u0438\u043d\u044f\u0442\u0443\u044e \u0437\u0430\u044f\u0432\u043a\u0443.");
       }
       const persistedIds = parseStringArray(pointRow.photoClientFileIdsJson ?? null);
       const updatedPersistedIds = Array.from(new Set(
@@ -2236,7 +2540,7 @@ async function savePointResult({
 }) {
   const ownerUserId = await requireOwnerUserId();
   await assertPointActionAllowed(assignmentId, "editPoint");
-  const point = await getPointForFill(assignmentId, pointId, ownerUserId, currentContourId);
+  const point = await assertPointCanBeOpened(assignmentId, pointId);
   if (!point) {
     throw new Error("Метка не загружена на телефон.");
   }
@@ -2270,6 +2574,15 @@ async function savePointResult({
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const currentAssignment = await tx.getFirstAsync<{ status: string }>(
+        "SELECT status FROM patrol_assignments WHERE owner_user_id = ? AND assignment_id = ? AND contour_id = ?",
+        [ownerUserId, assignmentId, currentContourId]
+      );
+      const actionError = patrolActionError("editPoint", currentAssignment?.status ?? "missing");
+      if (actionError) {
+        throw new Error(actionError);
+      }
+
       await supersedePendingPointStatusCommands(tx, ownerUserId, assignmentId, pointId);
       await upsertPointResultInTransaction(tx, {
         ownerUserId,
@@ -2285,7 +2598,8 @@ async function savePointResult({
         confirmationType: point.confirmationType ?? "manual",
         nfcUidHash: point.nfcUidHash,
         scannedAtLocal: point.scannedAtLocal ?? completedAtLocal,
-        photoClientFileIds: point.photoClientFileIds
+        photoClientFileIds: point.photoClientFileIds,
+        requireInProgress: true
       });
 
       await insertOutboxCommandInTransaction(tx, command);

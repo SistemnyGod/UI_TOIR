@@ -28,3 +28,11 @@ test("assignment screens reload only for their assignment or a refreshed snapsho
     snapshotRefreshed: true
   }, assignmentId), true);
 });
+
+test("assignment screens reload after retry, rejection, or conflict", () => {
+  assert.equal(shouldReloadAssignmentAfterSync({
+    acceptedOperationIds: [],
+    completedAssignmentIds: [],
+    changedAssignmentIds: ["assignment-current"]
+  }, "assignment-current"), true);
+});

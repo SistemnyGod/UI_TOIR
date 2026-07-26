@@ -27,7 +27,7 @@ export function canAcceptRequest(status: string) {
 }
 
 export function canStartAssignment(status: string) {
-  return isNotBlocked(status) && (status === "accepted" || status === "paused" || status === "inProgress");
+  return isNotBlocked(status) && (status === "accepted" || status === "inProgress");
 }
 
 export function canPauseAssignment(status: string) {
@@ -47,7 +47,7 @@ export function canEditPoint(status: string) {
 }
 
 export function canAttachMedia(status: string) {
-  return isNotBlocked(status) && (status === "inProgress" || status === "completedLocal");
+  return isNotBlocked(status) && status === "inProgress";
 }
 
 export function canCompleteAssignment(status: string) {

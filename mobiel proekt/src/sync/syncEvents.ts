@@ -2,6 +2,7 @@ export type SyncEvent = {
   acceptedOperationIds: string[];
   completedAssignmentIds: string[];
   cancelledAssignmentIds?: string[];
+  changedAssignmentIds?: string[];
   snapshotRefreshed?: boolean;
 };
 
@@ -26,5 +27,6 @@ export function emitSyncEvent(event: SyncEvent) {
 export function shouldReloadAssignmentAfterSync(event: SyncEvent, assignmentId: string) {
   return event.snapshotRefreshed === true
     || event.completedAssignmentIds.includes(assignmentId)
-    || event.cancelledAssignmentIds?.includes(assignmentId) === true;
+    || event.cancelledAssignmentIds?.includes(assignmentId) === true
+    || event.changedAssignmentIds?.includes(assignmentId) === true;
 }

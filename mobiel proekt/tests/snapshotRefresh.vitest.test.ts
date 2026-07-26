@@ -17,3 +17,18 @@ describe("обновление snapshot принятого назначения"
     expect(plan.pointIds).toEqual(["point-1", "point-2"]);
   });
 });
+
+describe("active patrol snapshot", () => {
+  it("does not replace an in-progress snapshot even when it is empty", () => {
+    const plan = getSnapshotRefreshPlan({
+      localStatus: "inProgress",
+      localSnapshotVersion: 2,
+      localPointCount: 0,
+      routeVersion: 3,
+      incomingPointIds: ["point-1", "point-2"]
+    });
+
+    expect(plan.shouldReplace).toBe(false);
+    expect(plan.snapshotVersion).toBe(2);
+  });
+});

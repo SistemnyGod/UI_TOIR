@@ -1,4 +1,5 @@
 import * as Crypto from "expo-crypto";
+import * as SQLite from "expo-sqlite";
 
 import { currentContourId } from "@/core/environments";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
@@ -47,7 +48,7 @@ export async function saveWorkItems(items: WorkItemDto[]) {
           VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 'synced', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(task_id) DO UPDATE SET
             title = excluded.title,
-            status = CASE WHEN work_tasks.sync_status = 'pending' THEN work_tasks.status ELSE excluded.status END,
+            status = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.status ELSE excluded.status END,
             planned_at = excluded.planned_at,
             revision = excluded.revision,
             section_id = excluded.section_id,
@@ -64,7 +65,7 @@ export async function saveWorkItems(items: WorkItemDto[]) {
             actual_participants_json = excluded.actual_participants_json,
             attachments_json = excluded.attachments_json,
             capabilities_json = excluded.capabilities_json,
-            sync_status = CASE WHEN work_tasks.sync_status = 'pending' THEN work_tasks.sync_status ELSE 'synced' END
+            sync_status = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.sync_status ELSE 'synced' END
         `,
         [
           item.itemId,
@@ -177,7 +178,7 @@ export async function saveWorkTasks(tasks: WorkTaskDto[]) {
               FROM outbox_commands
               WHERE outbox_commands.entity_local_id = work_tasks.task_id
                 AND outbox_commands.command_type IN ('createWorkTask', 'updateWorkTask', 'pauseWorkTask', 'resumeWorkTask', 'completeWorkTask')
-                AND outbox_commands.status IN ('pending', 'sending', 'retryLater')
+                AND outbox_commands.status IN ('pending', 'sending', 'retryLater', 'waiting_auth', 'waiting_network', 'wrong_contour', 'blocked', 'rejected', 'conflict', 'invalidPayload')
          AND outbox_commands.contour_id = ?
             )
         `,
@@ -193,7 +194,7 @@ export async function saveWorkTasks(tasks: WorkTaskDto[]) {
               FROM outbox_commands
               WHERE outbox_commands.entity_local_id = work_tasks.task_id
                 AND outbox_commands.command_type IN ('createWorkTask', 'updateWorkTask', 'pauseWorkTask', 'resumeWorkTask', 'completeWorkTask')
-                AND outbox_commands.status IN ('pending', 'sending', 'retryLater')
+                AND outbox_commands.status IN ('pending', 'sending', 'retryLater', 'waiting_auth', 'waiting_network', 'wrong_contour', 'blocked', 'rejected', 'conflict', 'invalidPayload')
          AND outbox_commands.contour_id = ?
             )
         `,
@@ -224,16 +225,16 @@ export async function saveWorkTasks(tasks: WorkTaskDto[]) {
           ON CONFLICT(task_id) DO UPDATE SET
             owner_user_id = excluded.owner_user_id,
             title = excluded.title,
-            status = excluded.status,
+            status = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.status ELSE excluded.status END,
             planned_at = excluded.planned_at,
             revision = excluded.revision,
-            completed_at_local = excluded.completed_at_local,
+            completed_at_local = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.completed_at_local ELSE excluded.completed_at_local END,
             section_id = excluded.section_id,
             section_name = excluded.section_name,
             employee_id = excluded.employee_id,
             employee_name = excluded.employee_name,
             created_at_local = excluded.created_at_local,
-            sync_status = excluded.sync_status
+            sync_status = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.sync_status ELSE excluded.sync_status END
         `,
         [
           task.taskId,
@@ -401,20 +402,16 @@ export async function startPlannedWorkLocally(item: WorkItemDto, employee: Mobil
   const taskId = Crypto.randomUUID();
   const startedAtLocal = new Date().toISOString();
   const db = await getDatabase();
-  const command = createWorkTaskOutboxCommand({
-    ownerUserId,
-    commandType: "startPlannedWork",
-    payload: {
-      taskId,
-      planTaskId: item.planTaskId,
-      employeeId: employee.employeeId,
-      baseRevision: item.revision,
-      startedAtLocal
-    },
-    taskId,
-    createdAtLocal: startedAtLocal
-  });
   const result = await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    const currentItem = await tx.getFirstAsync<{ taskId: string; status: WorkTaskDto["status"]; revision: number }>(
+      "SELECT task_id AS taskId, status, revision FROM work_tasks WHERE task_id = ? AND owner_user_id = ? AND item_kind = 'planTask'",
+      [item.itemId, ownerUserId]
+    );
+    if (!currentItem) {
+      throw new Error("Работа не найдена на телефоне.");
+    }
+    assertEmuTaskAction("start", currentItem.status);
+
     const existing = await tx.getFirstAsync<{ taskId: string }>(
       `
         SELECT task_id AS taskId
@@ -427,7 +424,7 @@ export async function startPlannedWorkLocally(item: WorkItemDto, employee: Mobil
       `,
       [ownerUserId, item.planTaskId]
     );
-    await tx.runAsync(
+    const capabilitiesResult = await tx.runAsync(
       `
         UPDATE work_tasks
         SET capabilities_json = ?
@@ -437,13 +434,30 @@ export async function startPlannedWorkLocally(item: WorkItemDto, employee: Mobil
       `,
       [
         JSON.stringify({ canStart: false, canJoin: false, canReplace: false, canPause: false, canResume: false, canComplete: false }),
-        item.itemId,
+        currentItem.taskId,
         ownerUserId
       ]
     );
+    if (capabilitiesResult.changes !== 1) {
+      throw new Error("Работа изменилась до запуска.");
+    }
     if (existing) {
       return existing.taskId;
     }
+
+    const command = createWorkTaskOutboxCommand({
+      ownerUserId,
+      commandType: "startPlannedWork",
+      payload: {
+        taskId,
+        planTaskId: item.planTaskId,
+        employeeId: employee.employeeId,
+        baseRevision: currentItem.revision,
+        startedAtLocal
+      },
+      taskId,
+      createdAtLocal: startedAtLocal
+    });
     await tx.runAsync(
       `INSERT INTO work_tasks (
         task_id, owner_user_id, title, status, planned_at, revision, completed_at_local,
@@ -496,25 +510,51 @@ async function enqueueParticipantChange(
   assertEmuTaskAction(commandType === "joinWorkTask" ? "start" : "edit", item.status);
   const now = new Date().toISOString();
   const db = await getDatabase();
-  const command = createWorkTaskOutboxCommand({
-    ownerUserId,
-    commandType,
-    payload: {
-      taskId,
-      employeeId: employee.employeeId,
-      baseRevision: item.revision,
-      startedAtLocal: now,
-      changedAtLocal: now,
-      ...extraPayload
-    },
-    taskId,
-    createdAtLocal: now
-  });
   await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
-    await tx.runAsync("UPDATE work_tasks SET sync_status = 'pending', status = 'inProgress' WHERE task_id = ? AND owner_user_id = ?", [item.itemId, ownerUserId]);
+    const currentTask = await getCurrentWorkTaskInTransaction(tx, ownerUserId, item.itemId);
+    const action = commandType === "joinWorkTask" ? "start" : "edit";
+    assertEmuTaskAction(action, currentTask.status);
+    const command = createWorkTaskOutboxCommand({
+      ownerUserId,
+      commandType,
+      payload: {
+        taskId,
+        employeeId: employee.employeeId,
+        baseRevision: currentTask.revision,
+        startedAtLocal: now,
+        changedAtLocal: now,
+        ...extraPayload
+      },
+      taskId,
+      createdAtLocal: now
+    });
+    const result = await tx.runAsync(
+      "UPDATE work_tasks SET sync_status = 'pending', status = 'inProgress' WHERE task_id = ? AND owner_user_id = ?",
+      [currentTask.taskId, ownerUserId]
+    );
+    if (result.changes !== 1) {
+      throw new Error("Работа изменилась до сохранения.");
+    }
     await insertOutboxCommandInTransaction(tx, command);
   }));
   requestSyncAfterMutation();
+}
+
+type CurrentWorkTaskState = {
+  taskId: string;
+  status: WorkTaskDto["status"];
+  revision: number;
+};
+
+async function getCurrentWorkTaskInTransaction(tx: Pick<SQLite.SQLiteDatabase, "getFirstAsync">, ownerUserId: string, taskId: string) {
+  const task = await tx.getFirstAsync<CurrentWorkTaskState>(
+    "SELECT task_id AS taskId, status, revision FROM work_tasks WHERE task_id = ? AND owner_user_id = ?",
+    [taskId, ownerUserId]
+  );
+  if (!task) {
+    throw new Error("Работа не найдена на телефоне.");
+  }
+  return task;
 }
 
 export async function updateWorkTaskLocally(input: UpdateWorkTaskInput) {
@@ -527,23 +567,24 @@ export async function updateWorkTaskLocally(input: UpdateWorkTaskInput) {
   }
 
   const db = await getDatabase();
-  const command = createWorkTaskOutboxCommand({
-    ownerUserId,
-    commandType: "updateWorkTask",
-    payload: {
-      taskId: input.task.taskId,
-      sectionId: input.sectionId,
-      taskDescription: title,
-      baseRevision: input.task.revision,
-      updatedAtLocal
-    },
-    taskId: input.task.taskId,
-    createdAtLocal: updatedAtLocal
-  });
-
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
-      await tx.runAsync(
+      const currentTask = await getCurrentWorkTaskInTransaction(tx, ownerUserId, input.task.taskId);
+      assertEmuTaskAction("edit", currentTask.status);
+      const command = createWorkTaskOutboxCommand({
+        ownerUserId,
+        commandType: "updateWorkTask",
+        payload: {
+          taskId: currentTask.taskId,
+          sectionId: input.sectionId,
+          taskDescription: title,
+          baseRevision: currentTask.revision,
+          updatedAtLocal
+        },
+        taskId: currentTask.taskId,
+        createdAtLocal: updatedAtLocal
+      });
+      const result = await tx.runAsync(
         `
           UPDATE work_tasks
           SET title = ?,
@@ -553,9 +594,11 @@ export async function updateWorkTaskLocally(input: UpdateWorkTaskInput) {
           WHERE task_id = ?
             AND owner_user_id = ?
         `,
-        [title, input.sectionId, input.sectionName, input.task.taskId, ownerUserId]
+        [title, input.sectionId, input.sectionName, currentTask.taskId, ownerUserId]
       );
-
+      if (result.changes !== 1) {
+        throw new Error("Работа изменилась до сохранения.");
+      }
       await insertOutboxCommandInTransaction(tx, command);
     })
   );
@@ -567,36 +610,38 @@ export async function pauseWorkTaskLocally(task: WorkTaskDto, comment: string) {
   assertEmuTaskAction("pause", task.status);
   const pausedAtLocal = new Date().toISOString();
   const db = await getDatabase();
-  const command = createWorkTaskOutboxCommand({
-    ownerUserId,
-    commandType: "pauseWorkTask",
-    payload: {
-      taskId: task.taskId,
-      baseRevision: task.revision,
-      pausedAtLocal,
-      comment: comment.trim()
-    },
-    taskId: task.taskId,
-    createdAtLocal: pausedAtLocal
-  });
-
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
       if (await hasActiveWorkTaskCommand(tx, ownerUserId, task.taskId, "pauseWorkTask")) {
         return;
       }
-
-      await tx.runAsync(
-      `
-        UPDATE work_tasks
-        SET status = 'paused',
-            sync_status = 'pending'
-        WHERE task_id = ?
-          AND owner_user_id = ?
-      `,
-      [task.taskId, ownerUserId]
-    );
-
+      const currentTask = await getCurrentWorkTaskInTransaction(tx, ownerUserId, task.taskId);
+      assertEmuTaskAction("pause", currentTask.status);
+      const command = createWorkTaskOutboxCommand({
+        ownerUserId,
+        commandType: "pauseWorkTask",
+        payload: {
+          taskId: currentTask.taskId,
+          baseRevision: currentTask.revision,
+          pausedAtLocal,
+          comment: comment.trim()
+        },
+        taskId: currentTask.taskId,
+        createdAtLocal: pausedAtLocal
+      });
+      const result = await tx.runAsync(
+        `
+          UPDATE work_tasks
+          SET status = 'paused',
+              sync_status = 'pending'
+          WHERE task_id = ?
+            AND owner_user_id = ?
+        `,
+        [currentTask.taskId, ownerUserId]
+      );
+      if (result.changes !== 1) {
+        throw new Error("Работа изменилась до сохранения.");
+      }
       await insertOutboxCommandInTransaction(tx, command);
     })
   );
@@ -608,36 +653,38 @@ export async function resumeWorkTaskLocally(task: WorkTaskDto, comment: string) 
   assertEmuTaskAction("resume", task.status);
   const resumedAtLocal = new Date().toISOString();
   const db = await getDatabase();
-  const command = createWorkTaskOutboxCommand({
-    ownerUserId,
-    commandType: "resumeWorkTask",
-    payload: {
-      taskId: task.taskId,
-      baseRevision: task.revision,
-      resumedAtLocal,
-      comment: comment.trim()
-    },
-    taskId: task.taskId,
-    createdAtLocal: resumedAtLocal
-  });
-
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
       if (await hasActiveWorkTaskCommand(tx, ownerUserId, task.taskId, "resumeWorkTask")) {
         return;
       }
-
-      await tx.runAsync(
-      `
-        UPDATE work_tasks
-        SET status = 'inProgress',
-            sync_status = 'pending'
-        WHERE task_id = ?
-          AND owner_user_id = ?
-      `,
-      [task.taskId, ownerUserId]
-    );
-
+      const currentTask = await getCurrentWorkTaskInTransaction(tx, ownerUserId, task.taskId);
+      assertEmuTaskAction("resume", currentTask.status);
+      const command = createWorkTaskOutboxCommand({
+        ownerUserId,
+        commandType: "resumeWorkTask",
+        payload: {
+          taskId: currentTask.taskId,
+          baseRevision: currentTask.revision,
+          resumedAtLocal,
+          comment: comment.trim()
+        },
+        taskId: currentTask.taskId,
+        createdAtLocal: resumedAtLocal
+      });
+      const result = await tx.runAsync(
+        `
+          UPDATE work_tasks
+          SET status = 'inProgress',
+              sync_status = 'pending'
+          WHERE task_id = ?
+            AND owner_user_id = ?
+        `,
+        [currentTask.taskId, ownerUserId]
+      );
+      if (result.changes !== 1) {
+        throw new Error("Работа изменилась до сохранения.");
+      }
       await insertOutboxCommandInTransaction(tx, command);
     })
   );
@@ -647,7 +694,6 @@ export async function resumeWorkTaskLocally(task: WorkTaskDto, comment: string) 
 export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: string) {
   const ownerUserId = await requireOwnerUserId();
   assertEmuTaskAction("complete", task.status);
-
   const comment = resultComment.trim();
   if (!comment) {
     throw new Error("Заполните комментарий для завершения работы.");
@@ -655,38 +701,40 @@ export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: 
 
   const completedAtLocal = new Date().toISOString();
   const db = await getDatabase();
-  const command = createWorkTaskOutboxCommand({
-    ownerUserId,
-    commandType: "completeWorkTask",
-    payload: {
-      taskId: task.taskId,
-      baseRevision: task.revision,
-      completedAtLocal,
-      resultStatus: "completed",
-      resultComment: comment
-    },
-    taskId: task.taskId,
-    createdAtLocal: completedAtLocal
-  });
-
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
       if (await hasActiveWorkTaskCommand(tx, ownerUserId, task.taskId, "completeWorkTask")) {
         return;
       }
-
-      await tx.runAsync(
-      `
-        UPDATE work_tasks
-        SET status = 'completedLocal',
-            completed_at_local = ?,
-            sync_status = 'pending'
-        WHERE task_id = ?
-          AND owner_user_id = ?
-      `,
-      [completedAtLocal, task.taskId, ownerUserId]
-    );
-
+      const currentTask = await getCurrentWorkTaskInTransaction(tx, ownerUserId, task.taskId);
+      assertEmuTaskAction("complete", currentTask.status);
+      const command = createWorkTaskOutboxCommand({
+        ownerUserId,
+        commandType: "completeWorkTask",
+        payload: {
+          taskId: currentTask.taskId,
+          baseRevision: currentTask.revision,
+          completedAtLocal,
+          resultStatus: "completed",
+          resultComment: comment
+        },
+        taskId: currentTask.taskId,
+        createdAtLocal: completedAtLocal
+      });
+      const result = await tx.runAsync(
+        `
+          UPDATE work_tasks
+          SET status = 'completedLocal',
+              completed_at_local = ?,
+              sync_status = 'pending'
+          WHERE task_id = ?
+            AND owner_user_id = ?
+        `,
+        [completedAtLocal, currentTask.taskId, ownerUserId]
+      );
+      if (result.changes !== 1) {
+        throw new Error("Работа изменилась до сохранения.");
+      }
       await insertOutboxCommandInTransaction(tx, command);
     })
   );

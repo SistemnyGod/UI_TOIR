@@ -2,7 +2,7 @@ import * as Crypto from "expo-crypto";
 import * as SQLite from "expo-sqlite";
 
 import { currentContourId } from "@/core/environments";
-import { getDatabase } from "@/db/database";
+import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import type { PointListItem } from "@/db/repositories/patrolRepository";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
@@ -129,10 +129,15 @@ export async function upsertPointResult(input: {
   nfcUidHash: string | null;
   scannedAtLocal: string | null;
   photoClientFileIds: string[];
+  requireInProgress?: boolean;
 }) {
   const db = await getDatabase();
-  await withSqliteBusyRetry(() => upsertPointResultInTransaction(db, input));
-  requestSyncAfterMutation();
+  await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    await upsertPointResultInTransaction(tx, input);
+  }));
+  if (input.syncStatus !== "localOnly") {
+    requestSyncAfterMutation();
+  }
 }
 
 export async function upsertPointResultInTransaction(executor: SqlExecutor, input: {
@@ -150,7 +155,18 @@ export async function upsertPointResultInTransaction(executor: SqlExecutor, inpu
   nfcUidHash: string | null;
   scannedAtLocal: string | null;
   photoClientFileIds: string[];
+  requireInProgress?: boolean;
 }) {
+  if (input.requireInProgress) {
+    const assignment = await executor.getFirstAsync<{ status: string }>(
+      "SELECT status FROM patrol_assignments WHERE owner_user_id = ? AND assignment_id = ? AND contour_id = ?",
+      [input.ownerUserId, input.assignmentId, currentContourId]
+    );
+    if (assignment?.status !== "inProgress") {
+      throw new Error("Point action is unavailable after patrol completion.");
+    }
+  }
+
   const existing = await executor.getFirstAsync<{ localResultId: string }>(
     `
       SELECT local_result_id AS localResultId

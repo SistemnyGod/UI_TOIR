@@ -86,7 +86,7 @@ async function calculateClientFileHash(
 
   try {
     if (effectiveTotalBytes <= 0) {
-      throw new Error("��������� ���� ��� ��� ������ �� ������� ����������.");
+      throw new Error("Невозможно вычислить SHA-256: размер файла не определён.");
     }
 
     while (processedBytes < effectiveTotalBytes) {

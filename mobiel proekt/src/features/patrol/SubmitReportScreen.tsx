@@ -57,7 +57,7 @@ export function SubmitReportScreen() {
       .catch((error) => {
         void logMobileError("report.screen.load.failed", error);
         if (isMounted) {
-          setLoadError(error instanceof Error ? error.message : "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ Р»РѕРєР°Р»СЊРЅС‹Р№ РѕС‚С‡С‘С‚.");
+          setLoadError(error instanceof Error ? error.message : "Не удалось прочитать локальный отчёт.");
         }
       });
 
@@ -119,17 +119,17 @@ export function SubmitReportScreen() {
       setDelivery(await loadDelivery(assignmentId));
 
       if (syncResult.skipped === "offline") {
-        setSyncNotice("РќРµС‚ РїРѕРґРєР»СЋС‡РµРЅРёСЏ. РћС‚С‡РµС‚ СЃРѕС…СЂР°РЅРµРЅ Рё Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё РїРѕРІС‚РѕСЂРёС‚СЃСЏ РїРѕСЃР»Рµ РїРѕСЏРІР»РµРЅРёСЏ СЃРµС‚Рё.");
+        setSyncNotice("Нет подключения. Отчет сохранен и автоматически повторится после появления сети.");
       } else if (syncResult.skipped === "serverUnavailable") {
-        setSyncNotice("РЎРµСЂРІРµСЂ РІСЂРµРјРµРЅРЅРѕ РЅРµРґРѕСЃС‚СѓРїРµРЅ. РћС‚С‡РµС‚ РѕСЃС‚Р°РµС‚СЃСЏ РЅР° С‚РµР»РµС„РѕРЅРµ; СЃР»РµРґСѓСЋС‰РёР№ РїРѕРІС‚РѕСЂ СѓР¶Рµ Р·Р°РїР»Р°РЅРёСЂРѕРІР°РЅ.");
+        setSyncNotice("Сервер временно недоступен. Отчет остается на телефоне; следующий повтор уже запланирован.");
       } else if (syncResult.skipped === "unauthenticated") {
-        setSyncNotice("РЎРµСЃСЃРёСЏ РґРµР№СЃС‚РІРёС‚РµР»СЊРЅРѕ РёСЃС‚РµРєР»Р°. РћС‚С‡РµС‚ СЃРѕС…СЂР°РЅРµРЅ РЅР° С‚РµР»РµС„РѕРЅРµ Рё РѕС‚РїСЂР°РІРёС‚СЃСЏ РїРѕСЃР»Рµ РІС…РѕРґР°.");
+        setSyncNotice("Сессия действительно истекла. Отчет сохранен на телефоне и отправится после входа.");
       } else if (syncResult.skipped === "failed") {
-        setSyncNotice("РћС‚РїСЂР°РІРєР° РїСЂРµСЂРІР°Р»Р°СЃСЊ. Р”Р°РЅРЅС‹Рµ СЃРѕС…СЂР°РЅРµРЅС‹ вЂ” РјРѕР¶РЅРѕ РїРѕРІС‚РѕСЂРёС‚СЊ СЃРµР№С‡Р°СЃ РёР»Рё РґРѕР¶РґР°С‚СЊСЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРѕР№ РѕС‚РїСЂР°РІРєРё.");
+        setSyncNotice("Отправка прервалась. Данные сохранены — можно повторить сейчас или дождаться автоматической отправки.");
       }
     } catch (error) {
       setDelivery(await loadDelivery(assignmentId));
-      setSyncNotice(error instanceof Error ? error.message : "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ РѕС‚РїСЂР°РІРєСѓ. РћС‚С‡РµС‚ СЃРѕС…СЂР°РЅРµРЅ РЅР° С‚РµР»РµС„РѕРЅРµ.");
+      setSyncNotice(error instanceof Error ? error.message : "Не удалось запустить отправку. Отчет сохранен на телефоне.");
     } finally {
       setIsSubmitting(false);
     }
@@ -155,13 +155,13 @@ export function SubmitReportScreen() {
 
   if (!readiness) {
     return (
-      <Screen title="РћС‚РїСЂР°РІРєР° РѕС‚С‡РµС‚Р°" subtitle="РџСЂРѕРІРµСЂСЏРµРј С‚РѕС‡РєРё Рё Р»РѕРєР°Р»СЊРЅРѕ СЃРѕС…СЂР°РЅРµРЅРЅС‹Рµ РґР°РЅРЅС‹Рµ.">
+      <Screen title="Отправка отчета" subtitle="Проверяем точки и локально сохраненные данные.">
         {loadError ? (
           <Card>
             <Text style={styles.loadError}>{loadError}</Text>
             <PrimaryButton
               icon="refresh-outline"
-              label="РџРѕРІС‚РѕСЂРёС‚СЊ РїСЂРѕРІРµСЂРєСѓ"
+              label="Повторить проверку"
               onPress={() => setReloadRevision((value) => value + 1)}
               variant="secondary"
             />
@@ -173,38 +173,38 @@ export function SubmitReportScreen() {
 
   const actionDisabled = isSubmitting || (!readiness.ready && problemGroups.length === 0);
   const primaryLabel = !readiness.ready && problemGroups[0]
-    ? problemGroups[0].pointId === "route-empty" ? "РћС‚РєСЂС‹С‚СЊ СЃРїРёСЃРѕРє С‚РѕС‡РµРє" : `РџРµСЂРµР№С‚Рё Рє С‚РѕС‡РєРµ ${problemGroups[0].orderIndex}`
+    ? problemGroups[0].pointId === "route-empty" ? "Открыть список точек" : `Перейти к точке ${problemGroups[0].orderIndex}`
     : presentation.buttonLabel;
   const primaryIcon = !readiness.ready ? "arrow-forward-outline" : actionIcon(presentation.action);
 
   return (
-    <Screen title="РџСЂРѕРІРµСЂРєР° РѕС‚С‡С‘С‚Р°" subtitle="РСЃРїСЂР°РІСЊС‚Рµ РЅРµР·Р°РїРѕР»РЅРµРЅРЅС‹Рµ С‚РѕС‡РєРё РёР»Рё Р·Р°РІРµСЂС€РёС‚Рµ РѕР±С…РѕРґ.">
+    <Screen title="Проверка отчёта" subtitle="Исправьте незаполненные точки или завершите обход.">
       <Card>
         <View style={styles.row}>
-          <Text style={[styles.title, { color: colors.text }]}>{readiness.assignment?.routeName ?? "РћР±С…РѕРґ"}</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{readiness.assignment?.routeName ?? "Обход"}</Text>
           <StatusPill
-            label={readiness.ready ? "Р’СЃРµ С‚РѕС‡РєРё Р·Р°РїРѕР»РЅРµРЅС‹" : `РћСЃС‚Р°Р»РѕСЃСЊ: ${problemGroups.length}`}
+            label={readiness.ready ? "Все точки заполнены" : `Осталось: ${problemGroups.length}`}
             tone={readiness.ready ? "success" : "warning"}
           />
         </View>
         <View style={styles.progressRow}>
-          <ProgressValue label="РџСЂРѕР№РґРµРЅРѕ" value={`${readiness.progress.completed}/${readiness.progress.total}`} />
-          <ProgressValue label="Р—Р°РјРµС‡Р°РЅРёСЏ" value={String(readiness.progress.issues)} />
-          <ProgressValue label="РћС‚Р»РѕР¶РµРЅРѕ" value={String(readiness.progress.deferred)} />
+          <ProgressValue label="Пройдено" value={`${readiness.progress.completed}/${readiness.progress.total}`} />
+          <ProgressValue label="Замечания" value={String(readiness.progress.issues)} />
+          <ProgressValue label="Отложено" value={String(readiness.progress.deferred)} />
         </View>
       </Card>
 
       <DeliveryCard
         detail={presentation.detail}
         lastUpdate={delivery?.updatedAtLocal ?? null}
-        title={isSubmitting ? "РџСЂРѕРІРµСЂСЏРµРј РґРѕСЃС‚Р°РІРєСѓвЂ¦" : presentation.title}
+        title={isSubmitting ? "Проверяем доставку…" : presentation.title}
         tone={presentation.tone}
         status={delivery?.status ?? null}
       />
 
       {readiness.problems.length > 0 ? (
         <Card>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>РќСѓР¶РЅРѕ Р·Р°РїРѕР»РЅРёС‚СЊ РїРµСЂРµРґ РѕС‚РїСЂР°РІРєРѕР№</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Нужно заполнить перед отправкой</Text>
           {problemGroups.map((problem) => (
             <ProblemGroupButton
               key={problem.pointId}
@@ -223,7 +223,7 @@ export function SubmitReportScreen() {
         <PrimaryButton
           disabled={actionDisabled}
           icon={primaryIcon}
-          label={isSubmitting ? "РџСЂРѕРІРµСЂСЏРµРј РґРѕСЃС‚Р°РІРєСѓвЂ¦" : primaryLabel}
+          label={isSubmitting ? "Проверяем доставку…" : primaryLabel}
           onPress={handleScreenPrimaryAction}
           size="large"
         />
@@ -232,12 +232,12 @@ export function SubmitReportScreen() {
       <View style={styles.secondaryLinks}>
         <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} style={styles.secondaryLink}>
           <Ionicons color={colors.primary} name="list-outline" size={18} />
-          <Text style={[styles.secondaryLinkText, { color: colors.primary }]}>Р’СЃРµ С‚РѕС‡РєРё</Text>
+          <Text style={[styles.secondaryLinkText, { color: colors.primary }]}>Все точки</Text>
         </Pressable>
         {presentation.action !== "done" ? (
           <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push("/settings/sync-queue" as never)} style={styles.secondaryLink}>
             <Ionicons color={colors.primary} name="cloud-upload-outline" size={18} />
-            <Text style={[styles.secondaryLinkText, { color: colors.primary }]}>РџРѕРґСЂРѕР±РЅРµРµ РѕР± РѕС‚РїСЂР°РІРєРµ</Text>
+            <Text style={[styles.secondaryLinkText, { color: colors.primary }]}>Подробнее об отправке</Text>
           </Pressable>
         ) : null}
       </View>
@@ -293,7 +293,7 @@ function DeliveryCard({
         <Text style={[styles.deliveryTitle, { color: palette.color }]}>{title}</Text>
         <Text style={styles.deliveryDetail}>{detail}</Text>
         <Text style={styles.deliveryState}>{deliveryStateLabel(status)}</Text>
-        {lastUpdate ? <Text style={styles.deliveryTime}>РћР±РЅРѕРІР»РµРЅРѕ {formatTime(lastUpdate)}</Text> : null}
+        {lastUpdate ? <Text style={styles.deliveryTime}>Обновлено {formatTime(lastUpdate)}</Text> : null}
       </View>
     </View>
   );

@@ -34,6 +34,7 @@ import {
   resetStaleSendingOutboxCommands
 } from "@/db/repositories/outboxRepository";
 import { OutboxCommand, OutboxResponse } from "@/domain/sync/syncTypes";
+import type { LocalMobileFile } from "@/domain/files/fileTypes";
 import { getPendingOutboxBatch } from "@/sync/outboxProcessor";
 import { findMissingClientFileIds } from "@/sync/fileReferenceIntegrity";
 import { SerializedTaskQueue } from "@/sync/serializedTaskQueue";
@@ -42,7 +43,8 @@ import { getCommandAggregateKey } from "@/sync/outboxOrderingPolicy";
 import { mapWithConcurrency } from "@/sync/boundedAsync";
 import { shouldContinueOutboxSync } from "@/sync/outboxContinuationPolicy";
 import { emitSyncEvent } from "@/sync/syncEvents";
-import { extractUploadClientFileIds } from "@/sync/uploadCandidatePolicy";
+import { extractUploadClientFileIds, extractUploadFileReferences } from "@/sync/uploadCandidatePolicy";
+import type { UploadFileReference } from "@/sync/uploadCandidatePolicy";
 import { FileUploadFailureDisposition, PermanentFileUploadError, getFileUploadFailureDisposition } from "@/domain/files/fileUploadPolicy";
 
 export type ForegroundSyncResult = {
@@ -159,6 +161,7 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
           } else {
             await markOutboxCommandsRetryLater(ownerUserId, commandIds, readableError);
           }
+          emitSyncEvent(buildSyncEvent([command], [], [getCommandAssignmentId(command)].filter((id): id is string => id !== null)));
           throw error;
         }
       }
@@ -250,7 +253,21 @@ function isAcceptedOutboxResponse(response: OutboxResponse | null): response is 
   return response?.status === "accepted" || response?.status === "duplicate";
 }
 
-function buildSyncEvent(commands: OutboxCommand[], responses: OutboxResponse[]) {
+function getCommandAssignmentId(command: OutboxCommand) {
+  const payloadAssignmentId = command.payload.assignmentId;
+  if (typeof payloadAssignmentId === "string" && payloadAssignmentId) {
+    return payloadAssignmentId;
+  }
+  return command.entityType === "patrolAssignment" || command.entityType === "patrolPoint"
+    ? command.entityLocalId ?? null
+    : null;
+}
+
+function buildSyncEvent(
+  commands: OutboxCommand[],
+  responses: OutboxResponse[],
+  additionalAssignmentIds: string[] = []
+) {
   const acceptedOperationIds = responses
     .filter((response) => response.status === "accepted" || response.status === "duplicate")
     .map((response) => response.clientOperationId);
@@ -282,10 +299,17 @@ function buildSyncEvent(commands: OutboxCommand[], responses: OutboxResponse[]) 
     return command.entityLocalId ? [command.entityLocalId] : [];
   });
 
+  const respondedOperationIds = new Set(responses.map((response) => response.clientOperationId));
+  const changedAssignmentIds = commands
+    .filter((command) => respondedOperationIds.has(command.clientOperationId))
+    .map(getCommandAssignmentId)
+    .filter((assignmentId): assignmentId is string => assignmentId !== null);
+
   return {
     acceptedOperationIds,
     completedAssignmentIds,
-    cancelledAssignmentIds: Array.from(new Set(cancelledAssignmentIds))
+    cancelledAssignmentIds: Array.from(new Set(cancelledAssignmentIds)),
+    changedAssignmentIds: Array.from(new Set([...changedAssignmentIds, ...additionalAssignmentIds]))
   };
 }
 
@@ -335,6 +359,16 @@ function getStaleSendingBoundaryIso() {
 
 async function uploadFilesForCompleteCommands(ownerUserId: string, commands: OutboxCommand[]) {
   const clientFileIds = Array.from(new Set(commands.flatMap(extractUploadClientFileIds)));
+  const fileReferencesById = new Map<string, UploadFileReference[]>();
+  for (const reference of commands.flatMap(extractUploadFileReferences)) {
+    const references = fileReferencesById.get(reference.clientFileId) ?? [];
+    references.push(reference);
+    fileReferencesById.set(reference.clientFileId, references);
+  }
+  const workTaskIds = new Set(commands
+    .filter((command) => command.entityType === "workTask")
+    .map((command) => command.entityLocalId ?? command.entityServerId)
+    .filter((value): value is string => Boolean(value)));
   const files = await listFilesByClientIds(clientFileIds);
   const workFiles = await listWorkFilesForCommands(commands);
   const allFilesById = new Map([...files, ...workFiles].map((file) => [file.clientFileId, file]));
@@ -344,21 +378,26 @@ async function uploadFilesForCompleteCommands(ownerUserId: string, commands: Out
   );
 
   if (missingClientFileIds.length > 0) {
-    throw new Error(
-      `Не найдены локальные вложения: ${missingClientFileIds.length}. Добавьте фото или видео повторно перед отправкой отчёта.`
+    throw new PermanentFileUploadError(
+      `Не найдены локальные вложения: ${missingClientFileIds.length}. Добавьте фото или видео повторно перед отправкой отчёта.`,
+      missingClientFileIds[0] ?? "unknown"
     );
   }
 
   for (const file of allFilesById.values()) {
-    if (file.ownerUserId !== ownerUserId) {
-      throw new Error("Локальный файл принадлежит другому пользователю и не будет отправлен.");
-    }
-
-    if (file.status === "uploaded" || file.status === "linked") {
-      continue;
-    }
-
     try {
+      if (file.ownerUserId !== ownerUserId) {
+        throw new PermanentFileUploadError("Локальный файл принадлежит другому пользователю и не будет отправлен.", file.clientFileId);
+      }
+
+      const scopeError = getPermanentFileScopeError(file, fileReferencesById.get(file.clientFileId) ?? [], workTaskIds);
+      if (scopeError) {
+        throw new PermanentFileUploadError(scopeError, file.clientFileId);
+      }
+
+      if (file.status === "uploaded" || file.status === "linked") {
+        continue;
+      }
       await markFileUploading(file.clientFileId);
       const response = await uploadMobileFile(file);
       await markFileUploaded(file.clientFileId, response.serverFileId);
@@ -377,6 +416,14 @@ async function uploadFilesForCompleteCommands(ownerUserId: string, commands: Out
         await markFileUploadFailed(file.clientFileId, "retryLater", error instanceof Error ? error.message : "Неизвестная ошибка загрузки файла.");
         throw error;
       }
+      if (error instanceof PermanentFileUploadError) {
+        try {
+          await markFileUploadFailed(file.clientFileId, "failed", error.message);
+        } catch (markError) {
+          void logMobileError("sync.file.mark_failed", markError);
+        }
+        throw error;
+      }
       const disposition: FileUploadFailureDisposition = error instanceof MobileNetworkError ? "retryLater" : getFileUploadFailureDisposition(error);
       await markFileUploadFailed(file.clientFileId, disposition, error instanceof Error ? error.message : "Неизвестная ошибка загрузки файла.");
       const message = "Не удалось отправить файл на сервер. Отчет останется в очереди восстановления.";
@@ -391,6 +438,32 @@ async function uploadFilesForCompleteCommands(ownerUserId: string, commands: Out
   }
 }
 
+function getPermanentFileScopeError(
+  file: LocalMobileFile,
+  references: UploadFileReference[],
+  workTaskIds: Set<string>
+): string | null {
+  if (references.length > 0 && !references.some((reference) => {
+    if (reference.assignmentId && file.assignmentId !== reference.assignmentId) {
+      return false;
+    }
+    if (reference.pointId && file.pointId !== reference.pointId) {
+      return false;
+    }
+    if (reference.remarkId && file.remarkId !== reference.remarkId) {
+      return false;
+    }
+    return true;
+  })) {
+    return "Локальное вложение связано с другим назначением, точкой или замечанием. Вложение нужно заменить.";
+  }
+
+  if (file.workTaskId && workTaskIds.size > 0 && !workTaskIds.has(file.workTaskId)) {
+    return "Локальное вложение связано с другой задачей ЭМУ. Вложение нужно заменить.";
+  }
+
+  return null;
+}
 async function listWorkFilesForCommands(commands: OutboxCommand[]) {
   const workTaskIds = Array.from(new Set(commands
     .filter((command) => command.entityType === "workTask")

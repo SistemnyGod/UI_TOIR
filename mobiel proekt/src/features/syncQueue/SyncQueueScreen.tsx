@@ -10,7 +10,7 @@ import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { requestMobileDataRefresh, triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
-import { acceptServerConflict, cancelRejectedCommand, retryConflictWithLatestRevision, sendConflictToDispatcher } from "@/services/conflictResolutionService";
+import { acceptServerConflict, canAcceptServerConflict, cancelRejectedCommand, retryConflictWithLatestRevision, sendConflictToDispatcher } from "@/services/conflictResolutionService";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -130,7 +130,7 @@ export function SyncQueueScreen() {
       {!isLoading && loadError ? (
         <Card>
           <Text style={styles.errorText}>{loadError}</Text>
-          <PrimaryButton icon="refresh-outline" label="Повторить загрузку" onPress={() => void load()} variant="secondary" />
+          <PrimaryButton icon="refresh-outline" label="\u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0443" onPress={() => void load()} variant="secondary" />
         </Card>
       ) : null}
 
@@ -214,6 +214,7 @@ export function SyncQueueScreen() {
               ) : null}
               {command.status === "conflict" ? (
                 <View style={styles.actionGroup}>
+                {canAcceptServerConflict(command) ? (
                   <PrimaryButton
                     disabled={actionInProgressId === command.clientOperationId}
                     icon="cloud-done-outline"
@@ -222,6 +223,7 @@ export function SyncQueueScreen() {
                     size="large"
                     variant="secondary"
                   />
+                ) : null}
                   <PrimaryButton
                     disabled={actionInProgressId === command.clientOperationId}
                     icon="people-outline"

@@ -210,7 +210,7 @@ async function attachMixedMediaAssets(
         photoCount += 1;
       }
     } catch (error) {
-      errors.push(`Р¤Р°Р№Р» ${index + 1}: ${error instanceof Error ? error.message : "РЅРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРіРѕС‚РѕРІРёС‚СЊ"}`);
+      errors.push(`Файл ${index + 1}: ${error instanceof Error ? error.message : "не удалось подготовить"}`);
     }
   }
 
@@ -226,12 +226,12 @@ async function attachMixedMediaAssets(
 
 async function prepareOwnerAndStorage() {
   if (!(await hasEnoughStorageForPhoto())) {
-    throw new Error("РќР° С‚РµР»РµС„РѕРЅРµ РјР°Р»Рѕ СЃРІРѕР±РѕРґРЅРѕРіРѕ РјРµСЃС‚Р°. РћСЃРІРѕР±РѕРґРёС‚Рµ РїР°РјСЏС‚СЊ Рё РїРѕРІС‚РѕСЂРёС‚Рµ.");
+    throw new Error("На телефоне мало свободного места. Освободите память и повторите.");
   }
 
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
-    throw new Error("РќСѓР¶РЅРѕ РІРѕР№С‚Рё РІ РјРѕР±РёР»СЊРЅС‹Р№ Р°РєРєР°СѓРЅС‚.");
+    throw new Error("Нужно войти в мобильный аккаунт.");
   }
 
   return ownerUserId;
@@ -240,7 +240,7 @@ async function prepareOwnerAndStorage() {
 async function pickImages(source: "camera" | "library") {
   const permissionGranted = source === "camera" ? await ensureCameraPermission() : await ensureLibraryPermission();
   if (!permissionGranted) {
-    throw new Error(source === "camera" ? "РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РєР°РјРµСЂРµ." : "РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РіР°Р»РµСЂРµРµ.");
+    throw new Error(source === "camera" ? "Нет доступа к камере." : "Нет доступа к галерее.");
   }
 
   const result = source === "camera"
@@ -263,7 +263,7 @@ async function pickImages(source: "camera" | "library") {
 async function pickVideo(source: "camera" | "library") {
   const permissionGranted = source === "camera" ? await ensureCameraPermission() : await ensureLibraryPermission();
   if (!permissionGranted) {
-    throw new Error(source === "camera" ? "РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РєР°РјРµСЂРµ." : "РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РіР°Р»РµСЂРµРµ.");
+    throw new Error(source === "camera" ? "Нет доступа к камере." : "Нет доступа к галерее.");
   }
 
   const result = source === "camera"
@@ -283,7 +283,7 @@ async function pickVideo(source: "camera" | "library") {
 
 async function pickMixedMediaFromGallery() {
   if (!(await ensureLibraryPermission())) {
-    throw new Error("РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РіР°Р»РµСЂРµРµ.");
+    throw new Error("Нет доступа к галерее.");
   }
 
   const result = await ImagePicker.launchImageLibraryAsync({
@@ -444,7 +444,7 @@ async function getValidatedVideoSize(asset: ImagePicker.ImagePickerAsset) {
   const info = asset.fileSize ? null : await getLocalFileInfo(asset.uri);
   const sizeBytes = asset.fileSize ?? (info?.exists ? info.size : null);
   if (sizeBytes && sizeBytes > MAX_VIDEO_BYTES) {
-    throw new Error("Р’РёРґРµРѕ СЃР»РёС€РєРѕРј Р±РѕР»СЊС€РѕРµ. Р’С‹Р±РµСЂРёС‚Рµ С„Р°Р№Р» РґРѕ 25 РњР‘.");
+    throw new Error("Видео слишком большое. Выберите файл до 25 МБ.");
   }
 
   return sizeBytes ?? null;
