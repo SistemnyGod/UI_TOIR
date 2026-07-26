@@ -43,7 +43,7 @@ test("active patrol route data and upload error kind survive refresh failures", 
     readSource("src/api/fileApi.ts"),
     readSource("src/sync/syncEngine.ts")
   ]);
-  const protectedStatuses = "'accepted', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision'";
+  const protectedStatuses = "'accepted', 'releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision'";
 
   assert.ok(bootstrapSource.includes(`status IN (${protectedStatuses})`));
   assert.ok(databaseSource.includes(`assignment.status IN (${protectedStatuses})`));

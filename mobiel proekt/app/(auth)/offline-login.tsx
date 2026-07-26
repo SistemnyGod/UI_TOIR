@@ -98,7 +98,7 @@ export default function OfflineLoginRoute() {
         return;
       }
       if (access.mode !== "full") {
-        setAuthError("пїЅпїЅпїЅпїЅпїЅпїЅ-пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ: пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ.");
+        setAuthError("Офлайн-доступ недоступен: сохранённая сессия не разрешает открыть рабочие разделы приложения.");
         return;
       }
       markSessionUnlocked();
@@ -163,7 +163,7 @@ export default function OfflineLoginRoute() {
       {authError ? <Text style={styles.error}>{authError}</Text> : null}
       <PrimaryButton
         disabled={isAuthenticating}
-        label={isAuthenticating ? "Checking access..." : isExpired ? "Open emergency view" : "Continue offline"}
+        label={isAuthenticating ? "Проверяем доступ..." : isExpired ? "Открыть аварийный просмотр" : "Продолжить офлайн"}
         onPress={() => void continueOffline()}
       />
       <PrimaryButton label="Войти онлайн" onPress={() => router.replace("/(auth)/login")} />

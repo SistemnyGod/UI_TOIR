@@ -24,6 +24,8 @@ import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "getFirstAsync" | "runAsync">;
 
 const activePatrolConflictMessage = "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0435 \u0438\u043b\u0438 \u043f\u0435\u0440\u0435\u0434\u0430\u0439\u0442\u0435 \u0442\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0431\u0445\u043e\u0434.";
+const nfcDisabledMessage = "\u004e\u0046\u0043-\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 \u0434\u043b\u044f \u044d\u0442\u043e\u0433\u043e \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043e\u0442\u043a\u043b\u044e\u0447\u0435\u043d\u043e.";
+const qrDisabledMessage = "\u0051\u0052-\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 \u0434\u043b\u044f \u044d\u0442\u043e\u0433\u043e \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043e\u0442\u043a\u043b\u044e\u0447\u0435\u043d\u043e.";
 
 async function assertNoOtherActivePatrol(
   executor: SqlExecutor,
@@ -803,7 +805,7 @@ async function getExistingPointResultForScan(
 export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
-  await assertPointActionAllowed(assignmentId, "scanAssignment");
+  await assertScanMethodAllowed(assignmentId, "nfc");
   const scannedCandidates = getNfcCodeCandidates(nfcCode);
   const points = await db.getAllAsync<{
     pointId: string;
@@ -828,8 +830,11 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
       FROM patrol_assignments assignment
       JOIN assignment_route_points point ON point.assignment_id = assignment.assignment_id
       WHERE assignment.assignment_id = ?
+        AND assignment.owner_user_id = ?
+        AND assignment.contour_id = ?
+        AND point.route_id = assignment.route_id
     `,
-    [assignmentId]
+    [assignmentId, ownerUserId, currentContourId]
   );
 
   const point = points.find((candidate) => {
@@ -950,7 +955,7 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
 export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
-  await assertPointActionAllowed(assignmentId, "scanAssignment");
+  await assertScanMethodAllowed(assignmentId, "qr");
   const normalizedQr = qrCodeHash.trim();
   const point = await db.getFirstAsync<{
     pointId: string;
@@ -973,10 +978,13 @@ export async function scanPointByQr(assignmentId: string, qrCodeHash: string) {
       FROM patrol_assignments assignment
       JOIN assignment_route_points point ON point.assignment_id = assignment.assignment_id
       WHERE assignment.assignment_id = ?
+        AND assignment.owner_user_id = ?
+        AND assignment.contour_id = ?
+        AND point.route_id = assignment.route_id
         AND point.qr_code_hash = ?
       LIMIT 1
     `,
-    [assignmentId, normalizedQr]
+    [assignmentId, ownerUserId, currentContourId, normalizedQr]
   );
 
   if (!point) {
@@ -1537,6 +1545,18 @@ export async function getAssignmentScanPolicy(assignmentId: string): Promise<Ass
     qrFallbackEnabled: row?.qrFallbackEnabled === 1
   };
 }
+async function assertScanMethodAllowed(assignmentId: string, method: "nfc" | "qr") {
+  await assertPointActionAllowed(assignmentId, "scanAssignment");
+  const policy = await getAssignmentScanPolicy(assignmentId);
+
+  if (method === "nfc" && !policy.nfcEnabled) {
+    throw new Error(nfcDisabledMessage);
+  }
+  if (method === "qr" && !policy.qrFallbackEnabled) {
+    throw new Error(qrDisabledMessage);
+  }
+}
+
 export async function getAssignmentById(assignmentId: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();

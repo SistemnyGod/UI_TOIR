@@ -873,6 +873,7 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
           command?.entity_local_id
           && [
             "acceptPatrolRequest",
+            "takePatrolRequest",
             "startPatrolAssignment",
             "pausePatrolAssignment",
             "resumePatrolAssignment",
@@ -1099,7 +1100,9 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
             response.status === "rejected"
             && command.command_type === "completePatrolAssignment"
             && response.reasonCode !== "assignmentCancelled";
-          const assignmentId = command.entity_type === "patrolAssignment" || command.command_type === "acceptPatrolRequest"
+          const assignmentId = command.entity_type === "patrolAssignment"
+            || command.command_type === "acceptPatrolRequest"
+            || command.command_type === "takePatrolRequest"
             ? command.entity_local_id
             : isCancelledByServer ? extractAssignmentId(command.payload_json) : null;
           const releaseResolution = command.command_type === "releasePatrolRequest"

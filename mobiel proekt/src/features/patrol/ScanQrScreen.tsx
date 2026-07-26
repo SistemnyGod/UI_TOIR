@@ -58,9 +58,9 @@ export function ScanQrScreen() {
       setStatus("matched");
       setMessage("QR подтвержден.");
       router.replace(`/patrol/assignment/${assignmentId}/point/${result.point.pointId}/fill`);
-    } catch {
+    } catch (error) {
       setStatus("error");
-      setMessage("Не удалось обработать QR-метку. Проверьте подключение и попробуйте снова.");
+      setMessage(error instanceof Error ? error.message : "Не удалось обработать QR-метку. Проверьте подключение и попробуйте снова.");
     } finally {
       isHandlingScanRef.current = false;
     }

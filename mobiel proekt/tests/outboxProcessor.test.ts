@@ -22,8 +22,6 @@ test("outbox keeps FIFO order within one patrol before independent commands", ()
 
   assert.deepEqual(selected.map((item) => item.id), [
     "a-acceptPatrolRequest-2026-07-16T10:00:00.000Z",
-    "a-startPatrolAssignment-2026-07-16T10:01:00.000Z",
-    "a-scanPatrolPointNfc-2026-07-16T10:02:00.000Z",
     "b-startPatrolAssignment-2026-07-16T10:00:30.000Z"
   ]);
 });

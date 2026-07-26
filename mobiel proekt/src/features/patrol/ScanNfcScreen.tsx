@@ -85,9 +85,9 @@ export function ScanNfcScreen() {
       setStatus("matched");
       setMessage("NFC подтвержден.");
       router.replace(`/patrol/assignment/${assignmentId}/point/${result.point.pointId}/fill`);
-    } catch {
+    } catch (error) {
       setStatus("error");
-      setMessage("NFC недоступен или чтение отменено.");
+      setMessage(error instanceof Error ? error.message : "NFC недоступен или чтение отменено.");
     } finally {
       scanInProgressRef.current = false;
     }
