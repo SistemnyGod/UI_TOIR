@@ -61,6 +61,7 @@ internal sealed partial class EfPatrolStore
             Session = "-",
             LastSeenAt = null,
             Device = (request.RestrictToLinkedDevices ?? request.RestrictToBoundDevice) ? "Ожидает привязки" : "Любое устройство",
+            RestrictToBoundDevice = request.RestrictToLinkedDevices ?? request.RestrictToBoundDevice,
             Version = "-",
             CreatedAt = now,
             PasswordHash = string.Empty,
@@ -104,6 +105,10 @@ internal sealed partial class EfPatrolStore
         account.Login = NormalizeLogin(request.Login);
         account.Role = NormalizeOptionalText(request.Role);
         account.Status = nextStatus;
+        if (request.RestrictToBoundDevice.HasValue)
+        {
+            account.RestrictToBoundDevice = request.RestrictToBoundDevice.Value;
+        }
 
         if (!string.IsNullOrWhiteSpace(password))
         {
@@ -817,6 +822,7 @@ internal sealed partial class EfPatrolStore
             account.Session,
             account.LastSeenAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "Не входил",
             account.Device,
-            account.Version);
+            account.Version,
+            account.RestrictToBoundDevice);
     }
 }

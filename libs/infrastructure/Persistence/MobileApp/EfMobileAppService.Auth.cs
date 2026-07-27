@@ -63,6 +63,11 @@ internal sealed partial class EfMobileAppService
         {
             return UnauthorizedResult("device_revoked");
         }
+        if (account.RestrictToBoundDevice && registeredDevice is not null
+            && registeredDevice.MobileAccountId != account.Id)
+        {
+            return UnauthorizedResult("device_bound_to_another_account");
+        }
         if (registeredDevice is null)
         {
             registeredDevice = new MobileDeviceEntity
@@ -340,9 +345,9 @@ internal sealed partial class EfMobileAppService
             MobileAccountId = account.Id,
             Status = "Онлайн",
             DeviceId = NormalizeOptionalText(deviceId),
-            Device = NormalizeOptionalText(deviceName, "Kenshi Armor C1s"),
+            Device = NormalizeBoundedOptionalText(deviceName, "Kenshi Armor C1s", 160),
             Platform = NormalizeBoundedOptionalText(platform, "Android", 80),
-            AppVersion = NormalizeOptionalText(appVersion, "0.1.0"),
+            AppVersion = NormalizeBoundedOptionalText(appVersion, "0.1.0", 40),
             IpAddress = NormalizeBoundedOptionalText(ipAddress, "-", 80),
             PushToken = string.Empty,
             TokenHash = EfAuthSessionService.HashToken(accessToken),

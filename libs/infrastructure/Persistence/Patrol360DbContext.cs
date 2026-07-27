@@ -692,6 +692,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(account => account.Session).HasColumnName("session").HasMaxLength(60).IsRequired();
             entity.Property(account => account.LastSeenAt).HasColumnName("last_seen_at");
             entity.Property(account => account.Device).HasColumnName("device").HasMaxLength(160).IsRequired();
+            entity.Property(account => account.RestrictToBoundDevice).HasColumnName("restrict_to_bound_device").HasDefaultValue(false).IsRequired();
             entity.Property(account => account.Version).HasColumnName("version").HasMaxLength(40).IsRequired();
             entity.Property(account => account.CreatedAt).HasColumnName("created_at");
 

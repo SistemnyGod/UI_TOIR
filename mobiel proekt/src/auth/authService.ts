@@ -1,6 +1,6 @@
 import { login, logout } from "@/api/authApi";
 import { isReauthenticationRequiredError } from "@/auth/sessionErrors";
-import { refreshStoredAccessToken } from "@/api/httpClient";
+import { beginAuthTransition, refreshStoredAccessToken } from "@/api/httpClient";
 import { getBootstrap } from "@/api/mobileApi";
 import { getOrCreateDeviceId } from "@/auth/deviceRegistration";
 import { createLoginPayload, getAppRuntimeMetadata } from "@/auth/appMetadata";
@@ -65,6 +65,7 @@ async function revokeServerSession() {
 }
 
 export async function signIn(loginName: string, password: string) {
+  beginAuthTransition();
   if (!(await flushPendingLogout())) {
     throw new Error("Предыдущая сессия ожидает отзыва. Подключите сервер и повторите вход.");
   }
@@ -179,6 +180,7 @@ export async function restoreSessionWithRefreshToken() {
 
 export async function signOut() {
   await assertNoPendingLocalChanges("Нельзя выйти из аккаунта: на телефоне есть неотправленные отчеты или действия. Сначала выполните синхронизацию.");
+  beginAuthTransition();
   const ownerUserId = await getStoredOwnerUserId();
   await enqueueLogoutIntent(ownerUserId);
 

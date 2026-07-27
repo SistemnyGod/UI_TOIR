@@ -3348,6 +3348,11 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(160)")
                         .HasColumnName("device");
 
+                    b.Property<bool>("RestrictToBoundDevice")
+                        .HasDefaultValue(false)
+                        .HasColumnType("boolean")
+                        .HasColumnName("restrict_to_bound_device");
+
                     b.Property<string>("EmployeeScope")
                         .IsRequired()
                         .HasMaxLength(40)

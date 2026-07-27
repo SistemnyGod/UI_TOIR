@@ -37,6 +37,19 @@ type RequestOptions = {
 
 let refreshPromise: Promise<string> | null = null;
 
+let authEpoch = 0;
+
+export function beginAuthTransition() {
+  authEpoch += 1;
+}
+
+class StaleAuthResponseError extends Error {
+  constructor() {
+    super("Stale authentication response ignored.");
+    this.name = "StaleAuthResponseError";
+  }
+}
+
 export async function mobileRequest<TResponse>(
   path: string,
   schema: ZodType<TResponse>,
@@ -66,7 +79,8 @@ export async function mobileRequest<TResponse>(
   if (!response.ok) {
     if (response.status === 401) {
       if (path.endsWith("/auth/login")) {
-        throw new Error(`Сервер доступен (${apiBaseUrl}), но вход отклонён. Проверьте логин, пароль и привязку аккаунта.`);
+        const failureCode = await readAuthFailureCode(response);
+        throw new Error(loginFailureMessage(failureCode, apiBaseUrl));
       }
 
       if (refreshedSession) {
@@ -179,7 +193,8 @@ async function sendMobileRequest(apiBaseUrl: string, path: string, options: Requ
 }
 
 async function refreshAccessToken(apiBaseUrl: string) {
-  refreshPromise ??= refreshAccessTokenInternal(apiBaseUrl)
+  const requestEpoch = authEpoch;
+  refreshPromise ??= refreshAccessTokenInternal(apiBaseUrl, requestEpoch)
     .then((accessToken) => {
       void logMobileAction({
         eventType: "auth.refresh.recovered",
@@ -189,6 +204,9 @@ async function refreshAccessToken(apiBaseUrl: string) {
       return accessToken;
     })
     .catch((error) => {
+      if (error instanceof StaleAuthResponseError) {
+        throw error;
+      }
       if (error instanceof Error && isMobileSessionKeyUnavailableError(error.message)) {
         void logMobileAction({
           eventType: "auth.refresh.skipped",
@@ -207,7 +225,7 @@ async function refreshAccessToken(apiBaseUrl: string) {
   return refreshPromise;
 }
 
-async function refreshAccessTokenInternal(apiBaseUrl: string) {
+async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: number) {
   const refreshToken = await getRefreshToken();
   if (!refreshToken) {
     throw new Error("Ключ мобильной сессии недоступен. Локальные отчёты сохранены; автоматическая отправка приостановлена.");
@@ -275,12 +293,19 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
     response = lastResponse!;
   }
 
+  if (requestEpoch !== authEpoch) {
+    throw new StaleAuthResponseError();
+  }
+
   if (response.status === 401) {
     const failureCode = await readAuthFailureCode(response);
     if (failureCode === "device_reenrollment_required"
       || failureCode === "device_session_not_found"
       || failureCode === "device_mismatch"
       || failureCode === "refresh_expired") {
+      if (requestEpoch !== authEpoch) {
+        throw new StaleAuthResponseError();
+      }
       await preserveOfflineSessionAfterRefreshFailure(failureCode);
       throw new Error(explicitRevocationMessage(failureCode));
     }
@@ -289,6 +314,9 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
       || failureCode === "device_revoked"
       || failureCode === "account_disabled"
       || failureCode === "refresh_token_reuse") {
+      if (requestEpoch !== authEpoch) {
+        throw new StaleAuthResponseError();
+      }
       await revokeStoredSession(failureCode);
       throw new Error(explicitRevocationMessage(failureCode));
     }
@@ -322,6 +350,10 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
   } catch (error) {
     await revokeStoredSession("session_owner_mismatch");
     throw error;
+  }
+
+  if (requestEpoch !== authEpoch) {
+    throw new StaleAuthResponseError();
   }
 
   await setTokens(session.accessToken, session.refreshToken);
@@ -391,7 +423,26 @@ async function readAuthFailureCode(response: Response) {
   }
 }
 
-function explicitRevocationMessage(code: "session_revoked" | "device_revoked" | "account_disabled" | "refresh_expired" | "refresh_token_reuse" | "device_reenrollment_required" | "device_session_not_found" | "device_mismatch") {
+function loginFailureMessage(code: string | null, apiBaseUrl: string) {
+  switch (code) {
+    case "device_revoked":
+      return "Устройство заблокировано администратором. Обратитесь к ответственному за Patrol360.";
+    case "device_enrollment_required":
+      return "Для этого аккаунта требуется предварительная привязка устройства.";
+    case "device_bound_to_another_account":
+      return "Устройство уже привязано к другому аккаунту.";
+    case "account_disabled":
+      return "Мобильный аккаунт отключён администратором.";
+    case "account_not_linked":
+      return "Аккаунт не привязан к сотруднику. Обратитесь к администратору.";
+    case "wrong_contour":
+      return "Аккаунт относится к другому контуру системы.";
+    default:
+      return `Сервер доступен, но вход отклонён (${code ?? "invalid_credentials"}). Проверьте логин, пароль и привязку аккаунта. Адрес: ${apiBaseUrl}`;
+  }
+}
+
+function explicitRevocationMessage(code: "session_revoked" | "device_revoked" | "account_disabled" | "refresh_expired" | "refresh_token_reuse" | "device_reenrollment_required" | "device_session_not_found" | "device_mismatch" | "device_enrollment_required" | "device_bound_to_another_account") {
   switch (code) {
     case "session_revoked":
       return "Мобильная сессия явно отозвана. Локальные отчёты сохранены.";
@@ -403,6 +454,8 @@ function explicitRevocationMessage(code: "session_revoked" | "device_revoked" | 
       return "Серверная запись сессии недоступна. Локальная работа и очередь сохранены; повторите вход при наличии сети.";
     case "device_mismatch":
       return "Сервер не подтвердил это устройство. Локальная работа и очередь сохранены; проверьте регистрацию при наличии сети.";
+    case "device_enrollment_required":
+    case "device_bound_to_another_account":
     case "device_reenrollment_required":
     case "refresh_expired":
       return "Онлайн-сессия требует повторной регистрации. Локальная работа и очередь сохранены.";

@@ -295,7 +295,26 @@ internal sealed partial class EfMobileAppService
             errors["deviceId"] = ["Device id is required."];
         }
 
+        AddLengthError(errors, "login", request.Login, 120);
+        AddLengthError(errors, "password", request.Password, 1024);
+        AddLengthError(errors, "deviceId", request.DeviceId, 120);
+        AddLengthError(errors, "deviceName", request.DeviceName, 160);
+        AddLengthError(errors, "platform", request.Platform, 80);
+        AddLengthError(errors, "appVersion", request.AppVersion, 40);
+
         return errors;
+    }
+
+    private static void AddLengthError(
+        IDictionary<string, string[]> errors,
+        string field,
+        string? value,
+        int maxLength)
+    {
+        if (value is not null && value.Length > maxLength)
+        {
+            errors[field] = [$"{field} must not exceed {maxLength} characters."];
+        }
     }
 
     private static MobileOutboxResponseDto Rejected(string clientOperationId, string message) =>
