@@ -16,7 +16,7 @@ export type ReportDeliveryStatus =
   | "cancelled"
   | "invalidPayload";
 
-export type ReportDeliveryAction = "submit" | "retry" | "repair" | "resubmit" | "signIn" | "serverSettings" | "done";
+export type ReportDeliveryAction = "submit" | "retry" | "repair" | "signIn" | "serverSettings" | "done";
 
 export function getReportDeliveryPresentation(status: ReportDeliveryStatus | null, lastError: string | null) {
   if (!status || status === "superseded" || status === "cancelled") {
@@ -51,10 +51,10 @@ export function getReportDeliveryPresentation(status: ReportDeliveryStatus | nul
 
   if (status === "rejected" || status === "conflict") {
     return {
-      action: status === "rejected" ? "resubmit" as const : "repair" as const,
-      buttonLabel: status === "rejected" ? "Отправить исправленный отчет" : "Проверить конфликт",
-      detail: lastError || "Сервер не принял данные. Проверьте точки обхода и отправьте исправленный отчет.",
-      title: status === "conflict" ? "Нужна проверка данных" : "Отчет не принят",
+      action: "repair" as const,
+      buttonLabel: status === "rejected" ? "Исправить отчёт" : "Проверить конфликт",
+      detail: lastError || "Сервер не принял данные. Проверьте точки обхода перед созданием новой команды.",
+      title: status === "conflict" ? "Нужна проверка данных" : "Отчёт не принят",
       tone: "danger" as const
     };
   }

@@ -29,6 +29,7 @@ type OutboxDatabaseRow = {
   created_at_local: string;
   updated_at_local: string | null;
   next_attempt_at: string | null;
+  retry_reason: string | null;
   attempt_count: number;
   status: string;
   aggregate_key: string | null;
@@ -43,10 +44,11 @@ export async function insertOutboxCommand(command: OutboxCommand) {
     })
   );
 }
-export async function listPendingOutboxCommands(ownerUserId: string, limit = 25) {
+export async function listPendingOutboxCommands(ownerUserId: string, limit = 25, aggregateKey?: string) {
   const db = await getDatabase();
   const nowIso = new Date().toISOString();
   const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
+  const aggregateFilter = aggregateKey ? "AND candidate.aggregate_key = ?" : "";
   const rows = await db.getAllAsync<OutboxDatabaseRow>(
     `
       SELECT candidate.*
@@ -60,6 +62,7 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
             AND (candidate.next_attempt_at IS NULL OR candidate.next_attempt_at <= ?)
           )
         )
+        ${aggregateFilter}
         AND NOT EXISTS (
           SELECT 1
           FROM outbox_commands previous
@@ -74,7 +77,7 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
                candidate.client_operation_id ASC
       LIMIT ?
     `,
-    [ownerUserId, currentContourId, nowIso, boundedLimit]
+    [ownerUserId, currentContourId, nowIso, ...(aggregateKey ? [aggregateKey] : []), boundedLimit]
   );
 
   const commands = await parseOutboxPayloadRows(
@@ -104,6 +107,41 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
   );
 
   return commands.map(({ nextAttemptAt: _nextAttemptAt, ...command }) => command);
+}
+export type OutboxRetryReason = "network" | "timeout" | "server" | "rateLimit" | "authentication" | "unknown";
+
+export async function getNextOutboxRetryAt(ownerUserId: string): Promise<string | null> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ nextRetryAt: string | null }>(
+    `
+      SELECT MIN(next_attempt_at) AS nextRetryAt
+      FROM outbox_commands
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND status = 'retryLater'
+        AND next_attempt_at IS NOT NULL
+    `,
+    [ownerUserId, currentContourId]
+  );
+
+  return row?.nextRetryAt ?? null;
+}
+
+export async function countRetryableOutboxCommands(ownerUserId: string): Promise<number> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ count: number }>(
+    `
+      SELECT COUNT(*) AS count
+      FROM outbox_commands
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND status = 'retryLater'
+        AND next_attempt_at IS NOT NULL
+    `,
+    [ownerUserId, currentContourId]
+  );
+
+  return row?.count ?? 0;
 }
 export async function countPendingOutboxCommands(ownerUserId: string) {
   const db = await getDatabase();
@@ -354,7 +392,8 @@ export async function markOutboxCommandsRetryLater(
   ownerUserId: string,
   clientOperationIds: string[],
   lastError?: string,
-  retryAfterSeconds?: number | null
+  retryAfterSeconds?: number | null,
+  retryReason: OutboxRetryReason = "unknown"
 ) {
   if (clientOperationIds.length === 0) {
     return;
@@ -386,6 +425,7 @@ export async function markOutboxCommandsRetryLater(
           UPDATE outbox_commands
           SET status = 'retryLater',
               last_error = COALESCE(?, last_error),
+              retry_reason = ?,
               next_attempt_at = ?,
               updated_at_local = ?
           WHERE owner_user_id = ?
@@ -393,7 +433,7 @@ export async function markOutboxCommandsRetryLater(
             AND client_operation_id = ?
             AND status = 'sending'
         `,
-        [lastError ?? null, nextAttemptAt, updatedAtLocal, ownerUserId, currentContourId, row.client_operation_id]
+        [lastError ?? null, retryReason, nextAttemptAt, updatedAtLocal, ownerUserId, currentContourId, row.client_operation_id]
       );
     }
     })
@@ -414,6 +454,7 @@ export async function markOutboxCommandsRejected(ownerUserId: string, clientOper
       UPDATE outbox_commands
       SET status = 'rejected',
           last_error = ?,
+          retry_reason = NULL,
           next_attempt_at = NULL,
           updated_at_local = ?
       WHERE owner_user_id = ?
@@ -424,8 +465,15 @@ export async function markOutboxCommandsRejected(ownerUserId: string, clientOper
     [lastError, updatedAtLocal, ownerUserId, currentContourId, ...clientOperationIds]
   ));
 }
-export async function markPendingOutboxCommandsRetryLater(ownerUserId: string, lastError: string) {
+export async function markPendingOutboxCommandsRetryLater(
+  ownerUserId: string,
+  lastError: string,
+  retryReason: OutboxRetryReason = "server",
+  aggregateKey?: string
+) {
   const db = await getDatabase();
+  const aggregateFilter = aggregateKey ? " AND aggregate_key = ?" : "";
+  const aggregateParams = aggregateKey ? [aggregateKey] : [];
 
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
@@ -436,8 +484,8 @@ export async function markPendingOutboxCommandsRetryLater(ownerUserId: string, l
       }>(
         "SELECT client_operation_id, attempt_count, next_attempt_at " +
         "FROM outbox_commands WHERE owner_user_id = ? AND contour_id = ? " +
-        "AND status IN ('pending', 'sending', 'retryLater')",
-        [ownerUserId, currentContourId]
+        "AND status IN ('pending', 'sending', 'retryLater')" + aggregateFilter,
+        [ownerUserId, currentContourId, ...aggregateParams]
       );
       const nowMs = Date.now();
       const updatedAtLocal = new Date(nowMs).toISOString();
@@ -453,31 +501,77 @@ export async function markPendingOutboxCommandsRetryLater(ownerUserId: string, l
         ).toISOString();
 
         await tx.runAsync(
-          "UPDATE outbox_commands SET status = 'retryLater', last_error = ?, next_attempt_at = ?, updated_at_local = ? " +
+          "UPDATE outbox_commands SET status = 'retryLater', last_error = ?, retry_reason = ?, next_attempt_at = ?, updated_at_local = ? " +
           "WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?",
-          [lastError, nextAttemptAt, updatedAtLocal, ownerUserId, currentContourId, row.client_operation_id]
+          [lastError, retryReason, nextAttemptAt, updatedAtLocal, ownerUserId, currentContourId, row.client_operation_id]
         );
       }
     })
   );
 }
-export async function markPendingOutboxCommandsWaitingNetwork(ownerUserId: string, lastError: string) {
+
+export async function markPendingOutboxCommandsWaitingNetwork(
+  ownerUserId: string,
+  lastError: string,
+  aggregateKey?: string
+) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
+  const aggregateFilter = aggregateKey ? " AND aggregate_key = ?" : "";
   await withSqliteBusyRetry(() => db.runAsync(
-    "UPDATE outbox_commands SET status = 'waiting_network', last_error = ?, next_attempt_at = NULL, updated_at_local = ? " +
-    "WHERE owner_user_id = ? AND contour_id = ? AND status IN ('pending', 'sending', 'retryLater', 'waiting_network')",
-    [lastError, updatedAtLocal, ownerUserId, currentContourId]
+    "UPDATE outbox_commands SET status = 'waiting_network', last_error = ?, retry_reason = 'network', next_attempt_at = NULL, updated_at_local = ? " +
+    "WHERE owner_user_id = ? AND contour_id = ? AND status IN ('pending', 'sending', 'retryLater', 'waiting_network')" + aggregateFilter,
+    [lastError, updatedAtLocal, ownerUserId, currentContourId, ...(aggregateKey ? [aggregateKey] : [])]
   ));
 }
-
 export async function activateWaitingNetworkOutboxCommands(ownerUserId: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
   await withSqliteBusyRetry(() => db.runAsync(
-    "UPDATE outbox_commands SET status = 'pending', next_attempt_at = NULL, updated_at_local = ? " +
+    "UPDATE outbox_commands SET status = 'pending', next_attempt_at = NULL, retry_reason = NULL, updated_at_local = ? " +
     "WHERE owner_user_id = ? AND contour_id = ? AND status = 'waiting_network'",
     [updatedAtLocal, ownerUserId, currentContourId]
+  ));
+}
+
+export async function activateNetworkRecoveredOutboxCommands(ownerUserId: string) {
+  const db = await getDatabase();
+  const updatedAtLocal = new Date().toISOString();
+  await withSqliteBusyRetry(() => db.runAsync(
+    `
+      UPDATE outbox_commands
+      SET status = 'pending',
+          next_attempt_at = NULL,
+          retry_reason = NULL,
+          updated_at_local = ?
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND (
+          status = 'waiting_network'
+          OR (status = 'retryLater' AND retry_reason IN ('network', 'timeout'))
+        )
+    `,
+    [updatedAtLocal, ownerUserId, currentContourId]
+  ));
+}
+
+export async function activateRetryableReportCommands(ownerUserId: string, assignmentId: string) {
+  const db = await getDatabase();
+  const updatedAtLocal = new Date().toISOString();
+  const aggregateKey = `patrolAssignment:${assignmentId}`;
+  await withSqliteBusyRetry(() => db.runAsync(
+    `
+      UPDATE outbox_commands
+      SET status = CASE WHEN status = 'waiting_network' THEN 'pending' ELSE status END,
+          next_attempt_at = NULL,
+          retry_reason = NULL,
+          updated_at_local = ?
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND status IN ('retryLater', 'waiting_network')
+        AND (aggregate_key = ? OR (aggregate_key IS NULL AND entity_local_id = ?))
+    `,
+    [updatedAtLocal, ownerUserId, currentContourId, aggregateKey, assignmentId]
   ));
 }
 
@@ -489,6 +583,7 @@ export async function activateRetryableOutboxCommandsForImmediateRetry(ownerUser
       UPDATE outbox_commands
       SET status = CASE WHEN status = 'waiting_network' THEN 'pending' ELSE status END,
           next_attempt_at = NULL,
+          retry_reason = NULL,
           updated_at_local = ?
       WHERE owner_user_id = ?
         AND contour_id = ?
@@ -497,28 +592,31 @@ export async function activateRetryableOutboxCommandsForImmediateRetry(ownerUser
     [updatedAtLocal, ownerUserId, currentContourId]
   ));
 }
-
-export async function markPendingOutboxCommandsAuthRequired(ownerUserId: string, lastError: string) {
+export async function markPendingOutboxCommandsAuthRequired(
+  ownerUserId: string,
+  lastError: string,
+  aggregateKey?: string
+) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
+  const aggregateFilter = aggregateKey ? " AND aggregate_key = ?" : "";
 
-  // Authentication is a delivery condition, not a patrol lifecycle state.
-  // Keep the local report and defer automatic retries until the session is restored.
   await withSqliteBusyRetry(() => db.runAsync(
     `
       UPDATE outbox_commands
       SET status = 'waiting_auth',
           last_error = ?,
+          retry_reason = 'authentication',
           next_attempt_at = NULL,
           updated_at_local = ?
       WHERE owner_user_id = ?
-                AND contour_id = ?
+        AND contour_id = ?
         AND status IN ('pending', 'sending', 'retryLater', 'waiting_auth')
+        ${aggregateFilter}
     `,
-    [lastError, updatedAtLocal, ownerUserId, currentContourId]
+    [lastError, updatedAtLocal, ownerUserId, currentContourId, ...(aggregateKey ? [aggregateKey] : [])]
   ));
-}
-export async function activateWaitingAuthOutboxCommands(ownerUserId: string) {
+}export async function activateWaitingAuthOutboxCommands(ownerUserId: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
   await withSqliteBusyRetry(() => db.runAsync(
@@ -575,6 +673,44 @@ export async function resetSendingOutboxCommandsForManualRetry(ownerUserId: stri
       WHERE owner_user_id = ?
                 AND contour_id = ?
         AND status = 'sending'
+    `,
+    [updatedAtLocal, updatedAtLocal, ownerUserId, currentContourId]
+  ));
+}
+export async function reactivateRecoverableRejectedStartCommands(ownerUserId: string) {
+  const db = await getDatabase();
+  const updatedAtLocal = new Date().toISOString();
+
+  await withSqliteBusyRetry(() => db.runAsync(
+    `
+      UPDATE outbox_commands
+      SET status = 'retryLater',
+          next_attempt_at = ?,
+          last_error = 'Восстанавливаем серверную последовательность принятия и запуска обхода.',
+          updated_at_local = ?
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND command_type = 'startPatrolAssignment'
+        AND status = 'rejected'
+        AND lower(COALESCE(last_error, '')) LIKE '%only an accepted patrol assignment can be started%'
+        AND attempt_count < 3
+        AND EXISTS (
+          SELECT 1
+          FROM patrol_assignments AS assignment
+          WHERE assignment.owner_user_id = outbox_commands.owner_user_id
+            AND assignment.contour_id = outbox_commands.contour_id
+            AND assignment.assignment_id = outbox_commands.entity_local_id
+            AND assignment.status IN ('completedLocal', 'retryLater', 'syncError')
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM outbox_commands AS completion
+          WHERE completion.owner_user_id = outbox_commands.owner_user_id
+            AND completion.contour_id = outbox_commands.contour_id
+            AND completion.entity_local_id = outbox_commands.entity_local_id
+            AND completion.command_type = 'completePatrolAssignment'
+            AND completion.status IN ('pending', 'sending', 'retryLater', 'waiting_network', 'waiting_auth')
+        )
     `,
     [updatedAtLocal, updatedAtLocal, ownerUserId, currentContourId]
   ));
@@ -662,6 +798,9 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
           ).toISOString()
         : null;
       const isSuccessful = response.status === "accepted" || response.status === "duplicate";
+      const retryReason: OutboxRetryReason | null = response.status === "retryLater"
+        ? response.retryAfterSeconds !== null ? "rateLimit" : "server"
+        : null;
       const updatedAtLocal = new Date().toISOString();
       await tx.runAsync(
         `
@@ -669,6 +808,7 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
           SET status = ?,
               entity_server_id = COALESCE(?, entity_server_id),
               next_attempt_at = ?,
+              retry_reason = ?,
               last_attempt_at = ${isSuccessful ? "NULL" : "last_attempt_at"},
               last_error = ?,
               updated_at_local = ?
@@ -678,6 +818,7 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
           response.status,
           response.serverEntityId,
           nextAttemptAt,
+          retryReason,
           isProblemResponse(response.status) ? response.message : null,
           updatedAtLocal,
           ownerUserId,

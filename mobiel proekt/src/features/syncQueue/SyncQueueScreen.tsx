@@ -107,7 +107,7 @@ export function SyncQueueScreen() {
     setIsSyncing(true);
     setFeedback(null);
     try {
-      const result = await triggerForegroundSyncWithRetry({ forceRetry: true });
+      const result = await triggerForegroundSyncWithRetry({ mode: "manualAll" });
       await load();
       setFeedback(syncResultMessage(result.skipped));
     } catch (caught) {

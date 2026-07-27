@@ -342,7 +342,10 @@ internal sealed partial class EfMobileAppService
         return new MobileOutboxResponseDto(command.ClientOperationId, "accepted", null, null, "Request returned.", null, null);
     }
 
-    private MobileOutboxResponseDto ProcessStartPatrolAssignment(MobileAccountEntity account, MobileOutboxCommandDto command)
+    private MobileOutboxResponseDto ProcessStartPatrolAssignment(
+        MobileAccountEntity account,
+        MobileOutboxCommandDto command,
+        bool allowMissingAcceptRecovery = false)
     {
         var assignment = FindMobileAssignment(account, command, includeRequest: true);
         if (assignment is null)
@@ -370,6 +373,25 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Closed patrol assignment cannot be started.");
         }
 
+        if (allowMissingAcceptRecovery
+            && (assignment.Status == AssignmentStatusValues.Waiting
+                || assignment.Status == AssignmentStatusValues.Assigned))
+        {
+            var acceptTransition = PatrolAssignmentStateMachine.Evaluate(
+                "acceptPatrolRequest",
+                assignment.Status);
+            if (acceptTransition.Kind != PatrolTransitionKind.Allowed)
+            {
+                return BuildPatrolTransitionResponse(command, assignment, acceptTransition);
+            }
+
+            assignment.Status = AssignmentStatusValues.Accepted;
+            assignment.LockVersion += 1;
+            if (assignment.PatrolRequest is not null)
+            {
+                assignment.PatrolRequest.Status = AssignmentStatusValues.Accepted;
+            }
+        }
         var startTransition = PatrolAssignmentStateMachine.Evaluate(
             "startPatrolAssignment",
             assignment.Status);

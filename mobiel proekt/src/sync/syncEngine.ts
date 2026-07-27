@@ -17,11 +17,14 @@ import {
   markFileUploading
 } from "@/db/repositories/filesRepository";
 import {
+  activateNetworkRecoveredOutboxCommands,
   activateRetryableOutboxCommandsForImmediateRetry,
+  activateRetryableReportCommands,
   applyOutboxResponses,
   activateWaitingAuthOutboxCommands,
-  activateWaitingNetworkOutboxCommands,
+  countRetryableOutboxCommands,
   finalizeAcceptedCompleteReportCommands,
+  getNextOutboxRetryAt,
   listUnconfirmedCompleteReportCommands,
   markPendingOutboxCommandsAuthRequired,
   markPendingOutboxCommandsWaitingNetwork,
@@ -30,9 +33,10 @@ import {
   markOutboxCommandsRetryLater,
   markOutboxCommandsSending,
   markPendingOutboxCommandsRetryLater,
-  resetSendingOutboxCommandsForManualRetry,
+  reactivateRecoverableRejectedStartCommands,
   resetStaleSendingOutboxCommands
 } from "@/db/repositories/outboxRepository";
+import type { OutboxRetryReason } from "@/db/repositories/outboxRepository";
 import { OutboxCommand, OutboxResponse } from "@/domain/sync/syncTypes";
 import type { LocalMobileFile } from "@/domain/files/fileTypes";
 import { getPendingOutboxBatch } from "@/sync/outboxProcessor";
@@ -42,6 +46,7 @@ import { processOrderedOutboxBatch } from "@/sync/orderedOutboxBatch";
 import { getCommandAggregateKey } from "@/sync/outboxOrderingPolicy";
 import { mapWithConcurrency } from "@/sync/boundedAsync";
 import { shouldContinueOutboxSync } from "@/sync/outboxContinuationPolicy";
+import { scheduleNextOutboxRetry } from "@/sync/outboxRetryScheduler";
 import { emitSyncEvent } from "@/sync/syncEvents";
 import { extractUploadClientFileIds, extractUploadFileReferences } from "@/sync/uploadCandidatePolicy";
 import type { UploadFileReference } from "@/sync/uploadCandidatePolicy";
@@ -51,7 +56,19 @@ export type ForegroundSyncResult = {
   sent: number;
   skipped: "offline" | "serverUnavailable" | "unauthenticated" | null;
   hasMore: boolean;
+  nextRetryAt: string | null;
+  retryableCount: number;
 };
+
+export type SyncRequestMode = "normal" | "networkRecovered" | "manualReport" | "manualAll";
+
+export type ForegroundSyncOptions = {
+  mode?: SyncRequestMode;
+  assignmentId?: string;
+};
+
+type SyncResultBase = Omit<ForegroundSyncResult, "nextRetryAt" | "retryableCount">;
+type InternalForegroundSyncOptions = Required<Pick<ForegroundSyncOptions, "mode">> & ForegroundSyncOptions & { skipPreparation?: boolean };
 
 const staleSendingTimeoutMs = 5 * 60 * 1000;
 const maxSyncBatchesPerRun = 4;
@@ -59,73 +76,93 @@ const reconciliationPageSize = 24;
 const reconciliationConcurrency = 4;
 const foregroundSyncQueue = new SerializedTaskQueue<ForegroundSyncResult>();
 
-export async function runForegroundSync(): Promise<ForegroundSyncResult> {
-  // Never discard a sync request that arrives while another pass is running.
-  // The previous `busy` result could leave a newly queued report untouched until
-  // some later trigger (often the submission of the next report).
-  const result = await foregroundSyncQueue.run(runForegroundSyncInternal);
+export async function runForegroundSync(options: ForegroundSyncOptions = {}): Promise<ForegroundSyncResult> {
+  return executeForegroundSync(normalizeSyncOptions(options));
+}
+
+async function executeForegroundSync(options: InternalForegroundSyncOptions): Promise<ForegroundSyncResult> {
+  const result = await foregroundSyncQueue.run(() => runForegroundSyncInternal(options));
+  const ownerUserId = await getStoredOwnerUserId();
+  void scheduleNextOutboxRetry(ownerUserId).catch((error) => {
+    void logMobileError("sync.retry_schedule.failed", error);
+  });
+
   if (result.hasMore) {
-    scheduleOutboxContinuation();
+    scheduleOutboxContinuation(options);
   }
+
   return result;
 }
 
-function scheduleOutboxContinuation() {
-  void foregroundSyncQueue.run(runForegroundSyncInternal).then((result) => {
-    if (result.hasMore) {
-      scheduleOutboxContinuation();
-    }
-  }).catch((error) => {
+function normalizeSyncOptions(options: ForegroundSyncOptions): InternalForegroundSyncOptions {
+  const mode = options.mode ?? "normal";
+  if (mode === "manualReport" && !options.assignmentId) {
+    throw new Error("Для ручной отправки необходимо указать назначение.");
+  }
+
+  return { ...options, mode };
+}
+
+function scheduleOutboxContinuation(options: InternalForegroundSyncOptions) {
+  const continuationOptions: InternalForegroundSyncOptions = options.mode === "manualReport"
+    ? { ...options, skipPreparation: true }
+    : { mode: "normal" };
+  void executeForegroundSync(continuationOptions).catch((error) => {
     void logMobileError("sync.continuation.failed", error);
   });
 }
 
-async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
+async function runForegroundSyncInternal(options: InternalForegroundSyncOptions): Promise<ForegroundSyncResult> {
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
-    return { sent: 0, skipped: "unauthenticated" as const, hasMore: false };
+    return buildForegroundSyncResult(null, { sent: 0, skipped: "unauthenticated", hasMore: false });
   }
 
-  await finalizeAcceptedCompleteReportCommands(ownerUserId);
-  await reclaimAcceptedLocalMedia(ownerUserId);
+  const aggregateKey = options.mode === "manualReport" && options.assignmentId
+    ? `patrolAssignment:${options.assignmentId}`
+    : undefined;
+
+  if (!options.skipPreparation) {
+    await prepareSyncRequest(ownerUserId, options);
+  }
+  await finalizeAcceptedCompleteReportCommands(ownerUserId, options.assignmentId);
+  if (!aggregateKey) {
+    await reclaimAcceptedLocalMedia(ownerUserId);
+    await reactivateRecoverableRejectedStartCommands(ownerUserId);
+  }
 
   if (!(await hasUsableNetwork())) {
-    await markPendingOutboxCommandsWaitingNetwork(ownerUserId, "Сеть недоступна. Отчет сохранён на телефоне.");
-    return { sent: 0, skipped: "offline" as const, hasMore: false };
+    await markPendingOutboxCommandsWaitingNetwork(ownerUserId, "Сеть недоступна. Отчет сохранён на телефоне.", aggregateKey);
+    return buildForegroundSyncResult(ownerUserId, { sent: 0, skipped: "offline", hasMore: false });
   }
-  await activateWaitingNetworkOutboxCommands(ownerUserId);
 
   const serverCheck = await checkServerConnection();
   if (!serverCheck.ok) {
     if (serverCheck.errorKind === "offline") {
-      await markPendingOutboxCommandsWaitingNetwork(ownerUserId, serverCheck.message);
-      return { sent: 0, skipped: "offline" as const, hasMore: false };
+      await markPendingOutboxCommandsWaitingNetwork(ownerUserId, serverCheck.message, aggregateKey);
+      return buildForegroundSyncResult(ownerUserId, { sent: 0, skipped: "offline", hasMore: false });
     }
 
-    await markPendingOutboxCommandsRetryLater(ownerUserId, serverCheck.message);
-    return { sent: 0, skipped: "serverUnavailable" as const, hasMore: false };
+    await markPendingOutboxCommandsRetryLater(ownerUserId, serverCheck.message, "server", aggregateKey);
+    return buildForegroundSyncResult(ownerUserId, { sent: 0, skipped: "serverUnavailable", hasMore: false });
   }
 
-  const accessTokenState = await ensureAccessTokenForSync(ownerUserId);
+  const accessTokenState = await ensureAccessTokenForSync(ownerUserId, aggregateKey);
   if (accessTokenState !== "ok") {
-    return {
-      sent: 0,
-      skipped: accessTokenState,
-      hasMore: false
-    };
+    return buildForegroundSyncResult(ownerUserId, { sent: 0, skipped: accessTokenState, hasMore: false });
   }
 
-  await resetStaleSendingOutboxCommands(ownerUserId, getStaleSendingBoundaryIso());
-  await activateWaitingAuthOutboxCommands(ownerUserId);
-  await reconcileAcceptedCompleteReports();
+  if (!aggregateKey) {
+    await resetStaleSendingOutboxCommands(ownerUserId, getStaleSendingBoundaryIso());
+    await activateWaitingAuthOutboxCommands(ownerUserId);
+  }
+  await reconcileAcceptedCompleteReports(options.assignmentId);
 
   let sent = 0;
-
   let processedBatches = 0;
   const attemptedOperationIds = new Set<string>();
   for (let batchIndex = 0; batchIndex < maxSyncBatchesPerRun; batchIndex += 1) {
-    const commands = await getPendingOutboxBatch(ownerUserId, undefined, attemptedOperationIds);
-
+    const commands = await getPendingOutboxBatch(ownerUserId, undefined, attemptedOperationIds, aggregateKey);
     if (commands.length === 0) {
       break;
     }
@@ -153,34 +190,61 @@ async function runForegroundSyncInternal(): Promise<ForegroundSyncResult> {
           if (isWrongContourError(error)) {
             await markOutboxCommandsWrongContour(ownerUserId, commandIds, readableError);
           } else if (isAuthRequiredError(error)) {
-            await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError);
+            await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError, aggregateKey);
           } else if (isOfflineNetworkError(error)) {
-            await markPendingOutboxCommandsWaitingNetwork(ownerUserId, readableError);
+            await markPendingOutboxCommandsWaitingNetwork(ownerUserId, readableError, aggregateKey);
           } else if (error instanceof PermanentFileUploadError) {
             await markOutboxCommandsRejected(ownerUserId, commandIds, readableError);
           } else {
-            await markOutboxCommandsRetryLater(ownerUserId, commandIds, readableError);
+            await markOutboxCommandsRetryLater(ownerUserId, commandIds, readableError, null, getRetryReason(error));
           }
           emitSyncEvent(buildSyncEvent([command], [], [getCommandAssignmentId(command)].filter((id): id is string => id !== null)));
           throw error;
         }
       }
     });
-    // Нефатальная ошибка изолирована агрегатом; остальные агрегаты продолжают синхронизацию.
   }
 
   const hasMore = shouldContinueOutboxSync(
     processedBatches,
     maxSyncBatchesPerRun,
-    (await getPendingOutboxBatch(ownerUserId)).some(
+    (await getPendingOutboxBatch(ownerUserId, undefined, attemptedOperationIds, aggregateKey)).some(
       (command) => !attemptedOperationIds.has(command.clientOperationId)
     )
   );
 
-  return { sent, skipped: null, hasMore };
+  return buildForegroundSyncResult(ownerUserId, { sent, skipped: null, hasMore });
 }
 
-async function ensureAccessTokenForSync(ownerUserId: string): Promise<"ok" | "serverUnavailable" | "unauthenticated"> {
+async function prepareSyncRequest(
+  ownerUserId: string,
+  options: InternalForegroundSyncOptions
+) {
+  if (options.mode === "networkRecovered") {
+    await activateNetworkRecoveredOutboxCommands(ownerUserId);
+  } else if (options.mode === "manualReport" && options.assignmentId) {
+    await activateRetryableReportCommands(ownerUserId, options.assignmentId);
+  } else if (options.mode === "manualAll") {
+    await activateRetryableOutboxCommandsForImmediateRetry(ownerUserId);
+  }
+}
+
+async function buildForegroundSyncResult(ownerUserId: string | null, result: SyncResultBase): Promise<ForegroundSyncResult> {
+  if (!ownerUserId) {
+    return { ...result, nextRetryAt: null, retryableCount: 0 };
+  }
+
+  const [nextRetryAt, retryableCount] = await Promise.all([
+    getNextOutboxRetryAt(ownerUserId),
+    countRetryableOutboxCommands(ownerUserId)
+  ]);
+  return { ...result, nextRetryAt, retryableCount };
+}
+
+async function ensureAccessTokenForSync(
+  ownerUserId: string,
+  aggregateKey?: string
+): Promise<"ok" | "serverUnavailable" | "unauthenticated"> {
   if (await getAccessToken()) {
     return "ok";
   }
@@ -191,16 +255,16 @@ async function ensureAccessTokenForSync(ownerUserId: string): Promise<"ok" | "se
   } catch (error) {
     const readableError = getReadableSyncError(error);
     if (isAuthRequiredError(error)) {
-      await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError);
+      await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError, aggregateKey);
       return "unauthenticated";
     }
 
     if (isOfflineNetworkError(error)) {
-      await markPendingOutboxCommandsWaitingNetwork(ownerUserId, readableError);
+      await markPendingOutboxCommandsWaitingNetwork(ownerUserId, readableError, aggregateKey);
       return "serverUnavailable";
     }
 
-    await markPendingOutboxCommandsRetryLater(ownerUserId, readableError);
+    await markPendingOutboxCommandsRetryLater(ownerUserId, readableError, getRetryReason(error), aggregateKey);
     return "serverUnavailable";
   }
 }
@@ -231,7 +295,7 @@ async function postOutboxWithServerReconciliation(ownerUserId: string, commands:
       emitSyncEvent(buildSyncEvent(commands, reconciledResponses));
     }
 
-    await markOutboxCommandsRetryLater(ownerUserId, remainingCommandIds, getReadableSyncError(error));
+    await markOutboxCommandsRetryLater(ownerUserId, remainingCommandIds, getReadableSyncError(error), null, getRetryReason(error));
 
     throw error;
   }
@@ -321,11 +385,7 @@ export async function recoverStaleSendingOutboxCommands() {
 }
 
 export async function prepareManualSyncRetry() {
-  const ownerUserId = await getStoredOwnerUserId();
-  if (ownerUserId) {
-    await resetSendingOutboxCommandsForManualRetry(ownerUserId);
-    await activateRetryableOutboxCommandsForImmediateRetry(ownerUserId);
-  }
+  await runForegroundSync({ mode: "manualAll" });
 }
 
 export async function reconcileAcceptedCompleteReports(assignmentId?: string) {
@@ -523,6 +583,20 @@ function getReadableSyncError(error: unknown) {
   return "Не удалось отправить данные. Приложение повторит отправку автоматически.";
 }
 
+function getRetryReason(error: unknown): OutboxRetryReason {
+  if (error instanceof MobileNetworkError) {
+    return error.kind === "timeout" ? "timeout" : "network";
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  if (/\b429\b|too many requests|rate.?limit/i.test(message)) {
+    return "rateLimit";
+  }
+  if (/\b5\d\d\b|server unavailable|сервер/i.test(message)) {
+    return "server";
+  }
+  return "unknown";
+}
 function isAuthRequiredError(error: unknown) {
   return error instanceof Error && isReauthenticationRequiredError(error.message);
 }

@@ -24,6 +24,9 @@ test("only explicit revocation forces re-authentication", () => {
   assert.equal(isSessionExpiredError("Session revoked by administrator"), true);
   assert.equal(isSessionExpiredError("Device revoked"), true);
   assert.equal(isSessionExpiredError("Mobile session is invalid"), true);
+  assert.equal(isSessionExpiredError("Device session not found"), false);
+  assert.equal(isSessionExpiredError("Device mismatch"), false);
+  assert.equal(isSessionExpiredError("Refresh session expired"), false);
   assert.equal(isSessionExpiredError("Mobile API temporarily rejected the request after token refresh"), false);
   assert.equal(isReauthenticationRequiredError("session owner mismatch"), true);
   assert.equal(isSessionExpiredError("\u041a\u043b\u044e\u0447 \u043c\u043e\u0431\u0438\u043b\u044c\u043d\u043e\u0439 \u0441\u0435\u0441\u0441\u0438\u0438 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d."), false);
@@ -42,11 +45,11 @@ test("technical refresh failure preserves offline data and does not create a ref
   assert.match(httpSource, /refreshPromise \?\?= refreshAccessTokenInternal/);
   assert.match(httpSource, /finally\(\(\) => \{[\s\S]*?refreshPromise = null/);
   assert.match(tokenSource, /revokedAt: null/);
-  assert.match(tokenSource, /await clearAuthTokens\(\);/);
   const preserveStart = tokenSource.indexOf("export async function preserveOfflineSessionAfterRefreshFailure");
   const preserveEnd = tokenSource.indexOf("export async function revokeStoredSession", preserveStart);
   assert.ok(preserveStart >= 0 && preserveEnd > preserveStart);
-  assert.doesNotMatch(tokenSource.slice(preserveStart, preserveEnd), /clearTokens/);
+  assert.doesNotMatch(tokenSource.slice(preserveStart, preserveEnd), /clearAuthTokens|clearTokens|lockSession/);
+  assert.match(tokenSource.slice(preserveStart, preserveEnd), /requiresReenrollment: false/);
 });
 test("sync refuses a mixed-owner batch", () => {
   assert.deepEqual(

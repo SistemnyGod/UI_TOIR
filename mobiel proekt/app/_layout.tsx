@@ -12,6 +12,7 @@ import { bootstrapApplication } from "@/core/bootstrap";
 import { classifyStartupError, StartupState } from "@/core/startupState";
 import { SessionGateProvider, SessionGuard } from "@/auth/SessionGate";
 import { isSessionUnlocked, setPendingSessionRoute } from "@/auth/sessionGateState";
+import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { ThemeProvider, useAppTheme } from "@/features/settings/themePreference";
 import { registerPushNotifications, refreshPushRegistrationIfAllowed, syncMobileNotifications, subscribeToMobilePushEvents } from "@/services/notificationService";
 import { installMobileErrorReporter, logMobileError } from "@/services/mobileErrorReporter";
@@ -19,6 +20,7 @@ import { sanitizeDiagnosticMessage } from "@/services/diagnosticReportPolicy";
 import { registerBackgroundSyncTask } from "@/sync/backgroundSyncTask";
 import { registerBackgroundNotificationTask } from "@/services/backgroundNotificationTask";
 import { requestMobileDataRefresh, subscribeToNetworkSync, triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { cancelNextOutboxRetry, scheduleNextOutboxRetry } from "@/sync/outboxRetryScheduler";
 import { resolvePushNavigationTarget } from "@/services/pushNavigationResolver";
 
 export default function RootLayout() {
@@ -40,6 +42,9 @@ export default function RootLayout() {
         }
         setStartupState({ status: "ready" });
         installMobileErrorReporter();
+        void getStoredOwnerUserId().then(scheduleNextOutboxRetry).catch((error) => {
+          void logMobileError("sync.retry_schedule.failed", error);
+        });
       })
       .catch((error) => {
         logMobileError("app.bootstrap.failed", error);
@@ -89,7 +94,10 @@ export default function RootLayout() {
     const appStateSubscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         requestMobileDataRefresh("appActive");
-        triggerForegroundSyncWithRetry();
+        void getStoredOwnerUserId().then(scheduleNextOutboxRetry).catch((error) => {
+          void logMobileError("sync.retry_schedule.failed", error);
+        });
+        void triggerForegroundSyncWithRetry({ mode: "normal" });
         void refreshPushRegistrationIfAllowed().catch(() => undefined);
       }
     });
@@ -98,6 +106,7 @@ export default function RootLayout() {
       unsubscribeNetworkSync();
       unsubscribePushEvents();
       appStateSubscription.remove();
+      cancelNextOutboxRetry();
     };
   }, [isReady]);
 

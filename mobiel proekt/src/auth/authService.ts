@@ -28,9 +28,11 @@ import { completePendingLogoutIntents, enqueueLogoutIntent, getPendingLogoutCont
 import { registerPushNotifications, syncMobileNotifications } from "@/services/notificationService";
 import { syncWorkItems } from "@/services/workTaskService";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { cancelNextOutboxRetry } from "@/sync/outboxRetryScheduler";
 import { currentContourId } from "@/core/environments";
 
 export async function flushPendingLogout() {
+  cancelNextOutboxRetry();
   const pendingContourId = await getPendingLogoutContourId();
   if (pendingContourId === undefined) {
     return true;
@@ -126,7 +128,7 @@ export async function signIn(loginName: string, password: string) {
   await syncMobileNotifications().catch(() => []);
   // Resume reports and patrol actions that were safely retained while the
   // session was expired.  This is intentionally non-blocking for login UI.
-  void triggerForegroundSyncWithRetry({ forceRetry: true });
+  void triggerForegroundSyncWithRetry({ mode: "normal" });
 
   void logMobileAction({
     eventType: "auth.signIn",
@@ -166,7 +168,7 @@ export async function restoreSessionWithRefreshToken() {
   await syncWorkItems().catch(() => []);
   await registerPushNotifications().catch(() => null);
   await syncMobileNotifications().catch(() => []);
-  void triggerForegroundSyncWithRetry({ forceRetry: true });
+  void triggerForegroundSyncWithRetry({ mode: "normal" });
 
   void logMobileAction({
     eventType: "auth.restore",
@@ -179,6 +181,7 @@ export async function restoreSessionWithRefreshToken() {
 }
 
 export async function signOut() {
+  cancelNextOutboxRetry();
   await assertNoPendingLocalChanges("Нельзя выйти из аккаунта: на телефоне есть неотправленные отчеты или действия. Сначала выполните синхронизацию.");
   beginAuthTransition();
   const ownerUserId = await getStoredOwnerUserId();

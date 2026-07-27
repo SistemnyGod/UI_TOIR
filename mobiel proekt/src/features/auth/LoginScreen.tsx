@@ -25,6 +25,7 @@ import { currentContourId } from "@/core/environments";
 import { consumePendingSessionRoute, markSessionUnlocked } from "@/auth/sessionGateState";
 import { getOfflineSession, getRefreshToken, getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getServerBaseUrl, localLanServerBaseUrl, setLocalLanServerBaseUrl } from "@/core/serverSettings";
+import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 
 const rememberedLoginKey = "patrol360.rememberedLogin";
 const legacyRememberedPasswordKey = "patrol360.rememberedPassword";
@@ -209,6 +210,10 @@ export function LoginScreen() {
       const [offlineSession, ownerUserId] = await Promise.all([getOfflineSession(), getStoredOwnerUserId()]);
       if (offlineSession && ownerUserId === offlineSession.userId && isOfflineSessionValid(offlineSession, currentContourId)) {
         markSessionUnlocked();
+        // If connectivity was restored before biometric confirmation, the
+        // network event has already been consumed. Resume the retained outbox
+        // explicitly after unlocking the local session.
+        void triggerForegroundSyncWithRetry({ mode: "normal" });
         router.replace((consumePendingSessionRoute() ?? "/(tabs)/patrol") as never);
         return;
       }

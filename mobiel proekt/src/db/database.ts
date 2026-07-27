@@ -214,6 +214,7 @@ async function initializeDatabaseOnce() {
       updated_at_local TEXT,
       next_attempt_at TEXT,
       last_attempt_at TEXT,
+      retry_reason TEXT,
       attempt_count INTEGER NOT NULL DEFAULT 0,
       last_error TEXT,
       status TEXT NOT NULL
@@ -400,6 +401,9 @@ async function initializeDatabaseOnce() {
 
     await runLocalMigration(tx, "20260725_outbox_retry_timestamps", async () => {
       await ensureOutboxRetryTimestamps(tx);
+    });
+    await runLocalMigration(tx, "20260727_outbox_retry_reason", async () => {
+      await ensureOutboxRetryReason(tx);
     });
     await runLocalMigration(tx, "20260727_outbox_ordering", async () => {
       await ensureOutboxOrdering(tx);
@@ -978,6 +982,15 @@ async function ensureOutboxRetryTimestamps(db: SqlExecutor) {
   ]);
 }
 
+async function ensureOutboxRetryReason(db: SqlExecutor) {
+  await ensureColumns(db, "outbox_commands", [
+    { name: "retry_reason", sql: "ALTER TABLE outbox_commands ADD COLUMN retry_reason TEXT" }
+  ]);
+  await db.execAsync(`
+    CREATE INDEX IF NOT EXISTS ix_outbox_commands_retry_schedule
+      ON outbox_commands (owner_user_id, contour_id, status, retry_reason, next_attempt_at);
+  `);
+}
 async function ensureOutboxOrdering(db: SqlExecutor) {
   await ensureColumns(db, "outbox_commands", [
     { name: "aggregate_key", sql: "ALTER TABLE outbox_commands ADD COLUMN aggregate_key TEXT" },

@@ -136,10 +136,9 @@ export async function preserveOfflineSessionAfterRefreshFailure(reason: string) 
       ...offlineSession,
       revokedAt: null,
       revocationReason: reason,
-      requiresReenrollment: true
+      requiresReenrollment: false
     });
   }
-  await clearAuthTokens();
 }
 
 export async function revokeStoredSession(reason: string) {

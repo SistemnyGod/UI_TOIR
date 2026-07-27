@@ -9,6 +9,7 @@ import { consumePendingSessionRoute, markSessionUnlocked } from "@/auth/sessionG
 import { getOfflineSession, getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
 import { getLocalUserProfile } from "@/db/repositories/bootstrapRepository";
+import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -96,6 +97,11 @@ export default function OfflineLoginRoute() {
         return;
       }
       markSessionUnlocked();
+
+      // The network may have returned while the offline unlock screen was
+      // open. NetInfo has already emitted its event in that case, so request
+      // one non-blocking pass explicitly after unlocking the local session.
+      void triggerForegroundSyncWithRetry({ mode: "normal" });
       router.replace((consumePendingSessionRoute() ?? "/(tabs)/patrol") as never);
     } catch {
       setAuthError("На устройстве не настроена безопасная блокировка. Офлайн-данные не открыты.");

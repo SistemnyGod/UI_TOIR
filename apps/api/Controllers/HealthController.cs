@@ -1,13 +1,17 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Patrol360.Infrastructure.Persistence;
 
 namespace Patrol360.Api.Controllers;
 
 [ApiController]
 [AllowAnonymous]
 [Route("health")]
-public sealed class HealthController(IConfiguration configuration) : ControllerBase
+public sealed class HealthController(
+    IConfiguration configuration,
+    Patrol360DbContext dbContext) : ControllerBase
 {
     [HttpGet("live")]
     public IActionResult Live() => Ok(new { status = "live" });
@@ -25,6 +29,15 @@ public sealed class HealthController(IConfiguration configuration) : ControllerB
         {
             await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
+
+            var pendingMigrations = await dbContext.Database
+                .GetPendingMigrationsAsync(cancellationToken);
+            if (pendingMigrations.Any())
+            {
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    new { status = "unready", dependency = "database-migrations" });
+            }
         }
         catch (NpgsqlException)
         {

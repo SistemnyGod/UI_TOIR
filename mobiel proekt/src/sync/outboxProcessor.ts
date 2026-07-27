@@ -41,12 +41,13 @@ export async function enqueueOutboxCommand(input: CreateOutboxCommandInput) {
 export async function getPendingOutboxBatch(
   ownerUserId: string,
   limit?: number,
-  excludedClientOperationIds: ReadonlySet<string> = new Set()
+  excludedClientOperationIds: ReadonlySet<string> = new Set(),
+  aggregateKey?: string
 ) {
   const batchLimit = limit ?? 25;
   const commands = assertRecordsBelongToOwner(
     ownerUserId,
-    await listPendingOutboxCommands(ownerUserId, Math.max(batchLimit * 4, 100))
+    await listPendingOutboxCommands(ownerUserId, Math.max(batchLimit * 4, 100), aggregateKey)
   ).filter((command) => !excludedClientOperationIds.has(command.clientOperationId));
   return selectNextByAssignment(
     commands.map((command) => ({ command, assignmentId: getCommandAggregateKey(command), createdAtLocal: command.createdAtLocal, sequenceNo: command.sequenceNo, clientOperationId: command.clientOperationId })),

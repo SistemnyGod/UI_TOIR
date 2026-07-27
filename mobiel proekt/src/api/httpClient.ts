@@ -307,7 +307,7 @@ async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: numb
         throw new StaleAuthResponseError();
       }
       await preserveOfflineSessionAfterRefreshFailure(failureCode);
-      throw new Error(explicitRevocationMessage(failureCode));
+      throw new Error(recoverableRefreshFailureMessage(failureCode));
     }
 
     if (failureCode === "session_revoked"
@@ -462,4 +462,10 @@ function explicitRevocationMessage(code: "session_revoked" | "device_revoked" | 
     case "refresh_token_reuse":
       return "Обнаружено повторное использование refresh-токена. Сессия отозвана, локальные отчёты сохранены.";
   }
+}
+
+function recoverableRefreshFailureMessage(
+  code: "refresh_expired" | "device_reenrollment_required" | "device_session_not_found" | "device_mismatch"
+) {
+  return "Сервер временно не восстановил мобильную сессию (" + code + "). Локальная работа и очередь отчётов сохранены; приложение повторит отправку автоматически.";
 }

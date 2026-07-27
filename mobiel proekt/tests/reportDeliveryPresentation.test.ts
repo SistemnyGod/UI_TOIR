@@ -33,7 +33,7 @@ test("sending report can be checked and retried manually", () => {
 });
 
 test("a permanent rejection asks for correction instead of blind retry", () => {
-  assert.equal(getReportDeliveryPresentation("rejected", "Неверная точка").action, "resubmit");
+  assert.equal(getReportDeliveryPresentation("rejected", "Неверная точка").action, "repair");
   assert.equal(getReportDeliveryPresentation("conflict", null).action, "repair");
 });
 

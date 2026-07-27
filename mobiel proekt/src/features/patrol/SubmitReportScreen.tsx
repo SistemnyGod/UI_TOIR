@@ -102,7 +102,7 @@ export function SubmitReportScreen() {
       return;
     }
 
-    if (!readiness?.ready && (presentation.action === "submit" || presentation.action === "resubmit")) {
+    if (!readiness?.ready && presentation.action === "submit") {
       return;
     }
 
@@ -110,23 +110,24 @@ export function SubmitReportScreen() {
     setSyncNotice(null);
 
     try {
-      if (presentation.action === "submit" || presentation.action === "resubmit") {
+      if (presentation.action === "submit") {
         await completeAssignmentLocally(assignmentId);
         setDelivery(await loadDelivery(assignmentId));
+        setSyncNotice("Отчёт сохранён на телефоне. Можно закрыть экран: отправка начнётся автоматически при первой доступной возможности.");
+        void triggerForegroundSyncWithRetry({ mode: "normal" })
+          .then(async (syncResult) => {
+            setDelivery(await loadDelivery(assignmentId));
+            setSyncNotice(getSyncNotice(syncResult.skipped));
+          })
+          .catch((error) => {
+            void logMobileError("report.screen.sync.failed", error);
+          });
+        return;
       }
 
-      const syncResult = await triggerForegroundSyncWithRetry({ forceRetry: true });
+      const syncResult = await triggerForegroundSyncWithRetry({ mode: "manualReport", assignmentId });
       setDelivery(await loadDelivery(assignmentId));
-
-      if (syncResult.skipped === "offline") {
-        setSyncNotice("Нет подключения. Отчет сохранен и автоматически повторится после появления сети.");
-      } else if (syncResult.skipped === "serverUnavailable") {
-        setSyncNotice("Сервер временно недоступен. Отчет остается на телефоне; следующий повтор уже запланирован.");
-      } else if (syncResult.skipped === "unauthenticated") {
-        setSyncNotice("Сессия действительно истекла. Отчет сохранен на телефоне и отправится после входа.");
-      } else if (syncResult.skipped === "failed") {
-        setSyncNotice("Отправка прервалась. Данные сохранены — можно повторить сейчас или дождаться автоматической отправки.");
-      }
+      setSyncNotice(getSyncNotice(syncResult.skipped));
     } catch (error) {
       setDelivery(await loadDelivery(assignmentId));
       setSyncNotice(error instanceof Error ? error.message : "Не удалось запустить отправку. Отчет сохранен на телефоне.");
@@ -230,6 +231,10 @@ export function SubmitReportScreen() {
       </View>
 
       <View style={styles.secondaryLinks}>
+        <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.replace("/(tabs)/patrol")} style={styles.secondaryLink}>
+          <Ionicons color={colors.primary} name="list-outline" size={18} />
+          <Text style={[styles.secondaryLinkText, { color: colors.primary }]}>К списку обходов</Text>
+        </Pressable>
         <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} style={styles.secondaryLink}>
           <Ionicons color={colors.primary} name="list-outline" size={18} />
           <Text style={[styles.secondaryLinkText, { color: colors.primary }]}>Все точки</Text>
@@ -250,14 +255,19 @@ async function loadDelivery(assignmentId: string) {
   return ownerUserId ? getCompleteReportDeliveryState(ownerUserId, assignmentId) : null;
 }
 
+function getSyncNotice(skipped: "offline" | "serverUnavailable" | "unauthenticated" | "failed" | null) {
+  if (skipped === "offline") return "Нет подключения. Отчёт сохранён и автоматически повторится после появления сети.";
+  if (skipped === "serverUnavailable") return "Сервер временно недоступен. Отчёт остаётся на телефоне; следующий повтор уже запланирован.";
+  if (skipped === "unauthenticated") return "Для продолжения отправки необходимо войти. Повторно проходить точки не потребуется.";
+  if (skipped === "failed") return "Отправка прервалась. Данные сохранены — можно повторить сейчас или дождаться автоматической отправки.";
+  return "Отчёт сохранён на телефоне. Отправка выполняется автоматически.";
+}
 function actionIcon(action: ReturnType<typeof getReportDeliveryPresentation>["action"]): keyof typeof Ionicons.glyphMap {
   switch (action) {
     case "retry":
       return "refresh-outline";
     case "repair":
       return "build-outline";
-    case "resubmit":
-      return "send-outline";
     case "signIn":
       return "log-in-outline";
     case "done":

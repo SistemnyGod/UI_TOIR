@@ -192,8 +192,9 @@ try {
       $arguments.BuildRoot = $BuildRoot
     }
     & (Join-Path $PSScriptRoot 'build-apk.ps1') @arguments
-    if ($LASTEXITCODE -ne 0) {
-      throw ('Release APK build failed with exit code {0}' -f $LASTEXITCODE)
+    $nestedExitCode = $LASTEXITCODE
+    if ($null -ne $nestedExitCode -and "$nestedExitCode" -ne '' -and [int]$nestedExitCode -ne 0) {
+      throw ('Release APK build failed with exit code {0}' -f $nestedExitCode)
     }
   }
 }

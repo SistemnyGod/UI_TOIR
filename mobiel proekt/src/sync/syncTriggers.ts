@@ -1,39 +1,39 @@
 import NetInfo from "@react-native-community/netinfo";
-import { canAttemptServerConnection } from "@/core/networkPolicy";
-import { isReauthenticationRequiredError } from "@/auth/sessionErrors";
-import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 
-import { refreshMobileData } from "@/services/mobileDataRefreshService";
+import { isReauthenticationRequiredError } from "@/auth/sessionErrors";
+import { canAttemptServerConnection } from "@/core/networkPolicy";
+import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { triggerDailyDiagnosticReportUpload } from "@/services/diagnosticReportService";
-import { ForegroundSyncResult, prepareManualSyncRetry, runForegroundSync } from "@/sync/syncEngine";
+import { refreshMobileData } from "@/services/mobileDataRefreshService";
 import { createMutationSyncScheduler } from "@/sync/mutationSyncScheduler";
 import { registerMutationSyncRequester, requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
-import { getRetryDelayMs } from "@/sync/retryPolicy";
+import { registerOutboxRetrySchedulerRunner } from "@/sync/outboxRetryScheduler";
+import { ForegroundSyncResult, ForegroundSyncOptions, runForegroundSync } from "@/sync/syncEngine";
 
 const fallbackRefreshMs = 300_000;
 const refreshCooldownMs = 15_000;
 const mutationSyncDebounceMs = 50;
 
-let retryTimeout: ReturnType<typeof setTimeout> | null = null;
 let fallbackRefreshInterval: ReturnType<typeof setInterval> | null = null;
 let scheduledRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
-let retryAttempt = 0;
 let lastRefreshStartedAt = 0;
 let activeRefreshPromise: Promise<boolean> | null = null;
 let lastNetworkUsable: boolean | null = null;
 
 const mutationSyncScheduler = createMutationSyncScheduler(
-  () => triggerForegroundSyncWithRetry(),
+  () => triggerForegroundSyncWithRetry({ mode: "normal" }),
   mutationSyncDebounceMs
 );
 registerMutationSyncRequester(() => mutationSyncScheduler.request());
+registerOutboxRetrySchedulerRunner(() => triggerForegroundSyncWithRetry({ mode: "normal" }));
 
 export type MobileDataRefreshReason = "push" | "notificationResponse" | "network" | "appActive" | "fallback" | "manual";
 
 export function subscribeToNetworkSync() {
   fallbackRefreshInterval ??= setInterval(() => {
     requestMobileDataRefresh("fallback");
+    void triggerForegroundSyncWithRetry({ mode: "normal" });
   }, fallbackRefreshMs);
 
   const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
@@ -52,7 +52,7 @@ export function subscribeToNetworkSync() {
 
     if (networkUsable) {
       requestMobileDataRefresh("network");
-      void triggerForegroundSyncWithRetry({ forceRetry: networkBecameUsable });
+      void triggerForegroundSyncWithRetry({ mode: networkBecameUsable ? "networkRecovered" : "normal" });
       void triggerDailyDiagnosticReportUpload();
     }
   });
@@ -74,43 +74,36 @@ export type TriggerForegroundSyncResult = ForegroundSyncResult | {
   sent: 0;
   skipped: "failed";
   hasMore: false;
+  nextRetryAt: null;
+  retryableCount: 0;
 };
 
 export async function triggerForegroundSyncWithRetry(
-  options: { forceRetry?: boolean } = {}
+  options: ForegroundSyncOptions & { forceRetry?: boolean } = {}
 ): Promise<TriggerForegroundSyncResult> {
-  if (options.forceRetry) {
-    clearScheduledRetry();
-  }
+  const mode = options.forceRetry ? "manualAll" : options.mode ?? "normal";
   const pendingRefresh = activeRefreshPromise;
 
   try {
-    if (options.forceRetry) {
-      await prepareManualSyncRetry();
-    }
     await (pendingRefresh ? pendingRefresh.catch(() => false) : Promise.resolve(false));
-    const result = await runForegroundSync();
-    if (result.skipped === "serverUnavailable" || result.skipped === "offline") {
-      scheduleRetry();
-      return result;
+    const result = await runForegroundSync({ mode, assignmentId: options.assignmentId });
+    if (result.skipped === null) {
+      void triggerDailyDiagnosticReportUpload();
     }
-
-    resetRetryBackoff();
-    void triggerDailyDiagnosticReportUpload();
     return result;
   } catch (error) {
     void logMobileError("sync.trigger.failed", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (isReauthenticationRequiredError(errorMessage)) {
-      return { sent: 0, skipped: "unauthenticated", hasMore: false };
+      return { sent: 0, skipped: "unauthenticated", hasMore: false, nextRetryAt: null, retryableCount: 0 };
     }
 
-    scheduleRetry();
-    return { sent: 0, skipped: "failed", hasMore: false };
+    return { sent: 0, skipped: "failed", hasMore: false, nextRetryAt: null, retryableCount: 0 };
   }
 }
 
 export { requestSyncAfterMutation };
+
 export function triggerMobileDataRefresh() {
   requestMobileDataRefresh("manual", { force: true });
 }
@@ -152,31 +145,4 @@ function scheduleMobileDataRefresh(reason: MobileDataRefreshReason, delayMs: num
     scheduledRefreshTimeout = null;
     requestMobileDataRefresh(reason);
   }, delayMs);
-}
-
-function scheduleRetry() {
-  if (retryTimeout) {
-    return;
-  }
-
-  const delayMs = getRetryDelayMs(retryAttempt);
-  retryAttempt += 1;
-  retryTimeout = setTimeout(() => {
-    retryTimeout = null;
-    triggerForegroundSyncWithRetry();
-  }, delayMs);
-}
-
-function resetRetryBackoff() {
-  retryAttempt = 0;
-  clearScheduledRetry();
-}
-
-function clearScheduledRetry() {
-  if (!retryTimeout) {
-    return;
-  }
-
-  clearTimeout(retryTimeout);
-  retryTimeout = null;
 }

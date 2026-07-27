@@ -1379,7 +1379,7 @@ public sealed class MobileAppDbIntegrationTests
                 @scheduled_time,
                 false,
                 '',
-                'Новая',
+                'Назначена',
                 @created_at,
                 'Mobile integration request'
             );
