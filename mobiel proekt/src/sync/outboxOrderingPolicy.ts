@@ -1,6 +1,8 @@
 export type OrderedOutboxItem = {
   createdAtLocal: string;
   assignmentId: string | null;
+  sequenceNo?: number | null;
+  clientOperationId?: string;
 };
 
 export type OutboxAggregateCommand = {
@@ -36,7 +38,16 @@ export function getCommandAggregateKey(command: OutboxAggregateCommand) {
   return null;
 }
 function compareByCreatedAt(left: OrderedOutboxItem, right: OrderedOutboxItem) {
-  return left.createdAtLocal.localeCompare(right.createdAtLocal);
+  const leftSequence = left.sequenceNo ?? Number.MAX_SAFE_INTEGER;
+  const rightSequence = right.sequenceNo ?? Number.MAX_SAFE_INTEGER;
+  if (left.assignmentId && left.assignmentId === right.assignmentId && leftSequence !== rightSequence) {
+    return leftSequence - rightSequence;
+  }
+  const createdAtOrder = left.createdAtLocal.localeCompare(right.createdAtLocal);
+  if (createdAtOrder !== 0) {
+    return createdAtOrder;
+  }
+  return (left.clientOperationId ?? "").localeCompare(right.clientOperationId ?? "");
 }
 
 /**

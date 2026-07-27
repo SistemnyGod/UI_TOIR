@@ -27,7 +27,6 @@ export default function OfflineLoginRoute() {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [requiresReenrollment, setRequiresReenrollment] = useState(false);
-  const [isExpired, setIsExpired] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -39,11 +38,6 @@ export default function OfflineLoginRoute() {
         }
 
         setRequiresReenrollment(Boolean(offlineSession?.requiresReenrollment));
-        const accessAfterAuthentication = evaluateOfflineAccess(offlineSession, {
-          authenticationSatisfied: true,
-          expectedContourId: currentContourId
-        });
-        setIsExpired(accessAfterAuthentication.reason === "offlineExpired");
         if (!ownerUserId || !offlineSession || offlineSession.userId !== ownerUserId || !isOfflineSessionValid(offlineSession, currentContourId)) {
           return null;
         }
@@ -163,7 +157,7 @@ export default function OfflineLoginRoute() {
       {authError ? <Text style={styles.error}>{authError}</Text> : null}
       <PrimaryButton
         disabled={isAuthenticating}
-        label={isAuthenticating ? "Проверяем доступ..." : isExpired ? "Открыть аварийный просмотр" : "Продолжить офлайн"}
+        label={isAuthenticating ? "Проверяем доступ..." : "Продолжить офлайн"}
         onPress={() => void continueOffline()}
       />
       <PrimaryButton label="Войти онлайн" onPress={() => router.replace("/(auth)/login")} />

@@ -58,6 +58,30 @@ internal sealed partial class EfMobileAppService
 
         var deviceId = NormalizeOptionalText(request.DeviceId);
         var now = DateTimeOffset.UtcNow;
+        var registeredDevice = dbContext.MobileDevices.FirstOrDefault(item => item.DeviceId == deviceId);
+        if (registeredDevice is not null && (!registeredDevice.Trusted || registeredDevice.BlockedAt is not null))
+        {
+            return UnauthorizedResult("device_revoked");
+        }
+        if (registeredDevice is null)
+        {
+            registeredDevice = new MobileDeviceEntity
+            {
+                DeviceId = deviceId,
+                MobileAccountId = account.Id,
+                Trusted = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+                LastSeenAt = now
+            };
+            dbContext.MobileDevices.Add(registeredDevice);
+        }
+        else
+        {
+            registeredDevice.MobileAccountId = account.Id;
+            registeredDevice.UpdatedAt = now;
+            registeredDevice.LastSeenAt = now;
+        }
         var previousSessions = dbContext.MobileAccountSessions
             .Include(item => item.MobileAccount)
             .Where(item => item.DeviceId == deviceId && item.RevokedAt == null)
@@ -126,6 +150,7 @@ internal sealed partial class EfMobileAppService
         {
             var replayedSession = dbContext.MobileAccountSessions
                 .Include(item => item.MobileAccount)
+                    .ThenInclude(account => account!.EmployeeBindings)
                 .FirstOrDefault(item => item.PreviousRefreshTokenHash == tokenHash
                     && item.PreviousRefreshTokenValidUntil > now
                     && item.DeviceId == request.DeviceId);
@@ -135,12 +160,6 @@ internal sealed partial class EfMobileAppService
                 {
                     return UnauthorizedResult("session_revoked");
                 }
-
-                if (replayedSession.RefreshExpiresAt <= now)
-                {
-                    return UnauthorizedResult("device_reenrollment_required");
-                }
-
                 if (replayedSession.MobileAccount is null || !CanUseMobileApp(replayedSession.MobileAccount))
                 {
                     return UnauthorizedResult("account_disabled");
@@ -175,21 +194,43 @@ internal sealed partial class EfMobileAppService
                 return UnauthorizedResult("refresh_token_reuse");
             }
 
-            return UnauthorizedResult("device_reenrollment_required");
+            var historicalToken = dbContext.MobileRefreshTokenHistories
+                .Include(item => item.MobileAccountSession)
+                    .ThenInclude(session => session!.MobileAccount)
+                .FirstOrDefault(item => item.TokenHash == tokenHash);
+            if (historicalToken?.MobileAccountSession is not null)
+            {
+                var historicalSession = historicalToken.MobileAccountSession;
+                historicalSession.RevokedAt = now;
+                historicalSession.PushTokenRevokedAt = now;
+                historicalSession.Status = "Завершена";
+                AddMobileSessionAuditEvent(
+                    historicalSession.MobileAccount!,
+                    "mobile_account.refresh_token_reuse",
+                    $"Обнаружено повторное использование refresh-токена поколения {historicalToken.Generation} сессии {historicalSession.Id}; сессия отозвана.");
+                dbContext.SaveChanges();
+                return UnauthorizedResult("refresh_token_reuse");
+            }
+            return UnauthorizedResult("device_session_not_found");
         }
         if (oldSession.RevokedAt is not null)
         {
             return UnauthorizedResult("session_revoked");
         }
-
-        if (oldSession.RefreshExpiresAt <= now)
-        {
-            return UnauthorizedResult("device_reenrollment_required");
-        }
-
         if (!string.Equals(oldSession.DeviceId, request.DeviceId, StringComparison.Ordinal))
         {
-            return UnauthorizedResult("device_reenrollment_required");
+            return UnauthorizedResult("device_mismatch");
+        }
+
+        var registeredDevice = dbContext.MobileDevices.FirstOrDefault(item => item.DeviceId == oldSession.DeviceId);
+        if (registeredDevice is not null && (!registeredDevice.Trusted || registeredDevice.BlockedAt is not null))
+        {
+            return UnauthorizedResult("device_revoked");
+        }
+        if (registeredDevice is not null)
+        {
+            registeredDevice.UpdatedAt = now;
+            registeredDevice.LastSeenAt = now;
         }
 
         if (oldSession.MobileAccount is null || !CanUseMobileApp(oldSession.MobileAccount))
@@ -197,6 +238,15 @@ internal sealed partial class EfMobileAppService
             return UnauthorizedResult("account_disabled");
         }
 
+        dbContext.MobileRefreshTokenHistories.Add(new MobileRefreshTokenHistoryEntity
+        {
+            Id = Guid.NewGuid(),
+            MobileAccountSessionId = oldSession.Id,
+            TokenHash = oldSession.RefreshTokenHash,
+            Generation = oldSession.RefreshGeneration,
+            RotatedAt = now,
+            ReplayValidUntil = now.Add(RefreshReplayDetectionWindow)
+        });
         var accessToken = EfAuthSessionService.GenerateAccessToken();
         var refreshToken = EfAuthSessionService.GenerateAccessToken();
         oldSession.TokenHash = EfAuthSessionService.HashToken(accessToken);

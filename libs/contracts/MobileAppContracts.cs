@@ -299,8 +299,19 @@ public sealed record MobileDeviceHealthDto(
     string PushStatus,
     int PendingOutboxCount,
     int StaleOutboxCount,
-    string? LastError);
+    string? LastError,
+    bool Trusted,
+    DateTimeOffset? BlockedAt);
 
+public sealed record MobileDeviceAdminDto(
+    string DeviceId,
+    Guid MobileAccountId,
+    bool Trusted,
+    DateTimeOffset? BlockedAt,
+    string BlockReason,
+    DateTimeOffset LastSeenAt);
+
+public sealed record MobileDeviceBlockRequestDto(string? Reason);
 public sealed record MobileAuthResult(
     MobileAuthSessionDto? Session,
     bool Unauthorized,

@@ -77,6 +77,7 @@ export function WorkAccountingScreen() {
   const [sections, setSections] = useState<MobileEmuSectionDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [taskModal, setTaskModal] = useState<{ mode: "create" | "edit"; task?: WorkTaskDto } | null>(null);
   const [remarkModalOpen, setRemarkModalOpen] = useState(false);
   const [menuTask, setMenuTask] = useState<WorkItemDto | null>(null);
@@ -114,7 +115,19 @@ export function WorkAccountingScreen() {
       let isMounted = true;
       setLoading(true);
 
-      void Promise.all([loadWorkItemsOfflineFirst(reloadLocal), listShiftRemarks(), listMobileEmployees(), listEmuSections()])
+      const handleRefreshSuccess = async () => {
+        await reloadLocal();
+        if (isMounted) {
+          setRefreshError(null);
+        }
+      };
+      const handleRefreshFailure = () => {
+        if (isMounted) {
+          setRefreshError("Показаны сохранённые данные. Обновление с сервера не удалось.");
+        }
+      };
+
+      void Promise.all([loadWorkItemsOfflineFirst(handleRefreshSuccess, handleRefreshFailure), listShiftRemarks(), listMobileEmployees(), listEmuSections()])
         .then(([nextTasks, nextRemarks, nextEmployees, nextSections]) => {
           if (isMounted) {
             setTasks(nextTasks);
@@ -417,6 +430,7 @@ export function WorkAccountingScreen() {
       </View>
 
       {message ? <Text style={[styles.message, { color: colors.primary }]}>{message}</Text> : null}
+      {refreshError ? <StatusPill label={refreshError} tone="warning" /> : null}
 
       {tab === "tasks" ? (
         <>

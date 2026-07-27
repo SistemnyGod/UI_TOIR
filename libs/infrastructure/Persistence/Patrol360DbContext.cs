@@ -49,6 +49,10 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
 
     public DbSet<MobileAccountSessionEntity> MobileAccountSessions => Set<MobileAccountSessionEntity>();
 
+    public DbSet<MobileDeviceEntity> MobileDevices => Set<MobileDeviceEntity>();
+
+    public DbSet<MobileRefreshTokenHistoryEntity> MobileRefreshTokenHistories => Set<MobileRefreshTokenHistoryEntity>();
+
     public DbSet<MobileAccountAuditEventEntity> MobileAccountAuditEvents => Set<MobileAccountAuditEventEntity>();
 
     public DbSet<MobileNotificationEntity> MobileNotifications => Set<MobileNotificationEntity>();
@@ -218,6 +222,8 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
         ConfigureMobileAccounts(modelBuilder);
         ConfigureMobileAccountEmployeeBindings(modelBuilder);
         ConfigureMobileAccountSessions(modelBuilder);
+        ConfigureMobileDevices(modelBuilder);
+        ConfigureMobileRefreshTokenHistories(modelBuilder);
         ConfigureMobileAccountAuditEvents(modelBuilder);
         ConfigureMobileNotifications(modelBuilder);
         ConfigureMobileOutboxOperations(modelBuilder);
@@ -780,6 +786,59 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
         });
     }
 
+    private static void ConfigureMobileDevices(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<MobileDeviceEntity>(entity =>
+        {
+            entity.ToTable("mobile_devices");
+            entity.HasKey(device => device.DeviceId);
+
+            entity.Property(device => device.DeviceId).HasColumnName("device_id").HasMaxLength(120);
+            entity.Property(device => device.MobileAccountId).HasColumnName("mobile_account_id");
+            entity.Property(device => device.Trusted).HasColumnName("trusted").IsRequired();
+            entity.Property(device => device.BlockedAt).HasColumnName("blocked_at");
+            entity.Property(device => device.BlockReason).HasColumnName("block_reason").HasMaxLength(240).IsRequired();
+            entity.Property(device => device.CreatedAt).HasColumnName("created_at");
+            entity.Property(device => device.UpdatedAt).HasColumnName("updated_at");
+            entity.Property(device => device.LastSeenAt).HasColumnName("last_seen_at");
+
+            entity.HasOne(device => device.MobileAccount)
+                .WithMany()
+                .HasForeignKey(device => device.MobileAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(device => device.MobileAccountId)
+                .HasDatabaseName("ix_mobile_devices_account");
+            entity.HasIndex(device => device.BlockedAt)
+                .HasDatabaseName("ix_mobile_devices_blocked_at");
+        });
+    }
+    private static void ConfigureMobileRefreshTokenHistories(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<MobileRefreshTokenHistoryEntity>(entity =>
+        {
+            entity.ToTable("mobile_refresh_token_histories");
+            entity.HasKey(history => history.Id);
+
+            entity.Property(history => history.Id).HasColumnName("id");
+            entity.Property(history => history.MobileAccountSessionId).HasColumnName("mobile_account_session_id");
+            entity.Property(history => history.TokenHash).HasColumnName("token_hash").HasMaxLength(128).IsRequired();
+            entity.Property(history => history.Generation).HasColumnName("generation").IsRequired();
+            entity.Property(history => history.RotatedAt).HasColumnName("rotated_at");
+            entity.Property(history => history.ReplayValidUntil).HasColumnName("replay_valid_until");
+
+            entity.HasOne(history => history.MobileAccountSession)
+                .WithMany()
+                .HasForeignKey(history => history.MobileAccountSessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(history => history.TokenHash)
+                .IsUnique()
+                .HasDatabaseName("ux_mobile_refresh_token_histories_token_hash");
+            entity.HasIndex(history => history.MobileAccountSessionId)
+                .HasDatabaseName("ix_mobile_refresh_token_histories_session");
+        });
+    }
     private static void ConfigureMobileAccountAuditEvents(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<MobileAccountAuditEventEntity>(entity =>

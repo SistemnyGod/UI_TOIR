@@ -1201,6 +1201,22 @@ public sealed class MobileAppDbIntegrationTests
         ExpireMobileSessions(database.ConnectionString, account.Account.Id);
         Assert.Null(AuthenticateMobileSession(provider, firstLogin.Session.AccessToken));
 
+        ExpireMobileRefreshSessions(database.ConnectionString, account.Account.Id);
+        var refreshedAfterExpiry = UseMobileApp(provider, mobile => mobile.Refresh(new MobileRefreshRequestDto(
+            firstLogin.Session.RefreshToken,
+            "kenshi-c1s-test"), "127.0.0.1"));
+        Assert.True(refreshedAfterExpiry.Succeeded);
+        Assert.NotEqual(firstLogin.Session.RefreshToken, refreshedAfterExpiry.Session!.RefreshToken);
+
+        ExpirePreviousRefreshToken(database.ConnectionString, account.Account.Id);
+
+        var replayedRefresh = UseMobileApp(provider, mobile => mobile.Refresh(new MobileRefreshRequestDto(
+            firstLogin.Session.RefreshToken,
+            "kenshi-c1s-test"), "127.0.0.1"));
+        Assert.True(replayedRefresh.Unauthorized);
+        Assert.Equal("refresh_token_reuse", replayedRefresh.FailureCode);
+        Assert.Null(AuthenticateMobileSession(provider, refreshedAfterExpiry.Session.AccessToken));
+
         var secondLogin = Login(provider, account.Account.Login, "Patrol360!");
         Assert.True(secondLogin.Succeeded);
         Assert.NotNull(AuthenticateMobileSession(provider, secondLogin.Session!.AccessToken));
@@ -1278,6 +1294,28 @@ public sealed class MobileAppDbIntegrationTests
 
         using var command = connection.CreateCommand();
         command.CommandText = "UPDATE mobile_account_sessions SET expires_at = NOW() - INTERVAL '1 minute' WHERE mobile_account_id = @account_id;";
+        command.Parameters.AddWithValue("account_id", mobileAccountId);
+        command.ExecuteNonQuery();
+    }
+
+    private static void ExpirePreviousRefreshToken(string connectionString, Guid mobileAccountId)
+    {
+        using var connection = new NpgsqlConnection(connectionString);
+        connection.Open();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE mobile_account_sessions SET previous_refresh_token_valid_until = NOW() - INTERVAL '1 minute' WHERE mobile_account_id = @account_id;";
+        command.Parameters.AddWithValue("account_id", mobileAccountId);
+        command.ExecuteNonQuery();
+    }
+
+    private static void ExpireMobileRefreshSessions(string connectionString, Guid mobileAccountId)
+    {
+        using var connection = new NpgsqlConnection(connectionString);
+        connection.Open();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE mobile_account_sessions SET refresh_expires_at = NOW() - INTERVAL '1 minute' WHERE mobile_account_id = @account_id;";
         command.Parameters.AddWithValue("account_id", mobileAccountId);
         command.ExecuteNonQuery();
     }

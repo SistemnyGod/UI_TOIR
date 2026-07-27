@@ -19,6 +19,21 @@ public sealed class MobileSyncController(IMobileSyncAdminService syncAdminServic
     public ActionResult<IReadOnlyList<MobileDeviceHealthDto>> DeviceHealth() =>
         Ok(syncAdminService.GetDeviceHealth());
 
+    [HttpPost("devices/{deviceId}/block")]
+    [RequirePermission("mobile_accounts.write")]
+    public ActionResult<MobileDeviceAdminDto> BlockDevice(string deviceId, MobileDeviceBlockRequestDto? request)
+    {
+        var result = syncAdminService.BlockDevice(deviceId, request?.Reason ?? "Заблокировано оператором", User.Identity?.Name ?? "operator");
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpPost("devices/{deviceId}/unblock")]
+    [RequirePermission("mobile_accounts.write")]
+    public ActionResult<MobileDeviceAdminDto> UnblockDevice(string deviceId)
+    {
+        var result = syncAdminService.UnblockDevice(deviceId, User.Identity?.Name ?? "operator");
+        return result is null ? NotFound() : Ok(result);
+    }
     [HttpGet("conflicts/{mobileAccountId:guid}/{clientOperationId}")]
     [RequirePermission("results.read")]
     public ActionResult<MobileSyncConflictDetailDto> Conflict(Guid mobileAccountId, string clientOperationId)

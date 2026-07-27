@@ -1,6 +1,7 @@
 import * as SQLite from "expo-sqlite";
 
 import { openProtectedDatabase, openProtectedDatabaseConnection } from "@/db/encryptedDatabase";
+import { getCommandAggregateKey } from "@/sync/outboxOrderingPolicy";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let initializationPromise: Promise<void> | null = null;
@@ -399,6 +400,9 @@ async function initializeDatabaseOnce() {
 
     await runLocalMigration(tx, "20260725_outbox_retry_timestamps", async () => {
       await ensureOutboxRetryTimestamps(tx);
+    });
+    await runLocalMigration(tx, "20260727_outbox_ordering", async () => {
+      await ensureOutboxOrdering(tx);
     });
     await runLocalMigration(tx, "20260725_conflict_resolution_state", async () => {
       await ensureConflictResolutionState(tx);
@@ -974,6 +978,79 @@ async function ensureOutboxRetryTimestamps(db: SqlExecutor) {
   ]);
 }
 
+async function ensureOutboxOrdering(db: SqlExecutor) {
+  await ensureColumns(db, "outbox_commands", [
+    { name: "aggregate_key", sql: "ALTER TABLE outbox_commands ADD COLUMN aggregate_key TEXT" },
+    { name: "sequence_no", sql: "ALTER TABLE outbox_commands ADD COLUMN sequence_no INTEGER" }
+  ]);
+
+  const maxRow = await db.getFirstAsync<{ maxSequence: number | null }>(
+    "SELECT COALESCE(MAX(sequence_no), 0) AS maxSequence FROM outbox_commands"
+  );
+  let nextSequence = maxRow?.maxSequence ?? 0;
+  const rows = await db.getAllAsync<{
+    rowid: number;
+    client_operation_id: string;
+    owner_user_id: string;
+    contour_id: string | null;
+    command_type: string;
+    entity_type: string;
+    entity_local_id: string | null;
+    entity_server_id: string | null;
+    payload_json: string;
+    aggregate_key: string | null;
+    sequence_no: number | null;
+    status: string;
+  }>(
+    `
+      SELECT rowid, client_operation_id, owner_user_id, contour_id,
+             command_type, entity_type, entity_local_id, entity_server_id,
+             payload_json, aggregate_key, sequence_no, status
+      FROM outbox_commands
+      WHERE aggregate_key IS NULL OR sequence_no IS NULL
+      ORDER BY rowid ASC
+    `
+  );
+
+  for (const row of rows) {
+    nextSequence += 1;
+    let aggregateKey = row.aggregate_key;
+    let status = row.status;
+    let lastError: string | null = null;
+    try {
+      const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
+      aggregateKey ??= getCommandAggregateKey({
+        commandType: row.command_type,
+        entityType: row.entity_type,
+        entityLocalId: row.entity_local_id,
+        entityServerId: row.entity_server_id,
+        payload
+      });
+    } catch (error) {
+      status = "invalidPayload";
+      lastError = `Некорректный JSON payload: ${error instanceof Error ? error.message : "ошибка разбора"}`;
+    }
+
+    aggregateKey ??= `legacy:${row.client_operation_id}`;
+    await db.runAsync(
+      `
+        UPDATE outbox_commands
+        SET aggregate_key = ?,
+            sequence_no = ?,
+            status = ?,
+            last_error = COALESCE(?, last_error),
+            updated_at_local = COALESCE(updated_at_local, ?)
+        WHERE rowid = ?
+      `,
+      [aggregateKey, nextSequence, status, lastError, new Date().toISOString(), row.rowid]
+    );
+  }
+
+  await db.execAsync(`
+    CREATE INDEX IF NOT EXISTS ix_outbox_commands_contour_aggregate_sequence
+      ON outbox_commands (owner_user_id, contour_id, aggregate_key, sequence_no);
+  `);
+}
 async function ensureFileRetryMetadata(db: SqlExecutor) {
   await ensureColumns(db, "files", [
     { name: "attempt_count", sql: "ALTER TABLE files ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0" },

@@ -5,7 +5,6 @@ export type OfflineAccessMode = "full" | "emergency" | "denied";
 export type OfflineAccessReason =
   | "allowed"
   | "authenticationRequired"
-  | "offlineExpired"
   | "deviceNotTrusted"
   | "userBlocked"
   | "deviceBlocked"
@@ -19,15 +18,14 @@ export type OfflineAccessDecision = {
 };
 
 type EvaluateOfflineAccessOptions = {
-  now?: Date;
   authenticationSatisfied?: boolean;
   expectedContourId?: string;
 };
 
 /**
  * Decides whether a stored session may unlock the writable application.
- * Expired sessions can only enter the isolated emergency mode after local
- * authentication; they never unlock the work tabs.
+ * Legacy expiry fields are retained in stored sessions for compatibility, but
+ * offline work ends only after explicit revocation or a device/account guard.
  */
 export function evaluateOfflineAccess(
   session: OfflineSessionState | null,
@@ -53,22 +51,15 @@ export function evaluateOfflineAccess(
     return denied("deviceBlocked");
   }
 
-  if (session.deviceTrusted !== true) {
+  // deviceTrusted was added after the first mobile releases. Preserve
+  // existing enrolled sessions unless the server explicitly marks them as
+  // untrusted; a missing value is a legacy trusted session.
+  if (session.deviceTrusted === false) {
     return denied("deviceNotTrusted");
   }
 
   if (options.authenticationSatisfied !== true) {
     return denied("authenticationRequired");
-  }
-
-  const expiresAt = Date.parse(session.offlineExpiresAt ?? session.expiresAt);
-  const now = (options.now ?? new Date()).getTime();
-  if (Number.isNaN(expiresAt) || expiresAt <= now) {
-    return {
-      mode: "emergency",
-      reason: "offlineExpired",
-      canOpenWorkTabs: false
-    };
   }
 
   return {
@@ -78,7 +69,7 @@ export function evaluateOfflineAccess(
   };
 }
 
-function denied(reason: Exclude<OfflineAccessReason, "allowed" | "offlineExpired">): OfflineAccessDecision {
+function denied(reason: Exclude<OfflineAccessReason, "allowed">): OfflineAccessDecision {
   return {
     mode: "denied",
     reason,

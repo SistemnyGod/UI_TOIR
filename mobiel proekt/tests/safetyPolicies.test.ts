@@ -32,6 +32,22 @@ test("only explicit revocation forces re-authentication", () => {
   assert.equal(isReauthenticationRequiredError("Server temporarily unavailable"), false);
 });
 
+test("technical refresh failure preserves offline data and does not create a refresh loop", async () => {
+  const [httpSource, tokenSource] = await Promise.all([
+    readFile(join(process.cwd(), "src/api/httpClient.ts"), "utf8"),
+    readFile(join(process.cwd(), "src/auth/tokenStorage.ts"), "utf8")
+  ]);
+
+  assert.match(httpSource, /preserveOfflineSessionAfterRefreshFailure\(failureCode\)/);
+  assert.match(httpSource, /refreshPromise \?\?= refreshAccessTokenInternal/);
+  assert.match(httpSource, /finally\(\(\) => \{[\s\S]*?refreshPromise = null/);
+  assert.match(tokenSource, /revokedAt: null/);
+  assert.match(tokenSource, /await clearAuthTokens\(\);/);
+  const preserveStart = tokenSource.indexOf("export async function preserveOfflineSessionAfterRefreshFailure");
+  const preserveEnd = tokenSource.indexOf("export async function revokeStoredSession", preserveStart);
+  assert.ok(preserveStart >= 0 && preserveEnd > preserveStart);
+  assert.doesNotMatch(tokenSource.slice(preserveStart, preserveEnd), /clearTokens/);
+});
 test("sync refuses a mixed-owner batch", () => {
   assert.deepEqual(
     assertRecordsBelongToOwner("user-a", [{ ownerUserId: "user-a", id: 1 }]),

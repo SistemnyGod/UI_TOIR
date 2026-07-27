@@ -13,7 +13,7 @@ import {
   getAccessToken,
   getRefreshToken,
   getStoredOwnerUserId,
-  markSessionNeedsReenrollment,
+  preserveOfflineSessionAfterRefreshFailure,
   revokeStoredSession,
   setOfflineSession,
   setStoredOwnerUserId,
@@ -281,8 +281,8 @@ async function refreshAccessTokenInternal(apiBaseUrl: string) {
       || failureCode === "device_session_not_found"
       || failureCode === "device_mismatch"
       || failureCode === "refresh_expired") {
-      await markSessionNeedsReenrollment("device_reenrollment_required");
-      throw new Error(explicitRevocationMessage("device_reenrollment_required"));
+      await preserveOfflineSessionAfterRefreshFailure(failureCode);
+      throw new Error(explicitRevocationMessage(failureCode));
     }
 
     if (failureCode === "session_revoked"
@@ -399,12 +399,13 @@ function explicitRevocationMessage(code: "session_revoked" | "device_revoked" | 
       return "Это устройство явно отозвано администратором. Локальные отчёты сохранены.";
     case "account_disabled":
       return "Учётная запись заблокирована администратором. Локальные отчёты сохранены.";
-    case "device_reenrollment_required":
     case "device_session_not_found":
+      return "Серверная запись сессии недоступна. Локальная работа и очередь сохранены; повторите вход при наличии сети.";
     case "device_mismatch":
-      return "Требуется повторная регистрация устройства. Локальные отчёты и очередь сохранены.";
+      return "Сервер не подтвердил это устройство. Локальная работа и очередь сохранены; проверьте регистрацию при наличии сети.";
+    case "device_reenrollment_required":
     case "refresh_expired":
-      return "Срок мобильной сессии истёк. Локальные отчёты сохранены; требуется повторная регистрация устройства.";
+      return "Онлайн-сессия требует повторной регистрации. Локальная работа и очередь сохранены.";
     case "refresh_token_reuse":
       return "Обнаружено повторное использование refresh-токена. Сессия отозвана, локальные отчёты сохранены.";
   }

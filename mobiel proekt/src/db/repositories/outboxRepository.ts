@@ -3,15 +3,14 @@ import { currentContourId } from "@/core/environments";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
-import { updatePendingCompleteReportBaseRevisionInTransaction, updatePendingWorkTaskRevisionInTransaction } from "@/db/repositories/outboxSql";
+import { insertOutboxCommandInTransaction, updatePendingCompleteReportBaseRevisionInTransaction, updatePendingWorkTaskRevisionInTransaction } from "@/db/repositories/outboxSql";
 import { finalizeCancelledAssignmentInTransaction } from "@/db/repositories/patrolCancellationRepository";
 import { MobileEntityType, OutboxCommand, OutboxCommandStatus, OutboxCommandType, OutboxResponse } from "@/domain/sync/syncTypes";
 import { extractAssignmentId, extractCompletionFileIds, isCancelledCompletionResponse, isPatrolAssignmentCommand, isProblemResponse, parsePatrolPointConflictIdentity, resolvePatrolAssignmentIdentity } from "@/db/repositories/outboxPolicies";
 import { SyncQueueCommandItem } from "@/db/repositories/outboxTypes";
-import { isOutboxCommandReady, resolveRetryDelaySeconds } from "@/sync/outboxRetryPolicy";
+import { resolveRetryDelaySeconds } from "@/sync/outboxRetryPolicy";
 import { parseOutboxPayloadRows } from "@/sync/outboxPayloadParser";
 import { applyRejectedCancellationTransition, applyServerWinsTransition, ConflictServerSnapshot } from "@/domain/sync/conflictResolutionPolicy";
-import { getCommandAggregateKey } from "@/sync/outboxOrderingPolicy";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 import { getReleaseResponseResolution } from "@/domain/patrol/releaseResolutionPolicy";
 import { getPointResultSyncUpdate } from "@/domain/patrol/pointResultSyncPolicy";
@@ -32,93 +31,52 @@ type OutboxDatabaseRow = {
   next_attempt_at: string | null;
   attempt_count: number;
   status: string;
+  aggregate_key: string | null;
+  sequence_no: number | null;
 };
 
 export async function insertOutboxCommand(command: OutboxCommand) {
   const db = await getDatabase();
-
-  await withSqliteBusyRetry(() => db.runAsync(
-    `
-      INSERT INTO outbox_commands (
-        client_operation_id,
-        owner_user_id,
-        contour_id,
-        command_type,
-        entity_type,
-        entity_local_id,
-        entity_server_id,
-        payload_json,
-        created_at_local,
-        updated_at_local,
-        attempt_count,
-        status
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    [
-      command.clientOperationId,
-      command.ownerUserId,
-      command.contourId ?? currentContourId,
-      command.commandType,
-      command.entityType,
-      command.entityLocalId ?? null,
-      command.entityServerId ?? null,
-      JSON.stringify(command.payload),
-      command.createdAtLocal,
-      command.createdAtLocal,
-      command.attemptCount,
-      command.status
-    ]
-  ));
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      await insertOutboxCommandInTransaction(tx, command);
+    })
+  );
 }
-
 export async function listPendingOutboxCommands(ownerUserId: string, limit = 25) {
   const db = await getDatabase();
   const nowIso = new Date().toISOString();
-  const readyRows = await db.getAllAsync<OutboxDatabaseRow>(
+  const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
+  const rows = await db.getAllAsync<OutboxDatabaseRow>(
     `
-      SELECT *
-      FROM outbox_commands
-      WHERE owner_user_id = ?
-        AND contour_id = ?
+      SELECT candidate.*
+      FROM outbox_commands candidate
+      WHERE candidate.owner_user_id = ?
+        AND candidate.contour_id = ?
         AND (
-          status = 'pending'
+          candidate.status = 'pending'
           OR (
-            status = 'retryLater'
-            AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+            candidate.status = 'retryLater'
+            AND (candidate.next_attempt_at IS NULL OR candidate.next_attempt_at <= ?)
           )
         )
-      ORDER BY created_at_local ASC
+        AND NOT EXISTS (
+          SELECT 1
+          FROM outbox_commands previous
+          WHERE previous.owner_user_id = candidate.owner_user_id
+            AND previous.contour_id = candidate.contour_id
+            AND previous.aggregate_key = candidate.aggregate_key
+            AND previous.sequence_no < candidate.sequence_no
+            AND previous.status NOT IN ('accepted', 'duplicate', 'superseded', 'cancelled')
+        )
+      ORDER BY candidate.sequence_no ASC,
+               candidate.created_at_local ASC,
+               candidate.client_operation_id ASC
       LIMIT ?
     `,
-    [ownerUserId, currentContourId, nowIso, Math.max(limit * 4, 100)]
+    [ownerUserId, currentContourId, nowIso, boundedLimit]
   );
 
-  // Non-ready commands still need to be visible to the aggregate FIFO check.
-  // They are loaded separately so old conflicts cannot hide ready independent commands.
-  const blockerRows = await db.getAllAsync<OutboxDatabaseRow>(
-    `
-      SELECT *
-      FROM outbox_commands
-      WHERE owner_user_id = ?
-        AND contour_id = ?
-        AND (
-          status NOT IN ('accepted', 'duplicate', 'superseded', 'cancelled', 'pending', 'retryLater')
-          OR (
-            status = 'retryLater'
-            AND (next_attempt_at IS NULL OR next_attempt_at > ?)
-          )
-        )
-      ORDER BY created_at_local ASC
-    `,
-    [ownerUserId, currentContourId, nowIso]
-  );
-
-  const rowsByOperationId = new Map<string, OutboxDatabaseRow>();
-  [...readyRows, ...blockerRows].forEach((row) => rowsByOperationId.set(row.client_operation_id, row));
-  const rows = [...rowsByOperationId.values()].sort((left, right) => left.created_at_local.localeCompare(right.created_at_local));
-
-  const invalidPayloadOperationIds = new Set<string>();
   const commands = await parseOutboxPayloadRows(
     rows,
     (row) => ({
@@ -133,51 +91,19 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
       createdAtLocal: row.created_at_local,
       attemptCount: row.attempt_count,
       status: row.status as OutboxCommandStatus,
-      nextAttemptAt: row.next_attempt_at
+      nextAttemptAt: row.next_attempt_at,
+      aggregateKey: row.aggregate_key,
+      sequenceNo: row.sequence_no
     }),
     async (row, reason) => {
-      invalidPayloadOperationIds.add(row.client_operation_id);
       await withSqliteBusyRetry(() => db.runAsync(
         "UPDATE outbox_commands SET status = 'invalidPayload', last_error = ?, updated_at_local = ? WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?",
         [`Некорректный JSON payload: ${reason}`, new Date().toISOString(), ownerUserId, currentContourId, row.client_operation_id]
       ));
     }
   );
-  const commandsForOrdering: OutboxCommand[] = [
-    ...commands,
-    ...rows
-      .filter((row) => invalidPayloadOperationIds.has(row.client_operation_id))
-      .map((row) => ({
-        clientOperationId: row.client_operation_id,
-        ownerUserId: row.owner_user_id,
-        contourId: row.contour_id,
-        commandType: row.command_type as OutboxCommandType,
-        entityType: row.entity_type as MobileEntityType,
-        entityLocalId: row.entity_local_id,
-        entityServerId: row.entity_server_id,
-        payload: {},
-        createdAtLocal: row.created_at_local,
-        attemptCount: row.attempt_count,
-        status: "invalidPayload" as const
-      }))
-  ];
-  const terminalStatuses = new Set<OutboxCommandStatus>(["accepted", "duplicate", "superseded", "cancelled"]);
-  const readyCandidates = commands.filter((command) => isOutboxCommandReady(command, new Date().toISOString()));
 
-  return readyCandidates
-    .filter((candidate) => {
-      const aggregateId = getCommandAggregateKey(candidate);
-      if (!aggregateId) {
-        return true;
-      }
-      return !commandsForOrdering.some((previous) =>
-        previous.createdAtLocal < candidate.createdAtLocal
-        && getCommandAggregateKey(previous) === aggregateId
-        && !terminalStatuses.has(previous.status)
-      );
-    })
-    .slice(0, limit)
-    .map(({ nextAttemptAt: _nextAttemptAt, ...command }) => command);
+  return commands.map(({ nextAttemptAt: _nextAttemptAt, ...command }) => command);
 }
 export async function countPendingOutboxCommands(ownerUserId: string) {
   const db = await getDatabase();
@@ -1472,7 +1398,6 @@ export async function retryOutboxConflictWithRevision(
         throw new Error("В конфликтной команде отсутствует корректное назначение.");
       }
 
-      const nextPayload = JSON.stringify({ ...payload, baseRevision: revision });
       await tx.runAsync(
         `
           UPDATE outbox_commands
@@ -1482,28 +1407,19 @@ export async function retryOutboxConflictWithRevision(
         `,
         [now, ownerUserId, currentContourId, clientOperationId]
       );
-      await tx.runAsync(
-        `
-          INSERT INTO outbox_commands (
-            client_operation_id, owner_user_id, contour_id, command_type, entity_type,
-            entity_local_id, entity_server_id, payload_json, created_at_local,
-            updated_at_local, attempt_count, status
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pending')
-        `,
-        [
-          nextClientOperationId,
-          ownerUserId,
-          currentContourId,
-          command.command_type,
-          command.entity_type,
-          command.entity_local_id,
-          command.entity_server_id,
-          nextPayload,
-          now,
-          now
-        ]
-      );
+      await insertOutboxCommandInTransaction(tx, {
+        clientOperationId: nextClientOperationId,
+        ownerUserId,
+        contourId: currentContourId,
+        commandType: command.command_type as OutboxCommandType,
+        entityType: command.entity_type as MobileEntityType,
+        entityLocalId: command.entity_local_id,
+        entityServerId: command.entity_server_id,
+        payload: { ...payload, baseRevision: revision },
+        createdAtLocal: now,
+        attemptCount: 0,
+        status: "pending"
+      });
       await tx.runAsync(
         `
           UPDATE sync_conflicts

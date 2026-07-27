@@ -3,10 +3,19 @@ import * as SQLite from "expo-sqlite";
 import { currentContourId } from "@/core/environments";
 import { OutboxCommand } from "@/domain/sync/syncTypes";
 import { applyWorkTaskServerRevision } from "@/domain/emu/workTaskRevisionPolicy";
+import { getCommandAggregateKey } from "@/sync/outboxOrderingPolicy";
 
-export type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "runAsync">;
+export type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "getFirstAsync" | "runAsync">;
 
 export async function insertOutboxCommandInTransaction(executor: SqlExecutor, command: OutboxCommand) {
+  const contourId = command.contourId ?? currentContourId;
+  const aggregateKey = command.aggregateKey ?? getCommandAggregateKey(command) ?? `operation:${command.clientOperationId}`;
+  const nextSequenceRow = await executor.getFirstAsync<{ nextSequence: number }>(
+    "SELECT COALESCE(MAX(sequence_no), 0) + 1 AS nextSequence FROM outbox_commands WHERE owner_user_id = ? AND contour_id = ? AND aggregate_key IS ?",
+    [command.ownerUserId, contourId, aggregateKey ?? null]
+  );
+  const sequenceNo = command.sequenceNo ?? nextSequenceRow?.nextSequence ?? 1;
+
   await executor.runAsync(
     `
       INSERT INTO outbox_commands (
@@ -20,15 +29,17 @@ export async function insertOutboxCommandInTransaction(executor: SqlExecutor, co
         payload_json,
         created_at_local,
         updated_at_local,
+        aggregate_key,
+        sequence_no,
         attempt_count,
         status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       command.clientOperationId,
       command.ownerUserId,
-      command.contourId ?? currentContourId,
+      contourId,
       command.commandType,
       command.entityType,
       command.entityLocalId ?? null,
@@ -36,12 +47,13 @@ export async function insertOutboxCommandInTransaction(executor: SqlExecutor, co
       JSON.stringify(command.payload),
       command.createdAtLocal,
       command.createdAtLocal,
+      aggregateKey,
+      sequenceNo,
       command.attemptCount,
       command.status
     ]
   );
 }
-
 export async function updatePendingCompleteReportBaseRevisionInTransaction(
   tx: SqlExecutor,
   ownerUserId: string,

@@ -48,7 +48,7 @@ export async function getOfflineSession(): Promise<OfflineSessionState | null> {
       lastOnlineLoginAt: parsed.lastOnlineLoginAt,
       expiresAt: parsed.expiresAt,
       offlineExpiresAt,
-      deviceTrusted: parsed.deviceTrusted === true,
+      deviceTrusted: typeof parsed.deviceTrusted === "boolean" ? parsed.deviceTrusted : undefined,
       userBlockedAt: parsed.userBlockedAt ?? null,
       deviceBlockedAt: parsed.deviceBlockedAt ?? null,
       revokedAt: parsed.revokedAt ?? null,
@@ -117,6 +117,19 @@ export async function clearLocalSessionKeepingRefreshToken() {
 
 }
 export async function markSessionNeedsReenrollment(reason = "device_reenrollment_required") {
+  const offlineSession = await getOfflineSession();
+  if (offlineSession) {
+    await setOfflineSession({
+      ...offlineSession,
+      revokedAt: null,
+      revocationReason: reason,
+      requiresReenrollment: true
+    });
+  }
+  await clearAuthTokens();
+}
+
+export async function preserveOfflineSessionAfterRefreshFailure(reason: string) {
   const offlineSession = await getOfflineSession();
   if (offlineSession) {
     await setOfflineSession({

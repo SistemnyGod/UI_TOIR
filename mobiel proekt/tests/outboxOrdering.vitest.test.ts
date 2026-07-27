@@ -8,6 +8,8 @@ type TestCommand = {
   payload: Record<string, unknown>;
   createdAtLocal: string;
   assignmentId: string | null;
+  sequenceNo?: number;
+  clientOperationId?: string;
 };
 
 function command(commandType: string, assignmentId: string, createdAtLocal: string, payload: Record<string, unknown> = {}): TestCommand {
@@ -34,5 +36,14 @@ describe("outbox ordering by patrol assignment", () => {
       command("startPatrolAssignment", "assignment-A", "2026-07-25T10:01:00.000Z")
     ], 25);
     expect(nextPass[0]?.commandType).toBe("startPatrolAssignment");
+  });
+  it("uses sequenceNo as a stable FIFO tie-breaker", () => {
+    const selected = selectNextOutboxCommands([
+      { ...command("startPatrolAssignment", "assignment-A", "2026-07-25T11:00:00.000Z"), sequenceNo: 2, clientOperationId: "op-2" },
+      { ...command("acceptPatrolRequest", "assignment-A", "2026-07-25T11:00:00.000Z"), sequenceNo: 1, clientOperationId: "op-1" }
+    ], 25);
+
+    expect(selected[0]?.commandType).toBe("acceptPatrolRequest");
+    expect(selected[0]?.sequenceNo).toBe(1);
   });
 });

@@ -59,6 +59,8 @@ export type OutboxCommand = {
   createdAtLocal: string;
   attemptCount: number;
   status: OutboxCommandStatus;
+  aggregateKey?: string | null;
+  sequenceNo?: number | null;
 };
 
 export type OutboxResponseStatus =

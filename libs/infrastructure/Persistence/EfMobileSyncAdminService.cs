@@ -56,6 +56,11 @@ internal sealed class EfMobileSyncAdminService(Patrol360DbContext dbContext) : I
             .OrderBy(account => account.Login)
             .ToList();
         var accountIds = accounts.Select(account => account.Id).ToHashSet();
+        var devicesByAccount = dbContext.MobileDevices.AsNoTracking()
+            .Where(device => accountIds.Contains(device.MobileAccountId))
+            .ToList()
+            .GroupBy(device => device.MobileAccountId)
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(device => device.LastSeenAt).First());
 
         var outboxByAccount = dbContext.MobileOutboxOperations
             .AsNoTracking()
@@ -78,6 +83,7 @@ internal sealed class EfMobileSyncAdminService(Patrol360DbContext dbContext) : I
                     .OrderByDescending(session => session.LastSeenAt)
                     .FirstOrDefault();
                 outboxByAccount.TryGetValue(account.Id, out var operations);
+                devicesByAccount.TryGetValue(account.Id, out var latestDevice);
                 notificationsByAccount.TryGetValue(account.Id, out var notifications);
                 operations ??= [];
                 notifications ??= [];
@@ -103,11 +109,80 @@ internal sealed class EfMobileSyncAdminService(Patrol360DbContext dbContext) : I
                     operations.Count(operation => IsStaleOutbox(operation, staleBefore)),
                     latestErrorOperation is not null
                         ? ReadMessage(latestErrorOperation)
-                        : string.IsNullOrWhiteSpace(latestFailedPush?.PushLastError) ? null : latestFailedPush.PushLastError);
+                        : string.IsNullOrWhiteSpace(latestFailedPush?.PushLastError) ? null : latestFailedPush.PushLastError,
+                    latestDevice?.Trusted ?? true,
+                    latestDevice?.BlockedAt);
             })
             .ToList();
     }
 
+    public MobileDeviceAdminDto? BlockDevice(string deviceId, string reason, string actor)
+    {
+        var device = dbContext.MobileDevices
+            .Include(item => item.MobileAccount)
+            .FirstOrDefault(item => item.DeviceId == deviceId);
+        if (device is null)
+        {
+            return null;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        device.Trusted = false;
+        device.BlockedAt = now;
+        device.BlockReason = string.IsNullOrWhiteSpace(reason) ? "Заблокировано оператором" : reason.Trim();
+        device.UpdatedAt = now;
+        foreach (var session in dbContext.MobileAccountSessions.Where(item => item.DeviceId == deviceId && item.RevokedAt == null).ToList())
+        {
+            session.RevokedAt = now;
+            session.PushTokenRevokedAt = now;
+            session.Status = "Заблокирована";
+        }
+        if (device.MobileAccount is not null)
+        {
+            device.MobileAccount.Session = "Офлайн";
+            AddDeviceAuditEvent(device.MobileAccount.Id, "mobile_device.blocked", $"Устройство {deviceId} заблокировано оператором {actor}: {device.BlockReason}", actor);
+        }
+        dbContext.SaveChanges();
+        return MapDeviceAdmin(device);
+    }
+
+    public MobileDeviceAdminDto? UnblockDevice(string deviceId, string actor)
+    {
+        var device = dbContext.MobileDevices
+            .Include(item => item.MobileAccount)
+            .FirstOrDefault(item => item.DeviceId == deviceId);
+        if (device is null)
+        {
+            return null;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        device.Trusted = true;
+        device.BlockedAt = null;
+        device.BlockReason = string.Empty;
+        device.UpdatedAt = now;
+        if (device.MobileAccount is not null)
+        {
+            AddDeviceAuditEvent(device.MobileAccount.Id, "mobile_device.unblocked", $"Устройство {deviceId} разблокировано оператором {actor}.", actor);
+        }
+        dbContext.SaveChanges();
+        return MapDeviceAdmin(device);
+    }
+
+    private void AddDeviceAuditEvent(Guid accountId, string action, string details, string actor)
+    {
+        dbContext.MobileAccountAuditEvents.Add(new MobileAccountAuditEventEntity
+        {
+            Id = Guid.NewGuid(),
+            MobileAccountId = accountId,
+            Action = action,
+            Details = details,
+            Actor = actor,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+    }
+    private static MobileDeviceAdminDto MapDeviceAdmin(MobileDeviceEntity device) =>
+        new(device.DeviceId, device.MobileAccountId, device.Trusted, device.BlockedAt, device.BlockReason, device.LastSeenAt);
     public MobileSyncConflictDetailDto? GetConflict(Guid mobileAccountId, string clientOperationId)
     {
         var operation = dbContext.MobileOutboxOperations

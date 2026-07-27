@@ -62,7 +62,7 @@ public sealed class MobileController(IMobileAppService mobileAppService, IConfig
         }
 
         return result.Unauthorized
-            ? Unauthorized(new { code = result.FailureCode ?? "device_reenrollment_required" })
+            ? Unauthorized(new { code = result.FailureCode ?? "device_session_not_found" })
             : Ok(result.Session);
     }
 

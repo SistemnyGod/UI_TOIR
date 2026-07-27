@@ -73,3 +73,42 @@ test("missing or cross-contour local session requires online login", () => {
     contourId: "patrol360-local-enterprise"
   }), "login");
 });
+test("session restore does not unlock blocked or untrusted sessions", () => {
+  const base = {
+    userId: "user-1",
+    contourId: "patrol360-local-enterprise",
+    fullName: "Test User",
+    lastOnlineLoginAt: "2026-07-23T00:00:00.000Z",
+    expiresAt: "2026-01-01T00:00:00.000Z"
+  };
+
+  assert.equal(resolveSessionRestoreDecision({
+    accessToken: "access-token",
+    ownerUserId: "user-1",
+    offlineSession: { ...base, deviceTrusted: false },
+    contourId: "patrol360-local-enterprise"
+  }), "login");
+
+  assert.equal(resolveSessionRestoreDecision({
+    accessToken: null,
+    ownerUserId: "user-1",
+    offlineSession: { ...base, deviceBlockedAt: "2026-07-24T00:00:00.000Z" },
+    contourId: "patrol360-local-enterprise"
+  }), "login");
+});
+
+test("device mismatch keeps a valid local session available offline", () => {
+  assert.equal(resolveSessionRestoreDecision({
+    accessToken: null,
+    ownerUserId: "user-1",
+    offlineSession: {
+      userId: "user-1",
+      contourId: "patrol360-local-enterprise",
+      fullName: "Test User",
+      lastOnlineLoginAt: "2026-07-23T00:00:00.000Z",
+      expiresAt: "2026-01-01T00:00:00.000Z",
+      requiresReenrollment: true
+    },
+    contourId: "patrol360-local-enterprise"
+  }), "offline-unlock");
+});

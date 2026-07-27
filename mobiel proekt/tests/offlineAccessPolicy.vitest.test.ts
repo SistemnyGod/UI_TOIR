@@ -1,9 +1,9 @@
-﻿import { strict as assert } from "node:assert";
+import { strict as assert } from "node:assert";
 import { test } from "vitest";
 
 import { evaluateOfflineAccess } from "../src/auth/offlineAccessPolicy";
 
-test("expired offline session does not open work tabs", () => {
+test("offline session remains available after legacy expiry date", () => {
   const decision = evaluateOfflineAccess({
     userId: "user-1",
     fullName: "Test User",
@@ -13,11 +13,8 @@ test("expired offline session does not open work tabs", () => {
     deviceTrusted: true,
     userBlockedAt: null,
     deviceBlockedAt: null
-  }, {
-    now: new Date("2026-07-26T00:00:00.000Z"),
-    authenticationSatisfied: true
-  });
+  }, { authenticationSatisfied: true });
 
-  assert.equal(decision.mode, "emergency");
-  assert.equal(decision.canOpenWorkTabs, false);
+  assert.equal(decision.mode, "full");
+  assert.equal(decision.canOpenWorkTabs, true);
 });

@@ -4,7 +4,7 @@ import * as SQLite from "expo-sqlite";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
-import { insertLocalFileInTransaction, listFilesByClientIds } from "@/db/repositories/filesRepository";
+import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { insertOutboxCommandInTransaction } from "@/db/repositories/outboxSql";
 import { getPointForFillOwnedSql, listAssignmentPointsOwnedSql } from "@/db/repositories/patrolPointOwnershipQueries";
@@ -1604,7 +1604,7 @@ export async function completeAssignmentLocally(assignmentId: string) {
 
   const completedAtLocal = new Date().toISOString();
   const pointResults = await buildCompletedPointResults(db, assignmentId, ownerUserId, completedAtLocal);
-  await assertCompletionAttachmentsAvailable(ownerUserId, assignmentId, pointResults);
+  await assertCompletionAttachmentsAvailable(db, ownerUserId, assignmentId, pointResults);
   const photoCount = pointResults.reduce((sum, result) => sum + result.photoClientFileIds.length, 0);
   const command: OutboxCommand = {
     clientOperationId: Crypto.randomUUID(),
@@ -1659,6 +1659,7 @@ export async function completeAssignmentLocally(assignmentId: string) {
           throw new Error("Состояние назначения изменилось. Обновите данные и повторите завершение отчета.");
         }
         const currentPointResults = await buildCompletedPointResults(tx, assignmentId, ownerUserId, completedAtLocal);
+        await assertCompletionAttachmentsAvailable(tx, ownerUserId, assignmentId, currentPointResults);
         if (JSON.stringify(currentPointResults) !== JSON.stringify(pointResults)) {
           throw new Error("Состав точек изменился во время завершения. Проверьте отчет и повторите действие.");
         }
@@ -2209,6 +2210,7 @@ async function buildCompletedPointResults(
 }
 
 async function findCompletionAttachmentFailures(
+  executor: SqlExecutor,
   ownerUserId: string,
   assignmentId: string,
   pointResults: { pointId: string; photoClientFileIds: string[] }[]
@@ -2221,9 +2223,39 @@ async function findCompletionAttachmentFailures(
     return [];
   }
 
-  const files = await listFilesByClientIds(Array.from(new Set(references.map((reference) => reference.clientFileId))));
+  const clientFileIds = Array.from(new Set(references.map((reference) => reference.clientFileId)));
+  const placeholders = clientFileIds.map(() => "?").join(", ");
+  const files = await executor.getAllAsync<LocalMobileFile>(
+    `
+      SELECT
+        client_file_id AS clientFileId,
+        owner_user_id AS ownerUserId,
+        contour_id AS contourId,
+        local_path AS localPath,
+        preview_path AS previewPath,
+        server_file_id AS serverFileId,
+        status,
+        sha256,
+        size_bytes AS sizeBytes,
+        content_type AS contentType,
+        media_kind AS mediaKind,
+        assignment_id AS assignmentId,
+        point_id AS pointId,
+        remark_id AS remarkId,
+        work_task_id AS workTaskId,
+        created_at_local AS createdAtLocal
+      FROM files
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND client_file_id IN (${placeholders})
+    `,
+    [ownerUserId, currentContourId, ...clientFileIds]
+  );
   const filesById = new Map(files.map((file) => [file.clientFileId, file]));
-  const points = await listAssignmentPoints(assignmentId, ownerUserId, currentContourId);
+  const points = await executor.getAllAsync<Pick<PointListItem, "pointId" | "requiresPhoto" | "status">>(
+    listAssignmentPointsOwnedSql,
+    [assignmentId, ownerUserId, currentContourId]
+  );
   const pointsById = new Map(points.map((point) => [point.pointId, point]));
 
   const failures = await Promise.all(references.map(async (reference) => {
@@ -2248,16 +2280,16 @@ async function findCompletionAttachmentFailures(
 }
 
 async function assertCompletionAttachmentsAvailable(
+  executor: SqlExecutor,
   ownerUserId: string,
   assignmentId: string,
   pointResults: { pointId: string; photoClientFileIds: string[] }[]
 ) {
-  const failures = await findCompletionAttachmentFailures(ownerUserId, assignmentId, pointResults);
+  const failures = await findCompletionAttachmentFailures(executor, ownerUserId, assignmentId, pointResults);
   if (failures.length > 0) {
     throw new Error(`Report cannot be completed because a local attachment preflight failed: ${failures[0]}`);
   }
 }
-
 export async function listMissingCompleteAssignmentAttachmentIds(assignmentId: string, pointId: string) {
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {

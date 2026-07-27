@@ -10,6 +10,10 @@ public interface IMobileSyncAdminService
 
     MobileSyncConflictDetailDto? GetConflict(Guid mobileAccountId, string clientOperationId);
 
+    MobileDeviceAdminDto? BlockDevice(string deviceId, string reason, string actor);
+
+    MobileDeviceAdminDto? UnblockDevice(string deviceId, string actor);
+
     MobileSyncConflictResolutionDto? SetResolution(
         Guid mobileAccountId,
         string clientOperationId,

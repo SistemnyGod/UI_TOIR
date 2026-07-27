@@ -31,6 +31,7 @@ export function ScanNfcScreen() {
   const [routeName, setRouteName] = useState<string | null>(null);
   const [progress, setProgress] = useState<AssignmentProgress | null>(null);
   const [nextPoint, setNextPoint] = useState<PointListItem | null>(null);
+  const [progressError, setProgressError] = useState<string | null>(null);
 
   const loadRouteProgress = useCallback(async () => {
     const ownerUserId = await getStoredOwnerUserId();
@@ -42,6 +43,7 @@ export function ScanNfcScreen() {
     setRouteName(assignment?.routeName ?? null);
     setProgress(buildProgress(points));
     setNextPoint(points.find((point) => !["ok", "issue", "skipped"].includes(point.status)) ?? null);
+    setProgressError(null);
   }, [assignmentId]);
   const [message, setMessage] = useState("Поднесите телефон к NFC-метке.");
 
@@ -98,8 +100,7 @@ export function ScanNfcScreen() {
       let isMounted = true;
       void loadRouteProgress().catch(() => {
         if (isMounted) {
-          setProgress(null);
-          setNextPoint(null);
+          setProgressError("Прогресс маршрута временно недоступен. Данные на телефоне сохранены.");
         }
       });
       return () => {
@@ -124,6 +125,7 @@ export function ScanNfcScreen() {
   return (
     <Screen title="Сканирование NFC" subtitle={undefined}>
       {routeName ? <Text style={[styles.routeName, { color: colors.text }]}>{routeName}</Text> : null}
+      {progressError ? <StatusPill label="Прогресс маршрута временно недоступен" tone="warning" /> : null}
       {progress ? (
         <Card>
           <View style={styles.progressHeader}>

@@ -4,6 +4,7 @@ import * as Crypto from "expo-crypto";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
+import { insertOutboxCommandInTransaction } from "@/db/repositories/outboxSql";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
@@ -84,42 +85,27 @@ export async function createShiftRemarkLocally(input: {
         ]
       );
 
-      await tx.runAsync(
-        `
-          INSERT INTO outbox_commands (
-            client_operation_id,
-            owner_user_id,
-            contour_id,
-            command_type,
-            entity_type,
-            entity_local_id,
-            entity_server_id,
-            payload_json,
-            created_at_local,
-            updated_at_local,
-            attempt_count,
-            status
-          )
-          VALUES (?, ?, ?, 'createShiftRemark', 'shiftRemark', ?, NULL, ?, ?, ?, 0, 'pending')
-        `,
-        [
-          clientOperationId,
-          ownerUserId,
-          currentContourId,
+      await insertOutboxCommandInTransaction(tx, {
+        clientOperationId,
+        ownerUserId,
+        contourId: currentContourId,
+        commandType: "createShiftRemark",
+        entityType: "shiftRemark",
+        entityLocalId: remarkId,
+        entityServerId: null,
+        payload: {
           remarkId,
-          JSON.stringify({
-            remarkId,
-            title,
-            comment,
-            sectionId: input.sectionId,
-            employeeId: input.employeeId,
-            mediaClientFileIds,
-            createdAtLocal
-          }),
-          createdAtLocal,
+          title,
+          comment,
+          sectionId: input.sectionId,
+          employeeId: input.employeeId,
+          mediaClientFileIds,
           createdAtLocal
-        ]
-      );
+        },
+        createdAtLocal,
+        attemptCount: 0,
+        status: "pending"
+      });
     })
   );
 
@@ -193,38 +179,23 @@ export async function attachMediaToShiftRemark(remarkId: string, file: LocalMobi
         );
       }
 
-      await tx.runAsync(
-        `
-          INSERT INTO outbox_commands (
-            client_operation_id,
-            owner_user_id,
-            contour_id,
-            command_type,
-            entity_type,
-            entity_local_id,
-            entity_server_id,
-            payload_json,
-            created_at_local,
-            updated_at_local,
-            attempt_count,
-            status
-          )
-          VALUES (?, ?, ?, 'attachShiftRemarkMedia', 'shiftRemark', ?, NULL, ?, ?, ?, 0, 'pending')
-        `,
-        [
-          clientOperationId,
-          ownerUserId,
-          currentContourId,
+      await insertOutboxCommandInTransaction(tx, {
+        clientOperationId,
+        ownerUserId,
+        contourId: currentContourId,
+        commandType: "attachShiftRemarkMedia",
+        entityType: "shiftRemark",
+        entityLocalId: remarkId,
+        entityServerId: null,
+        payload: {
           remarkId,
-          JSON.stringify({
-            remarkId,
-            mediaClientFileIds: [file.clientFileId],
-            createdAtLocal
-          }),
-          createdAtLocal,
+          mediaClientFileIds: [file.clientFileId],
           createdAtLocal
-        ]
-      );
+        },
+        createdAtLocal,
+        attemptCount: 0,
+        status: "pending"
+      });
     })
   );
   requestSyncAfterMutation();

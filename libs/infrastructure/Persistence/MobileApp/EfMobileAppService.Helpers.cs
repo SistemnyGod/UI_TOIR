@@ -87,8 +87,15 @@ internal sealed partial class EfMobileAppService
             account.LastSeenAt ?? account.CreatedAt);
     }
 
-    private static MobileDeviceDto MapDevice(MobileAccountEntity account, MobileAccountSessionEntity session) =>
-        new(session.DeviceId, account.Id, Trusted: true, BlockedAt: null);
+    private MobileDeviceDto MapDevice(MobileAccountEntity account, MobileAccountSessionEntity session)
+    {
+        var device = dbContext.MobileDevices.FirstOrDefault(item => item.DeviceId == session.DeviceId);
+        return new(
+            session.DeviceId,
+            account.Id,
+            Trusted: device?.Trusted ?? true,
+            BlockedAt: device?.BlockedAt);
+    }
 
     private static MobileNotificationDto MapNotification(MobileNotificationEntity notification) =>
         new(
