@@ -51,9 +51,9 @@ internal sealed partial class EfMobileAppService
                 route.Id,
                 route.Name,
                 route.VersionNo,
-                AllowFreeOrder: true,
-                NfcEnabled: true,
-                QrFallbackEnabled: true))
+                route.AllowFreeOrder,
+                route.NfcEnabled,
+                route.QrFallbackEnabled))
             .ToArray();
 
         var pointDtos = routes
@@ -118,11 +118,143 @@ internal sealed partial class EfMobileAppService
                 item.Operation?.EntityServerId,
                 item.Operation?.Status ?? "conflict",
                 item.Status,
-                ParseResponseSnapshot(item.Operation?.ResponseJson),
+                BuildConflictResponseSnapshot(mobileAccountId, item.Operation),
                 item.ResolvedAt))
             .ToArray();
     }
 
+    private object? BuildConflictResponseSnapshot(Guid mobileAccountId, MobileOutboxOperationEntity? operation)
+    {
+        var fallback = ParseResponseSnapshot(operation?.ResponseJson);
+        if (operation is null || string.IsNullOrWhiteSpace(operation.PayloadJson))
+        {
+            return fallback;
+        }
+
+        Dictionary<string, JsonElement>? payload;
+        try
+        {
+            payload = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(operation.PayloadJson, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return fallback;
+        }
+
+        if (payload is null)
+        {
+            return fallback;
+        }
+
+        string? PayloadString(string key) => payload.TryGetValue(key, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+        if (operation.EntityType.Equals("patrolPoint", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Guid.TryParse(PayloadString("assignmentId"), out var assignmentId)
+                || !Guid.TryParse(PayloadString("pointId") ?? operation.EntityLocalId, out var pointId))
+            {
+                return fallback;
+            }
+
+            var result = dbContext.PatrolResults
+                .AsNoTracking()
+                .Include(item => item.Assignment)
+                .FirstOrDefault(item => item.AssignmentId == assignmentId && item.RoutePointId == pointId);
+            return result is null
+                ? fallback
+                : new
+                {
+                    entityType = "patrolPoint",
+                    assignmentId = assignmentId.ToString(),
+                    pointId = pointId.ToString(),
+                    status = result.Status,
+                    comment = result.Comment,
+                    issueTypeId = result.IssueType,
+                    severity = result.Severity,
+                    serverRevision = result.Assignment?.LockVersion
+                };
+        }
+
+        if (operation.EntityType.Equals("workTask", StringComparison.OrdinalIgnoreCase))
+        {
+            var taskLookupId = operation.EntityServerId ?? operation.EntityLocalId;
+            if (!Guid.TryParse(taskLookupId, out var taskId))
+            {
+                return fallback;
+            }
+
+            var workItem = BuildWorkSessionConflictSnapshot(mobileAccountId, taskId);
+            return workItem is null
+                ? fallback
+                : new
+                {
+                    entityType = "workTask",
+                    taskId = workItem.WorkSessionId?.ToString() ?? workItem.ItemId.ToString(),
+                    title = workItem.Title,
+                    description = workItem.Description,
+                    status = workItem.Status,
+                    plannedAt = workItem.PlannedAt,
+                    revision = workItem.Revision,
+                    completedAtLocal = (DateTimeOffset?)null,
+                    sectionId = workItem.SectionId,
+                    sectionName = workItem.SectionName,
+                    employeeId = workItem.ActualParticipants.FirstOrDefault(item => item.IsCurrentMobileEmployee)?.EmployeeId,
+                    employeeName = workItem.ActualParticipants.FirstOrDefault(item => item.IsCurrentMobileEmployee)?.FullName,
+                    source = workItem.Source,
+                    approvalStatus = workItem.ApprovalStatus,
+                    assignedEmployees = workItem.AssignedEmployees,
+                    actualParticipants = workItem.ActualParticipants,
+                    attachments = workItem.Attachments,
+                    capabilities = workItem.Capabilities
+                };
+        }
+
+        if (operation.EntityType.Equals("shiftRemark", StringComparison.OrdinalIgnoreCase)
+            && Guid.TryParse(operation.EntityLocalId, out var remarkId))
+        {
+            var remark = dbContext.MobileShiftRemarks
+                .AsNoTracking()
+                .FirstOrDefault(item => item.MobileAccountId == mobileAccountId && item.Id == remarkId);
+            return remark is null
+                ? fallback
+                : new
+                {
+                    entityType = "shiftRemark",
+                    remarkId = remark.Id.ToString(),
+                    title = remark.Title,
+                    comment = remark.Comment,
+                    status = remark.Status,
+                    serverRemarkId = remark.Id.ToString()
+                };
+        }
+
+        return fallback;
+    }
+    private MobileWorkItemDto? BuildWorkSessionConflictSnapshot(Guid mobileAccountId, Guid taskId)
+    {
+        var boundEmployeeIds = dbContext.MobileAccountEmployeeBindings
+            .Where(binding => binding.MobileAccountId == mobileAccountId && binding.DetachedAt == null)
+            .Select(binding => binding.EmployeeId)
+            .ToHashSet();
+        var session = dbContext.EmuWorkSessions
+            .AsNoTracking()
+            .Include(row => row.Section)
+            .Include(row => row.Employees)
+            .FirstOrDefault(row => row.Id == taskId && row.DeletedAt == null);
+        if (session is null)
+        {
+            return null;
+        }
+
+        var attachments = dbContext.MobileUploadedFiles
+            .AsNoTracking()
+            .Where(file => file.MobileAccountId == mobileAccountId && file.WorkTaskId == taskId)
+            .OrderBy(file => file.UploadedAt)
+            .ToArray();
+        return MapMobileWorkSessionItem(session, boundEmployeeIds, attachments);
+    }
     private static object? ParseResponseSnapshot(string? responseJson)
     {
         if (string.IsNullOrWhiteSpace(responseJson))

@@ -4,7 +4,11 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { assertSessionOwner } from "../src/auth/sessionIdentity.ts";
-import { isReauthenticationRequiredError, isSessionExpiredError } from "../src/auth/sessionErrors.ts";
+import {
+  isMobileSessionKeyUnavailableError,
+  isReauthenticationRequiredError,
+  isSessionExpiredError
+} from "../src/auth/sessionErrors.ts";
 import { isOfflineSessionValid } from "../src/auth/offlineSession.ts";
 import { normalizePointDraft, restoreDeferredPointSelection, skippedPointDraftReason } from "../src/domain/patrol/pointDraftPolicy.ts";
 import { assertRecordsBelongToOwner } from "../src/sync/ownerIsolation.ts";
@@ -22,6 +26,9 @@ test("only explicit revocation forces re-authentication", () => {
   assert.equal(isSessionExpiredError("Mobile session is invalid"), true);
   assert.equal(isSessionExpiredError("Mobile API temporarily rejected the request after token refresh"), false);
   assert.equal(isReauthenticationRequiredError("session owner mismatch"), true);
+  assert.equal(isSessionExpiredError("\u041a\u043b\u044e\u0447 \u043c\u043e\u0431\u0438\u043b\u044c\u043d\u043e\u0439 \u0441\u0435\u0441\u0441\u0438\u0438 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d."), false);
+  assert.equal(isMobileSessionKeyUnavailableError("\u041a\u043b\u044e\u0447 \u043c\u043e\u0431\u0438\u043b\u044c\u043d\u043e\u0439 \u0441\u0435\u0441\u0441\u0438\u0438 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d."), true);
+  assert.equal(isReauthenticationRequiredError("\u041a\u043b\u044e\u0447 \u043c\u043e\u0431\u0438\u043b\u044c\u043d\u043e\u0439 \u0441\u0435\u0441\u0441\u0438\u0438 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d."), true);
   assert.equal(isReauthenticationRequiredError("Server temporarily unavailable"), false);
 });
 
@@ -54,18 +61,20 @@ test("offline access remains available until explicit revocation", () => {
   assert.equal(isOfflineSessionValid({ ...session, revokedAt: "2026-07-08T00:00:00.000Z" }), false);
 });
 
-test("work item pruning binds only the owner and returned item identifiers", async () => {
+test("partial work item refresh does not prune local rows", async () => {
   const source = await readFile(
     join(process.cwd(), "src/db/repositories/workTaskRepository.ts"),
     "utf8"
   );
-  const pruneCall = source.match(
-    /DELETE FROM work_tasks WHERE owner_user_id = \?[\s\S]*?\[ownerUserId,[^\]]+\]/
-  );
 
-  assert.ok(pruneCall, "Work item pruning query was not found.");
-  assert.match(pruneCall[0], /\[ownerUserId, \.\.\.itemIds\]/);
-  assert.doesNotMatch(pruneCall[0], /\[ownerUserId, currentContourId,/);
+  const saveWorkItemsStart = source.indexOf("export async function saveWorkItems");
+  const saveWorkItemsEnd = source.indexOf("export async function listLocalWorkItems", saveWorkItemsStart);
+  const saveWorkItemsSource = source.slice(saveWorkItemsStart, saveWorkItemsEnd);
+
+  assert.ok(saveWorkItemsStart >= 0 && saveWorkItemsEnd > saveWorkItemsStart);
+  assert.doesNotMatch(saveWorkItemsSource, /DELETE FROM work_tasks/);
+  assert.match(saveWorkItemsSource, /ON CONFLICT\(task_id\) DO UPDATE SET/);
+  assert.match(saveWorkItemsSource, /sync_status = CASE WHEN work_tasks\.sync_status <> 'synced'/);
 });
 
 test("unfinished point draft preserves the selected status and issue details", () => {

@@ -258,6 +258,9 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(route => route.Distance).HasColumnName("distance").HasMaxLength(40).IsRequired();
             entity.Property(route => route.Periodicity).HasColumnName("periodicity").HasMaxLength(120).IsRequired();
             entity.Property(route => route.VersionNo).HasColumnName("version_no").IsConcurrencyToken();
+            entity.Property(route => route.AllowFreeOrder).HasColumnName("allow_free_order").HasDefaultValue(true);
+            entity.Property(route => route.NfcEnabled).HasColumnName("nfc_enabled").HasDefaultValue(true);
+            entity.Property(route => route.QrFallbackEnabled).HasColumnName("qr_fallback_enabled").HasDefaultValue(true);
             entity.Property(route => route.IsArchived).HasColumnName("is_archived");
             entity.Property(route => route.CreatedAt).HasColumnName("created_at");
 
@@ -316,6 +319,9 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(revision => revision.VersionNo).HasColumnName("version_no");
             entity.Property(revision => revision.Name).HasColumnName("name").HasMaxLength(160).IsRequired();
             entity.Property(revision => revision.Territory).HasColumnName("territory").HasMaxLength(160).IsRequired();
+            entity.Property(revision => revision.AllowFreeOrder).HasColumnName("allow_free_order").HasDefaultValue(true);
+            entity.Property(revision => revision.NfcEnabled).HasColumnName("nfc_enabled").HasDefaultValue(true);
+            entity.Property(revision => revision.QrFallbackEnabled).HasColumnName("qr_fallback_enabled").HasDefaultValue(true);
             entity.Property(revision => revision.CreatedAt).HasColumnName("created_at");
             entity.HasOne(revision => revision.Route)
                 .WithMany(route => route.Revisions)

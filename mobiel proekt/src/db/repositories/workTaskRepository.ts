@@ -17,20 +17,6 @@ export async function saveWorkItems(items: WorkItemDto[]) {
   const ownerUserId = await requireOwnerUserId();
   const db = await getDatabase();
   await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
-    const itemIds = items.map((item) => item.itemId);
-    if (itemIds.length > 0) {
-      const placeholders = itemIds.map(() => "?").join(", ");
-      await tx.runAsync(
-        `DELETE FROM work_tasks WHERE owner_user_id = ? AND sync_status = 'synced' AND task_id NOT IN (${placeholders})`,
-        [ownerUserId, ...itemIds]
-      );
-    } else {
-      await tx.runAsync(
-        "DELETE FROM work_tasks WHERE owner_user_id = ? AND sync_status = 'synced'",
-        [ownerUserId]
-      );
-    }
-
     for (const item of items) {
       const primaryEmployee = item.actualParticipants.find((employee) => employee.isCurrentMobileEmployee)
         ?? item.assignedEmployees.find((employee) => employee.isCurrentMobileEmployee)

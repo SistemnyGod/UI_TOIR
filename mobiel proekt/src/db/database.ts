@@ -334,6 +334,13 @@ async function initializeDatabaseOnce() {
     await runLocalMigration(tx, "20260726_assignment_snapshot_policy", async () => {
       await ensureAssignmentSnapshotPolicy(tx);
     });
+    await runLocalMigration(tx, "20260726_assignment_snapshot_source", async () =>
+    {
+      await tx.runAsync(
+        "UPDATE patrol_assignments SET snapshot_source = COALESCE(snapshot_source, 'legacyBackfill') WHERE snapshot_source IS NULL"
+      );
+    });
+
     await runLocalMigration(tx, "20260526_assignment_snapshot_outbox_recovery", async () => {
       await ensureAssignmentSnapshotAndOutboxRecovery(tx);
   });
@@ -433,7 +440,8 @@ async function ensureAssignmentSnapshotPolicy(db: SqlExecutor) {
   await db.runAsync(
     `
       UPDATE patrol_assignments
-      SET snapshot_allow_free_order = COALESCE(
+      SET snapshot_source = COALESCE(snapshot_source, 'legacyBackfill'),
+          snapshot_allow_free_order = COALESCE(
             snapshot_allow_free_order,
             (SELECT allow_free_order FROM routes WHERE routes.route_id = patrol_assignments.route_id),
             1

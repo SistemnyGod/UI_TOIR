@@ -12,7 +12,7 @@ import { parseStringArray, supersedePendingPointStatusCommands, updateLatestPend
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { getCompletionAttachmentFailure } from "@/domain/files/completionAttachmentPolicy";
-import { isPhotoEvidenceRequired } from "@/domain/patrol/photoEvidencePolicy";
+import { isPhotoEvidenceRequired, type PhotoEvidenceStatus } from "@/domain/patrol/photoEvidencePolicy";
 import { normalizePointDraft, PointDraftSelectedStatus } from "@/domain/patrol/pointDraftPolicy";
 import { canCreateCompletionCommand, evaluateRequiredPointReadiness, isTerminalPointStatus } from "@/domain/patrol/reportReadinessPolicy";
 import { canPatrolAction, patrolActionError } from "@/domain/patrol/patrolStateMachine";
@@ -2273,7 +2273,7 @@ export async function listMissingCompleteAssignmentAttachmentIds(assignmentId: s
         AND contour_id = ?
         AND command_type = 'completePatrolAssignment'
         AND entity_local_id = ?
-        AND status IN ('pending', 'retryLater')
+        AND status IN ('pending', 'retryLater', 'waiting_network', 'waiting_auth', 'rejected')
       ORDER BY created_at_local DESC
       LIMIT 1
     `,
@@ -2303,9 +2303,9 @@ export async function listMissingCompleteAssignmentAttachmentIds(assignmentId: s
   }
 
   const placeholders = clientFileIds.map(() => "?").join(", ");
-  const presentFiles = await db.getAllAsync<{ clientFileId: string }>(
+  const presentFiles = await db.getAllAsync<{ clientFileId: string; localPath: string | null; status: string; sizeBytes: number | null }>(
     `
-      SELECT client_file_id AS clientFileId
+      SELECT client_file_id AS clientFileId, local_path AS localPath, status, size_bytes AS sizeBytes
       FROM files
       WHERE owner_user_id = ?
         AND contour_id = ?
@@ -2313,8 +2313,16 @@ export async function listMissingCompleteAssignmentAttachmentIds(assignmentId: s
     `,
     [ownerUserId, currentContourId, ...clientFileIds]
   );
-  const presentIds = new Set(presentFiles.map((file) => file.clientFileId));
-  return clientFileIds.filter((clientFileId) => !presentIds.has(clientFileId));
+  const presentFilesById = new Map(presentFiles.map((file) => [file.clientFileId, file]));
+  const missingIds: string[] = [];
+  for (const clientFileId of clientFileIds) {
+    const file = presentFilesById.get(clientFileId);
+    const physicalFile = file?.localPath ? await getLocalFileInfo(file.localPath).catch(() => null) : null;
+    if (!file || file.status === "failed" || !file.localPath || !physicalFile || !physicalFile.exists || physicalFile.size <= 0 || file.sizeBytes === 0) {
+      missingIds.push(clientFileId);
+    }
+  }
+  return missingIds;
 }
 
 export async function restoreMissingPointAttachment(
@@ -2358,7 +2366,7 @@ export async function restoreMissingPointAttachment(
             AND contour_id = ?
             AND command_type = 'completePatrolAssignment'
             AND entity_local_id = ?
-            AND status IN ('pending', 'retryLater')
+            AND status IN ('pending', 'retryLater', 'waiting_network', 'waiting_auth', 'rejected')
           ORDER BY created_at_local DESC
           LIMIT 1
         `,
@@ -2369,9 +2377,23 @@ export async function restoreMissingPointAttachment(
         throw new Error("Не найдена ожидающая отправки команда завершения отчёта.");
       }
 
-      const existingMissingFile = await tx.getFirstAsync<{ clientFileId: string }>(
+      const currentAssignment = await tx.getFirstAsync<{ status: string }>(
         `
-          SELECT client_file_id AS clientFileId
+          SELECT status
+          FROM patrol_assignments
+          WHERE owner_user_id = ?
+            AND contour_id = ?
+            AND assignment_id = ?
+          LIMIT 1
+        `,
+        [ownerUserId, currentContourId, assignmentId]
+      );
+      if (!currentAssignment || currentAssignment.status !== "completedLocal") {
+        throw new Error("Восстановление отменено: отчёт уже не находится в состоянии completedLocal.");
+      }
+      const existingMissingFile = await tx.getFirstAsync<{ clientFileId: string; localPath: string | null; status: string; sizeBytes: number | null }>(
+        `
+          SELECT client_file_id AS clientFileId, local_path AS localPath, status, size_bytes AS sizeBytes
           FROM files
           WHERE owner_user_id = ?
             AND contour_id = ?
@@ -2380,8 +2402,17 @@ export async function restoreMissingPointAttachment(
         `,
         [ownerUserId, currentContourId, missingClientFileId]
       );
-      if (existingMissingFile) {
-        throw new Error("Исходное вложение уже доступно на телефоне; повторное восстановление не требуется.");
+      const existingPhysicalFile = existingMissingFile?.localPath
+        ? await getLocalFileInfo(existingMissingFile.localPath).catch(() => null)
+        : null;
+      if (
+        existingMissingFile &&
+        existingMissingFile.status !== "failed" &&
+        existingMissingFile.sizeBytes !== 0 &&
+        existingPhysicalFile?.exists &&
+        existingPhysicalFile.size > 0
+      ) {
+        throw new Error("Исходное вложение доступно на телефоне; повторное восстановление не требуется.");
       }
 
       let payload: Record<string, unknown>;
@@ -2426,21 +2457,60 @@ export async function restoreMissingPointAttachment(
           SELECT photo_client_file_ids_json AS photoClientFileIdsJson
           FROM point_results
           WHERE owner_user_id = ?
+            AND contour_id = ?
             AND assignment_id = ?
             AND point_id = ?
           LIMIT 1
         `,
-        [ownerUserId, assignmentId, pointId]
+        [ownerUserId, currentContourId, assignmentId, pointId]
       );
       if (!pointRow) {
-    throw new Error("\u041d\u0430\u0447\u0430\u0442\u044c \u043c\u043e\u0436\u043d\u043e \u0442\u043e\u043b\u044c\u043a\u043e \u043f\u0440\u0438\u043d\u044f\u0442\u0443\u044e \u0437\u0430\u044f\u0432\u043a\u0443.");
+        throw new Error("Результат точки не найден на телефоне.");
       }
       const persistedIds = parseStringArray(pointRow.photoClientFileIdsJson ?? null);
+      if (persistedIds.length > 0 && !persistedIds.includes(missingClientFileId)) {
+        throw new Error("Локальный результат точки не содержит указанное отсутствующее вложение.");
+      }
       const updatedPersistedIds = Array.from(new Set(
         (persistedIds.length > 0 ? persistedIds : [missingClientFileId])
           .map((id) => (id === missingClientFileId ? file.clientFileId : id))
       ));
 
+      const pointMetadata = await tx.getFirstAsync<{ requiresPhoto: number; status: PhotoEvidenceStatus }>(
+        `
+          SELECT requires_photo AS requiresPhoto, status
+          FROM assignment_route_points
+          WHERE assignment_id = ?
+            AND point_id = ?
+          LIMIT 1
+        `,
+        [assignmentId, pointId]
+      );
+      if (!pointMetadata) {
+        throw new Error("Снимок точки не найден на телефоне.");
+      }
+      const replacementPhysicalFile = await getLocalFileInfo(file.localPath).catch(() => null);
+      const replacementFailure = getCompletionAttachmentFailure(
+        {
+          ...file,
+          ownerUserId,
+          contourId: currentContourId,
+          assignmentId,
+          pointId,
+          status: "queued"
+        },
+        replacementPhysicalFile,
+        {
+          ownerUserId,
+          contourId: currentContourId,
+          assignmentId,
+          pointId,
+          requiredPhoto: isPhotoEvidenceRequired(pointMetadata.requiresPhoto === 1, pointMetadata.status)
+        }
+      );
+      if (replacementFailure) {
+        throw new Error(`Новое вложение не прошло проверку: ${replacementFailure}`);
+      }
       await insertLocalFileInTransaction(tx, {
         ...file,
         ownerUserId,
@@ -2449,30 +2519,40 @@ export async function restoreMissingPointAttachment(
         pointId,
         status: "queued"
       });
-      await tx.runAsync(
+      const pointUpdate = await tx.runAsync(
         `
           UPDATE point_results
           SET photo_client_file_ids_json = ?,
               sync_status = 'pending'
           WHERE owner_user_id = ?
+            AND contour_id = ?
             AND assignment_id = ?
             AND point_id = ?
         `,
-        [JSON.stringify(updatedPersistedIds), ownerUserId, assignmentId, pointId]
+        [JSON.stringify(updatedPersistedIds), ownerUserId, currentContourId, assignmentId, pointId]
       );
-      await tx.runAsync(
+      if (pointUpdate.changes !== 1) {
+        throw new Error("Не удалось обновить локальный результат точки при восстановлении вложения.");
+      }
+      const commandUpdate = await tx.runAsync(
         `
           UPDATE outbox_commands
           SET payload_json = ?,
+              status = 'pending',
+              last_error = NULL,
               next_attempt_at = NULL,
+              sent_at_local = NULL,
               updated_at_local = ?
           WHERE client_operation_id = ?
             AND owner_user_id = ?
             AND contour_id = ?
-            AND status IN ('pending', 'retryLater')
+            AND status IN ('pending', 'retryLater', 'waiting_network', 'waiting_auth', 'rejected')
         `,
         [JSON.stringify({ ...payload, pointResults }), new Date().toISOString(), command.clientOperationId, ownerUserId, currentContourId]
       );
+      if (commandUpdate.changes !== 1) {
+        throw new Error("Не удалось вернуть команду отчёта в очередь после восстановления вложения.");
+      }
 
       resultRef.clientOperationId = command.clientOperationId;
     })

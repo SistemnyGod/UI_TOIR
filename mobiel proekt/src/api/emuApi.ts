@@ -18,7 +18,7 @@ export function getWorkItemsV2() {
       employeeId: currentEmployee?.employeeId ?? null,
       employeeName: currentEmployee?.fullName ?? null,
       createdAtLocal: item.plannedAt ?? new Date().toISOString(),
-      completedAtLocal: item.status === "completedServer" ? item.plannedAt : null,
+      completedAtLocal: null,
       syncStatus: "synced"
     };
   }));

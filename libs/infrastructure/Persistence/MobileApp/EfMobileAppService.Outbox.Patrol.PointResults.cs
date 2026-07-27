@@ -21,6 +21,11 @@ internal sealed partial class EfMobileAppService
             return validation.Response!;
         }
 
+        if (!(validation.Assignment!.RouteRevision?.NfcEnabled ?? validation.Assignment.Route!.NfcEnabled))
+        {
+            return Rejected(command.ClientOperationId, "NFC confirmation is disabled for this route.");
+        }
+
         var expectedNfc = NormalizeOptionalText(validation.Point!.NfcCode);
         if (string.IsNullOrWhiteSpace(expectedNfc)
             || !expectedNfc.Equals(nfcUidHash.Trim(), StringComparison.OrdinalIgnoreCase))
@@ -45,6 +50,11 @@ internal sealed partial class EfMobileAppService
         if (!validation.Succeeded)
         {
             return validation.Response!;
+        }
+
+        if (!(validation.Assignment!.RouteRevision?.QrFallbackEnabled ?? validation.Assignment.Route!.QrFallbackEnabled))
+        {
+            return Rejected(command.ClientOperationId, "QR confirmation is disabled for this route.");
         }
 
         var expectedQr = NormalizeOptionalText(validation.Point!.Tag);

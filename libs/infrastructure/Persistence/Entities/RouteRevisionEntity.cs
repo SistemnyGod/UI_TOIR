@@ -7,6 +7,12 @@ internal sealed class RouteRevisionEntity
     public int VersionNo { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Territory { get; set; } = string.Empty;
+
+    public bool AllowFreeOrder { get; set; } = true;
+
+    public bool NfcEnabled { get; set; } = true;
+
+    public bool QrFallbackEnabled { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
     public RouteEntity? Route { get; set; }
     public List<RouteRevisionPointEntity> Points { get; set; } = [];

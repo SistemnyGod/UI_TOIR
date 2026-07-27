@@ -10,7 +10,10 @@ public sealed record RouteDto(
     string Distance,
     string Periodicity,
     int VersionNo,
-    IReadOnlyList<RoutePointDto> Points);
+    IReadOnlyList<RoutePointDto> Points,
+    bool AllowFreeOrder = true,
+    bool NfcEnabled = true,
+    bool QrFallbackEnabled = true);
 
 public sealed record RoutePointDto(
     Guid Id,
@@ -35,7 +38,10 @@ public sealed record CreateRouteDto(
     string? Status,
     string? Duration,
     string? Distance,
-    string? Periodicity);
+    string? Periodicity,
+    bool AllowFreeOrder = true,
+    bool NfcEnabled = true,
+    bool QrFallbackEnabled = true);
 
 public sealed record CreateRouteWithPointsDto(
     CreateRouteDto Route,
@@ -49,7 +55,11 @@ public sealed record UpdateRouteDto(
     string? Duration,
     string? Distance,
     string? Periodicity,
-    int? ExpectedVersionNo = null);
+    int? ExpectedVersionNo = null,
+    bool? AllowFreeOrder = null,
+    bool? NfcEnabled = null,
+    bool? QrFallbackEnabled = null
+);
 
 public sealed record CreateRoutePointDto(
     string Name,

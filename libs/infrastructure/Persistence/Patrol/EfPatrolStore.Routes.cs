@@ -47,6 +47,9 @@ internal sealed partial class EfPatrolStore
             Duration = NormalizeOptionalText(request.Duration, "00:30"),
             Distance = NormalizeOptionalText(request.Distance, "0 км"),
             Periodicity = NormalizeOptionalText(request.Periodicity, "По заявке"),
+            AllowFreeOrder = request.AllowFreeOrder,
+            NfcEnabled = request.NfcEnabled,
+            QrFallbackEnabled = request.QrFallbackEnabled,
             VersionNo = 1,
             IsArchived = IsArchivedStatus(request.Status),
             CreatedAt = DateTimeOffset.UtcNow
@@ -79,6 +82,9 @@ internal sealed partial class EfPatrolStore
             Duration = NormalizeOptionalText(request.Route.Duration, "00:30"),
             Distance = NormalizeOptionalText(request.Route.Distance, "0 км"),
             Periodicity = NormalizeOptionalText(request.Route.Periodicity, "По заявке"),
+            AllowFreeOrder = request.Route.AllowFreeOrder,
+            NfcEnabled = request.Route.NfcEnabled,
+            QrFallbackEnabled = request.Route.QrFallbackEnabled,
             VersionNo = 1,
             IsArchived = IsArchivedStatus(request.Route.Status),
             CreatedAt = DateTimeOffset.UtcNow
@@ -144,6 +150,9 @@ internal sealed partial class EfPatrolStore
         route.Duration = NormalizeOptionalText(request.Duration, "00:30");
         route.Distance = NormalizeOptionalText(request.Distance, "0 км");
         route.Periodicity = NormalizeOptionalText(request.Periodicity, "По заявке");
+        route.AllowFreeOrder = request.AllowFreeOrder ?? route.AllowFreeOrder;
+        route.NfcEnabled = request.NfcEnabled ?? route.NfcEnabled;
+        route.QrFallbackEnabled = request.QrFallbackEnabled ?? route.QrFallbackEnabled;
         route.IsArchived = IsArchivedStatus(request.Status);
         route.VersionNo += 1;
 
@@ -378,7 +387,10 @@ internal sealed partial class EfPatrolStore
             route.Points
                 .OrderBy(point => point.SequenceNo)
                 .Select(point => MapRoutePoint(point))
-                .ToList());
+                .ToList(),
+            route.AllowFreeOrder,
+            route.NfcEnabled,
+            route.QrFallbackEnabled);
 
     private static RoutePointDto MapRoutePoint(RoutePointEntity point) =>
         new(

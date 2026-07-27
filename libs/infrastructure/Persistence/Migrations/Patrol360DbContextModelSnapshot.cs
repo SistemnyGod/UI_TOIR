@@ -4796,6 +4796,21 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("version_no");
 
+
+                    b.Property<bool>("AllowFreeOrder")
+                        .HasDefaultValue(true)
+                        .HasColumnType("boolean")
+                        .HasColumnName("allow_free_order");
+
+                    b.Property<bool>("NfcEnabled")
+                        .HasDefaultValue(true)
+                        .HasColumnType("boolean")
+                        .HasColumnName("nfc_enabled");
+
+                    b.Property<bool>("QrFallbackEnabled")
+                        .HasDefaultValue(true)
+                        .HasColumnType("boolean")
+                        .HasColumnName("qr_fallback_enabled");
                     b.HasKey("Id");
 
                     b.HasIndex("IsArchived")
@@ -4929,6 +4944,21 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasMaxLength(160)
                         .HasColumnType("character varying(160)")
                         .HasColumnName("territory");
+
+                    b.Property<bool>("AllowFreeOrder")
+                        .HasDefaultValue(true)
+                        .HasColumnType("boolean")
+                        .HasColumnName("allow_free_order");
+
+                    b.Property<bool>("NfcEnabled")
+                        .HasDefaultValue(true)
+                        .HasColumnType("boolean")
+                        .HasColumnName("nfc_enabled");
+
+                    b.Property<bool>("QrFallbackEnabled")
+                        .HasDefaultValue(true)
+                        .HasColumnType("boolean")
+                        .HasColumnName("qr_fallback_enabled");
 
                     b.Property<int>("VersionNo")
                         .HasColumnType("integer")

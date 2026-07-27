@@ -103,7 +103,7 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
       WHERE owner_user_id = ?
         AND contour_id = ?
         AND (
-          status NOT IN ('accepted', 'duplicate', 'superseded', 'cancelled', 'invalidPayload', 'pending', 'retryLater')
+          status NOT IN ('accepted', 'duplicate', 'superseded', 'cancelled', 'pending', 'retryLater')
           OR (
             status = 'retryLater'
             AND (next_attempt_at IS NULL OR next_attempt_at > ?)
@@ -118,6 +118,7 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
   [...readyRows, ...blockerRows].forEach((row) => rowsByOperationId.set(row.client_operation_id, row));
   const rows = [...rowsByOperationId.values()].sort((left, right) => left.created_at_local.localeCompare(right.created_at_local));
 
+  const invalidPayloadOperationIds = new Set<string>();
   const commands = await parseOutboxPayloadRows(
     rows,
     (row) => ({
@@ -135,12 +136,31 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
       nextAttemptAt: row.next_attempt_at
     }),
     async (row, reason) => {
+      invalidPayloadOperationIds.add(row.client_operation_id);
       await withSqliteBusyRetry(() => db.runAsync(
         "UPDATE outbox_commands SET status = 'invalidPayload', last_error = ?, updated_at_local = ? WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?",
         [`Некорректный JSON payload: ${reason}`, new Date().toISOString(), ownerUserId, currentContourId, row.client_operation_id]
       ));
     }
   );
+  const commandsForOrdering: OutboxCommand[] = [
+    ...commands,
+    ...rows
+      .filter((row) => invalidPayloadOperationIds.has(row.client_operation_id))
+      .map((row) => ({
+        clientOperationId: row.client_operation_id,
+        ownerUserId: row.owner_user_id,
+        contourId: row.contour_id,
+        commandType: row.command_type as OutboxCommandType,
+        entityType: row.entity_type as MobileEntityType,
+        entityLocalId: row.entity_local_id,
+        entityServerId: row.entity_server_id,
+        payload: {},
+        createdAtLocal: row.created_at_local,
+        attemptCount: row.attempt_count,
+        status: "invalidPayload" as const
+      }))
+  ];
   const terminalStatuses = new Set<OutboxCommandStatus>(["accepted", "duplicate", "superseded", "cancelled"]);
   const readyCandidates = commands.filter((command) => isOutboxCommandReady(command, new Date().toISOString()));
 
@@ -150,7 +170,7 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25)
       if (!aggregateId) {
         return true;
       }
-      return !commands.some((previous) =>
+      return !commandsForOrdering.some((previous) =>
         previous.createdAtLocal < candidate.createdAtLocal
         && getCommandAggregateKey(previous) === aggregateId
         && !terminalStatuses.has(previous.status)
@@ -1567,16 +1587,33 @@ export async function cancelRejectedOutboxCommand(ownerUserId: string, clientOpe
         `,
         [transition.conflictStatus, transition.resolutionStatus, now, reason, ownerUserId, currentContourId, clientOperationId]
       );
-      if (patrolAssignmentIdentity) {
-        const restoredStatus = command.command_type === "releasePatrolRequest" || command.command_type === "acceptPatrolRequest" ? "accepted" : "inProgress";
+      if (patrolAssignmentIdentity && (command.command_type === "acceptPatrolRequest" || command.command_type === "takePatrolRequest")) {
+        await finalizeCancelledAssignmentInTransaction(tx, ownerUserId, patrolAssignmentIdentity);
+        await tx.runAsync(
+          `UPDATE outbox_commands SET status = ?, updated_at_local = ?, last_error = ? WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?`,
+          ["cancelledLocal", now, reason, ownerUserId, currentContourId, clientOperationId]
+        );
+        await tx.runAsync(
+          `UPDATE sync_conflicts SET status = ?, resolution_status = ?, resolved_at = ?, resolution_reason = ? WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?`,
+          ["resolved", "cancelledLocal", now, reason, ownerUserId, currentContourId, clientOperationId]
+        );
+      } else if (patrolAssignmentIdentity) {
+        const restoredStatus = command.command_type === "releasePatrolRequest" || command.command_type === "acceptPatrolRequest"
+          ? "accepted"
+          : "inProgress";
+        const statusToRestore = command.command_type === "resumePatrolAssignment"
+          ? "paused"
+          : command.command_type === "startPatrolAssignment"
+            ? "accepted"
+            : restoredStatus;
         const assignmentUpdate = await tx.runAsync(
           `
             UPDATE patrol_assignments
             SET status = ?, completed_at_local = CASE WHEN ? = 'inProgress' THEN NULL ELSE completed_at_local END
             WHERE owner_user_id = ? AND assignment_id = ?
-              AND status IN ('syncError', 'completedLocal', 'needsDispatcherDecision', 'accepted', 'inProgress')
+              AND status IN ('syncError', 'completedLocal', 'needsDispatcherDecision', 'accepted', 'inProgress', 'paused')
           `,
-          [restoredStatus, restoredStatus, ownerUserId, patrolAssignmentIdentity]
+          [statusToRestore, statusToRestore, ownerUserId, patrolAssignmentIdentity]
         );
         if (assignmentUpdate.changes !== 1) {
           throw new Error("\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u043e\u0435 \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e; \u043e\u0442\u043c\u0435\u043d\u0430 \u043a\u043e\u043c\u0430\u043d\u0434\u044b \u043d\u0435 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430.");
@@ -1589,7 +1626,7 @@ export async function cancelRejectedOutboxCommand(ownerUserId: string, clientOpe
               SELECT request_id FROM patrol_assignments WHERE owner_user_id = ? AND assignment_id = ? LIMIT 1
             )
           `,
-          [restoredStatus, ownerUserId, ownerUserId, patrolAssignmentIdentity]
+          [statusToRestore, ownerUserId, ownerUserId, patrolAssignmentIdentity]
         );
       } else if (command.entity_type === "workTask" && command.entity_local_id) {
         await tx.runAsync(

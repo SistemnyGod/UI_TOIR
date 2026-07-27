@@ -20,6 +20,12 @@ internal sealed class RouteEntity
 
     public int VersionNo { get; set; }
 
+    public bool AllowFreeOrder { get; set; } = true;
+
+    public bool NfcEnabled { get; set; } = true;
+
+    public bool QrFallbackEnabled { get; set; } = true;
+
     public bool IsArchived { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

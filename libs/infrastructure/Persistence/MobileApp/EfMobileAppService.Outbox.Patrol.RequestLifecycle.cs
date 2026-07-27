@@ -245,6 +245,15 @@ internal sealed partial class EfMobileAppService
                 null);
         }
 
+        var requestTransition = PatrolAssignmentStateMachine.Evaluate(
+            "acceptPatrolRequest",
+            patrolRequest.Status);
+        if (requestTransition.Kind != PatrolTransitionKind.Allowed)
+        {
+            return requestTransition.Kind == PatrolTransitionKind.Conflict
+                ? Conflict(command.ClientOperationId, requestTransition.Message)
+                : Rejected(command.ClientOperationId, requestTransition.Message);
+        }
         if (dbContext.Assignments.Any(item => item.Id == clientAssignmentId))
         {
             return Conflict(command.ClientOperationId, "Client assignment id is already used.");

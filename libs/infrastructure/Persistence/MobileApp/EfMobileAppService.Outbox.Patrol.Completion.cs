@@ -193,13 +193,6 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Patrol assignment was changed after mobile sync.");
         }
 
-        if (assignment.RouteRevisionId is null
-            && assignment.RouteVersionNo > 0
-            && assignment.Route.VersionNo != assignment.RouteVersionNo)
-        {
-            return Conflict(command.ClientOperationId, "Patrol route was changed after assignment sync.");
-        }
-
         var now = DateTimeOffset.UtcNow;
         SaveMobilePointResults(
             account,

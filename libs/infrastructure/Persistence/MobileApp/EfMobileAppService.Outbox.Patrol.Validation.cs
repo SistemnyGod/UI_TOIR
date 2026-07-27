@@ -91,6 +91,29 @@ internal sealed partial class EfMobileAppService
             return AssignmentPointValidation.Fail(Conflict(clientOperationId, "Patrol point is not active for mobile assignments."));
         }
 
+        if (!(assignment.RouteRevision?.AllowFreeOrder ?? assignment.Route.AllowFreeOrder))
+        {
+            var earlierRequiredPointIds = GetAssignedRoutePoints(assignment)
+                .Where(item => item.IsRequired && item.SequenceNo < point.SequenceNo)
+                .Select(item => item.Id)
+                .ToArray();
+            if (earlierRequiredPointIds.Length > 0)
+            {
+                var completedEarlierPointIds = dbContext.PatrolResults
+                    .AsNoTracking()
+                    .Where(result => result.AssignmentId == assignmentId
+                        && result.RoutePointId.HasValue
+                        && earlierRequiredPointIds.Contains(result.RoutePointId.Value)
+                        && (result.Status == "ok" || result.Status == "issue" || result.Status == "skipped"))
+                    .Select(result => result.RoutePointId!.Value)
+                    .ToHashSet();
+                if (earlierRequiredPointIds.Any(id => !completedEarlierPointIds.Contains(id)))
+                {
+                    return AssignmentPointValidation.Fail(
+                        Rejected(clientOperationId, "Сначала завершите обязательные точки по порядку маршрута."));
+                }
+            }
+        }
         return new AssignmentPointValidation(true, assignment, point, null);
     }
 }

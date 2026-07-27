@@ -10,6 +10,7 @@ import {
   getRequestBoardItem,
   releaseAcceptedRequestLocally,
   RequestBoardItem,
+  resumeAssignmentLocally,
   startAssignmentLocally,
   takeRequestLocally
 } from "@/db/repositories/patrolRepository";
@@ -116,7 +117,9 @@ export function PatrolRequestScreen() {
       return;
     }
     await runAction(async () => {
-      const updated = await startAssignmentLocally(assignment.assignmentId);
+      const updated = assignment.status === "paused"
+        ? await resumeAssignmentLocally(assignment.assignmentId)
+        : await startAssignmentLocally(assignment.assignmentId);
       if (updated) {
         router.replace(`/patrol/assignment/${updated.assignmentId}`);
       }

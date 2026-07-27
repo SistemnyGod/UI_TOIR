@@ -28,6 +28,9 @@ internal sealed partial class EfPatrolStore
             VersionNo = route.VersionNo,
             Name = route.Name,
             Territory = route.Territory,
+            AllowFreeOrder = route.AllowFreeOrder,
+            NfcEnabled = route.NfcEnabled,
+            QrFallbackEnabled = route.QrFallbackEnabled,
             CreatedAt = DateTimeOffset.UtcNow,
             Points = points.Select(point => new RouteRevisionPointEntity
             {

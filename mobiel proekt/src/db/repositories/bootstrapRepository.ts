@@ -2,7 +2,7 @@ import * as SQLite from "expo-sqlite";
 import { currentContourId } from "@/core/environments";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
-import { BootstrapDto } from "@/domain/patrol/patrolTypes";
+import { BootstrapConflictResolutionDto, BootstrapDto } from "@/domain/patrol/patrolTypes";
 import { finalizeCancelledAssignmentInTransaction } from "@/db/repositories/patrolCancellationRepository";
 import { deletePatrolPhotoDirectory } from "@/services/fileStorageService";
 import { resolveBootstrapAssignmentStatus } from "@/domain/sync/bootstrapResolutionPolicy";
@@ -284,7 +284,7 @@ export async function countBlockingLocalUserData() {
         (SELECT COUNT(*) FROM patrol_assignments
           WHERE status IN ('accepted', 'releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision')) +
         (SELECT COUNT(*) FROM point_results
-          WHERE sync_status <> 'synced'
+          WHERE sync_status NOT IN ('synced', 'cancelled')
             AND EXISTS (
               SELECT 1
               FROM patrol_assignments assignment
@@ -306,9 +306,9 @@ export async function countBlockingLocalUserData() {
           WHERE status NOT IN ('resolved', 'dismissed')) +
         (SELECT COUNT(*) FROM work_tasks
           WHERE status IN ('inProgress', 'paused', 'completedLocal', 'syncError')
-             OR sync_status <> 'synced') +
+             OR sync_status NOT IN ('synced', 'cancelled')) +
         (SELECT COUNT(*) FROM shift_remarks
-          WHERE sync_status <> 'synced') +
+          WHERE sync_status NOT IN ('synced', 'cancelled')) +
         (SELECT COUNT(*) FROM mobile_diagnostic_reports
           WHERE status = 'pending')
       ) AS count
@@ -405,6 +405,104 @@ async function clearLocalUserTablesInTransaction(executor: SqlExecutor) {
     await executor.runAsync("DELETE FROM mobile_diagnostic_state");
 }
 
+function conflictSnapshotRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function conflictSnapshotString(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function conflictSnapshotJson(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return Array.isArray(value) || (value && typeof value === "object") ? JSON.stringify(value) : null;
+}
+
+async function applyConflictEntitySnapshotInTransaction(
+  tx: SqlExecutor,
+  ownerUserId: string,
+  entityType: string,
+  entityLocalId: string | null,
+  resolution: BootstrapConflictResolutionDto
+) {
+  const snapshot = conflictSnapshotRecord(resolution.responseSnapshot);
+  if (!snapshot || snapshot.entityType !== entityType) return false;
+  const resolvedAt = resolution.resolvedAt;
+  if (entityType === "patrolPoint") {
+    const assignmentId = conflictSnapshotString(snapshot, "assignmentId");
+    const pointId = conflictSnapshotString(snapshot, "pointId");
+    const status = conflictSnapshotString(snapshot, "status");
+    if (!assignmentId || !pointId || !status || (entityLocalId && entityLocalId !== pointId)) return false;
+    const revision = typeof snapshot.serverRevision === "number" ? snapshot.serverRevision : null;
+    const result = await tx.runAsync(
+      `UPDATE point_results
+         SET status = ?, comment = ?, issue_type_id = ?, severity = ?, sync_status = ?, server_revision = ?, accepted_operation_id = ?, last_synced_at = ?
+       WHERE owner_user_id = ? AND assignment_id = ? AND point_id = ?`,
+      [status, conflictSnapshotString(snapshot, "comment"), conflictSnapshotString(snapshot, "issueTypeId"), conflictSnapshotString(snapshot, "severity"), "synced", revision, resolution.clientOperationId, resolvedAt, ownerUserId, assignmentId, pointId]
+    );
+    return result.changes === 1;
+  }
+  if (entityType === "workTask") {
+    const localTaskId = entityLocalId ?? conflictSnapshotString(snapshot, "taskId");
+    const status = conflictSnapshotString(snapshot, "status");
+    const revision = typeof snapshot.revision === "number" ? snapshot.revision : null;
+    if (!localTaskId || !status || revision === null) return false;
+    const result = await tx.runAsync(
+      `UPDATE work_tasks
+          SET title = COALESCE(?, title),
+              status = ?,
+              planned_at = ?,
+              revision = ?,
+              completed_at_local = COALESCE(?, completed_at_local),
+              section_id = ?,
+              section_name = ?,
+              employee_id = ?,
+              employee_name = ?,
+              source = COALESCE(?, source),
+              approval_status = COALESCE(?, approval_status),
+              assigned_employees_json = COALESCE(?, assigned_employees_json),
+              actual_participants_json = COALESCE(?, actual_participants_json),
+              attachments_json = COALESCE(?, attachments_json),
+              capabilities_json = COALESCE(?, capabilities_json),
+              sync_status = ?
+        WHERE owner_user_id = ? AND task_id = ?`,
+      [
+        conflictSnapshotString(snapshot, "title"),
+        status,
+        conflictSnapshotString(snapshot, "plannedAt"),
+        revision,
+        conflictSnapshotString(snapshot, "completedAtLocal"),
+        conflictSnapshotString(snapshot, "sectionId"),
+        conflictSnapshotString(snapshot, "sectionName"),
+        conflictSnapshotString(snapshot, "employeeId"),
+        conflictSnapshotString(snapshot, "employeeName"),
+        conflictSnapshotString(snapshot, "source"),
+        conflictSnapshotString(snapshot, "approvalStatus"),
+        conflictSnapshotJson(snapshot, "assignedEmployees"),
+        conflictSnapshotJson(snapshot, "actualParticipants"),
+        conflictSnapshotJson(snapshot, "attachments"),
+        conflictSnapshotJson(snapshot, "capabilities"),
+        "synced",
+        ownerUserId,
+        localTaskId
+      ]
+    );
+    return result.changes === 1;
+  }
+  if (entityType === "shiftRemark") {
+    const remarkId = conflictSnapshotString(snapshot, "remarkId") ?? entityLocalId;
+    const status = conflictSnapshotString(snapshot, "status");
+    if (!remarkId || !status) return false;
+    const result = await tx.runAsync(
+      `UPDATE shift_remarks SET title = COALESCE(?, title), comment = COALESCE(?, comment), status = ?, server_remark_id = COALESCE(?, server_remark_id), sync_status = ? WHERE owner_user_id = ? AND remark_id = ?`,
+      [conflictSnapshotString(snapshot, "title"), conflictSnapshotString(snapshot, "comment"), status, conflictSnapshotString(snapshot, "serverRemarkId"), "synced", ownerUserId, remarkId]
+    );
+    return result.changes === 1;
+  }
+  return false;
+}
+
 async function applyBootstrapConflictResolutionsInTransaction(
   tx: SqlExecutor,
   ownerUserId: string,
@@ -458,21 +556,19 @@ async function applyBootstrapConflictResolutionsInTransaction(
       continue;
     }
 
-    // Bootstrap currently carries the authoritative state only for assignments.
-    // Closing a point/task/remark conflict without applying that state would
-    // leave the local entity blocking logout while the outbox entry is hidden.
     if (!assignmentCommand) {
-      switch (command.entityType) {
-        case "patrolPoint":
-        case "workTask":
-        case "shiftRemark":
-          continue;
-        default:
-          continue;
+      const entitySnapshotApplied = await applyConflictEntitySnapshotInTransaction(tx, ownerUserId, command.entityType, command.entityLocalId, resolution);
+      if (!entitySnapshotApplied) {
+        switch (command.entityType) {
+          case "patrolPoint":
+          case "workTask":
+          case "shiftRemark":
+            continue;
+          default:
+            continue;
+        }
       }
     }
-
-
     if (assignmentWasCancelled && assignmentId) {
       await finalizeCancelledAssignmentInTransaction(tx, ownerUserId, assignmentId);
       continue;

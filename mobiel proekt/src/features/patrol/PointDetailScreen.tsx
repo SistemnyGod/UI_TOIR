@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { currentContourId } from "@/core/environments";
 import { listPointFiles } from "@/db/repositories/filesRepository";
-import { assertPointCanBeOpened, getAssignmentById, getAssignmentScanPolicy, listMissingCompleteAssignmentAttachmentIds, PointForFill, PointListItem } from "@/db/repositories/patrolRepository";
+import { assertPointCanBeOpened, getAssignmentById, getAssignmentScanPolicy, getPointForFill, listMissingCompleteAssignmentAttachmentIds, PointForFill, PointListItem } from "@/db/repositories/patrolRepository";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
@@ -44,10 +45,14 @@ export function PointDetailScreen() {
       void (async () => {
         try {
         const ownerUserId = await getStoredOwnerUserId();
-        const [loadedAssignment, loadedPolicy, loadedPoint, files, missingIds] = await Promise.all([
-          getAssignmentById(assignmentId),
+        const loadedAssignment = await getAssignmentById(assignmentId);
+        const [loadedPolicy, loadedPoint, files, missingIds] = await Promise.all([
           getAssignmentScanPolicy(assignmentId),
-          ownerUserId ? assertPointCanBeOpened(assignmentId, pointId) : Promise.resolve(null),
+          ownerUserId
+            ? loadedAssignment?.status === "inProgress"
+              ? assertPointCanBeOpened(assignmentId, pointId)
+              : getPointForFill(assignmentId, pointId, ownerUserId, currentContourId)
+            : Promise.resolve(null),
           listPointFiles(assignmentId, pointId),
           listMissingCompleteAssignmentAttachmentIds(assignmentId, pointId)
         ]);

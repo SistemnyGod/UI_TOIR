@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
@@ -7,7 +7,7 @@ async function readSource(relativePath: string) {
   return readFile(join(process.cwd(), relativePath), "utf8");
 }
 
-test("work item refresh uses v2 everywhere and prunes an empty server snapshot", async () => {
+test("work item refresh uses v2 without pruning a partial server snapshot", async () => {
   const [refreshSource, authSource, repositorySource] = await Promise.all([
     readSource("src/services/mobileDataRefreshService.ts"),
     readSource("src/auth/authService.ts"),
@@ -18,12 +18,19 @@ test("work item refresh uses v2 everywhere and prunes an empty server snapshot",
   assert.doesNotMatch(refreshSource, /syncWorkTasks\(\)/);
   assert.match(authSource, /syncWorkItems\(\)/);
   assert.doesNotMatch(authSource, /syncWorkTasks\(\)/);
-  assert.match(
-    repositorySource,
-    /else \{\s*await tx\.runAsync\(\s*"DELETE FROM work_tasks WHERE owner_user_id = \? AND sync_status = 'synced'"/
-  );
+  const saveWorkItemsStart = repositorySource.indexOf("export async function saveWorkItems");
+  const saveWorkItemsEnd = repositorySource.indexOf("export async function listLocalWorkItems", saveWorkItemsStart);
+  const saveWorkItemsSource = repositorySource.slice(saveWorkItemsStart, saveWorkItemsEnd);
+  assert.doesNotMatch(saveWorkItemsSource, /DELETE FROM work_tasks WHERE owner_user_id = \? AND sync_status = 'synced'/);
 });
 
+
+test("V2 work items do not fabricate completion time from planned time", async () => {
+  const apiSource = await readSource("src/api/emuApi.ts");
+
+  assert.match(apiSource, /completedAtLocal: null/);
+  assert.doesNotMatch(apiSource, /completedAtLocal: item\.status[\s\S]*item\.plannedAt/);
+});
 test("work task transitions reject a second active command of the same type", async () => {
   const source = await readSource("src/db/repositories/workTaskRepository.ts");
 
@@ -196,4 +203,20 @@ test("frozen snapshot readiness ignores current route version", async () => {
   assert.match(bootstrapSource, /const snapshotVersion = frozenSnapshot[\s\S]*assignment\.routeVersionNo/);
   assert.ok(startedBlockStart >= 0 && startedBlockEnd > startedBlockStart);
   assert.doesNotMatch(readiness.slice(startedBlockStart, startedBlockEnd), /route\.version/);
+});
+
+test("completed report attachment repair validates physical file and requeues rejected command", async () => {
+  const source = await readSource("src/db/repositories/patrolRepository.ts");
+  const repairStart = source.indexOf("export async function listMissingCompleteAssignmentAttachmentIds");
+  const repairSource = source.slice(repairStart);
+
+  assert.match(repairSource, /status IN \('pending', 'retryLater', 'waiting_network', 'waiting_auth', 'rejected'\)/);
+  assert.match(repairSource, /getLocalFileInfo/);
+  assert.match(repairSource, /currentAssignment\.status !== "completedLocal"/);
+  assert.match(repairSource, /contour_id = \?/);
+  assert.match(repairSource, /persistedIds\.includes\(missingClientFileId\)/);
+  assert.match(repairSource, /getCompletionAttachmentFailure/);
+  assert.match(repairSource, /status = 'pending'/);
+  assert.match(repairSource, /pointUpdate.changes !== 1/);
+  assert.match(repairSource, /commandUpdate.changes !== 1/);
 });

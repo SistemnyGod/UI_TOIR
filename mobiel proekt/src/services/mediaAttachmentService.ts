@@ -1,7 +1,9 @@
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { logMobileError } from "@/services/mobileErrorReporter";
 import { attachPhotoToPoint, restoreMissingPointAttachment } from "@/db/repositories/patrolRepository";
 import { attachMediaToShiftRemark } from "@/db/repositories/shiftRemarkRepository";
 import { attachMediaToWorkTask } from "@/db/repositories/workTaskRepository";
@@ -358,7 +360,14 @@ async function restorePointPhotoAsset(
     assignmentId,
     pointId
   });
-  await restoreMissingPointAttachment(assignmentId, pointId, missingClientFileId, file);
+  try {
+    await restoreMissingPointAttachment(assignmentId, pointId, missingClientFileId, file);
+  } catch (error) {
+    await FileSystem.deleteAsync(file.localPath, { idempotent: true }).catch((cleanupError) => {
+      void logMobileError("media.repair.cleanup.failed", cleanupError);
+    });
+    throw error;
+  }
 }
 async function attachRemarkPhotoAssets(ownerUserId: string, remarkId: string, assets: ImagePicker.ImagePickerAsset[], onProgress?: MediaPreparationProgressCallback) {
   for (const asset of assets) {

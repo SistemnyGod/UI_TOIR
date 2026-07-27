@@ -127,6 +127,18 @@ internal static class PatrolAssignmentStateMachine
                 "Patrol assignment was already paused.");
         }
 
+        if (IsOneOf(
+                status,
+                AssignmentStatusValues.NeedsDispatcherDecision,
+                AssignmentStatusValues.Completed,
+                AssignmentStatusValues.Cancelled))
+        {
+            return new(
+                PatrolTransitionKind.Conflict,
+                null,
+                "Patrol assignment cannot be paused from its current state.");
+        }
+
         return new(
             PatrolTransitionKind.Rejected,
             null,
@@ -149,6 +161,18 @@ internal static class PatrolAssignmentStateMachine
                 PatrolTransitionKind.Duplicate,
                 AssignmentStatusValues.InProgress,
                 "Patrol assignment was already resumed.");
+        }
+
+        if (IsOneOf(
+                status,
+                AssignmentStatusValues.NeedsDispatcherDecision,
+                AssignmentStatusValues.Completed,
+                AssignmentStatusValues.Cancelled))
+        {
+            return new(
+                PatrolTransitionKind.Conflict,
+                null,
+                "Patrol assignment cannot be resumed from its current state.");
         }
 
         return new(

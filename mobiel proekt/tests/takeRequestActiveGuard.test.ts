@@ -22,3 +22,18 @@ test("taking a request is blocked when another patrol is active", async () => {
   assert.ok(assignmentInsert > transactionCheck);
   assert.match(repositorySource, /status IN \('inProgress', 'paused'\)/);
 });
+
+test("paused request resumes instead of starting a new patrol", async () => {
+  const screenSource = await readFile(
+    join(process.cwd(), "src/features/patrol/PatrolRequestScreen.tsx"),
+    "utf8"
+  );
+  const handleStart = screenSource.slice(
+    screenSource.indexOf("async function handleStart()"),
+    screenSource.indexOf("  function handleRelease()")
+  );
+
+  assert.match(handleStart, /assignment\.status === "paused"/);
+  assert.match(handleStart, /resumeAssignmentLocally\(assignment\.assignmentId\)/);
+  assert.match(handleStart, /startAssignmentLocally\(assignment\.assignmentId\)/);
+});
