@@ -65,4 +65,6 @@ docker compose -f compose.yaml -f infra/docker/compose.web-prebuilt.yaml --profi
 docker compose -f compose.yaml -f infra/docker/compose.web-prebuilt.yaml --profile app up -d --build
 ```
 
+If `docker_default` already exists and is managed outside the current command, add `-f infra/docker/compose.existing-network.yaml`. The start script detects this case automatically.
+
 Use the script by default so the Docker web container does not accidentally serve stale assets.

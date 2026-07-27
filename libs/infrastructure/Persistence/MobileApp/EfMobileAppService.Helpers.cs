@@ -538,6 +538,12 @@ internal sealed partial class EfMobileAppService
     private static string NormalizeOptionalText(string? value, string fallback = "") =>
         string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
 
+    private static string NormalizeBoundedOptionalText(string? value, string fallback, int maxLength)
+    {
+        var normalized = NormalizeOptionalText(value, fallback);
+        return normalized.Length <= maxLength ? normalized : normalized[..maxLength];
+    }
+
     private static string? NormalizeNullableText(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 

@@ -13,7 +13,8 @@ public sealed record MobileAccountDto(
     string Session,
     string LastSeen,
     string Device,
-    string Version);
+    string Version,
+    bool RestrictToBoundDevice = false);
 
 public sealed record MobileAccountCreatedDto(
     MobileAccountDto Account,
@@ -39,7 +40,8 @@ public sealed record UpdateMobileAccountDto(
     string? Role,
     string? Status,
     string? Password = null,
-    string? ConfirmPassword = null);
+    string? ConfirmPassword = null,
+    bool? RestrictToBoundDevice = null);
 
 public sealed record AttachMobileAccountEmployeeDto(
     Guid? EmployeeId,

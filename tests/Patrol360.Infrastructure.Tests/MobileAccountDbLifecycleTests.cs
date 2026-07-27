@@ -65,7 +65,7 @@ public sealed class MobileAccountDbLifecycleTests
                 created.TemporaryPassword!,
                 "mobile-account-lifecycle-device",
                 "Test Android device",
-                "Android",
+                new string('A', 100),
                 "2.3.0"),
             "127.0.0.1"));
         Assert.True(login.Succeeded);
@@ -73,7 +73,7 @@ public sealed class MobileAccountDbLifecycleTests
 
         var sessions = UseMobileAccounts(provider, mobileAccounts => mobileAccounts.GetSessions(accountId));
         Assert.Single(sessions);
-        Assert.Equal("Android", sessions[0].Platform);
+        Assert.Equal(new string('A', 80), sessions[0].Platform);
         Assert.NotEqual(default, sessions[0].StartedAt);
         Assert.Null(sessions[0].EndedAt);
 

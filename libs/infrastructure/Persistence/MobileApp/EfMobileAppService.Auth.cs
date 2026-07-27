@@ -259,7 +259,7 @@ internal sealed partial class EfMobileAppService
         oldSession.ExpiresAt = now.Add(AccessTokenLifetime);
         oldSession.RefreshExpiresAt = now.Add(RefreshSessionLifetime);
         oldSession.LastSeenAt = now;
-        oldSession.IpAddress = NormalizeOptionalText(ipAddress, "-");
+        oldSession.IpAddress = NormalizeBoundedOptionalText(ipAddress, "-", 80);
         oldSession.Status = "Онлайн";
         oldSession.MobileAccount.Session = "Онлайн";
         oldSession.MobileAccount.LastSeenAt = now;
@@ -341,9 +341,9 @@ internal sealed partial class EfMobileAppService
             Status = "Онлайн",
             DeviceId = NormalizeOptionalText(deviceId),
             Device = NormalizeOptionalText(deviceName, "Kenshi Armor C1s"),
-            Platform = NormalizeOptionalText(platform, "Android"),
+            Platform = NormalizeBoundedOptionalText(platform, "Android", 80),
             AppVersion = NormalizeOptionalText(appVersion, "0.1.0"),
-            IpAddress = NormalizeOptionalText(ipAddress, "-"),
+            IpAddress = NormalizeBoundedOptionalText(ipAddress, "-", 80),
             PushToken = string.Empty,
             TokenHash = EfAuthSessionService.HashToken(accessToken),
             RefreshTokenHash = EfAuthSessionService.HashToken(refreshToken),

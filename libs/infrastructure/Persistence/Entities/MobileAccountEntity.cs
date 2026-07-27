@@ -30,6 +30,8 @@ internal sealed class MobileAccountEntity
 
     public string Device { get; set; } = string.Empty;
 
+    public bool RestrictToBoundDevice { get; set; }
+
     public string Version { get; set; } = string.Empty;
 
     public DateTimeOffset CreatedAt { get; set; }

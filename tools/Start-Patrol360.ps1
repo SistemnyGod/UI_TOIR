@@ -10,15 +10,14 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$composeArgs = @(
+$composeBaseArgs = @(
   "compose",
   "-f",
   "compose.yaml",
   "-f",
-  "infra/docker/compose.web-prebuilt.yaml",
-  "--profile",
-  "app"
+  "infra/docker/compose.web-prebuilt.yaml"
 )
+$composeArgs = $composeBaseArgs + @("--profile", "app")
 
 function Invoke-Native {
   param(
@@ -128,6 +127,17 @@ try {
   Test-RequiredCommand npm
   Test-RequiredCommand docker
   Invoke-Native docker compose version | Out-Null
+
+  & docker network inspect docker_default *> $null
+  if ($LASTEXITCODE -eq 0) {
+    $composeArgs = $composeBaseArgs + @(
+      "-f",
+      "infra/docker/compose.existing-network.yaml",
+      "--profile",
+      "app"
+    )
+    Write-Host "Using existing Docker network: docker_default"
+  }
 
   if (-not $SkipWebBuild) {
     Invoke-Step "Build fresh web assets" {
