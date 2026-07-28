@@ -14,17 +14,24 @@ import { PrimaryButton } from "@/ui/PrimaryButton";
 import { ScreenList } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
 
-type RequestTab = "available" | "mine" | "unsent" | "history";
+type RequestTab = "all" | "history";
 
-const activeStatuses = new Set(["accepted", "inProgress", "paused"]);
-const unsentStatuses = new Set(["completedLocal", "syncing", "retryLater", "syncError", "authRequired", "needsDispatcherDecision"]);
 const historyStatuses = new Set(["completed", "completedServer", "cancelled", "cancelledServer"]);
+
+function requestStatusRank(status: string) {
+  if (status === "inProgress") return 0;
+  if (status === "accepted" || status === "paused") return 1;
+  if (status === "assigned") return 2;
+  if (status === "available") return 3;
+  if (status === "completedLocal" || status === "syncing" || status === "retryLater") return 4;
+  return 5;
+}
 
 export function RequestBoardScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const [items, setItems] = useState<RequestBoardItem[]>([]);
-  const [activeTab, setActiveTab] = useState<RequestTab>("available");
+  const [activeTab, setActiveTab] = useState<RequestTab>("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -76,25 +83,19 @@ export function RequestBoardScreen() {
 
   const summary = useMemo(
     () => ({
-      available: items.filter((item) => item.status === "available" || item.status === "assigned").length,
-      mine: items.filter((item) => activeStatuses.has(item.status)).length,
-      unsent: items.filter((item) => unsentStatuses.has(item.status)).length,
+      all: items.filter((item) => !historyStatuses.has(item.status)).length,
       history: items.filter((item) => historyStatuses.has(item.status)).length
     }),
     [items]
   );
 
   const filteredItems = useMemo(() => {
-    switch (activeTab) {
-      case "mine":
-        return items.filter((item) => activeStatuses.has(item.status));
-      case "unsent":
-        return items.filter((item) => unsentStatuses.has(item.status));
-      case "history":
-        return items.filter((item) => historyStatuses.has(item.status));
-      default:
-        return items.filter((item) => item.status === "available" || item.status === "assigned");
-    }
+    const source = activeTab === "history"
+      ? items.filter((item) => historyStatuses.has(item.status))
+      : items.filter((item) => !historyStatuses.has(item.status));
+    return [...source].sort((left, right) => requestStatusRank(left.status) - requestStatusRank(right.status)
+      || left.plannedStartAt.localeCompare(right.plannedStartAt)
+      || left.requestId.localeCompare(right.requestId));
   }, [activeTab, items]);
 
   const renderItem: ListRenderItem<RequestBoardItem> = ({ item }) => (
@@ -124,9 +125,7 @@ export function RequestBoardScreen() {
       headerContent={
         <>
           <View style={styles.tabBar}>
-            <RequestTabButton active={activeTab === "available"} count={summary.available} label="Доступные" onPress={() => setActiveTab("available")} />
-            <RequestTabButton active={activeTab === "mine"} count={summary.mine} label="Мои" onPress={() => setActiveTab("mine")} />
-            <RequestTabButton active={activeTab === "unsent"} count={summary.unsent} label="Не отправлено" onPress={() => setActiveTab("unsent")} />
+            <RequestTabButton active={activeTab === "all"} count={summary.all} label="Все заявки" onPress={() => setActiveTab("all")} />
             <RequestTabButton active={activeTab === "history"} count={summary.history} label="История" onPress={() => setActiveTab("history")} />
           </View>
 

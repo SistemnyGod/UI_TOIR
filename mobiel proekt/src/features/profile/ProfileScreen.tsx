@@ -8,7 +8,7 @@ import { getDeviceDisplayName } from "@/auth/deviceInfo";
 import { listLocalNotifications } from "@/db/repositories/notificationRepository";
 import { MobileNotificationDto } from "@/domain/patrol/patrolTypes";
 import { useAppTheme } from "@/features/settings/themePreference";
-import { markMobileNotificationRead, syncMobileNotifications } from "@/services/notificationService";
+import { syncMobileNotifications } from "@/services/notificationService";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -23,19 +23,11 @@ export function ProfileScreen() {
   const [notifications, setNotifications] = useState<MobileNotificationDto[]>([]);
   const [isRefreshingNotifications, setIsRefreshingNotifications] = useState(false);
 
-  const unreadNotifications = useMemo(() => notifications.filter((notification) => !notification.readAt), [notifications]);
   const visibleNotifications = useMemo(
-    () => [...notifications].sort((left, right) => {
-      if (!left.readAt && right.readAt) {
-        return -1;
-      }
-      if (left.readAt && !right.readAt) {
-        return 1;
-      }
-      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-    }),
+    () => [...notifications].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
     [notifications]
   );
+
 
   const refreshNotifications = useCallback(async () => {
     setIsRefreshingNotifications(true);
@@ -84,16 +76,6 @@ export function ProfileScreen() {
     }
   }
 
-  async function handleRead(notificationId: string) {
-    await markMobileNotificationRead(notificationId).catch(() => null);
-    setNotifications(await listLocalNotifications(NOTIFICATION_LIMIT));
-  }
-
-  async function handleReadAll() {
-    const unreadIds = unreadNotifications.map((notification) => notification.id);
-    await Promise.all(unreadIds.map((notificationId) => markMobileNotificationRead(notificationId).catch(() => null)));
-    setNotifications(await listLocalNotifications(NOTIFICATION_LIMIT));
-  }
 
   return (
     <Screen title="Профиль" subtitle="Устройство, настройки, диагностика и смена пользователя.">
@@ -126,9 +108,7 @@ export function ProfileScreen() {
           <View style={styles.notificationHeaderText}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Уведомления</Text>
             <Text style={[styles.text, { color: colors.mutedText }]}>
-              {notifications.length === 0
-                ? "Новых уведомлений нет."
-                : `${notifications.length} последних · непрочитанных: ${unreadNotifications.length}`}
+              {notifications.length === 0 ? "Уведомлений нет." : `${notifications.length} последних уведомлений`}
             </Text>
           </View>
           <View style={styles.notificationHeaderActions}>
@@ -137,16 +117,13 @@ export function ProfileScreen() {
               label={isRefreshingNotifications ? "Обновляем" : "Обновить"}
               onPress={refreshNotifications}
             />
-            {unreadNotifications.length > 0 ? (
-              <CompactAction icon="checkmark-done-outline" label="Прочитать все" onPress={handleReadAll} />
-            ) : null}
           </View>
         </View>
 
         {notifications.length > 0 ? (
           <View style={styles.notificationList}>
             {visibleNotifications.map((notification) => (
-              <NotificationRow key={notification.id} notification={notification} onRead={handleRead} />
+              <NotificationRow key={notification.id} notification={notification} onPress={() => handleNotificationPress(notification, router)} />
             ))}
           </View>
         ) : (
@@ -164,54 +141,47 @@ export function ProfileScreen() {
   );
 }
 
-function NotificationRow({
-  notification,
-  onRead
-}: {
-  notification: MobileNotificationDto;
-  onRead: (notificationId: string) => void;
-}) {
+function handleNotificationPress(notification: MobileNotificationDto, router: ReturnType<typeof useRouter>) {
+  const entityType = notification.entityType?.toLowerCase() ?? "";
+  if (notification.entityId && entityType.includes("request")) {
+    router.push(`/patrol/request/${notification.entityId}`);
+    return;
+  }
+  if (notification.entityId && (entityType.includes("assignment") || entityType.includes("patrol"))) {
+    router.push(`/patrol/assignment/${notification.entityId}`);
+    return;
+  }
+  if (notification.entityId && entityType.includes("report")) {
+    router.push("/settings/sync-queue" as never);
+    return;
+  }
+  Alert.alert(notification.title || "Уведомление", notification.message || "Без текста уведомления.");
+}
+
+function NotificationRow({ notification, onPress }: { notification: MobileNotificationDto; onPress: () => void }) {
   const { colors } = useAppTheme();
-  const isUnread = !notification.readAt;
 
   return (
     <Pressable
-      accessibilityHint={isUnread ? "Отметить уведомление прочитанным" : undefined}
+      accessibilityHint="Открыть уведомление"
       accessibilityRole="button"
-      disabled={!isUnread}
-      onPress={() => onRead(notification.id)}
+      onPress={onPress}
       style={({ pressed }) => [
         styles.notificationItem,
-        {
-          backgroundColor: isUnread ? colors.backgroundAccent : colors.card,
-          borderColor: isUnread ? colors.primary : colors.border
-        },
-        pressed && isUnread ? styles.notificationPressed : null
+        { backgroundColor: colors.card, borderColor: colors.border },
+        pressed ? styles.notificationPressed : null
       ]}
     >
       <View style={styles.notificationTopLine}>
-        <View style={styles.notificationMeta}>
-          <Text style={[styles.notificationType, { color: isUnread ? colors.primary : colors.mutedText }]}>
-            {formatNotificationType(notification.type)}
-          </Text>
-          <Text style={[styles.notificationDate, { color: colors.mutedText }]}>{formatNotificationDate(notification.createdAt)}</Text>
-        </View>
-        <StatusPill label={isUnread ? "Новое" : "Прочитано"} tone={isUnread ? "warning" : "neutral"} />
+        <Text style={[styles.notificationType, { color: colors.mutedText }]}>{formatNotificationType(notification.type)}</Text>
+        <Text style={[styles.notificationDate, { color: colors.mutedText }]}>{formatNotificationDate(notification.createdAt)}</Text>
       </View>
-
       <Text numberOfLines={2} style={[styles.notificationTitle, { color: colors.text }]}>
         {notification.title || "Уведомление"}
       </Text>
-      <Text numberOfLines={3} style={[styles.text, { color: colors.mutedText }]}>
+      <Text numberOfLines={4} style={[styles.text, { color: colors.mutedText }]}>
         {notification.message || "Без текста уведомления."}
       </Text>
-
-      {isUnread ? (
-        <View style={styles.inlineReadButton}>
-          <Ionicons color={colors.primary} name="checkmark-circle-outline" size={17} />
-          <Text style={[styles.inlineReadText, { color: colors.primary }]}>Отметить прочитанным</Text>
-        </View>
-      ) : null}
     </Pressable>
   );
 }

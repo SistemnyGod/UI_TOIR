@@ -85,7 +85,7 @@ export function SubmitReportScreen() {
     }
 
     if (presentation.action === "repair") {
-      router.push(`/patrol/assignment/${assignmentId}/all-points`);
+      router.push(`/patrol/assignment/${assignmentId}/all-points?filter=attention`);
       return;
     }
 
@@ -146,8 +146,8 @@ export function SubmitReportScreen() {
   }
 
   function handleScreenPrimaryAction() {
-    if (!readiness?.ready && problemGroups[0]) {
-      openProblem(problemGroups[0]);
+    if (!readiness?.ready) {
+      router.push(`/patrol/assignment/${assignmentId}/all-points?filter=attention`);
       return;
     }
 
@@ -173,8 +173,8 @@ export function SubmitReportScreen() {
   }
 
   const actionDisabled = isSubmitting || presentation.action === "wait" || (!readiness.ready && problemGroups.length === 0);
-  const primaryLabel = !readiness.ready && problemGroups[0]
-    ? problemGroups[0].pointId === "route-empty" ? "Открыть список точек" : `Перейти к точке ${problemGroups[0].orderIndex}`
+  const primaryLabel = !readiness.ready
+    ? "Открыть незаполненные"
     : presentation.buttonLabel;
   const primaryIcon = !readiness.ready ? "arrow-forward-outline" : actionIcon(presentation.action);
 

@@ -358,3 +358,22 @@ async function advanceDiagnosticPeriod(ownerUserId: string, periodEnd: string) {
     )
   );
 }
+
+export async function getPendingDiagnosticReport(ownerUserId: string): Promise<MobileDiagnosticReport | null> {
+  const currentOwnerUserId = await getStoredOwnerUserId();
+  if (!currentOwnerUserId || currentOwnerUserId !== ownerUserId) {
+    return null;
+  }
+
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ payload_json: string }>(
+    `SELECT payload_json
+     FROM mobile_diagnostic_reports
+     WHERE owner_user_id = ? AND status = 'pending'
+     ORDER BY created_at_local ASC
+     LIMIT 1`,
+    [ownerUserId]
+  );
+
+  return row ? JSON.parse(row.payload_json) as MobileDiagnosticReport : null;
+}

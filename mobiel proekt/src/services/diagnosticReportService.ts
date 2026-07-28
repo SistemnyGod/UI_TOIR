@@ -4,6 +4,8 @@ import { postDailyDiagnosticReport } from "@/api/mobileApi";
 import { getAppRuntimeMetadata } from "@/auth/appMetadata";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import {
+  MobileDiagnosticReport,
+  getPendingDiagnosticReport,
   getOrCreatePendingDiagnosticReport,
   listDiagnosticReports,
   markDiagnosticReportFailed,
@@ -20,12 +22,20 @@ export type DiagnosticUploadResult =
   | { status: "sent"; reportId: string }
   | { status: "notDue" }
   | { status: "disabled" }
-  | { status: "offline" }
+  | { status: "offline"; reportId?: string }
+  | { status: "queued"; reportId: string }
   | { status: "unauthenticated" }
   | { status: "failed"; message: string };
 
 export function triggerDailyDiagnosticReportUpload() {
   activeUpload ??= uploadDailyDiagnosticReport().finally(() => {
+    activeUpload = null;
+  });
+  return activeUpload;
+}
+
+export function triggerPendingDiagnosticReportUpload() {
+  activeUpload ??= uploadPendingDiagnosticReport().finally(() => {
     activeUpload = null;
   });
   return activeUpload;
@@ -41,7 +51,10 @@ export async function setAutomaticDiagnosticUploadEnabled(enabled: boolean) {
 }
 
 export async function triggerManualDiagnosticReportUpload() {
-  return uploadDiagnosticReport({ force: true, includeEmpty: true, respectAutomaticSetting: false });
+  activeUpload ??= uploadDiagnosticReport({ force: true, includeEmpty: true, respectAutomaticSetting: false }).finally(() => {
+    activeUpload = null;
+  });
+  return activeUpload;
 }
 
 export async function runSafeDiagnosticTest() {
@@ -76,9 +89,6 @@ async function uploadDiagnosticReport(options: {
     return { status: "disabled" };
   }
 
-  if (!(await hasUsableNetwork())) {
-    return { status: "offline" };
-  }
 
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
@@ -98,6 +108,32 @@ async function uploadDiagnosticReport(options: {
     return { status: "notDue" };
   }
 
+  if (!(await hasUsableNetwork())) {
+    return { status: "queued", reportId: report.reportId };
+  }
+
+  return sendPendingDiagnosticReport(report);
+}
+
+async function uploadPendingDiagnosticReport(): Promise<DiagnosticUploadResult> {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return { status: "unauthenticated" };
+  }
+
+  const report = await getPendingDiagnosticReport(ownerUserId);
+  if (!report) {
+    return { status: "notDue" };
+  }
+
+  if (!(await hasUsableNetwork())) {
+    return { status: "offline", reportId: report.reportId };
+  }
+
+  return sendPendingDiagnosticReport(report);
+}
+
+async function sendPendingDiagnosticReport(report: MobileDiagnosticReport): Promise<DiagnosticUploadResult> {
   try {
     await postDailyDiagnosticReport(report);
     await markDiagnosticReportSent(report);

@@ -6,6 +6,7 @@ import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { triggerDailyDiagnosticReportUpload } from "@/services/diagnosticReportService";
 import { refreshMobileData } from "@/services/mobileDataRefreshService";
+import { triggerPendingDiagnosticReportUpload } from "@/services/diagnosticReportService";
 import { createMutationSyncScheduler } from "@/sync/mutationSyncScheduler";
 import { registerMutationSyncRequester, requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 import { registerOutboxRetrySchedulerRunner } from "@/sync/outboxRetryScheduler";
@@ -53,6 +54,7 @@ export function subscribeToNetworkSync() {
     if (networkUsable) {
       requestMobileDataRefresh("network");
       void triggerForegroundSyncWithRetry({ mode: networkBecameUsable ? "networkRecovered" : "normal" });
+      void triggerPendingDiagnosticReportUpload();
       void triggerDailyDiagnosticReportUpload();
     }
   });
@@ -89,6 +91,7 @@ export async function triggerForegroundSyncWithRetry(
     await (pendingRefresh ? pendingRefresh.catch(() => false) : Promise.resolve(false));
     const result = await runForegroundSync({ mode, assignmentId: options.assignmentId });
     if (result.skipped === null) {
+      void triggerPendingDiagnosticReportUpload();
       void triggerDailyDiagnosticReportUpload();
     }
     return result;

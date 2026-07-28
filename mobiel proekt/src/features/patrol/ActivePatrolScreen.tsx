@@ -138,7 +138,18 @@ export function ActivePatrolScreen() {
   const isReadyForReview = progress.total > 0 && progress.completed >= progress.total;
 
   return (
-    <Screen title={assignment.routeName} subtitle="Следуйте следующему действию — прогресс сохраняется автоматически.">
+    <Screen
+      title={assignment.routeName}
+      subtitle="Следуйте следующему действию — прогресс сохраняется автоматически."
+      floatingAction={isInProgress ? (
+        <PrimaryButton
+          icon={isReadyForReview ? "document-text-outline" : "scan-outline"}
+          label={isReadyForReview ? "Проверить и отправить отчёт" : "Сканировать NFC"}
+          onPress={() => router.push(isReadyForReview ? `/patrol/assignment/${assignment.assignmentId}/submit` : `/patrol/assignment/${assignment.assignmentId}/scan-nfc`)}
+          size="large"
+        />
+      ) : null}
+    >
       <Card>
         <View style={styles.routeHeader}>
           <View style={styles.routeTextBox}>

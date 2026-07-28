@@ -924,11 +924,12 @@ async function findExistingPointScanCommand(
     }
   });
 }
-export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
+export async function scanPointByNfc(assignmentId: string, nfcCode: string | string[]) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
   const scanPolicy = await assertScanMethodAllowed(assignmentId, "nfc");
-  const scannedCandidates = getNfcCodeCandidates(nfcCode);
+  const scannedCodes = Array.isArray(nfcCode) ? nfcCode : [nfcCode];
+  const scannedCandidates = Array.from(new Set(scannedCodes.flatMap(getNfcCodeCandidates)));
   const points = await db.getAllAsync<{
     pointId: string;
     routeId: string;
@@ -968,8 +969,8 @@ export async function scanPointByNfc(assignmentId: string, nfcCode: string) {
     return expectedCandidates.some((expected) => scannedCandidates.includes(expected));
   });
 
-  const normalizedNfcCode = normalizeNfcCode(point?.nfcUidHash ?? nfcCode);
-  const scannedNfcCode = normalizeNfcCode(nfcCode);
+  const normalizedNfcCode = normalizeNfcCode(point?.nfcUidHash ?? scannedCodes[0] ?? "");
+  const scannedNfcCode = normalizeNfcCode(scannedCodes[0] ?? "");
 
   if (scannedCandidates.length === 0) {
     return { matched: false as const, scannedCode: null };

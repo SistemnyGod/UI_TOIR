@@ -36,30 +36,35 @@ export async function readNfcTag() {
 }
 
 export function getNfcCode(tag: unknown) {
+  return getNfcCodes(tag)[0] ?? null;
+}
+
+export function getNfcCodes(tag: unknown) {
   if (!tag || typeof tag !== "object") {
-    return null;
+    return [];
   }
 
+  const codes = new Set<string>();
   const ndefCode = getNdefTextCode(tag);
   if (ndefCode) {
-    return normalizeNfcCode(ndefCode);
+    codes.add(normalizeNfcCode(ndefCode));
   }
 
   const candidate = "id" in tag ? (tag as { id?: unknown }).id : null;
 
   if (typeof candidate === "string" && candidate.trim().length > 0) {
-    return normalizeNfcCode(candidate);
+    codes.add(normalizeNfcCode(candidate));
   }
 
   if (Array.isArray(candidate) && candidate.every((item) => typeof item === "number")) {
-    return normalizeNfcCode(bytesToHex(candidate));
+    codes.add(normalizeNfcCode(bytesToHex(candidate)));
   }
 
   if (candidate instanceof Uint8Array) {
-    return normalizeNfcCode(bytesToHex(Array.from(candidate)));
+    codes.add(normalizeNfcCode(bytesToHex(Array.from(candidate))));
   }
 
-  return null;
+  return Array.from(codes).filter(Boolean);
 }
 
 // MVP compatibility: the API field is still named nfcUidHash, but it carries this raw normalized code.

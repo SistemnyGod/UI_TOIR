@@ -12,14 +12,14 @@ import {
   PointListItem,
   scanPointByNfc
 } from "@/db/repositories/patrolRepository";
-import { cancelNfcRead, getNfcCode, initializeNfc, readNfcTag } from "@/services/nfcService";
+import { cancelNfcRead, getNfcCodes, initializeNfc, readNfcTag } from "@/services/nfcService";
 import { Card } from "@/ui/Card";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
 
-type NfcStatus = "idle" | "reading" | "matched" | "unsupported" | "disabled" | "error";
+type NfcStatus = "idle" | "reading" | "matched" | "unmatched" | "unsupported" | "disabled" | "error";
 
 export function ScanNfcScreen() {
   const router = useRouter();
@@ -70,16 +70,17 @@ export function ScanNfcScreen() {
       }
 
       const tag = await readNfcTag();
-      const nfcCode = getNfcCode(tag);
-      if (!nfcCode) {
+      const nfcCodes = getNfcCodes(tag);
+      if (nfcCodes.length === 0) {
         setStatus("error");
         setMessage("Не удалось прочитать код NFC-метки.");
         return;
       }
 
-      const result = await scanPointByNfc(assignmentId, nfcCode);
+      const nfcCode = nfcCodes.join(" / ");
+      const result = await scanPointByNfc(assignmentId, nfcCodes);
       if (!result.matched) {
-        setStatus("error");
+        setStatus("unmatched");
         setMessage(`Метка не соответствует этому обходу. Прочитан код: ${result.scannedCode ?? nfcCode}`);
         return;
       }
@@ -149,7 +150,7 @@ export function ScanNfcScreen() {
           <Ionicons color="#1e5bff" name="scan-outline" size={44} />
         </View>
         <Text style={styles.title}>{message}</Text>
-        {status === "error" || status === "unsupported" || status === "disabled" ? (
+        {status === "error" || status === "unmatched" || status === "unsupported" || status === "disabled" ? (
           <>
           <StatusPill label={statusLabel(status)} tone={statusTone(status)} />
           <Text style={styles.text}>
@@ -160,7 +161,7 @@ export function ScanNfcScreen() {
       </Card>
 
       {status === "reading" ? <ActivityIndicator /> : null}
-      {status === "error" || status === "disabled" ? (
+      {status === "error" || status === "unmatched" || status === "disabled" ? (
         <PrimaryButton icon="scan-outline" label={scanButtonLabel(status)} onPress={handleScan} />
       ) : null}
       <PrimaryButton icon="list-outline" label="Все метки" onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} variant="secondary" />
@@ -173,7 +174,7 @@ function scanButtonLabel(status: NfcStatus) {
     return "Ожидание метки...";
   }
 
-  if (status === "error") {
+  if (status === "error" || status === "unmatched") {
     return "Повторить сканирование";
   }
 
@@ -188,6 +189,8 @@ function statusLabel(status: NfcStatus) {
       return "NFC подтвержден";
     case "error":
       return "Ошибка NFC";
+    case "unmatched":
+      return "\u041c\u0435\u0442\u043a\u0430 \u0434\u0440\u0443\u0433\u043e\u0433\u043e \u043e\u0431\u0445\u043e\u0434\u0430";
     case "unsupported":
       return "NFC не поддерживается";
     case "disabled":
@@ -202,7 +205,7 @@ function statusTone(status: NfcStatus) {
     return "success";
   }
 
-  if (status === "error" || status === "unsupported" || status === "disabled") {
+  if (status === "error" || status === "unmatched" || status === "unsupported" || status === "disabled") {
     return "danger";
   }
 

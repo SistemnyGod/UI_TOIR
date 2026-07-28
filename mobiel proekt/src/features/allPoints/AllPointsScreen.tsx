@@ -1,4 +1,5 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ListRenderItem, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -14,19 +15,23 @@ import { PrimaryButton } from "@/ui/PrimaryButton";
 import { ScreenList } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
 
-type Filter = "all" | "pending" | "deferred" | "issue" | "skipped";
+type Filter = "all" | "attention" | "pending" | "deferred" | "issue" | "skipped";
 
 export function AllPointsScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
-  const { assignmentId: routeAssignmentId } = useLocalSearchParams<{ assignmentId?: string }>();
+  const { assignmentId: routeAssignmentId, filter: routeFilter } = useLocalSearchParams<{ assignmentId?: string; filter?: string }>();
   const [assignmentId, setAssignmentId] = useState<string | null>(routeAssignmentId ?? null);
   const [assignmentStatus, setAssignmentStatus] = useState<string | null>(null);
   const [points, setPoints] = useState<PointListItem[]>([]);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>(routeFilter === "attention" ? "attention" : "all");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadRevision, setReloadRevision] = useState(0);
   const [syncRevision, setSyncRevision] = useState(0);
+
+  useEffect(() => {
+    if (routeFilter === "attention") setFilter("attention");
+  }, [routeFilter]);
 
   useEffect(() => subscribeToSyncEvents((event) => {
     if (assignmentId && shouldReloadAssignmentAfterSync(event, assignmentId)) {
@@ -78,7 +83,13 @@ export function AllPointsScreen() {
       return points;
     }
 
-    return points.filter((point) => point.status === filter);
+    const filtered = filter === "attention"
+      ? points.filter(isAttentionPoint)
+      : points.filter((point) => point.status === filter);
+
+    return filter === "attention"
+      ? [...filtered].sort((left, right) => attentionRank(left) - attentionRank(right) || left.orderIndex - right.orderIndex)
+      : filtered;
   }, [filter, points]);
 
   const renderItem: ListRenderItem<PointListItem> = ({ item }) => (
@@ -91,6 +102,16 @@ export function AllPointsScreen() {
 
   return (
     <ScreenList
+      floatingAction={assignmentId && assignmentStatus === "inProgress" ? (
+        <PrimaryButton
+          icon={isReadyForReport ? "document-text-outline" : "scan-outline"}
+          label={isReadyForReport ? "Проверить и отправить отчёт" : "Сканировать NFC"}
+          onPress={() => router.push(isReadyForReport
+            ? `/patrol/assignment/${assignmentId}/submit`
+            : `/patrol/assignment/${assignmentId}/scan-nfc`)}
+          size="large"
+        />
+      ) : null}
       data={assignmentId ? visiblePoints : []}
       keyExtractor={(point) => point.pointId}
       ListEmptyComponent={
@@ -136,21 +157,14 @@ export function AllPointsScreen() {
               <Text style={[styles.meta, { color: colors.mutedText }]}>{percent}%</Text>
             </Card>
 
-            {assignmentStatus === "inProgress" ? (
-              <PrimaryButton
-                icon={isReadyForReport ? "document-text-outline" : "scan-outline"}
-                label={isReadyForReport ? "Проверить и отправить отчёт" : "Сканировать NFC"}
-                onPress={() => router.push(isReadyForReport
-                  ? `/patrol/assignment/${assignmentId}/submit`
-                  : `/patrol/assignment/${assignmentId}/scan-nfc`)}
-              />
-            ) : (
+            {assignmentStatus !== "inProgress" ? (
               <Card>
                 <Text style={[styles.text, { color: colors.mutedText }]}>{pointListHint(assignmentStatus)}</Text>
               </Card>
-            )}
+            ) : null}
 
             <View style={styles.filters}>
+              <FilterChip count={summary.attention} label="\u0412\u043d\u0438\u043c\u0430\u043d\u0438\u0435" selected={filter === "attention"} onPress={() => setFilter("attention")} />
               <FilterChip count={summary.total} label="Все" selected={filter === "all"} onPress={() => setFilter("all")} />
               <FilterChip count={summary.pending} label="Не заполнено" selected={filter === "pending"} onPress={() => setFilter("pending")} />
               <FilterChip count={summary.issue} label="Проблемы" selected={filter === "issue"} onPress={() => setFilter("issue")} />
@@ -211,17 +225,37 @@ function FilterChip({ label, count, selected, onPress }: { label: string; count:
   );
 }
 
+function isAttentionPoint(point: PointListItem) {
+  if (point.status === "pending" || point.status === "scanned" || point.status === "deferred" || point.status === "skipped") {
+    return true;
+  }
+
+  if (point.status === "issue" && (!point.comment?.trim() || !point.issueTypeId)) {
+    return true;
+  }
+
+  return point.requiresPhoto && point.photoClientFileIds.length === 0;
+}
+
+function attentionRank(point: PointListItem) {
+  if (point.status === "deferred") return 0;
+  if (point.status === "pending" || point.status === "scanned") return 1;
+  if (point.status === "skipped") return 2;
+  return 3;
+}
+
 function buildSummary(points: PointListItem[]) {
   return {
     total: points.length,
+    attention: points.filter(isAttentionPoint).length,
     pending: points.filter((point) => point.status === "pending").length,
     completed: points.filter((point) => point.status === "ok" || point.status === "issue" || point.status === "skipped").length,
     deferred: points.filter((point) => point.status === "deferred").length,
     skipped: points.filter((point) => point.status === "skipped").length,
     issue: points.filter((point) => point.status === "issue").length
   };
-}
 
+}
 function progressPercent(summary: ReturnType<typeof buildSummary>) {
   return summary.total === 0 ? 0 : Math.round((summary.completed / summary.total) * 100);
 }

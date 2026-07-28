@@ -23,16 +23,18 @@ type ScreenProps = {
   title: string;
   subtitle?: string;
   children: ReactNode;
+  floatingAction?: ReactNode;
 };
 
 type ScreenListProps<T> = Omit<FlatListProps<T>, "ListHeaderComponent" | "contentContainerStyle"> & {
   title: string;
   subtitle?: string;
+  floatingAction?: ReactNode;
   headerContent?: ReactNode;
   contentContainerStyle?: StyleProp<ViewStyle>;
 };
 
-export function Screen({ title, subtitle, children }: ScreenProps) {
+export function Screen({ title, subtitle, children, floatingAction }: ScreenProps) {
   const shell = useScreenShell();
 
   return (
@@ -48,6 +50,7 @@ export function Screen({ title, subtitle, children }: ScreenProps) {
         <ScreenHeader title={title} subtitle={subtitle} isOnline={shell.isOnline} />
         {children}
       </ScrollView>
+      {floatingAction ? <View style={styles.floatingAction}>{floatingAction}</View> : null}
       <NestedNavigation shell={shell} />
     </SafeAreaView>
   );
@@ -57,6 +60,7 @@ export function ScreenList<T>({
   title,
   subtitle,
   headerContent,
+  floatingAction,
   contentContainerStyle,
   ...listProps
 }: ScreenListProps<T>) {
@@ -81,6 +85,7 @@ export function ScreenList<T>({
         removeClippedSubviews
         showsVerticalScrollIndicator={false}
       />
+      {floatingAction ? <View style={styles.floatingAction}>{floatingAction}</View> : null}
       <NestedNavigation shell={shell} />
     </SafeAreaView>
   );
@@ -214,6 +219,14 @@ function NestedNavItem({
 }
 
 const styles = StyleSheet.create({
+  floatingAction: {
+    bottom: 80,
+    left: 16,
+    position: "absolute",
+    right: 16,
+    zIndex: 20
+  },
+
   safeArea: {
     flex: 1,
     backgroundColor: "#f5f7fa"

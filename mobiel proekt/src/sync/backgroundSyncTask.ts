@@ -4,6 +4,7 @@ import * as TaskManager from "expo-task-manager";
 import { initializeDatabase } from "@/db/database";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { triggerDailyDiagnosticReportUpload } from "@/services/diagnosticReportService";
+import { triggerPendingDiagnosticReportUpload } from "@/services/diagnosticReportService";
 import { recoverStaleSendingOutboxCommands, runForegroundSync } from "@/sync/syncEngine";
 import { recordBackgroundSyncResult } from "@/sync/backgroundSyncState";
 
@@ -24,6 +25,7 @@ export async function runBackgroundSyncTask() {
       void logMobileError("background.sync.state-save.failed", error);
     });
 
+    await triggerPendingDiagnosticReportUpload();
     if (result.skipped !== null) {
       return BackgroundTask.BackgroundTaskResult.Failed;
     }
