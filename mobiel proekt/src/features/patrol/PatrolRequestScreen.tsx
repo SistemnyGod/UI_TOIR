@@ -181,7 +181,7 @@ export function PatrolRequestScreen() {
     );
   }
 
-  const canAccept = !assignment && (request.status === "available" || request.status === "assigned");
+  const canAccept = (request.status === "available" || request.status === "assigned") && (!assignment || assignment.status === "assigned");
   const canStart = assignment?.status === "accepted" || assignment?.status === "paused";
   const canRelease = assignment?.status === "accepted" && !assignment.startedAtLocal;
   const canOpen = assignment && !canStart && assignment.status !== "releasePending";

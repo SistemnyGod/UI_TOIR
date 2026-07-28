@@ -1201,19 +1201,35 @@ public sealed class MobileAppDbIntegrationTests
         Assert.Null(AuthenticateMobileSession(provider, firstLogin.Session.AccessToken));
 
         ExpireMobileRefreshSessions(database.ConnectionString, account.Account.Id);
+        const string refreshOperationId = "refresh-op-lost-response";
         var refreshedAfterExpiry = UseMobileApp(provider, mobile => mobile.Refresh(new MobileRefreshRequestDto(
             firstLogin.Session.RefreshToken,
-            "kenshi-c1s-test"), "127.0.0.1"));
+            "kenshi-c1s-test",
+            null,
+            refreshOperationId), "127.0.0.1"));
         Assert.True(refreshedAfterExpiry.Succeeded);
         Assert.NotEqual(firstLogin.Session.RefreshToken, refreshedAfterExpiry.Session!.RefreshToken);
 
         ExpirePreviousRefreshToken(database.ConnectionString, account.Account.Id);
 
+        // The response may have been lost after the server rotated the token.
+        // Retrying the same operation must return the same response, not revoke the session.
         var replayedRefresh = UseMobileApp(provider, mobile => mobile.Refresh(new MobileRefreshRequestDto(
             firstLogin.Session.RefreshToken,
-            "kenshi-c1s-test"), "127.0.0.1"));
-        Assert.True(replayedRefresh.Unauthorized);
-        Assert.Equal("refresh_token_reuse", replayedRefresh.FailureCode);
+            "kenshi-c1s-test",
+            null,
+            refreshOperationId), "127.0.0.1"));
+        Assert.True(replayedRefresh.Succeeded, replayedRefresh.FailureCode ?? "no failure code");
+        Assert.Equal(refreshedAfterExpiry.Session!.AccessToken, replayedRefresh.Session!.AccessToken);
+        Assert.Equal(refreshedAfterExpiry.Session.RefreshToken, replayedRefresh.Session.RefreshToken);
+
+        var reusedByAnotherOperation = UseMobileApp(provider, mobile => mobile.Refresh(new MobileRefreshRequestDto(
+            firstLogin.Session.RefreshToken,
+            "kenshi-c1s-test",
+            null,
+            "different-refresh-operation"), "127.0.0.1"));
+        Assert.True(reusedByAnotherOperation.Unauthorized);
+        Assert.Equal("refresh_token_reuse", reusedByAnotherOperation.FailureCode);
         Assert.Null(AuthenticateMobileSession(provider, refreshedAfterExpiry.Session.AccessToken));
 
         var secondLogin = Login(provider, account.Account.Login, "Patrol360!");

@@ -1,4 +1,5 @@
 import * as SecureStore from "expo-secure-store";
+import * as Crypto from "expo-crypto";
 
 import type { OfflineSessionState } from "@/auth/offlineSession";
 import { lockSession } from "@/auth/sessionGateState";
@@ -7,17 +8,20 @@ const accessTokenKey = "patrol360.accessToken";
 const refreshTokenKey = "patrol360.refreshToken";
 const ownerUserIdKey = "patrol360.ownerUserId";
 const offlineSessionKey = "patrol360.offlineSession";
+const refreshOperationIdKey = "patrol360.refreshOperationId";
 
 export type StoredSessionSnapshot = {
   accessToken: string | null;
   refreshToken: string | null;
   ownerUserId: string | null;
   offlineSession: OfflineSessionState | null;
+  refreshOperationId: string | null;
 };
 
 export async function setTokens(accessToken: string, refreshToken: string) {
   await SecureStore.setItemAsync(accessTokenKey, accessToken);
   await SecureStore.setItemAsync(refreshTokenKey, refreshToken);
+  await clearRefreshOperationId();
 }
 
 export function setOfflineSession(session: OfflineSessionState) {
@@ -68,6 +72,21 @@ export function getRefreshToken() {
   return SecureStore.getItemAsync(refreshTokenKey);
 }
 
+export async function getOrCreateRefreshOperationId() {
+  const existing = await SecureStore.getItemAsync(refreshOperationIdKey);
+  if (existing) {
+    return existing;
+  }
+
+  const operationId = Crypto.randomUUID();
+  await SecureStore.setItemAsync(refreshOperationIdKey, operationId);
+  return operationId;
+}
+
+export function clearRefreshOperationId() {
+  return SecureStore.deleteItemAsync(refreshOperationIdKey);
+}
+
 export function setStoredOwnerUserId(ownerUserId: string) {
   return SecureStore.setItemAsync(ownerUserIdKey, ownerUserId);
 }
@@ -77,14 +96,15 @@ export function getStoredOwnerUserId() {
 }
 
 export async function getStoredSessionSnapshot(): Promise<StoredSessionSnapshot> {
-  const [accessToken, refreshToken, ownerUserId, offlineSession] = await Promise.all([
+  const [accessToken, refreshToken, ownerUserId, offlineSession, refreshOperationId] = await Promise.all([
     getAccessToken(),
     getRefreshToken(),
     getStoredOwnerUserId(),
-    getOfflineSession()
+    getOfflineSession(),
+    SecureStore.getItemAsync(refreshOperationIdKey)
   ]);
 
-  return { accessToken, refreshToken, ownerUserId, offlineSession };
+  return { accessToken, refreshToken, ownerUserId, offlineSession, refreshOperationId };
 }
 
 export async function restoreStoredSessionSnapshot(snapshot: StoredSessionSnapshot) {
@@ -101,16 +121,28 @@ export async function restoreStoredSessionSnapshot(snapshot: StoredSessionSnapsh
   if (snapshot.offlineSession) {
     await setOfflineSession(snapshot.offlineSession);
   }
+
+  if (snapshot.refreshOperationId) {
+    await SecureStore.setItemAsync(refreshOperationIdKey, snapshot.refreshOperationId);
+  }
 }
 
+export async function clearVolatileTokens() {
+  await Promise.all([
+    SecureStore.deleteItemAsync(accessTokenKey),
+    SecureStore.deleteItemAsync(refreshTokenKey)
+  ]);
+}
 export async function clearAuthTokens() {
   await SecureStore.deleteItemAsync(accessTokenKey);
   await SecureStore.deleteItemAsync(refreshTokenKey);
+  await clearRefreshOperationId();
   lockSession();
 }
 
 export async function clearLocalSessionKeepingRefreshToken() {
   await SecureStore.deleteItemAsync(accessTokenKey);
+  await clearRefreshOperationId();
   await SecureStore.deleteItemAsync(ownerUserIdKey);
   await SecureStore.deleteItemAsync(offlineSessionKey);
   lockSession();

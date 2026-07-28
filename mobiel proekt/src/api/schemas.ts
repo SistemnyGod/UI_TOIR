@@ -34,6 +34,7 @@ const patrolRequestStatus = z.enum([
   "needsDispatcherDecision"
 ]);
 const patrolAssignmentStatus = z.enum([
+  "assigned",
   "accepted",
   "inProgress",
   "paused",

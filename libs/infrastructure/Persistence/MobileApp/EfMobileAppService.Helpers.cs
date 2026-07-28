@@ -271,7 +271,14 @@ internal sealed partial class EfMobileAppService
             return "needsDispatcherDecision";
         }
 
-        return "accepted";
+        if (status == AssignmentStatusValues.Assigned
+            || status == AssignmentStatusValues.Waiting)
+        {
+            return "assigned";
+        }
+
+        // Unknown non-terminal server states must not be treated as startable.
+        return "syncError";
     }
 
     private static string BuildMobileRequestDisplayNumber(Guid requestId) =>

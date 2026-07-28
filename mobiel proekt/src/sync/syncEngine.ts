@@ -391,12 +391,19 @@ function buildSyncEvent(
     .filter((command) => respondedOperationIds.has(command.clientOperationId))
     .map(getCommandAssignmentId)
     .filter((assignmentId): assignmentId is string => assignmentId !== null);
+  const deliveryChangedAssignmentIds = commands
+    .filter((command) => command.commandType === 'completePatrolAssignment'
+      || responses.some((response) => response.clientOperationId === command.clientOperationId
+        && (response.status === 'rejected' || response.status === 'conflict')))
+    .map(getCommandAssignmentId)
+    .filter((assignmentId): assignmentId is string => assignmentId !== null);
 
   return {
     acceptedOperationIds,
     completedAssignmentIds,
     cancelledAssignmentIds: Array.from(new Set(cancelledAssignmentIds)),
-    changedAssignmentIds: Array.from(new Set([...changedAssignmentIds, ...additionalAssignmentIds]))
+    changedAssignmentIds: Array.from(new Set([...changedAssignmentIds, ...additionalAssignmentIds])),
+    deliveryChangedAssignmentIds: Array.from(new Set(deliveryChangedAssignmentIds))
   };
 }
 

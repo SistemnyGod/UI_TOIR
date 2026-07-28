@@ -10,7 +10,7 @@ import { getReportDeliveryPresentation } from "@/features/patrol/reportDeliveryP
 import { groupReportProblems, ReportProblemGroup } from "@/features/patrol/reportReadinessPresentation";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
-import { shouldReloadAssignmentAfterSync, subscribeToSyncEvents } from "@/sync/syncEvents";
+import { shouldReloadReportAfterSync, subscribeToSyncEvents } from "@/sync/syncEvents";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -33,7 +33,7 @@ export function SubmitReportScreen() {
 
   useEffect(
     () => subscribeToSyncEvents((event) => {
-      if (shouldReloadAssignmentAfterSync(event, assignmentId)) {
+      if (shouldReloadReportAfterSync(event, assignmentId)) {
         setReloadRevision((value) => value + 1);
       }
     }),

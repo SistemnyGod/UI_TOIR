@@ -12,7 +12,8 @@ public sealed record MobileLoginRequestDto(
 public sealed record MobileRefreshRequestDto(
     string RefreshToken,
     string DeviceId,
-    string? ContourId = null);
+    string? ContourId = null,
+    string? ClientOperationId = null);
 
 public sealed record MobileAuthSessionDto(
     MobileUserDto User,

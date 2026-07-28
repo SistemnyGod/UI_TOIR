@@ -31,8 +31,17 @@ export type LoginPayload = LoginMetadataInput & {
   appVersion: string;
 };
 
+const loginMetadataLimits = {
+  appVersion: 40,
+  deviceName: 160,
+  platform: 80
+} as const;
+
 export function resolveRuntimeMetadata(source: RuntimeMetadataSource): AppRuntimeMetadata {
-  const appVersion = clean(source.expoVersion) ?? clean(source.nativeAppVersion) ?? "unknown";
+  const appVersion = limitLoginMetadata(
+    clean(source.expoVersion) ?? clean(source.nativeAppVersion) ?? "unknown",
+    loginMetadataLimits.appVersion
+  );
   const buildVersion = clean(source.nativeBuildVersion)
     ?? clean(source.androidVersionCode === null || source.androidVersionCode === undefined
       ? null
@@ -42,12 +51,18 @@ export function resolveRuntimeMetadata(source: RuntimeMetadataSource): AppRuntim
   const model = clean(source.modelName) ?? clean(source.productName) ?? clean(source.modelId);
   const manufacturer = clean(source.manufacturer);
   const configuredDeviceName = clean(source.deviceName);
-  const deviceName = combineDeviceName(manufacturer, model)
-    ?? configuredDeviceName
-    ?? (platformName + " device");
-  const platform = [platformName, clean(source.osVersion), "build " + buildVersion]
-    .filter(Boolean)
-    .join(" ");
+  const deviceName = limitLoginMetadata(
+    combineDeviceName(manufacturer, model)
+      ?? configuredDeviceName
+      ?? (platformName + " device"),
+    loginMetadataLimits.deviceName
+  );
+  const platform = limitLoginMetadata(
+    [platformName, clean(source.osVersion), "build " + buildVersion]
+      .filter(Boolean)
+      .join(" "),
+    loginMetadataLimits.platform
+  );
 
   return { appVersion, buildVersion, deviceName, platform };
 }
@@ -80,4 +95,8 @@ function combineDeviceName(manufacturer: string | null, model: string | null) {
 function clean(value: string | undefined | null) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function limitLoginMetadata(value: string, maxLength: number) {
+  return value.length <= maxLength ? value : value.slice(0, maxLength).trimEnd();
 }

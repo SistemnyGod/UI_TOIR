@@ -22,8 +22,9 @@ internal sealed partial class EfMobileAppService(
         ?? "patrol360-local-enterprise";
 
     private static readonly TimeSpan AccessTokenLifetime = TimeSpan.FromHours(8);
-    // Device registration is long-lived, while each refresh credential is a
-    // rotating bearer secret with a sliding 180-day inactivity lifetime. Access
+    // Device registration is long-lived. RefreshExpiresAt is retained for DTO
+    // and legacy-database compatibility, but Refresh() does not reject a valid
+    // rotating credential solely because this metadata date has passed. Access
     // tokens stay short-lived and are renewed whenever the phone can reach the API.
     private static readonly TimeSpan RefreshSessionLifetime = TimeSpan.FromDays(180);
     private static readonly TimeSpan RefreshReplayDetectionWindow = TimeSpan.FromSeconds(60);

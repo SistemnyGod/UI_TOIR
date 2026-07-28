@@ -826,6 +826,11 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(history => history.TokenHash).HasColumnName("token_hash").HasMaxLength(128).IsRequired();
             entity.Property(history => history.Generation).HasColumnName("generation").IsRequired();
             entity.Property(history => history.RotatedAt).HasColumnName("rotated_at");
+            entity.Property(history => history.ClientOperationId).HasColumnName("client_operation_id").HasMaxLength(120);
+            entity.Property(history => history.AccessTokenProtected).HasColumnName("access_token_protected").HasMaxLength(4096);
+            entity.Property(history => history.RefreshTokenProtected).HasColumnName("refresh_token_protected").HasMaxLength(4096);
+            entity.Property(history => history.AccessTokenExpiresAt).HasColumnName("access_token_expires_at");
+            entity.Property(history => history.RefreshTokenExpiresAt).HasColumnName("refresh_token_expires_at");
             entity.Property(history => history.ReplayValidUntil).HasColumnName("replay_valid_until");
 
             entity.HasOne(history => history.MobileAccountSession)

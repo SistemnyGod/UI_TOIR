@@ -74,6 +74,7 @@ test("offline access remains available until explicit revocation", () => {
   };
 
   assert.equal(isOfflineSessionValid(session), true);
+  assert.equal(isOfflineSessionValid({ ...session, offlineExpiresAt: "2026-07-02T00:00:00.000Z" }), true);
   assert.equal(isOfflineSessionValid({ ...session, contourId: "patrol360-local-enterprise" }, "patrol360-local-enterprise"), true);
   assert.equal(isOfflineSessionValid({ ...session, contourId: "patrol360-test" }, "patrol360-local-enterprise"), false);
   assert.equal(isOfflineSessionValid(session, "patrol360-local-enterprise"), false);

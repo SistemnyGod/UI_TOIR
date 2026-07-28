@@ -12,6 +12,9 @@ import { isMobileSessionKeyUnavailableError } from "@/auth/sessionErrors";
 import {
   getAccessToken,
   getRefreshToken,
+  getOrCreateRefreshOperationId,
+  clearRefreshOperationId,
+  clearVolatileTokens,
   getStoredOwnerUserId,
   preserveOfflineSessionAfterRefreshFailure,
   revokeStoredSession,
@@ -233,6 +236,7 @@ async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: numb
 
   const runtimeConfig = await getMobileRuntimeConfig();
   const deviceId = await getOrCreateDeviceId();
+  const clientOperationId = await getOrCreateRefreshOperationId();
   const apiBaseUrls = await getServerCandidateBaseUrls(apiBaseUrl);
   let response: Response | null = null;
   let lastResponse: Response | null = null;
@@ -261,7 +265,7 @@ async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: numb
           "X-Patrol360-Client": "mobile-app",
           "X-Patrol360-Contour": runtimeConfig.contourId
         },
-        body: JSON.stringify({ deviceId, refreshToken, contourId: runtimeConfig.contourId })
+        body: JSON.stringify({ deviceId, refreshToken, contourId: runtimeConfig.contourId, clientOperationId })
       });
       if (shouldTryNextMobileServer(response.status, response.headers.get("content-type"))
           && candidateApiBaseUrl !== apiBaseUrls[apiBaseUrls.length - 1]) {
@@ -307,6 +311,8 @@ async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: numb
         throw new StaleAuthResponseError();
       }
       await preserveOfflineSessionAfterRefreshFailure(failureCode);
+      await clearRefreshOperationId();
+      await clearVolatileTokens();
       throw new Error(recoverableRefreshFailureMessage(failureCode));
     }
 
@@ -397,7 +403,7 @@ async function appendRequestFailureContext(error: unknown, context: string) {
 
 async function readErrorMessage(response: Response) {
   const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) {
+  if (!contentType.includes("application/json") && !contentType.includes("+json")) {
     return null;
   }
 

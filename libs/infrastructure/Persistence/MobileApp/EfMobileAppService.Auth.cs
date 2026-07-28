@@ -146,6 +146,11 @@ internal sealed partial class EfMobileAppService
 
         var tokenHash = EfAuthSessionService.HashToken(request.RefreshToken);
         var now = DateTimeOffset.UtcNow;
+        var clientOperationId = NormalizeNullableText(request.ClientOperationId);
+        if (clientOperationId is not null && clientOperationId.Length > 120)
+        {
+            return UnauthorizedResult("invalid_refresh_operation");
+        }
         var sessionQuery = dbContext.MobileAccountSessions
             .Include(item => item.MobileAccount)
                 .ThenInclude(account => account!.EmployeeBindings);
@@ -153,32 +158,49 @@ internal sealed partial class EfMobileAppService
 
         if (oldSession is null)
         {
-            var replayedSession = dbContext.MobileAccountSessions
-                .Include(item => item.MobileAccount)
-                    .ThenInclude(account => account!.EmployeeBindings)
-                .FirstOrDefault(item => item.PreviousRefreshTokenHash == tokenHash
-                    && item.PreviousRefreshTokenValidUntil > now
-                    && item.DeviceId == request.DeviceId);
-            if (replayedSession is not null)
+            var historicalToken = dbContext.MobileRefreshTokenHistories
+                .Include(item => item.MobileAccountSession)
+                    .ThenInclude(session => session!.MobileAccount)
+                        .ThenInclude(account => account!.EmployeeBindings)
+                .FirstOrDefault(item => item.TokenHash == tokenHash);
+            if (historicalToken?.MobileAccountSession is not null)
             {
-                if (replayedSession.RevokedAt is not null)
+                var historicalSession = historicalToken.MobileAccountSession;
+                if (historicalSession.RevokedAt is not null)
                 {
                     return UnauthorizedResult("session_revoked");
                 }
-                if (replayedSession.MobileAccount is null || !CanUseMobileApp(replayedSession.MobileAccount))
+                if (!string.Equals(historicalSession.DeviceId, request.DeviceId, StringComparison.Ordinal))
+                {
+                    return UnauthorizedResult("device_mismatch");
+                }
+                var historicalDevice = dbContext.MobileDevices.FirstOrDefault(item => item.DeviceId == historicalSession.DeviceId);
+                if (historicalDevice is not null && (!historicalDevice.Trusted || historicalDevice.BlockedAt is not null))
+                {
+                    return UnauthorizedResult("device_revoked");
+                }
+                if (historicalSession.MobileAccount is null || !CanUseMobileApp(historicalSession.MobileAccount))
                 {
                     return UnauthorizedResult("account_disabled");
                 }
 
-                if (!string.IsNullOrWhiteSpace(replayedSession.PreviousAccessTokenProtected)
-                    && !string.IsNullOrWhiteSpace(replayedSession.PreviousRefreshTokenProtected))
+                if (clientOperationId is not null
+                    && string.Equals(historicalToken.ClientOperationId, clientOperationId, StringComparison.Ordinal)
+                    && !string.IsNullOrWhiteSpace(historicalToken.AccessTokenProtected)
+                    && !string.IsNullOrWhiteSpace(historicalToken.RefreshTokenProtected))
                 {
                     try
                     {
-                        var replayAccessToken = RefreshReplayProtector.Unprotect(replayedSession.PreviousAccessTokenProtected);
-                        var replayRefreshToken = RefreshReplayProtector.Unprotect(replayedSession.PreviousRefreshTokenProtected);
+                        var replayAccessToken = RefreshReplayProtector.Unprotect(historicalToken.AccessTokenProtected);
+                        var replayRefreshToken = RefreshReplayProtector.Unprotect(historicalToken.RefreshTokenProtected);
                         return new MobileAuthResult(
-                            MapAuthSession(replayedSession.MobileAccount, replayedSession, replayAccessToken, replayRefreshToken),
+                            MapHistoricalAuthSession(
+                                historicalSession.MobileAccount,
+                                historicalSession,
+                                replayAccessToken,
+                                replayRefreshToken,
+                                historicalToken.AccessTokenExpiresAt,
+                                historicalToken.RefreshTokenExpiresAt),
                             false,
                             EmptyErrors());
                     }
@@ -188,34 +210,90 @@ internal sealed partial class EfMobileAppService
                     }
                 }
 
-                replayedSession.RevokedAt = now;
-                replayedSession.PushTokenRevokedAt = now;
-                replayedSession.Status = "Завершена";
-                AddMobileSessionAuditEvent(
-                    replayedSession.MobileAccount,
-                    "mobile_account.refresh_token_reuse",
-                    $"Не удалось восстановить предыдущий refresh-ответ сессии {replayedSession.Id}; сессия отозвана.");
-                dbContext.SaveChanges();
-                return UnauthorizedResult("refresh_token_reuse");
-            }
+                // Legacy clients did not send an operation id. Keep their short
+                // compatibility window, but never grant it to a keyed request.
+                if (clientOperationId is null
+                    && historicalToken.ReplayValidUntil > now
+                    && !string.IsNullOrWhiteSpace(historicalSession.PreviousAccessTokenProtected)
+                    && !string.IsNullOrWhiteSpace(historicalSession.PreviousRefreshTokenProtected))
+                {
+                    try
+                    {
+                        var replayAccessToken = RefreshReplayProtector.Unprotect(historicalSession.PreviousAccessTokenProtected);
+                        var replayRefreshToken = RefreshReplayProtector.Unprotect(historicalSession.PreviousRefreshTokenProtected);
+                        return new MobileAuthResult(
+                            MapAuthSession(historicalSession.MobileAccount, historicalSession, replayAccessToken, replayRefreshToken),
+                            false,
+                            EmptyErrors());
+                    }
+                    catch (CryptographicException)
+                    {
+                        // A corrupted replay record is treated as token reuse below.
+                    }
+                }
 
-            var historicalToken = dbContext.MobileRefreshTokenHistories
-                .Include(item => item.MobileAccountSession)
-                    .ThenInclude(session => session!.MobileAccount)
-                .FirstOrDefault(item => item.TokenHash == tokenHash);
-            if (historicalToken?.MobileAccountSession is not null)
-            {
-                var historicalSession = historicalToken.MobileAccountSession;
                 historicalSession.RevokedAt = now;
                 historicalSession.PushTokenRevokedAt = now;
                 historicalSession.Status = "Завершена";
                 AddMobileSessionAuditEvent(
-                    historicalSession.MobileAccount!,
+                    historicalSession.MobileAccount,
                     "mobile_account.refresh_token_reuse",
                     $"Обнаружено повторное использование refresh-токена поколения {historicalToken.Generation} сессии {historicalSession.Id}; сессия отозвана.");
                 dbContext.SaveChanges();
                 return UnauthorizedResult("refresh_token_reuse");
             }
+
+            // Compatibility for a rotation that completed before the history
+            // row was created. Keyed clients must not use this fallback.
+            if (clientOperationId is null)
+            {
+                var replayedSession = dbContext.MobileAccountSessions
+                    .Include(item => item.MobileAccount)
+                        .ThenInclude(account => account!.EmployeeBindings)
+                    .FirstOrDefault(item => item.PreviousRefreshTokenHash == tokenHash
+                        && item.PreviousRefreshTokenValidUntil > now
+                        && item.DeviceId == request.DeviceId);
+                if (replayedSession is not null)
+                {
+                    if (replayedSession.RevokedAt is not null)
+                    {
+                        return UnauthorizedResult("session_revoked");
+                    }
+                    if (replayedSession.MobileAccount is null || !CanUseMobileApp(replayedSession.MobileAccount))
+                    {
+                        return UnauthorizedResult("account_disabled");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(replayedSession.PreviousAccessTokenProtected)
+                        && !string.IsNullOrWhiteSpace(replayedSession.PreviousRefreshTokenProtected))
+                    {
+                        try
+                        {
+                            var replayAccessToken = RefreshReplayProtector.Unprotect(replayedSession.PreviousAccessTokenProtected);
+                            var replayRefreshToken = RefreshReplayProtector.Unprotect(replayedSession.PreviousRefreshTokenProtected);
+                            return new MobileAuthResult(
+                                MapAuthSession(replayedSession.MobileAccount, replayedSession, replayAccessToken, replayRefreshToken),
+                                false,
+                                EmptyErrors());
+                        }
+                        catch (CryptographicException)
+                        {
+                            // A corrupted replay record is treated as token reuse below.
+                        }
+                    }
+
+                    replayedSession.RevokedAt = now;
+                    replayedSession.PushTokenRevokedAt = now;
+                    replayedSession.Status = "Завершена";
+                    AddMobileSessionAuditEvent(
+                        replayedSession.MobileAccount,
+                        "mobile_account.refresh_token_reuse",
+                        $"Не удалось восстановить предыдущий refresh-ответ сессии {replayedSession.Id}; сессия отозвана.");
+                    dbContext.SaveChanges();
+                    return UnauthorizedResult("refresh_token_reuse");
+                }
+            }
+
             return UnauthorizedResult("device_session_not_found");
         }
         if (oldSession.RevokedAt is not null)
@@ -243,15 +321,17 @@ internal sealed partial class EfMobileAppService
             return UnauthorizedResult("account_disabled");
         }
 
-        dbContext.MobileRefreshTokenHistories.Add(new MobileRefreshTokenHistoryEntity
+        var refreshHistory = new MobileRefreshTokenHistoryEntity
         {
             Id = Guid.NewGuid(),
             MobileAccountSessionId = oldSession.Id,
             TokenHash = oldSession.RefreshTokenHash,
             Generation = oldSession.RefreshGeneration,
             RotatedAt = now,
+            ClientOperationId = clientOperationId,
             ReplayValidUntil = now.Add(RefreshReplayDetectionWindow)
-        });
+        };
+        dbContext.MobileRefreshTokenHistories.Add(refreshHistory);
         var accessToken = EfAuthSessionService.GenerateAccessToken();
         var refreshToken = EfAuthSessionService.GenerateAccessToken();
         oldSession.TokenHash = EfAuthSessionService.HashToken(accessToken);
@@ -263,6 +343,10 @@ internal sealed partial class EfMobileAppService
         oldSession.RefreshGeneration += 1;
         oldSession.ExpiresAt = now.Add(AccessTokenLifetime);
         oldSession.RefreshExpiresAt = now.Add(RefreshSessionLifetime);
+        refreshHistory.AccessTokenProtected = oldSession.PreviousAccessTokenProtected;
+        refreshHistory.RefreshTokenProtected = oldSession.PreviousRefreshTokenProtected;
+        refreshHistory.AccessTokenExpiresAt = oldSession.ExpiresAt;
+        refreshHistory.RefreshTokenExpiresAt = oldSession.RefreshExpiresAt;
         oldSession.LastSeenAt = now;
         oldSession.IpAddress = NormalizeBoundedOptionalText(ipAddress, "-", 80);
         oldSession.Status = "Онлайн";
@@ -379,6 +463,22 @@ internal sealed partial class EfMobileAppService
             refreshToken,
             session.ExpiresAt,
             session.RefreshExpiresAt,
+            MobileContourId);
+
+    private MobileAuthSessionDto MapHistoricalAuthSession(
+        MobileAccountEntity account,
+        MobileAccountSessionEntity session,
+        string accessToken,
+        string refreshToken,
+        DateTimeOffset? accessTokenExpiresAt,
+        DateTimeOffset? refreshTokenExpiresAt) =>
+        new(
+            MapUser(account),
+            MapDevice(account, session),
+            accessToken,
+            refreshToken,
+            accessTokenExpiresAt ?? session.ExpiresAt,
+            refreshTokenExpiresAt ?? session.RefreshExpiresAt,
             MobileContourId);
 
     private MobileAccountSessionEntity? FindActiveSession(string accessToken)

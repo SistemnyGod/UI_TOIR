@@ -3,6 +3,7 @@ export type SyncEvent = {
   completedAssignmentIds: string[];
   cancelledAssignmentIds?: string[];
   changedAssignmentIds?: string[];
+  deliveryChangedAssignmentIds?: string[];
   snapshotRefreshed?: boolean;
 };
 
@@ -24,6 +25,12 @@ export function emitSyncEvent(event: SyncEvent) {
   }
 }
 
+export function shouldReloadReportAfterSync(event: SyncEvent, assignmentId: string) {
+  return event.snapshotRefreshed === true
+    || event.completedAssignmentIds.includes(assignmentId)
+    || event.cancelledAssignmentIds?.includes(assignmentId) === true
+    || event.deliveryChangedAssignmentIds?.includes(assignmentId) === true;
+}
 export function shouldReloadAssignmentAfterSync(event: SyncEvent, assignmentId: string) {
   return event.snapshotRefreshed === true
     || event.completedAssignmentIds.includes(assignmentId)

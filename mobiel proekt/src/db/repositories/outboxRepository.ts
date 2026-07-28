@@ -330,11 +330,16 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
         command.last_attempt_at,
         command.attempt_count,
         command.last_error,
-        assignment.route_name AS assignment_route_name,
+        COALESCE(route.name, request.route_name, '') AS assignment_route_name,
         (SELECT resolution_status FROM sync_conflicts conflict WHERE conflict.owner_user_id = command.owner_user_id AND conflict.contour_id = command.contour_id AND conflict.client_operation_id = command.client_operation_id ORDER BY conflict.rowid DESC LIMIT 1) AS resolution_status
       FROM outbox_commands command
       LEFT JOIN patrol_assignments assignment
         ON assignment.assignment_id = command.entity_local_id
+      LEFT JOIN routes route
+        ON route.route_id = assignment.route_id
+      LEFT JOIN patrol_request_board request
+        ON request.request_id = assignment.request_id
+       AND request.owner_user_id = command.owner_user_id
       WHERE command.owner_user_id = ?
         AND command.contour_id = ?
         AND command.status IN ('pending', 'sending', 'retryLater', 'waiting_auth', 'waiting_network', 'wrong_contour', 'blocked', 'rejected', 'conflict', 'invalidPayload')
@@ -809,41 +814,150 @@ export async function reactivateRecoverableRejectedStartCommands(ownerUserId: st
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
 
-  await withSqliteBusyRetry(() => db.runAsync(
-    `
-      UPDATE outbox_commands
-      SET status = 'retryLater',
-          next_attempt_at = ?,
-          last_error = 'Восстанавливаем серверную последовательность принятия и запуска обхода.',
-          updated_at_local = ?
-      WHERE owner_user_id = ?
-        AND contour_id = ?
-        AND command_type = 'startPatrolAssignment'
-        AND status = 'rejected'
-        AND lower(COALESCE(last_error, '')) LIKE '%only an accepted patrol assignment can be started%'
-        AND attempt_count < 3
-        AND EXISTS (
-          SELECT 1
-          FROM patrol_assignments AS assignment
-          WHERE assignment.owner_user_id = outbox_commands.owner_user_id
-            AND assignment.contour_id = outbox_commands.contour_id
-            AND assignment.assignment_id = outbox_commands.entity_local_id
-            AND assignment.status IN ('completedLocal', 'retryLater', 'syncError')
-        )
-        AND EXISTS (
-          SELECT 1
-          FROM outbox_commands AS completion
-          WHERE completion.owner_user_id = outbox_commands.owner_user_id
-            AND completion.contour_id = outbox_commands.contour_id
-            AND completion.entity_local_id = outbox_commands.entity_local_id
-            AND completion.command_type = 'completePatrolAssignment'
-            AND completion.status IN ('pending', 'sending', 'retryLater', 'waiting_network', 'waiting_auth')
-        )
-    `,
-    [updatedAtLocal, updatedAtLocal, ownerUserId, currentContourId]
-  ));
-}
-export async function finalizeAcceptedCompleteReportCommands(ownerUserId: string, assignmentId?: string) {
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const rejectedStarts = await tx.getAllAsync<{
+        clientOperationId: string;
+        assignmentId: string;
+      }>(
+        `
+          SELECT
+            command.client_operation_id AS clientOperationId,
+            command.entity_local_id AS assignmentId
+          FROM outbox_commands command
+          INNER JOIN patrol_assignments assignment
+            ON assignment.owner_user_id = command.owner_user_id
+            AND assignment.contour_id = command.contour_id
+            AND assignment.assignment_id = command.entity_local_id
+          WHERE command.owner_user_id = ?
+            AND command.contour_id = ?
+            AND command.command_type = 'startPatrolAssignment'
+            AND command.status = 'rejected'
+            AND lower(COALESCE(command.last_error, '')) LIKE '%only an accepted patrol assignment can be started%'
+            AND command.attempt_count < 3
+            AND assignment.status IN ('retryLater', 'syncError')
+        `,
+        [ownerUserId, currentContourId]
+      );
+
+      for (const rejectedStart of rejectedStarts) {
+        const acceptCommand = await tx.getFirstAsync<{
+          clientOperationId: string;
+          aggregateKey: string | null;
+        }>(
+          `
+            SELECT
+              client_operation_id AS clientOperationId,
+              aggregate_key AS aggregateKey
+            FROM outbox_commands
+            WHERE owner_user_id = ?
+              AND contour_id = ?
+              AND command_type = 'acceptPatrolRequest'
+              AND entity_local_id = ?
+              AND status IN ('pending', 'sending', 'retryLater', 'waiting_network', 'waiting_auth', 'accepted', 'duplicate')
+            ORDER BY sequence_no ASC, created_at_local ASC
+            LIMIT 1
+          `,
+          [ownerUserId, currentContourId, rejectedStart.assignmentId]
+        );
+
+        if (acceptCommand) {
+          const nextSequence = await tx.getFirstAsync<{ nextSequence: number }>(
+            `
+              SELECT COALESCE(MAX(sequence_no), 0) + 1 AS nextSequence
+              FROM outbox_commands
+              WHERE owner_user_id = ?
+                AND contour_id = ?
+                AND aggregate_key = ?
+            `,
+            [ownerUserId, currentContourId, acceptCommand.aggregateKey]
+          );
+          await tx.runAsync(
+            `
+              UPDATE outbox_commands
+              SET status = 'retryLater',
+                  next_attempt_at = ?,
+                  sequence_no = ?,
+                  last_error = 'Start is waiting for the acceptance command.',
+                  updated_at_local = ?
+              WHERE owner_user_id = ?
+                AND contour_id = ?
+                AND client_operation_id = ?
+            `,
+            [updatedAtLocal, nextSequence?.nextSequence ?? 1, updatedAtLocal, ownerUserId, currentContourId, rejectedStart.clientOperationId]
+          );
+          await tx.runAsync(
+            `
+              UPDATE patrol_assignments
+              SET status = 'accepted'
+              WHERE owner_user_id = ?
+                AND contour_id = ?
+                AND assignment_id = ?
+            `,
+            [ownerUserId, currentContourId, rejectedStart.assignmentId]
+          );
+          await tx.runAsync(
+            `
+              UPDATE patrol_request_board
+              SET status = 'accepted'
+              WHERE owner_user_id = ?
+                AND request_id = (
+                  SELECT request_id
+                  FROM patrol_assignments
+                  WHERE owner_user_id = ?
+                    AND contour_id = ?
+                    AND assignment_id = ?
+                  LIMIT 1
+                )
+            `,
+            [ownerUserId, ownerUserId, currentContourId, rejectedStart.assignmentId]
+          );
+          continue;
+        }
+
+        await tx.runAsync(
+          `
+            UPDATE outbox_commands
+            SET status = 'superseded',
+                next_attempt_at = NULL,
+                last_error = 'Start was rejected because the server assignment was not accepted. Accept the assignment before starting it.',
+                updated_at_local = ?
+            WHERE owner_user_id = ?
+              AND contour_id = ?
+              AND client_operation_id = ?
+          `,
+          [updatedAtLocal, ownerUserId, currentContourId, rejectedStart.clientOperationId]
+        );
+        await tx.runAsync(
+          `
+            UPDATE patrol_assignments
+            SET status = 'assigned'
+            WHERE owner_user_id = ?
+              AND contour_id = ?
+              AND assignment_id = ?
+          `,
+          [ownerUserId, currentContourId, rejectedStart.assignmentId]
+        );
+        await tx.runAsync(
+          `
+            UPDATE patrol_request_board
+            SET status = 'assigned'
+            WHERE owner_user_id = ?
+              AND request_id = (
+                SELECT request_id
+                FROM patrol_assignments
+                WHERE owner_user_id = ?
+                  AND contour_id = ?
+                  AND assignment_id = ?
+                LIMIT 1
+              )
+          `,
+          [ownerUserId, ownerUserId, currentContourId, rejectedStart.assignmentId]
+        );
+      }
+    })
+  );
+}export async function finalizeAcceptedCompleteReportCommands(ownerUserId: string, assignmentId?: string) {
   const db = await getDatabase();
   let finalized = 0;
 

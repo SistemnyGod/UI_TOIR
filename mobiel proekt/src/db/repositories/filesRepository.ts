@@ -262,11 +262,16 @@ export async function listSyncQueueFiles(ownerUserId: string, limit = 100) {
           file.last_error AS lastError,
           file.next_attempt_at AS nextAttemptAt,
           file.last_attempt_at AS lastAttemptAt,
-          assignment.route_name AS assignmentRouteName
+          COALESCE(route.name, request.route_name, '') AS assignmentRouteName
         FROM files file
         LEFT JOIN patrol_assignments assignment
           ON assignment.assignment_id = file.assignment_id
           AND assignment.owner_user_id = file.owner_user_id
+        LEFT JOIN routes route
+          ON route.route_id = assignment.route_id
+        LEFT JOIN patrol_request_board request
+          ON request.request_id = assignment.request_id
+          AND request.owner_user_id = file.owner_user_id
         WHERE file.owner_user_id = ?
           AND file.contour_id = '${currentContourId}'
           AND file.status NOT IN ('uploaded', 'linked', 'deletedAfterRetention')

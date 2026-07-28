@@ -54,6 +54,7 @@ export type PatrolRequestStatus =
   | "needsDispatcherDecision";
 
 export type PatrolAssignmentStatus =
+  | "assigned"
   | "accepted"
   | "inProgress"
   | "paused"

@@ -457,15 +457,16 @@ export async function takeRequestLocally(requestId: string) {
 export async function acceptRequestLocally(requestId: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
-  const existing = await getAssignmentByRequestId(requestId);
-  if (existing) {
-    return { assignment: existing, created: false };
-  }
-
   const request = await getRequestBoardItem(requestId);
   if (!request) {
     throw new Error("Заявка не загружена на телефон.");
   }
+
+  const existing = await getAssignmentByRequestId(requestId);
+  if (existing && existing.status !== "assigned") {
+    return { assignment: existing, created: false };
+  }
+
   assertPatrolAction("acceptRequest", request.status);
   const route = await db.getFirstAsync<{
     version: number;
@@ -476,11 +477,11 @@ export async function acceptRequestLocally(requestId: string) {
     "SELECT version, allow_free_order AS allowFreeOrder, nfc_enabled AS nfcEnabled, qr_fallback_enabled AS qrFallbackEnabled FROM routes WHERE route_id = ? LIMIT 1",
     [request.routeId]
   );
-  const snapshotVersion = route?.version ?? 0;
-  const snapshotAllowFreeOrder = route?.allowFreeOrder !== 0 ? 1 : 0;
-  const snapshotNfcEnabled = route?.nfcEnabled === 1 ? 1 : 0;
-  const snapshotQrFallbackEnabled = route?.qrFallbackEnabled !== 0 ? 1 : 0;
-  const assignmentId = Crypto.randomUUID();
+  const snapshotVersion = existing?.routeVersionNo ?? route?.version ?? 0;
+  const snapshotAllowFreeOrder = existing?.snapshotAllowFreeOrder ?? (route?.allowFreeOrder !== 0 ? 1 : 0);
+  const snapshotNfcEnabled = existing?.snapshotNfcEnabled ?? (route?.nfcEnabled === 1 ? 1 : 0);
+  const snapshotQrFallbackEnabled = existing?.snapshotQrFallbackEnabled ?? (route?.qrFallbackEnabled !== 0 ? 1 : 0);
+  const assignmentId = existing?.assignmentId ?? Crypto.randomUUID();
   const acceptedAtLocal = new Date().toISOString();
   const command: OutboxCommand = {
     clientOperationId: Crypto.randomUUID(),
@@ -517,32 +518,78 @@ export async function acceptRequestLocally(requestId: string) {
       }
       assertPatrolAction("acceptRequest", currentRequest.status);
 
-      await tx.runAsync(
-        `
-          INSERT INTO patrol_assignments (
-            assignment_id,
-            owner_user_id,
-            contour_id,
-            request_id,
-            route_id,
-            status,
-            started_at_local,
-            completed_at_local,
-            revision,
-            route_version_no,
-            snapshot_version,
-            snapshot_created_at,
-            snapshot_source,
-            snapshot_allow_free_order,
-            snapshot_nfc_enabled,
-            snapshot_qr_fallback_enabled
-          )
-          VALUES (?, ?, ?, ?, ?, 'accepted', NULL, NULL, 0, ?, ?, ?, 'local', ?, ?, ?)
-        `,
-        [assignmentId, ownerUserId, currentContourId, request.requestId, request.routeId, snapshotVersion, snapshotVersion, new Date().toISOString(), snapshotAllowFreeOrder, snapshotNfcEnabled, snapshotQrFallbackEnabled]
-      );
+      if (existing) {
+        const currentAssignment = await tx.getFirstAsync<{ status: string }>(
+          `
+            SELECT status
+            FROM patrol_assignments
+            WHERE owner_user_id = ?
+              AND assignment_id = ?
+              AND contour_id = ?
+            LIMIT 1
+          `,
+          [ownerUserId, assignmentId, currentContourId]
+        );
+        if (!currentAssignment || currentAssignment.status !== "assigned") {
+          throw new Error("Состояние назначения уже изменилось. Обновите список заявок.");
+        }
 
-      await snapshotRoutePointsInTransaction(tx, assignmentId, request.routeId);
+        const pendingAccept = await tx.getFirstAsync<{ clientOperationId: string }>(
+          `
+            SELECT client_operation_id AS clientOperationId
+            FROM outbox_commands
+            WHERE owner_user_id = ?
+              AND contour_id = ?
+              AND command_type = 'acceptPatrolRequest'
+              AND entity_local_id = ?
+              AND status IN ('pending', 'sending', 'retryLater', 'waiting_network', 'waiting_auth')
+            LIMIT 1
+          `,
+          [ownerUserId, currentContourId, assignmentId]
+        );
+        await tx.runAsync(
+          `
+            UPDATE patrol_assignments
+            SET status = 'accepted',
+                revision = revision + 1
+            WHERE owner_user_id = ?
+              AND assignment_id = ?
+              AND contour_id = ?
+          `,
+          [ownerUserId, assignmentId, currentContourId]
+        );
+        if (!pendingAccept) {
+          await insertOutboxCommandInTransaction(tx, command);
+        }
+      } else {
+        await tx.runAsync(
+          `
+            INSERT INTO patrol_assignments (
+              assignment_id,
+              owner_user_id,
+              contour_id,
+              request_id,
+              route_id,
+              status,
+              started_at_local,
+              completed_at_local,
+              revision,
+              route_version_no,
+              snapshot_version,
+              snapshot_created_at,
+              snapshot_source,
+              snapshot_allow_free_order,
+              snapshot_nfc_enabled,
+              snapshot_qr_fallback_enabled
+            )
+            VALUES (?, ?, ?, ?, ?, 'accepted', NULL, NULL, 0, ?, ?, ?, 'local', ?, ?, ?)
+          `,
+          [assignmentId, ownerUserId, currentContourId, request.requestId, request.routeId, snapshotVersion, snapshotVersion, acceptedAtLocal, snapshotAllowFreeOrder, snapshotNfcEnabled, snapshotQrFallbackEnabled]
+        );
+
+        await snapshotRoutePointsInTransaction(tx, assignmentId, request.routeId);
+        await insertOutboxCommandInTransaction(tx, command);
+      }
 
       await tx.runAsync(
         `
@@ -553,34 +600,33 @@ export async function acceptRequestLocally(requestId: string) {
         `,
         [ownerUserId, request.requestId]
       );
-
-      await insertOutboxCommandInTransaction(tx, command);
     })
   );
 
   requestSyncAfterMutation();
   return {
-    assignment: {
-      assignmentId,
-      requestId: request.requestId,
-      routeId: request.routeId,
-      routeName: request.routeName,
-      status: "accepted",
-      startedAtLocal: null,
-      completedAtLocal: null,
-      revision: 0,
-      routeVersionNo: snapshotVersion,
-      snapshotVersion,
-      snapshotCreatedAt: acceptedAtLocal,
-      snapshotSource: "local",
-      snapshotAllowFreeOrder,
-      snapshotNfcEnabled,
-      snapshotQrFallbackEnabled
-    } satisfies ActiveAssignment,
-    created: true
+    assignment: existing
+      ? { ...existing, status: "accepted", revision: existing.revision + 1 }
+      : {
+          assignmentId,
+          requestId: request.requestId,
+          routeId: request.routeId,
+          routeName: request.routeName,
+          status: "accepted",
+          startedAtLocal: null,
+          completedAtLocal: null,
+          revision: 0,
+          routeVersionNo: snapshotVersion,
+          snapshotVersion,
+          snapshotCreatedAt: acceptedAtLocal,
+          snapshotSource: "local",
+          snapshotAllowFreeOrder,
+          snapshotNfcEnabled,
+          snapshotQrFallbackEnabled
+        } satisfies ActiveAssignment,
+    created: !existing
   };
 }
-
 export async function releaseAcceptedRequestLocally(assignmentId: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();

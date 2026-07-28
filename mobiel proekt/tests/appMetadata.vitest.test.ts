@@ -24,4 +24,19 @@ describe("application runtime metadata", () => {
     expect(payload.platform).toContain("build 37");
     expect(payload.deviceName).toBe("Google Pixel 8");
   });
+
+  it("keeps device metadata within the mobile login contract", () => {
+    const metadata = resolveRuntimeMetadata({
+      expoVersion: "1".repeat(41),
+      nativeBuildVersion: "25",
+      platformName: "Android",
+      osVersion: "custom-build-".repeat(10),
+      manufacturer: "Manufacturer",
+      modelName: "M".repeat(180)
+    });
+
+    expect(metadata.appVersion).toHaveLength(40);
+    expect(metadata.platform.length).toBeLessThanOrEqual(80);
+    expect(metadata.deviceName.length).toBeLessThanOrEqual(160);
+  });
 });
