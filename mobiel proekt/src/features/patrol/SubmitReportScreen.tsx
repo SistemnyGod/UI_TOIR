@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
-import { getCompleteReportDeliveryState } from "@/db/repositories/outboxRepository";
+import { getReportDeliveryState } from "@/db/repositories/outboxRepository";
 import { completeAssignmentLocally, getReportReadiness, ReportReadiness } from "@/db/repositories/patrolRepository";
 import { getReportDeliveryPresentation } from "@/features/patrol/reportDeliveryPresentation";
 import { groupReportProblems, ReportProblemGroup } from "@/features/patrol/reportReadinessPresentation";
@@ -12,14 +12,13 @@ import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { shouldReloadAssignmentAfterSync, subscribeToSyncEvents } from "@/sync/syncEvents";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
-import { readBackgroundSyncState } from "@/sync/backgroundSyncState";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
-import { OutboxCommandStatus } from "@/domain/sync/syncTypes";
+import type { ReportDeliveryState, ReportDeliveryStateSnapshot } from "@/domain/reporting/reportDeliveryState";
 
-type DeliveryState = { clientOperationId: string; status: OutboxCommandStatus; lastError: string | null; attemptCount: number; updatedAtLocal: string | null } | null;
+type DeliveryState = ReportDeliveryStateSnapshot | null;
 
 export function SubmitReportScreen() {
   const router = useRouter();
@@ -31,7 +30,6 @@ export function SubmitReportScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadRevision, setReloadRevision] = useState(0);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
-  const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState<string | null>(null);
 
   useEffect(
     () => subscribeToSyncEvents((event) => {
@@ -46,12 +44,11 @@ export function SubmitReportScreen() {
     let isMounted = true;
 
     setLoadError(null);
-    void Promise.all([getReportReadiness(assignmentId), loadDelivery(assignmentId), readBackgroundSyncState()])
-      .then(([loadedReadiness, loadedDelivery, syncState]) => {
+    void Promise.all([getReportReadiness(assignmentId), loadDelivery(assignmentId)])
+      .then(([loadedReadiness, loadedDelivery]) => {
         if (isMounted) {
           setReadiness(loadedReadiness);
           setDelivery(loadedDelivery);
-          setLastSuccessfulSyncAt(syncState.lastSuccessfulSyncAt);
         }
       })
       .catch((error) => {
@@ -69,7 +66,7 @@ export function SubmitReportScreen() {
   useFocusEffect(load);
 
   const presentation = useMemo(
-    () => getReportDeliveryPresentation(delivery?.status ?? null, delivery?.lastError ?? null),
+    () => getReportDeliveryPresentation(delivery),
     [delivery]
   );
   const problemGroups = useMemo(
@@ -126,8 +123,11 @@ export function SubmitReportScreen() {
       }
 
       const syncResult = await triggerForegroundSyncWithRetry({ mode: "manualReport", assignmentId });
-      setDelivery(await loadDelivery(assignmentId));
-      setSyncNotice(getSyncNotice(syncResult.skipped));
+      const updatedDelivery = await loadDelivery(assignmentId);
+      setDelivery(updatedDelivery);
+      setSyncNotice(updatedDelivery?.status === "sending"
+        ? "Отправка уже выполняется. Подождите завершения текущей попытки."
+        : getSyncNotice(syncResult.skipped));
     } catch (error) {
       setDelivery(await loadDelivery(assignmentId));
       setSyncNotice(error instanceof Error ? error.message : "Не удалось запустить отправку. Отчет сохранен на телефоне.");
@@ -172,7 +172,7 @@ export function SubmitReportScreen() {
     );
   }
 
-  const actionDisabled = isSubmitting || (!readiness.ready && problemGroups.length === 0);
+  const actionDisabled = isSubmitting || presentation.action === "wait" || (!readiness.ready && problemGroups.length === 0);
   const primaryLabel = !readiness.ready && problemGroups[0]
     ? problemGroups[0].pointId === "route-empty" ? "Открыть список точек" : `Перейти к точке ${problemGroups[0].orderIndex}`
     : presentation.buttonLabel;
@@ -215,8 +215,7 @@ export function SubmitReportScreen() {
           ))}
         </Card>
       ) : null}
-
-      <Text style={styles.syncStatusLine}>{"\u041f\u043e\u0441\u043b\u0435\u0434\u043d\u044f\u044f \u0443\u0441\u043f\u0435\u0448\u043d\u0430\u044f \u0441\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0430\u0446\u0438\u044f: "}{lastSuccessfulSyncAt ? formatDateTime(lastSuccessfulSyncAt) : "\u0435\u0449\u0451 \u043d\u0435 \u0432\u044b\u043f\u043e\u043b\u043d\u044f\u043b\u0430\u0441\u044c"}</Text>
+      <Text style={styles.syncStatusLine}>{delivery?.status === "delivered" && delivery.deliveredAt ? `Отчёт доставлен: ${formatDateTime(delivery.deliveredAt)}` : "Отчёт хранится на телефоне до подтверждения сервером."}</Text>
       {syncNotice ? <Text accessibilityLiveRegion="polite" style={styles.notice}>{syncNotice}</Text> : null}
       {loadError ? <Text accessibilityLiveRegion="polite" style={styles.loadError}>{loadError}</Text> : null}
 
@@ -252,13 +251,14 @@ export function SubmitReportScreen() {
 
 async function loadDelivery(assignmentId: string) {
   const ownerUserId = await getStoredOwnerUserId();
-  return ownerUserId ? getCompleteReportDeliveryState(ownerUserId, assignmentId) : null;
+  return ownerUserId ? getReportDeliveryState(ownerUserId, assignmentId) : null;
 }
 
-function getSyncNotice(skipped: "offline" | "serverUnavailable" | "unauthenticated" | "failed" | null) {
+function getSyncNotice(skipped: "offline" | "serverUnavailable" | "unauthenticated" | "wrongContour" | "failed" | null) {
   if (skipped === "offline") return "Нет подключения. Отчёт сохранён и автоматически повторится после появления сети.";
   if (skipped === "serverUnavailable") return "Сервер временно недоступен. Отчёт остаётся на телефоне; следующий повтор уже запланирован.";
   if (skipped === "unauthenticated") return "Для продолжения отправки необходимо войти. Повторно проходить точки не потребуется.";
+  if (skipped === "wrongContour") return "Подключён сервер другого контура. Автоматическая отправка остановлена до исправления настроек.";
   if (skipped === "failed") return "Отправка прервалась. Данные сохранены — можно повторить сейчас или дождаться автоматической отправки.";
   return "Отчёт сохранён на телефоне. Отправка выполняется автоматически.";
 }
@@ -272,6 +272,8 @@ function actionIcon(action: ReturnType<typeof getReportDeliveryPresentation>["ac
       return "log-in-outline";
     case "done":
       return "checkmark-circle-outline";
+    case "wait":
+      return "time-outline";
     default:
       return "send-outline";
   }
@@ -288,7 +290,7 @@ function DeliveryCard({
   lastUpdate: string | null;
   title: string;
   tone: "neutral" | "success" | "warning" | "danger";
-  status: NonNullable<DeliveryState>["status"] | null;
+  status: ReportDeliveryState["status"] | null;
 }) {
   const palette = deliveryPalette[tone];
   return (
@@ -358,12 +360,12 @@ function ProgressValue({ label, value }: { label: string; value: string }) {
   );
 }
 
-function deliveryStateLabel(status: OutboxCommandStatus | null) {
-  if (status === "accepted" || status === "duplicate") return "\u0421\u0435\u0440\u0432\u0435\u0440: \u043f\u0440\u0438\u043d\u044f\u0442";
-  if (status === "pending" || status === "sending") return "\u0422\u0435\u043b\u0435\u0444\u043e\u043d: \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u2014 \u0441\u0435\u0440\u0432\u0435\u0440: \u043e\u0436\u0438\u0434\u0430\u0435\u0442";
-  if (status === "retryLater" || status === "waiting_network") return "\u0422\u0435\u043b\u0435\u0444\u043e\u043d: \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u2014 \u0441\u0435\u0440\u0432\u0435\u0440: \u043f\u043e\u0432\u0442\u043e\u0440 \u043f\u043e\u0437\u0436\u0435";
-  if (status === "rejected" || status === "conflict" || status === "invalidPayload") return "\u0422\u0435\u043b\u0435\u0444\u043e\u043d: \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u2014 \u0441\u0435\u0440\u0432\u0435\u0440: \u043d\u0443\u0436\u043d\u043e \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435";
-  return "\u0422\u0435\u043b\u0435\u0444\u043e\u043d: \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e";
+function deliveryStateLabel(status: ReportDeliveryState["status"] | null) {
+  if (status === "delivered") return "Сервер: принят";
+  if (status === "queued" || status === "sending") return "Телефон: сохранено локально — сервер: ожидает";
+  if (status === "retryScheduled" || status === "waitingNetwork") return "Телефон: сохранено локально — сервер: повтор позже";
+  if (status === "repairRequired" || status === "conflict" || status === "blockedByDependency" || status === "wrongContour") return "Телефон: сохранено локально — сервер: нужно действие";
+  return "Телефон: сохранено локально";
 }
 
 function formatTime(value: string) {

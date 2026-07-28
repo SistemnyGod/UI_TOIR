@@ -6,7 +6,7 @@ import { getReportDeliveryPresentation } from "../src/features/patrol/reportDeli
 test("retryable report stays saved and offers an explicit retry", () => {
   const view = getReportDeliveryPresentation("retryLater", "Сервер временно недоступен");
   assert.equal(view.action, "retry");
-  assert.equal(view.buttonLabel, "Повторить отправку сейчас");
+  assert.equal(view.buttonLabel, "Проверить отправку");
   assert.match(view.detail, /временно недоступен/);
 });
 
@@ -26,10 +26,10 @@ test("a session reset for another account asks to sign in", () => {
   assert.equal(view.action, "signIn");
 });
 
-test("sending report can be checked and retried manually", () => {
-  const view = getReportDeliveryPresentation("sending", null);
-  assert.equal(view.action, "retry");
-  assert.equal(view.buttonLabel, "Проверить и повторить");
+test("sending report waits for its current request", () => {
+  const view = getReportDeliveryPresentation({ status: "sending", clientOperationId: "operation-1" });
+  assert.equal(view.action, "wait");
+  assert.equal(view.buttonLabel, "Отправка уже выполняется");
 });
 
 test("a permanent rejection asks for correction instead of blind retry", () => {
@@ -40,4 +40,16 @@ test("a permanent rejection asks for correction instead of blind retry", () => {
 test("accepted and duplicate responses are terminal success", () => {
   assert.equal(getReportDeliveryPresentation("accepted", null).action, "done");
   assert.equal(getReportDeliveryPresentation("duplicate", null).action, "done");
+});
+
+test("a conflicting point blocks the complete report delivery state", () => {
+  const view = getReportDeliveryPresentation({
+    status: "conflict",
+    blockingOperationId: "point-operation",
+    blockingCommandType: "markPatrolPointIssue",
+    lastError: "Состояние точки изменилось на сервере."
+  });
+  assert.equal(view.action, "repair");
+  assert.equal(view.title, "Отправка отчёта остановлена");
+  assert.doesNotMatch(view.detail, /автоматически отправ/i);
 });

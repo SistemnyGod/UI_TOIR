@@ -36,7 +36,7 @@ internal sealed class LocalMobileDiagnosticReportStore : IMobileDiagnosticReport
             reportDate.ToString("MM"));
         Directory.CreateDirectory(directory);
 
-        var fileName = $"{reportDate:yyyyMMdd}_{report.MobileAccountId:N}_{reportId:N}.json";
+        var fileName = $"{reportDate:yyyyMMdd}_{reportId:N}.json";
         var destination = Path.Combine(directory, fileName);
         if (File.Exists(destination))
         {

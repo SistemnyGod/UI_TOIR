@@ -4,21 +4,27 @@ import { getServerBaseUrl, getServerCandidateBaseUrls, isAllowedServerBaseUrl, n
 import { currentContourId } from "@/core/environments";
 import { hasUsableNetwork } from "@/core/network";
 
+export type ServerConnectionFailureKind = "offline" | "serverUnavailable" | "protocolMismatch" | "wrongContour" | "invalidServerAddress";
+
 export type ServerConnectionCheckResult = {
   ok: boolean;
   message: string;
   status?: number;
   url?: string;
   contourId?: string;
+  expectedContourId?: string;
   errorKind?: NetworkErrorKind;
+  failureKind?: ServerConnectionFailureKind;
 };
 
 export type ServerHealthProbe = {
   ok: boolean;
   status?: number;
   contourId?: string;
+  expectedContourId?: string;
   message?: string;
   errorKind?: NetworkErrorKind;
+  failureKind?: ServerConnectionFailureKind;
 };
 
 const healthCache = new ServerHealthCache<ServerHealthProbe>();
@@ -45,12 +51,12 @@ export async function probeServerHealth(serverBaseUrl: string, expectedContourId
     );
 
     if (!response.ok) {
-      return { ok: false, status: response.status, message: `Сервер ответил с ошибкой ${response.status}.` };
+      return { ok: false, status: response.status, failureKind: "serverUnavailable", message: `Сервер ответил с ошибкой ${response.status}.` };
     }
 
     const body = await readMobileHealthResponse(response);
     if (!body || body.status !== "ok" || body.syncProtocolVersion !== "1.0") {
-      return { ok: false, status: response.status, message: "Адрес не является совместимым mobile API Patrol360." };
+      return { ok: false, status: response.status, failureKind: "protocolMismatch", message: "Адрес не является совместимым mobile API Patrol360." };
     }
 
     if (body.contourId !== expectedContourId) {
@@ -58,6 +64,8 @@ export async function probeServerHealth(serverBaseUrl: string, expectedContourId
         ok: false,
         status: response.status,
         contourId: body.contourId,
+        expectedContourId,
+        failureKind: "wrongContour",
         message: `Сервер относится к другому контуру (${body.contourId ?? "неизвестный"}). Ожидался ${expectedContourId}.`
       };
     }
@@ -71,7 +79,8 @@ export async function probeServerHealth(serverBaseUrl: string, expectedContourId
     return {
       ok: false,
       message: classifiedError.message,
-      errorKind: classifiedError.kind
+      errorKind: classifiedError.kind,
+      failureKind: classifiedError.kind === "offline" ? "offline" : "serverUnavailable"
     };
   }
 }
@@ -97,6 +106,7 @@ export async function checkServerConnection(rawServerBaseUrl?: string): Promise<
     if (rawServerBaseUrl && !isAllowedServerBaseUrl(serverBaseUrl)) {
       return {
         ok: false,
+        failureKind: "invalidServerAddress",
         message: "Адрес сервера не разрешён для текущего контура."
       };
     }
@@ -112,6 +122,9 @@ export async function checkServerConnection(rawServerBaseUrl?: string): Promise<
   let lastStatus: number | undefined;
   let lastProblem: string | null = null;
   let lastErrorKind: NetworkErrorKind | undefined;
+  let lastFailureKind: ServerConnectionFailureKind | undefined;
+  let lastContourId: string | undefined;
+  let lastExpectedContourId: string | undefined;
 
   for (const serverBaseUrl of serverBaseUrls) {
     checkedUrls.push(serverBaseUrl);
@@ -131,6 +144,9 @@ export async function checkServerConnection(rawServerBaseUrl?: string): Promise<
 
     lastProblem = probe.message ?? lastProblem;
     lastErrorKind = probe.errorKind;
+    lastFailureKind = probe.failureKind ?? lastFailureKind;
+    lastContourId = probe.contourId ?? lastContourId;
+    lastExpectedContourId = probe.expectedContourId ?? lastExpectedContourId;
   }
 
   return {
@@ -140,7 +156,10 @@ export async function checkServerConnection(rawServerBaseUrl?: string): Promise<
       : `${serverUnavailableMessage} Проверенные адреса: ${checkedUrls.join(", ")}`,
     status: lastStatus,
     url: checkedUrls.map((value) => `${value}/api/v1/mobile/health`).join(", "),
-    errorKind: lastErrorKind
+    errorKind: lastErrorKind,
+    failureKind: lastFailureKind ?? "serverUnavailable",
+    contourId: lastContourId,
+    expectedContourId: lastExpectedContourId
   };
 }
 

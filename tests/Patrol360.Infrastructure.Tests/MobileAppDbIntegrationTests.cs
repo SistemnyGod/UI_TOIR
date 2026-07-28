@@ -55,7 +55,6 @@ public sealed class MobileAppDbIntegrationTests
         var diagnosticNow = DateTimeOffset.UtcNow;
         var diagnosticReport = new MobileDiagnosticReportDto(
             diagnosticReportId,
-            "kenshi-c1s-test",
             "0.1.19",
             "Android 16",
             diagnosticNow.AddDays(-1),
@@ -71,7 +70,7 @@ public sealed class MobileAppDbIntegrationTests
         Assert.Equal("duplicate", diagnosticRepeated!.Status);
         Assert.Throws<ArgumentException>(() => UseMobileApp(provider, mobile => mobile.SaveDiagnosticReport(
             login.Session.AccessToken,
-            diagnosticReport with { ReportId = Guid.NewGuid(), DeviceId = "other-device" })));
+            diagnosticReport with { ReportId = Guid.NewGuid(), PendingOutboxCount = -1 })));
 
         var bootstrap = UseMobileApp(provider, mobile => mobile.GetBootstrap(login.Session.AccessToken));
         Assert.NotNull(bootstrap);

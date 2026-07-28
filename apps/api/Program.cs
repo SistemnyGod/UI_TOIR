@@ -1,6 +1,7 @@
 using Patrol360.Infrastructure;
 using Patrol360.Infrastructure.Persistence;
 using Patrol360.Api.Authorization;
+using Patrol360.Api.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -12,12 +13,19 @@ var builder = WebApplication.CreateBuilder(applicationArgs);
 
 const string WebCorsPolicy = "Patrol360Web";
 
+var configuredDatabaseConnection = builder.Configuration.GetConnectionString("Patrol360");
+if (!builder.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(configuredDatabaseConnection))
+{
+    throw new InvalidOperationException("ConnectionStrings:Patrol360 must be configured outside Development.");
+}
+
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
 
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
+builder.Services.AddScoped<IApplicationReadinessProbe, ApplicationReadinessProbe>();
 builder.Services
     .AddAuthentication(options =>
     {
@@ -65,28 +73,29 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("web-auth", authRateLimitPartition);
     options.AddPolicy("mobile-auth", authRateLimitPartition);
 });
+var configuredCorsOrigins = builder.Configuration
+    .GetSection("WebCors:AllowedOrigins")
+    .Get<string[]>()
+    ?.Select(origin => origin?.Trim())
+    .Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Where(origin => Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+        && (uri.Scheme == Uri.UriSchemeHttps
+            || (builder.Environment.IsDevelopment() && uri.Scheme == Uri.UriSchemeHttp)))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray()
+    ?? [];
+
+if (!builder.Environment.IsDevelopment() && configuredCorsOrigins.Length == 0)
+{
+    throw new InvalidOperationException("WebCors:AllowedOrigins must contain at least one HTTPS origin outside Development.");
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(WebCorsPolicy, policy =>
     {
         policy
-            .WithOrigins(
-                "http://localhost:5173",
-                "http://localhost:5174",
-                "http://localhost:5175",
-                "http://localhost:5176",
-                "https://localhost",
-                "https://localhost:5173",
-                "http://127.0.0.1:5173",
-                "http://127.0.0.1:5174",
-                "http://127.0.0.1:5175",
-                "http://127.0.0.1:5176",
-                "https://127.0.0.1",
-                "https://127.0.0.1:5173",
-                "https://192.168.2.194",
-                "http://192.168.2.194:5173",
-                "http://192.168.2.194:5174",
-                "https://192.168.2.194:5173")
+            .WithOrigins(configuredCorsOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod()
             .WithExposedHeaders(

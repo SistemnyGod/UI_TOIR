@@ -1,7 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 
 import { postDailyDiagnosticReport } from "@/api/mobileApi";
-import { getOrCreateDeviceId } from "@/auth/deviceRegistration";
 import { getAppRuntimeMetadata } from "@/auth/appMetadata";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import {
@@ -12,6 +11,7 @@ import {
 } from "@/db/repositories/diagnosticReportRepository";
 import { hasUsableNetwork } from "@/core/network";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
+import { collectDiagnosticContext } from "@/services/diagnosticContextService";
 
 let activeUpload: Promise<DiagnosticUploadResult> | null = null;
 const automaticDiagnosticsKey = "patrol360.diagnostics.automaticUpload";
@@ -87,10 +87,13 @@ async function uploadDiagnosticReport(options: {
 
   const runtimeMetadata = getAppRuntimeMetadata();
   const report = await getOrCreatePendingDiagnosticReport(ownerUserId, {
-    deviceId: await getOrCreateDeviceId(),
     appVersion: runtimeMetadata.appVersion,
     platform: runtimeMetadata.platform
-  }, new Date(), { force: options.force, includeEmpty: options.includeEmpty });
+  }, new Date(), {
+    force: options.force,
+    includeEmpty: options.includeEmpty,
+    context: await collectDiagnosticContext()
+  });
   if (!report) {
     return { status: "notDue" };
   }

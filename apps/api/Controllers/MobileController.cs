@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Patrol360.Api.Authorization;
+using Patrol360.Api.Services;
 using Patrol360.Application;
 using Patrol360.Contracts;
 
@@ -11,18 +12,28 @@ namespace Patrol360.Api.Controllers;
 [ApiController]
 [Route("api/v1/mobile")]
 [Authorize(Policy = MobileBearerAuthenticationHandler.PolicyName)]
-public sealed class MobileController(IMobileAppService mobileAppService, IConfiguration configuration) : MobileApiControllerBase
+public sealed class MobileController(
+    IMobileAppService mobileAppService,
+    IConfiguration configuration,
+    IApplicationReadinessProbe readinessProbe) : MobileApiControllerBase
 {
     [HttpGet("health")]
     [AllowAnonymous]
-    public IActionResult Health() =>
-        Ok(new
+    public async Task<IActionResult> Health(CancellationToken cancellationToken)
+    {
+        var readiness = await readinessProbe.CheckAsync(cancellationToken);
+        var response = new
         {
-            status = "ok",
+            status = readiness.IsReady ? "ok" : "unready",
+            dependency = readiness.IsReady ? null : readiness.Dependency,
             serverTime = DateTimeOffset.UtcNow,
             syncProtocolVersion = "1.0",
             contourId = MobileContourId
-        });
+        };
+        return readiness.IsReady
+            ? Ok(response)
+            : StatusCode(StatusCodes.Status503ServiceUnavailable, response);
+    }
 
     [HttpPost("auth/login")]
     [AllowAnonymous]

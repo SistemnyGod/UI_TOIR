@@ -76,6 +76,7 @@ export type TriggerForegroundSyncResult = ForegroundSyncResult | {
   hasMore: false;
   nextRetryAt: null;
   retryableCount: 0;
+  outcome: "failed";
 };
 
 export async function triggerForegroundSyncWithRetry(
@@ -95,10 +96,10 @@ export async function triggerForegroundSyncWithRetry(
     void logMobileError("sync.trigger.failed", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (isReauthenticationRequiredError(errorMessage)) {
-      return { sent: 0, skipped: "unauthenticated", hasMore: false, nextRetryAt: null, retryableCount: 0 };
+      return { sent: 0, skipped: "unauthenticated", hasMore: false, nextRetryAt: null, retryableCount: 0, outcome: "skipped" };
     }
 
-    return { sent: 0, skipped: "failed", hasMore: false, nextRetryAt: null, retryableCount: 0 };
+    return { sent: 0, skipped: "failed", hasMore: false, nextRetryAt: null, retryableCount: 0, outcome: "failed" };
   }
 }
 

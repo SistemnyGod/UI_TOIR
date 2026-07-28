@@ -144,6 +144,18 @@ jobs:
         working-directory: mobiel proekt
         run: npm run verify
 
+      - name: Build mobile debug APK
+        working-directory: mobiel proekt
+        run: npm run build:android:debug
+
+      - name: Upload mobile debug APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: patrol360-mobile-debug-apk
+          if-no-files-found: warn
+          path: mobiel proekt/build-output/patrol360-mobile-debug.apk
+
       - name: Frontend structural tests
         working-directory: apps/web
         run: npm run test:ci

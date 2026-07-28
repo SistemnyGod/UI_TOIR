@@ -23,11 +23,13 @@ import {
   applyOutboxResponses,
   activateWaitingAuthOutboxCommands,
   countRetryableOutboxCommands,
+  countOutboxDeliveryProblems,
   finalizeAcceptedCompleteReportCommands,
   getNextOutboxRetryAt,
   listUnconfirmedCompleteReportCommands,
   markPendingOutboxCommandsAuthRequired,
   markPendingOutboxCommandsWaitingNetwork,
+  markPendingOutboxCommandsWrongContour,
   markOutboxCommandsWrongContour,
   markOutboxCommandsRejected,
   markOutboxCommandsRetryLater,
@@ -38,6 +40,7 @@ import {
 } from "@/db/repositories/outboxRepository";
 import type { OutboxRetryReason } from "@/db/repositories/outboxRepository";
 import { OutboxCommand, OutboxResponse } from "@/domain/sync/syncTypes";
+import { resolvePatrolAssignmentIdentity } from "@/db/repositories/outboxPolicies";
 import type { LocalMobileFile } from "@/domain/files/fileTypes";
 import { getPendingOutboxBatch } from "@/sync/outboxProcessor";
 import { findMissingClientFileIds } from "@/sync/fileReferenceIntegrity";
@@ -52,12 +55,15 @@ import { extractUploadClientFileIds, extractUploadFileReferences } from "@/sync/
 import type { UploadFileReference } from "@/sync/uploadCandidatePolicy";
 import { FileUploadFailureDisposition, PermanentFileUploadError, getFileUploadFailureDisposition } from "@/domain/files/fileUploadPolicy";
 
+export type SyncOutcome = "complete" | "partial" | "skipped" | "failed";
+
 export type ForegroundSyncResult = {
   sent: number;
-  skipped: "offline" | "serverUnavailable" | "unauthenticated" | null;
+  skipped: "offline" | "serverUnavailable" | "unauthenticated" | "wrongContour" | null;
   hasMore: boolean;
   nextRetryAt: string | null;
   retryableCount: number;
+  outcome: SyncOutcome;
 };
 
 export type SyncRequestMode = "normal" | "networkRecovered" | "manualReport" | "manualAll";
@@ -67,7 +73,7 @@ export type ForegroundSyncOptions = {
   assignmentId?: string;
 };
 
-type SyncResultBase = Omit<ForegroundSyncResult, "nextRetryAt" | "retryableCount">;
+type SyncResultBase = Omit<ForegroundSyncResult, "nextRetryAt" | "retryableCount" | "outcome">;
 type InternalForegroundSyncOptions = Required<Pick<ForegroundSyncOptions, "mode">> & ForegroundSyncOptions & { skipPreparation?: boolean };
 
 const staleSendingTimeoutMs = 5 * 60 * 1000;
@@ -122,6 +128,11 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions)
     ? `patrolAssignment:${options.assignmentId}`
     : undefined;
 
+  if (options.mode === "manualReport" && options.assignmentId) {
+    await reconcileAcceptedCompleteReports(options.assignmentId);
+    await resetStaleSendingOutboxCommands(ownerUserId, getStaleSendingBoundaryIso(), aggregateKey);
+  }
+
   if (!options.skipPreparation) {
     await prepareSyncRequest(ownerUserId, options);
   }
@@ -138,7 +149,12 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions)
 
   const serverCheck = await checkServerConnection();
   if (!serverCheck.ok) {
-    if (serverCheck.errorKind === "offline") {
+    if (serverCheck.failureKind === "wrongContour") {
+      await markPendingOutboxCommandsWrongContour(ownerUserId, serverCheck.message, aggregateKey);
+      return buildForegroundSyncResult(ownerUserId, { sent: 0, skipped: "wrongContour", hasMore: false });
+    }
+
+    if (serverCheck.failureKind === "offline" || serverCheck.errorKind === "offline") {
       await markPendingOutboxCommandsWaitingNetwork(ownerUserId, serverCheck.message, aggregateKey);
       return buildForegroundSyncResult(ownerUserId, { sent: 0, skipped: "offline", hasMore: false });
     }
@@ -231,14 +247,18 @@ async function prepareSyncRequest(
 
 async function buildForegroundSyncResult(ownerUserId: string | null, result: SyncResultBase): Promise<ForegroundSyncResult> {
   if (!ownerUserId) {
-    return { ...result, nextRetryAt: null, retryableCount: 0 };
+    return { ...result, nextRetryAt: null, retryableCount: 0, outcome: result.skipped ? "skipped" : "complete" };
   }
 
-  const [nextRetryAt, retryableCount] = await Promise.all([
+  const [nextRetryAt, retryableCount, problemCount] = await Promise.all([
     getNextOutboxRetryAt(ownerUserId),
-    countRetryableOutboxCommands(ownerUserId)
+    countRetryableOutboxCommands(ownerUserId),
+    countOutboxDeliveryProblems(ownerUserId)
   ]);
-  return { ...result, nextRetryAt, retryableCount };
+  const outcome: SyncOutcome = result.skipped
+    ? "skipped"
+    : (problemCount > 0 || result.hasMore ? "partial" : "complete");
+  return { ...result, nextRetryAt, retryableCount, outcome };
 }
 
 async function ensureAccessTokenForSync(
@@ -322,9 +342,12 @@ function getCommandAssignmentId(command: OutboxCommand) {
   if (typeof payloadAssignmentId === "string" && payloadAssignmentId) {
     return payloadAssignmentId;
   }
-  return command.entityType === "patrolAssignment" || command.entityType === "patrolPoint"
-    ? command.entityLocalId ?? null
-    : null;
+  return resolvePatrolAssignmentIdentity({
+    commandType: command.commandType,
+    entityType: command.entityType,
+    entityLocalId: command.entityLocalId,
+    payload: command.payload
+  });
 }
 
 function buildSyncEvent(

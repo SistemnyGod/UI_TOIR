@@ -1,4 +1,5 @@
 import { isReauthenticationRequiredError } from "../../auth/sessionErrors.ts";
+import type { ReportDeliveryState } from "../../domain/reporting/reportDeliveryState.ts";
 
 export type ReportDeliveryStatus =
   | "pending"
@@ -16,86 +17,69 @@ export type ReportDeliveryStatus =
   | "cancelled"
   | "invalidPayload";
 
-export type ReportDeliveryAction = "submit" | "retry" | "repair" | "signIn" | "serverSettings" | "done";
+export type ReportDeliveryAction = "submit" | "retry" | "repair" | "signIn" | "serverSettings" | "done" | "wait";
 
-export function getReportDeliveryPresentation(status: ReportDeliveryStatus | null, lastError: string | null) {
-  if (!status || status === "superseded" || status === "cancelled") {
-    return {
-      action: "submit" as const,
-      buttonLabel: "Завершить обход и отправить",
-      detail: "Сначала отчет сохранится на телефоне, затем приложение отправит его на сервер.",
-      title: "Готов к отправке",
-      tone: "neutral" as const
-    };
+type ReportPresentationInput = ReportDeliveryState | ReportDeliveryStatus | null;
+
+export function getReportDeliveryPresentation(input: ReportPresentationInput, legacyLastError: string | null = null) {
+  const delivery = typeof input === "string" || input === null
+    ? fromLegacyStatus(input, legacyLastError)
+    : input;
+
+  switch (delivery.status) {
+    case "notQueued":
+      return neutral("submit", "Завершить обход и отправить", "Готов к отправке", "Сначала отчёт сохранится на телефоне, затем приложение отправит его на сервер.");
+    case "delivered":
+      return success("done", "К списку обходов", "Отчёт доставлен", "Сервер подтвердил получение. Повторная отправка не требуется.");
+    case "sending":
+      return neutral("wait", "Отправка уже выполняется", "Идёт отправка", "Подождите завершения текущей попытки. Второй запрос не будет создан.");
+    case "waitingAuth":
+      return warning("signIn", "Войти и продолжить отправку", "Требуется вход", "Отчёт сохранён на телефоне. После входа отправка продолжится без повторного заполнения.");
+    case "waitingNetwork":
+      return warning("retry", "Проверить отправку", "Отчёт сохранён на телефоне", "Он отправится автоматически после подключения к серверу.");
+    case "retryScheduled":
+      return warning("retry", "Проверить отправку", "Отправка запланирована", delivery.lastError ?? "Сервер временно недоступен. Следующая попытка уже запланирована.");
+    case "wrongContour":
+      return danger("serverSettings", "Проверить настройки сервера", "Подключён сервер другого контура", delivery.lastError ?? "Проверьте настройки сервера перед повторной отправкой.");
+    case "conflict":
+      return danger("repair", "Проверить конфликт", "Отправка отчёта остановлена", "Команда одной из точек конфликтует с состоянием сервера. Проверьте конфликт перед повторной отправкой.");
+    case "repairRequired":
+      return danger("repair", "Исправить отчёт", "Отчёт требует исправления", delivery.lastError ?? "Одна из сохранённых операций повреждена. Автоматическая отправка не продолжится до исправления данных.");
+    case "blockedByDependency":
+      return danger("repair", "Проверить блокирующую операцию", "Отправка отчёта остановлена", delivery.lastError ?? "Более ранняя операция этого обхода требует обработки.");
+    case "queued":
+      return warning("retry", "Проверить отправку", "Отчёт сохранён", "Отчёт сохранён на телефоне и ожидает отправки.");
   }
+}
 
-  if (status === "accepted" || status === "duplicate") {
-    return {
-      action: "done" as const,
-      buttonLabel: "К списку обходов",
-      detail: "Сервер подтвердил получение. Повторная отправка не требуется.",
-      title: "Отчет доставлен",
-      tone: "success" as const
-    };
-  }
+function fromLegacyStatus(status: ReportDeliveryStatus | null, lastError: string | null): ReportDeliveryState {
+  if (!status || status === "superseded" || status === "cancelled") return { status: "notQueued" };
+  if (status === "accepted" || status === "duplicate") return { status: "delivered", clientOperationId: "legacy", deliveredAt: null };
+  if (status === "sending") return { status: "sending", clientOperationId: "legacy" };
+  if (status === "waiting_auth" || isAuthenticationError(lastError)) return { status: "waitingAuth", clientOperationId: "legacy", lastError };
+  if (status === "waiting_network") return { status: "waitingNetwork", clientOperationId: "legacy", lastError };
+  if (status === "retryLater") return { status: "retryScheduled", clientOperationId: "legacy", nextAttemptAt: null, lastError };
+  if (status === "wrong_contour") return { status: "wrongContour", blockingOperationId: "legacy", lastError };
+  if (status === "blocked") return { status: "blockedByDependency", blockingOperationId: "legacy", blockingCommandType: "unknown", blockingStatus: status, lastError };
+  if (status === "rejected" || status === "invalidPayload") return { status: "repairRequired", blockingOperationId: "legacy", blockingCommandType: "unknown", lastError };
+  if (status === "conflict") return { status: "conflict", blockingOperationId: "legacy", blockingCommandType: "unknown", lastError };
+  return { status: "queued", clientOperationId: "legacy" };
+}
 
-  if (status === "sending") {
-    return {
-      action: "retry" as const,
-      buttonLabel: "Проверить и повторить",
-      detail: "Если отправка зависла или ответ потерялся, повтор пройдет с тем же номером операции без дубля.",
-      title: "Идет отправка",
-      tone: "neutral" as const
-    };
-  }
+function neutral(action: ReportDeliveryAction, buttonLabel: string, title: string, detail: string) {
+  return { action, buttonLabel, title, detail, tone: "neutral" as const };
+}
 
-  if (status === "rejected" || status === "conflict") {
-    return {
-      action: "repair" as const,
-      buttonLabel: status === "rejected" ? "Исправить отчёт" : "Проверить конфликт",
-      detail: lastError || "Сервер не принял данные. Проверьте точки обхода перед созданием новой команды.",
-      title: status === "conflict" ? "Нужна проверка данных" : "Отчёт не принят",
-      tone: "danger" as const
-    };
-  }
+function success(action: ReportDeliveryAction, buttonLabel: string, title: string, detail: string) {
+  return { action, buttonLabel, title, detail, tone: "success" as const };
+}
 
-  if (status === "invalidPayload") {
-    return {
-      action: "repair" as const,
-      buttonLabel: "Открыть точки отчёта",
-      detail: lastError || "Данные отчёта повреждены. Проверьте точки и сформируйте отчёт заново.",
-      title: "Отчёт требует исправления",
-      tone: "danger" as const
-    };
-  }
+function warning(action: ReportDeliveryAction, buttonLabel: string, title: string, detail: string) {
+  return { action, buttonLabel, title, detail, tone: "warning" as const };
+}
 
-  if (status === "wrong_contour" || status === "blocked") {
-    return {
-      action: "serverSettings" as const,
-      buttonLabel: "Проверить настройки сервера",
-      detail: lastError || "Отправка заблокирована до подтверждения целевого серверного контура.",
-      title: "Отправка заблокирована",
-      tone: "danger" as const
-    };
-
-  }
-  if (status === "waiting_auth" || isAuthenticationError(lastError)) {
-    return {
-      action: "signIn" as const,
-      buttonLabel: "Войти и продолжить отправку",
-      detail: "Отчет сохранен на телефоне. После входа отправка продолжится без повторного заполнения.",
-      title: "Требуется вход",
-      tone: "warning" as const
-    };
-  }
-
-  return {
-    action: "retry" as const,
-    buttonLabel: "Повторить отправку сейчас",
-    detail: lastError || "Отчет сохранен на телефоне и будет отправлен автоматически после восстановления связи.",
-    title: status === "pending" ? "Отчет сохранен" : "Отправка отложена",
-    tone: "warning" as const
-  };
+function danger(action: ReportDeliveryAction, buttonLabel: string, title: string, detail: string) {
+  return { action, buttonLabel, title, detail, tone: "danger" as const };
 }
 
 export function isAuthenticationError(message: string | null) {

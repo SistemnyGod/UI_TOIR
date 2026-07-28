@@ -7,7 +7,7 @@ import { logMobileError } from "@/services/mobileErrorReporter";
 import { attachPhotoToPoint, restoreMissingPointAttachment } from "@/db/repositories/patrolRepository";
 import { attachMediaToShiftRemark } from "@/db/repositories/shiftRemarkRepository";
 import { attachMediaToWorkTask } from "@/db/repositories/workTaskRepository";
-import { getLocalFileInfo, hasEnoughStorageForPhoto } from "@/services/fileStorageService";
+import { assertStorageForMedia, getLocalFileInfo, hasEnoughStorageForPhoto } from "@/services/fileStorageService";
 import { MediaPreparationProgressCallback, prepareLocalMedia, prepareLocalPhoto } from "@/sync/fileUploadQueue";
 import { MAX_VIDEO_BYTES } from "@/domain/files/fileUploadLimits";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
@@ -268,6 +268,10 @@ async function pickVideo(source: "camera" | "library") {
     throw new Error(source === "camera" ? "Нет доступа к камере." : "Нет доступа к галерее.");
   }
 
+  if (source === "camera") {
+    await assertStorageForMedia(MAX_VIDEO_BYTES);
+  }
+
   const result = source === "camera"
     ? await ImagePicker.launchCameraAsync({
         mediaTypes: "videos",
@@ -455,6 +459,8 @@ async function getValidatedVideoSize(asset: ImagePicker.ImagePickerAsset) {
   if (sizeBytes && sizeBytes > MAX_VIDEO_BYTES) {
     throw new Error("Видео слишком большое. Выберите файл до 25 МБ.");
   }
+
+  await assertStorageForMedia(sizeBytes ?? MAX_VIDEO_BYTES);
 
   return sizeBytes ?? null;
 }

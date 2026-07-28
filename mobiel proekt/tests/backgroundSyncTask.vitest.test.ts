@@ -43,13 +43,17 @@ describe("background sync result", () => {
     mocks.runForegroundSync.mockResolvedValue({
       sent: 0,
       skipped: "serverUnavailable",
+      outcome: "skipped",
       hasMore: false
     });
 
     const result = await runBackgroundSyncTask();
 
     expect(result).toBe(BackgroundTask.BackgroundTaskResult.Failed);
-    expect(mocks.recordBackgroundSyncResult).toHaveBeenCalledWith("serverUnavailable", expect.any(String));
+    expect(mocks.recordBackgroundSyncResult).toHaveBeenLastCalledWith(
+      expect.objectContaining({ skipped: "serverUnavailable", outcome: "skipped" }),
+      expect.any(String)
+    );
     expect(mocks.triggerDailyDiagnosticReportUpload).not.toHaveBeenCalled();
   });
 });

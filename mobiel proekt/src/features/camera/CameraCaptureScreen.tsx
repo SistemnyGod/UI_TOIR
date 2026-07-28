@@ -17,6 +17,7 @@ import {
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
+import { getLocalMediaStorageWarning } from "@/services/fileStorageService";
 
 export function CameraCaptureScreen() {
   const router = useRouter();
@@ -31,6 +32,7 @@ export function CameraCaptureScreen() {
   }>();
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
 
   const captureKind = mediaKind === "video" ? "video" : "photo";
   const isRemarkMedia = Boolean(remarkId);
@@ -93,6 +95,18 @@ export function CameraCaptureScreen() {
     }
   }, [handleAttach, source]);
 
+  useEffect(() => {
+    let active = true;
+    void getLocalMediaStorageWarning().then((warning) => {
+      if (active) {
+        setStorageWarning(warning);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   function goBack() {
     if (isMissingAttachmentRecovery) {
       router.replace(`/patrol/assignment/${assignmentId}/point/${pointId}`);
@@ -119,6 +133,7 @@ export function CameraCaptureScreen() {
         </Text>
       </Card>
 
+      {storageWarning ? <Text style={styles.warning}>{storageWarning}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {isBusy ? <ActivityIndicator /> : null}
       <View style={styles.actions}>
@@ -148,6 +163,11 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     fontSize: 15,
     lineHeight: 21
+  },
+  warning: {
+    color: "#b45309",
+    fontSize: 14,
+    lineHeight: 20
   },
   error: {
     color: "#ef4444",

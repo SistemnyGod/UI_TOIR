@@ -52,16 +52,29 @@ public sealed record MobileDiagnosticEntryDto(
     DateTimeOffset FirstSeenAt,
     DateTimeOffset LastSeenAt);
 
+public sealed record MobileDiagnosticContextDto(
+    string Environment,
+    string ContourId,
+    bool? NetworkConnected,
+    bool? InternetReachable,
+    string HealthStatus,
+    string? HealthFailureKind,
+    DateTimeOffset? LastBackgroundAttemptAt,
+    DateTimeOffset? LastServerContactAt,
+    DateTimeOffset? LastCompleteQueueSyncAt,
+    DateTimeOffset? LastReportDeliveredAt,
+    int? SchemaMigrationCount);
+
 public sealed record MobileDiagnosticReportDto(
     Guid ReportId,
-    string DeviceId,
     string AppVersion,
     string Platform,
     DateTimeOffset PeriodStart,
     DateTimeOffset PeriodEnd,
     DateTimeOffset GeneratedAt,
     int PendingOutboxCount,
-    IReadOnlyList<MobileDiagnosticEntryDto> Entries);
+    IReadOnlyList<MobileDiagnosticEntryDto> Entries,
+    MobileDiagnosticContextDto? Context = null);
 
 public sealed record MobileDiagnosticReportReceiptDto(
     Guid ReportId,

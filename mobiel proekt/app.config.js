@@ -34,6 +34,9 @@ if (!supportedDefaultEnvironments.has(configuredDefaultEnvironment)) {
 if (configuredDefaultEnvironment === "production" && !configuredProductionApiBaseUrl) {
   throw new Error("PATROL360_PRODUCTION_API_URL must be set for a production build. The placeholder domain is disabled.");
 }
+if (configuredDefaultEnvironment === "production" && !configuredProductionApiBaseUrl.startsWith("https://")) {
+  throw new Error("PATROL360_PRODUCTION_API_URL must use HTTPS for a production build.");
+}
 
 const allowLocalCleartext = configuredDefaultEnvironment === "dev"
   || configuredDefaultEnvironment === "local-enterprise";

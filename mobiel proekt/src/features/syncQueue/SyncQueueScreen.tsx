@@ -462,7 +462,7 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function syncResultMessage(skipped: "offline" | "serverUnavailable" | "unauthenticated" | "failed" | null) {
+function syncResultMessage(skipped: "offline" | "serverUnavailable" | "unauthenticated" | "wrongContour" | "failed" | null) {
   switch (skipped) {
     case "offline":
       return "Нет подключения. Очередь сохранена и повторится автоматически после появления сети.";

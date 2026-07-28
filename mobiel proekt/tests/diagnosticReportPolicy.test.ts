@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   diagnosticReportIntervalMs,
+  getDiagnosticEventMessage,
   isDailyDiagnosticReportDue,
   sanitizeDiagnosticMessage
 } from "../src/services/diagnosticReportPolicy.ts";
@@ -33,4 +34,11 @@ test("diagnostic messages redact opaque credentials and URL secrets", () => {
   assert.doesNotMatch(sanitized, /user:pass/);
   assert.doesNotMatch(sanitized, /top-secret/);
   assert.match(sanitized, /\[redacted]/);
+});
+test("exported diagnostic category never exposes a conflict comment", () => {
+  const comment = "Сотрудник Петров сообщил пароль от шкафа 1234";
+  const message = getDiagnosticEventMessage("sync.conflict.dispatcher_requested");
+
+  assert.doesNotMatch(message, new RegExp(comment));
+  assert.equal(message, "Ошибка, конфликт или ожидание синхронизации.");
 });

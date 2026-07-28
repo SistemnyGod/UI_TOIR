@@ -19,21 +19,16 @@ public sealed class MobileDiagnosticReportStoreTests : IDisposable
         var reportId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
         var report = new MobileStoredDiagnosticReport(
-            Guid.NewGuid(),
-            "mobile.test",
-            "android-test",
             new MobileDiagnosticReportDto(
                 reportId,
-                "android-test",
-                "0.1.19",
+            "0.1.19",
                 "Android 16",
                 now.AddDays(-1),
                 now,
                 now,
                 2,
                 [new MobileDiagnosticEntryDto("sync.failed", "Server unavailable", 3, now.AddHours(-2), now)]),
-            now,
-            "127.0.0.1");
+            now);
 
         var first = store.Save(report);
         var repeated = store.Save(report);
@@ -43,6 +38,10 @@ public sealed class MobileDiagnosticReportStoreTests : IDisposable
         var file = Assert.Single(Directory.GetFiles(rootPath, "*.json", SearchOption.AllDirectories));
         using var document = JsonDocument.Parse(File.ReadAllText(file));
         Assert.Equal(reportId, document.RootElement.GetProperty("report").GetProperty("reportId").GetGuid());
+        Assert.False(document.RootElement.TryGetProperty("mobileAccountId", out _));
+        Assert.False(document.RootElement.TryGetProperty("accountLogin", out _));
+        Assert.False(document.RootElement.TryGetProperty("sessionDeviceId", out _));
+        Assert.False(document.RootElement.TryGetProperty("ipAddress", out _));
     }
 
     public void Dispose()

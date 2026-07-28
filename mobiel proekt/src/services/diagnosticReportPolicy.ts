@@ -22,6 +22,25 @@ export function sanitizeDiagnosticMessage(message: string) {
   );
 }
 
+export function getDiagnosticEventMessage(eventType: string) {
+  const normalizedEventType = eventType.toLowerCase();
+  if (normalizedEventType.startsWith("auth.refresh")) {
+    return "Сбой или ожидание восстановления мобильной сессии.";
+  }
+  if (normalizedEventType.startsWith("network.")) {
+    return "Сетевая ошибка при работе приложения.";
+  }
+  if (normalizedEventType.startsWith("sync.")) {
+    return "Ошибка, конфликт или ожидание синхронизации.";
+  }
+  if (normalizedEventType.startsWith("mobile.data.refresh") || normalizedEventType.startsWith("mobile.refresh")) {
+    return "Не удалось полностью обновить рабочие данные с сервера.";
+  }
+  if (normalizedEventType.startsWith("app.crash") || normalizedEventType.startsWith("app.error")) {
+    return "Техническая ошибка мобильного приложения.";
+  }
+  return "Техническое событие мобильного приложения.";
+}
 export function truncateDiagnosticValue(value: string, maxLength: number) {
   return truncate(value, maxLength);
 }

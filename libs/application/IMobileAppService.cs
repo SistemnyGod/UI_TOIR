@@ -65,9 +65,5 @@ public interface IMobileDiagnosticReportStore
 }
 
 public sealed record MobileStoredDiagnosticReport(
-    Guid MobileAccountId,
-    string AccountLogin,
-    string SessionDeviceId,
     MobileDiagnosticReportDto Report,
-    DateTimeOffset ReceivedAt,
-    string IpAddress);
+    DateTimeOffset ReceivedAt);

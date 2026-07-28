@@ -7,6 +7,7 @@ import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import {
   diagnosticReportIntervalMs,
   isDailyDiagnosticReportDue,
+  getDiagnosticEventMessage,
   sanitizeDiagnosticMessage,
   truncateDiagnosticValue
 } from "@/services/diagnosticReportPolicy";
@@ -19,9 +20,22 @@ export type MobileDiagnosticEntry = {
   lastSeenAt: string;
 };
 
+export type MobileDiagnosticContext = {
+  environment: string;
+  contourId: string;
+  networkConnected: boolean | null;
+  internetReachable: boolean | null;
+  healthStatus: "ok" | "unavailable" | "notChecked";
+  healthFailureKind: string | null;
+  lastBackgroundAttemptAt: string | null;
+  lastServerContactAt: string | null;
+  lastCompleteQueueSyncAt: string | null;
+  lastReportDeliveredAt: string | null;
+  schemaMigrationCount: number | null;
+};
+
 export type MobileDiagnosticReport = {
   reportId: string;
-  deviceId: string;
   appVersion: string;
   platform: string;
   periodStart: string;
@@ -29,6 +43,7 @@ export type MobileDiagnosticReport = {
   generatedAt: string;
   pendingOutboxCount: number;
   entries: MobileDiagnosticEntry[];
+  context?: MobileDiagnosticContext;
 };
 
 export type MobileDiagnosticReportRow = {
@@ -44,9 +59,9 @@ export type MobileDiagnosticReportRow = {
 
 export async function getOrCreatePendingDiagnosticReport(
   ownerUserId: string,
-  device: { deviceId: string; appVersion: string; platform: string },
+  device: { appVersion: string; platform: string },
   now = new Date(),
-  options: { force?: boolean; includeEmpty?: boolean } = {}
+  options: { force?: boolean; includeEmpty?: boolean; context?: MobileDiagnosticContext } = {}
 ): Promise<MobileDiagnosticReport | null> {
   const currentOwnerUserId = await getStoredOwnerUserId();
   if (!currentOwnerUserId || currentOwnerUserId !== ownerUserId) {
@@ -119,7 +134,7 @@ export async function getOrCreatePendingDiagnosticReport(
 
   const actionLogEntries = rows.map((row) => ({
     eventType: truncateDiagnosticValue(row.event_type, 120),
-    message: sanitizeDiagnosticMessage(row.message),
+    message: getDiagnosticEventMessage(row.event_type),
     count: row.event_count,
     firstSeenAt: row.first_seen_at,
     lastSeenAt: row.last_seen_at
@@ -127,13 +142,13 @@ export async function getOrCreatePendingDiagnosticReport(
   const entries = [...queueEntries, ...actionLogEntries];
   const report: MobileDiagnosticReport = {
     reportId: Crypto.randomUUID(),
-    deviceId: device.deviceId,
     appVersion: device.appVersion,
     platform: device.platform,
     periodStart: periodStart.toISOString(),
     periodEnd: now.toISOString(),
     generatedAt: now.toISOString(),
     pendingOutboxCount: await countPendingOutboxCommands(ownerUserId),
+    context: options.context,
     entries: entries.length > 0
       ? entries
       : [{

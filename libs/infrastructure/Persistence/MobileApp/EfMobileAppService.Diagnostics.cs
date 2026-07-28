@@ -15,24 +15,18 @@ internal sealed partial class EfMobileAppService
             return null;
         }
 
-        ValidateDiagnosticReport(request, session.DeviceId);
+        ValidateDiagnosticReport(request);
         TouchSession(session);
         dbContext.SaveChanges();
 
         return diagnosticReportStore.Save(new MobileStoredDiagnosticReport(
-            session.MobileAccountId,
-            session.MobileAccount.Login,
-            session.DeviceId,
             request,
-            DateTimeOffset.UtcNow,
-            session.IpAddress));
+            DateTimeOffset.UtcNow));
     }
 
-    private static void ValidateDiagnosticReport(MobileDiagnosticReportDto report, string sessionDeviceId)
+    private static void ValidateDiagnosticReport(MobileDiagnosticReportDto report)
     {
         if (report.ReportId == Guid.Empty
-            || string.IsNullOrWhiteSpace(report.DeviceId)
-            || !report.DeviceId.Equals(sessionDeviceId, StringComparison.Ordinal)
             || report.PeriodEnd < report.PeriodStart
             || report.Entries.Count is < 1 or > 100
             || report.PendingOutboxCount < 0)
@@ -40,6 +34,17 @@ internal sealed partial class EfMobileAppService
             throw new ArgumentException("Invalid mobile diagnostic report.");
         }
 
+        if (report.Context is { } context
+            && (string.IsNullOrWhiteSpace(context.Environment)
+                || context.Environment.Length > 40
+                || string.IsNullOrWhiteSpace(context.ContourId)
+                || context.ContourId.Length > 120
+                || context.HealthStatus is not ("ok" or "unavailable" or "notChecked")
+                || context.HealthFailureKind?.Length > 80
+                || context.SchemaMigrationCount is < 0))
+        {
+            throw new ArgumentException("Invalid mobile diagnostic context.");
+        }
         if (report.Entries.Any(entry =>
                 string.IsNullOrWhiteSpace(entry.EventType)
                 || entry.EventType.Length > 120

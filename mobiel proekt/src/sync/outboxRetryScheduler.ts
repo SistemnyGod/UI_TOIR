@@ -2,6 +2,9 @@ import { getNextOutboxRetryAt } from "@/db/repositories/outboxRepository";
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 type RetrySchedulerRunner = () => Promise<unknown>;
+type RetrySchedulerRunResult = {
+  sent?: number;
+};
 
 type RetrySchedulerDependencies = {
   getNextRetryAt: (ownerUserId: string) => Promise<string | null>;
@@ -9,6 +12,7 @@ type RetrySchedulerDependencies = {
   setTimer?: (callback: () => void, delayMs: number) => TimerHandle;
   clearTimer?: (timer: TimerHandle) => void;
   now?: () => number;
+  isRunnerAvailable?: () => boolean;
 };
 
 export type OutboxRetryScheduler = {
@@ -17,6 +21,7 @@ export type OutboxRetryScheduler = {
 };
 
 const maximumTimerDelayMs = 2_147_483_647;
+const minimumNoProgressDelayMs = 15_000;
 let registeredRunner: RetrySchedulerRunner | null = null;
 
 export function createOutboxRetryScheduler(dependencies: RetrySchedulerDependencies): OutboxRetryScheduler {
@@ -26,39 +31,53 @@ export function createOutboxRetryScheduler(dependencies: RetrySchedulerDependenc
   let timer: TimerHandle | null = null;
   let generation = 0;
 
-  const cancel = () => {
-    generation += 1;
+  const clearCurrentTimer = () => {
     if (timer) {
       clearTimer(timer);
       timer = null;
     }
   };
 
-  const schedule = async (ownerUserId: string | null | undefined) => {
-    cancel();
+  const cancel = () => {
+    generation += 1;
+    clearCurrentTimer();
+  };
+
+  const schedule = async (ownerUserId: string | null | undefined, minimumDelayMs = 0) => {
+    const scheduleGeneration = ++generation;
+    clearCurrentTimer();
     if (!ownerUserId) {
       return;
     }
 
     const nextRetryAt = await dependencies.getNextRetryAt(ownerUserId);
+    if (scheduleGeneration !== generation || dependencies.isRunnerAvailable?.() === false) {
+      return;
+    }
+
     const nextRetryAtMs = nextRetryAt ? Date.parse(nextRetryAt) : Number.NaN;
     if (!Number.isFinite(nextRetryAtMs)) {
       return;
     }
 
-    const timerGeneration = generation;
-    const delayMs = Math.min(Math.max(nextRetryAtMs - now(), 0), maximumTimerDelayMs);
+    const delayMs = Math.min(
+      Math.max(nextRetryAtMs - now(), minimumDelayMs, 0),
+      maximumTimerDelayMs
+    );
     timer = setTimer(() => {
       timer = null;
-      if (timerGeneration !== generation) {
+      if (scheduleGeneration !== generation || dependencies.isRunnerAvailable?.() === false) {
         return;
       }
 
       void dependencies.runSync()
         .catch(() => undefined)
-        .finally(() => {
-          if (timerGeneration === generation) {
-            void schedule(ownerUserId);
+        .then((result) => {
+          if (scheduleGeneration === generation) {
+            const retryDelay = delayMs === 0 && isNoProgress(result)
+              ? minimumNoProgressDelayMs
+              : 0;
+            void schedule(ownerUserId, retryDelay);
           }
         });
     }, delayMs);
@@ -69,7 +88,8 @@ export function createOutboxRetryScheduler(dependencies: RetrySchedulerDependenc
 
 const retryScheduler = createOutboxRetryScheduler({
   getNextRetryAt: getNextOutboxRetryAt,
-  runSync: async () => registeredRunner?.()
+  runSync: async () => registeredRunner?.(),
+  isRunnerAvailable: () => registeredRunner !== null
 });
 
 export function registerOutboxRetrySchedulerRunner(runner: RetrySchedulerRunner) {
@@ -82,4 +102,10 @@ export function scheduleNextOutboxRetry(ownerUserId: string | null | undefined) 
 
 export function cancelNextOutboxRetry() {
   retryScheduler.cancel();
+}
+function isNoProgress(result: unknown): result is RetrySchedulerRunResult {
+  if (!result || typeof result !== "object") {
+    return false;
+  }
+  return "sent" in result && (result as RetrySchedulerRunResult).sent === 0;
 }
