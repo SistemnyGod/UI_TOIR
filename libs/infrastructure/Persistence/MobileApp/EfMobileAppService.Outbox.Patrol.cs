@@ -73,6 +73,17 @@ internal sealed partial class EfMobileAppService
                 return recoveredResponse;
             }
 
+            var recoveredDependency = TryRecoverRejectedPatrolDependency(
+                account,
+                session.MobileAccountId,
+                existing,
+                command,
+                transaction);
+            if (recoveredDependency is not null)
+            {
+                return recoveredDependency;
+            }
+
             return BuildRepeatedOutboxResponse(existing);
         }
 
@@ -92,7 +103,7 @@ internal sealed partial class EfMobileAppService
             }
         }
 
-        var response = command.CommandType switch
+        var response = command.CommandType.ToLowerInvariant() switch
             {
                 var type when type.Equals("takePatrolRequest", StringComparison.OrdinalIgnoreCase) =>
                     ProcessTakePatrolRequest(account, command),
@@ -303,19 +314,77 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Patrol request is already completed.");
         }
 
-        return new MobileOutboxResponseDto(
-            command.ClientOperationId,
-            "duplicate",
-            assignment.Id.ToString(),
-            assignment.LockVersion,
-            "Patrol request was already accepted.",
-            null,
-            null);
+        if (assignment.Status == AssignmentStatusValues.Accepted
+            || assignment.Status == AssignmentStatusValues.InProgress
+            || assignment.Status == AssignmentStatusValues.Paused)
+        {
+            return new MobileOutboxResponseDto(
+                command.ClientOperationId,
+                "duplicate",
+                assignment.Id.ToString(),
+                assignment.LockVersion,
+                "Patrol request was already accepted.",
+                null,
+                null);
+        }
+
+        // Assigned/waiting requests must pass through the normal accept transition.
+        // Returning duplicate here used to let a following start command reach the
+        // state machine while the server assignment was still unaccepted.
+        return null;
     }
 
     private static bool IsUniqueConstraintViolation(DbUpdateException exception) =>
         exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
+    private MobileOutboxResponseDto? TryRecoverRejectedPatrolDependency(
+        MobileAccountEntity account,
+        Guid mobileAccountId,
+        MobileOutboxOperationEntity existing,
+        MobileOutboxCommandDto command,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction)
+    {
+        var recoverableCommand = command.CommandType.Equals("scanPatrolPointNfc", StringComparison.OrdinalIgnoreCase)
+            || command.CommandType.Equals("scanPatrolPointQr", StringComparison.OrdinalIgnoreCase)
+            || command.CommandType.Equals("markPatrolPointOk", StringComparison.OrdinalIgnoreCase)
+            || command.CommandType.Equals("markPatrolPointIssue", StringComparison.OrdinalIgnoreCase)
+            || command.CommandType.Equals("completePatrolAssignment", StringComparison.OrdinalIgnoreCase);
+        if (!recoverableCommand
+            || !existing.Status.Equals("rejected", StringComparison.OrdinalIgnoreCase)
+            || !HasEquivalentLegacyStartPayload(existing.PayloadJson, command.Payload)
+            || (!existing.ResponseJson.Contains("Patrol point actions are allowed only while patrol is in progress.", StringComparison.Ordinal)
+                && !existing.ResponseJson.Contains("Patrol assignment must be in progress before report submit.", StringComparison.Ordinal)))
+        {
+            return null;
+        }
+
+        var response = command.CommandType.ToLowerInvariant() switch
+        {
+            "scanpatrolpointnfc" => ProcessScanPatrolPointNfc(account, command),
+            "scanpatrolpointqr" => ProcessScanPatrolPointQr(account, command),
+            "markpatrolpointok" => ProcessMarkPatrolPoint(account, command, isIssue: false),
+            "markpatrolpointissue" => ProcessMarkPatrolPoint(account, command, isIssue: true),
+            "completepatrolassignment" => ProcessCompletePatrolAssignment(account, command),
+            _ => null
+        };
+        if (response is null
+            || (!response.Status.Equals("accepted", StringComparison.OrdinalIgnoreCase)
+                && !response.Status.Equals("duplicate", StringComparison.OrdinalIgnoreCase)))
+        {
+            return null;
+        }
+
+        var trackedOperation = dbContext.MobileOutboxOperations.First(item =>
+            item.MobileAccountId == mobileAccountId
+            && item.ClientOperationId == existing.ClientOperationId);
+        trackedOperation.Status = response.Status;
+        trackedOperation.EntityServerId = NormalizeNullableText(response.ServerEntityId ?? command.EntityServerId);
+        trackedOperation.ResponseJson = JsonSerializer.Serialize(response, JsonOptions);
+        trackedOperation.AttemptCount = Math.Max(trackedOperation.AttemptCount, command.AttemptCount);
+        dbContext.SaveChanges();
+        transaction.Commit();
+        return response;
+    }
     private MobileOutboxResponseDto? TryRecoverRejectedLegacyStart(
         MobileAccountEntity account,
         Guid mobileAccountId,

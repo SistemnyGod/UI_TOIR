@@ -50,7 +50,7 @@ export async function getPendingOutboxBatch(
     await listPendingOutboxCommands(ownerUserId, Math.max(batchLimit * 4, 100), aggregateKey)
   ).filter((command) => !excludedClientOperationIds.has(command.clientOperationId));
   return selectNextByAssignment(
-    commands.map((command) => ({ command, assignmentId: getCommandAggregateKey(command), createdAtLocal: command.createdAtLocal, sequenceNo: command.sequenceNo, clientOperationId: command.clientOperationId })),
+    commands.map((command) => ({ command, aggregateKey: command.aggregateKey, assignmentId: getCommandAggregateKey(command), createdAtLocal: command.createdAtLocal, sequenceNo: command.sequenceNo, clientOperationId: command.clientOperationId })),
     batchLimit
   ).map((item) => item.command);
 }
@@ -63,7 +63,7 @@ export function selectNextOutboxCommands(commands: OutboxCommand[], batchLimit: 
   // commands from different patrols remain independent aggregates.
 
   return selectNextByAssignment(
-    commands.map((command) => ({ command, assignmentId: getCommandAggregateKey(command), createdAtLocal: command.createdAtLocal, sequenceNo: command.sequenceNo, clientOperationId: command.clientOperationId })),
+    commands.map((command) => ({ command, aggregateKey: command.aggregateKey, assignmentId: getCommandAggregateKey(command), createdAtLocal: command.createdAtLocal, sequenceNo: command.sequenceNo, clientOperationId: command.clientOperationId })),
     batchLimit
   ).map((item) => item.command);
 }

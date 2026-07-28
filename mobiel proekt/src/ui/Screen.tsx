@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import {
+  Animated,
   ColorValue,
   FlatList,
   FlatListProps,
@@ -18,23 +19,24 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { useAppTheme } from "@/features/settings/themePreference";
 import { canAttemptServerConnection } from "@/core/networkPolicy";
+import { checkServerConnection } from "@/api/serverHealthApi";
 
 type ScreenProps = {
   title: string;
   subtitle?: string;
   children: ReactNode;
-  floatingAction?: ReactNode;
+  bottomAction?: ReactNode;
 };
 
 type ScreenListProps<T> = Omit<FlatListProps<T>, "ListHeaderComponent" | "contentContainerStyle"> & {
   title: string;
   subtitle?: string;
-  floatingAction?: ReactNode;
+  bottomAction?: ReactNode;
   headerContent?: ReactNode;
   contentContainerStyle?: StyleProp<ViewStyle>;
 };
 
-export function Screen({ title, subtitle, children, floatingAction }: ScreenProps) {
+export function Screen({ title, subtitle, children, bottomAction }: ScreenProps) {
   const shell = useScreenShell();
 
   return (
@@ -43,14 +45,14 @@ export function Screen({ title, subtitle, children, floatingAction }: ScreenProp
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: shell.showNestedNavigation ? 132 + shell.bottomInset : Math.max(shell.insets.bottom + 150, 172) }
+          { paddingBottom: shell.showNestedNavigation ? 184 + shell.bottomInset : Math.max(shell.insets.bottom + 176, 196) }
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <ScreenHeader title={title} subtitle={subtitle} isOnline={shell.isOnline} />
+        <ScreenHeader title={title} subtitle={subtitle} networkStatus={shell.networkStatus} />
         {children}
       </ScrollView>
-      {floatingAction ? <View style={styles.floatingAction}>{floatingAction}</View> : null}
+      {bottomAction ? <View style={[styles.bottomAction, { bottom: shell.showNestedNavigation ? shell.bottomInset + 84 : shell.insets.bottom + 16 }]}>{bottomAction}</View> : null}
       <NestedNavigation shell={shell} />
     </SafeAreaView>
   );
@@ -60,7 +62,7 @@ export function ScreenList<T>({
   title,
   subtitle,
   headerContent,
-  floatingAction,
+  bottomAction,
   contentContainerStyle,
   ...listProps
 }: ScreenListProps<T>) {
@@ -73,19 +75,19 @@ export function ScreenList<T>({
         {...listProps}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: shell.showNestedNavigation ? 132 + shell.bottomInset : Math.max(shell.insets.bottom + 150, 172) },
+          { paddingBottom: shell.showNestedNavigation ? 184 + shell.bottomInset : Math.max(shell.insets.bottom + 176, 196) },
           contentContainerStyle
         ]}
         ListHeaderComponent={
           <View style={styles.listHeader}>
-            <ScreenHeader title={title} subtitle={subtitle} isOnline={shell.isOnline} />
+            <ScreenHeader title={title} subtitle={subtitle} networkStatus={shell.networkStatus} />
             {headerContent}
           </View>
         }
         removeClippedSubviews
         showsVerticalScrollIndicator={false}
       />
-      {floatingAction ? <View style={styles.floatingAction}>{floatingAction}</View> : null}
+      {bottomAction ? <View style={[styles.bottomAction, { bottom: shell.showNestedNavigation ? shell.bottomInset + 84 : shell.insets.bottom + 16 }]}>{bottomAction}</View> : null}
       <NestedNavigation shell={shell} />
     </SafeAreaView>
   );
@@ -96,21 +98,38 @@ function useScreenShell() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const router = useRouter();
-  const [isOnline, setIsOnline] = useState(false);
+  const [networkStatus, setNetworkStatus] = useState<NetworkStatus>("offline");
   const assignmentId = useMemo(() => pathname.match(/^\/patrol\/assignment\/([^/]+)/)?.[1] ?? null, [pathname]);
   const showNestedNavigation =
     pathname.startsWith("/patrol/") || pathname.startsWith("/camera/") || pathname === "/settings" || pathname.startsWith("/settings/");
   const bottomInset = Math.max(insets.bottom, 34);
 
   useEffect(() => {
+    let mounted = true;
     const unsubscribe = NetInfo.addEventListener((state) => {
-      setIsOnline(canAttemptServerConnection(state));
+      if (!canAttemptServerConnection(state)) {
+        setNetworkStatus("offline");
+        return;
+      }
+
+      setNetworkStatus("checking");
+      void checkServerConnection()
+        .then((result) => {
+          if (!mounted) return;
+          setNetworkStatus(result.ok ? "connected" : result.failureKind === "wrongContour" ? "otherServer" : "serverUnavailable");
+        })
+        .catch(() => {
+          if (mounted) setNetworkStatus("serverUnavailable");
+        });
     });
 
-    return unsubscribe;
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
   }, []);
 
-  return { assignmentId, bottomInset, colors, insets, isOnline, pathname, router, showNestedNavigation };
+  return { assignmentId, bottomInset, colors, insets, networkStatus, pathname, router, showNestedNavigation };
 }
 
 function ScreenBackground() {
@@ -124,7 +143,9 @@ function ScreenBackground() {
   );
 }
 
-function ScreenHeader({ title, subtitle, isOnline }: { title: string; subtitle?: string; isOnline: boolean }) {
+type NetworkStatus = "offline" | "checking" | "connected" | "serverUnavailable" | "otherServer";
+
+function ScreenHeader({ title, subtitle, networkStatus }: { title: string; subtitle?: string; networkStatus: NetworkStatus }) {
   const { colors } = useAppTheme();
 
   return (
@@ -137,8 +158,8 @@ function ScreenHeader({ title, subtitle, isOnline }: { title: string; subtitle?:
           <Text style={[styles.brandText, { color: colors.text }]}>ATOM{"\n"}MINERALS</Text>
         </View>
         <View style={styles.networkBadge}>
-          <Text style={[styles.networkText, { color: colors.mutedText }]}>{isOnline ? "Онлайн" : "Оффлайн"}</Text>
-          <View style={[styles.networkDot, { backgroundColor: isOnline ? "#22c55e" : "#f59e0b" }]} />
+          <Text style={[styles.networkText, { color: colors.mutedText }]}>{networkStatusLabel(networkStatus)}</Text>
+          <View style={[styles.networkDot, { backgroundColor: networkStatusColor(networkStatus) }]} />
         </View>
       </View>
       <View style={styles.header}>
@@ -149,6 +170,19 @@ function ScreenHeader({ title, subtitle, isOnline }: { title: string; subtitle?:
   );
 }
 
+function networkStatusLabel(status: NetworkStatus) {
+  if (status === "connected") return "Подключено";
+  if (status === "serverUnavailable") return "Сервер недоступен";
+  if (status === "otherServer") return "Другой сервер";
+  if (status === "checking") return "Проверяем";
+  return "Оффлайн";
+}
+
+function networkStatusColor(status: NetworkStatus) {
+  if (status === "connected") return "#22c55e";
+  if (status === "checking") return "#f59e0b";
+  return "#ef4444";
+}
 function NestedNavigation({ shell }: { shell: ReturnType<typeof useScreenShell> }) {
   const { assignmentId, bottomInset, colors, pathname, router, showNestedNavigation } = shell;
 
@@ -170,24 +204,28 @@ function NestedNavigation({ shell }: { shell: ReturnType<typeof useScreenShell> 
     >
       <NestedNavItem
         active={pathname.startsWith("/patrol") && !pathname.includes("/all-points")}
+        activeIcon="shield-checkmark"
         icon="shield-checkmark-outline"
         label="Обход"
         onPress={() => router.replace("/patrol")}
       />
       <NestedNavItem
         active={pathname.includes("/all-points")}
+        activeIcon="list"
         icon="list-outline"
         label="Метки"
         onPress={() => router.replace(assignmentId ? `/patrol/assignment/${assignmentId}/all-points` : "/all-points")}
       />
       <NestedNavItem
         active={pathname.startsWith("/work-accounting")}
+        activeIcon="construct"
         icon="construct-outline"
         label="Работы"
         onPress={() => router.replace("/work-accounting")}
       />
       <NestedNavItem
         active={pathname.startsWith("/profile") || pathname.startsWith("/settings")}
+        activeIcon="person-circle"
         icon="person-circle-outline"
         label="Профиль"
         onPress={() => router.replace("/profile")}
@@ -198,29 +236,57 @@ function NestedNavigation({ shell }: { shell: ReturnType<typeof useScreenShell> 
 
 function NestedNavItem({
   active,
+  activeIcon,
   icon,
   label,
   onPress
 }: {
   active: boolean;
+  activeIcon: keyof typeof Ionicons.glyphMap;
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
 }) {
   const { colors } = useAppTheme();
   const color: ColorValue = active ? colors.primary : colors.mutedText;
+  const [activeProgress] = useState(() => new Animated.Value(active ? 1 : 0));
+
+  useEffect(() => {
+    Animated.timing(activeProgress, {
+      duration: 150,
+      toValue: active ? 1 : 0,
+      useNativeDriver: true
+    }).start();
+  }, [active, activeProgress]);
 
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.nestedNavItem}>
-      <Ionicons color={String(color)} name={icon} size={24} />
-      <Text style={[styles.nestedNavLabel, { color: String(color) }]}>{label}</Text>
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.nestedNavItem, pressed ? styles.nestedNavItemPressed : null]}
+    >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.nestedNavActiveBackground,
+          {
+            backgroundColor: colors.backgroundAccent,
+            opacity: activeProgress,
+            transform: [{ scale: activeProgress.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }]
+          }
+        ]}
+      />
+      <View style={styles.nestedNavContent}>
+        <Ionicons color={String(color)} name={active ? activeIcon : icon} size={active ? 25 : 24} />
+        <Text style={[styles.nestedNavLabel, { color: String(color) }]}>{label}</Text>
+      </View>
     </Pressable>
   );
 }
-
 const styles = StyleSheet.create({
-  floatingAction: {
-    bottom: 80,
+  bottomAction: {
+    bottom: 0,
     left: 16,
     position: "absolute",
     right: 16,
@@ -336,10 +402,25 @@ const styles = StyleSheet.create({
   },
   nestedNavItem: {
     alignItems: "center",
+    borderRadius: 16,
     flex: 1,
+    justifyContent: "center",
+    marginHorizontal: 3,
+    minHeight: 56,
+    overflow: "hidden"
+  },
+  nestedNavItemPressed: {
+    opacity: 0.82
+  },
+  nestedNavActiveBackground: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: 16
+  },
+  nestedNavContent: {
+    alignItems: "center",
     gap: 3,
     justifyContent: "center",
-    minHeight: 56
+    zIndex: 1
   },
   nestedNavLabel: {
     fontSize: 10,

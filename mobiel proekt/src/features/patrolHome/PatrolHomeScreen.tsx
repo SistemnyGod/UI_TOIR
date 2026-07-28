@@ -108,7 +108,7 @@ function ActivePatrolCard({
       ) : (
         <Text style={[styles.bodyText, { color: colors.mutedText }]}>
           {isCompletedLocal
-            ? "Отчёт сохранён на телефоне. Он отправится автоматически при связи; статус можно посмотреть в очереди."
+            ? "Отчёт сохранён после ручной отправки. Если сети нет, очередь доставит его после подключения."
             : homeBlockedHint(status)}
         </Text>
       )}

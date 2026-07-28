@@ -3,7 +3,7 @@ import { currentContourId } from "@/core/environments";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
-import { insertOutboxCommandInTransaction, updatePendingCompleteReportBaseRevisionInTransaction, updatePendingWorkTaskRevisionInTransaction } from "@/db/repositories/outboxSql";
+import { insertOutboxCommandInTransaction, updatePendingCompleteReportBaseRevisionInTransaction, updatePendingWorkTaskRevisionInTransaction, type SqlExecutor } from "@/db/repositories/outboxSql";
 import { finalizeCancelledAssignmentInTransaction } from "@/db/repositories/patrolCancellationRepository";
 import { MobileEntityType, OutboxCommand, OutboxCommandStatus, OutboxCommandType, OutboxResponse } from "@/domain/sync/syncTypes";
 import type { ReportDeliveryState, ReportDeliveryStateSnapshot } from "@/domain/reporting/reportDeliveryState";
@@ -15,6 +15,8 @@ import { applyRejectedCancellationTransition, applyServerWinsTransition, Conflic
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 import { getReleaseResponseResolution } from "@/domain/patrol/releaseResolutionPolicy";
 import { getPointResultSyncUpdate } from "@/domain/patrol/pointResultSyncPolicy";
+import { validatePatrolCompletionPayload } from "@/domain/patrol/completionPayloadPolicy";
+import { resolveRemappedAssignmentStatus } from "@/domain/patrol/assignmentIdentityPolicy";
 
 export type { SyncQueueCommandItem } from "@/db/repositories/outboxTypes";
 
@@ -230,6 +232,29 @@ export async function getCompleteReportDeliveryState(ownerUserId: string, assign
   );
 }
 
+function isRecoverableLifecycleRejection(commandType: string, lastError: string | null) {
+  const error = (lastError ?? "").toLowerCase();
+  if (commandType === "startPatrolAssignment") {
+    return error.includes("only an accepted patrol assignment can be started");
+  }
+  if (["scanPatrolPointNfc", "scanPatrolPointQr", "markPatrolPointOk", "markPatrolPointIssue"].includes(commandType)) {
+    return error.includes("patrol point actions are allowed only while patrol is in progress");
+  }
+  if (commandType === "completePatrolAssignment") {
+    return error.includes("patrol assignment must be in progress before report submit");
+  }
+  return false;
+}
+
+function recoverableLifecycleMessage(commandType: string) {
+  if (commandType === "startPatrolAssignment") {
+    return "Запуск обхода сохранён. Восстанавливаем принятие заявки в фоне.";
+  }
+  if (commandType === "completePatrolAssignment") {
+    return "Отчёт сохранён. Восстанавливаем последовательность отправки.";
+  }
+  return "Действие обхода сохранено. Восстанавливаем отправку в фоне.";
+}
 export async function getReportDeliveryState(
   ownerUserId: string,
   assignmentId: string
@@ -274,6 +299,15 @@ export async function getReportDeliveryState(
   if (wrongContour) return snapshot({ status: "wrongContour", blockingOperationId: wrongContour.clientOperationId, lastError: wrongContour.lastError }, wrongContour);
   const conflict = first("conflict");
   if (conflict) return snapshot({ status: "conflict", blockingOperationId: conflict.clientOperationId, blockingCommandType: conflict.commandType, lastError: conflict.lastError }, conflict);
+  const recoverableLifecycle = rows.find((row) => row.status === "rejected" && isRecoverableLifecycleRejection(row.commandType, row.lastError));
+  if (recoverableLifecycle) {
+    return snapshot({
+      status: "retryScheduled",
+      clientOperationId: recoverableLifecycle.clientOperationId,
+      nextAttemptAt: recoverableLifecycle.nextAttemptAt,
+      lastError: "\u041e\u0442\u0447\u0451\u0442 \u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d, \u0432\u043e\u0441\u0441\u0442\u0430\u043d\u0430\u0432\u043b\u0438\u0432\u0430\u0435\u043c \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0443."
+    }, recoverableLifecycle);
+  }
   const repair = first("invalidPayload", "rejected");
   if (repair) return snapshot({ status: "repairRequired", blockingOperationId: repair.clientOperationId, blockingCommandType: repair.commandType, lastError: repair.lastError }, repair);
   const blocked = first("blocked");
@@ -291,6 +325,112 @@ export async function getReportDeliveryState(
   const delivered = rows.find((row) => row.commandType === "completePatrolAssignment" && (row.status === "accepted" || row.status === "duplicate"));
   if (delivered) return snapshot({ status: "delivered", clientOperationId: delivered.clientOperationId, deliveredAt: delivered.updatedAtLocal }, delivered);
   return empty();
+}
+export async function quarantineInvalidPatrolCompletionCommands(ownerUserId: string, assignmentId?: string) {
+  const db = await getDatabase();
+  const assignmentFilter = assignmentId ? " AND entity_local_id = ?" : "";
+  const params = assignmentId
+    ? [ownerUserId, currentContourId, assignmentId]
+    : [ownerUserId, currentContourId];
+  let quarantined = 0;
+  const assignmentIds = new Set<string>();
+
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const rows = await tx.getAllAsync<{
+        clientOperationId: string;
+        assignmentId: string | null;
+        payloadJson: string;
+      }>(
+        `
+          SELECT
+            client_operation_id AS clientOperationId,
+            entity_local_id AS assignmentId,
+            payload_json AS payloadJson
+          FROM outbox_commands
+          WHERE owner_user_id = ?
+            AND contour_id = ?
+            AND command_type = 'completePatrolAssignment'
+            AND status IN ('pending', 'sending', 'retryLater', 'waiting_network', 'waiting_auth', 'wrong_contour')
+            ${assignmentFilter}
+        `,
+        params
+      );
+
+      for (const row of rows) {
+        let failure: string | null = null;
+        try {
+          const payload = JSON.parse(row.payloadJson) as Record<string, unknown>;
+          const validation = validatePatrolCompletionPayload(payload);
+          failure = validation.valid ? null : validation.message;
+        } catch {
+          failure = "Не удалось прочитать сохранённый отчёт.";
+        }
+        if (!failure) {
+          continue;
+        }
+
+        const message = `Отчёт не отправлен: ${failure} Проверьте точки и сформируйте отчёт заново.`;
+        const updatedAtLocal = new Date().toISOString();
+        const commandUpdate = await tx.runAsync(
+          `
+            UPDATE outbox_commands
+            SET status = 'invalidPayload',
+                last_error = ?,
+                next_attempt_at = NULL,
+                retry_reason = NULL,
+                updated_at_local = ?
+            WHERE owner_user_id = ?
+              AND contour_id = ?
+              AND client_operation_id = ?
+              AND status IN ('pending', 'sending', 'retryLater', 'waiting_network', 'waiting_auth', 'wrong_contour')
+          `,
+          [message, updatedAtLocal, ownerUserId, currentContourId, row.clientOperationId]
+        );
+        if (commandUpdate.changes !== 1) {
+          continue;
+        }
+        quarantined += 1;
+
+        if (row.assignmentId) {
+          assignmentIds.add(row.assignmentId);
+          const assignmentUpdate = await tx.runAsync(
+            `
+              UPDATE patrol_assignments
+              SET status = 'inProgress',
+                  completed_at_local = NULL
+              WHERE owner_user_id = ?
+                AND contour_id = ?
+                AND assignment_id = ?
+                AND status IN ('completedLocal', 'syncing', 'syncError')
+            `,
+            [ownerUserId, currentContourId, row.assignmentId]
+          );
+          if (assignmentUpdate.changes !== 1) {
+            continue;
+          }
+          await tx.runAsync(
+            `
+              UPDATE patrol_request_board
+              SET status = 'inProgress'
+              WHERE owner_user_id = ?
+                AND request_id = (
+                  SELECT request_id
+                  FROM patrol_assignments
+                  WHERE owner_user_id = ?
+                    AND contour_id = ?
+                    AND assignment_id = ?
+                  LIMIT 1
+                )
+            `,
+            [ownerUserId, ownerUserId, currentContourId, row.assignmentId]
+          );
+        }
+      }
+    })
+  );
+
+  return { quarantined, assignmentIds: Array.from(assignmentIds) };
 }
 export async function hasPendingOutboxCommands(ownerUserId: string) {
   return (await countPendingOutboxCommands(ownerUserId)) > 0;
@@ -668,7 +808,10 @@ export async function activateRetryableReportCommands(ownerUserId: string, assig
   await withSqliteBusyRetry(() => db.runAsync(
     `
       UPDATE outbox_commands
-      SET status = CASE WHEN status = 'waiting_network' THEN 'pending' ELSE status END,
+      SET status = CASE
+            WHEN status IN ('waiting_network', 'retryLater') THEN 'pending'
+            ELSE status
+          END,
           next_attempt_at = NULL,
           retry_reason = NULL,
           updated_at_local = ?
@@ -676,7 +819,7 @@ export async function activateRetryableReportCommands(ownerUserId: string, assig
         AND contour_id = ?
         AND (
           status = 'waiting_network'
-          OR (status = 'retryLater' AND retry_reason IN ('network', 'timeout'))
+          OR (status = 'retryLater' AND COALESCE(retry_reason, 'unknown') <> 'rateLimit')
         )
         AND (aggregate_key = ? OR (aggregate_key IS NULL AND entity_local_id = ?))
     `,
@@ -728,16 +871,43 @@ export async function markPendingOutboxCommandsAuthRequired(
     `,
     [lastError, updatedAtLocal, ownerUserId, currentContourId, ...(aggregateKey ? [aggregateKey] : [])]
   ));
-}export async function activateWaitingAuthOutboxCommands(ownerUserId: string) {
+}
+
+export async function activateWaitingAuthOutboxCommands(ownerUserId: string, aggregateKey?: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
+  const scope = getAggregateActivationScope(aggregateKey);
   await withSqliteBusyRetry(() => db.runAsync(
-    "UPDATE outbox_commands SET status = 'pending', next_attempt_at = NULL, updated_at_local = ? " +
-    "WHERE owner_user_id = ? AND contour_id = ? AND status = 'waiting_auth'",
-    [updatedAtLocal, ownerUserId, currentContourId]
+    "UPDATE outbox_commands SET status = 'pending', next_attempt_at = NULL, retry_reason = NULL, updated_at_local = ? " +
+    "WHERE owner_user_id = ? AND contour_id = ? AND status = 'waiting_auth'" + scope.filter,
+    [updatedAtLocal, ownerUserId, currentContourId, ...scope.params]
   ));
 }
 
+export async function activateWrongContourOutboxCommands(ownerUserId: string, aggregateKey?: string) {
+  const db = await getDatabase();
+  const updatedAtLocal = new Date().toISOString();
+  const scope = getAggregateActivationScope(aggregateKey);
+  await withSqliteBusyRetry(() => db.runAsync(
+    "UPDATE outbox_commands SET status = 'pending', last_error = NULL, next_attempt_at = NULL, retry_reason = NULL, updated_at_local = ? " +
+    "WHERE owner_user_id = ? AND contour_id = ? AND status = 'wrong_contour'" + scope.filter,
+    [updatedAtLocal, ownerUserId, currentContourId, ...scope.params]
+  ));
+}
+
+function getAggregateActivationScope(aggregateKey?: string) {
+  if (!aggregateKey) {
+    return { filter: "", params: [] as (string | null)[] };
+  }
+
+  const assignmentId = aggregateKey.startsWith("patrolAssignment:")
+    ? aggregateKey.slice("patrolAssignment:".length)
+    : null;
+  return {
+    filter: " AND (aggregate_key = ? OR (aggregate_key IS NULL AND entity_local_id = ?))",
+    params: [aggregateKey, assignmentId]
+  };
+}
 export async function markOutboxCommandsWrongContour(ownerUserId: string, clientOperationIds: string[], lastError: string) {
   if (clientOperationIds.length === 0) {
     return;
@@ -810,20 +980,28 @@ export async function resetSendingOutboxCommandsForManualRetry(ownerUserId: stri
     [updatedAtLocal, updatedAtLocal, ownerUserId, currentContourId]
   ));
 }
-export async function reactivateRecoverableRejectedStartCommands(ownerUserId: string) {
+export async function reactivateRecoverableRejectedStartCommands(ownerUserId: string, assignmentId?: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
+  const assignmentFilter = assignmentId ? "AND command.entity_local_id = ?" : "";
+  const queryParams = assignmentId
+    ? [ownerUserId, currentContourId, assignmentId]
+    : [ownerUserId, currentContourId];
 
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
       const rejectedStarts = await tx.getAllAsync<{
         clientOperationId: string;
         assignmentId: string;
+        sequenceNo: number | null;
+        aggregateKey: string | null;
       }>(
         `
           SELECT
             command.client_operation_id AS clientOperationId,
-            command.entity_local_id AS assignmentId
+            command.entity_local_id AS assignmentId,
+            command.sequence_no AS sequenceNo,
+            command.aggregate_key AS aggregateKey
           FROM outbox_commands command
           INNER JOIN patrol_assignments assignment
             ON assignment.owner_user_id = command.owner_user_id
@@ -834,130 +1012,295 @@ export async function reactivateRecoverableRejectedStartCommands(ownerUserId: st
             AND command.command_type = 'startPatrolAssignment'
             AND command.status = 'rejected'
             AND lower(COALESCE(command.last_error, '')) LIKE '%only an accepted patrol assignment can be started%'
-            AND command.attempt_count < 3
-            AND assignment.status IN ('retryLater', 'syncError')
+            AND assignment.status IN ('retryLater', 'syncError', 'completedLocal', 'inProgress')
+            ${assignmentFilter}
         `,
-        [ownerUserId, currentContourId]
+        queryParams
       );
 
       for (const rejectedStart of rejectedStarts) {
-        const acceptCommand = await tx.getFirstAsync<{
-          clientOperationId: string;
-          aggregateKey: string | null;
-        }>(
-          `
-            SELECT
-              client_operation_id AS clientOperationId,
-              aggregate_key AS aggregateKey
-            FROM outbox_commands
-            WHERE owner_user_id = ?
-              AND contour_id = ?
-              AND command_type = 'acceptPatrolRequest'
-              AND entity_local_id = ?
-              AND status IN ('pending', 'sending', 'retryLater', 'waiting_network', 'waiting_auth', 'accepted', 'duplicate')
-            ORDER BY sequence_no ASC, created_at_local ASC
-            LIMIT 1
-          `,
-          [ownerUserId, currentContourId, rejectedStart.assignmentId]
-        );
+        // Sequence numbers are immutable during a normal retry. Legacy misordered rows are repaired once during database bootstrap.
 
-        if (acceptCommand) {
-          const nextSequence = await tx.getFirstAsync<{ nextSequence: number }>(
-            `
-              SELECT COALESCE(MAX(sequence_no), 0) + 1 AS nextSequence
-              FROM outbox_commands
-              WHERE owner_user_id = ?
-                AND contour_id = ?
-                AND aggregate_key = ?
-            `,
-            [ownerUserId, currentContourId, acceptCommand.aggregateKey]
-          );
-          await tx.runAsync(
-            `
-              UPDATE outbox_commands
+        await tx.runAsync(
+          `UPDATE outbox_commands
               SET status = 'retryLater',
                   next_attempt_at = ?,
-                  sequence_no = ?,
-                  last_error = 'Start is waiting for the acceptance command.',
+                  retry_reason = 'server',
+                  last_error = '\u0412\u043e\u0441\u0441\u0442\u0430\u043d\u0430\u0432\u043b\u0438\u0432\u0430\u0435\u043c \u043f\u0440\u0438\u043d\u044f\u0442\u0438\u0435 \u0438 \u0437\u0430\u043f\u0443\u0441\u043a \u043e\u0431\u0445\u043e\u0434\u0430.',
                   updated_at_local = ?
-              WHERE owner_user_id = ?
-                AND contour_id = ?
-                AND client_operation_id = ?
-            `,
-            [updatedAtLocal, nextSequence?.nextSequence ?? 1, updatedAtLocal, ownerUserId, currentContourId, rejectedStart.clientOperationId]
-          );
-          await tx.runAsync(
-            `
-              UPDATE patrol_assignments
-              SET status = 'accepted'
-              WHERE owner_user_id = ?
-                AND contour_id = ?
-                AND assignment_id = ?
-            `,
-            [ownerUserId, currentContourId, rejectedStart.assignmentId]
-          );
-          await tx.runAsync(
-            `
-              UPDATE patrol_request_board
-              SET status = 'accepted'
-              WHERE owner_user_id = ?
-                AND request_id = (
-                  SELECT request_id
-                  FROM patrol_assignments
-                  WHERE owner_user_id = ?
-                    AND contour_id = ?
-                    AND assignment_id = ?
-                  LIMIT 1
-                )
-            `,
-            [ownerUserId, ownerUserId, currentContourId, rejectedStart.assignmentId]
-          );
-          continue;
-        }
-
-        await tx.runAsync(
-          `
-            UPDATE outbox_commands
-            SET status = 'superseded',
-                next_attempt_at = NULL,
-                last_error = 'Start was rejected because the server assignment was not accepted. Accept the assignment before starting it.',
-                updated_at_local = ?
-            WHERE owner_user_id = ?
-              AND contour_id = ?
-              AND client_operation_id = ?
-          `,
-          [updatedAtLocal, ownerUserId, currentContourId, rejectedStart.clientOperationId]
+            WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?`,
+          [updatedAtLocal, updatedAtLocal, ownerUserId, currentContourId, rejectedStart.clientOperationId]
         );
         await tx.runAsync(
-          `
-            UPDATE patrol_assignments
-            SET status = 'assigned'
-            WHERE owner_user_id = ?
-              AND contour_id = ?
-              AND assignment_id = ?
-          `,
+          `UPDATE patrol_assignments
+              SET status = CASE WHEN status = 'completedLocal' THEN status ELSE 'inProgress' END
+            WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?`,
           [ownerUserId, currentContourId, rejectedStart.assignmentId]
         );
         await tx.runAsync(
-          `
-            UPDATE patrol_request_board
-            SET status = 'assigned'
-            WHERE owner_user_id = ?
-              AND request_id = (
-                SELECT request_id
-                FROM patrol_assignments
-                WHERE owner_user_id = ?
-                  AND contour_id = ?
-                  AND assignment_id = ?
-                LIMIT 1
-              )
-          `,
+          `UPDATE patrol_request_board
+              SET status = CASE WHEN status = 'completedLocal' THEN status ELSE 'inProgress' END
+            WHERE owner_user_id = ? AND request_id = (
+              SELECT request_id FROM patrol_assignments
+              WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?
+              LIMIT 1
+            )`,
           [ownerUserId, ownerUserId, currentContourId, rejectedStart.assignmentId]
         );
+        await resolveRecoverableOutboxConflict(tx, ownerUserId, rejectedStart.clientOperationId, updatedAtLocal);
       }
     })
   );
-}export async function finalizeAcceptedCompleteReportCommands(ownerUserId: string, assignmentId?: string) {
+}
+export async function reactivateRecoverableRejectedPointCommands(ownerUserId: string, assignmentId?: string) {
+  const db = await getDatabase();
+  const updatedAtLocal = new Date().toISOString();
+  const commandFilter = assignmentId ? "AND instr(command.payload_json, ?) > 0" : "";
+  const commandParams = assignmentId ? [ownerUserId, currentContourId, assignmentId] : [ownerUserId, currentContourId];
+
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const rows = await tx.getAllAsync<{
+        clientOperationId: string;
+        payloadJson: string;
+      }>(
+        `SELECT command.client_operation_id AS clientOperationId,
+                command.payload_json AS payloadJson
+           FROM outbox_commands command
+          WHERE command.owner_user_id = ?
+            AND command.contour_id = ?
+            AND command.command_type IN ('scanPatrolPointNfc', 'scanPatrolPointQr', 'markPatrolPointOk', 'markPatrolPointIssue', 'completePatrolAssignment')
+            AND command.status = 'rejected'
+            AND (
+              lower(COALESCE(command.last_error, '')) LIKE '%patrol point actions are allowed only while patrol is in progress%'
+              OR lower(COALESCE(command.last_error, '')) LIKE '%patrol assignment must be in progress before report submit%'
+            )
+            ${commandFilter}`,
+        commandParams
+      );
+
+      for (const row of rows) {
+        let payload: Record<string, unknown> | null = null;
+        try {
+          payload = JSON.parse(row.payloadJson) as Record<string, unknown>;
+        } catch {
+          continue;
+        }
+        const targetAssignmentId = typeof payload.assignmentId === 'string' ? payload.assignmentId : null;
+        if (!targetAssignmentId) continue;
+        const assignment = await tx.getFirstAsync<{ status: string }>(
+          `SELECT status FROM patrol_assignments
+             WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?
+             LIMIT 1`,
+          [ownerUserId, currentContourId, targetAssignmentId]
+        );
+        if (!assignment || !['retryLater', 'syncError', 'completedLocal', 'inProgress'].includes(assignment.status)) continue;
+
+        await tx.runAsync(
+          `UPDATE outbox_commands
+              SET status = 'retryLater',
+                  next_attempt_at = ?,
+                  retry_reason = 'server',
+                  last_error = 'Восстанавливаем команды обхода после запуска.',
+                  updated_at_local = ?
+            WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?`,
+          [updatedAtLocal, updatedAtLocal, ownerUserId, currentContourId, row.clientOperationId]
+        );
+        await tx.runAsync(
+          `UPDATE patrol_assignments
+              SET status = CASE WHEN status = 'completedLocal' THEN status ELSE 'inProgress' END
+            WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?`,
+          [ownerUserId, currentContourId, targetAssignmentId]
+        );
+        await resolveRecoverableOutboxConflict(tx, ownerUserId, row.clientOperationId, updatedAtLocal);
+      }
+    })
+  );
+}
+async function resolveRecoverableOutboxConflict(tx: SqlExecutor, ownerUserId: string, clientOperationId: string, resolvedAt: string) {
+  await tx.runAsync(
+    `UPDATE sync_conflicts
+        SET status = 'resolved',
+            resolution_status = 'retryRequested',
+            resolved_at = ?,
+            resolution_reason = '\u041a\u043e\u043c\u0430\u043d\u0434\u0430 \u0432\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0430 \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438.'
+      WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
+        AND status NOT IN ('resolved', 'dismissed')`,
+    [resolvedAt, ownerUserId, currentContourId, clientOperationId]
+  );
+}
+async function remapAssignmentIdentityInTransaction(
+  tx: SqlExecutor,
+  ownerUserId: string,
+  localAssignmentId: string,
+  serverAssignmentId: string
+) {
+  if (!localAssignmentId || !serverAssignmentId || localAssignmentId === serverAssignmentId) {
+    return;
+  }
+
+  type AssignmentIdentityRow = {
+    assignmentId: string;
+    requestId: string;
+    routeId: string;
+    status: string;
+    startedAtLocal: string | null;
+    completedAtLocal: string | null;
+    revision: number;
+    routeVersionNo: number;
+    snapshotVersion: number;
+    snapshotCreatedAt: string | null;
+    snapshotSource: string | null;
+    snapshotAllowFreeOrder: number | null;
+    snapshotNfcEnabled: number | null;
+    snapshotQrFallbackEnabled: number | null;
+  };
+  const assignmentRows = await tx.getAllAsync<AssignmentIdentityRow>(
+    `SELECT
+       assignment_id AS assignmentId,
+       request_id AS requestId,
+       route_id AS routeId,
+       status,
+       started_at_local AS startedAtLocal,
+       completed_at_local AS completedAtLocal,
+       revision,
+       route_version_no AS routeVersionNo,
+       snapshot_version AS snapshotVersion,
+       snapshot_created_at AS snapshotCreatedAt,
+       snapshot_source AS snapshotSource,
+       snapshot_allow_free_order AS snapshotAllowFreeOrder,
+       snapshot_nfc_enabled AS snapshotNfcEnabled,
+       snapshot_qr_fallback_enabled AS snapshotQrFallbackEnabled
+     FROM patrol_assignments
+     WHERE owner_user_id = ? AND contour_id = ? AND assignment_id IN (?, ?)`,
+    [ownerUserId, currentContourId, localAssignmentId, serverAssignmentId]
+  );
+  const localRow = assignmentRows.find((row) => row.assignmentId === localAssignmentId) ?? null;
+  const serverRow = assignmentRows.find((row) => row.assignmentId === serverAssignmentId) ?? null;
+
+  if (serverRow && localRow) {
+    await tx.runAsync(
+      `UPDATE patrol_assignments
+          SET request_id = ?,
+              route_id = ?,
+              status = ?,
+              started_at_local = ?,
+              completed_at_local = ?,
+              revision = ?,
+              route_version_no = ?,
+              snapshot_version = ?,
+              snapshot_created_at = ?,
+              snapshot_source = ?,
+              snapshot_allow_free_order = ?,
+              snapshot_nfc_enabled = ?,
+              snapshot_qr_fallback_enabled = ?
+        WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?`,
+      [
+        localRow.requestId,
+        localRow.routeId,
+        resolveRemappedAssignmentStatus(localRow.status, serverRow.status),
+        localRow.startedAtLocal ?? serverRow.startedAtLocal,
+        localRow.completedAtLocal ?? serverRow.completedAtLocal,
+        Math.max(localRow.revision, serverRow.revision),
+        localRow.routeVersionNo || serverRow.routeVersionNo,
+        localRow.snapshotVersion || serverRow.snapshotVersion,
+        localRow.snapshotCreatedAt ?? serverRow.snapshotCreatedAt,
+        localRow.snapshotSource ?? serverRow.snapshotSource,
+        localRow.snapshotAllowFreeOrder ?? serverRow.snapshotAllowFreeOrder,
+        localRow.snapshotNfcEnabled ?? serverRow.snapshotNfcEnabled,
+        localRow.snapshotQrFallbackEnabled ?? serverRow.snapshotQrFallbackEnabled,
+        ownerUserId,
+        currentContourId,
+        serverAssignmentId
+      ]
+    );
+  }
+  if (serverRow) {
+    // A bootstrap may already contain the server aggregate. Merge local route
+    // points into it without losing local results, then remove the duplicate key.
+    await tx.runAsync(
+      `INSERT OR REPLACE INTO assignment_route_points (
+         assignment_id, point_id, route_id, name, description, instruction,
+         order_index, nfc_uid_hash, qr_code_hash, required, requires_photo, revision
+       )
+       SELECT ?, point_id, route_id, name, description, instruction,
+              order_index, nfc_uid_hash, qr_code_hash, required, requires_photo, revision
+         FROM assignment_route_points
+        WHERE assignment_id = ?`,
+      [serverAssignmentId, localAssignmentId]
+    );
+    await tx.runAsync("DELETE FROM assignment_route_points WHERE assignment_id = ?", [localAssignmentId]);
+  } else {
+    await tx.runAsync("UPDATE assignment_route_points SET assignment_id = ? WHERE assignment_id = ?", [serverAssignmentId, localAssignmentId]);
+  }
+  await tx.runAsync("UPDATE point_results SET assignment_id = ? WHERE owner_user_id = ? AND assignment_id = ?", [serverAssignmentId, ownerUserId, localAssignmentId]);
+  await tx.runAsync("UPDATE files SET assignment_id = ? WHERE owner_user_id = ? AND assignment_id = ?", [serverAssignmentId, ownerUserId, localAssignmentId]);
+
+  const commands = await tx.getAllAsync<{
+    clientOperationId: string;
+    entityLocalId: string | null;
+    entityServerId: string | null;
+    payloadJson: string;
+  }>(
+    `SELECT client_operation_id AS clientOperationId,
+            entity_local_id AS entityLocalId,
+            entity_server_id AS entityServerId,
+            payload_json AS payloadJson
+       FROM outbox_commands
+      WHERE owner_user_id = ? AND contour_id = ?
+        AND (aggregate_key = ? OR entity_local_id = ? OR instr(payload_json, ?) > 0)`,
+    [ownerUserId, currentContourId, `patrolAssignment:${localAssignmentId}`, localAssignmentId, localAssignmentId]
+  );
+
+  for (const command of commands) {
+    let payloadJson = command.payloadJson;
+    try {
+      const payload = JSON.parse(command.payloadJson) as Record<string, unknown>;
+      if (payload.assignmentId === localAssignmentId) {
+        payload.assignmentId = serverAssignmentId;
+        payloadJson = JSON.stringify(payload);
+      }
+    } catch {
+      // Payload validation will report malformed legacy rows separately.
+    }
+    await tx.runAsync(
+      `UPDATE outbox_commands
+          SET entity_local_id = CASE WHEN entity_local_id = ? THEN ? ELSE entity_local_id END,
+              entity_server_id = CASE WHEN entity_server_id = ? THEN ? ELSE entity_server_id END,
+              aggregate_key = CASE WHEN aggregate_key = ? THEN ? ELSE aggregate_key END,
+              payload_json = ?
+        WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?`,
+      [
+        localAssignmentId,
+        serverAssignmentId,
+        localAssignmentId,
+        serverAssignmentId,
+        `patrolAssignment:${localAssignmentId}`,
+        `patrolAssignment:${serverAssignmentId}`,
+        payloadJson,
+        ownerUserId,
+        currentContourId,
+        command.clientOperationId
+      ]
+    );
+  }
+
+  if (serverRow) {
+    await tx.runAsync(
+      `DELETE FROM patrol_assignments
+        WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?`,
+      [ownerUserId, currentContourId, localAssignmentId]
+    );
+  } else {
+    await tx.runAsync(
+      `UPDATE patrol_assignments
+          SET assignment_id = ?
+        WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?`,
+      [serverAssignmentId, ownerUserId, currentContourId, localAssignmentId]
+    );
+  }
+}
+export async function finalizeAcceptedCompleteReportCommands(ownerUserId: string, assignmentId?: string) {
   const db = await getDatabase();
   let finalized = 0;
 
@@ -1193,14 +1536,15 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
             `
               UPDATE patrol_request_board
               SET status = ?
-              WHERE request_id = (
-                SELECT request_id
-                FROM patrol_assignments
-                WHERE owner_user_id = ? AND assignment_id = ?
-                LIMIT 1
+              WHERE owner_user_id = ?
+                AND request_id = (
+                  SELECT request_id
+                  FROM patrol_assignments
+                  WHERE owner_user_id = ? AND assignment_id = ?
+                  LIMIT 1
                 )
             `,
-            [requestStatus, command.owner_user_id, command.entity_local_id]
+            [requestStatus, command.owner_user_id, command.owner_user_id, command.entity_local_id]
           );
         }
 
@@ -1242,48 +1586,65 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
             "handoffPatrolAssignment"
           ].includes(command.command_type)
         ) {
-          const nextStatus =
-            command.command_type === "pausePatrolAssignment"
-              ? "paused"
-              : command.command_type === "handoffPatrolAssignment"
-                ? "needsDispatcherDecision"
-                : command.command_type === "acceptPatrolRequest"
-                  ? "accepted"
-                  : "inProgress";
+          let effectiveAssignmentId = command.entity_local_id;
+          if (command.command_type === "acceptPatrolRequest"
+            && response.serverEntityId
+            && response.serverEntityId !== command.entity_local_id) {
+            await remapAssignmentIdentityInTransaction(
+              tx,
+              command.owner_user_id,
+              command.entity_local_id,
+              response.serverEntityId
+            );
+            effectiveAssignmentId = response.serverEntityId;
+          }
 
+          // Local lifecycle mutations are applied atomically before enqueueing.
+          // A delayed response for an older command must only advance the
+          // server revision; it must never roll a newer local state backwards.
           await tx.runAsync(
             `
               UPDATE patrol_assignments
-              SET status = ?,
-                  revision = COALESCE(?, revision)
+              SET revision = COALESCE(?, revision)
               WHERE owner_user_id = ? AND assignment_id = ?
             `,
-            [nextStatus, response.serverRevision, command.owner_user_id, command.entity_local_id]
+            [response.serverRevision, command.owner_user_id, effectiveAssignmentId]
           );
           await tx.runAsync(
             `
               UPDATE patrol_request_board
-              SET status = ?
-              WHERE request_id = (
-                SELECT request_id
+              SET status = COALESCE((
+                SELECT status
                 FROM patrol_assignments
                 WHERE owner_user_id = ? AND assignment_id = ?
                 LIMIT 1
-              )
+              ), status)
+              WHERE owner_user_id = ?
+                AND request_id = (
+                  SELECT request_id
+                  FROM patrol_assignments
+                  WHERE owner_user_id = ? AND assignment_id = ?
+                  LIMIT 1
+                )
             `,
-            [nextStatus, command.owner_user_id, command.entity_local_id]
+            [
+              command.owner_user_id,
+              effectiveAssignmentId,
+              command.owner_user_id,
+              command.owner_user_id,
+              effectiveAssignmentId
+            ]
           );
 
           if (response.serverRevision !== null) {
             await updatePendingCompleteReportBaseRevisionInTransaction(
               tx,
               command.owner_user_id,
-              command.entity_local_id,
+              effectiveAssignmentId,
               response.serverRevision
             );
           }
         }
-
         if (command?.command_type === "completeWorkTask" && command.entity_local_id) {
           await tx.runAsync(
             `
@@ -1400,34 +1761,64 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
         );
 
         if (command) {
-          const conflictId = response.conflictId ?? `${response.status}-${response.clientOperationId}`;
-          await tx.runAsync(
-            `
-              INSERT OR REPLACE INTO sync_conflicts (
-                conflict_id,
-                owner_user_id,
-                contour_id,
-                client_operation_id,
-                entity_type,
-                reason,
-                payload_snapshot_json,
-                status,
-                resolution_status,
-                resolved_at,
-                resolution_reason
-              )
-              VALUES (?, ?, ?, ?, ?, ?, ?, 'open', 'open', NULL, NULL)
-            `,
-            [
-              conflictId,
+          const recoverableLifecycleRejection =
+            response.status === "rejected"
+            && isRecoverableLifecycleRejection(command.command_type, response.message);
+          if (!recoverableLifecycleRejection) {
+            const conflictId = response.conflictId ?? `${response.status}-${response.clientOperationId}`;
+            await tx.runAsync(
+              `
+                INSERT OR REPLACE INTO sync_conflicts (
+                  conflict_id,
+                  owner_user_id,
+                  contour_id,
+                  client_operation_id,
+                  entity_type,
+                  reason,
+                  payload_snapshot_json,
+                  status,
+                  resolution_status,
+                  resolved_at,
+                  resolution_reason
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'open', 'open', NULL, NULL)
+              `,
+              [
+                conflictId,
+                command.owner_user_id,
+                currentContourId,
+                response.clientOperationId,
+                command.entity_type,
+                response.message,
+                command.payload_json
+              ]
+            );
+          } else {
+            const retryAt = new Date(Date.now() + 30_000).toISOString();
+            await tx.runAsync(
+              `UPDATE outbox_commands
+                  SET status = 'retryLater',
+                      next_attempt_at = ?,
+                      retry_reason = 'server',
+                      last_error = ?,
+                      updated_at_local = ?
+                WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?`,
+              [
+                retryAt,
+                recoverableLifecycleMessage(command.command_type),
+                updatedAtLocal,
+                command.owner_user_id,
+                currentContourId,
+                response.clientOperationId
+              ]
+            );
+            await resolveRecoverableOutboxConflict(
+              tx,
               command.owner_user_id,
-              currentContourId,
               response.clientOperationId,
-              command.entity_type,
-              response.message,
-              command.payload_json
-            ]
-          );
+              updatedAtLocal
+            );
+          }
 
           if (command.entity_type === "shiftRemark" && command.entity_local_id) {
             await tx.runAsync(
@@ -1498,6 +1889,27 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
           if (assignmentId) {
             if (isCancelledByServer) {
               await finalizeCancelledAssignmentInTransaction(tx, command.owner_user_id, assignmentId);
+              continue;
+            }
+
+            if (recoverableLifecycleRejection) {
+              await tx.runAsync(
+                `UPDATE patrol_assignments
+                    SET status = CASE WHEN status = 'completedLocal' THEN status ELSE 'inProgress' END
+                  WHERE owner_user_id = ? AND assignment_id = ?`,
+                [command.owner_user_id, assignmentId]
+              );
+              await tx.runAsync(
+                `UPDATE patrol_request_board
+                    SET status = CASE WHEN status = 'completedLocal' THEN status ELSE 'inProgress' END
+                  WHERE owner_user_id = ? AND request_id = (
+                    SELECT request_id
+                    FROM patrol_assignments
+                    WHERE owner_user_id = ? AND assignment_id = ?
+                    LIMIT 1
+                  )`,
+                [command.owner_user_id, command.owner_user_id, assignmentId]
+              );
               continue;
             }
 

@@ -36,9 +36,9 @@ export function getReportDeliveryPresentation(input: ReportPresentationInput, le
     case "waitingAuth":
       return warning("signIn", "Войти и продолжить отправку", "Требуется вход", "Отчёт сохранён на телефоне. После входа отправка продолжится без повторного заполнения.");
     case "waitingNetwork":
-      return warning("retry", "Проверить отправку", "Отчёт сохранён на телефоне", "Он отправится автоматически после подключения к серверу.");
+      return warning("retry", "Проверить отправку", "Отчёт сохранён на телефоне", "Очередь доставит его после подключения к серверу.");
     case "retryScheduled":
-      return warning("retry", "Проверить отправку", "Отправка запланирована", delivery.lastError ?? "Сервер временно недоступен. Следующая попытка уже запланирована.");
+      return warning("retry", "Проверить отправку", "Отчёт сохранён, восстанавливаем отправку", delivery.lastError ?? "Очередь продолжит доставку после появления сети.");
     case "wrongContour":
       return danger("serverSettings", "Проверить настройки сервера", "Подключён сервер другого контура", delivery.lastError ?? "Проверьте настройки сервера перед повторной отправкой.");
     case "conflict":

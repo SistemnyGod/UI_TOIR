@@ -1,6 +1,7 @@
 export type OrderedOutboxItem = {
   createdAtLocal: string;
   assignmentId: string | null;
+  aggregateKey?: string | null;
   sequenceNo?: number | null;
   clientOperationId?: string;
 };
@@ -11,6 +12,7 @@ export type OutboxAggregateCommand = {
   entityLocalId?: string | null;
   entityServerId?: string | null;
   payload: Record<string, unknown>;
+  aggregateKey?: string | null;
 };
 
 export function getCommandAssignmentId(command: OutboxAggregateCommand) {
@@ -22,6 +24,9 @@ export function getCommandAssignmentId(command: OutboxAggregateCommand) {
   return typeof payloadAssignmentId === "string" && payloadAssignmentId ? payloadAssignmentId : command.entityLocalId ?? null;
 }
 export function getCommandAggregateKey(command: OutboxAggregateCommand) {
+  if (command.aggregateKey) {
+    return command.aggregateKey;
+  }
   const assignmentId = getCommandAssignmentId(command);
   const isPatrolAggregate = command.entityType === "patrolAssignment"
     || command.entityType === "patrolPoint"

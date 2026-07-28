@@ -98,7 +98,10 @@ export function invalidateServerHealthCache(serverBaseUrl?: string, expectedCont
   healthCache.invalidate(serverBaseUrl ? healthCacheKey(serverBaseUrl, expectedContourId) : undefined);
 }
 
-export async function checkServerConnection(rawServerBaseUrl?: string): Promise<ServerConnectionCheckResult> {
+export async function checkServerConnection(
+  rawServerBaseUrl?: string,
+  options: { useCache?: boolean } = {}
+): Promise<ServerConnectionCheckResult> {
   let serverBaseUrls: string[];
 
   try {
@@ -128,7 +131,9 @@ export async function checkServerConnection(rawServerBaseUrl?: string): Promise<
 
   for (const serverBaseUrl of serverBaseUrls) {
     checkedUrls.push(serverBaseUrl);
-    const probe = await probeServerHealth(serverBaseUrl);
+    const probe = options.useCache
+      ? await probeServerHealthCached(serverBaseUrl)
+      : await probeServerHealth(serverBaseUrl);
     lastStatus = probe.status ?? lastStatus;
 
     if (probe.ok) {

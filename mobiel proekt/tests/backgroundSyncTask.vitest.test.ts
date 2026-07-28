@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   runForegroundSync: vi.fn(),
   recordBackgroundSyncResult: vi.fn(),
-  triggerDailyDiagnosticReportUpload: vi.fn()
+  triggerDailyDiagnosticReportUpload: vi.fn(),
+  triggerPendingDiagnosticReportUpload: vi.fn()
 }));
 
 vi.mock("expo-background-task", () => ({
@@ -23,7 +24,8 @@ vi.mock("expo-task-manager", () => ({
 vi.mock("@/db/database", () => ({ initializeDatabase: vi.fn() }));
 vi.mock("@/services/mobileErrorReporter", () => ({ logMobileError: vi.fn() }));
 vi.mock("@/services/diagnosticReportService", () => ({
-  triggerDailyDiagnosticReportUpload: mocks.triggerDailyDiagnosticReportUpload
+  triggerDailyDiagnosticReportUpload: mocks.triggerDailyDiagnosticReportUpload,
+  triggerPendingDiagnosticReportUpload: mocks.triggerPendingDiagnosticReportUpload
 }));
 vi.mock("@/sync/syncEngine", () => ({
   recoverStaleSendingOutboxCommands: vi.fn(),
@@ -50,6 +52,7 @@ describe("background sync result", () => {
     const result = await runBackgroundSyncTask();
 
     expect(result).toBe(BackgroundTask.BackgroundTaskResult.Failed);
+    expect(mocks.runForegroundSync).toHaveBeenCalledWith({ mode: "networkRecovered" });
     expect(mocks.recordBackgroundSyncResult).toHaveBeenLastCalledWith(
       expect.objectContaining({ skipped: "serverUnavailable", outcome: "skipped" }),
       expect.any(String)

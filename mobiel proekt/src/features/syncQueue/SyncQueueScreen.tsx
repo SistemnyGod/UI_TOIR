@@ -176,7 +176,7 @@ export function SyncQueueScreen() {
 
       {state.commands.length > 0 ? (
         <Card>
-          <Text style={[styles.title, { color: colors.text }]}>Отчеты и команды</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Операции синхронизации</Text>
           {state.commands.map((command) => (
             <View
               key={command.clientOperationId}
@@ -195,7 +195,7 @@ export function SyncQueueScreen() {
                 <Meta label="Попытки" value={String(command.attemptCount)} />
                 <Meta label="Последняя попытка" value={formatDateTime(command.lastAttemptAt)} />
                 <Meta label="Следующая попытка" value={formatDateTime(command.nextAttemptAt)} />
-                <Meta label="Отчёт" value={command.assignmentRouteName ?? command.entityLocalId ?? "-"} />
+                <Meta label={command.commandType === "completePatrolAssignment" ? "Отчёт" : "Маршрут"} value={command.assignmentRouteName ?? command.entityLocalId ?? "-"} />
                 <Meta label="Действие" value={commandActionLabel(command.status)} />
               </View>
               {command.lastError ? (
@@ -316,7 +316,7 @@ function Meta({ label, value }: { label: string; value: string }) {
 
 function buildQueueSummary(state: SyncQueueState) {
   const errors =
-    state.commands.filter((command) => command.status === "conflict" || command.status === "rejected" || Boolean(command.lastError)).length +
+    state.commands.filter((command) => command.status === "conflict" || command.status === "rejected" || command.status === "invalidPayload").length +
     state.files.filter((file) => file.status === "failed").length;
   return { errors };
 }
@@ -384,7 +384,7 @@ function statusLabel(status: string, resolutionStatus: string | null = null) {
     return "Отменено локально";
   }
   if (resolutionStatus === "retryRequested") {
-    return "Повтор отправки создан";
+    return "Автоповтор запланирован";
   }
 
   switch (status) {

@@ -51,9 +51,9 @@ export function subscribeToNetworkSync() {
       }).catch(() => undefined);
     }
 
-    if (networkUsable) {
+    if (networkBecameUsable) {
       requestMobileDataRefresh("network");
-      void triggerForegroundSyncWithRetry({ mode: networkBecameUsable ? "networkRecovered" : "normal" });
+      void triggerForegroundSyncWithRetry({ mode: "networkRecovered" });
       void triggerPendingDiagnosticReportUpload();
       void triggerDailyDiagnosticReportUpload();
     }
@@ -80,32 +80,47 @@ export type TriggerForegroundSyncResult = ForegroundSyncResult | {
   retryableCount: 0;
   outcome: "failed";
 };
+const activeSyncRequests = new Map<string, Promise<TriggerForegroundSyncResult>>();
+
 
 export async function triggerForegroundSyncWithRetry(
   options: ForegroundSyncOptions & { forceRetry?: boolean } = {}
 ): Promise<TriggerForegroundSyncResult> {
   const mode = options.forceRetry ? "manualAll" : options.mode ?? "normal";
-  const pendingRefresh = activeRefreshPromise;
-
-  try {
-    await (pendingRefresh ? pendingRefresh.catch(() => false) : Promise.resolve(false));
-    const result = await runForegroundSync({ mode, assignmentId: options.assignmentId });
-    if (result.skipped === null) {
-      void triggerPendingDiagnosticReportUpload();
-      void triggerDailyDiagnosticReportUpload();
-    }
-    return result;
-  } catch (error) {
-    void logMobileError("sync.trigger.failed", error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (isReauthenticationRequiredError(errorMessage)) {
-      return { sent: 0, skipped: "unauthenticated", hasMore: false, nextRetryAt: null, retryableCount: 0, outcome: "skipped" };
-    }
-
-    return { sent: 0, skipped: "failed", hasMore: false, nextRetryAt: null, retryableCount: 0, outcome: "failed" };
+  const requestKey = `${mode}:${options.assignmentId ?? "*"}`;
+  const activeRequest = activeSyncRequests.get(requestKey);
+  if (activeRequest) {
+    return activeRequest;
   }
-}
 
+  const pendingRefresh = activeRefreshPromise;
+  let request!: Promise<TriggerForegroundSyncResult>;
+  request = (async (): Promise<TriggerForegroundSyncResult> => {
+    try {
+      await (pendingRefresh ? pendingRefresh.catch(() => false) : Promise.resolve(false));
+      const result = await runForegroundSync({ mode, assignmentId: options.assignmentId });
+      if (result.skipped === null) {
+        void triggerPendingDiagnosticReportUpload();
+        void triggerDailyDiagnosticReportUpload();
+      }
+      return result;
+    } catch (error) {
+      void logMobileError("sync.trigger.failed", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (isReauthenticationRequiredError(errorMessage)) {
+        return { sent: 0, skipped: "unauthenticated", hasMore: false, nextRetryAt: null, retryableCount: 0, outcome: "skipped" };
+      }
+
+      return { sent: 0, skipped: "failed", hasMore: false, nextRetryAt: null, retryableCount: 0, outcome: "failed" };
+    }
+  })().finally(() => {
+    if (activeSyncRequests.get(requestKey) === request) {
+      activeSyncRequests.delete(requestKey);
+    }
+  });
+  activeSyncRequests.set(requestKey, request);
+  return request;
+}
 export { requestSyncAfterMutation };
 
 export function triggerMobileDataRefresh() {

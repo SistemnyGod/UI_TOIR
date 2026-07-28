@@ -18,8 +18,9 @@ import { useAppTheme } from "@/features/settings/themePreference";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
+import { requestPatrolSync } from "@/sync/PatrolSyncCoordinator";
 
-type NfcStatus = "idle" | "reading" | "matched" | "unmatched" | "unsupported" | "disabled" | "error";
+type NfcStatus = "idle" | "reading" | "matched" | "unmatched" | "unsupported" | "disabled" | "blocked" | "routeUnavailable" | "error";
 
 export function ScanNfcScreen() {
   const router = useRouter();
@@ -40,9 +41,14 @@ export function ScanNfcScreen() {
       ownerUserId ? listAssignmentPoints(assignmentId, ownerUserId, currentContourId) : Promise.resolve([])
     ]);
 
+    const loadedProgress = buildProgress(points);
     setRouteName(assignment?.routeName ?? null);
-    setProgress(buildProgress(points));
+    setProgress(loadedProgress);
     setNextPoint(points.find((point) => !["ok", "issue", "skipped"].includes(point.status)) ?? null);
+    if (loadedProgress.total === 0) {
+      setStatus("routeUnavailable");
+      setMessage("Метки маршрута ещё не загружены. Обновите маршрут перед сканированием.");
+    }
     setProgressError(null);
   }, [assignmentId]);
   const [message, setMessage] = useState("Поднесите телефон к NFC-метке.");
@@ -77,11 +83,10 @@ export function ScanNfcScreen() {
         return;
       }
 
-      const nfcCode = nfcCodes.join(" / ");
       const result = await scanPointByNfc(assignmentId, nfcCodes);
       if (!result.matched) {
         setStatus("unmatched");
-        setMessage(`Метка не соответствует этому обходу. Прочитан код: ${result.scannedCode ?? nfcCode}`);
+        setMessage("Метка не относится к выбранному маршруту.");
         return;
       }
 
@@ -89,8 +94,15 @@ export function ScanNfcScreen() {
       setMessage("NFC подтвержден.");
       router.replace(`/patrol/assignment/${assignmentId}/point/${result.point.pointId}/fill`);
     } catch (error) {
-      setStatus("error");
-      setMessage(error instanceof Error ? error.message : "NFC недоступен или чтение отменено.");
+      const errorMessage = error instanceof Error ? error.message : "NFC недоступен или чтение отменено.";
+      if (isLifecycleScanBlock(errorMessage)) {
+        setStatus("blocked");
+        setMessage("Запуск обхода восстанавливается. Повторите сканирование через несколько секунд.");
+        void requestPatrolSync({ mode: "normal" });
+      } else {
+        setStatus("error");
+        setMessage(errorMessage);
+      }
     } finally {
       scanInProgressRef.current = false;
     }
@@ -111,7 +123,10 @@ export function ScanNfcScreen() {
   );
 
   useEffect(() => {
-    if (autoScanStartedRef.current) {
+    if (autoScanStartedRef.current || progress === null) {
+      return;
+    }
+    if (progress.total === 0) {
       return;
     }
 
@@ -121,7 +136,7 @@ export function ScanNfcScreen() {
     return () => {
       void cancelNfcRead();
     };
-  }, [handleScan]);
+  }, [handleScan, progress]);
 
   return (
     <Screen title="Сканирование NFC" subtitle={undefined}>
@@ -150,18 +165,24 @@ export function ScanNfcScreen() {
           <Ionicons color="#1e5bff" name="scan-outline" size={44} />
         </View>
         <Text style={styles.title}>{message}</Text>
-        {status === "error" || status === "unmatched" || status === "unsupported" || status === "disabled" ? (
+        {status === "error" || status === "unmatched" || status === "unsupported" || status === "disabled" || status === "blocked" || status === "routeUnavailable" ? (
           <>
           <StatusPill label={statusLabel(status)} tone={statusTone(status)} />
           <Text style={styles.text}>
-            Если метка не считалась, поднесите телефон ближе или откройте точку из списка меток.
+            {status === "blocked"
+              ? "Данные обхода сохранены. Приложение восстанавливает запуск автоматически."
+              : status === "routeUnavailable"
+                ? "Сканирование будет доступно после загрузки точек маршрута."
+                : "Если метка не считалась, поднесите телефон ближе или откройте точку из списка меток."}
           </Text>
           </>
         ) : null}
       </Card>
 
       {status === "reading" ? <ActivityIndicator /> : null}
-      {status === "error" || status === "unmatched" || status === "disabled" ? (
+      {status === "routeUnavailable" ? (
+        <PrimaryButton icon="refresh-outline" label="Обновить маршрут" onPress={() => void loadRouteProgress()} />
+      ) : status === "error" || status === "unmatched" || status === "disabled" || status === "blocked" ? (
         <PrimaryButton icon="scan-outline" label={scanButtonLabel(status)} onPress={handleScan} />
       ) : null}
       <PrimaryButton icon="list-outline" label="Все метки" onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} variant="secondary" />
@@ -189,6 +210,10 @@ function statusLabel(status: NfcStatus) {
       return "NFC подтвержден";
     case "error":
       return "Ошибка NFC";
+    case "blocked":
+      return "Запуск обхода восстанавливается";
+    case "routeUnavailable":
+      return "Маршрут ещё не загружен";
     case "unmatched":
       return "\u041c\u0435\u0442\u043a\u0430 \u0434\u0440\u0443\u0433\u043e\u0433\u043e \u043e\u0431\u0445\u043e\u0434\u0430";
     case "unsupported":
@@ -205,6 +230,10 @@ function statusTone(status: NfcStatus) {
     return "success";
   }
 
+  if (status === "blocked") {
+    return "warning";
+  }
+
   if (status === "error" || status === "unmatched" || status === "unsupported" || status === "disabled") {
     return "danger";
   }
@@ -212,6 +241,13 @@ function statusTone(status: NfcStatus) {
   return "neutral";
 }
 
+
+function isLifecycleScanBlock(message: string) {
+  const normalized = message.toLowerCase();
+  return normalized.includes("действие заблокировано текущим статусом назначения")
+    || normalized.includes("действие недоступно для текущего статуса назначения")
+    || normalized.includes("point action is unavailable after patrol completion");
+}
 const styles = StyleSheet.create({
   routeName: {
     fontSize: 18,

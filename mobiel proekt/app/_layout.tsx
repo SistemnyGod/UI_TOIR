@@ -19,7 +19,8 @@ import { installMobileErrorReporter, logMobileError } from "@/services/mobileErr
 import { sanitizeDiagnosticMessage } from "@/services/diagnosticReportPolicy";
 import { registerBackgroundSyncTask } from "@/sync/backgroundSyncTask";
 import { registerBackgroundNotificationTask } from "@/services/backgroundNotificationTask";
-import { requestMobileDataRefresh, subscribeToNetworkSync, triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { requestMobileDataRefresh } from "@/sync/syncTriggers";
+import { requestPatrolSync, startPatrolSyncCoordinator } from "@/sync/PatrolSyncCoordinator";
 import { cancelNextOutboxRetry, scheduleNextOutboxRetry } from "@/sync/outboxRetryScheduler";
 import { resolvePushNavigationTarget } from "@/services/pushNavigationResolver";
 
@@ -63,7 +64,7 @@ export default function RootLayout() {
       return undefined;
     }
 
-    const unsubscribeNetworkSync = subscribeToNetworkSync();
+    const stopPatrolSync = startPatrolSyncCoordinator();
     void registerBackgroundSyncTask().catch((error) => {
       void logMobileError("background.sync.registration.failed", error);
     });
@@ -74,12 +75,12 @@ export default function RootLayout() {
       onNotification: () => {
         void syncMobileNotifications().catch(() => []);
         requestMobileDataRefresh("push", { force: true });
-        triggerForegroundSyncWithRetry();
+        requestPatrolSync();
       },
       onNotificationResponse: (response) => {
         void syncMobileNotifications().catch(() => []);
         requestMobileDataRefresh("notificationResponse", { force: true });
-        triggerForegroundSyncWithRetry();
+        requestPatrolSync();
         openNotificationTarget(response);
       }
     });
@@ -97,13 +98,13 @@ export default function RootLayout() {
         void getStoredOwnerUserId().then(scheduleNextOutboxRetry).catch((error) => {
           void logMobileError("sync.retry_schedule.failed", error);
         });
-        void triggerForegroundSyncWithRetry({ mode: "normal" });
+        void requestPatrolSync({ mode: "normal" });
         void refreshPushRegistrationIfAllowed().catch(() => undefined);
       }
     });
 
     return () => {
-      unsubscribeNetworkSync();
+      stopPatrolSync();
       unsubscribePushEvents();
       appStateSubscription.remove();
       cancelNextOutboxRetry();

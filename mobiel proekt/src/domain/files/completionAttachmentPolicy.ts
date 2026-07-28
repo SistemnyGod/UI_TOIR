@@ -35,44 +35,44 @@ export function getCompletionAttachmentFailure(
   context: CompletionAttachmentContext
 ) {
   if (!file) {
-    return "local file record is missing";
+    return "Запись вложения не найдена на телефоне";
   }
   if (file.ownerUserId !== context.ownerUserId) {
-    return "local file belongs to another user";
+    return "Вложение принадлежит другому пользователю";
   }
   if (file.contourId !== context.contourId) {
-    return "local file belongs to another contour";
+    return "Вложение относится к другому серверному контуру";
   }
   if (file.assignmentId !== context.assignmentId || file.pointId !== context.pointId) {
-    return "local file is not linked to this assignment point";
+    return "Вложение не связано с этой точкой обхода";
   }
   if (file.status === "failed") {
-    return "local file has failed status";
+    return "Вложение повреждено или ранее не прошло проверку";
   }
   if (!physicalFile?.exists || typeof physicalFile.size !== "number" || physicalFile.size <= 0) {
-    return "local file is missing or empty on device";
+    return "Файл вложения отсутствует или пуст на телефоне";
   }
   if (typeof file.sizeBytes !== "number" || file.sizeBytes <= 0) {
-    return "local file size is missing or empty";
+    return "Не удалось определить размер вложения";
   }
 
   const isVideo = file.mediaKind === "video" || file.contentType === "video/mp4";
   const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_PHOTO_BYTES;
   if (file.sizeBytes > maxBytes || physicalFile.size > maxBytes) {
-    return isVideo ? "video exceeds the 30 MB limit" : "photo exceeds the 6 MB limit";
+    return isVideo ? "Видео превышает допустимый размер 30 МБ" : "Фото превышает допустимый размер 6 МБ";
   }
   if (!file.sha256?.trim()) {
-    return "local file SHA-256 is missing";
+    return "У вложения отсутствует контрольная сумма";
   }
   if (
     (file.mediaKind === "photo" && file.contentType !== "image/jpeg")
     || (file.mediaKind === "video" && file.contentType !== "video/mp4")
     || (!file.mediaKind && file.contentType !== "image/jpeg" && file.contentType !== "video/mp4")
   ) {
-    return "local file media type is invalid";
+    return "Формат вложения не поддерживается";
   }
   if (context.requiredPhoto && file.mediaKind !== "photo") {
-    return "required evidence must be a photo";
+    return "Для этой точки требуется именно фотография";
   }
 
   return null;

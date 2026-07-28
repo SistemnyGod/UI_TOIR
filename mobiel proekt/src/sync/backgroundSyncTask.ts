@@ -19,7 +19,7 @@ export async function runBackgroundSyncTask() {
   try {
     await initializeDatabase();
     await recoverStaleSendingOutboxCommands();
-    const result = await runForegroundSync();
+    const result = await runForegroundSync({ mode: "networkRecovered" });
 
     await recordBackgroundSyncResult(result, attemptAt).catch((error) => {
       void logMobileError("background.sync.state-save.failed", error);

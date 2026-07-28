@@ -426,7 +426,11 @@ export function PointFillScreen() {
   }
 
   return (
-    <Screen title="Результат точки" subtitle="Заполните только необходимые сведения.">
+    <Screen
+      bottomAction={<PrimaryButton disabled={isSubmitting || isMediaBusy} icon="save-outline" label="Сохранить и продолжить" onPress={handleSave} size="large" />}
+      title="Результат точки"
+      subtitle="Заполните только необходимые сведения."
+    >
       <Card>
         <View style={styles.row}>
           <Text style={[styles.title, { color: colors.text }]}>
@@ -519,7 +523,6 @@ export function PointFillScreen() {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {isSubmitting ? <ActivityIndicator /> : null}
-      <PrimaryButton disabled={isSubmitting || isMediaBusy} icon="save-outline" label="Сохранить и продолжить" onPress={handleSave} size="large" />
       <View style={styles.bottomActions}>
         <Pressable accessibilityRole="button" onPress={() => setPhase("status")} style={styles.inlineLink}>
           <Ionicons color={colors.primary} name="swap-horizontal-outline" size={19} />

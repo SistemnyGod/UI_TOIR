@@ -12,6 +12,7 @@ import { subscribeToSyncEvents } from "@/sync/syncEvents";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { ScreenList } from "@/ui/Screen";
+import { SelectionTabs, SelectionTransition } from "@/ui/SelectionTabs";
 import { StatusPill } from "@/ui/StatusPill";
 
 type RequestTab = "all" | "history";
@@ -99,7 +100,9 @@ export function RequestBoardScreen() {
   }, [activeTab, items]);
 
   const renderItem: ListRenderItem<RequestBoardItem> = ({ item }) => (
-    <RequestCard item={item} onPress={() => router.push(`/patrol/request/${item.requestId}`)} />
+    <SelectionTransition selectionKey={activeTab}>
+      <RequestCard item={item} onPress={() => router.push(`/patrol/request/${item.requestId}`)} />
+    </SelectionTransition>
   );
 
   return (
@@ -124,10 +127,15 @@ export function RequestBoardScreen() {
       subtitle="Откройте заявку, чтобы проверить маршрут."
       headerContent={
         <>
-          <View style={styles.tabBar}>
-            <RequestTabButton active={activeTab === "all"} count={summary.all} label="Все заявки" onPress={() => setActiveTab("all")} />
-            <RequestTabButton active={activeTab === "history"} count={summary.history} label="История" onPress={() => setActiveTab("history")} />
-          </View>
+          <SelectionTabs<RequestTab>
+            accessibilityLabel="Разделы заявок"
+            items={[
+              { count: summary.all, icon: "file-tray-full-outline", label: "Все заявки", value: "all" },
+              { count: summary.history, icon: "time-outline", label: "История", value: "history" }
+            ]}
+            onChange={setActiveTab}
+            value={activeTab}
+          />
 
           {message ? <Text style={[styles.message, { color: colors.mutedText }]}>{message}</Text> : null}
         </>
@@ -146,7 +154,7 @@ function RequestCard({ item, onPress }: { item: RequestBoardItem; onPress: () =>
         <View style={styles.requestContent}>
           <View style={styles.row}>
             <View style={styles.titleBox}>
-              <Text style={[styles.displayNumber, { color: colors.mutedText }]}>{item.displayNumber ?? shortRequestId(item.requestId)}</Text>
+              {item.displayNumber ? <Text style={[styles.displayNumber, { color: colors.mutedText }]}>{item.displayNumber}</Text> : null}
               <Text numberOfLines={2} style={[styles.title, { color: colors.text }]}>{item.routeName}</Text>
             </View>
             <StatusPill label={statusLabel(item.status)} tone={statusTone(item.status)} />
@@ -162,14 +170,6 @@ function RequestCard({ item, onPress }: { item: RequestBoardItem; onPress: () =>
   );
 }
 
-function RequestTabButton({ active, count, label, onPress }: { active: boolean; count: number; label: string; onPress: () => void }) {
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={[styles.tabButton, active ? styles.tabButtonActive : null]}>
-      <Text style={[styles.tabLabel, active ? styles.tabLabelActive : null]}>{label}</Text>
-      <Text style={[styles.tabCount, active ? styles.tabCountActive : null]}>{count}</Text>
-    </Pressable>
-  );
-}
 
 function statusLabel(status: string) {
   switch (status) {
@@ -227,10 +227,6 @@ function statusLineStyle(status: string) {
   return styles.statusLineNeutral;
 }
 
-function shortRequestId(requestId: string) {
-  return `#${requestId.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
-}
-
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("ru-RU", {
     day: "2-digit",
@@ -241,43 +237,7 @@ function formatDateTime(value: string) {
 }
 
 const styles = StyleSheet.create({
-  tabBar: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
-  },
-  tabButton: {
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderColor: "#dbe5f2",
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 6,
-    minHeight: 48,
-    paddingHorizontal: 12,
-    paddingVertical: 8
-  },
-  tabButtonActive: {
-    backgroundColor: "#1e5bff",
-    borderColor: "#1e5bff"
-  },
-  tabLabel: {
-    color: "#344563",
-    fontSize: 12,
-    fontWeight: "800"
-  },
-  tabLabelActive: {
-    color: "#ffffff"
-  },
-  tabCount: {
-    color: "#1e5bff",
-    fontSize: 12,
-    fontWeight: "900"
-  },
-  tabCountActive: {
-    color: "#ffffff"
-  },
+
   requestCard: {
     overflow: "hidden",
     padding: 0

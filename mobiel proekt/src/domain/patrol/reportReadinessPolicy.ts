@@ -56,6 +56,24 @@ export function evaluateRequiredPointReadiness(points: readonly RequiredPointRea
   };
 }
 
+export function evaluateReportPointReadiness(points: readonly RequiredPointReadinessInput[]) {
+  const terminalPoints = points.filter((point) => isTerminalPointStatus(point.status));
+  const problems: RequiredPointReadinessProblem[] = points
+    .filter((point) => !isTerminalPointStatus(point.status))
+    .map((point) => ({
+      pointId: point.pointId,
+      pointName: point.pointName,
+      orderIndex: point.orderIndex,
+      reason: getRequiredPointProblemReason(point.status)
+    }));
+
+  return {
+    totalCount: points.length,
+    terminalCount: terminalPoints.length,
+    problems,
+    ready: points.length > 0 && points.length === terminalPoints.length
+  };
+}
 export function canCreateCompletionCommand(assignmentExists: boolean, readinessReady: boolean) {
   return assignmentExists && readinessReady;
 }

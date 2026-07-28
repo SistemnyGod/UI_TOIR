@@ -5,9 +5,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAppTheme } from "@/features/settings/themePreference";
 
-const tabIcon = (name: keyof typeof Ionicons.glyphMap) =>
-  function Icon({ color, size }: { color: ColorValue; size: number }) {
-    return <Ionicons color={String(color)} name={name} size={size} />;
+const tabIcon = (outline: keyof typeof Ionicons.glyphMap, filled: keyof typeof Ionicons.glyphMap) =>
+  function Icon({ color, focused, size }: { color: ColorValue; focused: boolean; size: number }) {
+    return <Ionicons color={String(color)} name={focused ? filled : outline} size={focused ? size + 1 : size} />;
   };
 
 export default function TabsLayout() {
@@ -19,7 +19,10 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
+        animation: "fade",
         headerShown: false,
+        lazy: true,
+        tabBarActiveBackgroundColor: colors.backgroundAccent,
         tabBarActiveTintColor: colors.primary,
         tabBarHideOnKeyboard: true,
         tabBarInactiveTintColor: colors.mutedText,
@@ -28,6 +31,9 @@ export default function TabsLayout() {
           marginTop: 0
         },
         tabBarItemStyle: {
+          borderRadius: 16,
+          marginHorizontal: 3,
+          overflow: "hidden",
           paddingTop: 7
         },
         tabBarLabelStyle: {
@@ -48,13 +54,19 @@ export default function TabsLayout() {
           shadowOffset: { width: 0, height: -4 },
           shadowOpacity: 0.08,
           shadowRadius: 14
+        },
+        transitionSpec: {
+          animation: "timing",
+          config: {
+            duration: 160
+          }
         }
       }}
     >
-      <Tabs.Screen name="patrol" options={{ title: "Обход", tabBarIcon: tabIcon("shield-checkmark-outline") }} />
-      <Tabs.Screen name="all-points" options={{ title: "Метки", tabBarIcon: tabIcon("list-outline") }} />
-      <Tabs.Screen name="work-accounting" options={{ title: "Работы", tabBarIcon: tabIcon("construct-outline") }} />
-      <Tabs.Screen name="profile" options={{ title: "Профиль", tabBarIcon: tabIcon("person-circle-outline") }} />
+      <Tabs.Screen name="patrol" options={{ title: "Обход", tabBarIcon: tabIcon("shield-checkmark-outline", "shield-checkmark") }} />
+      <Tabs.Screen name="all-points" options={{ title: "Метки", tabBarIcon: tabIcon("list-outline", "list") }} />
+      <Tabs.Screen name="work-accounting" options={{ title: "Работы", tabBarIcon: tabIcon("construct-outline", "construct") }} />
+      <Tabs.Screen name="profile" options={{ title: "Профиль", tabBarIcon: tabIcon("person-circle-outline", "person-circle") }} />
     </Tabs>
   );
 }

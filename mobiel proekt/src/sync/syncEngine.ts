@@ -22,6 +22,7 @@ import {
   activateRetryableReportCommands,
   applyOutboxResponses,
   activateWaitingAuthOutboxCommands,
+  activateWrongContourOutboxCommands,
   countRetryableOutboxCommands,
   countOutboxDeliveryProblems,
   finalizeAcceptedCompleteReportCommands,
@@ -30,11 +31,13 @@ import {
   markPendingOutboxCommandsAuthRequired,
   markPendingOutboxCommandsWaitingNetwork,
   markPendingOutboxCommandsWrongContour,
+  quarantineInvalidPatrolCompletionCommands,
   markOutboxCommandsWrongContour,
   markOutboxCommandsRejected,
   markOutboxCommandsRetryLater,
   markOutboxCommandsSending,
   markPendingOutboxCommandsRetryLater,
+  reactivateRecoverableRejectedPointCommands,
   reactivateRecoverableRejectedStartCommands,
   resetStaleSendingOutboxCommands
 } from "@/db/repositories/outboxRepository";
@@ -50,7 +53,7 @@ import { getCommandAggregateKey } from "@/sync/outboxOrderingPolicy";
 import { mapWithConcurrency } from "@/sync/boundedAsync";
 import { shouldContinueOutboxSync } from "@/sync/outboxContinuationPolicy";
 import { scheduleNextOutboxRetry } from "@/sync/outboxRetryScheduler";
-import { emitSyncEvent } from "@/sync/syncEvents";
+import { emitSyncEvent, mergeSyncEvents, type SyncEvent } from "@/sync/syncEvents";
 import { extractUploadClientFileIds, extractUploadFileReferences } from "@/sync/uploadCandidatePolicy";
 import type { UploadFileReference } from "@/sync/uploadCandidatePolicy";
 import { FileUploadFailureDisposition, PermanentFileUploadError, getFileUploadFailureDisposition } from "@/domain/files/fileUploadPolicy";
@@ -128,6 +131,16 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions)
     ? `patrolAssignment:${options.assignmentId}`
     : undefined;
 
+  const quarantined = await quarantineInvalidPatrolCompletionCommands(ownerUserId, options.assignmentId);
+  if (quarantined.assignmentIds.length > 0) {
+    emitSyncEvent({
+      acceptedOperationIds: [],
+      completedAssignmentIds: [],
+      changedAssignmentIds: quarantined.assignmentIds,
+      deliveryChangedAssignmentIds: quarantined.assignmentIds
+    });
+  }
+
   if (options.mode === "manualReport" && options.assignmentId) {
     await reconcileAcceptedCompleteReports(options.assignmentId);
     await resetStaleSendingOutboxCommands(ownerUserId, getStaleSendingBoundaryIso(), aggregateKey);
@@ -137,9 +150,10 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions)
     await prepareSyncRequest(ownerUserId, options);
   }
   await finalizeAcceptedCompleteReportCommands(ownerUserId, options.assignmentId);
+  await reactivateRecoverableRejectedStartCommands(ownerUserId, options.assignmentId);
+  await reactivateRecoverableRejectedPointCommands(ownerUserId, options.assignmentId);
   if (!aggregateKey) {
     await reclaimAcceptedLocalMedia(ownerUserId);
-    await reactivateRecoverableRejectedStartCommands(ownerUserId);
   }
 
   if (!(await hasUsableNetwork())) {
@@ -147,7 +161,7 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions)
     return buildForegroundSyncResult(ownerUserId, { sent: 0, skipped: "offline", hasMore: false });
   }
 
-  const serverCheck = await checkServerConnection();
+  const serverCheck = await checkServerConnection(undefined, { useCache: true });
   if (!serverCheck.ok) {
     if (serverCheck.failureKind === "wrongContour") {
       await markPendingOutboxCommandsWrongContour(ownerUserId, serverCheck.message, aggregateKey);
@@ -163,14 +177,16 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions)
     return buildForegroundSyncResult(ownerUserId, { sent: 0, skipped: "serverUnavailable", hasMore: false });
   }
 
+  await activateWrongContourOutboxCommands(ownerUserId, aggregateKey);
+
   const accessTokenState = await ensureAccessTokenForSync(ownerUserId, aggregateKey);
   if (accessTokenState !== "ok") {
     return buildForegroundSyncResult(ownerUserId, { sent: 0, skipped: accessTokenState, hasMore: false });
   }
 
+  await activateWaitingAuthOutboxCommands(ownerUserId, aggregateKey);
   if (!aggregateKey) {
     await resetStaleSendingOutboxCommands(ownerUserId, getStaleSendingBoundaryIso());
-    await activateWaitingAuthOutboxCommands(ownerUserId);
   }
   await reconcileAcceptedCompleteReports(options.assignmentId);
 
@@ -186,7 +202,9 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions)
     processedBatches += 1;
     commands.forEach((command) => attemptedOperationIds.add(command.clientOperationId));
 
-    await processOrderedOutboxBatch(commands, {
+    const batchEvents: SyncEvent[] = [];
+    try {
+      await processOrderedOutboxBatch(commands, {
       getDependencyKey: getCommandDependencyKey,
       isFatal: (error) => isAuthRequiredError(error) || isOfflineNetworkError(error),
       process: async (command) => {
@@ -198,7 +216,7 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions)
           await applyOutboxResponses(ownerUserId, responses);
           await reclaimAcceptedLocalMedia(ownerUserId, getAcceptedCompletionFileIds([command], responses));
           logAcceptedReports([command], responses);
-          emitSyncEvent(buildSyncEvent([command], responses));
+          batchEvents.push(buildSyncEvent([command], responses));
           sent += responses.length;
         } catch (error) {
           const readableError = getReadableSyncError(error);
@@ -214,11 +232,16 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions)
           } else {
             await markOutboxCommandsRetryLater(ownerUserId, commandIds, readableError, null, getRetryReason(error));
           }
-          emitSyncEvent(buildSyncEvent([command], [], [getCommandAssignmentId(command)].filter((id): id is string => id !== null)));
+          batchEvents.push(buildSyncEvent([command], [], [getCommandAssignmentId(command)].filter((id): id is string => id !== null)));
           throw error;
         }
       }
-    });
+      });
+    } finally {
+      if (batchEvents.length > 0) {
+        emitSyncEvent(mergeSyncEvents(batchEvents));
+      }
+    }
   }
 
   const hasMore = shouldContinueOutboxSync(

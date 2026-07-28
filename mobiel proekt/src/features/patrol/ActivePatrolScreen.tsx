@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
@@ -18,7 +18,8 @@ import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { reconcileAcceptedCompleteReports } from "@/sync/syncEngine";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
-import { requestMobileDataRefresh, triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { requestMobileDataRefresh } from "@/sync/syncTriggers";
+import { requestPatrolSync } from "@/sync/PatrolSyncCoordinator";
 import { ActionSheet } from "@/ui/ActionSheet";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -36,19 +37,24 @@ export function ActivePatrolScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isActing, setIsActing] = useState(false);
+  const actionInProgressRef = useRef(false);
 
   const loadAssignment = useCallback(async () => {
     setIsLoading(true);
-    const [loadedAssignment, loadedProgress, loadedScanPolicy] = await Promise.all([
-      getAssignmentById(assignmentId),
-      getAssignmentProgress(assignmentId),
-      getAssignmentScanPolicy(assignmentId)
-    ]);
-    setAssignment(loadedAssignment);
-    setScanPolicy(loadedScanPolicy);
-    setProgress(loadedAssignment ? loadedProgress : null);
-    setLoadError(null);
-    setIsLoading(false);
+    try {
+      const [loadedAssignment, loadedProgress, loadedScanPolicy] = await Promise.all([
+        getAssignmentById(assignmentId),
+        getAssignmentProgress(assignmentId),
+        getAssignmentScanPolicy(assignmentId)
+      ]);
+      setAssignment(loadedAssignment);
+      setScanPolicy(loadedScanPolicy);
+      setProgress(loadedAssignment ? loadedProgress : null);
+      setLoadError(null);
+    } finally {
+      setIsLoading(false);
+    }
   }, [assignmentId]);
 
   useFocusEffect(
@@ -70,7 +76,10 @@ export function ActivePatrolScreen() {
 
   useEffect(() => subscribeToSyncEvents((event) => {
     if (event.snapshotRefreshed === true || event.completedAssignmentIds.includes(assignmentId) || event.cancelledAssignmentIds?.includes(assignmentId)) {
-      void loadAssignment();
+      void loadAssignment().catch((caught) => {
+        void logMobileError("patrol.active-sync-load.failed", caught);
+        setLoadError(caught instanceof Error ? caught.message : "Не удалось обновить текущий обход.");
+      });
     }
   }), [assignmentId, loadAssignment]);
 
@@ -78,24 +87,36 @@ export function ActivePatrolScreen() {
     if (assignment?.status === "completedLocal") {
       void reconcileAcceptedCompleteReports(assignment.assignmentId)
         .then(() => loadAssignment())
-        .finally(triggerForegroundSyncWithRetry);
+        .catch((caught) => {
+          void logMobileError("patrol.active-reconcile.failed", caught);
+          setLoadError(caught instanceof Error ? caught.message : "Не удалось проверить доставку отчёта.");
+        })
+        .finally(() => { void requestPatrolSync({ mode: "normal" }); });
     }
   }, [assignment?.assignmentId, assignment?.status, loadAssignment]);
 
   async function runAction(action: () => Promise<void>) {
+    if (actionInProgressRef.current) {
+      return;
+    }
+    actionInProgressRef.current = true;
+    setIsActing(true);
     setError(null);
     try {
       await action();
       await loadAssignment();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Не удалось выполнить действие.");
+    } finally {
+      actionInProgressRef.current = false;
+      setIsActing(false);
     }
   }
 
   async function handleRetrySubmit() {
     await runAction(async () => {
       await reconcileAcceptedCompleteReports(assignmentId);
-      await triggerForegroundSyncWithRetry({ mode: "manualReport", assignmentId });
+      await requestPatrolSync({ mode: "manualReport", assignmentId });
     });
   }
 
@@ -141,10 +162,11 @@ export function ActivePatrolScreen() {
     <Screen
       title={assignment.routeName}
       subtitle="Следуйте следующему действию — прогресс сохраняется автоматически."
-      floatingAction={isInProgress ? (
+      bottomAction={isInProgress ? (
         <PrimaryButton
+          disabled={isActing || progress.total === 0}
           icon={isReadyForReview ? "document-text-outline" : "scan-outline"}
-          label={isReadyForReview ? "Проверить и отправить отчёт" : "Сканировать NFC"}
+          label={progress.total === 0 ? "Загружаем метки маршрута" : isReadyForReview ? "Проверить и отправить отчёт" : "Сканировать NFC"}
           onPress={() => router.push(isReadyForReview ? `/patrol/assignment/${assignment.assignmentId}/submit` : `/patrol/assignment/${assignment.assignmentId}/scan-nfc`)}
           size="large"
         />
@@ -155,7 +177,7 @@ export function ActivePatrolScreen() {
           <View style={styles.routeTextBox}>
             <Text style={[styles.employeeLine, { color: colors.mutedText }]}>Текущий обход</Text>
             <Text style={[styles.routeTitle, { color: colors.text }]}>{assignment.routeName}</Text>
-            <Text style={[styles.text, { color: colors.mutedText }]}>ID: {assignment.assignmentId}</Text>
+
             <Text style={[styles.text, { color: colors.mutedText }]}>Начат: {formatDateTime(assignment.startedAtLocal)}</Text>
           </View>
           <StatusPill label={assignmentStatusLabel(assignment.status)} tone={assignmentStatusTone(assignment.status)} />
@@ -163,7 +185,7 @@ export function ActivePatrolScreen() {
 
         <View style={styles.progressHeader}>
           <Text style={[styles.progressLabel, { color: colors.text }]}>Прогресс</Text>
-          <Text style={[styles.progressLabel, { color: colors.text }]}>{progress.completed} из {progress.total} точек</Text>
+          <Text style={[styles.progressLabel, { color: colors.text }]}>{progress.total === 0 ? "Загружаем точки маршрута" : `${progress.completed} из ${progress.total} точек`}</Text>
         </View>
         <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
           <View style={[styles.progressFill, { width: `${percent}%` }]} />
@@ -190,7 +212,7 @@ export function ActivePatrolScreen() {
       {isCompletedLocal ? (
         <Card style={styles.stateCard}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Отчет сохранен на телефоне</Text>
-          <Text style={[styles.text, { color: colors.mutedText }]}>Отправка продолжится автоматически при связи. Можно повторить вручную из очереди.</Text>
+          <Text style={[styles.text, { color: colors.mutedText }]}>Отчёт отправляется только после ручного подтверждения. Если он сохранён офлайн, очередь доставит его после подключения.</Text>
         </Card>
       ) : null}
 
@@ -203,6 +225,7 @@ export function ActivePatrolScreen() {
 
       {isAccepted || isPaused ? (
         <PrimaryButton
+          disabled={isActing || progress.total === 0}
           icon="play-outline"
           label={isPaused ? "Продолжить обход" : "Начать обход"}
           onPress={() => runAction(async () => {
@@ -215,21 +238,7 @@ export function ActivePatrolScreen() {
           size="large"
         />
       ) : null}
-      {isInProgress ? (
-        <PrimaryButton
-          icon={isReadyForReview ? "document-text-outline" : "scan-outline"}
-          label={isReadyForReview ? "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430" : scanPolicy.nfcEnabled ? "NFC" : scanPolicy.qrFallbackEnabled ? "QR" : "\u0421\u043f\u0438\u0441\u043e\u043a"}
-          onPress={() => router.push(isReadyForReview
-            ? `/patrol/assignment/${assignment.assignmentId}/submit`
-            : scanPolicy.nfcEnabled
-              ? `/patrol/assignment/${assignment.assignmentId}/scan-nfc`
-              : scanPolicy.qrFallbackEnabled
-                ? `/patrol/assignment/${assignment.assignmentId}/scan-qr`
-                : `/patrol/assignment/${assignment.assignmentId}/all-points`)}
-          size="large"
-        />
-      ) : null}
-      {isCompletedLocal ? <PrimaryButton icon="refresh-outline" label="Повторить отправку" onPress={handleRetrySubmit} size="large" /> : null}
+      {isCompletedLocal ? <PrimaryButton disabled={isActing} icon="refresh-outline" label="Повторить отправку" onPress={handleRetrySubmit} size="large" /> : null}
       {isBlocked ? <PrimaryButton icon="cloud-upload-outline" label="Открыть очередь" onPress={() => router.push("/settings/sync-queue" as never)} size="large" /> : null}
       {isCompletedServer ? <PrimaryButton icon="checkmark-circle-outline" label="К новым заявкам" onPress={() => router.replace("/patrol/request-board")} size="large" /> : null}
 
@@ -311,7 +320,7 @@ function nextStepText(status: ActiveAssignment["status"], progress: AssignmentPr
     return "Нажмите \"Продолжить обход\", чтобы вернуться к меткам.";
   }
   if (status === "completedLocal") {
-    return "Отчет сохранен. Он отправится автоматически, статус виден в очереди.";
+    return "Отчёт сохранён после ручного подтверждения. Если сети нет, он будет доставлен после подключения.";
   }
   if (status === "completedServer") {
     return "Отчет принят сервером. Можно выбрать новую заявку.";

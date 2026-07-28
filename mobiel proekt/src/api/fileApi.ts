@@ -111,7 +111,7 @@ async function validateMobileFileBeforeUpload(file: LocalMobileFile) {
   try {
     fileInfo = await FileSystem.getInfoAsync(file.localPath);
   } catch {
-    rejectLocalFile("Local file is unavailable. Replace the attachment.");
+    rejectLocalFile("Файл недоступен на телефоне. Замените вложение и повторите отправку.");
   }
   if (!fileInfo || !fileInfo.exists) {
     rejectLocalFile("Файл не найден на телефоне. Добавьте вложение повторно.");

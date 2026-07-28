@@ -1,5 +1,4 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ListRenderItem, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -13,6 +12,7 @@ import { requestMobileDataRefresh } from "@/sync/syncTriggers";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { ScreenList } from "@/ui/Screen";
+import { SelectionTabs, SelectionTransition } from "@/ui/SelectionTabs";
 import { StatusPill } from "@/ui/StatusPill";
 
 type Filter = "all" | "attention" | "pending" | "deferred" | "issue" | "skipped";
@@ -29,9 +29,6 @@ export function AllPointsScreen() {
   const [reloadRevision, setReloadRevision] = useState(0);
   const [syncRevision, setSyncRevision] = useState(0);
 
-  useEffect(() => {
-    if (routeFilter === "attention") setFilter("attention");
-  }, [routeFilter]);
 
   useEffect(() => subscribeToSyncEvents((event) => {
     if (assignmentId && shouldReloadAssignmentAfterSync(event, assignmentId)) {
@@ -41,6 +38,8 @@ export function AllPointsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      void reloadRevision;
+      void syncRevision;
       let isMounted = true;
 
       async function load() {
@@ -93,19 +92,21 @@ export function AllPointsScreen() {
   }, [filter, points]);
 
   const renderItem: ListRenderItem<PointListItem> = ({ item }) => (
-    <PointRow
-      assignmentId={assignmentId ?? ""}
-      onPress={() => assignmentId && router.push(`/patrol/assignment/${assignmentId}/point/${item.pointId}`)}
-      point={item}
-    />
+    <SelectionTransition selectionKey={filter}>
+      <PointRow
+        onPress={() => assignmentId && router.push(`/patrol/assignment/${assignmentId}/point/${item.pointId}`)}
+        point={item}
+      />
+    </SelectionTransition>
   );
 
   return (
     <ScreenList
-      floatingAction={assignmentId && assignmentStatus === "inProgress" ? (
+      bottomAction={assignmentId && assignmentStatus === "inProgress" ? (
         <PrimaryButton
+          disabled={summary.total === 0}
           icon={isReadyForReport ? "document-text-outline" : "scan-outline"}
-          label={isReadyForReport ? "Проверить и отправить отчёт" : "Сканировать NFC"}
+          label={summary.total === 0 ? "Загружаем метки маршрута" : isReadyForReport ? "Проверить и отправить отчёт" : "Сканировать NFC"}
           onPress={() => router.push(isReadyForReport
             ? `/patrol/assignment/${assignmentId}/submit`
             : `/patrol/assignment/${assignmentId}/scan-nfc`)}
@@ -163,14 +164,21 @@ export function AllPointsScreen() {
               </Card>
             ) : null}
 
-            <View style={styles.filters}>
-              <FilterChip count={summary.attention} label="\u0412\u043d\u0438\u043c\u0430\u043d\u0438\u0435" selected={filter === "attention"} onPress={() => setFilter("attention")} />
-              <FilterChip count={summary.total} label="Все" selected={filter === "all"} onPress={() => setFilter("all")} />
-              <FilterChip count={summary.pending} label="Не заполнено" selected={filter === "pending"} onPress={() => setFilter("pending")} />
-              <FilterChip count={summary.issue} label="Проблемы" selected={filter === "issue"} onPress={() => setFilter("issue")} />
-              <FilterChip count={summary.skipped} label="Метка недоступна" selected={filter === "skipped"} onPress={() => setFilter("skipped")} />
-              <FilterChip count={summary.deferred} label="Отложено" selected={filter === "deferred"} onPress={() => setFilter("deferred")} />
-            </View>
+            <SelectionTabs<Filter>
+              accessibilityLabel="Фильтр меток"
+              compact
+              items={[
+                { count: summary.total, icon: "list-outline", label: "Все", value: "all" },
+                { count: summary.attention, icon: "alert-circle-outline", label: "Внимание", value: "attention" },
+                { count: summary.pending, icon: "ellipse-outline", label: "Не заполнено", value: "pending" },
+                { count: summary.issue, icon: "warning-outline", label: "Проблемы", value: "issue" },
+                { count: summary.skipped, icon: "close-circle-outline", label: "Недоступны", value: "skipped" },
+                { count: summary.deferred, icon: "time-outline", label: "Отложено", value: "deferred" }
+              ]}
+              onChange={setFilter}
+              scrollable
+              value={filter}
+            />
             </>
           ) : null}
         </>
@@ -179,12 +187,12 @@ export function AllPointsScreen() {
   );
 }
 
-function PointRow({ assignmentId, point, onPress }: { assignmentId: string; point: PointListItem; onPress: () => void }) {
+function PointRow({ point, onPress }: { point: PointListItem; onPress: () => void }) {
   const { colors } = useAppTheme();
 
   return (
     <Pressable
-      accessibilityHint={`Открыть точку ${point.name} в обходе ${assignmentId}`}
+      accessibilityHint={`Открыть точку ${point.name}`}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [pressed ? { opacity: 0.88 } : null]}
@@ -203,24 +211,6 @@ function PointRow({ assignmentId, point, onPress }: { assignmentId: string; poin
           </View>
         </View>
       </Card>
-    </Pressable>
-  );
-}
-
-function FilterChip({ label, count, selected, onPress }: { label: string; count: number; selected: boolean; onPress: () => void }) {
-  const { colors } = useAppTheme();
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={[
-        styles.chip,
-        { backgroundColor: selected ? colors.primary : colors.card, borderColor: selected ? colors.primary : colors.border }
-      ]}
-    >
-      <Text style={[styles.chipText, { color: selected ? "#ffffff" : colors.text }]}>{label}</Text>
-      <Text style={[styles.chipCount, { color: selected ? "#dbeafe" : colors.mutedText }]}>{count}</Text>
     </Pressable>
   );
 }
@@ -325,28 +315,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#1e5bff",
     height: 9
   },
-  filters: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 7
-  },
-  chip: {
-    alignItems: "center",
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 7
-  },
-  chipText: {
-    fontSize: 12,
-    fontWeight: "700"
-  },
-  chipCount: {
-    fontSize: 11,
-    fontWeight: "700"
-  },
+
   pointCard: {
     padding: 12
   },

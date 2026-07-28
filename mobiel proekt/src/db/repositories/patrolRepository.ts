@@ -14,7 +14,7 @@ import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { getCompletionAttachmentFailure } from "@/domain/files/completionAttachmentPolicy";
 import { isPhotoEvidenceRequired, type PhotoEvidenceStatus } from "@/domain/patrol/photoEvidencePolicy";
 import { normalizePointDraft, PointDraftSelectedStatus } from "@/domain/patrol/pointDraftPolicy";
-import { canCreateCompletionCommand, evaluateRequiredPointReadiness, isTerminalPointStatus } from "@/domain/patrol/reportReadinessPolicy";
+import { canCreateCompletionCommand, evaluateReportPointReadiness, isTerminalPointStatus } from "@/domain/patrol/reportReadinessPolicy";
 import { canPatrolAction, patrolActionError } from "@/domain/patrol/patrolStateMachine";
 import { OutboxCommand } from "@/domain/sync/syncTypes";
 import { getNfcCodeCandidates, normalizeNfcCode } from "@/services/nfcService";
@@ -817,11 +817,45 @@ export async function handoffAssignmentLocally(assignmentId: string) {
   return updateAssignmentLifecycleLocally(assignmentId, "handoffPatrolAssignment", "needsDispatcherDecision");
 }
 
+async function repairEmptyAssignmentSnapshot(
+  db: SQLite.SQLiteDatabase,
+  assignmentId: string,
+  ownerUserId: string,
+  contourId: string
+) {
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      await tx.runAsync(
+        `
+          INSERT OR IGNORE INTO assignment_route_points (
+            assignment_id, point_id, route_id, name, description, instruction,
+            order_index, nfc_uid_hash, qr_code_hash, required, requires_photo, revision
+          )
+          SELECT
+            assignment.assignment_id, point.point_id, point.route_id, point.name,
+            point.description, point.instruction, point.order_index, point.nfc_uid_hash,
+            point.qr_code_hash, point.required, point.requires_photo, point.revision
+          FROM patrol_assignments assignment
+          JOIN route_points point ON point.route_id = assignment.route_id
+          WHERE assignment.assignment_id = ?
+            AND assignment.owner_user_id = ?
+            AND assignment.contour_id = ?
+            AND NOT EXISTS (
+              SELECT 1
+              FROM assignment_route_points existing
+              WHERE existing.assignment_id = assignment.assignment_id
+            )
+        `,
+        [assignmentId, ownerUserId, contourId]
+      );
+    })
+  );
+}
 export async function listAssignmentPoints(assignmentId: string, ownerUserId: string, contourId: string) {
   const db = await getDatabase();
   await repairAssignmentContourBinding(db, assignmentId, ownerUserId);
 
-  const rows = await db.getAllAsync<{
+  let rows = await db.getAllAsync<{
     pointId: string;
     routeId: string;
     name: string;
@@ -839,6 +873,13 @@ export async function listAssignmentPoints(assignmentId: string, ownerUserId: st
     listAssignmentPointsOwnedSql,
     [assignmentId, ownerUserId, contourId]
   );
+  if (rows.length === 0) {
+    await repairEmptyAssignmentSnapshot(db, assignmentId, ownerUserId, contourId);
+    rows = await db.getAllAsync<(typeof rows)[number]>(
+      listAssignmentPointsOwnedSql,
+      [assignmentId, ownerUserId, contourId]
+    );
+  }
 
   return rows.map((row) => ({
     pointId: row.pointId,
@@ -1613,7 +1654,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
   }
 
   const progress = await getAssignmentProgress(assignmentId);
-  const requiredPointReadiness = evaluateRequiredPointReadiness(points.map((point) => ({
+  const reportPointReadiness = evaluateReportPointReadiness(points.map((point) => ({
     pointId: point.pointId,
     pointName: point.name,
     orderIndex: point.orderIndex,
@@ -1621,7 +1662,7 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
     status: point.status
   })));
 
-  for (const problem of requiredPointReadiness.problems) {
+  for (const problem of reportPointReadiness.problems) {
     problems.push(problem);
   }
 
@@ -1630,11 +1671,82 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
     progress,
     problems,
     ready: assignment !== null
-      && requiredPointReadiness.requiredCount === requiredPointReadiness.terminalRequiredCount
+      && reportPointReadiness.ready
       && problems.length === 0
   };
 }
 
+export async function reopenInvalidCompletionReportLocally(assignmentId: string) {
+  const db = await getDatabase();
+  const ownerUserId = await requireOwnerUserId();
+  let reopened = false;
+
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const assignment = await tx.getFirstAsync<{ requestId: string; status: string }>(
+        `SELECT request_id AS requestId, status
+           FROM patrol_assignments
+          WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?
+          LIMIT 1`,
+        [ownerUserId, currentContourId, assignmentId]
+      );
+      if (!assignment) {
+        throw new Error("Назначение не найдено на телефоне.");
+      }
+
+      const invalidCompletion = await tx.getFirstAsync<{ clientOperationId: string }>(
+        `SELECT client_operation_id AS clientOperationId
+           FROM outbox_commands
+          WHERE owner_user_id = ?
+            AND contour_id = ?
+            AND command_type = 'completePatrolAssignment'
+            AND entity_local_id = ?
+            AND status IN ('invalidPayload', 'rejected')
+          ORDER BY created_at_local DESC
+          LIMIT 1`,
+        [ownerUserId, currentContourId, assignmentId]
+      );
+      if (!invalidCompletion) {
+        return;
+      }
+
+      const updatedAtLocal = new Date().toISOString();
+      await tx.runAsync(
+        `UPDATE outbox_commands
+            SET status = 'superseded',
+                last_error = NULL,
+                next_attempt_at = NULL,
+                retry_reason = NULL,
+                updated_at_local = ?
+          WHERE owner_user_id = ?
+            AND contour_id = ?
+            AND command_type = 'completePatrolAssignment'
+            AND entity_local_id = ?
+            AND status IN ('invalidPayload', 'rejected')`,
+        [updatedAtLocal, ownerUserId, currentContourId, assignmentId]
+      );
+      await tx.runAsync(
+        `UPDATE patrol_assignments
+            SET status = 'inProgress',
+                completed_at_local = NULL
+          WHERE owner_user_id = ?
+            AND contour_id = ?
+            AND assignment_id = ?
+            AND status IN ('completedLocal', 'syncError', 'inProgress')`,
+        [ownerUserId, currentContourId, assignmentId]
+      );
+      await tx.runAsync(
+        `UPDATE patrol_request_board
+            SET status = 'inProgress'
+          WHERE owner_user_id = ? AND request_id = ?`,
+        [ownerUserId, assignment.requestId]
+      );
+      reopened = true;
+    })
+  );
+
+  return { reopened };
+}
 export async function completeAssignmentLocally(assignmentId: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
@@ -1651,6 +1763,9 @@ export async function completeAssignmentLocally(assignmentId: string) {
 
   const completedAtLocal = new Date().toISOString();
   const pointResults = await buildCompletedPointResults(db, assignmentId, ownerUserId, completedAtLocal);
+  if (readiness.progress.total <= 0 || pointResults.length !== readiness.progress.total) {
+    throw new Error("Отчёт не содержит результаты всех точек маршрута.");
+  }
   await assertCompletionAttachmentsAvailable(db, ownerUserId, assignmentId, pointResults);
   const photoCount = pointResults.reduce((sum, result) => sum + result.photoClientFileIds.length, 0);
   const command: OutboxCommand = {
@@ -1733,6 +1848,22 @@ export async function completeAssignmentLocally(assignmentId: string) {
       }
 
       await tx.runAsync(
+        `
+          UPDATE outbox_commands
+          SET status = 'superseded',
+              last_error = NULL,
+              next_attempt_at = NULL,
+              updated_at_local = ?
+          WHERE owner_user_id = ?
+            AND contour_id = ?
+            AND command_type = 'completePatrolAssignment'
+            AND entity_local_id = ?
+            AND status IN ('rejected', 'invalidPayload')
+        `,
+        [completedAtLocal, ownerUserId, currentContourId, assignmentId]
+      );
+
+      await tx.runAsync(
       `
         UPDATE patrol_assignments
         SET status = 'completedLocal',
@@ -1751,8 +1882,6 @@ export async function completeAssignmentLocally(assignmentId: string) {
       };
     })
   );
-
-  requestSyncAfterMutation();
 
   const completionResult = completionResultRef.current;
   if (!completionResult) {
@@ -1943,6 +2072,7 @@ async function updateAssignmentLifecycleLocally(
   nextStatus: "inProgress" | "paused" | "needsDispatcherDecision",
   timestampMode?: "startedAtLocal"
 ) {
+  let lifecycleChanged = false;
   const action = commandType === "startPatrolAssignment"
     ? "startAssignment"
     : commandType === "pausePatrolAssignment"
@@ -1992,7 +2122,7 @@ async function updateAssignmentLifecycleLocally(
   }
 
   if (commandType === "handoffPatrolAssignment" && assignment.status !== "inProgress") {
-    throw new Error("Only an in-progress patrol can be handed off.");
+    throw new Error("Передать можно только начатый обход.");
   }
   const now = new Date().toISOString();
   const command: OutboxCommand = {
@@ -2027,12 +2157,15 @@ async function updateAssignmentLifecycleLocally(
         [ownerUserId, assignment.assignmentId, currentContourId]
       );
       if (!current) {
-        throw new Error("Assignment is no longer available on this device.");
+        throw new Error("Назначение больше недоступно на этом телефоне.");
       }
+      if (commandType === "startPatrolAssignment" && current.status === "inProgress") {
+        return;
+      }
+
       if (action) {
         assertPatrolAction(action, current.status);
       }
-
 
       const releasePending = await tx.getFirstAsync<{ clientOperationId: string }>(
         `
@@ -2053,19 +2186,19 @@ async function updateAssignmentLifecycleLocally(
 
       if (commandType === "startPatrolAssignment"
         && !["accepted", "inProgress"].includes(current.status)) {
-        throw new Error("Only an accepted patrol can be started.");
+        throw new Error("Начать можно только принятую заявку.");
       }
 
       if (commandType === "pausePatrolAssignment" && current.status !== "inProgress") {
-        throw new Error("Only an in-progress patrol can be paused.");
+        throw new Error("Приостановить можно только начатый обход.");
       }
 
       if (commandType === "resumePatrolAssignment" && current.status !== "paused") {
-        throw new Error("Only a paused patrol can be resumed.");
+        throw new Error("Продолжить можно только приостановленный обход.");
       }
 
       if (commandType === "handoffPatrolAssignment" && current.status !== "inProgress") {
-        throw new Error("Only an in-progress patrol can be handed off.");
+        throw new Error("Передать можно только начатый обход.");
       }
       if (commandType === "startPatrolAssignment" || commandType === "resumePatrolAssignment") {
         const competing = await tx.getFirstAsync<{ assignmentId: string }>(
@@ -2081,7 +2214,7 @@ async function updateAssignmentLifecycleLocally(
           [ownerUserId, assignment.assignmentId, currentContourId]
         );
         if (competing) {
-          throw new Error("Finish or hand off the current patrol before starting another one.");
+          throw new Error("Сначала завершите или передайте текущий обход.");
         }
       }
 
@@ -2111,10 +2244,13 @@ async function updateAssignmentLifecycleLocally(
       );
 
       await insertOutboxCommandInTransaction(tx, command);
+      lifecycleChanged = true;
     })
   );
 
-  requestSyncAfterMutation();
+  if (lifecycleChanged) {
+    requestSyncAfterMutation();
+  }
 
   return getAssignmentById(assignment.assignmentId);
 }
@@ -2334,7 +2470,7 @@ async function assertCompletionAttachmentsAvailable(
 ) {
   const failures = await findCompletionAttachmentFailures(executor, ownerUserId, assignmentId, pointResults);
   if (failures.length > 0) {
-    throw new Error(`Report cannot be completed because a local attachment preflight failed: ${failures[0]}`);
+    throw new Error(`Отчёт нельзя отправить: ${failures[0]}. Замените вложение и повторите проверку`);
   }
 }
 export async function listMissingCompleteAssignmentAttachmentIds(assignmentId: string, pointId: string) {
@@ -2656,7 +2792,10 @@ async function getQueuedCompleteAssignmentCommand(executor: SqlExecutor, ownerUs
         AND command_type = 'completePatrolAssignment'
         AND entity_local_id = ?
         AND contour_id = ?
-        AND status IN ('pending', 'sending', 'retryLater', 'accepted', 'duplicate')
+        AND status IN (
+          'pending', 'sending', 'retryLater', 'waiting_network', 'waiting_auth',
+          'wrong_contour', 'blocked', 'accepted', 'duplicate', 'conflict'
+        )
       ORDER BY created_at_local DESC
       LIMIT 1
     `,

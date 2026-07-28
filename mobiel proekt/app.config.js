@@ -54,7 +54,7 @@ const localCleartextHosts = allowLocalCleartext
 
 const androidConfig = {
   package: "ru.patrol360.mobile",
-  versionCode: 25,
+  versionCode: 29,
   usesCleartextTraffic: false,
   adaptiveIcon: {
     foregroundImage: appIconFile,

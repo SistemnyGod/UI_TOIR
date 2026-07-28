@@ -408,6 +408,10 @@ async function initializeDatabaseOnce() {
     await runLocalMigration(tx, "20260727_outbox_ordering", async () => {
       await ensureOutboxOrdering(tx);
     });
+
+    await runLocalMigration(tx, "20260728_repair_misordered_patrol_outbox", async () => {
+      await repairMisorderedPatrolOutbox(tx);
+    });
     await runLocalMigration(tx, "20260725_conflict_resolution_state", async () => {
       await ensureConflictResolutionState(tx);
     });
@@ -1063,6 +1067,87 @@ async function ensureOutboxOrdering(db: SqlExecutor) {
     CREATE INDEX IF NOT EXISTS ix_outbox_commands_contour_aggregate_sequence
       ON outbox_commands (owner_user_id, contour_id, aggregate_key, sequence_no);
   `);
+}
+async function repairMisorderedPatrolOutbox(db: SqlExecutor) {
+  const starts = await db.getAllAsync<{
+    rowid: number;
+    ownerUserId: string;
+    contourId: string | null;
+    assignmentId: string;
+    aggregateKey: string | null;
+    sequenceNo: number | null;
+  }>(
+    `SELECT rowid,
+            owner_user_id AS ownerUserId,
+            contour_id AS contourId,
+            entity_local_id AS assignmentId,
+            aggregate_key AS aggregateKey,
+            sequence_no AS sequenceNo
+       FROM outbox_commands
+      WHERE command_type = 'startPatrolAssignment'
+        AND status = 'rejected'
+        AND lower(COALESCE(last_error, '')) LIKE '%only an accepted patrol assignment can be started%'
+        AND sequence_no IS NOT NULL`
+  );
+
+  for (const start of starts) {
+    if (start.sequenceNo == null) continue;
+    const aggregateKey = start.aggregateKey ?? `patrolAssignment:${start.assignmentId}`;
+    const aggregateScope = "aggregate_key IS ?";
+    const accept = await db.getFirstAsync<{ sequenceNo: number | null }>(
+      `SELECT sequence_no AS sequenceNo
+         FROM outbox_commands
+        WHERE owner_user_id = ? AND contour_id IS ?
+          AND command_type IN ('acceptPatrolRequest', 'takePatrolRequest')
+          AND (entity_local_id = ? OR instr(payload_json, ?) > 0)
+          AND status NOT IN ('superseded', 'cancelled')
+        ORDER BY sequence_no ASC, created_at_local ASC
+        LIMIT 1`,
+      [start.ownerUserId, start.contourId, start.assignmentId, start.assignmentId]
+    );
+
+    if (accept?.sequenceNo != null && start.sequenceNo > accept.sequenceNo + 1) {
+      await db.runAsync(
+        `UPDATE outbox_commands
+            SET sequence_no = sequence_no + 1
+          WHERE owner_user_id = ? AND contour_id IS ?
+            AND ${aggregateScope}
+            AND sequence_no > ? AND sequence_no < ?
+            AND rowid <> ?`,
+        [start.ownerUserId, start.contourId, aggregateKey, accept.sequenceNo, start.sequenceNo, start.rowid]
+      );
+      await db.runAsync(
+        `UPDATE outbox_commands SET sequence_no = ? WHERE rowid = ?`,
+        [accept.sequenceNo + 1, start.rowid]
+      );
+      continue;
+    }
+
+    if (!accept && start.sequenceNo > 0) {
+      const firstDependent = await db.getFirstAsync<{ sequenceNo: number | null }>(
+        `SELECT MIN(sequence_no) AS sequenceNo
+           FROM outbox_commands
+          WHERE owner_user_id = ? AND contour_id IS ?
+            AND ${aggregateScope}
+            AND command_type <> 'startPatrolAssignment'`,
+        [start.ownerUserId, start.contourId, aggregateKey]
+      );
+      if (firstDependent?.sequenceNo != null && start.sequenceNo > firstDependent.sequenceNo) {
+        // Keep the repaired start before all dependent point/file commands without
+        // introducing duplicate or negative sequence numbers.
+        await db.runAsync(
+          `UPDATE outbox_commands
+              SET sequence_no = sequence_no + 1
+            WHERE owner_user_id = ? AND contour_id IS ?
+              AND ${aggregateScope}
+              AND sequence_no >= ? AND sequence_no < ?
+              AND rowid <> ?`,
+          [start.ownerUserId, start.contourId, aggregateKey, firstDependent.sequenceNo, start.sequenceNo, start.rowid]
+        );
+        await db.runAsync("UPDATE outbox_commands SET sequence_no = ? WHERE rowid = ?", [firstDependent.sequenceNo, start.rowid]);
+      }
+    }
+  }
 }
 async function ensureFileRetryMetadata(db: SqlExecutor) {
   await ensureColumns(db, "files", [

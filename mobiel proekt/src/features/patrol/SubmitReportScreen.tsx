@@ -5,13 +5,13 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getReportDeliveryState } from "@/db/repositories/outboxRepository";
-import { completeAssignmentLocally, getReportReadiness, ReportReadiness } from "@/db/repositories/patrolRepository";
+import { completeAssignmentLocally, getReportReadiness, reopenInvalidCompletionReportLocally, ReportReadiness } from "@/db/repositories/patrolRepository";
 import { getReportDeliveryPresentation } from "@/features/patrol/reportDeliveryPresentation";
 import { groupReportProblems, ReportProblemGroup } from "@/features/patrol/reportReadinessPresentation";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { shouldReloadReportAfterSync, subscribeToSyncEvents } from "@/sync/syncEvents";
-import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { requestPatrolSync } from "@/sync/PatrolSyncCoordinator";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -41,6 +41,7 @@ export function SubmitReportScreen() {
   );
 
   const load = useCallback(() => {
+    void reloadRevision;
     let isMounted = true;
 
     setLoadError(null);
@@ -85,7 +86,16 @@ export function SubmitReportScreen() {
     }
 
     if (presentation.action === "repair") {
-      router.push(`/patrol/assignment/${assignmentId}/all-points?filter=attention`);
+      setIsSubmitting(true);
+      setSyncNotice(null);
+      try {
+        await reopenInvalidCompletionReportLocally(assignmentId);
+        router.push(`/patrol/assignment/${assignmentId}/all-points?filter=attention`);
+      } catch (error) {
+        setSyncNotice(error instanceof Error ? error.message : "Не удалось открыть отчёт для исправления.");
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
 
@@ -109,20 +119,16 @@ export function SubmitReportScreen() {
     try {
       if (presentation.action === "submit") {
         await completeAssignmentLocally(assignmentId);
-        setDelivery(await loadDelivery(assignmentId));
-        setSyncNotice("Отчёт сохранён на телефоне. Можно закрыть экран: отправка начнётся автоматически при первой доступной возможности.");
-        void triggerForegroundSyncWithRetry({ mode: "normal" })
-          .then(async (syncResult) => {
-            setDelivery(await loadDelivery(assignmentId));
-            setSyncNotice(getSyncNotice(syncResult.skipped));
-          })
-          .catch((error) => {
-            void logMobileError("report.screen.sync.failed", error);
-          });
+        const syncResult = await requestPatrolSync({ mode: "manualReport", assignmentId });
+        const updatedDelivery = await loadDelivery(assignmentId);
+        setDelivery(updatedDelivery);
+        setSyncNotice(updatedDelivery?.status === "sending"
+          ? "Отправка уже выполняется. Подождите завершения текущей попытки."
+          : getSyncNotice(syncResult.skipped));
         return;
       }
 
-      const syncResult = await triggerForegroundSyncWithRetry({ mode: "manualReport", assignmentId });
+      const syncResult = await requestPatrolSync({ mode: "manualReport", assignmentId });
       const updatedDelivery = await loadDelivery(assignmentId);
       setDelivery(updatedDelivery);
       setSyncNotice(updatedDelivery?.status === "sending"
@@ -145,13 +151,22 @@ export function SubmitReportScreen() {
     router.push(`/patrol/assignment/${assignmentId}/point/${problem.pointId}/fill`);
   }
 
-  function handleScreenPrimaryAction() {
+  async function handleScreenPrimaryAction() {
     if (!readiness?.ready) {
-      router.push(`/patrol/assignment/${assignmentId}/all-points?filter=attention`);
+      setIsSubmitting(true);
+      setSyncNotice(null);
+      try {
+        await reopenInvalidCompletionReportLocally(assignmentId);
+        router.push(`/patrol/assignment/${assignmentId}/all-points?filter=attention`);
+      } catch (error) {
+        setSyncNotice(error instanceof Error ? error.message : "Не удалось открыть точки для исправления.");
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
 
-    void handlePrimaryAction();
+    await handlePrimaryAction();
   }
 
   if (!readiness) {
@@ -179,7 +194,19 @@ export function SubmitReportScreen() {
   const primaryIcon = !readiness.ready ? "arrow-forward-outline" : actionIcon(presentation.action);
 
   return (
-    <Screen title="Проверка отчёта" subtitle="Исправьте незаполненные точки или завершите обход.">
+    <Screen
+      bottomAction={
+        <PrimaryButton
+          disabled={actionDisabled}
+          icon={primaryIcon}
+          label={isSubmitting ? "Проверяем доставку…" : primaryLabel}
+          onPress={() => void handleScreenPrimaryAction()}
+          size="large"
+        />
+      }
+      title="Проверка отчёта"
+      subtitle="Исправьте незаполненные точки или завершите обход."
+    >
       <Card>
         <View style={styles.row}>
           <Text style={[styles.title, { color: colors.text }]}>{readiness.assignment?.routeName ?? "Обход"}</Text>
@@ -219,15 +246,6 @@ export function SubmitReportScreen() {
       {syncNotice ? <Text accessibilityLiveRegion="polite" style={styles.notice}>{syncNotice}</Text> : null}
       {loadError ? <Text accessibilityLiveRegion="polite" style={styles.loadError}>{loadError}</Text> : null}
 
-      <View style={styles.primaryAction}>
-        <PrimaryButton
-          disabled={actionDisabled}
-          icon={primaryIcon}
-          label={isSubmitting ? "Проверяем доставку…" : primaryLabel}
-          onPress={handleScreenPrimaryAction}
-          size="large"
-        />
-      </View>
 
       <View style={styles.secondaryLinks}>
         <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.replace("/(tabs)/patrol")} style={styles.secondaryLink}>
@@ -255,12 +273,12 @@ async function loadDelivery(assignmentId: string) {
 }
 
 function getSyncNotice(skipped: "offline" | "serverUnavailable" | "unauthenticated" | "wrongContour" | "failed" | null) {
-  if (skipped === "offline") return "Нет подключения. Отчёт сохранён и автоматически повторится после появления сети.";
+  if (skipped === "offline") return "Нет подключения. Отчёт сохранён после ручной отправки; очередь доставит его после появления сети.";
   if (skipped === "serverUnavailable") return "Сервер временно недоступен. Отчёт остаётся на телефоне; следующий повтор уже запланирован.";
   if (skipped === "unauthenticated") return "Для продолжения отправки необходимо войти. Повторно проходить точки не потребуется.";
   if (skipped === "wrongContour") return "Подключён сервер другого контура. Автоматическая отправка остановлена до исправления настроек.";
   if (skipped === "failed") return "Отправка прервалась. Данные сохранены — можно повторить сейчас или дождаться автоматической отправки.";
-  return "Отчёт сохранён на телефоне. Отправка выполняется автоматически.";
+  return "Отчёт сохранён после ручной отправки. Очередь доставит его после подключения к сети.";
 }
 function actionIcon(action: ReturnType<typeof getReportDeliveryPresentation>["action"]): keyof typeof Ionicons.glyphMap {
   switch (action) {

@@ -185,7 +185,7 @@ export function PatrolRequestScreen() {
       <Card>
         <View style={styles.headerRow}>
           <StatusPill label={statusLabel(assignment?.status ?? request.status)} tone={statusTone(assignment?.status ?? request.status)} />
-          <Text style={[styles.displayNumber, { color: colors.mutedText }]}>{request.displayNumber ?? shortRequestId(request.requestId)}</Text>
+          {request.displayNumber ? <Text style={[styles.displayNumber, { color: colors.mutedText }]}>{request.displayNumber}</Text> : null}
         </View>
         <Text style={[styles.title, { color: colors.text }]}>{request.routeName}</Text>
         <Text style={[styles.text, { color: colors.mutedText }]}>{request.assignedFullName ?? "Свободная заявка"}</Text>
@@ -303,10 +303,6 @@ function actionHint(status: string) {
     default:
       return "Проверьте маршрут, время и статус. Доступные действия показаны ниже.";
   }
-}
-
-function shortRequestId(requestId: string) {
-  return `#${requestId.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
 }
 
 function formatDateTime(value: string) {

@@ -676,10 +676,10 @@ async function refreshAssignmentSnapshotInTransaction(
   }
 
   const route = bootstrap.routes.find((item) => item.routeId === assignment.routeId);
-  const frozenSnapshot = ["releasePending", "inProgress", "paused", "completedLocal", "syncing", "syncError", "authRequired", "needsDispatcherDecision"].includes(assignment.status);
+  const frozenSnapshot = ["releasePending", "inProgress", "paused", "completedLocal", "syncing", "syncError", "authRequired", "needsDispatcherDecision"].includes(local.status);
   const snapshotVersion = frozenSnapshot
-    ? (assignment.routeVersionNo || route?.version || 0)
-    : (route?.version ?? assignment.routeVersionNo ?? 0);
+    ? (local.snapshotVersion ?? assignment.routeVersionNo ?? route?.version ?? 0)
+    : (route?.version ?? assignment.routeVersionNo ?? local.snapshotVersion ?? 0);
   const snapshotAllowFreeOrder = route?.allowFreeOrder === false ? 0 : 1;
   const snapshotNfcEnabled = route?.nfcEnabled === true ? 1 : 0;
   const snapshotQrFallbackEnabled = route?.qrFallbackEnabled === false ? 0 : 1;
