@@ -1,4 +1,5 @@
-import type { EmuShiftReportCategory, EmuShiftType } from "../../../api/emuShiftReportContracts";
+import type { EmuShiftReportCategory, EmuShiftType } from '../../../api/emuShiftReportContracts';
+import { createClientUuid } from '../../../shared/clientUuid';
 
 export type WorkRow = {
   id: string;
@@ -9,24 +10,24 @@ export type WorkRow = {
   note: string;
 };
 
-export const draftPrefix = "patrol360.emu.shift-report.draft.v1";
+export const draftPrefix = 'patrol360.emu.shift-report.draft.v1';
 export const categoryLabels: Record<EmuShiftReportCategory, string> = {
-  mechanic: "Слесари",
-  electrician: "Электрики",
+  mechanic: 'Слесари',
+  electrician: 'Электрики',
 };
 export const shiftLabels: Record<EmuShiftType, string> = {
-  day: "Дневная",
-  night: "Ночная",
+  day: 'Дневная',
+  night: 'Ночная',
 };
 
 export function createWorkRow(): WorkRow {
   return {
-    id: crypto.randomUUID(),
-    description: "",
-    hours: "",
-    minutes: "",
-    sectionId: "",
-    note: "",
+    id: createClientUuid(),
+    description: '',
+    hours: '',
+    minutes: '',
+    sectionId: '',
+    note: '',
   };
 }
 
@@ -35,7 +36,7 @@ export function createEmptyRows() {
 }
 
 export function localDate(date = new Date()) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 export function getDurationMinutes(value: WorkRow) {
@@ -45,7 +46,7 @@ export function getDurationMinutes(value: WorkRow) {
 export function formatDuration(minutes: number) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return [hours ? `${hours} ч` : "", rest ? `${rest} мин` : ""].filter(Boolean).join(" ") || "0 мин";
+  return [hours ? `${hours} ч` : '', rest ? `${rest} мин` : ''].filter(Boolean).join(' ') || '0 мин';
 }
 
 export function isWorkRowUsed(value: WorkRow) {
@@ -53,5 +54,5 @@ export function isWorkRowUsed(value: WorkRow) {
 }
 
 export function getDraftKey(category: EmuShiftReportCategory, employeeId: string, reportDate: string, shiftType: EmuShiftType) {
-  return `${draftPrefix}.${category}.${employeeId || "_"}.${reportDate}.${shiftType}`;
+  return `${draftPrefix}.${category}.${employeeId || '_'}.${reportDate}.${shiftType}`;
 }

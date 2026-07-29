@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EmuShiftReportsScreen } from "../features/emu/shift-reports/EmuShiftReportsScreen";
 
 const mocks = vi.hoisted(() => ({ create: vi.fn(), getList: vi.fn(), getDetail: vi.fn(), getOptions: vi.fn() }));
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 vi.mock("../repositories/emuShiftReportsRepository", () => ({ createEmuShiftReportsRepository: () => mocks }));
 
 const currentUser = { id: "user-1", displayName: "Admin", login: "admin", roles: ["admin"], permissions: [] };
@@ -32,6 +36,8 @@ describe("EmuShiftReportsScreen", () => {
 
   it("keeps five base rows, validates partial rows, updates KPIs and sends minute durations", async () => {
     const user = userEvent.setup();
+    let uuidSeed = 0;
+    vi.stubGlobal('crypto', { getRandomValues: (bytes: Uint8Array) => { bytes.fill(++uuidSeed); return bytes; } });
     render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen="emu-shift-report-entry" />);
     await screen.findByRole("heading", { name: "Сменный отчёт" });
     await waitFor(() => expect(screen.getAllByPlaceholderText("Что выполнено")).toHaveLength(5));
@@ -108,4 +114,77 @@ describe("EmuShiftReportsScreen", () => {
     expect(await screen.findByText("Проверка щита")).toBeInTheDocument();
     expect(mocks.getDetail).toHaveBeenCalledTimes(2);
   });
+
+  it('does not submit twice while the first request is pending', async () => {
+    const user = userEvent.setup();
+    let resolveCreate: ((value: { id: string }) => void) | undefined;
+    mocks.create.mockImplementation(() => new Promise((resolve) => { resolveCreate = resolve; }));
+    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-entry' />);
+    await screen.findByRole('heading', { name: 'Сменный отчёт' });
+    await user.selectOptions(screen.getByLabelText(/Сотрудник/), 'employee-1');
+    await user.type(screen.getAllByPlaceholderText('Что выполнено')[0], 'Осмотр насоса');
+    await user.type(screen.getAllByLabelText('Часы')[0], '1');
+    const submit = screen.getByRole('button', { name: 'Отправить отчёт' });
+    await user.click(submit);
+    await user.click(submit);
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    resolveCreate?.({ id: 'report-1' });
+    expect(await screen.findByText('Сменный отчёт отправлен и добавлен в историю.')).toBeInTheDocument();
+  });
+
+  it('localizes render failures and can reopen the feature', async () => {
+    const brokenOptions = {
+      get employees() { throw new Error('render failure'); },
+      sections: [],
+      shifts: [],
+    };
+    mocks.getOptions.mockResolvedValueOnce(brokenOptions);
+    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-entry' />);
+    expect(await screen.findByRole('heading', { name: 'Не удалось открыть сменные отчёты' })).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Открыть повторно' }));
+    expect(await screen.findByRole('heading', { name: 'Сменный отчёт' })).toBeInTheDocument();
+  });
+
+  it('retries options without reloading the page', async () => {
+    mocks.getOptions.mockRejectedValueOnce(new Error('options unavailable'));
+    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-entry' />);
+    expect(await screen.findByText('options unavailable')).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Повторить загрузку' }));
+    expect(await screen.findByRole('heading', { name: 'Сменный отчёт' })).toBeInTheDocument();
+    expect(mocks.getOptions).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a failed detail request and keeps the successful detail cached', async () => {
+    const summary = { id: 'report-retry', reportDate: '2026-07-29', shiftType: 'day', workerCategory: 'mechanic', employeeId: 'employee-1', employeeName: 'Иванов Иван', personnelNo: '1', position: 'Слесарь', department: 'ЭМУ', status: 'submitted', workCount: 1, totalDurationMinutes: 45, createdByUserId: 'user-1', createdByName: 'Admin', submittedAt: '2026-07-29T08:00:00Z' } as const;
+    mocks.getList.mockResolvedValue({ rows: [summary], total: 1, page: 1, pageSize: 100, pageCount: 1 });
+    mocks.getDetail.mockRejectedValueOnce(new Error('detail unavailable')).mockResolvedValue({ ...summary, lines: [{ id: 'line-retry', sequenceNo: 1, workDescription: 'Проверка щита', durationMinutes: 45, sectionId: null, sectionName: 'Печной участок', note: null }] });
+    const user = userEvent.setup();
+    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-history' />);
+    const report = await screen.findByRole('button', { name: /Иванов Иван/ });
+    await user.click(report);
+    expect(await screen.findByText('detail unavailable')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByText('Проверка щита')).toBeInTheDocument();
+    await user.click(report);
+    await user.click(report);
+    expect(mocks.getDetail).toHaveBeenCalledTimes(2);
+  });
+
+  it('restores the entered draft after a page remount', async () => {
+    const user = userEvent.setup();
+    const first = render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-entry' />);
+    await screen.findByRole('heading', { name: 'Сменный отчёт' });
+    await user.selectOptions(screen.getByLabelText(/Сотрудник/), 'employee-1');
+    await user.type(screen.getAllByPlaceholderText('Что выполнено')[0], 'Проверка редуктора');
+    window.dispatchEvent(new Event('pagehide'));
+    expect(localStorage.getItem('patrol360.emu.shift-report.draft.v1.last.mechanic')).not.toBeNull();
+    first.unmount();
+
+    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-entry' />);
+    expect(await screen.findByRole('heading', { name: 'Сменный отчёт' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText(/Сотрудник/)).toHaveValue('employee-1'));
+    expect(screen.getAllByPlaceholderText('Что выполнено')[0]).toHaveValue('Проверка редуктора');
+    expect(screen.getByRole('status')).toHaveTextContent(/Сохраняем|Черновик/);
+  });
 });
+import { afterEach } from 'vitest';
