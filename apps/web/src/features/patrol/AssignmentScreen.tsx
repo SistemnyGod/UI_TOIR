@@ -60,6 +60,7 @@ import {
 } from "./assignments/assignmentStorage";
 import type { ShiftTimeSettings } from "./assignments/assignmentTypes";
 import { AssignmentSelectionBar } from "./assignments/AssignmentSelectionBar";
+import { subscribeAssignmentAutoRefresh } from "./assignments/assignmentAutoRefresh";
 import "./assignments/assignmentWorkspace.css";
 import { useAssignmentsWorkspace } from "../../hooks/useAssignmentsWorkspace";
 import {
@@ -96,7 +97,7 @@ interface AssignmentScreenProps {
   selectedEmployeeId: string;
   selectedRouteId: string;
   onOpenRequestById: (requestId: string) => void;
-  onRefreshRequests: () => Promise<void> | void;
+  onRefreshRequests: (options?: { signal?: AbortSignal; silent?: boolean }) => Promise<void> | void;
   onNavigate: (screen: ScreenId) => void;
   onNotify: (message: string) => void;
   onCreatePatrolRequest: (payload: CreateServiceRequestPayload) => Promise<ServiceRequest> | ServiceRequest;
@@ -257,7 +258,9 @@ export function AssignmentScreen({
         : "",
     [plannedDate, plannedStart, selectedEmployee, selectedRoute],
   );
-  const screenAssignments = dataSourceMode === "api" ? assignments.activePatrols ?? [] : assignments.activePatrols ?? activePatrols;
+  const screenAssignments = dataSourceMode === "api"
+    ? mergeAssignmentSources(assignments.activePatrols ?? [], activePatrols)
+    : assignments.activePatrols ?? activePatrols;
   const activeAssignments = useMemo(() => screenAssignments.filter(isAssignmentCurrent), [screenAssignments]);
   const selectedEmployeeAssignment = useMemo(
     () => (selectedEmployee ? activeAssignments.find((assignment) => assignment.employeeId === selectedEmployee.id) : undefined),
@@ -356,6 +359,30 @@ export function AssignmentScreen({
   useEffect(() => {
     return subscribeAssignmentFavoriteEmployeeIds(setFavoriteEmployeeIds);
   }, []);
+
+  const backgroundRefreshRef = useRef({
+    refreshAssignments: assignments.refreshAssignments,
+    refreshPatrolData,
+    refreshRequests: onRefreshRequests,
+  });
+  backgroundRefreshRef.current = {
+    refreshAssignments: assignments.refreshAssignments,
+    refreshPatrolData,
+    refreshRequests: onRefreshRequests,
+  };
+
+  useEffect(() => {
+    if (dataSourceMode !== "api") return;
+
+    return subscribeAssignmentAutoRefresh(async () => {
+      const refreshers = backgroundRefreshRef.current;
+      await Promise.allSettled([
+        refreshers.refreshAssignments({ silent: true }),
+        refreshers.refreshPatrolData(),
+        Promise.resolve(refreshers.refreshRequests({ silent: true })),
+      ]);
+    });
+  }, [dataSourceMode]);
 
   useEffect(() => {
     if (dataSourceMode !== "api" || serverSettingsApplied || !assignments.assignmentSettings) {
@@ -1913,6 +1940,13 @@ function DraftsCard({ drafts, onDelete, onOpen }: { drafts: LocalDraft[]; onDele
       )}
     </section>
   );
+}
+
+export function mergeAssignmentSources(historyAssignments: ActivePatrol[], liveAssignments: ActivePatrol[]) {
+  const merged = new Map<string, ActivePatrol>();
+  historyAssignments.forEach((assignment) => merged.set(assignment.id, assignment));
+  liveAssignments.forEach((assignment) => merged.set(assignment.id, assignment));
+  return Array.from(merged.values());
 }
 
 function loadAssignmentDrafts(): LocalDraft[] {

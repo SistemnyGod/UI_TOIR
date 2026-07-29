@@ -38,6 +38,7 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
         return dbContext.PatrolResults
             .AsNoTracking()
             .Include(result => result.Assignment)
+            .Where(result => result.ArchivedAt == null)
             .Where(result =>
                 (result.AssignmentId.HasValue && assignmentIds.Contains(result.AssignmentId.Value))
                 || (!result.AssignmentId.HasValue && standaloneResultIds.Contains(result.Id)))
@@ -85,6 +86,7 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
         var groupOrder = pageGroups.Select((group, index) => new { Key = BuildResultGroupKey(group.AssignmentId, group.ResultId), Index = index })
             .ToDictionary(group => group.Key, group => group.Index);
         var rows = await dbContext.PatrolResults.AsNoTracking().Include(result => result.Assignment)
+            .Where(result => result.ArchivedAt == null)
             .Where(result => (result.AssignmentId.HasValue && assignmentIds.Contains(result.AssignmentId.Value))
                 || (!result.AssignmentId.HasValue && standaloneResultIds.Contains(result.Id)))
             .ToListAsync(cancellationToken);
@@ -101,7 +103,7 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
             .Include(item => item.Issues)
             .Include(item => item.Attachments)
             .Include(item => item.Assignment)
-            .FirstOrDefault(item => item.Id == id);
+            .FirstOrDefault(item => item.Id == id && item.ArchivedAt == null);
 
         return result is null ? null : MapDetail(result);
     }
@@ -167,7 +169,7 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
     {
         var attachment = dbContext.PatrolResultAttachments
             .AsNoTracking()
-            .FirstOrDefault(item => item.PatrolResultId == resultId && item.Id == attachmentId);
+            .FirstOrDefault(item => item.PatrolResultId == resultId && item.Id == attachmentId && item.PatrolResult!.ArchivedAt == null);
 
         if (attachment is null)
         {
@@ -193,10 +195,62 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
         return new ResultAttachmentFileDto(fullPath, contentType, safeFileName);
     }
 
+    public bool ArchiveResultGroup(Guid resultId)
+    {
+        var target = dbContext.PatrolResults.FirstOrDefault(result => result.Id == resultId);
+        if (target is null)
+        {
+            return false;
+        }
+
+        var group = target.AssignmentId is { } assignmentId
+            ? dbContext.PatrolResults.Where(result => result.AssignmentId == assignmentId).ToList()
+            : [target];
+        var archivedAt = DateTimeOffset.UtcNow;
+        foreach (var result in group.Where(result => result.ArchivedAt is null))
+        {
+            result.ArchivedAt = archivedAt;
+        }
+
+        dbContext.SaveChanges();
+        return true;
+    }
+
+    public bool DeleteResultGroup(Guid resultId)
+    {
+        var target = dbContext.PatrolResults.AsNoTracking().FirstOrDefault(result => result.Id == resultId);
+        if (target is null)
+        {
+            return false;
+        }
+
+        var query = dbContext.PatrolResults.Include(result => result.Attachments).AsQueryable();
+        var group = target.AssignmentId is { } assignmentId
+            ? query.Where(result => result.AssignmentId == assignmentId).ToList()
+            : query.Where(result => result.Id == resultId).ToList();
+        var attachmentKeys = group
+            .SelectMany(result => result.Attachments)
+            .Select(attachment => attachment.FileName)
+            .Where(fileName => !string.IsNullOrWhiteSpace(fileName))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        dbContext.PatrolResults.RemoveRange(group);
+        dbContext.SaveChanges();
+        foreach (var attachmentKey in attachmentKeys)
+        {
+            attachmentStore.Delete(attachmentKey);
+        }
+
+        return true;
+    }
+
     private IQueryable<PatrolResultEntity> ApplyFilter(
         IQueryable<PatrolResultEntity> query,
         ResultFilterDto filter)
     {
+        query = query.Where(result => result.ArchivedAt == null);
+
         if (!string.IsNullOrWhiteSpace(filter.Status))
         {
             var statusValues = GetStatusFilterValues(filter.Status);
@@ -261,7 +315,7 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
 
     private string BuildResultFilterSql(ResultFilterDto filter, List<object> parameters)
     {
-        var where = new StringBuilder("WHERE TRUE");
+        var where = new StringBuilder("WHERE archived_at IS NULL");
 
         if (!string.IsNullOrWhiteSpace(filter.Status))
         {

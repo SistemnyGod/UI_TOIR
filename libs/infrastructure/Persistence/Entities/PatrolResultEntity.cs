@@ -42,6 +42,8 @@ internal sealed class PatrolResultEntity
 
     public DateTimeOffset CreatedAt { get; set; }
 
+    public DateTimeOffset? ArchivedAt { get; set; }
+
     public AssignmentEntity? Assignment { get; set; }
 
     public RouteEntity? Route { get; set; }

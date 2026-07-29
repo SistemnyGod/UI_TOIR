@@ -4,7 +4,7 @@ import { ListRenderItem, Pressable, StyleSheet, Text, View } from "react-native"
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
-import { getActiveAssignment, getAssignmentById, listAssignmentPoints, PointListItem } from "@/db/repositories/patrolRepository";
+import { getActiveAssignment, getAssignmentById, getAssignmentScanPolicy, listAssignmentPoints, PointListItem } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { shouldReloadAssignmentAfterSync, subscribeToSyncEvents } from "@/sync/syncEvents";
@@ -23,6 +23,7 @@ export function AllPointsScreen() {
   const { assignmentId: routeAssignmentId, filter: routeFilter } = useLocalSearchParams<{ assignmentId?: string; filter?: string }>();
   const [assignmentId, setAssignmentId] = useState<string | null>(routeAssignmentId ?? null);
   const [assignmentStatus, setAssignmentStatus] = useState<string | null>(null);
+  const [nfcEnabled, setNfcEnabled] = useState(false);
   const [points, setPoints] = useState<PointListItem[]>([]);
   const [filter, setFilter] = useState<Filter>(routeFilter === "attention" ? "attention" : "all");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -49,12 +50,18 @@ export function AllPointsScreen() {
         const targetAssignment = targetAssignmentId && routeAssignmentId
           ? await getAssignmentById(targetAssignmentId)
           : active;
-        const rows = targetAssignmentId && ownerUserId ? await listAssignmentPoints(targetAssignmentId, ownerUserId, currentContourId) : [];
+        const [rows, scanPolicy] = targetAssignmentId && ownerUserId
+          ? await Promise.all([
+              listAssignmentPoints(targetAssignmentId, ownerUserId, currentContourId),
+              getAssignmentScanPolicy(targetAssignmentId)
+            ])
+          : [[], { nfcEnabled: false, qrFallbackEnabled: false, allowFreeOrder: true }];
 
         if (isMounted) {
           setLoadError(null);
           setAssignmentId(targetAssignmentId);
           setAssignmentStatus(targetAssignment?.status ?? null);
+          setNfcEnabled(scanPolicy.nfcEnabled);
           setPoints(rows);
         }
       }
@@ -102,7 +109,7 @@ export function AllPointsScreen() {
 
   return (
     <ScreenList
-      bottomAction={assignmentId && assignmentStatus === "inProgress" ? (
+      bottomAction={assignmentId && assignmentStatus === "inProgress" && (isReadyForReport || nfcEnabled) ? (
         <PrimaryButton
           disabled={summary.total === 0}
           icon={isReadyForReport ? "document-text-outline" : "scan-outline"}
@@ -123,7 +130,9 @@ export function AllPointsScreen() {
           </Card>
         ) : (
           <Card>
-            <Text style={[styles.text, { color: colors.mutedText }]}>По выбранному фильтру меток нет.</Text>
+            <Text style={[styles.text, { color: colors.mutedText }]}>
+              {points.length === 0 ? "Метки маршрута ещё не загружены." : "По выбранному фильтру меток нет."}
+            </Text>
           </Card>
         )
       }
@@ -149,13 +158,13 @@ export function AllPointsScreen() {
               <View style={styles.progressHeader}>
                 <Text style={[styles.title, { color: colors.text }]}>Прогресс маршрута</Text>
                 <Text style={[styles.meta, { color: colors.mutedText }]}>
-                  {summary.completed} из {summary.total}
+                  {summary.total === 0 ? "Загружаем метки" : `${summary.completed} из ${summary.total}`}
                 </Text>
               </View>
               <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
                 <View style={[styles.progressFill, { width: `${percent}%` }]} />
               </View>
-              <Text style={[styles.meta, { color: colors.mutedText }]}>{percent}%</Text>
+              {summary.total > 0 ? <Text style={[styles.meta, { color: colors.mutedText }]}>{percent}%</Text> : null}
             </Card>
 
             {assignmentStatus !== "inProgress" ? (

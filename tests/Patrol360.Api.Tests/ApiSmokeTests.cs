@@ -785,6 +785,19 @@ public class ApiSmokeTests
     }
 
     [Fact]
+    public void ResultsControllerArchivesAndDeletesResultGroups()
+    {
+        var query = new FakePatrolResultQuery([]);
+        var controller = new ResultsController(query);
+        var resultId = Guid.NewGuid();
+
+        Assert.IsType<NoContentResult>(controller.Archive(resultId));
+        Assert.Equal(resultId, query.LastArchivedResultId);
+        Assert.IsType<NoContentResult>(controller.Delete(resultId));
+        Assert.Equal(resultId, query.LastDeletedResultId);
+    }
+
+    [Fact]
     public void AssignmentsControllerListReturnsAssignmentsFromService()
     {
         var assignment = CreateAssignment();
@@ -1320,6 +1333,10 @@ public class ApiSmokeTests
 
         public int? LastPageSize { get; private set; }
 
+        public Guid? LastArchivedResultId { get; private set; }
+
+        public Guid? LastDeletedResultId { get; private set; }
+
         public IReadOnlyList<ResultListItemDto> GetResults(ResultFilterDto filter, int page = 1, int pageSize = 100)
         {
             LastPage = page;
@@ -1340,6 +1357,18 @@ public class ApiSmokeTests
         public ResultDetailDto? GetResult(Guid id) => null;
 
         public ResultAttachmentFileDto? GetAttachmentFile(Guid resultId, Guid attachmentId) => null;
+
+        public bool ArchiveResultGroup(Guid resultId)
+        {
+            LastArchivedResultId = resultId;
+            return true;
+        }
+
+        public bool DeleteResultGroup(Guid resultId)
+        {
+            LastDeletedResultId = resultId;
+            return true;
+        }
     }
 
     private sealed class FakeAssignmentService(

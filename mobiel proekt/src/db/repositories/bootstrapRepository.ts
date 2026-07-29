@@ -102,7 +102,7 @@ async function reconcileAssignmentIdentityInTransaction(
 
     const hasUnfinishedCommand = await hasUnfinishedAssignmentCommandInTransaction(tx, ownerUserId, local.assignmentId);
     const resolvedStatus = resolveBootstrapAssignmentStatus(local.status, serverAssignment.status, hasUnfinishedCommand);
-    const preserveLocalStatus = hasUnfinishedCommand && resolvedStatus === local.status;
+    const preserveLocalStatus = resolvedStatus === local.status && local.status !== serverAssignment.status;
 
     await tx.runAsync(
       `
@@ -145,9 +145,9 @@ async function reconcileAssignmentIdentityInTransaction(
         FROM outbox_commands
         WHERE owner_user_id = ?
           AND (contour_id = ? OR contour_id IS NULL)
-          AND (entity_local_id = ? OR entity_server_id = ? OR instr(payload_json, ?) > 0)
+          AND (aggregate_key = ? OR entity_local_id = ? OR entity_server_id = ? OR instr(payload_json, ?) > 0)
       `,
-      [ownerUserId, currentContourId, local.assignmentId, local.assignmentId, local.assignmentId]
+      [ownerUserId, currentContourId, `patrolAssignment:${local.assignmentId}`, local.assignmentId, local.assignmentId, local.assignmentId]
     );
 
     for (const command of commands) {
@@ -173,6 +173,7 @@ async function reconcileAssignmentIdentityInTransaction(
           SET contour_id = COALESCE(contour_id, ?),
               entity_local_id = CASE WHEN entity_local_id = ? THEN ? ELSE entity_local_id END,
               entity_server_id = CASE WHEN entity_server_id = ? THEN ? ELSE entity_server_id END,
+              aggregate_key = CASE WHEN aggregate_key = ? THEN ? ELSE aggregate_key END,
               payload_json = ?,
               status = ?,
               last_error = CASE WHEN ? = 'superseded' THEN NULL ELSE last_error END
@@ -184,6 +185,8 @@ async function reconcileAssignmentIdentityInTransaction(
           serverAssignment.assignmentId,
           local.assignmentId,
           serverAssignment.assignmentId,
+          `patrolAssignment:${local.assignmentId}`,
+          `patrolAssignment:${serverAssignment.assignmentId}`,
           payloadJson,
           nextStatus,
           nextStatus,
@@ -1016,11 +1019,14 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
         [ownerUserId, assignment.assignmentId, currentContourId]
       );
       const hasUnfinishedCommand = await hasUnfinishedAssignmentCommandInTransaction(tx, ownerUserId, assignment.assignmentId);
-      const preserveLocalStatus = hasUnfinishedCommand && resolveBootstrapAssignmentStatus(
+      const resolvedBootstrapStatus = resolveBootstrapAssignmentStatus(
         localAssignment?.status ?? null,
         assignment.status,
         hasUnfinishedCommand
-      ) === (localAssignment?.status ?? null);
+      );
+      const preserveLocalStatus = localAssignment?.status != null
+        && resolvedBootstrapStatus === localAssignment.status
+        && localAssignment.status !== assignment.status;
       await tx.runAsync(
         `
           INSERT INTO patrol_assignments (

@@ -78,6 +78,16 @@ export function createApiResultsRepository({
     async exportResults(filters: ResultFilterOptions = {}, options: ApiRequestOptions = {}) {
       return client.download(`/api/v1/results/export${buildResultQuery(filters)}`, { method: "GET" }, options);
     },
+
+    async archiveResultGroup(resultId: string) {
+      if (!isBackendResultId(resultId)) throw new Error("Result id is not a backend API id");
+      await client.post<void>(`/api/v1/results/${resultId}/archive`);
+    },
+
+    async deleteResultGroup(resultId: string) {
+      if (!isBackendResultId(resultId)) throw new Error("Result id is not a backend API id");
+      await client.delete<void>(`/api/v1/results/${resultId}`);
+    },
   };
 }
 

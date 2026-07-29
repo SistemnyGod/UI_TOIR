@@ -55,6 +55,7 @@ import type {
   ServiceRequest,
 } from "../types";
 import { useStoredState } from "./useStoredState";
+import { subscribeAssignmentAutoRefresh } from "../features/patrol/assignments/assignmentAutoRefresh";
 
 interface UsePatrolWorkspaceDataOptions {
   dataSourceMode: DataSourceMode;
@@ -151,14 +152,14 @@ export function usePatrolWorkspaceData({
   );
 
   const refreshRequests = useCallback(
-    async ({ signal }: { signal?: AbortSignal } = {}) => {
+    async ({ signal, silent = false }: { signal?: AbortSignal; silent?: boolean } = {}) => {
       if (dataSourceMode !== "api") {
         setRequestListStatus("idle");
         setRequestListErrorMessage(undefined);
         return;
       }
 
-      setRequestListStatus("loading");
+      if (!silent) setRequestListStatus("loading");
       setRequestListErrorMessage(undefined);
 
       try {
@@ -169,10 +170,14 @@ export function usePatrolWorkspaceData({
         if (signal?.aborted) return;
 
         const message = error instanceof Error ? error.message : "Не удалось загрузить заявки API";
-        setApiRequests([]);
-        setRequestListStatus("error");
+        if (!silent) {
+          setApiRequests([]);
+          setRequestListStatus("error");
+        }
         setRequestListErrorMessage(message);
-        showToast(`Не удалось загрузить заявки API: ${message}`);
+        if (!silent) {
+          showToast(`Не удалось загрузить заявки API: ${message}`);
+        }
       }
     },
     [apiRequestsRepository, dataSourceMode, showToast],
@@ -210,6 +215,11 @@ export function usePatrolWorkspaceData({
     void refreshRequests({ signal: controller.signal });
 
     return () => controller.abort();
+  }, [dataSourceMode, refreshRequests, requestsEnabled]);
+
+  useEffect(() => {
+    if (dataSourceMode !== "api" || !requestsEnabled) return;
+    return subscribeAssignmentAutoRefresh(() => refreshRequests({ silent: true }));
   }, [dataSourceMode, refreshRequests, requestsEnabled]);
 
   async function submitRequestDraft(payload: CreateServiceRequestPayload) {

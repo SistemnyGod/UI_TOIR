@@ -12,7 +12,7 @@ const accountingFlyoutGroups = [
   { title: "Администрирование", ids: ["inventory-reports", "inventory-users", "inventory-settings", "inventory-system-log"] },
 ] satisfies Array<{ title: string; ids: string[] }>;
 
-const emuFlyoutIds = ["emu-dashboard", "emu-work-accounting", "emu-completed-work-history"];
+const emuFlyoutIds = ["emu-dashboard", "emu-work-accounting", "emu-completed-work-history", "emu-shift-report-entry", "emu-shift-report-history"];
 const patrolScreenIds: ScreenId[] = ["dashboard", "results", "assign", "employees", "schedule", "accounts", "routes"];
 
 const moduleCopy: Record<NavigationModuleId, { title: string; description: string }> = {
@@ -386,6 +386,8 @@ function canViewEmuScreen(user: SessionUserDto | null, screenId: ScreenId) {
     "emu-dashboard": "emu.dashboard.view",
     "emu-work-accounting": "emu.work-accounting.view",
     "emu-completed-work-history": "emu.history.view",
+    "emu-shift-report-entry": "emu.shift-reports.create",
+    "emu-shift-report-history": "emu.shift-reports.view",
   };
   const permission = permissionByScreen[screenId];
   return permission ? hasPermission(user, permission) : true;

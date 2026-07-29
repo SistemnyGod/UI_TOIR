@@ -165,9 +165,19 @@ export function ActivePatrolScreen() {
       bottomAction={isInProgress ? (
         <PrimaryButton
           disabled={isActing || progress.total === 0}
-          icon={isReadyForReview ? "document-text-outline" : "scan-outline"}
-          label={progress.total === 0 ? "Загружаем метки маршрута" : isReadyForReview ? "Проверить и отправить отчёт" : "Сканировать NFC"}
-          onPress={() => router.push(isReadyForReview ? `/patrol/assignment/${assignment.assignmentId}/submit` : `/patrol/assignment/${assignment.assignmentId}/scan-nfc`)}
+          icon={isReadyForReview ? "document-text-outline" : scanPolicy.nfcEnabled ? "scan-outline" : "list-outline"}
+          label={progress.total === 0
+            ? "Загружаем метки маршрута"
+            : isReadyForReview
+              ? "Проверить и отправить отчёт"
+              : scanPolicy.nfcEnabled
+                ? "Сканировать NFC"
+                : "Открыть все метки"}
+          onPress={() => router.push(isReadyForReview
+            ? `/patrol/assignment/${assignment.assignmentId}/submit`
+            : scanPolicy.nfcEnabled
+              ? `/patrol/assignment/${assignment.assignmentId}/scan-nfc`
+              : `/patrol/assignment/${assignment.assignmentId}/all-points`)}
           size="large"
         />
       ) : null}

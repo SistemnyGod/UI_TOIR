@@ -6,6 +6,7 @@ import {
   emptyPatrolDataSnapshot,
   type PatrolDataSnapshot,
 } from "../repositories/patrolDataRepository";
+import { subscribeAssignmentAutoRefresh } from "../features/patrol/assignments/assignmentAutoRefresh";
 
 export function usePatrolDataSource(mode: DataSourceMode) {
   const [snapshot, setSnapshot] = useState<PatrolDataSnapshot>(() => emptyPatrolDataSnapshot());
@@ -29,8 +30,10 @@ export function usePatrolDataSource(mode: DataSourceMode) {
         setSnapshot(nextSnapshot);
         setStatus(mode === "api" ? "ready" : "idle");
       } catch (error) {
-        setSnapshot(emptyPatrolDataSnapshot());
-        setStatus("error");
+        if (!silent) {
+          setSnapshot(emptyPatrolDataSnapshot());
+          setStatus("error");
+        }
         setErrorMessage(error instanceof Error ? error.message : "Не удалось загрузить данные API");
       }
     },
@@ -40,6 +43,11 @@ export function usePatrolDataSource(mode: DataSourceMode) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (mode !== "api") return;
+    return subscribeAssignmentAutoRefresh(() => refresh({ silent: true }));
+  }, [mode, refresh]);
 
   return {
     errorMessage,

@@ -193,6 +193,26 @@ describe("domain workflows", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it("sends server archive and delete commands for result groups", async () => {
+    const requests: Array<{ method: string; url: string }> = [];
+    const resultId = "11111111-1111-4111-8111-111111111111";
+    const repository = createApiResultsRepository({
+      baseUrl: "https://api.example.test",
+      fetcher: async (input, init) => {
+        requests.push({ method: init?.method ?? "GET", url: String(input) });
+        return new Response(null, { status: 204 });
+      },
+    });
+
+    await repository.archiveResultGroup(resultId);
+    await repository.deleteResultGroup(resultId);
+
+    expect(requests).toEqual([
+      { method: "POST", url: `https://api.example.test/api/v1/results/${resultId}/archive` },
+      { method: "DELETE", url: `https://api.example.test/api/v1/results/${resultId}` },
+    ]);
+  });
+
   it("sends sourceResultId when creating a request through API repository", async () => {
     let requestBody = "";
     const repository = createApiPatrolRequestsRepository({

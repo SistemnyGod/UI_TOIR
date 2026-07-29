@@ -409,6 +409,9 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
             "emu.work-accounting.view",
             "emu.dashboard.view",
             "emu.history.view",
+            "emu.shift-reports.create",
+            "emu.shift-reports.view",
+            "emu.shift-reports.view-all",
             "emu.work.create",
             "emu.work.update",
             "emu.work.pause",
@@ -437,6 +440,8 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
             "emu.view",
             "emu.work-accounting.view",
             "emu.dashboard.view",
+            "emu.shift-reports.create",
+            "emu.shift-reports.view",
             "emu.work.create",
             "emu.work.update",
             "emu.work.pause",
@@ -458,6 +463,8 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
             "emu.view",
             "emu.work-accounting.view",
             "emu.history.view",
+            "emu.shift-reports.view",
+            "emu.shift-reports.view-all",
             "emu.reports.view",
             "emu.reports.export",
             "emu.audit.view"
@@ -466,6 +473,8 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
             "emu.view",
             "emu.work-accounting.view",
             "emu.work.create",
+            "emu.shift-reports.create",
+            "emu.shift-reports.view",
             "emu.work.update",
             "emu.work.pause",
             "emu.work.complete",
@@ -904,6 +913,9 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
         CreatePermission("11111111-9999-9999-9999-999999999940", "emu.reports.export", "ЭМУ: экспорт истории и отчетов"),
         CreatePermission("11111111-9999-9999-9999-999999999941", "emu.shift.adjust", "EMU: shift adjust"),
         CreatePermission("11111111-9999-9999-9999-999999999942", "emu.decision.resolve", "EMU: resolve decisions"),
+        CreatePermission("11111111-9999-9999-9999-999999999944", "emu.shift-reports.create", "EMU: create shift reports"),
+        CreatePermission("11111111-9999-9999-9999-999999999945", "emu.shift-reports.view", "EMU: view shift reports"),
+        CreatePermission("11111111-9999-9999-9999-999999999946", "emu.shift-reports.view-all", "EMU: view all shift reports"),
         CreatePermission("11111111-9999-9999-9999-999999999943", "emu.scope.all", "ЭМУ: доступ ко всем участкам")
     ];
 

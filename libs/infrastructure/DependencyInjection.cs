@@ -66,6 +66,7 @@ public static class DependencyInjection
         services.AddScoped<IEmuShiftService>(provider => provider.GetRequiredService<EfEmuService>());
         services.AddScoped<IEmuPlanService>(provider => provider.GetRequiredService<EfEmuService>());
         services.AddScoped<IEmuMaintenanceService>(provider => provider.GetRequiredService<EfEmuService>());
+        services.AddScoped<IEmuShiftReportService, EfEmuShiftReportService>();
         services.AddScoped<IPercoIntegrationService, EfPercoIntegrationService>();
         services.AddScoped<IAuthSessionService, EfAuthSessionService>();
         services.AddScoped<ISiteUserAdminService, EfSiteUserAdminService>();

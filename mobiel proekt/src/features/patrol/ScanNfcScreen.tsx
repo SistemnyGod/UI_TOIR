@@ -1,5 +1,5 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
@@ -26,13 +26,14 @@ export function ScanNfcScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const { assignmentId } = useLocalSearchParams<{ assignmentId: string }>();
-  const autoScanStartedRef = useRef(false);
   const scanInProgressRef = useRef(false);
+  const screenActiveRef = useRef(false);
   const [status, setStatus] = useState<NfcStatus>("idle");
   const [routeName, setRouteName] = useState<string | null>(null);
   const [progress, setProgress] = useState<AssignmentProgress | null>(null);
   const [nextPoint, setNextPoint] = useState<PointListItem | null>(null);
   const [progressError, setProgressError] = useState<string | null>(null);
+  const [message, setMessage] = useState("Поднесите телефон к NFC-метке.");
 
   const loadRouteProgress = useCallback(async () => {
     const ownerUserId = await getStoredOwnerUserId();
@@ -41,6 +42,10 @@ export function ScanNfcScreen() {
       ownerUserId ? listAssignmentPoints(assignmentId, ownerUserId, currentContourId) : Promise.resolve([])
     ]);
 
+    if (!screenActiveRef.current) {
+      return;
+    }
+
     const loadedProgress = buildProgress(points);
     setRouteName(assignment?.routeName ?? null);
     setProgress(loadedProgress);
@@ -48,13 +53,17 @@ export function ScanNfcScreen() {
     if (loadedProgress.total === 0) {
       setStatus("routeUnavailable");
       setMessage("Метки маршрута ещё не загружены. Обновите маршрут перед сканированием.");
+    } else {
+      setStatus((current) => current === "routeUnavailable" ? "idle" : current);
+      setMessage((current) => current === "Метки маршрута ещё не загружены. Обновите маршрут перед сканированием."
+        ? "Поднесите телефон к NFC-метке."
+        : current);
     }
     setProgressError(null);
   }, [assignmentId]);
-  const [message, setMessage] = useState("Поднесите телефон к NFC-метке.");
 
   const handleScan = useCallback(async () => {
-    if (scanInProgressRef.current) {
+    if (!screenActiveRef.current || scanInProgressRef.current) {
       return;
     }
 
@@ -63,6 +72,9 @@ export function ScanNfcScreen() {
     setMessage("Ожидание NFC-метки...");
     try {
       const nfc = await initializeNfc();
+      if (!screenActiveRef.current) {
+        return;
+      }
       if (!nfc.supported) {
         setStatus("unsupported");
         setMessage("Телефон не поддерживает NFC.");
@@ -76,6 +88,9 @@ export function ScanNfcScreen() {
       }
 
       const tag = await readNfcTag();
+      if (!screenActiveRef.current) {
+        return;
+      }
       const nfcCodes = getNfcCodes(tag);
       if (nfcCodes.length === 0) {
         setStatus("error");
@@ -84,6 +99,9 @@ export function ScanNfcScreen() {
       }
 
       const result = await scanPointByNfc(assignmentId, nfcCodes);
+      if (!screenActiveRef.current) {
+        return;
+      }
       if (!result.matched) {
         setStatus("unmatched");
         setMessage("Метка не относится к выбранному маршруту.");
@@ -94,6 +112,9 @@ export function ScanNfcScreen() {
       setMessage("NFC подтвержден.");
       router.replace(`/patrol/assignment/${assignmentId}/point/${result.point.pointId}/fill`);
     } catch (error) {
+      if (!screenActiveRef.current) {
+        return;
+      }
       const errorMessage = error instanceof Error ? error.message : "NFC недоступен или чтение отменено.";
       if (isLifecycleScanBlock(errorMessage)) {
         setStatus("blocked");
@@ -111,6 +132,7 @@ export function ScanNfcScreen() {
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
+      screenActiveRef.current = true;
       void loadRouteProgress().catch(() => {
         if (isMounted) {
           setProgressError("Прогресс маршрута временно недоступен. Данные на телефоне сохранены.");
@@ -118,31 +140,18 @@ export function ScanNfcScreen() {
       });
       return () => {
         isMounted = false;
+        screenActiveRef.current = false;
+        void cancelNfcRead();
       };
     }, [loadRouteProgress])
   );
 
-  useEffect(() => {
-    if (autoScanStartedRef.current || progress === null) {
-      return;
-    }
-    if (progress.total === 0) {
-      return;
-    }
-
-    autoScanStartedRef.current = true;
-    void handleScan();
-
-    return () => {
-      void cancelNfcRead();
-    };
-  }, [handleScan, progress]);
 
   return (
     <Screen title="Сканирование NFC" subtitle={undefined}>
       {routeName ? <Text style={[styles.routeName, { color: colors.text }]}>{routeName}</Text> : null}
       {progressError ? <StatusPill label="Прогресс маршрута временно недоступен" tone="warning" /> : null}
-      {progress ? (
+      {progress && progress.total > 0 ? (
         <Card>
           <View style={styles.progressHeader}>
             <Text style={[styles.progressLabel, { color: colors.text }]}>Прогресс маршрута</Text>
@@ -158,6 +167,11 @@ export function ScanNfcScreen() {
               {nextPoint ? `${nextPoint.orderIndex}. ${nextPoint.name}` : "Все метки обработаны"}
             </Text>
           </View>
+        </Card>
+      ) : progress ? (
+        <Card>
+          <Text style={[styles.progressLabel, { color: colors.text }]}>Загружаем метки маршрута</Text>
+          <Text style={[styles.text, { color: colors.mutedText }]}>Прогресс появится после получения списка меток.</Text>
         </Card>
       ) : null}
       <Card>
@@ -182,7 +196,7 @@ export function ScanNfcScreen() {
       {status === "reading" ? <ActivityIndicator /> : null}
       {status === "routeUnavailable" ? (
         <PrimaryButton icon="refresh-outline" label="Обновить маршрут" onPress={() => void loadRouteProgress()} />
-      ) : status === "error" || status === "unmatched" || status === "disabled" || status === "blocked" ? (
+      ) : status !== "reading" && status !== "matched" && status !== "unsupported" ? (
         <PrimaryButton icon="scan-outline" label={scanButtonLabel(status)} onPress={handleScan} />
       ) : null}
       <PrimaryButton icon="list-outline" label="Все метки" onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} variant="secondary" />

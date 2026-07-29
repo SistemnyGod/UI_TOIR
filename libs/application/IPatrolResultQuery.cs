@@ -43,6 +43,10 @@ public interface IPatrolResultQuery
     ResultDetailDto? GetResult(Guid id);
 
     ResultAttachmentFileDto? GetAttachmentFile(Guid resultId, Guid attachmentId);
+
+    bool ArchiveResultGroup(Guid resultId);
+
+    bool DeleteResultGroup(Guid resultId);
 }
 
 public sealed record ResultAttachmentFileDto(

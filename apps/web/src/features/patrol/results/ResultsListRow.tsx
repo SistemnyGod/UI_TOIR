@@ -1,9 +1,11 @@
 import type { MouseEvent } from "react";
-import { AlertTriangle, CheckCircle2, EyeOff, MoreVertical } from "lucide-react";
+import { AlertTriangle, Archive, CheckCircle2, MoreVertical, Trash2 } from "lucide-react";
 import type { ResultGroup } from "./resultTypes";
 
 interface ResultsListRowProps {
   active?: boolean;
+  actionInProgress?: boolean;
+  canManageResults: boolean;
   canCreateRequest: boolean;
   group: ResultGroup;
   menuOpen: boolean;
@@ -18,7 +20,9 @@ interface ResultsListRowProps {
 
 export function ResultsListRow({
   active,
+  actionInProgress = false,
   canCreateRequest,
+  canManageResults,
   group,
   menuOpen,
   onArchive,
@@ -82,6 +86,7 @@ export function ResultsListRow({
             aria-haspopup="menu"
             aria-label={`Действия результата: ${group.route}, ${group.employee}`}
             className="results-review-row-more"
+            disabled={!canManageResults || actionInProgress}
             onClick={onOpenMenu}
             type="button"
           >
@@ -89,13 +94,13 @@ export function ResultsListRow({
           </button>
           {menuOpen ? (
             <div className="results-review-row-menu" role="menu">
-              <button data-action="archive" onClick={onArchive} role="menuitem" type="button">
-                <EyeOff size={16} />
-                Скрыть на этом устройстве
+              <button data-action="archive" disabled={actionInProgress} onClick={onArchive} role="menuitem" type="button">
+                <Archive size={16} />
+                {"\u0412 \u0430\u0440\u0445\u0438\u0432"}
               </button>
-              <button className="is-danger" data-action="delete" onClick={onDelete} role="menuitem" type="button">
-                <EyeOff size={16} />
-                Скрыть из списка на этом устройстве
+              <button className="is-danger" data-action="delete" disabled={actionInProgress} onClick={onDelete} role="menuitem" type="button">
+                <Trash2 size={16} />
+                {"\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b"}
               </button>
             </div>
           ) : null}

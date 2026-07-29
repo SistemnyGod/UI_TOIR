@@ -24,7 +24,7 @@ export function PatrolHomeScreen() {
           active={dashboard.active}
           onOpenAllPoints={() => router.push(`/patrol/assignment/${dashboard.active!.assignment.assignmentId}/all-points`)}
           onOpenPatrol={() => {
-            const action = getPrimaryAction(dashboard.active!.assignment.status);
+            const action = getPrimaryAction(dashboard.active!.assignment.status, dashboard.active!.progress, dashboard.active!.scanPolicy.nfcEnabled);
             router.push(action.path(dashboard.active!.assignment.assignmentId) as never);
           }}
           onOpenQueue={() => router.push("/settings/sync-queue" as never)}
@@ -69,7 +69,7 @@ function ActivePatrolCard({
   const isPaused = status === "paused";
   const isInProgress = status === "inProgress";
   const canUsePatrolAction = isAccepted || isPaused || isInProgress;
-  const primaryAction = getPrimaryAction(status);
+  const primaryAction = getPrimaryAction(status, active.progress, active.scanPolicy.nfcEnabled);
   const percent = progressPercent(active.progress);
 
   return (
@@ -82,16 +82,20 @@ function ActivePatrolCard({
       />
 
       <View
-        accessibilityLabel={`Пройдено ${active.progress.completed} из ${active.progress.total} меток`}
+        accessibilityLabel={active.progress.total === 0
+          ? "Метки маршрута загружаются"
+          : `Пройдено ${active.progress.completed} из ${active.progress.total} меток`}
         accessibilityRole="progressbar"
         accessibilityValue={{ min: 0, max: 100, now: percent }}
         style={styles.progressBlock}
       >
         <View style={styles.progressHeader}>
           <Text style={[styles.sectionLabel, { color: colors.text }]}>
-            {active.progress.completed} из {active.progress.total} меток
+            {active.progress.total === 0
+              ? "Загружаем метки маршрута"
+              : `${active.progress.completed} из ${active.progress.total} меток`}
           </Text>
-          <Text style={[styles.percent, { color: colors.text }]}>{percent}%</Text>
+          {active.progress.total > 0 ? <Text style={[styles.percent, { color: colors.text }]}>{percent}%</Text> : null}
         </View>
         <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
           <View style={[styles.progressFill, { backgroundColor: colors.primary, width: `${percent}%` }]} />
@@ -365,19 +369,35 @@ function requestStatusLabel(status: RequestBoardItem["status"]) {
   return "Доступна";
 }
 
-function getPrimaryAction(status: ActiveAssignment["status"] | undefined) {
-  if (status === "accepted" || status === "paused") {
+function getPrimaryAction(status: ActiveAssignment["status"] | undefined, progress: AssignmentProgress, nfcEnabled: boolean) {
+  if (status === "accepted" || status === "paused" || progress.total === 0) {
     return {
-      icon: "play-outline" as const,
-      label: status === "paused" ? "Продолжить обход" : "Начать обход",
+      icon: status === "accepted" || status === "paused" ? "play-outline" as const : "refresh-outline" as const,
+      label: status === "paused" ? "Продолжить обход" : status === "accepted" ? "Начать обход" : "Открыть обход",
       path: (assignmentId: string) => `/patrol/assignment/${assignmentId}`
     };
   }
 
+  if (progress.completed >= progress.total) {
+    return {
+      icon: "document-text-outline" as const,
+      label: "Проверить и отправить отчёт",
+      path: (assignmentId: string) => `/patrol/assignment/${assignmentId}/submit`
+    };
+  }
+
+  if (nfcEnabled) {
+    return {
+      icon: "scan-outline" as const,
+      label: "Сканировать NFC",
+      path: (assignmentId: string) => `/patrol/assignment/${assignmentId}/scan-nfc`
+    };
+  }
+
   return {
-    icon: "scan-outline" as const,
-    label: "Сканировать NFC",
-    path: (assignmentId: string) => `/patrol/assignment/${assignmentId}/scan-nfc`
+    icon: "list-outline" as const,
+    label: "Открыть все метки",
+    path: (assignmentId: string) => `/patrol/assignment/${assignmentId}/all-points`
   };
 }
 

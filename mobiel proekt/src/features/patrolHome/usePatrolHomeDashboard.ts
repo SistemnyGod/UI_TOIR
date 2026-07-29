@@ -5,6 +5,7 @@ import {
   ActiveAssignment,
   AssignmentProgress,
   getActiveAssignmentWithProgress,
+  getAssignmentScanPolicy,
   listRequestBoard,
   RequestBoardItem
 } from "@/db/repositories/patrolRepository";
@@ -16,6 +17,10 @@ import { buildPatrolHomeSummary, selectVisiblePatrolRequests } from "./patrolHom
 export type PatrolHomeActive = {
   assignment: ActiveAssignment;
   progress: AssignmentProgress;
+  scanPolicy: {
+    nfcEnabled: boolean;
+    qrFallbackEnabled: boolean;
+  };
 };
 
 export function usePatrolHomeDashboard() {
@@ -124,5 +129,11 @@ async function readDashboardSnapshot() {
     getActiveAssignmentWithProgress(),
     listRequestBoard()
   ]);
-  return { active, requests };
+  const scanPolicy = active
+    ? await getAssignmentScanPolicy(active.assignment.assignmentId)
+    : null;
+  return {
+    active: active && scanPolicy ? { ...active, scanPolicy } : null,
+    requests
+  };
 }

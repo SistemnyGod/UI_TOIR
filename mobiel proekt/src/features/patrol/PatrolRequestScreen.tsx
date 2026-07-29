@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
@@ -33,6 +33,7 @@ export function PatrolRequestScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const actionInProgressRef = useRef(false);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -69,6 +70,10 @@ export function PatrolRequestScreen() {
   }), [load]);
 
   async function runAction(action: () => Promise<void>) {
+    if (actionInProgressRef.current) {
+      return;
+    }
+    actionInProgressRef.current = true;
     setIsSubmitting(true);
     setError(null);
     try {
@@ -76,6 +81,7 @@ export function PatrolRequestScreen() {
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Не удалось выполнить действие.");
     } finally {
+      actionInProgressRef.current = false;
       setIsSubmitting(false);
     }
   }

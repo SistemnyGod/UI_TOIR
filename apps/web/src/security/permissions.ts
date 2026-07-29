@@ -19,6 +19,9 @@ export type PermissionCode =
   | "emu.work-accounting.view"
   | "emu.dashboard.view"
   | "emu.history.view"
+  | "emu.shift-reports.create"
+  | "emu.shift-reports.view"
+  | "emu.shift-reports.view-all"
   | "emu.work.create"
   | "emu.work.update"
   | "emu.work.pause"
@@ -86,6 +89,10 @@ export function getPrimaryActionPermission(screen: ScreenId): PermissionCode | u
       return "emu.work-accounting.view";
     case "emu-completed-work-history":
       return "emu.history.view";
+    case "emu-shift-report-entry":
+      return "emu.shift-reports.create";
+    case "emu-shift-report-history":
+      return "emu.shift-reports.view";
     case "inventory-overview":
     case "inventory-items":
     case "inventory-employees":

@@ -58,6 +58,16 @@ public sealed class ResultsController(IPatrolResultQuery resultQuery) : Controll
         return result is null ? NotFound() : Ok(result);
     }
 
+    [HttpPost("{id:guid}/archive")]
+    [RequirePermission("assignments.write")]
+    public IActionResult Archive(Guid id) =>
+        resultQuery.ArchiveResultGroup(id) ? NoContent() : NotFound();
+
+    [HttpDelete("{id:guid}")]
+    [RequirePermission("assignments.write")]
+    public IActionResult Delete(Guid id) =>
+        resultQuery.DeleteResultGroup(id) ? NoContent() : NotFound();
+
     [HttpGet("{id:guid}/attachments/{attachmentId:guid}")]
     [RequirePermission("results.read")]
     public IActionResult DownloadAttachment(Guid id, Guid attachmentId)

@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAssignmentHistoryEvents, formatAssignmentActionTime } from "../features/patrol/assignments/assignmentDateUtils";
 import { assignmentStatusText, isAssignmentCurrent } from "../features/patrol/assignments/assignmentUtils";
+import { ASSIGNMENT_AUTO_REFRESH_INTERVAL_MS, subscribeAssignmentAutoRefresh } from "../features/patrol/assignments/assignmentAutoRefresh";
+import { mergeAssignmentSources } from "../features/patrol/AssignmentScreen";
+import { buildLatestAssignmentResults } from "../features/dashboard/DashboardScreen";
 import { buildCounters, buildMetrics, buildResultApiFilters, buildResultGroups, filterGroups, summarizeDuration } from "../features/patrol/results/ResultsWorkspace";
 import { selectScheduleResultHistory } from "../features/patrol/ScheduleScreen";
 import { isImageAttachment, isVideoAttachment } from "../features/patrol/results/ResultMediaViewer";
@@ -12,6 +15,15 @@ afterEach(() => {
 });
 
 describe("patrol results and assignment stabilization", () => {
+  it("shows one latest dashboard row per patrol assignment", () => {
+    const latest = buildLatestAssignmentResults([
+      createResult("point-1", { assignmentId: "assignment-1", actualAt: "2026-07-29T07:20:00Z" }),
+      createResult("point-2", { assignmentId: "assignment-1", actualAt: "2026-07-29T07:27:00Z" }),
+      createResult("point-3", { assignmentId: "assignment-2", actualAt: "2026-07-29T06:00:00Z" }),
+    ]);
+
+    expect(latest.map((result) => result.id)).toEqual(["point-2", "point-3"]);
+  });
   it("keeps same-day schedule history authoritative and bounds recent fallback", () => {
     const selected = {
       id: "cell-1",
@@ -110,6 +122,29 @@ describe("patrol results and assignment stabilization", () => {
     expect(assignmentStatusText(cancelled.status)).toBe("Отменено");
     expect(isAssignmentCurrent(cancelled)).toBe(false);
     expect(createAssignmentHistoryEvents(cancelled)[0].title).toBe("Назначение отменено");
+  });
+  it("refreshes assignment data on an interval and when the page regains focus", async () => {
+    vi.useFakeTimers();
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const unsubscribe = subscribeAssignmentAutoRefresh(refresh);
+
+    await vi.advanceTimersByTimeAsync(ASSIGNMENT_AUTO_REFRESH_INTERVAL_MS);
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    window.dispatchEvent(new Event("focus"));
+    await Promise.resolve();
+    expect(refresh).toHaveBeenCalledTimes(2);
+
+    unsubscribe();
+    await vi.advanceTimersByTimeAsync(ASSIGNMENT_AUTO_REFRESH_INTERVAL_MS);
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses the live active assignment over a stale history copy", () => {
+    const stale = createAssignment();
+    const live = { ...stale, progress: 40, status: "В пути" } as ActivePatrol;
+
+    expect(mergeAssignmentSources([stale], [live])).toEqual([live]);
   });
 });
 

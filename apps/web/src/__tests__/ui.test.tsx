@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,6 +14,7 @@ import { Chip, EmptyState, ProgressBar } from "../components/ui";
 import { useResultsWorkspace } from "../hooks/useResultsWorkspace";
 import { InventoryRepositoryProvider } from "../repositories/inventoryRepositoryContext";
 import { createMockInventoryRepository } from "../repositories/mockInventoryRepository";
+import { patrolResultsFallback } from "../repositories/resultsRepository";
 import { PointResultTable } from "../features/patrol/results/PointResultTable";
 import { filterGroups, mapWithConcurrency, ResultsWorkspace } from "../features/patrol/results/ResultsWorkspace";
 import { AssignmentScreen } from "../features/patrol/AssignmentScreen";
@@ -995,6 +996,24 @@ describe("shared UI primitives", () => {
     expect(onApply).toHaveBeenCalledWith(["employee-1", "employee-2"]);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+  it("opens a dashboard-selected patrol report after navigation", async () => {
+    const onOpenResultHandled = vi.fn();
+    const selectedResultId = patrolResultsFallback[0].id;
+
+    render(
+      <ResultsWorkspace
+        dataSourceMode="mock"
+        selectedResultId={selectedResultId}
+        openResultId={selectedResultId}
+        onOpenResultHandled={onOpenResultHandled}
+        onSelectResult={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(onOpenResultHandled).toHaveBeenCalledTimes(1);
+  });
+
   it("opens patrol result details on result row double click", async () => {
     const user = userEvent.setup();
     const onSelectResult = vi.fn();

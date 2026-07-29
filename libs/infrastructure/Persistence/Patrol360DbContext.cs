@@ -3,7 +3,7 @@ using Patrol360.Infrastructure.Persistence.Entities;
 
 namespace Patrol360.Infrastructure.Persistence;
 
-internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> options) : DbContext(options)
+public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> options) : DbContext(options)
 {
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
@@ -17,173 +17,177 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
-    public DbSet<RouteEntity> Routes => Set<RouteEntity>();
+    internal DbSet<RouteEntity> Routes => Set<RouteEntity>();
 
-    public DbSet<RoutePointEntity> RoutePoints => Set<RoutePointEntity>();
+    internal DbSet<RoutePointEntity> RoutePoints => Set<RoutePointEntity>();
 
-    public DbSet<RouteRevisionEntity> RouteRevisions => Set<RouteRevisionEntity>();
+    internal DbSet<RouteRevisionEntity> RouteRevisions => Set<RouteRevisionEntity>();
 
-    public DbSet<RouteRevisionPointEntity> RouteRevisionPoints => Set<RouteRevisionPointEntity>();
+    internal DbSet<RouteRevisionPointEntity> RouteRevisionPoints => Set<RouteRevisionPointEntity>();
 
-    public DbSet<EmployeeEntity> Employees => Set<EmployeeEntity>();
+    internal DbSet<EmployeeEntity> Employees => Set<EmployeeEntity>();
 
-    public DbSet<AccountingEmployeeReferenceEntity> AccountingEmployeeReferences => Set<AccountingEmployeeReferenceEntity>();
+    internal DbSet<AccountingEmployeeReferenceEntity> AccountingEmployeeReferences => Set<AccountingEmployeeReferenceEntity>();
 
-    public DbSet<PatrolRequestEntity> PatrolRequests => Set<PatrolRequestEntity>();
+    internal DbSet<PatrolRequestEntity> PatrolRequests => Set<PatrolRequestEntity>();
 
-    public DbSet<PatrolResultEntity> PatrolResults => Set<PatrolResultEntity>();
+    internal DbSet<PatrolResultEntity> PatrolResults => Set<PatrolResultEntity>();
 
-    public DbSet<PatrolResultIssueEntity> PatrolResultIssues => Set<PatrolResultIssueEntity>();
+    internal DbSet<PatrolResultIssueEntity> PatrolResultIssues => Set<PatrolResultIssueEntity>();
 
-    public DbSet<PatrolResultAttachmentEntity> PatrolResultAttachments => Set<PatrolResultAttachmentEntity>();
+    internal DbSet<PatrolResultAttachmentEntity> PatrolResultAttachments => Set<PatrolResultAttachmentEntity>();
 
-    public DbSet<AssignmentEntity> Assignments => Set<AssignmentEntity>();
+    internal DbSet<AssignmentEntity> Assignments => Set<AssignmentEntity>();
 
-    public DbSet<AssignmentSettingsEntity> AssignmentSettings => Set<AssignmentSettingsEntity>();
+    internal DbSet<AssignmentSettingsEntity> AssignmentSettings => Set<AssignmentSettingsEntity>();
 
-    public DbSet<AssignmentFavoriteEmployeeEntity> AssignmentFavoriteEmployees => Set<AssignmentFavoriteEmployeeEntity>();
+    internal DbSet<AssignmentFavoriteEmployeeEntity> AssignmentFavoriteEmployees => Set<AssignmentFavoriteEmployeeEntity>();
 
-    public DbSet<MobileAccountEntity> MobileAccounts => Set<MobileAccountEntity>();
+    internal DbSet<MobileAccountEntity> MobileAccounts => Set<MobileAccountEntity>();
 
-    public DbSet<MobileAccountEmployeeBindingEntity> MobileAccountEmployeeBindings => Set<MobileAccountEmployeeBindingEntity>();
+    internal DbSet<MobileAccountEmployeeBindingEntity> MobileAccountEmployeeBindings => Set<MobileAccountEmployeeBindingEntity>();
 
-    public DbSet<MobileAccountSessionEntity> MobileAccountSessions => Set<MobileAccountSessionEntity>();
+    internal DbSet<MobileAccountSessionEntity> MobileAccountSessions => Set<MobileAccountSessionEntity>();
 
-    public DbSet<MobileDeviceEntity> MobileDevices => Set<MobileDeviceEntity>();
+    internal DbSet<MobileDeviceEntity> MobileDevices => Set<MobileDeviceEntity>();
 
-    public DbSet<MobileRefreshTokenHistoryEntity> MobileRefreshTokenHistories => Set<MobileRefreshTokenHistoryEntity>();
+    internal DbSet<MobileRefreshTokenHistoryEntity> MobileRefreshTokenHistories => Set<MobileRefreshTokenHistoryEntity>();
 
-    public DbSet<MobileAccountAuditEventEntity> MobileAccountAuditEvents => Set<MobileAccountAuditEventEntity>();
+    internal DbSet<MobileAccountAuditEventEntity> MobileAccountAuditEvents => Set<MobileAccountAuditEventEntity>();
 
-    public DbSet<MobileNotificationEntity> MobileNotifications => Set<MobileNotificationEntity>();
+    internal DbSet<MobileNotificationEntity> MobileNotifications => Set<MobileNotificationEntity>();
 
-    public DbSet<MobileOutboxOperationEntity> MobileOutboxOperations => Set<MobileOutboxOperationEntity>();
+    internal DbSet<MobileOutboxOperationEntity> MobileOutboxOperations => Set<MobileOutboxOperationEntity>();
 
-    public DbSet<MobileSyncConflictResolutionEntity> MobileSyncConflictResolutions => Set<MobileSyncConflictResolutionEntity>();
+    internal DbSet<MobileSyncConflictResolutionEntity> MobileSyncConflictResolutions => Set<MobileSyncConflictResolutionEntity>();
 
-    public DbSet<MobileUploadedFileEntity> MobileUploadedFiles => Set<MobileUploadedFileEntity>();
+    internal DbSet<MobileUploadedFileEntity> MobileUploadedFiles => Set<MobileUploadedFileEntity>();
 
-    public DbSet<MobileShiftRemarkEntity> MobileShiftRemarks => Set<MobileShiftRemarkEntity>();
+    internal DbSet<MobileShiftRemarkEntity> MobileShiftRemarks => Set<MobileShiftRemarkEntity>();
 
-    public DbSet<SiteUserEntity> SiteUsers => Set<SiteUserEntity>();
+    internal DbSet<SiteUserEntity> SiteUsers => Set<SiteUserEntity>();
 
-    public DbSet<RoleEntity> Roles => Set<RoleEntity>();
+    internal DbSet<RoleEntity> Roles => Set<RoleEntity>();
 
-    public DbSet<PermissionEntity> Permissions => Set<PermissionEntity>();
+    internal DbSet<PermissionEntity> Permissions => Set<PermissionEntity>();
 
-    public DbSet<SiteUserRoleEntity> SiteUserRoles => Set<SiteUserRoleEntity>();
+    internal DbSet<SiteUserRoleEntity> SiteUserRoles => Set<SiteUserRoleEntity>();
 
-    public DbSet<RolePermissionEntity> RolePermissions => Set<RolePermissionEntity>();
+    internal DbSet<RolePermissionEntity> RolePermissions => Set<RolePermissionEntity>();
 
-    public DbSet<SiteUserPermissionEntity> SiteUserPermissions => Set<SiteUserPermissionEntity>();
+    internal DbSet<SiteUserPermissionEntity> SiteUserPermissions => Set<SiteUserPermissionEntity>();
 
-    public DbSet<SiteUserAccessScopeEntity> SiteUserAccessScopes => Set<SiteUserAccessScopeEntity>();
+    internal DbSet<SiteUserAccessScopeEntity> SiteUserAccessScopes => Set<SiteUserAccessScopeEntity>();
 
-    public DbSet<SiteUserSessionEntity> SiteUserSessions => Set<SiteUserSessionEntity>();
+    internal DbSet<SiteUserSessionEntity> SiteUserSessions => Set<SiteUserSessionEntity>();
 
-    public DbSet<InventoryCategoryEntity> InventoryCategories => Set<InventoryCategoryEntity>();
+    internal DbSet<InventoryCategoryEntity> InventoryCategories => Set<InventoryCategoryEntity>();
 
-    public DbSet<InventoryUnitEntity> InventoryUnits => Set<InventoryUnitEntity>();
+    internal DbSet<InventoryUnitEntity> InventoryUnits => Set<InventoryUnitEntity>();
 
-    public DbSet<InventoryItemEntity> InventoryItems => Set<InventoryItemEntity>();
+    internal DbSet<InventoryItemEntity> InventoryItems => Set<InventoryItemEntity>();
 
-    public DbSet<InventoryWarehouseEntity> InventoryWarehouses => Set<InventoryWarehouseEntity>();
+    internal DbSet<InventoryWarehouseEntity> InventoryWarehouses => Set<InventoryWarehouseEntity>();
 
-    public DbSet<InventoryStockMoveEntity> InventoryStockMoves => Set<InventoryStockMoveEntity>();
+    internal DbSet<InventoryStockMoveEntity> InventoryStockMoves => Set<InventoryStockMoveEntity>();
 
-    public DbSet<InventoryCustodyCategoryEntity> InventoryCustodyCategories => Set<InventoryCustodyCategoryEntity>();
+    internal DbSet<InventoryCustodyCategoryEntity> InventoryCustodyCategories => Set<InventoryCustodyCategoryEntity>();
 
-    public DbSet<InventoryCustodyDocumentEntity> InventoryCustodyDocuments => Set<InventoryCustodyDocumentEntity>();
+    internal DbSet<InventoryCustodyDocumentEntity> InventoryCustodyDocuments => Set<InventoryCustodyDocumentEntity>();
 
-    public DbSet<InventoryCustodyRecordEntity> InventoryCustodyRecords => Set<InventoryCustodyRecordEntity>();
+    internal DbSet<InventoryCustodyRecordEntity> InventoryCustodyRecords => Set<InventoryCustodyRecordEntity>();
 
-    public DbSet<InventoryCustodyRecordEventEntity> InventoryCustodyRecordEvents => Set<InventoryCustodyRecordEventEntity>();
+    internal DbSet<InventoryCustodyRecordEventEntity> InventoryCustodyRecordEvents => Set<InventoryCustodyRecordEventEntity>();
 
-    public DbSet<InventoryPpeCardEntity> InventoryPpeCards => Set<InventoryPpeCardEntity>();
+    internal DbSet<InventoryPpeCardEntity> InventoryPpeCards => Set<InventoryPpeCardEntity>();
 
-    public DbSet<InventoryPpeCardLineEntity> InventoryPpeCardLines => Set<InventoryPpeCardLineEntity>();
+    internal DbSet<InventoryPpeCardLineEntity> InventoryPpeCardLines => Set<InventoryPpeCardLineEntity>();
 
-    public DbSet<InventoryPpeCardLineEventEntity> InventoryPpeCardLineEvents => Set<InventoryPpeCardLineEventEntity>();
+    internal DbSet<InventoryPpeCardLineEventEntity> InventoryPpeCardLineEvents => Set<InventoryPpeCardLineEventEntity>();
 
-    public DbSet<InventoryPpeNormSetEntity> InventoryPpeNormSets => Set<InventoryPpeNormSetEntity>();
+    internal DbSet<InventoryPpeNormSetEntity> InventoryPpeNormSets => Set<InventoryPpeNormSetEntity>();
 
-    public DbSet<InventoryPpeNormRowEntity> InventoryPpeNormRows => Set<InventoryPpeNormRowEntity>();
+    internal DbSet<InventoryPpeNormRowEntity> InventoryPpeNormRows => Set<InventoryPpeNormRowEntity>();
 
-    public DbSet<InventoryPpeNormCatalogMappingEntity> InventoryPpeNormCatalogMappings => Set<InventoryPpeNormCatalogMappingEntity>();
+    internal DbSet<InventoryPpeNormCatalogMappingEntity> InventoryPpeNormCatalogMappings => Set<InventoryPpeNormCatalogMappingEntity>();
 
-    public DbSet<InventoryPpeCardNormRowEntity> InventoryPpeCardNormRows => Set<InventoryPpeCardNormRowEntity>();
+    internal DbSet<InventoryPpeCardNormRowEntity> InventoryPpeCardNormRows => Set<InventoryPpeCardNormRowEntity>();
 
-    public DbSet<InventoryPpeIssueTemplateEntity> InventoryPpeIssueTemplates => Set<InventoryPpeIssueTemplateEntity>();
+    internal DbSet<InventoryPpeIssueTemplateEntity> InventoryPpeIssueTemplates => Set<InventoryPpeIssueTemplateEntity>();
 
-    public DbSet<InventoryItemSetEntity> InventoryItemSets => Set<InventoryItemSetEntity>();
+    internal DbSet<InventoryItemSetEntity> InventoryItemSets => Set<InventoryItemSetEntity>();
 
-    public DbSet<InventoryItemSetItemEntity> InventoryItemSetItems => Set<InventoryItemSetItemEntity>();
+    internal DbSet<InventoryItemSetItemEntity> InventoryItemSetItems => Set<InventoryItemSetItemEntity>();
 
-    public DbSet<InventoryPositionNormEntity> InventoryPositionNorms => Set<InventoryPositionNormEntity>();
+    internal DbSet<InventoryPositionNormEntity> InventoryPositionNorms => Set<InventoryPositionNormEntity>();
 
-    public DbSet<InventoryPositionItemSetMapEntity> InventoryPositionItemSetMaps => Set<InventoryPositionItemSetMapEntity>();
+    internal DbSet<InventoryPositionItemSetMapEntity> InventoryPositionItemSetMaps => Set<InventoryPositionItemSetMapEntity>();
 
-    public DbSet<InventoryReturnReasonEntity> InventoryReturnReasons => Set<InventoryReturnReasonEntity>();
+    internal DbSet<InventoryReturnReasonEntity> InventoryReturnReasons => Set<InventoryReturnReasonEntity>();
 
-    public DbSet<InventoryWriteOffReasonEntity> InventoryWriteOffReasons => Set<InventoryWriteOffReasonEntity>();
+    internal DbSet<InventoryWriteOffReasonEntity> InventoryWriteOffReasons => Set<InventoryWriteOffReasonEntity>();
 
-    public DbSet<InventorySystemLogEntity> InventorySystemLogs => Set<InventorySystemLogEntity>();
+    internal DbSet<InventorySystemLogEntity> InventorySystemLogs => Set<InventorySystemLogEntity>();
 
-    public DbSet<InventoryExportJobEntity> InventoryExportJobs => Set<InventoryExportJobEntity>();
+    internal DbSet<InventoryExportJobEntity> InventoryExportJobs => Set<InventoryExportJobEntity>();
 
-    public DbSet<InventoryLegacyImportRunEntity> InventoryLegacyImportRuns => Set<InventoryLegacyImportRunEntity>();
+    internal DbSet<InventoryLegacyImportRunEntity> InventoryLegacyImportRuns => Set<InventoryLegacyImportRunEntity>();
 
-    public DbSet<InventoryEmployeeLegacyLinkEntity> InventoryEmployeeLegacyLinks => Set<InventoryEmployeeLegacyLinkEntity>();
+    internal DbSet<InventoryEmployeeLegacyLinkEntity> InventoryEmployeeLegacyLinks => Set<InventoryEmployeeLegacyLinkEntity>();
 
-    public DbSet<InventoryUserLegacyLinkEntity> InventoryUserLegacyLinks => Set<InventoryUserLegacyLinkEntity>();
+    internal DbSet<InventoryUserLegacyLinkEntity> InventoryUserLegacyLinks => Set<InventoryUserLegacyLinkEntity>();
 
-    public DbSet<EmuWorkSectionEntity> EmuWorkSections => Set<EmuWorkSectionEntity>();
+    internal DbSet<EmuWorkSectionEntity> EmuWorkSections => Set<EmuWorkSectionEntity>();
 
-    public DbSet<EmuWaitReasonEntity> EmuWaitReasons => Set<EmuWaitReasonEntity>();
+    internal DbSet<EmuWaitReasonEntity> EmuWaitReasons => Set<EmuWaitReasonEntity>();
 
-    public DbSet<EmuNotCompletedReasonEntity> EmuNotCompletedReasons => Set<EmuNotCompletedReasonEntity>();
+    internal DbSet<EmuNotCompletedReasonEntity> EmuNotCompletedReasons => Set<EmuNotCompletedReasonEntity>();
 
-    public DbSet<EmuWorkTemplateEntity> EmuWorkTemplates => Set<EmuWorkTemplateEntity>();
+    internal DbSet<EmuWorkTemplateEntity> EmuWorkTemplates => Set<EmuWorkTemplateEntity>();
 
-    public DbSet<EmuFavoriteEmployeeEntity> EmuFavoriteEmployees => Set<EmuFavoriteEmployeeEntity>();
+    internal DbSet<EmuFavoriteEmployeeEntity> EmuFavoriteEmployees => Set<EmuFavoriteEmployeeEntity>();
 
-    public DbSet<EmuShiftTemplateEntity> EmuShiftTemplates => Set<EmuShiftTemplateEntity>();
+    internal DbSet<EmuShiftTemplateEntity> EmuShiftTemplates => Set<EmuShiftTemplateEntity>();
 
-    public DbSet<EmuEmployeeShiftEntity> EmuEmployeeShifts => Set<EmuEmployeeShiftEntity>();
+    internal DbSet<EmuEmployeeShiftEntity> EmuEmployeeShifts => Set<EmuEmployeeShiftEntity>();
 
-    public DbSet<EmuWorkPlanTaskEntity> EmuWorkPlanTasks => Set<EmuWorkPlanTaskEntity>();
+    internal DbSet<EmuWorkPlanTaskEntity> EmuWorkPlanTasks => Set<EmuWorkPlanTaskEntity>();
 
-    public DbSet<EmuWorkPlanTaskEmployeeEntity> EmuWorkPlanTaskEmployees => Set<EmuWorkPlanTaskEmployeeEntity>();
+    internal DbSet<EmuWorkPlanTaskEmployeeEntity> EmuWorkPlanTaskEmployees => Set<EmuWorkPlanTaskEmployeeEntity>();
 
-    public DbSet<EmuWorkSessionEntity> EmuWorkSessions => Set<EmuWorkSessionEntity>();
+    internal DbSet<EmuWorkSessionEntity> EmuWorkSessions => Set<EmuWorkSessionEntity>();
 
-    public DbSet<EmuWorkSessionEmployeeEntity> EmuWorkSessionEmployees => Set<EmuWorkSessionEmployeeEntity>();
+    internal DbSet<EmuWorkSessionEmployeeEntity> EmuWorkSessionEmployees => Set<EmuWorkSessionEmployeeEntity>();
 
-    public DbSet<EmuWorkParticipationIntervalEntity> EmuWorkParticipationIntervals => Set<EmuWorkParticipationIntervalEntity>();
+    internal DbSet<EmuWorkParticipationIntervalEntity> EmuWorkParticipationIntervals => Set<EmuWorkParticipationIntervalEntity>();
 
-    public DbSet<EmuWorkPauseEntity> EmuWorkPauses => Set<EmuWorkPauseEntity>();
+    internal DbSet<EmuWorkPauseEntity> EmuWorkPauses => Set<EmuWorkPauseEntity>();
 
-    public DbSet<EmuWorkPauseEmployeeEntity> EmuWorkPauseEmployees => Set<EmuWorkPauseEmployeeEntity>();
+    internal DbSet<EmuWorkPauseEmployeeEntity> EmuWorkPauseEmployees => Set<EmuWorkPauseEmployeeEntity>();
 
-    public DbSet<EmuWorkSessionCarryOverEntity> EmuWorkSessionCarryOvers => Set<EmuWorkSessionCarryOverEntity>();
+    internal DbSet<EmuWorkSessionCarryOverEntity> EmuWorkSessionCarryOvers => Set<EmuWorkSessionCarryOverEntity>();
 
-    public DbSet<EmuWorkAuditEventEntity> EmuWorkAuditEvents => Set<EmuWorkAuditEventEntity>();
+    internal DbSet<EmuWorkAuditEventEntity> EmuWorkAuditEvents => Set<EmuWorkAuditEventEntity>();
 
-    public DbSet<EmuDecisionEntity> EmuDecisions => Set<EmuDecisionEntity>();
+    internal DbSet<EmuDecisionEntity> EmuDecisions => Set<EmuDecisionEntity>();
 
-    public DbSet<EmuNotificationEntity> EmuNotifications => Set<EmuNotificationEntity>();
+    internal DbSet<EmuNotificationEntity> EmuNotifications => Set<EmuNotificationEntity>();
 
-    public DbSet<PercoIntegrationSettingsEntity> PercoIntegrationSettings => Set<PercoIntegrationSettingsEntity>();
+    internal DbSet<EmuShiftReportEntity> EmuShiftReports => Set<EmuShiftReportEntity>();
 
-    public DbSet<PercoIntegrationLogEntity> PercoIntegrationLogs => Set<PercoIntegrationLogEntity>();
+    internal DbSet<EmuShiftReportLineEntity> EmuShiftReportLines => Set<EmuShiftReportLineEntity>();
 
-    public DbSet<PercoSyncStateEntity> PercoSyncStates => Set<PercoSyncStateEntity>();
+    internal DbSet<PercoIntegrationSettingsEntity> PercoIntegrationSettings => Set<PercoIntegrationSettingsEntity>();
 
-    public DbSet<PercoEmployeeLinkEntity> PercoEmployeeLinks => Set<PercoEmployeeLinkEntity>();
+    internal DbSet<PercoIntegrationLogEntity> PercoIntegrationLogs => Set<PercoIntegrationLogEntity>();
 
-    public DbSet<PercoAccessEventEntity> PercoAccessEvents => Set<PercoAccessEventEntity>();
+    internal DbSet<PercoSyncStateEntity> PercoSyncStates => Set<PercoSyncStateEntity>();
 
-    public DbSet<EmployeePresenceIntervalEntity> EmployeePresenceIntervals => Set<EmployeePresenceIntervalEntity>();
+    internal DbSet<PercoEmployeeLinkEntity> PercoEmployeeLinks => Set<PercoEmployeeLinkEntity>();
+
+    internal DbSet<PercoAccessEventEntity> PercoAccessEvents => Set<PercoAccessEventEntity>();
+
+    internal DbSet<EmployeePresenceIntervalEntity> EmployeePresenceIntervals => Set<EmployeePresenceIntervalEntity>();
 
     private void SynchronizePatrolStatusCodes()
     {
@@ -245,6 +249,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
         ConfigureInventoryStockMoves(modelBuilder);
         ConfigureInventoryWorkflow(modelBuilder);
         ConfigureEmu(modelBuilder);
+        ConfigureEmuShiftReports(modelBuilder);
         ConfigurePerco(modelBuilder);
     }
 
@@ -498,6 +503,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.Property(result => result.Severity).HasColumnName("severity").HasMaxLength(60).IsRequired();
             entity.Property(result => result.Photos).HasColumnName("photos");
             entity.Property(result => result.CreatedAt).HasColumnName("created_at");
+            entity.Property(result => result.ArchivedAt).HasColumnName("archived_at");
 
             entity.HasOne(result => result.Assignment)
                 .WithMany()
@@ -527,6 +533,7 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.HasIndex(result => result.RouteId).HasDatabaseName("ix_patrol_results_route_id");
             entity.HasIndex(result => result.EmployeeId).HasDatabaseName("ix_patrol_results_employee_id");
             entity.HasIndex(result => result.ActualAt).HasDatabaseName("ix_patrol_results_actual_at");
+            entity.HasIndex(result => result.ArchivedAt).HasDatabaseName("ix_patrol_results_archived_at");
             entity.HasIndex(result => new { result.ActualAt, result.AssignmentId })
                 .HasDatabaseName("ix_patrol_results_actual_at_assignment_id");
         });
@@ -2203,6 +2210,60 @@ internal sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> op
             entity.HasOne(row => row.PlanTask).WithMany().HasForeignKey(row => row.PlanTaskId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(row => row.Status).HasDatabaseName("ix_emu_notifications_status");
             entity.HasIndex(row => row.DedupeKey).IsUnique().HasDatabaseName("ux_emu_notifications_dedupe_key");
+        });
+    }
+
+    private static void ConfigureEmuShiftReports(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EmuShiftReportEntity>(entity =>
+        {
+            entity.ToTable("emu_shift_reports");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.ReportDate).HasColumnName("report_date");
+            entity.Property(row => row.ShiftType).HasColumnName("shift_type").HasMaxLength(20).IsRequired();
+            entity.Property(row => row.WorkerCategory).HasColumnName("worker_category").HasMaxLength(30).IsRequired();
+            entity.Property(row => row.EmployeeId).HasColumnName("employee_id");
+            entity.Property(row => row.EmployeeNameSnapshot).HasColumnName("employee_name_snapshot").HasMaxLength(220).IsRequired();
+            entity.Property(row => row.PersonnelNoSnapshot).HasColumnName("personnel_no_snapshot").HasMaxLength(60).IsRequired();
+            entity.Property(row => row.PositionSnapshot).HasColumnName("position_snapshot").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.DepartmentSnapshot).HasColumnName("department_snapshot").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.CreatedByUserId).HasColumnName("created_by_user_id");
+            entity.Property(row => row.CreatedByName).HasColumnName("created_by_name").HasMaxLength(220).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.Property(row => row.SubmittedAt).HasColumnName("submitted_at");
+            entity.Property(row => row.RowVersion).HasColumnName("row_version").IsConcurrencyToken();
+            entity.HasOne(row => row.Employee).WithMany().HasForeignKey(row => row.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(row => row.CreatedByUser).WithMany().HasForeignKey(row => row.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(row => new { row.EmployeeId, row.ReportDate, row.ShiftType }).IsUnique().HasDatabaseName("ux_emu_shift_reports_employee_date_shift");
+            entity.HasIndex(row => row.ReportDate).HasDatabaseName("ix_emu_shift_reports_date");
+            entity.HasIndex(row => new { row.WorkerCategory, row.ReportDate, row.ShiftType }).HasDatabaseName("ix_emu_shift_reports_category_date_shift");
+            entity.HasIndex(row => row.CreatedByUserId).HasDatabaseName("ix_emu_shift_reports_created_by");
+        });
+
+        modelBuilder.Entity<EmuShiftReportLineEntity>(entity =>
+        {
+            entity.ToTable("emu_shift_report_lines", table =>
+            {
+                table.HasCheckConstraint("ck_emu_shift_report_lines_duration", "duration_minutes >= 1 AND duration_minutes <= 1440");
+                table.HasCheckConstraint("ck_emu_shift_report_lines_sequence", "sequence_no > 0");
+            });
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.ReportId).HasColumnName("report_id");
+            entity.Property(row => row.SequenceNo).HasColumnName("sequence_no");
+            entity.Property(row => row.WorkDescription).HasColumnName("work_description").HasMaxLength(1500).IsRequired();
+            entity.Property(row => row.DurationMinutes).HasColumnName("duration_minutes");
+            entity.Property(row => row.SectionId).HasColumnName("section_id");
+            entity.Property(row => row.SectionNameSnapshot).HasColumnName("section_name_snapshot").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.Note).HasColumnName("note").HasMaxLength(1500).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasOne(row => row.Report).WithMany(report => report.Lines).HasForeignKey(row => row.ReportId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.Section).WithMany().HasForeignKey(row => row.SectionId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(row => new { row.ReportId, row.SequenceNo }).IsUnique().HasDatabaseName("ux_emu_shift_report_lines_report_sequence");
+            entity.HasIndex(row => row.ReportId).HasDatabaseName("ix_emu_shift_report_lines_report");
         });
     }
 

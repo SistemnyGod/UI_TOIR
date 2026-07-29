@@ -16,6 +16,7 @@ import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { collectDiagnosticContext } from "@/services/diagnosticContextService";
 
 let activeUpload: Promise<DiagnosticUploadResult> | null = null;
+let activeUploadKind: "daily" | "pending" | "manual" | null = null;
 const automaticDiagnosticsKey = "patrol360.diagnostics.automaticUpload";
 
 export type DiagnosticUploadResult =
@@ -28,19 +29,48 @@ export type DiagnosticUploadResult =
   | { status: "failed"; message: string };
 
 export function triggerDailyDiagnosticReportUpload() {
-  activeUpload ??= uploadDailyDiagnosticReport().finally(() => {
-    activeUpload = null;
-  });
-  return activeUpload;
+  return scheduleDiagnosticUpload("daily", uploadDailyDiagnosticReport);
 }
 
 export function triggerPendingDiagnosticReportUpload() {
-  activeUpload ??= uploadPendingDiagnosticReport().finally(() => {
-    activeUpload = null;
-  });
-  return activeUpload;
+  return scheduleDiagnosticUpload("pending", uploadPendingDiagnosticReport);
 }
 
+
+function scheduleDiagnosticUpload(
+  kind: "daily" | "pending" | "manual",
+  upload: () => Promise<DiagnosticUploadResult>
+) {
+  if (activeUpload && (kind !== "manual" || activeUploadKind === "manual")) {
+    return activeUpload;
+  }
+
+  const previousUpload = activeUpload;
+  let request!: Promise<DiagnosticUploadResult>;
+  request = (async () => {
+    if (previousUpload) {
+      await previousUpload.catch(() => undefined);
+    }
+
+    try {
+      return await upload();
+    } catch (error) {
+      return {
+        status: "failed" as const,
+        message: error instanceof Error ? error.message : "Не удалось подготовить диагностический отчёт."
+      };
+    }
+  })().finally(() => {
+    if (activeUpload === request) {
+      activeUpload = null;
+      activeUploadKind = null;
+    }
+  });
+
+  activeUpload = request;
+  activeUploadKind = kind;
+  return request;
+}
 export async function isAutomaticDiagnosticUploadEnabled() {
   const stored = await SecureStore.getItemAsync(automaticDiagnosticsKey);
   return stored !== "false";
@@ -50,11 +80,10 @@ export async function setAutomaticDiagnosticUploadEnabled(enabled: boolean) {
   await SecureStore.setItemAsync(automaticDiagnosticsKey, enabled ? "true" : "false");
 }
 
-export async function triggerManualDiagnosticReportUpload() {
-  activeUpload ??= uploadDiagnosticReport({ force: true, includeEmpty: true, respectAutomaticSetting: false }).finally(() => {
-    activeUpload = null;
-  });
-  return activeUpload;
+export function triggerManualDiagnosticReportUpload() {
+  return scheduleDiagnosticUpload("manual", () =>
+    uploadDiagnosticReport({ force: true, includeEmpty: true, respectAutomaticSetting: false })
+  );
 }
 
 export async function runSafeDiagnosticTest() {

@@ -72,6 +72,8 @@ export function DiagnosticsSettingsScreen() {
       const result = await triggerManualDiagnosticReportUpload();
       setFeedback(uploadResultMessage(result));
       await load();
+    } catch (caught) {
+      setFeedback(caught instanceof Error ? `Не удалось отправить отчёт: ${caught.message}` : "Не удалось отправить диагностический отчёт.");
     } finally {
       setIsSending(false);
     }
@@ -97,6 +99,8 @@ export function DiagnosticsSettingsScreen() {
                 const result = await runSafeDiagnosticTest();
                 setFeedback(uploadResultMessage(result));
                 await load();
+              } catch (caught) {
+                setFeedback(caught instanceof Error ? `Не удалось проверить отправку: ${caught.message}` : "Не удалось проверить отправку диагностики.");
               } finally {
                 setIsSending(false);
               }
@@ -119,7 +123,7 @@ export function DiagnosticsSettingsScreen() {
   }
 
   return (
-    <Screen title="Diagnostics" subtitle="Errors and manual report upload.">
+    <Screen title="Диагностика" subtitle="Ошибки приложения и ручная отправка отчёта.">
       {isLoading ? <ActivityIndicator /> : null}
 
       <Card>
@@ -229,9 +233,9 @@ function uploadResultMessage(result: DiagnosticUploadResult) {
     case "offline":
       return "Нет подключения. Отчёт сохранён и будет отправлен позже.";
     case "unauthenticated":
-    case "queued":
-      return "\u041e\u0442\u0447\u0451\u0442 \u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d \u043d\u0430 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0435 \u0438 \u0431\u0443\u0434\u0435\u0442 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438 \u043f\u0440\u0438 \u043f\u043e\u044f\u0432\u043b\u0435\u043d\u0438\u0438 \u0441\u0435\u0442\u0438.";
       return "Нужно войти в приложение. Локальные логи сохранены.";
+    case "queued":
+      return "Отчёт сохранён на телефоне и будет отправлен автоматически при появлении сети.";
     case "failed":
       return `Не удалось отправить отчёт: ${result.message}`;
   }

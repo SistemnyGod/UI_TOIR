@@ -51,7 +51,7 @@ export function useResultsWorkspace({
   const selectedResult = selectedDetail ?? selectedListItem;
 
   const refreshResults = useCallback(
-    async ({ signal }: { signal?: AbortSignal } = {}) => {
+    async ({ signal, silent = false }: { signal?: AbortSignal; silent?: boolean } = {}) => {
       if (dataSourceMode !== "api") {
         setResults(patrolResultsFallback);
         setHasMoreResults(false);
@@ -62,7 +62,7 @@ export function useResultsWorkspace({
         return;
       }
 
-      setListStatus("loading");
+      if (!silent) setListStatus("loading");
       setErrorMessage(undefined);
 
       try {
@@ -76,12 +76,14 @@ export function useResultsWorkspace({
       } catch (error) {
         if (signal?.aborted) return;
         const message = error instanceof Error ? error.message : "Не удалось загрузить результаты API";
-        setResults([]);
-        setHasMoreResults(false);
-        setTotalResults(0);
-        setListStatus("error");
+        if (!silent) {
+          setResults([]);
+          setHasMoreResults(false);
+          setTotalResults(0);
+          setListStatus("error");
+        }
         setErrorMessage(message);
-        showToast(`Не удалось загрузить результаты API: ${message}`);
+        if (!silent) showToast(`Не удалось загрузить результаты API: ${message}`);
       }
     },
     [apiResults, dataSourceMode, filters, showToast],
@@ -134,7 +136,9 @@ export function useResultsWorkspace({
     if (!enabled) return;
 
     if (results.length === 0) {
-      if (selectedResultId) onSelectResult("");
+      if (selectedResultId && !(dataSourceMode === "api" && isBackendResultId(selectedResultId))) {
+        onSelectResult("");
+      }
       return;
     }
 

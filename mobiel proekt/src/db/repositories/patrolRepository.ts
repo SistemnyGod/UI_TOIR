@@ -23,35 +23,10 @@ import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 
 type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "getFirstAsync" | "runAsync">;
 
-const activePatrolConflictMessage = "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0435 \u0438\u043b\u0438 \u043f\u0435\u0440\u0435\u0434\u0430\u0439\u0442\u0435 \u0442\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0431\u0445\u043e\u0434.";
 const nfcDisabledMessage = "\u004e\u0046\u0043-\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 \u0434\u043b\u044f \u044d\u0442\u043e\u0433\u043e \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043e\u0442\u043a\u043b\u044e\u0447\u0435\u043d\u043e.";
 const qrDisabledMessage = "\u0051\u0052-\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 \u0434\u043b\u044f \u044d\u0442\u043e\u0433\u043e \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043e\u0442\u043a\u043b\u044e\u0447\u0435\u043d\u043e.";
 const frozenSnapshotAssignmentStatuses = new Set(["releasePending", "inProgress", "paused", "completedLocal", "syncing", "syncError", "authRequired", "needsDispatcherDecision"]);
 
-async function assertNoOtherActivePatrol(
-  executor: SqlExecutor,
-  ownerUserId: string,
-  excludedAssignmentId?: string
-) {
-  const exclusion = excludedAssignmentId ? "\n          AND assignment_id <> ?" : "";
-  const params = excludedAssignmentId
-    ? [ownerUserId, currentContourId, excludedAssignmentId]
-    : [ownerUserId, currentContourId];
-  const competing = await executor.getFirstAsync<{ assignmentId: string }>(
-    `
-      SELECT assignment_id AS assignmentId
-      FROM patrol_assignments
-      WHERE owner_user_id = ?
-        AND contour_id = ?
-        AND status IN ('inProgress', 'paused')${exclusion}
-      LIMIT 1
-    `,
-    params
-  );
-  if (competing) {
-    throw new Error(activePatrolConflictMessage);
-  }
-}
 
 export type RequestBoardItem = {
   requestId: string;
@@ -195,7 +170,7 @@ export async function getActiveAssignment() {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
 
-  return db.getFirstAsync<ActiveAssignment>(
+  const assignment = await db.getFirstAsync<ActiveAssignment>(
     `
       SELECT
         assignment.assignment_id AS assignmentId,
@@ -217,27 +192,35 @@ export async function getActiveAssignment() {
       LEFT JOIN routes route ON route.route_id = assignment.route_id
       LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
       WHERE assignment.owner_user_id = ?
+        AND (assignment.contour_id = ? OR assignment.contour_id IS NULL)
         AND assignment.status NOT IN ('completed', 'completedServer', 'cancelled', 'cancelledServer', 'conflict')
       ORDER BY
         CASE
           WHEN assignment.status = 'inProgress' THEN 0
-          WHEN assignment.status = 'completedLocal' THEN 1
-          WHEN assignment.status = 'accepted' THEN 2
-          WHEN assignment.status = 'paused' THEN 3
-          ELSE 2
+          WHEN assignment.status = 'paused' THEN 1
+          WHEN assignment.status IN ('completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN 2
+          WHEN assignment.status = 'accepted' THEN 3
+          WHEN assignment.status = 'releasePending' THEN 4
+          ELSE 5
         END,
         assignment.started_at_local DESC
       LIMIT 1
     `,
-    [ownerUserId]
+    [ownerUserId, currentContourId]
   );
+
+  if (assignment) {
+    await repairAssignmentContourBinding(db, assignment.assignmentId, ownerUserId);
+  }
+
+  return assignment;
 }
 
 export async function getAssignmentByRequestId(requestId: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
 
-  return db.getFirstAsync<ActiveAssignment>(
+  const assignment = await db.getFirstAsync<ActiveAssignment>(
     `
       SELECT
         assignment.assignment_id AS assignmentId,
@@ -260,198 +243,28 @@ export async function getAssignmentByRequestId(requestId: string) {
       LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
       WHERE assignment.owner_user_id = ?
         AND assignment.request_id = ?
+        AND (assignment.contour_id = ? OR assignment.contour_id IS NULL)
         AND assignment.status NOT IN ('completed', 'completedServer', 'cancelled', 'cancelledServer', 'conflict')
       ORDER BY
         CASE
           WHEN assignment.status = 'inProgress' THEN 0
-          WHEN assignment.status = 'completedLocal' THEN 1
-          WHEN assignment.status = 'accepted' THEN 2
-          WHEN assignment.status = 'paused' THEN 3
-          ELSE 2
+          WHEN assignment.status = 'paused' THEN 1
+          WHEN assignment.status IN ('completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN 2
+          WHEN assignment.status = 'accepted' THEN 3
+          WHEN assignment.status = 'releasePending' THEN 4
+          ELSE 5
         END,
         assignment.started_at_local DESC
       LIMIT 1
     `,
-    [ownerUserId, requestId]
+    [ownerUserId, requestId, currentContourId]
   );
-}
 
-export async function takeRequestLocally(requestId: string) {
-  const db = await getDatabase();
-  const ownerUserId = await requireOwnerUserId();
-  const existing = await getAssignmentByRequestId(requestId);
-  if (existing) {
-    return { assignment: existing, created: false };
+  if (assignment) {
+    await repairAssignmentContourBinding(db, assignment.assignmentId, ownerUserId);
   }
 
-  const request = await getRequestBoardItem(requestId);
-  if (!request) {
-    throw new Error("Заявка не загружена на телефон.");
-  }
-  assertPatrolAction("acceptRequest", request.status);
-  await assertNoOtherActivePatrol(db, ownerUserId);
-  const route = await db.getFirstAsync<{
-    version: number;
-    allowFreeOrder: number | null;
-    nfcEnabled: number | null;
-    qrFallbackEnabled: number | null;
-  }>(
-    "SELECT version, allow_free_order AS allowFreeOrder, nfc_enabled AS nfcEnabled, qr_fallback_enabled AS qrFallbackEnabled FROM routes WHERE route_id = ? LIMIT 1",
-    [request.routeId]
-  );
-  const snapshotVersion = route?.version ?? 0;
-  const snapshotAllowFreeOrder = route?.allowFreeOrder !== 0 ? 1 : 0;
-  const snapshotNfcEnabled = route?.nfcEnabled === 1 ? 1 : 0;
-  const snapshotQrFallbackEnabled = route?.qrFallbackEnabled !== 0 ? 1 : 0;
-  const assignmentId = Crypto.randomUUID();
-  const takenAtLocal = new Date().toISOString();
-  const command: OutboxCommand = {
-    clientOperationId: Crypto.randomUUID(),
-    ownerUserId,
-    commandType: "takePatrolRequest",
-    entityType: "patrolRequest",
-    entityLocalId: assignmentId,
-    entityServerId: request.requestId,
-    payload: {
-      requestId: request.requestId,
-      routeId: request.routeId,
-      requestRevision: request.revision,
-      takenAtLocal
-    },
-    createdAtLocal: takenAtLocal,
-    attemptCount: 0,
-    status: "pending"
-  };
-
-  await withSqliteBusyRetry(() =>
-    withProtectedExclusiveTransactionAsync(db, async (tx) => {
-      const currentRequest = await tx.getFirstAsync<{ status: string }>(
-        `
-          SELECT status
-          FROM patrol_request_board
-          WHERE owner_user_id = ?
-            AND request_id = ?
-          LIMIT 1
-        `,
-        [ownerUserId, request.requestId]
-      );
-      if (!currentRequest) {
-        throw new Error("Заявка больше не доступна на телефоне.");
-      }
-      assertPatrolAction("acceptRequest", currentRequest.status);
-      await assertNoOtherActivePatrol(tx, ownerUserId, assignmentId);
-
-      await tx.runAsync(
-      `
-        INSERT INTO patrol_assignments (
-          assignment_id,
-          owner_user_id,
-          contour_id,
-          request_id,
-          route_id,
-          status,
-          started_at_local,
-          completed_at_local,
-          revision,
-          route_version_no,
-          snapshot_version,
-          snapshot_created_at,
-          snapshot_source,
-          snapshot_allow_free_order,
-          snapshot_nfc_enabled,
-          snapshot_qr_fallback_enabled
-        )
-        VALUES (?, ?, ?, ?, ?, 'inProgress', ?, NULL, 0, ?, ?, ?, 'local', ?, ?, ?)
-      `,
-      [assignmentId, ownerUserId, currentContourId, request.requestId, request.routeId, takenAtLocal, snapshotVersion, snapshotVersion, takenAtLocal, snapshotAllowFreeOrder, snapshotNfcEnabled, snapshotQrFallbackEnabled]
-    );
-
-    await tx.runAsync(
-      `
-        INSERT OR REPLACE INTO assignment_route_points (
-          assignment_id,
-          point_id,
-          route_id,
-          name,
-          order_index,
-          nfc_uid_hash,
-          qr_code_hash,
-          required,
-          requires_photo,
-          revision
-        )
-        SELECT
-          ?,
-          point_id,
-          route_id,
-          name,
-          order_index,
-          nfc_uid_hash,
-          qr_code_hash,
-          required,
-          requires_photo,
-          revision
-        FROM route_points
-        WHERE route_id = ?
-      `,
-      [assignmentId, request.routeId]
-    );
-
-    const snapshot = await tx.getFirstAsync<{ count: number }>(
-      `
-        SELECT COUNT(*) AS count
-        FROM assignment_route_points
-        WHERE assignment_id = ?
-      `,
-      [assignmentId]
-    );
-    if ((snapshot?.count ?? 0) === 0) {
-      throw new Error("Маршрут не загружен на телефон.");
-    }
-
-    await tx.runAsync(
-      `
-        UPDATE patrol_request_board
-        SET status = 'inProgress'
-        WHERE owner_user_id = ?
-          AND request_id = ?
-      `,
-      [ownerUserId, request.requestId]
-    );
-
-      await insertOutboxCommandInTransaction(tx, command);
-    })
-  );
-
-  requestSyncAfterMutation();
-  void logMobileAction({
-    eventType: "patrol.request.taken",
-    entityType: "patrolAssignment",
-    entityId: assignmentId,
-    message: "Заявка взята в работу.",
-    payload: { requestId: request.requestId, routeId: request.routeId }
-  }).catch(() => undefined);
-
-  return {
-    assignment: {
-      assignmentId,
-      requestId: request.requestId,
-      routeId: request.routeId,
-      routeName: request.routeName,
-      status: "inProgress",
-      startedAtLocal: takenAtLocal,
-      completedAtLocal: null,
-      revision: 0,
-      routeVersionNo: snapshotVersion,
-      snapshotVersion,
-      snapshotCreatedAt: takenAtLocal,
-      snapshotSource: "local",
-      snapshotAllowFreeOrder,
-      snapshotNfcEnabled,
-      snapshotQrFallbackEnabled
-    } satisfies ActiveAssignment,
-    created: true
-  };
+  return assignment;
 }
 
 export async function acceptRequestLocally(requestId: string) {
@@ -503,6 +316,23 @@ export async function acceptRequestLocally(requestId: string) {
 
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const concurrentAssignment = await tx.getFirstAsync<{ assignmentId: string }>(
+        `
+          SELECT assignment_id AS assignmentId
+          FROM patrol_assignments
+          WHERE owner_user_id = ?
+            AND contour_id = ?
+            AND request_id = ?
+            AND assignment_id <> ?
+            AND status NOT IN ('completed', 'completedServer', 'cancelled', 'cancelledServer', 'conflict')
+          LIMIT 1
+        `,
+        [ownerUserId, currentContourId, request.requestId, assignmentId]
+      );
+      if (concurrentAssignment) {
+        throw new Error("Заявка уже принята на этом телефоне. Обновите экран.");
+      }
+
       const currentRequest = await tx.getFirstAsync<{ status: string }>(
         `
           SELECT status
@@ -1725,7 +1555,7 @@ export async function reopenInvalidCompletionReportLocally(assignmentId: string)
             AND status IN ('invalidPayload', 'rejected')`,
         [updatedAtLocal, ownerUserId, currentContourId, assignmentId]
       );
-      await tx.runAsync(
+      const assignmentUpdate = await tx.runAsync(
         `UPDATE patrol_assignments
             SET status = 'inProgress',
                 completed_at_local = NULL
@@ -1735,13 +1565,15 @@ export async function reopenInvalidCompletionReportLocally(assignmentId: string)
             AND status IN ('completedLocal', 'syncError', 'inProgress')`,
         [ownerUserId, currentContourId, assignmentId]
       );
-      await tx.runAsync(
-        `UPDATE patrol_request_board
-            SET status = 'inProgress'
-          WHERE owner_user_id = ? AND request_id = ?`,
-        [ownerUserId, assignment.requestId]
-      );
-      reopened = true;
+      if (assignmentUpdate.changes === 1) {
+        await tx.runAsync(
+          `UPDATE patrol_request_board
+              SET status = 'inProgress'
+            WHERE owner_user_id = ? AND request_id = ?`,
+          [ownerUserId, assignment.requestId]
+        );
+        reopened = true;
+      }
     })
   );
 
@@ -1835,9 +1667,10 @@ export async function completeAssignmentLocally(assignmentId: string) {
             SET status = 'completedLocal',
                 completed_at_local = COALESCE(completed_at_local, ?)
             WHERE owner_user_id = ?
+              AND contour_id = ?
               AND assignment_id = ?
           `,
-          [existingCompletedAt, ownerUserId, assignmentId]
+          [existingCompletedAt, ownerUserId, currentContourId, assignmentId]
         );
         completionResultRef.current = {
           completedAtLocal: existingCompletedAt,
@@ -1869,9 +1702,10 @@ export async function completeAssignmentLocally(assignmentId: string) {
         SET status = 'completedLocal',
             completed_at_local = ?
         WHERE owner_user_id = ?
+          AND contour_id = ?
           AND assignment_id = ?
       `,
-      [completedAtLocal, ownerUserId, assignmentId]
+      [completedAtLocal, ownerUserId, currentContourId, assignmentId]
     );
 
       await insertOutboxCommandInTransaction(tx, command);

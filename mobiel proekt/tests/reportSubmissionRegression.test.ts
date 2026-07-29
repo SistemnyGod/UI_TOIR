@@ -9,12 +9,24 @@ const repositorySource = readFileSync(
 const reportScreenSource = readFileSync(
   new URL("../src/features/patrol/SubmitReportScreen.tsx", import.meta.url),
   "utf8"
+);
+const requestScreenSource = readFileSync(
+  new URL("../src/features/patrol/PatrolRequestScreen.tsx", import.meta.url),
+  "utf8"
 );const outboxRepositorySource = readFileSync(
   new URL("../src/db/repositories/outboxRepository.ts", import.meta.url),
   "utf8"
 );
 const activePatrolScreenSource = readFileSync(
   new URL("../src/features/patrol/ActivePatrolScreen.tsx", import.meta.url),
+  "utf8"
+);
+const allPointsScreenSource = readFileSync(
+  new URL("../src/features/allPoints/AllPointsScreen.tsx", import.meta.url),
+  "utf8"
+);
+const patrolHomeScreenSource = readFileSync(
+  new URL("../src/features/patrolHome/PatrolHomeScreen.tsx", import.meta.url),
   "utf8"
 );
 const scanNfcScreenSource = readFileSync(
@@ -44,6 +56,25 @@ test("manual report submission owns one scoped sync pass", () => {
   assert.doesNotMatch(submitBranch, /void requestPatrolSync|mode: "normal"/);
 });
 
+test("request acceptance and report repair cannot regress concurrently", () => {
+  const acceptance = repositorySource.slice(
+    repositorySource.indexOf("export async function acceptRequestLocally"),
+    repositorySource.indexOf("export async function releaseAcceptedRequestLocally")
+  );
+  const repair = repositorySource.slice(
+    repositorySource.indexOf("export async function reopenInvalidCompletionReportLocally"),
+    repositorySource.indexOf("export async function completeAssignmentLocally")
+  );
+  const completion = repositorySource.slice(
+    repositorySource.indexOf("export async function completeAssignmentLocally"),
+    repositorySource.indexOf("export async function getAssignmentProgress")
+  );
+
+  assert.match(requestScreenSource, /actionInProgressRef\.current/);
+  assert.match(acceptance, /request_id = \?[\s\S]*assignment_id <> \?[\s\S]*status NOT IN/);
+  assert.match(repair, /if \(assignmentUpdate\.changes === 1\)[\s\S]*SET status = 'inProgress'/);
+  assert.match(completion, /WHERE owner_user_id = \?[\s\S]*AND contour_id = \?[\s\S]*AND assignment_id = \?/);
+});
 test("lifecycle and completed report commands are idempotent", () => {
   const lifecycle = repositorySource.slice(
     repositorySource.indexOf("async function updateAssignmentLifecycleLocally"),
@@ -73,9 +104,37 @@ test("manual retry reactivates server failures without bypassing rate limits", (
 
 test("NFC waits for a non-empty route snapshot", () => {
   assert.match(activePatrolScreenSource, /disabled=\{isActing \|\| progress\.total === 0\}/);
-  assert.match(scanNfcScreenSource, /if \(autoScanStartedRef\.current \|\| progress === null\)/);
+  assert.doesNotMatch(scanNfcScreenSource, /autoScanStartedRef|void handleScan\(\)/);
+  assert.match(scanNfcScreenSource, /status !== "reading" && status !== "matched" && status !== "unsupported"/);
+  assert.match(scanNfcScreenSource, /onPress=\{handleScan\}/);
   assert.match(scanNfcScreenSource, /if \(loadedProgress\.total === 0\)[\s\S]*setStatus\("routeUnavailable"\)/);
+  assert.match(scanNfcScreenSource, /progress && progress\.total > 0/);
+  assert.match(scanNfcScreenSource, /current === "routeUnavailable" \? "idle" : current/);
+  assert.match(scanNfcScreenSource, /screenActiveRef\.current = false[\s\S]*cancelNfcRead\(\)/);
+  assert.match(scanNfcScreenSource, /catch \(error\) \{[\s\S]*if \(!screenActiveRef\.current\) \{[\s\S]*return;/);
+  assert.match(activePatrolScreenSource, /scanPolicy\.nfcEnabled[\s\S]*Открыть все метки/);
   assert.match(activePatrolScreenSource, /progress\.total === 0 \? "Загружаем точки маршрута"/);
+  assert.match(allPointsScreenSource, /summary\.total === 0 \? "Загружаем метки"/);
+  assert.match(allPointsScreenSource, /isReadyForReport \|\| nfcEnabled/);
+  assert.doesNotMatch(allPointsScreenSource, />\{summary\.completed\} из \{summary\.total\}</);
+  assert.match(patrolHomeScreenSource, /active\.progress\.total === 0[\s\S]*Загружаем метки маршрута/);
+  assert.match(patrolHomeScreenSource, /progress\.completed >= progress\.total[\s\S]*Проверить и отправить отчёт/);
+  assert.match(patrolHomeScreenSource, /if \(nfcEnabled\) \{[\s\S]*Сканировать NFC[\s\S]*Открыть все метки/);
+});
+
+test("active assignment selection is contour-scoped and keeps paused work ahead of accepted requests", () => {
+  const activeLookup = repositorySource.slice(
+    repositorySource.indexOf("export async function getActiveAssignment()"),
+    repositorySource.indexOf("export async function getAssignmentByRequestId")
+  );
+  const requestLookup = repositorySource.slice(
+    repositorySource.indexOf("export async function getAssignmentByRequestId"),
+    repositorySource.indexOf("export async function acceptRequestLocally")
+  );
+
+  assert.match(activeLookup, /assignment\.contour_id = \? OR assignment\.contour_id IS NULL/);
+  assert.match(requestLookup, /assignment\.contour_id = \? OR assignment\.contour_id IS NULL/);
+  assert.ok(activeLookup.indexOf("assignment.status = 'paused'") < activeLookup.indexOf("assignment.status = 'accepted'"));
 });
 test("active patrol recovers from reload failures and serializes actions", () => {
   assert.match(activePatrolScreenSource, /try \{[\s\S]*Promise\.all\([\s\S]*finally \{[\s\S]*setIsLoading\(false\)/);

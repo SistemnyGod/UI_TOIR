@@ -3,17 +3,18 @@ import type { MouseEvent } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
+  Archive,
   Camera,
   CheckCircle2,
   Download,
   ExternalLink,
-  EyeOff,
   FileText,
   MapPinned,
   PlusCircle,
   RefreshCw,
   Search,
   Timer,
+  Trash2,
   User,
 } from "lucide-react";
 import type { ApiFileResponse } from "../../../api/client";
@@ -29,9 +30,12 @@ import "./resultsWorkspace.css";
 
 export interface ResultsScreenProps {
   canCreateRequest?: boolean;
+  canManageResults?: boolean;
   dataSourceMode: DataSourceMode;
   mode?: ResultMode;
   selectedResultId?: string;
+  openResultId?: string;
+  onOpenResultHandled?: () => void;
   onModeChange?: (mode: ResultMode) => void;
   onSelectResult?: (id: string) => void;
   onCreateRequest?: (sourceResultId?: string) => void;
@@ -68,9 +72,12 @@ const noop = () => undefined;
 
 export function ResultsWorkspace({
   canCreateRequest = true,
+  canManageResults = true,
   dataSourceMode,
   mode = "all",
   selectedResultId = "",
+  openResultId = "",
+  onOpenResultHandled,
   onModeChange,
   onSelectResult,
   onCreateRequest,
@@ -94,6 +101,7 @@ export function ResultsWorkspace({
   const [mediaPreview, setMediaPreview] = useState<ResultMediaPreviewState | null>(null);
   const [activeView, setActiveView] = useState<"results" | "remarks">("results");
   const [exportInProgress, setExportInProgress] = useState(false);
+  const [mutatingGroupId, setMutatingGroupId] = useState<string | null>(null);
   const apiResultsRepository = useMemo(() => createApiResultsRepository(), []);
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedQuery(query), 300);
@@ -116,9 +124,10 @@ export function ResultsWorkspace({
   );
   const groups = useMemo(() => buildResultGroups(mergedResults), [mergedResults]);
   const visibleGroups = useMemo(() => {
+    if (dataSourceMode === "api") return groups;
     const hiddenIds = new Set([...archivedGroupIds, ...deletedGroupIds]);
     return groups.filter((group) => !hiddenIds.has(group.id));
-  }, [archivedGroupIds, deletedGroupIds, groups]);
+  }, [archivedGroupIds, dataSourceMode, deletedGroupIds, groups]);
   const routeOptions = useMemo(() => buildRouteOptions(visibleGroups, routeDirectory), [routeDirectory, visibleGroups]);
   const clientQuery = dataSourceMode === "api" ? "" : query;
   const filteredGroups = useMemo(() => filterGroups(visibleGroups, activeMode, clientQuery, routeFilter), [visibleGroups, activeMode, clientQuery, routeFilter]);
@@ -138,14 +147,31 @@ export function ResultsWorkspace({
   const contextGroup = contextMenu ? visibleGroups.find((group) => group.id === contextMenu.groupId) : undefined;
 
   useEffect(() => {
+    if (!openResultId) return;
+    const requestedGroup = visibleGroups.find((group) => group.results.some((result) => result.id === openResultId));
+    if (!requestedGroup) return;
+
+    setOpenGroupId(requestedGroup.id);
+    onSelectResult?.(openResultId);
+    onOpenResultHandled?.();
+  }, [onOpenResultHandled, onSelectResult, openResultId, visibleGroups]);
+
+  useEffect(() => {
     if (routeFilter !== "all" && !routeOptions.some((route) => route.id === routeFilter)) {
       setRouteFilter("all");
     }
   }, [routeFilter, routeOptions]);
 
   useEffect(() => {
+    if (dataSourceMode === "api") {
+      setArchivedGroupIds([]);
+      setDeletedGroupIds([]);
+      writeResultVisibilityState(emptyResultVisibilityState);
+      return;
+    }
+
     writeResultVisibilityState({ archived: archivedGroupIds, deleted: deletedGroupIds });
-  }, [archivedGroupIds, deletedGroupIds]);
+  }, [archivedGroupIds, dataSourceMode, deletedGroupIds]);
 
   const changeFilter = (nextMode: ResultMode) => {
     setActiveMode(nextMode);
@@ -176,22 +202,63 @@ export function ResultsWorkspace({
     });
   };
 
-  const hideGroup = (group: ResultGroup, action: "archive" | "delete") => {
-    const setHiddenIds = action === "archive" ? setArchivedGroupIds : setDeletedGroupIds;
-    setHiddenIds((current) => (current.includes(group.id) ? current : [...current, group.id]));
+  const notifyAction = (message: string, kind: "success" | "error" | "info") => {
+    if (addToast) {
+      addToast(message, kind);
+    } else {
+      onNotify?.(message);
+    }
+  };
 
-    if (openGroupId === group.id) {
-      setOpenGroupId(null);
+  const handleGroupAction = async (group: ResultGroup, action: "archive" | "delete") => {
+    if (mutatingGroupId) return;
+    if (dataSourceMode === "api" && action === "delete" && !window.confirm(`Удалить результаты обхода «${group.route}» вместе с вложениями? Действие нельзя отменить.`)) {
+      return;
     }
 
     setActionMenuGroupId(null);
     setContextMenu(null);
-    addToast?.(
-      action === "archive"
-        ? "Результат обхода скрыт на этом устройстве"
-        : "Результат обхода скрыт из списка на этом устройстве",
-      action === "archive" ? "info" : "success",
-    );
+    if (openGroupId === group.id) setOpenGroupId(null);
+
+    if (dataSourceMode !== "api") {
+      const setHiddenIds = action === "archive" ? setArchivedGroupIds : setDeletedGroupIds;
+      setHiddenIds((current) => (current.includes(group.id) ? current : [...current, group.id]));
+      notifyAction(action === "archive" ? "Результат убран в локальный архив" : "Результат удалён из локального списка", action === "archive" ? "info" : "success");
+      return;
+    }
+
+    if (!canManageResults) {
+      notifyAction("Недостаточно прав для изменения результатов обхода", "error");
+      return;
+    }
+
+    const resultId = group.results[0]?.id;
+    if (!isBackendResultId(resultId)) {
+      notifyAction("Серверный идентификатор результата отсутствует", "error");
+      return;
+    }
+
+    setMutatingGroupId(group.id);
+    try {
+      if (action === "archive") {
+        await apiResultsRepository.archiveResultGroup(resultId);
+      } else {
+        await apiResultsRepository.deleteResultGroup(resultId);
+      }
+
+      setDetailedResults((current) => {
+        const next = { ...current };
+        group.results.forEach((result) => delete next[result.id]);
+        return next;
+      });
+      await refreshResults();
+      notifyAction(action === "archive" ? "Результаты обхода перенесены в архив" : "Результаты обхода удалены", "success");
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "сервер не выполнил операцию";
+      notifyAction(`${action === "archive" ? "Не удалось перенести результаты в архив" : "Не удалось удалить результаты"}: ${message}`, "error");
+    } finally {
+      setMutatingGroupId(null);
+    }
   };
 
   const openDetails = (group: ResultGroup) => {
@@ -450,9 +517,11 @@ export function ResultsWorkspace({
                   menuOpen={actionMenuGroupId === group.id}
                   onOpenMenu={() => openRowMenu(group)}
                   onOpenContextMenu={(event) => openContextPanel(event, group)}
-                  onArchive={() => hideGroup(group, "archive")}
-                  onDelete={() => hideGroup(group, "delete")}
+                  onArchive={() => void handleGroupAction(group, "archive")}
+                  onDelete={() => void handleGroupAction(group, "delete")}
+                  actionInProgress={mutatingGroupId === group.id}
                   canCreateRequest={canCreateRequest}
+                  canManageResults={canManageResults}
                 />
               ))}
             </div>
@@ -493,13 +562,13 @@ export function ResultsWorkspace({
           onContextMenu={(event) => event.preventDefault()}
         >
           <strong>{contextGroup.route}</strong>
-          <button type="button" role="menuitem" data-action="archive" onClick={() => hideGroup(contextGroup, "archive")}>
-            <EyeOff size={16} />
-            Скрыть на этом устройстве
+          <button type="button" role="menuitem" data-action="archive" disabled={mutatingGroupId === contextGroup.id} onClick={() => void handleGroupAction(contextGroup, "archive")}>
+            <Archive size={16} />
+            {"\u0412 \u0430\u0440\u0445\u0438\u0432"}
           </button>
-          <button type="button" role="menuitem" data-action="delete" className="is-danger" onClick={() => hideGroup(contextGroup, "delete")}>
-            <EyeOff size={16} />
-            Скрыть из списка на этом устройстве
+          <button type="button" role="menuitem" data-action="delete" className="is-danger" disabled={mutatingGroupId === contextGroup.id} onClick={() => void handleGroupAction(contextGroup, "delete")}>
+            <Trash2 size={16} />
+            {"\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b"}
           </button>
         </div>
       ) : null}

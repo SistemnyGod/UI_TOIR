@@ -1,6 +1,7 @@
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { useResultsWorkspace } from "../../hooks/useResultsWorkspace";
 import { isTerminalPatrolRequestStatus } from "../../domain/patrolRequestStatus";
+import { subscribeAssignmentAutoRefresh } from "../patrol/assignments/assignmentAutoRefresh";
 import type {
   ActivePatrol,
   DataSourceMode,
@@ -49,6 +50,7 @@ export function DashboardScreen({
   dataSourceMode,
   onNavigate,
   onNotify,
+  onOpenResult,
   onOpenRequestById,
   onRetryRequests,
   onSelectResult,
@@ -64,6 +66,7 @@ export function DashboardScreen({
   onCreateRequest: (sourceResultId?: string) => void;
   onNavigate: (screen: ScreenId) => void;
   onNotify: (message: string) => void;
+  onOpenResult: (resultId: string) => void;
   onOpenRequestById: (requestId: string) => void;
   onRetryRequests: () => void | Promise<void>;
   onSelectResult: (id: string) => void;
@@ -79,6 +82,11 @@ export function DashboardScreen({
     selectedResultId,
     showToast: onNotify,
   });
+
+  useEffect(() => {
+    if (dataSourceMode !== "api") return;
+    return subscribeAssignmentAutoRefresh(() => refreshResults({ silent: true }));
+  }, [dataSourceMode, refreshResults]);
 
   const normalizedMetrics = dashboardMetrics.length > 0 ? dashboardMetrics : emptyDashboardMetrics;
   const issueResults = patrolResults.filter((result) => isIssueResult(result.status));
@@ -183,8 +191,8 @@ export function DashboardScreen({
           resultListStatus={resultListStatus}
           patrolResults={patrolResults}
           onNavigate={onNavigate}
+          onOpenResult={onOpenResult}
           onRefreshResults={refreshResults}
-          onSelectResult={onSelectResult}
           remaining={remaining}
         />
         <QuickActions onCreateRequest={() => onCreateRequest()} onNavigate={onNavigate} />
@@ -251,8 +259,8 @@ function KpiCard({ card }: { card: DashboardKpi }) {
 function OperationalSummary({
   completed,
   onNavigate,
+  onOpenResult,
   onRefreshResults,
-  onSelectResult,
   patrolResults,
   plan,
   progress,
@@ -262,8 +270,8 @@ function OperationalSummary({
 }: {
   completed: number;
   onNavigate: (screen: ScreenId) => void;
+  onOpenResult: (resultId: string) => void;
   onRefreshResults: () => void | Promise<void>;
-  onSelectResult: (id: string) => void;
   patrolResults: PatrolResult[];
   plan: number;
   progress: number;
@@ -330,8 +338,8 @@ function OperationalSummary({
         <LatestResultsPreview
           errorMessage={resultListErrorMessage}
           onNavigate={onNavigate}
+          onOpenResult={onOpenResult}
           onRefresh={onRefreshResults}
-          onSelectResult={onSelectResult}
           results={patrolResults}
           status={resultListStatus}
         />
@@ -343,20 +351,20 @@ function OperationalSummary({
 function LatestResultsPreview({
   errorMessage,
   onNavigate,
+  onOpenResult,
   onRefresh,
-  onSelectResult,
   results,
   status,
 }: {
   errorMessage?: string;
   onNavigate: (screen: ScreenId) => void;
+  onOpenResult: (resultId: string) => void;
   onRefresh: () => void | Promise<void>;
-  onSelectResult: (id: string) => void;
   results: PatrolResult[];
   status: DataSourceStatus;
 }) {
   const latestResults = useMemo(() => {
-    return [...results].sort((left, right) => getResultTimestamp(right) - getResultTimestamp(left)).slice(0, 3);
+    return buildLatestAssignmentResults(results).slice(0, 3);
   }, [results]);
   const isInitialLoading = status === "loading" && latestResults.length === 0;
   const isRefreshing = status === "loading" && latestResults.length > 0;
@@ -364,7 +372,7 @@ function LatestResultsPreview({
   return (
     <div className="dashboard-am-latest">
       <div className="dashboard-am-latest-head">
-        <h3>Последние результаты</h3>
+        <h3>{"\u041f\u043e\u0441\u043b\u0435\u0434\u043d\u0438\u0435 \u043e\u0442\u0447\u0451\u0442\u044b \u043f\u043e \u0437\u0430\u044f\u0432\u043a\u0430\u043c"}</h3>
         <div className="dashboard-am-latest-head-actions">
           <span>{isRefreshing ? "обновление" : `${latestResults.length} из 3`}</span>
           <button className="dashboard-am-panel-head-link" onClick={() => onNavigate("results")} type="button">
@@ -390,10 +398,7 @@ function LatestResultsPreview({
               aria-label={`Открыть результат обхода: ${result.route || "Маршрут не указан"}`}
               className="dashboard-am-latest-row"
               key={result.id}
-              onClick={() => {
-                onSelectResult(result.id);
-                onNavigate("results");
-              }}
+              onClick={() => onOpenResult(result.id)}
               type="button"
             >
               <span className={`dashboard-am-status-dot ${isIssueResult(result.status) ? "orange" : "green"}`} />
@@ -695,6 +700,20 @@ function DashboardIcon({ name }: { name: DashboardIconName }) {
 function getMetricValue(metrics: Metric[], labels: string[]) {
   const metric = metrics.find((item) => labels.some((label) => item.label.includes(label)));
   return metric?.value ?? "0";
+}
+
+export function buildLatestAssignmentResults(results: PatrolResult[]) {
+  const grouped = new Map<string, PatrolResult[]>();
+
+  results.forEach((result) => {
+    const key = result.assignmentId || `${result.employeeId || result.employee}:${result.routeId || result.route}:${result.plannedAt}`;
+    grouped.set(key, [...(grouped.get(key) ?? []), result]);
+  });
+
+  return Array.from(grouped.values())
+    .map((group) => [...group].sort((left, right) => getResultTimestamp(right) - getResultTimestamp(left))[0])
+    .filter((result): result is PatrolResult => Boolean(result))
+    .sort((left, right) => getResultTimestamp(right) - getResultTimestamp(left));
 }
 
 function getResultTimestamp(result: PatrolResult) {

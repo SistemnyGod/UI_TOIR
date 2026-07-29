@@ -1550,6 +1550,43 @@ public sealed class EmuDbIntegrationTests
         Assert.All(approvedWeek.Value!, task => Assert.Equal("Согласовано", task.ApprovalStatus));
     }
 
+    [DbIntegrationFact]
+    public async Task ShiftReportCreateListDetailAndDuplicate()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var options = UseShiftReport(provider, service => service.GetOptions());
+        var employee = Assert.Single(options.Employees.Take(1));
+        var section = options.Sections.FirstOrDefault();
+        var reportDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        var request = new EmuCreateShiftReportDto(
+            reportDate,
+            "day",
+            employee.WorkerCategory,
+            employee.Id,
+            [
+                new EmuCreateShiftReportLineDto("Pump inspection", 35, section?.Id, "Normal"),
+                new EmuCreateShiftReportLineDto("Equipment adjustment", 55, null, null),
+            ]);
+
+        var created = UseShiftReport(provider, service => service.Create(request, null, "integration"));
+        Assert.True(created.Succeeded);
+        Assert.Equal(2, created.Value!.WorkCount);
+        Assert.Equal(90, created.Value.TotalDurationMinutes);
+
+        var list = UseShiftReport(provider, service => service.GetList(new EmuShiftReportQueryDto(Date: reportDate)));
+        Assert.Contains(list.Rows, row => row.Id == created.Value.Id && row.TotalDurationMinutes == 90);
+        var detail = UseShiftReport(provider, service => service.GetDetail(created.Value.Id));
+        Assert.True(detail.Succeeded);
+        Assert.Equal(2, detail.Value!.Lines.Count);
+
+        var duplicate = UseShiftReport(provider, service => service.Create(request, null, "integration"));
+        Assert.False(duplicate.Succeeded);
+        Assert.Contains("duplicate", duplicate.Errors.Keys);
+    }
+
     private static ServiceProvider BuildProvider(string connectionString)
     {
         var services = new ServiceCollection();
@@ -1583,6 +1620,12 @@ public sealed class EmuDbIntegrationTests
     {
         using var scope = provider.CreateScope();
         return action(scope.ServiceProvider.GetRequiredService<IEmuPlanService>());
+    }
+
+    private static T UseShiftReport<T>(ServiceProvider provider, Func<IEmuShiftReportService, T> action)
+    {
+        using var scope = provider.CreateScope();
+        return action(scope.ServiceProvider.GetRequiredService<IEmuShiftReportService>());
     }
 
     private static T UseShift<T>(ServiceProvider provider, Func<IEmuShiftService, T> action)

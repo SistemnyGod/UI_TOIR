@@ -123,7 +123,7 @@ export function useAssignmentsWorkspace({
   );
 
   const refreshAssignments = useCallback(
-    async ({ signal }: { signal?: AbortSignal } = {}) => {
+    async ({ signal, silent = false }: { signal?: AbortSignal; silent?: boolean } = {}) => {
       if (dataSourceMode !== "api") {
         setAssignments([]);
         setListStatus("idle");
@@ -132,7 +132,7 @@ export function useAssignmentsWorkspace({
         return;
       }
 
-      setListStatus("loading");
+      if (!silent) setListStatus("loading");
       setErrorMessage(undefined);
 
       try {
@@ -143,10 +143,14 @@ export function useAssignmentsWorkspace({
       } catch (error) {
         if (signal?.aborted) return;
         const message = error instanceof Error ? error.message : "Не удалось загрузить назначения API";
-        setAssignments([]);
-        setListStatus("error");
+        if (!silent) {
+          setAssignments([]);
+          setListStatus("error");
+        }
         setErrorMessage(message);
-        showToast(`Не удалось загрузить назначения API: ${message}`);
+        if (!silent) {
+          showToast(`Не удалось загрузить назначения API: ${message}`);
+        }
       }
     },
     [apiAssignments, dataSourceMode, showToast],

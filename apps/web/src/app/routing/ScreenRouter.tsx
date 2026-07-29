@@ -36,6 +36,7 @@ const AssignmentScreen = lazy(() => import("../../features/patrol/AssignmentScre
 const DashboardScreen = lazy(() => import("../../features/dashboard/DashboardScreen").then((module) => ({ default: module.DashboardScreen })));
 const EmployeesScreen = lazy(() => import("../../features/patrol/EmployeesScreen").then((module) => ({ default: module.EmployeesScreen })));
 const EmuScreen = lazy(() => import("../../features/emu/EmuScreen").then((module) => ({ default: module.EmuScreen })));
+const EmuShiftReportsScreen = lazy(() => import("../../features/emu/shift-reports/EmuShiftReportsScreen").then((module) => ({ default: module.EmuShiftReportsScreen })));
 const InventoryScreen = lazy(() => import("../../features/inventory/InventoryScreen").then((module) => ({ default: module.InventoryScreen })));
 const MobileAccountsScreen = lazy(() => import("../../features/mobileAccounts/MobileAccountsScreen").then((module) => ({ default: module.MobileAccountsScreen })));
 const PercoIntegrationScreen = lazy(() => import("../../features/perco/PercoIntegrationScreen").then((module) => ({ default: module.PercoIntegrationScreen })));
@@ -62,6 +63,7 @@ const inventoryScreens = new Set<ScreenId>([
 ]);
 
 const emuScreens = new Set<ScreenId>(["emu-dashboard", "emu-work-accounting", "emu-completed-work-history"]);
+const emuShiftReportScreens = new Set<ScreenId>(["emu-shift-report-entry", "emu-shift-report-history"]);
 
 function isInventoryScreen(screen: ScreenId): screen is InventoryScreenId {
   return inventoryScreens.has(screen);
@@ -122,6 +124,8 @@ export function ScreenRouter({
   onNavigate,
   onNotify,
   onOpenRequest,
+  onOpenResult,
+  onResultOpenIntentHandled,
   onOpenRequestById,
   onRefreshAccountSecurity,
   onRefreshPatrolData,
@@ -153,6 +157,7 @@ export function ScreenRouter({
   requestListStatus,
   patrolResults,
   resultMode,
+  resultOpenIntentId,
   employeeCreateIntent,
   routeCreateIntent,
   routeDirectory,
@@ -204,6 +209,8 @@ export function ScreenRouter({
   onNavigate: (screen: ScreenId) => void;
   onNotify: (message: string) => void;
   onOpenRequest: (resultId?: string) => void;
+  onOpenResult: (resultId: string) => void;
+  onResultOpenIntentHandled: () => void;
   onOpenRequestById: (requestId: string) => void;
   onRefreshAccountSecurity: () => MaybePromise<void>;
   onRefreshPatrolData: () => Promise<void>;
@@ -235,6 +242,7 @@ export function ScreenRouter({
   requestListStatus: DataSourceStatus;
   patrolResults: PatrolResult[];
   resultMode: ResultMode;
+  resultOpenIntentId: string;
   employeeCreateIntent: number;
   routeCreateIntent: number;
   routeDirectory: RouteDirectoryItem[];
@@ -273,6 +281,7 @@ export function ScreenRouter({
             onNavigate={onNavigate}
             onOpenRequestById={onOpenRequestById}
             onNotify={onNotify}
+            onOpenResult={onOpenResult}
             onSelectResult={onSelectResult}
             routeDirectory={routeDirectory}
             requests={requests}
@@ -285,8 +294,11 @@ export function ScreenRouter({
         {screen === "results" ? (
           <ResultsScreen
             canCreateRequest={hasPermission(currentUser, "requests.write")}
+            canManageResults={hasPermission(currentUser, "assignments.write")}
             dataSourceMode={dataSourceMode}
             mode={resultMode}
+            openResultId={resultOpenIntentId}
+            onOpenResultHandled={onResultOpenIntentHandled}
             onModeChange={onResultModeChange}
             selectedResultId={selectedResultId}
             onSelectResult={onSelectResult}
@@ -434,6 +446,13 @@ export function ScreenRouter({
             screen={screen}
             onNavigate={onNavigate}
             onNotify={onNotify}
+          />
+        ) : null}
+        {emuShiftReportScreens.has(screen) ? (
+          <EmuShiftReportsScreen
+            currentUser={currentUser}
+            onNotify={onNotify}
+            screen={screen as "emu-shift-report-entry" | "emu-shift-report-history"}
           />
         ) : null}
         {isEmuScreen(screen) ? (

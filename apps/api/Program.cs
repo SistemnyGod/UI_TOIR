@@ -77,6 +77,7 @@ var configuredCorsOrigins = builder.Configuration
     .GetSection("WebCors:AllowedOrigins")
     .Get<string[]>()
     ?.Select(origin => origin?.Trim())
+    .OfType<string>()
     .Where(origin => !string.IsNullOrWhiteSpace(origin))
     .Where(origin => Uri.TryCreate(origin, UriKind.Absolute, out var uri)
         && (uri.Scheme == Uri.UriSchemeHttps

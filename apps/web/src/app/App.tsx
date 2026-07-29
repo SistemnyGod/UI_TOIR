@@ -38,6 +38,7 @@ export function App() {
   const [screen, navigate] = useHashScreen();
   const [resultMode, setResultMode] = useState<ResultMode>("all");
   const [selectedResultId, setSelectedResultId] = useState(patrolResultsFallback[0]?.id ?? "");
+  const [resultOpenIntentId, setResultOpenIntentId] = useState("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [selectedDirectoryEmployeeId, setSelectedDirectoryEmployeeId] = useState("");
   const [selectedRouteId, setSelectedRouteId] = useState("");
@@ -247,6 +248,12 @@ export function App() {
       showToast(`API недоступен: ${patrolData.errorMessage}`);
     }
   }, [dataAccessMode, patrolData.errorMessage, patrolData.status, showToast]);
+
+  function openPatrolResult(resultId: string) {
+    setSelectedResultId(resultId);
+    setResultOpenIntentId(resultId);
+    navigate("results");
+  }
 
   function openRequestForResult(resultId = selectedResultId) {
     if (!resultId) {
@@ -473,6 +480,8 @@ export function App() {
           onNavigate={navigate}
           onNotify={showToast}
           onOpenRequest={openRequestForResult}
+          onOpenResult={openPatrolResult}
+          onResultOpenIntentHandled={() => setResultOpenIntentId("")}
           onOpenRequestById={openRequestById}
           onRefreshAccountSecurity={mobileAccounts.refreshMobileAccountSecurity}
           onRefreshPatrolData={() => patrolData.refresh({ silent: true })}
@@ -504,6 +513,7 @@ export function App() {
           patrolResults={scheduleResultHistory.results}
           onRetryRequests={refreshRequests}
           resultMode={resultMode}
+          resultOpenIntentId={resultOpenIntentId}
           employeeCreateIntent={employeeCreateIntent}
           routeCreateIntent={routeCreateIntent}
           routeDirectory={routeDirectory}

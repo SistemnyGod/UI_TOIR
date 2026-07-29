@@ -90,6 +90,20 @@ export function NavIcon({ screen }: { screen: ScreenId }) {
           <path d="M9 19h6" />
         </>
       ) : null}
+      {screen === "emu-shift-report-entry" ? (
+        <>
+          <rect x="5" y="3" width="14" height="18" rx="2" />
+          <path d="M8 8h8M8 12h8M8 16h5" />
+          <path d="M15 16h4M17 14v4" />
+        </>
+      ) : null}
+      {screen === "emu-shift-report-history" ? (
+        <>
+          <rect x="6" y="5" width="13" height="15" rx="2" />
+          <path d="M9 9h7M9 13h7M9 17h4" />
+          <path d="M5 5V3h12" />
+        </>
+      ) : null}
       {screen === "users" ? (
         <>
           <rect x="4" y="4" width="16" height="16" rx="3" />

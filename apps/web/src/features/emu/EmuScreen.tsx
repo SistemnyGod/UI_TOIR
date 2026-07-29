@@ -27,6 +27,8 @@ export function EmuScreen({
     "emu-dashboard": "emu.dashboard.view",
     "emu-work-accounting": "emu.work-accounting.view",
     "emu-completed-work-history": "emu.history.view",
+    "emu-shift-report-entry": "emu.shift-reports.create",
+    "emu-shift-report-history": "emu.shift-reports.view",
   } as const;
   const requiredPermission = requiredPermissionByScreen[screen];
 

@@ -14,7 +14,12 @@ export type InventoryScreenId =
   | "inventory-users"
   | "inventory-settings"
   | "inventory-system-log";
-export type EmuScreenId = "emu-dashboard" | "emu-work-accounting" | "emu-completed-work-history";
+export type EmuScreenId =
+  | "emu-dashboard"
+  | "emu-work-accounting"
+  | "emu-completed-work-history"
+  | "emu-shift-report-entry"
+  | "emu-shift-report-history";
 export type IntegrationScreenId = "perco-integration";
 export type ScreenId = PatrolScreenId | InventoryScreenId | EmuScreenId | IntegrationScreenId | "users";
 

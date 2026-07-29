@@ -414,7 +414,6 @@ internal sealed partial class EfPatrolStore
             .Where(assignment =>
                 (AssignmentStatusValues.Active.Contains(assignment.Status) || AssignmentStatusValues.Delayed.Contains(assignment.Status))
                 && assignment.FinishedAt == null
-                && !dbContext.PatrolResults.Any(result => result.AssignmentId == assignment.Id)
                 && (assignment.StartedAt != null || assignment.PlannedAt >= recentWindowStart))
             .AsEnumerable()
             .Where(assignment => IsCurrentAssignmentWindow(assignment, settings, now))
