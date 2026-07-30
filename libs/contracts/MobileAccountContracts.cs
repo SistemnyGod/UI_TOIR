@@ -62,7 +62,9 @@ public sealed record MobileAccountSessionDto(
     string IpAddress,
     DateTimeOffset LastSeenAt,
     DateTimeOffset StartedAt,
-    DateTimeOffset? EndedAt);
+    DateTimeOffset? EndedAt,
+    DateTimeOffset AccessExpiresAt,
+    DateTimeOffset RefreshExpiresAt);
 
 public sealed record MobileAccountSecurityEventDto(
     Guid Id,

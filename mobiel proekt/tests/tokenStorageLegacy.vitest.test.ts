@@ -8,6 +8,7 @@ const secureStore = vi.hoisted(() => ({
 }));
 
 vi.mock("expo-secure-store", () => secureStore);
+vi.mock("expo-crypto", () => ({ randomUUID: vi.fn() }));
 
 import { getOfflineSession } from "../src/auth/tokenStorage";
 

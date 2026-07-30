@@ -41,17 +41,11 @@ function scheduleDiagnosticUpload(
   kind: "daily" | "pending" | "manual",
   upload: () => Promise<DiagnosticUploadResult>
 ) {
-  if (activeUpload && (kind !== "manual" || activeUploadKind === "manual")) {
+  if (activeUpload) {
     return activeUpload;
   }
-
-  const previousUpload = activeUpload;
   let request!: Promise<DiagnosticUploadResult>;
   request = (async () => {
-    if (previousUpload) {
-      await previousUpload.catch(() => undefined);
-    }
-
     try {
       return await upload();
     } catch (error) {
@@ -86,6 +80,16 @@ export function triggerManualDiagnosticReportUpload() {
   );
 }
 
+export function triggerReportDeliveryDiagnostic() {
+  return scheduleDiagnosticUpload("manual", async () => {
+    await logMobileAction({
+      eventType: "diagnostic.report_delivery.threshold",
+      entityType: "mobileApp",
+      message: "Отчёт не доставлен после трёх онлайн-попыток. Подготовлена безопасная диагностика без содержимого отчёта."
+    });
+    return uploadDiagnosticReport({ force: true, includeEmpty: true, respectAutomaticSetting: false });
+  });
+}
 export async function runSafeDiagnosticTest() {
   await logMobileAction({
     eventType: "diagnostic.test.error",

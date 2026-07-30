@@ -11,6 +11,7 @@ import { assertSessionOwner } from "@/auth/sessionIdentity";
 import { isMobileSessionKeyUnavailableError } from "@/auth/sessionErrors";
 import {
   getAccessToken,
+  getAccessTokenExpiresAt,
   getRefreshToken,
   getOrCreateRefreshOperationId,
   clearRefreshOperationId,
@@ -27,6 +28,7 @@ import { getMobileRuntimeConfig, getServerCandidateBaseUrls } from "@/core/serve
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { MobileApiProtocolError, parseMobileResponse } from "@/api/protocolValidation";
+import { shouldRefreshAccessToken } from "@/auth/tokenExpiryPolicy";
 import type { ZodType } from "zod";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -362,7 +364,10 @@ async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: numb
     throw new StaleAuthResponseError();
   }
 
-  await setTokens(session.accessToken, session.refreshToken);
+  await setTokens(session.accessToken, session.refreshToken, {
+    accessExpiresAt: session.expiresAt,
+    refreshExpiresAt: session.refreshExpiresAt
+  });
   await setOfflineSession({
     userId: session.user.serverUserId,
     contourId: runtimeConfig.contourId,
@@ -386,6 +391,24 @@ async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: numb
 export async function refreshStoredAccessToken() {
   const runtimeConfig = await getMobileRuntimeConfig();
   return refreshAccessToken(runtimeConfig.apiBaseUrl);
+}
+
+export async function refreshStoredAccessTokenIfNeeded() {
+  const [accessToken, accessExpiresAt, refreshToken] = await Promise.all([
+    getAccessToken(),
+    getAccessTokenExpiresAt(),
+    getRefreshToken()
+  ]);
+
+  if (!accessToken) {
+    return refreshToken ? refreshStoredAccessToken() : null;
+  }
+
+  if (shouldRefreshAccessToken(accessExpiresAt)) {
+    return refreshStoredAccessToken();
+  }
+
+  return accessToken;
 }
 
 async function appendRequestFailureContext(error: unknown, context: string) {

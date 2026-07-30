@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getReportDeliveryState } from "@/db/repositories/outboxRepository";
@@ -30,6 +30,7 @@ export function SubmitReportScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadRevision, setReloadRevision] = useState(0);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
+  const confirmationOpenRef = useRef(false);
 
   useEffect(
     () => subscribeToSyncEvents((event) => {
@@ -151,6 +152,33 @@ export function SubmitReportScreen() {
     router.push(`/patrol/assignment/${assignmentId}/point/${problem.pointId}/fill`);
   }
 
+  function confirmReportSubmission() {
+    if (confirmationOpenRef.current || isSubmitting || !readiness?.ready || presentation.action !== "submit") {
+      return;
+    }
+
+    confirmationOpenRef.current = true;
+    Alert.alert(
+      "Отправить отчёт?",
+      "Отчёт будет сохранён на телефоне и отправлен автоматически при наличии сети.",
+      [
+        {
+          text: "Нет",
+          style: "cancel",
+          onPress: () => {
+            confirmationOpenRef.current = false;
+          }
+        },
+        {
+          text: "Да, отправить",
+          onPress: () => {
+            confirmationOpenRef.current = false;
+            void handlePrimaryAction();
+          }
+        }
+      ]
+    );
+  }
   async function handleScreenPrimaryAction() {
     if (!readiness?.ready) {
       setIsSubmitting(true);
@@ -163,6 +191,11 @@ export function SubmitReportScreen() {
       } finally {
         setIsSubmitting(false);
       }
+      return;
+    }
+
+    if (presentation.action === "submit") {
+      confirmReportSubmission();
       return;
     }
 
@@ -199,7 +232,7 @@ export function SubmitReportScreen() {
         <PrimaryButton
           disabled={actionDisabled}
           icon={primaryIcon}
-          label={isSubmitting ? "Проверяем доставку…" : primaryLabel}
+          label={isSubmitting ? "Отправляем…" : primaryLabel}
           onPress={() => void handleScreenPrimaryAction()}
           size="large"
         />

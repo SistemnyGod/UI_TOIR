@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -41,6 +41,9 @@ import {
   attachWorkVideoFromCamera
 } from "@/services/mediaAttachmentService";
 import { loadWorkItemsOfflineFirst } from "@/services/workTaskService";
+import { logMobileError } from "@/services/mobileErrorReporter";
+import { subscribeToSyncEvents } from "@/sync/syncEvents";
+import { useSmoothRefreshIndicator } from "@/sync/useSmoothRefreshIndicator";
 import { ActionSheet } from "@/ui/ActionSheet";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -96,6 +99,7 @@ export function WorkAccountingScreen() {
   const [participationReason, setParticipationReason] = useState("");
   const [attachmentTask, setAttachmentTask] = useState<WorkItemDto | null>(null);
   const [attachmentRemark, setAttachmentRemark] = useState<RemarkAttachmentTarget>(null);
+  const smoothRefresh = useSmoothRefreshIndicator();
 
   const reloadLocal = useCallback(async () => {
     const [nextTasks, nextRemarks, nextEmployees, nextSections] = await Promise.all([
@@ -110,6 +114,19 @@ export function WorkAccountingScreen() {
     setSections(nextSections);
   }, []);
 
+  useEffect(() => subscribeToSyncEvents((event) => {
+    if (!event.snapshotRefreshed && !event.refreshedZones?.includes("workItems")) {
+      return;
+    }
+
+    smoothRefresh.beginRefresh();
+    void reloadLocal()
+      .catch((error) => {
+        void logMobileError("emu.work-accounting.sync-refresh.failed", error);
+        setRefreshError("Показаны сохранённые данные. Обновление с сервера не удалось.");
+      })
+      .finally(smoothRefresh.endRefresh);
+  }), [reloadLocal, smoothRefresh.beginRefresh, smoothRefresh.endRefresh]);
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
@@ -430,6 +447,7 @@ export function WorkAccountingScreen() {
       </View>
 
       {message ? <Text style={[styles.message, { color: colors.primary }]}>{message}</Text> : null}
+      {smoothRefresh.showRefreshIndicator ? <StatusPill label="Обновляем данные…" tone="neutral" /> : null}
       {refreshError ? <StatusPill label={refreshError} tone="warning" /> : null}
 
       {tab === "tasks" ? (

@@ -326,6 +326,33 @@ export async function getReportDeliveryState(
   if (delivered) return snapshot({ status: "delivered", clientOperationId: delivered.clientOperationId, deliveredAt: delivered.updatedAtLocal }, delivered);
   return empty();
 }
+export async function markReportDeliveryDiagnosticIfDue(
+  ownerUserId: string,
+  clientOperationId: string,
+  now = new Date()
+) {
+  const db = await getDatabase();
+  const nowIso = now.toISOString();
+  const cooldownBoundary = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString();
+  const result = await withSqliteBusyRetry(() => db.runAsync(
+    `
+      UPDATE outbox_commands
+      SET diagnostic_last_created_at = ?, updated_at_local = ?
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND client_operation_id = ?
+        AND command_type = 'completePatrolAssignment'
+        AND attempt_count >= 3
+        AND (
+          diagnostic_last_created_at IS NULL
+          OR diagnostic_last_created_at <= ?
+        )
+    `,
+    [nowIso, nowIso, ownerUserId, currentContourId, clientOperationId, cooldownBoundary]
+  ));
+
+  return result.changes === 1;
+}
 export async function quarantineInvalidPatrolCompletionCommands(ownerUserId: string, assignmentId?: string) {
   const db = await getDatabase();
   const assignmentFilter = assignmentId ? " AND entity_local_id = ?" : "";

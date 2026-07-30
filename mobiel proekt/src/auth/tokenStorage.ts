@@ -9,19 +9,45 @@ const refreshTokenKey = "patrol360.refreshToken";
 const ownerUserIdKey = "patrol360.ownerUserId";
 const offlineSessionKey = "patrol360.offlineSession";
 const refreshOperationIdKey = "patrol360.refreshOperationId";
+const accessTokenExpiresAtKey = "patrol360.accessTokenExpiresAt";
+const refreshTokenExpiresAtKey = "patrol360.refreshTokenExpiresAt";
+
+export type StoredTokenMetadata = {
+  accessExpiresAt?: string | null;
+  refreshExpiresAt?: string | null;
+};
 
 export type StoredSessionSnapshot = {
   accessToken: string | null;
   refreshToken: string | null;
+  accessExpiresAt: string | null;
+  refreshExpiresAt: string | null;
   ownerUserId: string | null;
   offlineSession: OfflineSessionState | null;
   refreshOperationId: string | null;
 };
 
-export async function setTokens(accessToken: string, refreshToken: string) {
-  await SecureStore.setItemAsync(accessTokenKey, accessToken);
-  await SecureStore.setItemAsync(refreshTokenKey, refreshToken);
-  await clearRefreshOperationId();
+export async function setTokens(
+  accessToken: string,
+  refreshToken: string,
+  metadata: StoredTokenMetadata = {}
+) {
+  await Promise.all([
+    SecureStore.setItemAsync(accessTokenKey, accessToken),
+    SecureStore.setItemAsync(refreshTokenKey, refreshToken),
+    setOptionalSecureValue(accessTokenExpiresAtKey, metadata.accessExpiresAt),
+    setOptionalSecureValue(refreshTokenExpiresAtKey, metadata.refreshExpiresAt),
+    clearRefreshOperationId()
+  ]);
+}
+
+async function setOptionalSecureValue(key: string, value: string | null | undefined) {
+  if (value) {
+    await SecureStore.setItemAsync(key, value);
+    return;
+  }
+
+  await SecureStore.deleteItemAsync(key);
 }
 
 export function setOfflineSession(session: OfflineSessionState) {
@@ -72,6 +98,14 @@ export function getRefreshToken() {
   return SecureStore.getItemAsync(refreshTokenKey);
 }
 
+export function getAccessTokenExpiresAt() {
+  return SecureStore.getItemAsync(accessTokenExpiresAtKey);
+}
+
+export function getRefreshTokenExpiresAt() {
+  return SecureStore.getItemAsync(refreshTokenExpiresAtKey);
+}
+
 export async function getOrCreateRefreshOperationId() {
   const existing = await SecureStore.getItemAsync(refreshOperationIdKey);
   if (existing) {
@@ -96,22 +130,27 @@ export function getStoredOwnerUserId() {
 }
 
 export async function getStoredSessionSnapshot(): Promise<StoredSessionSnapshot> {
-  const [accessToken, refreshToken, ownerUserId, offlineSession, refreshOperationId] = await Promise.all([
+  const [accessToken, refreshToken, accessExpiresAt, refreshExpiresAt, ownerUserId, offlineSession, refreshOperationId] = await Promise.all([
     getAccessToken(),
     getRefreshToken(),
+    getAccessTokenExpiresAt(),
+    getRefreshTokenExpiresAt(),
     getStoredOwnerUserId(),
     getOfflineSession(),
     SecureStore.getItemAsync(refreshOperationIdKey)
   ]);
 
-  return { accessToken, refreshToken, ownerUserId, offlineSession, refreshOperationId };
+  return { accessToken, refreshToken, accessExpiresAt, refreshExpiresAt, ownerUserId, offlineSession, refreshOperationId };
 }
 
 export async function restoreStoredSessionSnapshot(snapshot: StoredSessionSnapshot) {
   await clearTokens();
 
   if (snapshot.accessToken && snapshot.refreshToken) {
-    await setTokens(snapshot.accessToken, snapshot.refreshToken);
+    await setTokens(snapshot.accessToken, snapshot.refreshToken, {
+      accessExpiresAt: snapshot.accessExpiresAt,
+      refreshExpiresAt: snapshot.refreshExpiresAt
+    });
   }
 
   if (snapshot.ownerUserId) {
@@ -130,18 +169,27 @@ export async function restoreStoredSessionSnapshot(snapshot: StoredSessionSnapsh
 export async function clearVolatileTokens() {
   await Promise.all([
     SecureStore.deleteItemAsync(accessTokenKey),
-    SecureStore.deleteItemAsync(refreshTokenKey)
+    SecureStore.deleteItemAsync(refreshTokenKey),
+    SecureStore.deleteItemAsync(accessTokenExpiresAtKey),
+    SecureStore.deleteItemAsync(refreshTokenExpiresAtKey)
   ]);
 }
 export async function clearAuthTokens() {
-  await SecureStore.deleteItemAsync(accessTokenKey);
-  await SecureStore.deleteItemAsync(refreshTokenKey);
+  await Promise.all([
+    SecureStore.deleteItemAsync(accessTokenKey),
+    SecureStore.deleteItemAsync(refreshTokenKey),
+    SecureStore.deleteItemAsync(accessTokenExpiresAtKey),
+    SecureStore.deleteItemAsync(refreshTokenExpiresAtKey)
+  ]);
   await clearRefreshOperationId();
   lockSession();
 }
 
 export async function clearLocalSessionKeepingRefreshToken() {
-  await SecureStore.deleteItemAsync(accessTokenKey);
+  await Promise.all([
+    SecureStore.deleteItemAsync(accessTokenKey),
+    SecureStore.deleteItemAsync(accessTokenExpiresAtKey)
+  ]);
   await clearRefreshOperationId();
   await SecureStore.deleteItemAsync(ownerUserIdKey);
   await SecureStore.deleteItemAsync(offlineSessionKey);

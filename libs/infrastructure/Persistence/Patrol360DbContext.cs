@@ -387,6 +387,7 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
             entity.Property(employee => employee.Position).HasColumnName("position").HasMaxLength(160).IsRequired();
             entity.Property(employee => employee.Department).HasColumnName("department").HasMaxLength(160).IsRequired();
             entity.Property(employee => employee.EmployeeGroup).HasColumnName("employee_group").HasMaxLength(120).IsRequired();
+            entity.Property(employee => employee.EmuShiftReportCategory).HasColumnName("emu_shift_report_category").HasMaxLength(30);
             entity.Property(employee => employee.HiredAt).HasColumnName("hired_at");
             entity.Property(employee => employee.BirthDate).HasColumnName("birth_date");
             entity.Property(employee => employee.Status).HasColumnName("status").HasMaxLength(60).IsRequired();
@@ -2241,6 +2242,8 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
             entity.HasIndex(row => row.ReportDate).HasDatabaseName("ix_emu_shift_reports_date");
             entity.HasIndex(row => new { row.WorkerCategory, row.ReportDate, row.ShiftType }).HasDatabaseName("ix_emu_shift_reports_category_date_shift");
             entity.HasIndex(row => row.CreatedByUserId).HasDatabaseName("ix_emu_shift_reports_created_by");
+            entity.HasIndex(row => new { row.ReportDate, row.SubmittedAt }).HasDatabaseName("ix_emu_shift_reports_date_submitted");
+            entity.HasIndex(row => new { row.CreatedByUserId, row.ReportDate, row.SubmittedAt }).HasDatabaseName("ix_emu_shift_reports_owner_date_submitted");
         });
 
         modelBuilder.Entity<EmuShiftReportLineEntity>(entity =>

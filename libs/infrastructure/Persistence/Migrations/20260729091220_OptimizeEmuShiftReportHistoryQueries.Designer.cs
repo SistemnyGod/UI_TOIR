@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Patrol360.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Patrol360.Infrastructure.Persistence;
 namespace Patrol360.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(Patrol360DbContext))]
-    partial class Patrol360DbContextModelSnapshot : ModelSnapshot
+    [Migration("20260729091220_OptimizeEmuShiftReportHistoryQueries")]
+    partial class OptimizeEmuShiftReportHistoryQueries
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -252,11 +255,6 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
                         .HasColumnName("employee_group");
-
-                    b.Property<string>("EmuShiftReportCategory")
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("emu_shift_report_category");
 
                     b.Property<string>("FullName")
                         .IsRequired()

@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import type { ReactNode } from "react";
 
 export function ModalShell({
@@ -17,14 +18,14 @@ export function ModalShell({
 }) {
   return (
     <div className="modal-backdrop" role="presentation">
-      <section aria-modal="true" className={`modal-shell ${className}`} role="dialog">
+      <section aria-label={title} aria-modal="true" className={`modal-shell ${className}`} role="dialog">
         <header className="modal-shell-header">
           <div>
             <h2>{title}</h2>
             {subtitle ? <p>{subtitle}</p> : null}
           </div>
           <button aria-label="Закрыть" className="modal-shell-close" onClick={onClose} type="button">
-            Г—
+            <X aria-hidden="true" size={18} strokeWidth={2.4} />
           </button>
         </header>
         <div className="modal-shell-body">{children}</div>

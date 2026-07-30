@@ -269,6 +269,8 @@ function mapMobileAccountSession(session: MobileAccountSessionDto): MobileAccoun
     lastSeenAt: session.lastSeenAt,
     startedAt: session.startedAt,
     endedAt: session.endedAt,
+    accessExpiresAt: session.accessExpiresAt,
+    refreshExpiresAt: session.refreshExpiresAt,
   };
 }
 

@@ -1,3 +1,5 @@
+export type RefreshZone = "requests" | "activePatrols" | "points" | "reportDelivery" | "workItems" | "references" | "notifications";
+
 export type SyncEvent = {
   acceptedOperationIds: string[];
   completedAssignmentIds: string[];
@@ -5,6 +7,7 @@ export type SyncEvent = {
   changedAssignmentIds?: string[];
   deliveryChangedAssignmentIds?: string[];
   snapshotRefreshed?: boolean;
+  refreshedZones?: RefreshZone[];
 };
 
 type SyncEventListener = (event: SyncEvent) => void;
@@ -34,7 +37,8 @@ export function mergeSyncEvents(events: SyncEvent[]): SyncEvent {
     cancelledAssignmentIds: unique(events.flatMap((event) => event.cancelledAssignmentIds ?? [])),
     changedAssignmentIds: unique(events.flatMap((event) => event.changedAssignmentIds ?? [])),
     deliveryChangedAssignmentIds: unique(events.flatMap((event) => event.deliveryChangedAssignmentIds ?? [])),
-    snapshotRefreshed: events.some((event) => event.snapshotRefreshed === true)
+    snapshotRefreshed: events.some((event) => event.snapshotRefreshed === true),
+    refreshedZones: unique(events.flatMap((event) => event.refreshedZones ?? [])) as RefreshZone[]
   };
 }
 

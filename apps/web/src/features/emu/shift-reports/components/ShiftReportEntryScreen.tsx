@@ -1,7 +1,7 @@
 import { BriefcaseBusiness, Clock3 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '../../../../api/client';
-import type { EmuCreateShiftReportDto, EmuShiftReportCategory, EmuShiftType } from '../../../../api/emuShiftReportContracts';
+import type { EmuCreateShiftReportDto, EmuShiftReportCategory, EmuShiftReportEmployeeOptionDto, EmuShiftType } from '../../../../api/emuShiftReportContracts';
 import type { useEmuShiftReportsWorkspace } from '../../../../hooks/useEmuShiftReportsWorkspace';
 import { ModalShell } from '../../../../shared/ui';
 import {
@@ -17,9 +17,12 @@ import {
   type WorkRow,
 } from '../shiftReportUi';
 import { ShiftReportForm } from './ShiftReportForm';
+import { ShiftReportReminder } from './ShiftReportReminder';
+
 
 type Workspace = ReturnType<typeof useEmuShiftReportsWorkspace>;
 type Draft = { employeeId: string; reportDate: string; shiftType: EmuShiftType; rows: WorkRow[] };
+type DraftSnapshot = Draft & { category: EmuShiftReportCategory };
 type DraftStatus = 'idle' | 'saving' | 'saved' | 'restored' | 'error';
 type StoredDraft = Draft & { version: 1 };
 
@@ -27,13 +30,54 @@ function ensureFiveRows(rows: WorkRow[]) {
   return rows.length >= 5 ? rows : [...rows, ...Array.from({ length: 5 - rows.length }, createWorkRow)];
 }
 
+function isDraftRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function normalizeWorkRow(value: unknown): WorkRow | null {
+  if (!isDraftRecord(value)) return null;
+  const row = value as Record<string, unknown>;
+  const fallback = createWorkRow();
+  return {
+    id: typeof row.id === 'string' && row.id ? row.id : fallback.id,
+    description: typeof row.description === 'string' ? row.description : '',
+    hours: typeof row.hours === 'string' ? row.hours : '',
+    minutes: typeof row.minutes === 'string' ? row.minutes : '',
+    sectionId: typeof row.sectionId === 'string' ? row.sectionId : '',
+    note: typeof row.note === 'string' ? row.note : '',
+  };
+}
+
+function parseDraft(raw: string | null): Draft | null {
+  try {
+    const stored = JSON.parse(raw ?? 'null') as unknown;
+    if (!isDraftRecord(stored) || stored.version !== 1 || !Array.isArray(stored.rows)) return null;
+    const rows = stored.rows.map(normalizeWorkRow).filter((row): row is WorkRow => row !== null);
+    if (stored.rows.length > 0 && rows.length === 0) return null;
+    return {
+      employeeId: typeof stored.employeeId === 'string' ? stored.employeeId : '',
+      reportDate: typeof stored.reportDate === 'string' && stored.reportDate ? stored.reportDate : localDate(),
+      shiftType: stored.shiftType === 'night' ? 'night' : 'day',
+      rows: ensureFiveRows(rows),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function readDraft(category: EmuShiftReportCategory): Draft | null {
   try {
-    const pointer = localStorage.getItem(`${draftPrefix}.last.${category}`);
-    if (!pointer) return null;
-    const draft = JSON.parse(localStorage.getItem(pointer) ?? 'null') as Draft | null;
-    if (!draft || !Array.isArray(draft.rows)) return null;
-    return { ...draft, rows: ensureFiveRows(draft.rows) };
+    if (typeof window === 'undefined') return null;
+    const pointer = window.localStorage.getItem(`${draftPrefix}.last.${category}`);
+    const candidates = [
+      pointer?.startsWith(`${draftPrefix}.${category}.`) ? window.localStorage.getItem(pointer) : null,
+      window.localStorage.getItem(`${draftPrefix}.recovery.${category}`),
+    ];
+    for (const raw of candidates) {
+      const draft = parseDraft(raw);
+      if (draft) return draft;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -41,10 +85,20 @@ function readDraft(category: EmuShiftReportCategory): Draft | null {
 
 function writeDraft(category: EmuShiftReportCategory, employeeId: string, reportDate: string, shiftType: EmuShiftType, rows: WorkRow[]) {
   try {
+    if (typeof window === 'undefined') return false;
     const key = getDraftKey(category, employeeId, reportDate, shiftType);
-    const value: StoredDraft = { version: 1, employeeId, reportDate, shiftType, rows };
-    localStorage.setItem(key, JSON.stringify(value));
-    localStorage.setItem(`${draftPrefix}.last.${category}`, key);
+    const value: StoredDraft & { savedAt: string } = {
+      version: 1,
+      employeeId,
+      reportDate,
+      shiftType,
+      rows: rows.map(normalizeWorkRow).filter((row): row is WorkRow => row !== null),
+      savedAt: new Date().toISOString(),
+    };
+    const serialized = JSON.stringify(value);
+    window.localStorage.setItem(key, serialized);
+    window.localStorage.setItem(`${draftPrefix}.recovery.${category}`, serialized);
+    window.localStorage.setItem(`${draftPrefix}.last.${category}`, key);
     return true;
   } catch {
     return false;
@@ -53,16 +107,18 @@ function writeDraft(category: EmuShiftReportCategory, employeeId: string, report
 
 function removeDraft(category: EmuShiftReportCategory) {
   try {
-    const pointer = localStorage.getItem(`${draftPrefix}.last.${category}`);
-    if (pointer) localStorage.removeItem(pointer);
-    localStorage.removeItem(`${draftPrefix}.last.${category}`);
+    if (typeof window === 'undefined') return;
+    const pointer = window.localStorage.getItem(`${draftPrefix}.last.${category}`);
+    if (pointer?.startsWith(`${draftPrefix}.${category}.`)) window.localStorage.removeItem(pointer);
+    window.localStorage.removeItem(`${draftPrefix}.recovery.${category}`);
+    window.localStorage.removeItem(`${draftPrefix}.last.${category}`);
   } catch {
     // Storage can be unavailable in private browsing; the form remains usable.
   }
-}
-
-export function ShiftReportEntryScreen({ workspace, onNotify }: { workspace: Workspace; onNotify: (message: string) => void }) {
+}export function ShiftReportEntryScreen({ workspace, onNotify, canManageFavorites }: { workspace: Workspace; onNotify: (message: string) => void; canManageFavorites: boolean }) {
   const submitLockRef = useRef(false);
+  const draftTimerRef = useRef<number | null>(null);
+  const latestDraftRef = useRef<DraftSnapshot | null>(null);
   const [category, setCategory] = useState<EmuShiftReportCategory>('mechanic');
   const [hydratedCategory, setHydratedCategory] = useState<EmuShiftReportCategory | null>(null);
   const [employeeId, setEmployeeId] = useState('');
@@ -73,15 +129,16 @@ export function ShiftReportEntryScreen({ workspace, onNotify }: { workspace: Wor
   const [submitting, setSubmitting] = useState(false);
   const [nightWarning, setNightWarning] = useState('');
   const [showClearDialog, setShowClearDialog] = useState(false);
+  const [showDirectoryDialog, setShowDirectoryDialog] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [draftStatus, setDraftStatus] = useState<DraftStatus>('idle');
   const [draftSavedAt, setDraftSavedAt] = useState('');
 
   const options = workspace.options;
-  const employees = useMemo(() => options?.employees.filter((item) => item.workerCategory === category) ?? [], [category, options]);
+  const employees = options?.employees ?? [];
   const usedRows = rows.filter(isWorkRowUsed);
   const totalMinutes = usedRows.reduce((sum, item) => sum + getDurationMinutes(item), 0);
-  const hasDraftData = Boolean(employeeId || rows.some(isWorkRowUsed));
+  const hasDraftData = Boolean(employeeId || rows.some(isWorkRowUsed) || reportDate !== localDate() || shiftType !== 'day');
 
   useEffect(() => {
     setHydratedCategory(null);
@@ -99,29 +156,86 @@ export function ShiftReportEntryScreen({ workspace, onNotify }: { workspace: Wor
   }, [category]);
 
   useEffect(() => {
-    if (hydratedCategory !== category || (!employeeId && !rows.some(isWorkRowUsed))) return;
+    if (hydratedCategory !== category) return;
+
+    const snapshot: DraftSnapshot | null = hasDraftData
+      ? {
+          category,
+          employeeId,
+          reportDate,
+          shiftType,
+          rows: rows.map((row) => ({ ...row })),
+        }
+      : null;
+    latestDraftRef.current = snapshot;
+
+    if (draftTimerRef.current !== null) {
+      window.clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = null;
+    }
+    if (!snapshot) {
+      removeDraft(category);
+      setDraftStatus('idle');
+      setDraftSavedAt('');
+      return;
+    }
+
     setDraftStatus('saving');
     const timer = window.setTimeout(() => {
-      const saved = writeDraft(category, employeeId, reportDate, shiftType, rows);
+      draftTimerRef.current = null;
+      const current = latestDraftRef.current;
+      if (!current) return;
+      const saved = writeDraft(current.category, current.employeeId, current.reportDate, current.shiftType, current.rows);
       setDraftStatus(saved ? 'saved' : 'error');
       if (saved) setDraftSavedAt(new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }));
-    }, 400);
-    return () => window.clearTimeout(timer);
-  }, [category, employeeId, hydratedCategory, reportDate, rows, shiftType]);
+    }, 250);
+    draftTimerRef.current = timer;
+
+    return () => {
+      window.clearTimeout(timer);
+      if (draftTimerRef.current === timer) draftTimerRef.current = null;
+    };
+  }, [category, employeeId, hydratedCategory, reportDate, rows, shiftType, hasDraftData]);
 
   useEffect(() => {
-    if (hydratedCategory !== category || (!employeeId && !rows.some(isWorkRowUsed))) return;
     const flushDraft = () => {
-      writeDraft(category, employeeId, reportDate, shiftType, rows);
+      if (draftTimerRef.current !== null) {
+        window.clearTimeout(draftTimerRef.current);
+        draftTimerRef.current = null;
+      }
+      const snapshot = latestDraftRef.current;
+      if (snapshot) {
+        writeDraft(snapshot.category, snapshot.employeeId, snapshot.reportDate, snapshot.shiftType, snapshot.rows);
+      }
+    };
+
+    const flushWhenHidden = () => {
+      if (document.visibilityState === 'hidden') flushDraft();
     };
     window.addEventListener('beforeunload', flushDraft);
     window.addEventListener('pagehide', flushDraft);
+    document.addEventListener('visibilitychange', flushWhenHidden);
     return () => {
       window.removeEventListener('beforeunload', flushDraft);
       window.removeEventListener('pagehide', flushDraft);
+      document.removeEventListener('visibilitychange', flushWhenHidden);
+      flushDraft();
     };
-  }, [category, employeeId, hydratedCategory, reportDate, rows, shiftType]);
+  }, []);
+  useEffect(() => {
+    if (!hasDraftData || !navigator.storage?.persist) return;
+    void navigator.storage.persist().catch(() => false);
+  }, [hasDraftData]);
+  function openDirectory() {
+    setShowDirectoryDialog(true);
+    void workspace.loadFavorites();
+  }
 
+  function selectDirectoryEmployee(employee: EmuShiftReportEmployeeOptionDto) {
+    setEmployeeId(employee.id);
+    setSuccessMessage('');
+    setShowDirectoryDialog(false);
+  }
   function updateRow(id: string, patch: Partial<WorkRow>) {
     setRows((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
     setSuccessMessage('');
@@ -129,9 +243,23 @@ export function ShiftReportEntryScreen({ workspace, onNotify }: { workspace: Wor
 
   function switchCategory(value: EmuShiftReportCategory) {
     if (value === category) return;
+    if (draftTimerRef.current !== null) {
+      window.clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = null;
+    }
     if (hasDraftData) {
-      const saved = writeDraft(category, employeeId, reportDate, shiftType, rows);
+      const snapshot: DraftSnapshot = {
+        category,
+        employeeId,
+        reportDate,
+        shiftType,
+        rows: rows.map((row) => ({ ...row })),
+      };
+      latestDraftRef.current = snapshot;
+      const saved = writeDraft(snapshot.category, snapshot.employeeId, snapshot.reportDate, snapshot.shiftType, snapshot.rows);
       setDraftStatus(saved ? 'saved' : 'error');
+    } else {
+      latestDraftRef.current = null;
     }
     setCategory(value);
   }
@@ -161,6 +289,11 @@ export function ShiftReportEntryScreen({ workspace, onNotify }: { workspace: Wor
   }
 
   function clearDraft() {
+    if (draftTimerRef.current !== null) {
+      window.clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = null;
+    }
+    latestDraftRef.current = null;
     removeDraft(category);
     setEmployeeId('');
     setReportDate(localDate());
@@ -237,10 +370,9 @@ export function ShiftReportEntryScreen({ workspace, onNotify }: { workspace: Wor
   }
 
   return (
-    <main className='emu-shift-report-page'>
+    <main className='emu-shift-report-page emu-entry-page'>
       <header className='emu-shift-header'>
         <div>
-          <span>ЭМУ · сменный журнал</span>
           <h1>Сменный отчёт</h1>
           <p>Зафиксируйте выполненные за смену работы. Черновик сохраняется автоматически.</p>
           <div className={`emu-draft-status is-${draftStatus}`} role='status' aria-live='polite'>
@@ -267,10 +399,24 @@ export function ShiftReportEntryScreen({ workspace, onNotify }: { workspace: Wor
         errors={errors}
         employees={employees}
         sections={options?.sections ?? []}
+        favoriteEmployees={workspace.favoriteEmployees}
+        favoriteLoading={workspace.favoritesLoading}
+        favoriteError={workspace.favoritesError}
+        canManageFavorites={canManageFavorites}
+        directoryOpen={showDirectoryDialog}
+        onOpenDirectory={openDirectory}
+        onCloseDirectory={() => setShowDirectoryDialog(false)}
+        onAddFavoriteEmployee={(id) => workspace.addFavoriteEmployee({ employeeId: id })}
+        onRemoveFavoriteEmployee={(id) => workspace.removeFavoriteEmployee(id)}
+        onSetEmployeeCategory={(id, workerCategory) => workspace.setEmployeeCategory(id, { workerCategory })}
+        onSelectDirectoryEmployee={selectDirectoryEmployee}
+        onManageFavorites={openDirectory}
+        onRetryFavorites={() => void workspace.loadFavorites()}
         nightWarning={nightWarning}
         successMessage={successMessage}
         submitting={submitting}
         hasDraftData={hasDraftData}
+        reminder={<ShiftReportReminder />}
         onSubmit={submit}
         onSwitchCategory={switchCategory}
         onEmployeeChange={(value) => { setEmployeeId(value); setSuccessMessage(''); }}
@@ -281,6 +427,7 @@ export function ShiftReportEntryScreen({ workspace, onNotify }: { workspace: Wor
         onAddRow={() => setRows((current) => [...current, createWorkRow()])}
         onRequestClear={() => setShowClearDialog(true)}
       />
+
 
       {showClearDialog ? <ModalShell className='emu-shift-confirm-dialog' title='Очистить черновик?' subtitle='Все заполненные строки текущей вкладки будут удалены.' onClose={() => setShowClearDialog(false)} actions={<><button type='button' className='button ghost' onClick={() => setShowClearDialog(false)}>Отмена</button><button type='button' className='button danger' onClick={clearDraft}>Очистить</button></>}><p>Черновик {categoryLabels[category].toLowerCase()} нельзя будет восстановить после очистки.</p></ModalShell> : null}
     </main>

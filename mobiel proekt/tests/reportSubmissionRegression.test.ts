@@ -149,3 +149,10 @@ test("snapshot freeze uses local lifecycle and attachment errors are user-facing
   assert.doesNotMatch(attachmentPolicySource, /local file|video exceeds|photo exceeds|required evidence/);
   assert.match(attachmentPolicySource, /Файл вложения отсутствует или пуст на телефоне/);
 });
+test("report submission asks for confirmation and keeps an optional full review", () => {
+  assert.match(activePatrolScreenSource, /Alert\.alert\(\s*"Отправить отчёт\?"/);
+  assert.match(activePatrolScreenSource, /completeAssignmentLocally\(assignmentId\)/);
+  assert.match(activePatrolScreenSource, /requestPatrolSync\(\{ mode: "manualReport", assignmentId \}\)/);
+  assert.match(activePatrolScreenSource, /Проверить отчёт/);
+  assert.match(activePatrolScreenSource, /isLoading && !assignment/);
+});

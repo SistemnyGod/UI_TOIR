@@ -21,7 +21,7 @@ export type OutboxRetryScheduler = {
 };
 
 const maximumTimerDelayMs = 2_147_483_647;
-const minimumNoProgressDelayMs = 15_000;
+const minimumNoProgressDelayMs = 15 * 60_000;
 let registeredRunner: RetrySchedulerRunner | null = null;
 
 export function createOutboxRetryScheduler(dependencies: RetrySchedulerDependencies): OutboxRetryScheduler {

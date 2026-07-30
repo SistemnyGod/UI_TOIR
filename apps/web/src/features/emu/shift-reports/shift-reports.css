@@ -678,6 +678,20 @@
   text-transform: uppercase;
 }
 
+.emu-history-detail-table thead,
+.emu-history-detail-table thead tr {
+  height: 32px;
+}
+
+.emu-history-detail-table th {
+  box-sizing: border-box;
+  height: 32px;
+  padding: 4px 8px;
+  line-height: 1.15;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 .emu-detail-state {
   display: flex;
   align-items: center;
@@ -702,6 +716,124 @@
   line-height: 1.5;
 }
 
+/* Shared modal shell used by the shift-report confirmation and directory. */
+.emu-shift-report-page .modal-backdrop {
+  z-index: 1400;
+  padding: clamp(16px, 3vh, 28px);
+}
+
+.emu-shift-report-page .modal-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(900px, calc(100vw - 32px));
+  max-width: 100%;
+  max-height: min(860px, calc(100dvh - 32px));
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #cbd9eb;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgb(8 23 48 / 28%);
+  color: #14233a;
+  animation: emu-modal-in .18s ease-out;
+}
+
+.emu-shift-report-page .modal-shell-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid #e2eaf4;
+  background: linear-gradient(180deg, #fbfdff 0%, #f5f9ff 100%);
+}
+
+.emu-shift-report-page .modal-shell-header > div {
+  min-width: 0;
+}
+
+.emu-shift-report-page .modal-shell-header h2 {
+  margin: 0;
+  color: #152e56;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -.02em;
+  line-height: 1.2;
+}
+
+.emu-shift-report-page .modal-shell-header p {
+  max-width: 640px;
+  margin: 6px 0 0;
+  color: #6c7d96;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.emu-shift-report-page .modal-shell-close {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #cbd9eb;
+  border-radius: 10px;
+  background: #fff;
+  color: #526987;
+  cursor: pointer;
+}
+
+.emu-shift-report-page .modal-shell-close:hover {
+  border-color: #8db2ed;
+  background: #eef5ff;
+  color: #205bd0;
+}
+
+.emu-shift-report-page .modal-shell-close:focus-visible,
+.emu-shift-report-page .modal-shell-actions button:focus-visible,
+.emu-shift-report-page .emu-directory-employee:focus-visible,
+.emu-shift-report-page .emu-directory-star:focus-visible,
+.emu-shift-report-page .emu-directory-tabs button:focus-visible,
+.emu-shift-report-page .emu-directory-modes button:focus-visible {
+  outline: 3px solid rgb(37 99 235 / 22%);
+  outline-offset: 2px;
+}
+
+.emu-shift-report-page .modal-shell-body {
+  min-height: 0;
+  overflow: hidden;
+  padding: 20px 22px;
+}
+
+.emu-shift-report-page .modal-shell-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 14px 22px;
+  border-top: 1px solid #e2eaf4;
+  background: #fbfdff;
+}
+
+.emu-shift-report-page .modal-shell-actions > .button {
+  min-width: 112px;
+}
+
+.emu-shift-report-page .emu-directory-dialog {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.emu-shift-report-page .emu-directory-dialog .modal-shell-body {
+  padding: 0;
+}
+
+.emu-shift-report-page .emu-shift-confirm-dialog .modal-shell-body {
+  overflow: auto;
+}
+
+@keyframes emu-modal-in {
+  from { opacity: 0; transform: translateY(6px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 @keyframes emu-spin { to { transform: rotate(360deg); } }
 @keyframes emu-shift-panel-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes emu-detail-open { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
@@ -1017,5 +1149,2350 @@
     flex-basis: 100%;
     margin-left: 24px;
     text-align: left;
+  }
+}
+
+/* Employee picker and favorites management stay local to the shift-report feature. */
+.emu-shift-employee-field {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.emu-employee-picker-label-row,
+.emu-favorites-modal-heading,
+.emu-favorites-current-item,
+.emu-favorites-directory-item,
+.emu-employee-search-row {
+  display: flex;
+  align-items: center;
+}
+
+.emu-employee-picker-label-row {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.emu-favorites-manage-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.emu-favorites-manage-button:hover { color: #174fc3; text-decoration: underline; }
+
+.emu-selected-employee-card,
+.emu-selected-employee-empty,
+.emu-employee-picker {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #c8d5e6;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.emu-selected-employee-card {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 58px;
+  padding: 8px 9px;
+  box-shadow: 0 4px 12px rgb(37 99 235 / 5%);
+}
+
+.emu-selected-employee-empty {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 10px;
+  color: #78869b;
+  font-size: 12px;
+}
+
+.emu-selected-employee-avatar,
+.emu-employee-option-avatar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9px;
+  background: #eef4ff;
+  color: #2563eb;
+}
+
+.emu-selected-employee-avatar { width: 34px; height: 34px; }
+.emu-employee-option-avatar { width: 29px; height: 29px; }
+
+.emu-selected-employee-copy,
+.emu-employee-option-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.emu-selected-employee-copy strong,
+.emu-employee-option-copy strong {
+  overflow: hidden;
+  color: #14233a;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emu-selected-employee-copy small,
+.emu-employee-option-copy small {
+  overflow: hidden;
+  color: #708098;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emu-selected-employee-clear {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: #f4f7fb;
+  color: #6c7b92;
+  cursor: pointer;
+}
+
+.emu-selected-employee-clear:hover { background: #fff0f2; color: #bd2d3a; }
+
+.emu-employee-picker { position: relative; }
+
+.emu-employee-search-row {
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 10px;
+  color: #74839a;
+}
+
+.emu-employee-search-row input {
+  min-height: 38px;
+  padding: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.emu-employee-picker-chevron {
+  flex: 0 0 auto;
+  transition: transform .18s ease;
+}
+
+.emu-employee-picker-chevron.is-open { transform: rotate(180deg); }
+
+.emu-employee-picker-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: -1px;
+  left: -1px;
+  z-index: 20;
+  overflow: hidden;
+  border: 1px solid #b9cce6;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 18px 38px rgb(35 55 85 / 16%), 0 3px 8px rgb(35 55 85 / 7%);
+}
+
+.emu-employee-picker-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 7px;
+  border-bottom: 1px solid #e4ebf5;
+  background: #f7faff;
+}
+
+.emu-employee-picker-tabs button {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 31px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #6b7a91;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.emu-employee-picker-tabs button span {
+  padding: 1px 5px;
+  border-radius: 99px;
+  background: #e8effa;
+  color: #4f6381;
+  font-size: 10px;
+}
+
+.emu-employee-picker-tabs button.active {
+  background: #fff;
+  color: #205bd0;
+  box-shadow: 0 2px 7px rgb(35 55 85 / 8%);
+}
+
+.emu-employee-picker-list,
+.emu-favorites-current-list,
+.emu-favorites-directory-list {
+  max-height: 250px;
+  overflow: auto;
+}
+
+.emu-employee-option,
+.emu-favorites-current-item,
+.emu-favorites-directory-item {
+  width: 100%;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid #edf1f7;
+  background: #fff;
+  text-align: left;
+}
+
+.emu-employee-option {
+  display: flex;
+  align-items: center;
+  color: #14233a;
+  cursor: pointer;
+}
+
+.emu-employee-option:hover,
+.emu-employee-option.is-active { background: #f4f8ff; }
+.emu-employee-option.is-selected { box-shadow: inset 3px 0 #2563eb; }
+.emu-employee-option-star { margin-left: auto; flex: 0 0 auto; color: #e4a51c; }
+
+.emu-employee-picker-empty,
+.emu-favorites-modal-empty {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 22px 14px;
+  color: #53647e;
+  font-size: 12px;
+  text-align: center;
+}
+
+.emu-employee-picker-empty small,
+.emu-favorites-modal-empty small {
+  color: #7b899d;
+  font-size: 11px;
+}
+
+.emu-employee-picker-hint {
+  margin: 0;
+  padding: 7px 10px;
+  border-top: 1px solid #edf1f7;
+  color: #8190a5;
+  font-size: 10px;
+  text-align: right;
+}
+
+.emu-favorites-inline-loading,
+.emu-favorites-inline-error,
+.emu-favorites-modal-loading,
+.emu-favorites-modal-error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  color: #6c7b92;
+  font-size: 11px;
+}
+
+.emu-favorites-inline-error,
+.emu-favorites-modal-error { color: #b42331; }
+.emu-favorites-inline-error button,
+.emu-favorites-modal-error button { margin-left: auto; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 800; cursor: pointer; text-decoration: underline; }
+.emu-employee-picker-error { color: #bf2c3a; font-size: 11px; font-weight: 650; }
+
+.emu-favorites-dialog { width: min(1000px, calc(100vw - 32px)); }
+.emu-favorites-dialog .modal-shell-body { padding: 0; }
+.emu-favorites-modal-layout { display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr); gap: 0; }
+.emu-favorites-modal-column { min-width: 0; padding: 18px; }
+.emu-favorites-modal-column + .emu-favorites-modal-column { border-left: 1px solid #e4ebf5; background: #f8fbff; }
+.emu-favorites-modal-heading { justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.emu-favorites-modal-heading h3 { margin: 2px 0 0; color: #14233a; font-size: 16px; }
+.emu-favorites-modal-heading b,
+.emu-favorites-directory-count { display: inline-grid; min-width: 28px; min-height: 28px; place-items: center; border-radius: 99px; background: #eaf1ff; color: #205bd0; font-size: 11px; font-weight: 800; }
+.emu-favorites-directory-count { padding: 0 8px; }
+.emu-favorites-kicker { color: #73829a; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.emu-favorites-current-list { max-height: 340px; }
+.emu-favorites-current-item,
+.emu-favorites-directory-item { min-height: 45px; padding-inline: 0; background: transparent; }
+.emu-favorites-remove-button,
+.emu-favorites-add-button { flex: 0 0 auto; min-height: 29px; padding: 0 9px; border-radius: 7px; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.emu-favorites-remove-button { border: 1px solid #f0c3c8; background: #fff7f8; color: #bd2d3a; }
+.emu-favorites-add-button { border: 1px solid #b9cce6; background: #fff; color: #205bd0; }
+.emu-favorites-remove-button:disabled,
+.emu-favorites-add-button:disabled { cursor: wait; opacity: .55; }
+.emu-favorites-search { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px !important; min-height: 40px; margin-bottom: 8px !important; padding: 0 10px !important; border: 1px solid #c8d5e6 !important; border-radius: 9px !important; background: #fff; color: #74839a !important; }
+.emu-favorites-search input { min-height: 36px !important; padding: 0 !important; border: 0 !important; box-shadow: none !important; }
+.emu-favorites-directory-list { max-height: 340px; }
+.emu-favorites-added { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; color: #17804a; font-size: 10px; font-weight: 800; }
+.emu-favorites-confirm { display: grid; gap: 5px; margin-top: 12px; padding: 11px; border: 1px solid #f2d29c; border-radius: 9px; background: #fff9ed; color: #7b570f; font-size: 11px; }
+.emu-favorites-confirm span { line-height: 1.4; }
+.emu-favorites-confirm > div { display: flex; justify-content: flex-end; gap: 7px; margin-top: 3px; }
+
+@media (max-width: 760px) {
+  .emu-employee-picker-popover { position: fixed; top: auto; right: 13px; bottom: 13px; left: 13px; max-height: min(62vh, 460px); }
+  .emu-employee-picker-list { max-height: 270px; }
+  .emu-favorites-modal-layout { grid-template-columns: 1fr; }
+  .emu-favorites-modal-column + .emu-favorites-modal-column { border-top: 1px solid #e4ebf5; border-left: 0; }
+  .emu-favorites-modal-column { padding: 14px; }
+  .emu-favorites-current-list,
+  .emu-favorites-directory-list { max-height: 220px; }
+}
+.emu-shift-tabs-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px 0;
+  border-bottom: 1px solid #e4ebf5;
+}
+
+.emu-shift-tabs-row .emu-shift-tabs {
+  padding: 0;
+  border-bottom: 0;
+}
+
+.emu-employee-directory {
+  position: relative;
+  flex: 0 0 auto;
+  padding-bottom: 8px;
+}
+
+.emu-employee-directory-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid #cbd9eb;
+  border-radius: 9px;
+  background: #fff;
+  color: #2454a6;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+
+.emu-employee-directory-trigger:hover,
+.emu-employee-directory-trigger[aria-expanded='true'] {
+  border-color: #8fb2ef;
+  background: #f6f9ff;
+  box-shadow: 0 5px 14px rgb(37 99 235 / 10%);
+}
+
+.emu-employee-directory-trigger svg:last-child {
+  transition: transform .18s ease;
+}
+
+.emu-employee-directory-trigger svg:last-child.is-open {
+  transform: rotate(180deg);
+}
+
+.emu-employee-directory-popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% - 1px);
+  right: 0;
+  width: min(420px, calc(100vw - 32px));
+  padding: 14px;
+  border: 1px solid #cddbed;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 18px 44px rgb(35 55 85 / 18%), 0 3px 9px rgb(35 55 85 / 7%);
+  animation: emu-message-in .16s ease-out;
+}
+
+.emu-employee-directory-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.emu-employee-directory-head div {
+  display: grid;
+  gap: 3px;
+}
+
+.emu-employee-directory-head span {
+  color: #6d7d96;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.emu-employee-directory-head strong {
+  color: #173661;
+  font-size: 14px;
+}
+
+.emu-employee-directory-close {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #d7e2f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #6d7d96;
+  cursor: pointer;
+}
+
+.emu-employee-directory-close:hover {
+  border-color: #a9bddb;
+  color: #2454a6;
+}
+
+.emu-employee-directory-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-bottom: 10px;
+  padding: 4px;
+  border-radius: 9px;
+  background: #f1f5fb;
+}
+
+.emu-employee-directory-tabs button {
+  min-height: 32px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #65758f;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.emu-employee-directory-tabs button.active {
+  background: #fff;
+  color: #2454a6;
+  box-shadow: 0 2px 7px rgb(35 55 85 / 9%);
+}
+
+.emu-employee-directory-tabs button span {
+  display: inline-grid;
+  min-width: 19px;
+  height: 19px;
+  margin-left: 4px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e2ebfa;
+  color: #2454a6;
+  font-size: 10px;
+}
+
+.emu-employee-directory-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  margin-bottom: 9px;
+  padding: 0 10px;
+  border: 1px solid #d2deed;
+  border-radius: 8px;
+  color: #7d8da5;
+}
+
+.emu-employee-directory-search:focus-within {
+  border-color: #6d9bea;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 11%);
+}
+
+.emu-employee-directory-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #213653;
+  font: inherit;
+  font-size: 12px;
+}
+
+.emu-employee-directory-list {
+  display: grid;
+  max-height: 300px;
+  gap: 4px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.emu-employee-directory-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: #f8fbff;
+}
+
+.emu-employee-directory-item:hover {
+  border-color: #d6e4f7;
+  background: #f3f8ff;
+}
+
+.emu-employee-directory-avatar {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 8px;
+  background: #e3efff;
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.emu-employee-directory-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.emu-employee-directory-copy strong,
+.emu-employee-directory-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emu-employee-directory-copy strong {
+  color: #243b5c;
+  font-size: 12px;
+}
+
+.emu-employee-directory-copy small {
+  color: #71829a;
+  font-size: 10px;
+}
+
+.emu-employee-directory-empty {
+  padding: 24px 12px;
+  color: #71829a;
+  font-size: 12px;
+  text-align: center;
+}
+
+.emu-employee-directory-footer {
+  margin-top: 9px;
+  color: #8492a7;
+  font-size: 10px;
+  text-align: right;
+}
+
+@media (max-width: 760px) {
+  .emu-shift-tabs-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 8px;
+  }
+
+  .emu-employee-directory {
+    padding-bottom: 9px;
+  }
+
+  .emu-employee-directory-trigger {
+    width: 100%;
+    justify-content: center;
+  }
+}
+.emu-history-loading {
+  min-height: 128px;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  padding: 24px;
+}
+
+.emu-history-skeleton {
+  display: block;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #edf3fb 25%, #f8fbff 50%, #edf3fb 75%);
+  background-size: 200% 100%;
+  animation: emu-history-skeleton-pulse 1.25s ease-in-out infinite;
+}
+
+.emu-history-skeleton-wide {
+  width: 78%;
+}
+
+.emu-history-skeleton-short {
+  width: 46%;
+}
+
+@keyframes emu-history-skeleton-pulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.emu-history-favorite-filter {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px !important;
+  min-height: 40px;
+  padding: 0 10px !important;
+  border: 1px solid #c8d5e6 !important;
+  border-radius: 9px !important;
+  background: #fff;
+  cursor: pointer;
+}
+
+.emu-history-favorite-filter input {
+  width: 16px !important;
+  min-width: 16px;
+  min-height: 16px !important;
+  margin: 0;
+  accent-color: #2563eb;
+}
+
+.emu-directory-dialog {
+  width: min(900px, calc(100vw - 32px));
+}
+
+.emu-directory-dialog .modal-shell-body {
+  padding: 0;
+}
+
+.emu-directory-toolbar {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-bottom: 1px solid #e4ebf5;
+  background: #f8fbff;
+}
+
+.emu-directory-tabs,
+.emu-directory-modes {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #eaf1fb;
+}
+
+.emu-directory-tabs button,
+.emu-directory-modes button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #667791;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.emu-directory-tabs button {
+  flex: 1;
+}
+
+.emu-directory-tabs button.active,
+.emu-directory-modes button.active {
+  background: #fff;
+  color: #205bd0;
+  box-shadow: 0 2px 8px rgb(35 55 85 / 10%);
+}
+
+.emu-directory-tabs button span,
+.emu-directory-modes button span {
+  display: inline-grid;
+  min-width: 22px;
+  min-height: 20px;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: #dce9ff;
+  color: #205bd0;
+  font-size: 10px;
+}
+
+.emu-directory-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid #c8d5e6;
+  border-radius: 9px;
+  background: #fff;
+  color: #73829a;
+}
+
+.emu-directory-search:focus-within {
+  border-color: #6d9bea;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 11%);
+}
+
+.emu-directory-search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #213653;
+  font: inherit;
+  font-size: 12px;
+}
+
+.emu-directory-list {
+  display: grid;
+  max-height: min(52vh, 470px);
+  gap: 5px;
+  padding: 14px 18px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.emu-directory-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.emu-directory-item:hover {
+  border-color: #d6e4f7;
+  background: #f3f8ff;
+}
+
+.emu-directory-employee {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.emu-directory-avatar {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9px;
+  background: #e3efff;
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.emu-directory-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.emu-directory-copy strong,
+.emu-directory-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emu-directory-copy strong {
+  color: #243b5c;
+  font-size: 12px;
+}
+
+.emu-directory-copy small {
+  color: #71829a;
+  font-size: 10px;
+}
+
+.emu-directory-category-control {
+  display: grid;
+  width: 112px;
+  flex: 0 0 auto;
+  gap: 3px;
+  color: #71829a;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.emu-directory-category-control > span {
+  padding-left: 2px;
+  line-height: 1;
+}
+
+.emu-directory-category-control select {
+  width: 100%;
+  height: 32px;
+  padding: 0 25px 0 8px;
+  border: 1px solid #cbd9eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #294465;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.emu-directory-category-control select:focus-visible {
+  outline: 3px solid rgb(37 99 235 / 22%);
+  outline-offset: 2px;
+  border-color: #77a6ee;
+}
+
+.emu-directory-category-control select:disabled {
+  cursor: wait;
+  opacity: .58;
+}
+.emu-directory-star {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #cbd9eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #9aa8bc;
+  cursor: pointer;
+}
+
+.emu-directory-star.is-favorite {
+  border-color: #f0c96a;
+  background: #fff9e8;
+  color: #e5a900;
+}
+
+.emu-directory-star:disabled {
+  cursor: wait;
+  opacity: .55;
+}
+
+.emu-directory-status,
+.emu-directory-error {
+  margin: 12px 18px 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.emu-directory-status {
+  background: #eef4ff;
+  color: #3764a5;
+}
+
+.emu-directory-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff4f5;
+  color: #b42331;
+}
+
+.emu-directory-error button {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.emu-directory-empty {
+  padding: 38px 16px;
+  color: #71829a;
+  font-size: 12px;
+  text-align: center;
+}
+
+.emu-directory-empty small {
+  display: block;
+  margin-top: 5px;
+  font-size: 10px;
+}
+
+.emu-directory-footer {
+  padding: 10px 18px 14px;
+  border-top: 1px solid #e4ebf5;
+  color: #8492a7;
+  font-size: 10px;
+  text-align: right;
+}
+
+@media (max-width: 760px) {
+  .emu-directory-dialog {
+    width: min(100% - 20px, 900px);
+  }
+
+  .emu-directory-toolbar,
+  .emu-directory-list {
+    padding-inline: 12px;
+  }
+
+  .emu-directory-list {
+    max-height: 45vh;
+  }
+
+  .emu-directory-tabs button,
+  .emu-directory-modes button {
+    padding-inline: 7px;
+    font-size: 11px;
+  }
+}
+/* Employee directory: all active employees, local filters and one scrolling list. */
+.emu-shift-report-page .emu-directory-dialog {
+  width: min(1040px, calc(100vw - 32px));
+}
+
+.emu-shift-report-page .emu-directory-dialog .modal-shell-body {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(220px, 1fr) auto;
+  overflow: hidden;
+}
+
+.emu-shift-report-page .emu-directory-toolbar {
+  position: relative;
+  z-index: 2;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  padding: 14px 18px;
+  background: #f8fbff;
+}
+
+.emu-shift-report-page .emu-directory-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.emu-shift-report-page .emu-directory-filter-row {
+  display: grid;
+  grid-template-columns: auto minmax(250px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.emu-shift-report-page .emu-directory-modes {
+  align-self: end;
+}
+
+.emu-shift-report-page .emu-directory-department {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  color: #526681;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.emu-shift-report-page .emu-directory-department select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 34px 0 11px;
+  border: 1px solid #c8d5e6;
+  border-radius: 9px;
+  background: #fff;
+  color: #213653;
+  font: inherit;
+  font-size: 12px;
+}
+
+.emu-shift-report-page .emu-directory-reset,
+.emu-shift-report-page .emu-directory-search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: #4f6f9e;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.emu-shift-report-page .emu-directory-reset {
+  min-height: 38px;
+  padding: 0 8px;
+}
+
+.emu-shift-report-page .emu-directory-search-clear {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+}
+
+.emu-shift-report-page .emu-directory-search-clear:hover,
+.emu-shift-report-page .emu-directory-reset:hover {
+  background: #e9f1ff;
+  color: #205bd0;
+}
+
+.emu-shift-report-page .emu-directory-messages:empty {
+  display: none;
+}
+
+.emu-shift-report-page .emu-directory-messages {
+  padding: 0 18px;
+  background: #fff;
+}
+
+.emu-shift-report-page .emu-directory-messages .emu-directory-status,
+.emu-shift-report-page .emu-directory-messages .emu-directory-error {
+  margin: 10px 0 0;
+}
+
+.emu-shift-report-page .emu-directory-list {
+  max-height: min(56vh, 520px);
+  min-height: 220px;
+  padding: 10px 18px;
+  gap: 4px;
+  background: #fff;
+}
+
+.emu-shift-report-page .emu-directory-item {
+  min-height: 54px;
+  padding: 5px 7px;
+  content-visibility: auto;
+  contain-intrinsic-size: 54px;
+}
+
+.emu-shift-report-page .emu-directory-item.is-active {
+  border-color: #aac8f5;
+  background: #f1f6ff;
+}
+
+.emu-shift-report-page .emu-directory-item.is-selected {
+  border-color: #78a7ee;
+  box-shadow: inset 3px 0 #2563eb;
+}
+
+.emu-shift-report-page .emu-directory-copy {
+  gap: 5px;
+}
+
+.emu-shift-report-page .emu-directory-copy strong {
+  font-size: 12px;
+}
+
+.emu-shift-report-page .emu-directory-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  color: #71829a;
+}
+
+.emu-shift-report-page .emu-directory-meta small {
+  max-width: 300px;
+}
+
+.emu-shift-report-page .emu-directory-badge,
+.emu-shift-report-page .emu-employee-option-category,
+.emu-shift-report-page .emu-directory-personnel {
+  display: inline-flex;
+  max-width: 220px;
+  flex: 0 1 auto;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 7px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #edf3fb;
+  color: #536b8b;
+  font-size: 9px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emu-shift-report-page .emu-directory-badge.is-mechanic,
+.emu-shift-report-page .emu-employee-option-category.is-mechanic {
+  background: #e9f2ff;
+  color: #1f65c9;
+}
+
+.emu-shift-report-page .emu-directory-badge.is-electrician,
+.emu-shift-report-page .emu-employee-option-category.is-electrician {
+  background: #fff4d7;
+  color: #966600;
+}
+
+.emu-shift-report-page .emu-directory-badge.is-other,
+.emu-shift-report-page .emu-employee-option-category.is-other {
+  background: #f0eefc;
+  color: #6553a4;
+}
+
+.emu-shift-report-page .emu-directory-badge.is-department {
+  background: #edf7f3;
+  color: #31715b;
+}
+
+.emu-shift-report-page .emu-directory-personnel {
+  background: transparent;
+  padding-inline: 2px;
+  color: #7c8ca2;
+}
+
+.emu-shift-report-page .emu-directory-empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  min-height: 210px;
+}
+
+.emu-shift-report-page .emu-directory-empty strong {
+  color: #344b6a;
+  font-size: 13px;
+}
+
+.emu-shift-report-page .emu-directory-empty .button {
+  margin-top: 5px;
+}
+
+.emu-shift-report-page .emu-directory-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 18px;
+  background: #fbfdff;
+  text-align: left;
+}
+
+.emu-shift-report-page .emu-directory-footer button {
+  border: 0;
+  background: transparent;
+  color: #205bd0;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.emu-shift-report-page .emu-employee-search-clear {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #7487a2;
+  cursor: pointer;
+}
+
+.emu-shift-report-page .emu-employee-option-category {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.emu-shift-report-page .emu-employee-picker-list .emu-employee-option {
+  content-visibility: auto;
+  contain-intrinsic-size: 48px;
+}
+
+@media (max-width: 760px) {
+  .emu-shift-report-page .emu-directory-dialog {
+    width: min(100% - 16px, 1040px);
+  }
+
+  .emu-shift-report-page .emu-directory-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .emu-shift-report-page .emu-directory-filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .emu-shift-report-page .emu-directory-list {
+    max-height: 46vh;
+    padding-inline: 10px;
+  }
+
+  .emu-shift-report-page .emu-directory-meta {
+    flex-wrap: wrap;
+  }
+
+  .emu-shift-report-page .emu-directory-meta small {
+    width: 100%;
+    max-width: none;
+  }
+
+  .emu-shift-report-page .emu-directory-badge.is-department,
+  .emu-shift-report-page .emu-employee-option-category {
+    display: none;
+  }
+}
+/* History period, stable refresh and smooth accordion. */
+.emu-history-page .emu-history-header {
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.emu-history-page .emu-history-header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.emu-history-page .emu-history-header p {
+  margin-bottom: 3px;
+}
+
+.emu-history-period-summary {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid #d8e4f3;
+  border-radius: 9px;
+  background: rgb(255 255 255 / 72%);
+  color: #57708f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.emu-history-period-summary b {
+  padding-left: 7px;
+  border-left: 1px solid #dbe5f2;
+  color: #1f5bd7;
+}
+
+.emu-history-page .emu-history-filters {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.emu-history-period {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  padding: 13px 16px 11px;
+  border-bottom: 1px solid #e5edf7;
+  background: linear-gradient(180deg, #fbfdff 0%, #f7faff 100%);
+}
+
+.emu-history-filter-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 130px;
+  min-height: 40px;
+  color: #253f63;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.emu-history-filter-title svg {
+  color: #2563eb;
+}
+
+.emu-history-date-range {
+  display: flex;
+  align-items: end;
+  gap: 7px;
+}
+
+.emu-history-date-range > span {
+  padding-bottom: 12px;
+  color: #8a99ae;
+}
+
+.emu-history-date-range label {
+  display: grid;
+  gap: 4px;
+  color: #61728b;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.emu-history-date-range input {
+  width: 150px;
+  min-height: 40px;
+}
+
+.emu-history-presets {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #eaf1fb;
+}
+
+.emu-history-presets button,
+.emu-history-reset-button {
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #58708f;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background-color .16s ease, color .16s ease, box-shadow .16s ease;
+}
+
+.emu-history-presets button:hover,
+.emu-history-presets button:focus-visible,
+.emu-history-reset-button:hover,
+.emu-history-reset-button:focus-visible {
+  background: #fff;
+  color: #1f5bd7;
+  box-shadow: 0 2px 7px rgb(38 75 130 / 10%);
+}
+
+.emu-history-main-filters {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  padding: 0 16px 14px;
+}
+
+.emu-history-main-filters > label:not(.search):not(.emu-history-favorite-filter) {
+  width: 160px;
+  flex: 0 0 auto;
+}
+
+.emu-history-main-filters .search {
+  min-width: 220px;
+  flex: 1 1 auto;
+}
+
+.emu-history-main-filters .emu-search-control button {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #74839a;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.emu-history-main-filters .emu-search-control input {
+  padding-right: 35px;
+}
+
+.emu-history-page .emu-history-favorite-filter {
+  min-width: 155px;
+  flex: 0 0 auto;
+  border-color: #d3dfed !important;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.emu-history-page .emu-history-favorite-filter:has(input:checked) {
+  border-color: #8eb4ef !important;
+  background: #eef5ff;
+  color: #1f5bd7;
+}
+
+.emu-history-reset-button {
+  flex: 0 0 auto;
+  min-height: 40px;
+}
+
+.emu-history-page .emu-history-status {
+  min-height: 22px;
+  margin-top: 7px;
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+.emu-history-page .emu-history-status > span {
+  padding: 4px 9px;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 72%);
+  color: #58708f;
+}
+
+.emu-history-grid {
+  transition: opacity .2s ease, filter .2s ease;
+}
+
+.emu-history-grid.is-refreshing {
+  opacity: .88;
+}
+
+.emu-history-group {
+  position: relative;
+  transition: border-color .2s ease, box-shadow .2s ease, opacity .2s ease;
+}
+
+.emu-history-group.is-refreshing::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+  background-size: 200% 100%;
+  content: '';
+  animation: emu-history-refresh-line 1.1s linear infinite;
+}
+
+.emu-history-row {
+  animation: emu-history-row-enter .22s ease-out both;
+  content-visibility: auto;
+  contain-intrinsic-size: 58px;
+}
+
+.emu-history-summary {
+  grid-template-columns: 20px minmax(165px, 1fr) 82px 54px 92px 64px;
+  transition: background-color .18s ease, box-shadow .18s ease;
+}
+
+.emu-history-summary:active {
+  background: #edf4ff;
+}
+
+.emu-history-summary .report-date strong {
+  color: #36577e;
+  font-size: 11px;
+}
+
+.emu-history-summary .chevron {
+  transition: transform .26s cubic-bezier(.2, .8, .2, 1), color .18s ease;
+}
+
+.emu-history-summary[aria-expanded=true] .chevron {
+  color: #2563eb;
+}
+
+.emu-history-detail-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  overflow: hidden;
+  opacity: 0;
+  animation: none;
+  transition: grid-template-rows .3s cubic-bezier(.2, .8, .2, 1), opacity .22s ease;
+}
+
+.emu-history-detail-panel.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.emu-history-detail-panel-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.emu-detail-loading {
+  display: grid;
+  align-content: center;
+  gap: 9px;
+  min-height: 112px;
+  padding-inline: 18px;
+}
+
+.emu-history-detail-table {
+  overflow-x: auto;
+  border-radius: 9px;
+}
+
+.emu-history-detail tbody tr {
+  animation: emu-history-row-enter .2s ease-out both;
+}
+
+.emu-history-detail tbody tr:nth-child(2) { animation-delay: 25ms; }
+.emu-history-detail tbody tr:nth-child(3) { animation-delay: 50ms; }
+.emu-history-detail tbody tr:nth-child(4) { animation-delay: 75ms; }
+
+.emu-history-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  max-width: 1480px;
+  margin: 14px auto 0;
+  padding: 10px 14px;
+  border: 1px solid #dce6f2;
+  border-radius: 12px;
+  background: rgb(255 255 255 / 82%);
+  color: #65758d;
+  font-size: 11px;
+}
+
+.emu-history-pagination button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 5px 11px;
+  border: 1px solid #cbd9eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #28589c;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.emu-history-pagination button:disabled {
+  cursor: default;
+  opacity: .45;
+}
+
+@keyframes emu-history-refresh-line {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@keyframes emu-history-row-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 1350px) {
+  .emu-history-summary {
+    grid-template-columns: 20px minmax(150px, 1fr) 78px 48px 80px;
+  }
+
+  .emu-history-summary > span:nth-child(6) {
+    display: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .emu-history-period,
+  .emu-history-main-filters {
+    flex-wrap: wrap;
+  }
+
+  .emu-history-filter-title {
+    width: 100%;
+    min-height: 24px;
+  }
+
+  .emu-history-main-filters .search {
+    min-width: min(100%, 280px);
+  }
+}
+
+@media (max-width: 760px) {
+  .emu-history-period {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .emu-history-date-range {
+    align-items: end;
+  }
+
+  .emu-history-date-range label {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .emu-history-date-range input {
+    width: 100%;
+  }
+
+  .emu-history-presets {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .emu-history-main-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .emu-history-main-filters > label:not(.search):not(.emu-history-favorite-filter),
+  .emu-history-main-filters .search,
+  .emu-history-page .emu-history-favorite-filter {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .emu-history-summary {
+    grid-template-columns: 20px minmax(0, 1fr) 78px;
+  }
+
+  .emu-history-summary > span:nth-child(4),
+  .emu-history-summary > span:nth-child(5),
+  .emu-history-summary > span:nth-child(6) {
+    display: none;
+  }
+
+  .emu-history-pagination {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .emu-history-pagination span {
+    width: 100%;
+    text-align: center;
+    order: -1;
+  }
+}
+
+/* Unified history date-range calendar. */
+.emu-date-range-picker {
+  position: relative;
+  min-width: 310px;
+}
+
+.emu-date-range-trigger {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border: 1px solid #c8d5e6;
+  border-radius: 10px;
+  background: #fff;
+  color: #2563eb;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
+}
+
+.emu-date-range-trigger:hover,
+.emu-date-range-trigger[aria-expanded='true'] {
+  border-color: #7ba6eb;
+  background: #f8fbff;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 10%);
+}
+
+.emu-date-range-trigger > span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.emu-date-range-trigger small {
+  color: #71829a;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.emu-date-range-trigger strong {
+  overflow: hidden;
+  color: #243b5c;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emu-date-range-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 80;
+  width: min(680px, calc(100vw - 40px));
+  overflow: hidden;
+  border: 1px solid #c9d8ea;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 22px 60px rgb(24 48 82 / 22%), 0 4px 12px rgb(24 48 82 / 8%);
+  animation: emu-message-in .16s ease-out;
+}
+
+.emu-date-range-popover > header,
+.emu-date-range-popover > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.emu-date-range-popover > header {
+  border-bottom: 1px solid #e4ebf5;
+  background: #f8fbff;
+}
+
+.emu-date-range-popover > header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.emu-date-range-popover > header strong {
+  color: #1e385e;
+  font-size: 12px;
+}
+
+.emu-date-range-popover > header span,
+.emu-date-range-popover > footer > span {
+  color: #71829a;
+  font-size: 10px;
+}
+
+.emu-date-range-popover nav,
+.emu-date-range-popover footer > div {
+  display: flex;
+  gap: 6px;
+}
+
+.emu-date-range-popover nav button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #cedbea;
+  border-radius: 8px;
+  background: #fff;
+  color: #315f9d;
+  cursor: pointer;
+}
+
+.emu-date-range-popover nav button:hover {
+  border-color: #85ace9;
+  background: #eef5ff;
+}
+
+.emu-date-range-calendars {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  padding: 12px;
+}
+
+.emu-date-range-month {
+  min-width: 0;
+  padding: 0 10px 8px;
+}
+
+.emu-date-range-month + .emu-date-range-month {
+  border-left: 1px solid #e5edf7;
+}
+
+.emu-date-range-month h3 {
+  margin: 2px 0 10px;
+  color: #213d64;
+  font-size: 12px;
+  text-align: center;
+}
+
+.emu-date-range-month h3 span {
+  color: #71829a;
+  font-weight: 650;
+}
+
+.emu-date-range-weekdays,
+.emu-date-range-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.emu-date-range-weekdays span {
+  padding: 4px 0 6px;
+  color: #8997aa;
+  font-size: 9px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.emu-date-range-days button {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  height: 34px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #304763;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.emu-date-range-days button:hover,
+.emu-date-range-days button:focus-visible {
+  z-index: 1;
+  background: #e8f1ff;
+  color: #174fae;
+  outline: none;
+}
+
+.emu-date-range-days button.is-outside {
+  color: #b4bfce;
+}
+
+.emu-date-range-days button.is-in-range {
+  border-radius: 0;
+  background: #eaf2ff;
+  color: #2459a9;
+}
+
+.emu-date-range-days button.is-range-start,
+.emu-date-range-days button.is-range-end {
+  z-index: 1;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  box-shadow: 0 4px 10px rgb(37 99 235 / 24%);
+}
+
+.emu-date-range-days button.is-today:not(.is-range-start):not(.is-range-end)::after {
+  position: absolute;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #2563eb;
+  content: '';
+}
+
+.emu-date-range-popover > footer {
+  min-height: 50px;
+  border-top: 1px solid #e4ebf5;
+  background: #fbfdff;
+}
+
+.emu-date-range-popover > footer .button {
+  min-height: 32px;
+  padding: 5px 11px;
+  font-size: 10px;
+}
+
+@media (max-width: 760px) {
+  .emu-date-range-picker {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .emu-date-range-popover {
+    position: fixed;
+    top: 74px;
+    right: 10px;
+    left: 10px;
+    width: auto;
+    max-height: calc(100dvh - 90px);
+    overflow: auto;
+  }
+
+  .emu-date-range-calendars {
+    grid-template-columns: 1fr;
+  }
+
+  .emu-date-range-month + .emu-date-range-month {
+    display: none;
+  }
+
+  .emu-date-range-popover > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+.emu-history-page .emu-history-filters {
+  overflow: visible;
+}
+
+.emu-date-range-days button.is-outside {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Shift-report entry polish and configurable reminder. */
+.emu-entry-page {
+  background: #f3f7fc;
+}
+
+.emu-entry-page .emu-shift-header {
+  align-items: center;
+  margin-bottom: 14px;
+  padding-block: 2px;
+}
+
+.emu-entry-page .emu-shift-header h1 {
+  margin-top: 0;
+  font-size: clamp(27px, 2.2vw, 33px);
+}
+
+.emu-entry-page .emu-shift-header p {
+  font-size: 13px;
+}
+
+.emu-entry-page .emu-draft-status {
+  min-height: 28px;
+  margin-top: 8px;
+  padding: 4px 9px;
+  border: 1px solid #d9e5f2;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 78%);
+}
+
+.emu-entry-page .emu-draft-status.is-saved,
+.emu-entry-page .emu-draft-status.is-restored {
+  border-color: #c8e8d7;
+  background: #f5fcf8;
+  color: #28704f;
+}
+
+.emu-entry-page .emu-shift-kpis > div {
+  min-width: 122px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  box-shadow: 0 8px 22px rgb(35 55 85 / 7%);
+}
+
+.emu-entry-page .emu-shift-form {
+  border-radius: 13px;
+  box-shadow: 0 12px 32px rgb(34 57 91 / 8%);
+}
+
+.emu-entry-page .emu-shift-tabs-row {
+  align-items: center;
+  padding: 7px 14px 0;
+  background: #fff;
+}
+
+.emu-entry-page .emu-shift-tabs button {
+  min-height: 40px;
+}
+
+.emu-entry-page .emu-shift-fields {
+  grid-template-columns: minmax(300px, 1.45fr) minmax(175px, .55fr) minmax(245px, .8fr);
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e6edf6;
+  background: #fbfdff;
+}
+
+.emu-entry-page .emu-shift-fields input,
+.emu-entry-page .emu-shift-fields select {
+  min-height: 38px;
+}
+
+.emu-entry-page .emu-shift-table th {
+  height: 34px;
+  box-sizing: border-box;
+  padding-block: 5px;
+  background: #f4f7fb;
+  color: #5d6e86;
+  font-size: 10px;
+  vertical-align: middle;
+}
+
+.emu-entry-page .emu-shift-table td {
+  padding-block: 6px;
+}
+
+.emu-entry-page .emu-shift-table textarea {
+  min-height: 42px;
+  resize: vertical;
+}
+
+.emu-entry-page .emu-shift-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 8;
+  padding: 11px 16px;
+  border-top: 1px solid #e2eaf4;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 -8px 22px rgb(31 53 84 / 5%);
+  backdrop-filter: blur(8px);
+}
+
+.emu-reminder-stack {
+  display: grid;
+  gap: 9px;
+  padding: 12px 16px 14px;
+  border-bottom: 1px solid #e5edf6;
+  background: #fff;
+}
+
+.emu-reminder-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border: 1px solid #f0cd83;
+  border-radius: 10px;
+  background: #fff9e9;
+  color: #805c11;
+  animation: emu-message-in .18s ease-out;
+}
+
+.emu-reminder-banner > svg {
+  color: #c78700;
+}
+
+.emu-reminder-banner > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.emu-reminder-banner strong {
+  color: #62470d;
+  font-size: 12px;
+}
+
+.emu-reminder-banner span {
+  color: #8a6c2c;
+  font-size: 10px;
+}
+
+.emu-reminder-banner button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #8a6c2c;
+  cursor: pointer;
+}
+
+.emu-reminder-banner button:hover {
+  background: #f8eac5;
+}
+
+.emu-reminder-panel {
+  overflow: hidden;
+  border: 1px solid #d5e1ef;
+  border-radius: 10px;
+  background: #fbfdff;
+}
+
+.emu-reminder-heading {
+  display: grid;
+  width: 100%;
+  min-height: 48px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 11px;
+  border: 0;
+  background: transparent;
+  color: #203a60;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.emu-reminder-heading:hover {
+  background: #f4f8fe;
+}
+
+.emu-reminder-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 8px;
+  background: #eaf2ff;
+  color: #2563eb;
+}
+
+.emu-reminder-heading > span:nth-child(2) {
+  display: grid;
+  gap: 2px;
+}
+
+.emu-reminder-heading strong {
+  font-size: 12px;
+}
+
+.emu-reminder-heading small {
+  color: #718198;
+  font-size: 10px;
+}
+
+.emu-reminder-heading > svg {
+  color: #718198;
+  transition: transform .18s ease;
+}
+
+.emu-reminder-panel.is-expanded .emu-reminder-heading > svg {
+  transform: rotate(180deg);
+}
+
+.emu-reminder-state {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: #edf1f6;
+  color: #75849a;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.emu-reminder-state.is-on {
+  background: #e7f7ee;
+  color: #23714f;
+}
+
+.emu-reminder-settings {
+  display: grid;
+  grid-template-columns: 160px 180px minmax(170px, 1fr) minmax(190px, 1fr);
+  align-items: center;
+  gap: 0;
+  padding: 12px;
+  border-top: 1px solid #e2eaf4;
+  background: #fff;
+}
+
+.emu-reminder-settings > * {
+  min-height: 46px;
+  padding: 0 12px;
+  border-right: 1px solid #e6edf6;
+}
+
+.emu-reminder-settings > *:first-child {
+  padding-left: 0;
+}
+
+.emu-reminder-settings > *:nth-child(4) {
+  border-right: 0;
+}
+
+.emu-reminder-time {
+  display: grid;
+  gap: 4px;
+  color: #5d6f88;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.emu-reminder-time > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.emu-reminder-time input {
+  width: 112px;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid #c8d5e6;
+  border-radius: 8px;
+  color: #203a60;
+  font: inherit;
+}
+
+.emu-reminder-toggle,
+.emu-reminder-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #344b6a;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.emu-reminder-toggle > input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.emu-reminder-toggle > span {
+  position: relative;
+  width: 34px;
+  height: 19px;
+  flex: 0 0 auto;
+  border-radius: 99px;
+  background: #c5d0df;
+  transition: background-color .18s ease;
+}
+
+.emu-reminder-toggle > span::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(25 45 73 / 25%);
+  content: '';
+  transition: transform .18s ease;
+}
+
+.emu-reminder-toggle > input:checked + span {
+  background: #2563eb;
+}
+
+.emu-reminder-toggle > input:checked + span::after {
+  transform: translateX(15px);
+}
+
+.emu-reminder-check > input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  accent-color: #2563eb;
+}
+
+.emu-reminder-check > svg {
+  flex: 0 0 auto;
+  color: #52709a;
+}
+
+.emu-reminder-check > span {
+  display: grid;
+  gap: 2px;
+}
+
+.emu-reminder-check b {
+  font-size: 10px;
+}
+
+.emu-reminder-check small {
+  color: #7c8ba0;
+  font-size: 9px;
+}
+
+.emu-reminder-permission {
+  display: flex;
+  min-height: 36px;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 7px 9px !important;
+  border: 0 !important;
+  border-radius: 8px;
+  background: #f3f7fc;
+  color: #687a92;
+  font-size: 10px;
+}
+
+.emu-reminder-permission button {
+  margin-left: auto;
+  padding: 5px 9px;
+  border: 1px solid #9bb9e8;
+  border-radius: 7px;
+  background: #fff;
+  color: #2058b0;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.emu-reminder-permission .is-success {
+  color: #23714f;
+  font-weight: 800;
+}
+
+@media (max-width: 1100px) {
+  .emu-reminder-settings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .emu-reminder-settings > * {
+    padding: 0;
+    border-right: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .emu-entry-page .emu-shift-header {
+    align-items: stretch;
+  }
+
+  .emu-entry-page .emu-shift-fields,
+  .emu-reminder-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .emu-reminder-heading {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .emu-reminder-state {
+    display: none;
+  }
+
+  .emu-reminder-settings > * {
+    min-height: 40px;
+  }
+
+  .emu-reminder-permission {
+    grid-column: auto;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .emu-reminder-permission button {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+@media (max-width: 760px) {
+  .emu-directory-category-control {
+    width: 96px;
+  }
+
+  .emu-directory-category-control > span {
+    display: none;
   }
 }

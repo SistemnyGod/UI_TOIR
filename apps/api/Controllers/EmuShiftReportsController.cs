@@ -21,6 +21,18 @@ public sealed class EmuShiftReportsController(
         return Ok(service.GetOptions(GetAllowedSectionIds(actor)));
     }
 
+    [HttpPut("employee-categories/{employeeId:guid}")]
+    [RequirePermission("emu.shift-reports.create")]
+    public ActionResult<EmuShiftReportEmployeeOptionDto> SetEmployeeCategory(Guid employeeId, EmuSetShiftReportEmployeeCategoryDto request)
+    {
+        var result = service.SetEmployeeCategory(employeeId, request);
+        return result.Succeeded && result.Value is not null
+            ? Ok(result.Value)
+            : ValidationProblem(new ValidationProblemDetails(result.Errors.ToDictionary(item => item.Key, item => item.Value))
+            {
+                Title = "Не удалось изменить группу сотрудника"
+            });
+    }
     [HttpPost]
     [RequirePermission("emu.shift-reports.create")]
     public ActionResult<EmuShiftReportDetailDto> Create(EmuCreateShiftReportDto request)
@@ -42,24 +54,25 @@ public sealed class EmuShiftReportsController(
 
     [HttpGet]
     [RequirePermission("emu.shift-reports.view")]
-    public ActionResult<EmuListResponseDto<EmuShiftReportSummaryDto>> List(
+    public async Task<ActionResult<EmuListResponseDto<EmuShiftReportSummaryDto>>> List(
         [FromQuery] DateOnly? date = null, [FromQuery] DateOnly? dateFrom = null, [FromQuery] DateOnly? dateTo = null,
         [FromQuery] string? shiftType = null, [FromQuery] string? workerCategory = null,
         [FromQuery] Guid? employeeId = null, [FromQuery] string? search = null,
-        [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 50, [FromQuery] bool favoriteOnly = false,
+        CancellationToken cancellationToken = default)
     {
         var actor = ReadCurrentUser();
         var owner = actor.Permissions.Contains("emu.shift-reports.view-all", StringComparer.OrdinalIgnoreCase) ? null : actor.UserId;
-        return Ok(service.GetList(new EmuShiftReportQueryDto(date, dateFrom, dateTo, shiftType, workerCategory, employeeId, search, page, pageSize), owner, GetAllowedSectionIds(actor)));
+        return Ok(await service.GetListAsync(new EmuShiftReportQueryDto(date, dateFrom, dateTo, shiftType, workerCategory, employeeId, search, page, pageSize, favoriteOnly), owner, GetAllowedSectionIds(actor), cancellationToken));
     }
 
     [HttpGet("{id:guid}")]
     [RequirePermission("emu.shift-reports.view")]
-    public ActionResult<EmuShiftReportDetailDto> Get(Guid id)
+    public async Task<ActionResult<EmuShiftReportDetailDto>> Get(Guid id, CancellationToken cancellationToken)
     {
         var actor = ReadCurrentUser();
         var owner = actor.Permissions.Contains("emu.shift-reports.view-all", StringComparer.OrdinalIgnoreCase) ? null : actor.UserId;
-        var result = service.GetDetail(id, owner, GetAllowedSectionIds(actor));
+        var result = await service.GetDetailAsync(id, owner, GetAllowedSectionIds(actor), cancellationToken);
         return result.Succeeded && result.Value is not null ? Ok(result.Value) : NotFound();
     }
 

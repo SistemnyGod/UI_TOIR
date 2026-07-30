@@ -14,9 +14,7 @@ internal sealed class EfEmuShiftReportService(Patrol360DbContext dbContext) : IE
     {
         var employees = dbContext.Employees.AsNoTracking().OrderBy(row => row.FullName).ToArray()
             .Where(IsActiveEmployee)
-            .Select(row => new { Employee = row, Category = Classify(row.Position) })
-            .Where(row => row.Category is not null)
-            .Select(row => new EmuShiftReportEmployeeOptionDto(row.Employee.Id, row.Employee.FullName, row.Employee.PersonnelNo, row.Employee.Position, row.Employee.Department, row.Category!))
+            .Select(MapEmployeeOption)
             .ToArray();
 
         var sectionsQuery = dbContext.EmuWorkSections.AsNoTracking().Where(row => row.IsActive);
@@ -33,6 +31,24 @@ internal sealed class EfEmuShiftReportService(Patrol360DbContext dbContext) : IE
         return new EmuShiftReportOptionsDto(employees, sections, shifts);
     }
 
+    public EmuCommandResult<EmuShiftReportEmployeeOptionDto> SetEmployeeCategory(Guid employeeId, EmuSetShiftReportEmployeeCategoryDto request)
+    {
+        var category = request.WorkerCategory?.Trim().ToLowerInvariant();
+        if (category is not null and not ("mechanic" or "electrician" or "none"))
+        {
+            return new(null, new Dictionary<string, string[]> { ["workerCategory"] = ["Выберите группу: слесари, электрики, без группы или автоматическое определение."] });
+        }
+
+        var employee = dbContext.Employees.SingleOrDefault(row => row.Id == employeeId);
+        if (employee is null || !IsActiveEmployee(employee))
+        {
+            return new(null, new Dictionary<string, string[]> { ["employeeId"] = ["Активный сотрудник не найден."] });
+        }
+
+        employee.EmuShiftReportCategory = category;
+        dbContext.SaveChanges();
+        return new(MapEmployeeOption(employee), new Dictionary<string, string[]>());
+    }
     public EmuCommandResult<EmuShiftReportDetailDto> Create(EmuCreateShiftReportDto request, Guid? actorUserId, string actorName, IReadOnlyList<Guid>? allowedSectionIds = null)
     {
         var errors = Validate(request, allowedSectionIds);
@@ -88,24 +104,43 @@ internal sealed class EfEmuShiftReportService(Patrol360DbContext dbContext) : IE
         return Success(MapDetail(report));
     }
 
-    public EmuListResponseDto<EmuShiftReportSummaryDto> GetList(EmuShiftReportQueryDto query, Guid? restrictedOwnerUserId = null, IReadOnlyList<Guid>? allowedSectionIds = null)
+    public async Task<EmuListResponseDto<EmuShiftReportSummaryDto>> GetListAsync(EmuShiftReportQueryDto query, Guid? restrictedOwnerUserId = null, IReadOnlyList<Guid>? allowedSectionIds = null, CancellationToken cancellationToken = default)
     {
         var page = Math.Max(1, query.Page);
         var pageSize = Math.Clamp(query.PageSize, 1, 100);
-        var rows = Filter(dbContext.EmuShiftReports.AsNoTracking().Include(row => row.Lines), query, restrictedOwnerUserId, allowedSectionIds);
-        var total = rows.Count();
-        var result = rows.OrderByDescending(row => row.ReportDate).ThenByDescending(row => row.SubmittedAt)
-            .Skip((page - 1) * pageSize).Take(pageSize).ToArray().Select(MapSummary).ToArray();
+        var rows = Filter(dbContext.EmuShiftReports.AsNoTracking(), query, restrictedOwnerUserId, allowedSectionIds);
+        var total = await rows.CountAsync(cancellationToken);
+        var result = await rows
+            .OrderByDescending(row => row.ReportDate)
+            .ThenByDescending(row => row.SubmittedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(row => new EmuShiftReportSummaryDto(
+                row.Id,
+                row.ReportDate,
+                row.ShiftType,
+                row.WorkerCategory,
+                row.EmployeeId,
+                row.EmployeeNameSnapshot,
+                row.PersonnelNoSnapshot,
+                row.PositionSnapshot,
+                row.DepartmentSnapshot,
+                row.Status,
+                row.Lines.Count(),
+                row.Lines.Sum(line => line.DurationMinutes),
+                row.CreatedByUserId,
+                row.CreatedByName,
+                row.SubmittedAt))
+            .ToArrayAsync(cancellationToken);
         return new EmuListResponseDto<EmuShiftReportSummaryDto>(result, total, page, pageSize, Math.Max(1, (int)Math.Ceiling(total / (double)pageSize)));
     }
 
-    public EmuCommandResult<EmuShiftReportDetailDto> GetDetail(Guid id, Guid? restrictedOwnerUserId = null, IReadOnlyList<Guid>? allowedSectionIds = null)
+    public async Task<EmuCommandResult<EmuShiftReportDetailDto>> GetDetailAsync(Guid id, Guid? restrictedOwnerUserId = null, IReadOnlyList<Guid>? allowedSectionIds = null, CancellationToken cancellationToken = default)
     {
         var query = Filter(dbContext.EmuShiftReports.AsNoTracking().Include(row => row.Lines), new EmuShiftReportQueryDto(), restrictedOwnerUserId, allowedSectionIds);
-        var report = query.SingleOrDefault(row => row.Id == id);
+        var report = await query.SingleOrDefaultAsync(row => row.Id == id, cancellationToken);
         return report is null ? Failed(new Dictionary<string, string[]> { ["id"] = ["Отчёт не найден или недоступен."] }) : Success(MapDetail(report));
     }
-
     private Dictionary<string, string[]> Validate(EmuCreateShiftReportDto request, IReadOnlyList<Guid>? allowedSectionIds)
     {
         var errors = new Dictionary<string, string[]>();
@@ -114,7 +149,7 @@ internal sealed class EfEmuShiftReportService(Patrol360DbContext dbContext) : IE
         if (request.Lines.Count is < 1 or > 50) errors["lines"] = ["Укажите от 1 до 50 выполненных работ."];
         var employee = dbContext.Employees.AsNoTracking().SingleOrDefault(row => row.Id == request.EmployeeId);
         if (employee is null || !IsActiveEmployee(employee)) errors["employeeId"] = ["Активный сотрудник не найден."];
-        else if (Classify(employee.Position) != request.WorkerCategory) errors["employeeId"] = ["Сотрудник не относится к выбранной категории."];
+
         for (var index = 0; index < request.Lines.Count; index++)
         {
             var line = request.Lines[index];
@@ -132,7 +167,7 @@ internal sealed class EfEmuShiftReportService(Patrol360DbContext dbContext) : IE
         return errors;
     }
 
-    private static IQueryable<EmuShiftReportEntity> Filter(IQueryable<EmuShiftReportEntity> rows, EmuShiftReportQueryDto query, Guid? ownerId, IReadOnlyList<Guid>? sections)
+    private IQueryable<EmuShiftReportEntity> Filter(IQueryable<EmuShiftReportEntity> rows, EmuShiftReportQueryDto query, Guid? ownerId, IReadOnlyList<Guid>? sections)
     {
         if (ownerId is not null) rows = rows.Where(row => row.CreatedByUserId == ownerId);
         if (sections is not null) rows = rows.Where(row => row.Lines.All(line => !line.SectionId.HasValue || sections.Contains(line.SectionId.Value)));
@@ -142,6 +177,10 @@ internal sealed class EfEmuShiftReportService(Patrol360DbContext dbContext) : IE
         if (!string.IsNullOrWhiteSpace(query.ShiftType)) rows = rows.Where(row => row.ShiftType == query.ShiftType);
         if (!string.IsNullOrWhiteSpace(query.WorkerCategory)) rows = rows.Where(row => row.WorkerCategory == query.WorkerCategory);
         if (query.EmployeeId is Guid employeeId) rows = rows.Where(row => row.EmployeeId == employeeId);
+        if (query.FavoriteOnly)
+        {
+            rows = rows.Where(row => dbContext.EmuFavoriteEmployees.Any(favorite => favorite.EmployeeId == row.EmployeeId && favorite.IsActive));
+        }
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim().ToLower();
@@ -154,6 +193,22 @@ internal sealed class EfEmuShiftReportService(Patrol360DbContext dbContext) : IE
     private static EmuShiftReportDetailDto MapDetail(EmuShiftReportEntity row) => new(row.Id, row.ReportDate, row.ShiftType, row.WorkerCategory, row.EmployeeId, row.EmployeeNameSnapshot, row.PersonnelNoSnapshot, row.PositionSnapshot, row.DepartmentSnapshot, row.Status, row.Lines.Count, row.Lines.Sum(line => line.DurationMinutes), row.CreatedByUserId, row.CreatedByName, row.SubmittedAt, row.Lines.OrderBy(line => line.SequenceNo).Select(line => new EmuShiftReportLineDto(line.Id, line.SequenceNo, line.WorkDescription, line.DurationMinutes, line.SectionId, line.SectionNameSnapshot, line.Note)).ToArray());
     private static string Normalize(string value) => value.Trim().ToLowerInvariant().Replace('ё', 'е');
     private static bool IsActiveEmployee(EmployeeEntity row) => Normalize(row.Status) is "active" or "активен" or "работает";
+    private static EmuShiftReportEmployeeOptionDto MapEmployeeOption(EmployeeEntity row) => new(
+        row.Id,
+        row.FullName,
+        row.PersonnelNo,
+        row.Position,
+        row.Department,
+        ResolveWorkerCategory(row),
+        row.EmuShiftReportCategory);
+
+    private static string? ResolveWorkerCategory(EmployeeEntity row) => row.EmuShiftReportCategory switch
+    {
+        "mechanic" => "mechanic",
+        "electrician" => "electrician",
+        "none" => null,
+        _ => Classify(row.Position)
+    };
     private static string? Classify(string position)
     {
         var value = Normalize(position);

@@ -53,7 +53,7 @@ function ShiftReportsFeature({ currentUser, onNotify, screen }: { currentUser: S
   if (workspace.loading) return <main className='emu-shift-report-page'><section className='emu-shift-card emu-shift-empty emu-shift-loading' aria-live='polite'><span className='emu-loading-mark' aria-hidden='true' /><div className='emu-loading-stack' aria-hidden='true'><span /><span /><span /></div><h2>Загружаем данные ЭМУ</h2><p>Получаем сотрудников, участки и параметры смен.</p></section></main>;
   if (!isHistory && workspace.error) return <main className='emu-shift-report-page'><section className='emu-shift-card emu-shift-empty' role='alert'><h2>Не удалось открыть форму</h2><p>{workspace.error}</p><button type='button' className='emu-refresh-button' onClick={() => void workspace.loadOptions().catch(() => undefined)}>Повторить загрузку</button></section></main>;
 
-  return isHistory ? <ShiftReportHistoryScreen workspace={workspace} /> : <ShiftReportEntryScreen workspace={workspace} onNotify={onNotify} />;
+  return isHistory ? <ShiftReportHistoryScreen workspace={workspace} /> : <ShiftReportEntryScreen workspace={workspace} onNotify={onNotify} canManageFavorites={hasPermission(currentUser, 'emu.favorite-employees.manage') || hasPermission(currentUser, 'emu.shift-reports.create')} />;
 }
 
 export function EmuShiftReportsScreen({ currentUser, onNotify, screen }: { currentUser: SessionUserDto | null; onNotify: (message: string) => void; screen: ShiftReportScreen }) {

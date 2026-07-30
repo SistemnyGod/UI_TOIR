@@ -14,6 +14,8 @@ internal sealed class EmployeeEntity
 
     public string EmployeeGroup { get; set; } = string.Empty;
 
+    public string? EmuShiftReportCategory { get; set; }
+
     public DateOnly? HiredAt { get; set; }
 
     public DateOnly? BirthDate { get; set; }

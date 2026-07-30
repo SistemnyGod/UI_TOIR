@@ -1,11 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
   ActiveAssignment,
   AssignmentProgress,
+  completeAssignmentLocally,
   getAssignmentById,
   getAssignmentProgress,
   getAssignmentScanPolicy,
@@ -37,11 +38,14 @@ export function ActivePatrolScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [submissionNotice, setSubmissionNotice] = useState<string | null>(null);
   const [isActing, setIsActing] = useState(false);
   const actionInProgressRef = useRef(false);
 
-  const loadAssignment = useCallback(async () => {
-    setIsLoading(true);
+  const loadAssignment = useCallback(async (options: { showLoader?: boolean } = {}) => {
+    if (options.showLoader) {
+      setIsLoading(true);
+    }
     try {
       const [loadedAssignment, loadedProgress, loadedScanPolicy] = await Promise.all([
         getAssignmentById(assignmentId),
@@ -60,7 +64,7 @@ export function ActivePatrolScreen() {
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      void loadAssignment().catch((caught) => {
+      void loadAssignment({ showLoader: true }).catch((caught) => {
         void logMobileError("patrol.active-load.failed", caught);
         if (isMounted) {
           setLoadError(caught instanceof Error ? caught.message : "Не удалось прочитать текущий обход.");
@@ -120,7 +124,51 @@ export function ActivePatrolScreen() {
     });
   }
 
-  if (isLoading) {
+  function confirmReportSubmission() {
+    if (!assignment || !progress || progress.total === 0 || progress.completed < progress.total || actionInProgressRef.current) {
+      return;
+    }
+
+    Alert.alert(
+      "Отправить отчёт?",
+      "Все " + progress.total + " отметок заполнены. Отчёт будет сохранён на телефоне и отправлен автоматически при наличии сети.",
+      [
+        { text: "Нет", style: "cancel" },
+        {
+          text: "Да, отправить",
+          onPress: () => {
+            void runReportSubmission();
+          }
+        }
+      ]
+    );
+  }
+
+  async function runReportSubmission() {
+    if (actionInProgressRef.current) {
+      return;
+    }
+
+    actionInProgressRef.current = true;
+    setIsActing(true);
+    setError(null);
+    setSubmissionNotice(null);
+    try {
+      await completeAssignmentLocally(assignmentId);
+      const syncResult = await requestPatrolSync({ mode: "manualReport", assignmentId });
+      await loadAssignment();
+      setSubmissionNotice(getSubmissionNotice(syncResult.skipped));
+    } catch (caughtError) {
+      void logMobileError("patrol.report.submit.failed", caughtError);
+      setSubmissionNotice("Отчёт сохранён на телефоне. Приложение повторит отправку автоматически.");
+      setError(caughtError instanceof Error ? caughtError.message : "Не удалось сохранить отчёт на телефоне.");
+    } finally {
+      actionInProgressRef.current = false;
+      setIsActing(false);
+    }
+  }
+
+  if (isLoading && !assignment) {
     return (
       <Screen title="Обход" subtitle="Маршрут, прогресс и безопасные действия.">
         <Card><Text style={[styles.text, { color: colors.mutedText }]}>Загрузка...</Text></Card>
@@ -128,7 +176,7 @@ export function ActivePatrolScreen() {
     );
   }
 
-  if (loadError) {
+  if (loadError && !assignment) {
     return (
       <Screen title="Обход" subtitle="Маршрут, прогресс и безопасные действия.">
         <Card>
@@ -169,15 +217,19 @@ export function ActivePatrolScreen() {
           label={progress.total === 0
             ? "Загружаем метки маршрута"
             : isReadyForReview
-              ? "Проверить и отправить отчёт"
+              ? "Отправить отчёт"
               : scanPolicy.nfcEnabled
                 ? "Сканировать NFC"
                 : "Открыть все метки"}
-          onPress={() => router.push(isReadyForReview
-            ? `/patrol/assignment/${assignment.assignmentId}/submit`
-            : scanPolicy.nfcEnabled
-              ? `/patrol/assignment/${assignment.assignmentId}/scan-nfc`
-              : `/patrol/assignment/${assignment.assignmentId}/all-points`)}
+          onPress={() => {
+            if (isReadyForReview) {
+              confirmReportSubmission();
+            } else if (scanPolicy.nfcEnabled) {
+              router.push(`/patrol/assignment/${assignment.assignmentId}/scan-nfc`);
+            } else {
+              router.push(`/patrol/assignment/${assignment.assignmentId}/all-points`);
+            }
+          }}
           size="large"
         />
       ) : null}
@@ -249,6 +301,7 @@ export function ActivePatrolScreen() {
         />
       ) : null}
       {isCompletedLocal ? <PrimaryButton disabled={isActing} icon="refresh-outline" label="Повторить отправку" onPress={handleRetrySubmit} size="large" /> : null}
+      {submissionNotice ? <Text accessibilityLiveRegion="polite" style={[styles.text, { color: colors.primary }]}>{submissionNotice}</Text> : null}
       {isBlocked ? <PrimaryButton icon="cloud-upload-outline" label="Открыть очередь" onPress={() => router.push("/settings/sync-queue" as never)} size="large" /> : null}
       {isCompletedServer ? <PrimaryButton icon="checkmark-circle-outline" label="К новым заявкам" onPress={() => router.replace("/patrol/request-board")} size="large" /> : null}
 
@@ -259,6 +312,12 @@ export function ActivePatrolScreen() {
             <Text style={[styles.linkLabel, { color: colors.primary }]}>Все метки</Text>
           </Pressable>
         ) : <View />}
+        {isReadyForReview && !isCompletedLocal && !isCompletedServer ? (
+          <Pressable accessibilityRole="button" onPress={() => router.push(`/patrol/assignment/${assignment.assignmentId}/submit`)} style={styles.linkButton}>
+            <Ionicons color={colors.primary} name="document-text-outline" size={19} />
+            <Text style={[styles.linkLabel, { color: colors.primary }]}>Проверить отчёт</Text>
+          </Pressable>
+        ) : null}
         {isInProgress ? (
           <Pressable accessibilityLabel="Дополнительные действия" accessibilityRole="button" onPress={() => setIsMenuOpen(true)} style={styles.iconButton}>
             <Ionicons color={colors.primary} name="ellipsis-horizontal" size={22} />
@@ -353,6 +412,15 @@ function nextStepText(status: ActiveAssignment["status"], progress: AssignmentPr
   return "Сканируйте следующую метку через NFC или откройте список всех меток.";
 }
 
+
+function getSubmissionNotice(skipped: "offline" | "serverUnavailable" | "unauthenticated" | "wrongContour" | "failed" | null) {
+  if (skipped === "offline") return "Нет сети. Отчёт сохранён на телефоне и будет отправлен автоматически.";
+  if (skipped === "serverUnavailable") return "Сервер временно недоступен. Отчёт сохранён, повторная отправка запланирована.";
+  if (skipped === "unauthenticated") return "Отчёт сохранён на телефоне. Синхронизация продолжится после восстановления сессии.";
+  if (skipped === "wrongContour") return "Проверьте настройки сервера. Отчёт сохранён на телефоне.";
+  if (skipped === "failed") return "Сервер временно недоступен. Отчёт сохранён, повторная отправка запланирована.";
+  return "Отчёт отправлен или уже был принят сервером.";
+}
 function formatDateTime(value: string | null) {
   if (!value) {
     return "-";

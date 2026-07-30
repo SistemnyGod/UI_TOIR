@@ -28,6 +28,6 @@ describe("completion attachment preflight", () => {
       }
     );
 
-    expect(failure).toBe("local file is missing or empty on device");
+    expect(failure).toBe("Файл вложения отсутствует или пуст на телефоне");
   });
 });

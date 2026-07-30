@@ -392,6 +392,8 @@ export interface MobileAccountSessionDto {
   lastSeenAt: string;
   startedAt: string;
   endedAt: string | null;
+  accessExpiresAt: string;
+  refreshExpiresAt: string;
 }
 
 export interface MobileAccountSecurityEventDto {

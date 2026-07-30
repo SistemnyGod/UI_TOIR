@@ -1,5 +1,6 @@
 import { AlertCircle, Plus, Send, Wrench, Zap } from 'lucide-react';
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
+import type { EmuFavoriteEmployeeDto } from '../../../../api/contracts';
 import type {
   EmuShiftReportCategory,
   EmuShiftReportEmployeeOptionDto,
@@ -9,6 +10,8 @@ import type {
 import type { WorkRow } from '../shiftReportUi';
 import { categoryLabels, shiftLabels } from '../shiftReportUi';
 import { ShiftReportWorkRow } from './ShiftReportWorkRow';
+import { EmployeePicker } from './EmployeePicker';
+import { EmployeeDirectoryPopover } from './EmployeeDirectoryPopover';
 
 export function ShiftReportForm({
   category,
@@ -18,15 +21,29 @@ export function ShiftReportForm({
   rows,
   errors,
   employees,
+  favoriteEmployees,
+  favoriteLoading,
+  favoriteError,
+  canManageFavorites,
+  directoryOpen,
+  onOpenDirectory,
+  onCloseDirectory,
+  onAddFavoriteEmployee,
+  onRemoveFavoriteEmployee,
+  onSetEmployeeCategory,
+  onSelectDirectoryEmployee,
   sections,
   nightWarning,
   successMessage,
   submitting,
   hasDraftData,
+  reminder,
   onSubmit,
   onSwitchCategory,
   onEmployeeChange,
   onDateChange,
+  onManageFavorites,
+  onRetryFavorites,
   onChooseShift,
   onUpdateRow,
   onRemoveRow,
@@ -40,14 +57,28 @@ export function ShiftReportForm({
   rows: WorkRow[];
   errors: Record<string, string>;
   employees: EmuShiftReportEmployeeOptionDto[];
+  favoriteEmployees: EmuFavoriteEmployeeDto[];
+  favoriteLoading: boolean;
+  favoriteError: string;
+  canManageFavorites: boolean;
+  directoryOpen: boolean;
+  onOpenDirectory: () => void;
+  onCloseDirectory: () => void;
+  onAddFavoriteEmployee: (employeeId: string) => Promise<unknown>;
+  onRemoveFavoriteEmployee: (employeeId: string) => Promise<unknown>;
+  onSetEmployeeCategory: (employeeId: string, workerCategory: import('../../../../api/emuShiftReportContracts').EmuShiftReportEmployeeAssignment) => Promise<unknown>;
+  onSelectDirectoryEmployee: (employee: EmuShiftReportEmployeeOptionDto) => void;
   sections: EmuShiftReportSectionDto[];
   nightWarning: string;
   successMessage: string;
   submitting: boolean;
   hasDraftData: boolean;
+  reminder?: ReactNode;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onSwitchCategory: (value: EmuShiftReportCategory) => void;
   onEmployeeChange: (value: string) => void;
+  onManageFavorites: () => void;
+  onRetryFavorites: () => void;
   onDateChange: (value: string) => void;
   onChooseShift: (value: EmuShiftType) => void;
   onUpdateRow: (id: string, patch: Partial<WorkRow>) => void;
@@ -57,7 +88,8 @@ export function ShiftReportForm({
 }) {
   return (
     <form onSubmit={onSubmit} className='emu-shift-card emu-shift-form' noValidate>
-      <div className='emu-shift-tabs' role='tablist' aria-label='Категория сотрудников'>
+      <div className='emu-shift-tabs-row'>
+        <div className='emu-shift-tabs' role='tablist' aria-label='Категория сотрудников'>
         {(['mechanic', 'electrician'] as const).map((value) => (
           <button
             id={`shift-report-tab-${value}`}
@@ -74,19 +106,39 @@ export function ShiftReportForm({
             {categoryLabels[value]}
           </button>
         ))}
+        </div>
+        <EmployeeDirectoryPopover
+          employees={employees}
+          selectedEmployeeId={employeeId}
+          favoriteEmployees={favoriteEmployees}
+          favoriteLoading={favoriteLoading}
+          favoriteError={favoriteError}
+          canManageFavorites={canManageFavorites}
+          open={directoryOpen}
+          onOpen={onOpenDirectory}
+          onClose={onCloseDirectory}
+          onRetryFavorites={onRetryFavorites}
+          onAddFavorite={onAddFavoriteEmployee}
+          onRemoveFavorite={onRemoveFavoriteEmployee}
+          onSetEmployeeCategory={onSetEmployeeCategory}
+          onSelectEmployee={onSelectDirectoryEmployee}
+        />
       </div>
 
       <div id='shift-report-form-panel' className='emu-shift-panel' role='tabpanel' aria-labelledby={`shift-report-tab-${category}`}>
         <div className='emu-shift-fields'>
-          <label>
-            Сотрудник *
-            <select id='employeeId' value={employeeId} onChange={(event) => onEmployeeChange(event.target.value)} aria-invalid={Boolean(errors.employeeId)} aria-describedby={errors.employeeId ? 'employee-error' : employees.length ? undefined : 'employee-empty-hint'}>
-              <option value=''>Выберите сотрудника</option>
-              {employees.map((item) => <option key={item.id} value={item.id}>{item.fullName} · {item.position}</option>)}
-            </select>
-            {errors.employeeId ? <small id='employee-error'>{errors.employeeId}</small> : null}
-            {!employees.length ? <small id='employee-empty-hint' className='warning'>Для этой профессии нет доступных сотрудников.</small> : null}
-          </label>
+          <EmployeePicker
+            employees={employees}
+            favoriteEmployees={favoriteEmployees}
+            favoriteLoading={favoriteLoading}
+            favoriteError={favoriteError}
+            selectedId={employeeId}
+            error={errors.employeeId}
+            canManageFavorites={canManageFavorites}
+            onChange={onEmployeeChange}
+            onManageFavorites={onManageFavorites}
+            onRetryFavorites={onRetryFavorites}
+          />
           <label>
             Дата отчёта *
             <input id='reportDate' type='date' value={reportDate} onChange={(event) => onDateChange(event.target.value)} aria-invalid={Boolean(errors.reportDate)} aria-describedby={errors.reportDate ? 'report-date-error' : undefined} />
@@ -102,6 +154,8 @@ export function ShiftReportForm({
             {nightWarning ? <small className='warning'>{nightWarning}</small> : null}
           </fieldset>
         </div>
+
+        {reminder}
 
         {!sections.length ? <p className='emu-inline-notice'><AlertCircle aria-hidden='true' size={17} />Справочник участков пуст. Отчёт можно отправить без указания участка.</p> : null}
 

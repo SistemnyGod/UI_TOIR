@@ -72,11 +72,13 @@ export function MobileAccountSecurityPanels({
                   <span className={`mobile-am-session-state ${session.endedAt ? "ended" : "active"}`} />
                   <div className="mobile-am-session-main">
                     <strong>{session.device || "Неизвестное устройство"}</strong>
-                    <span>{[session.platform, session.appVersion, session.ipAddress].filter(Boolean).join(" · ")}</span>
+                    <span>{[session.platform, session.appVersion, session.ipAddress].filter(Boolean).join(" · ")}</span><small>{session.status}</small>
                   </div>
                   <dl>
                     <div><dt>Вход</dt><dd>{formatDateTime(session.startedAt)}</dd></div>
-                    <div><dt>Выход</dt><dd>{session.endedAt ? formatDateTime(session.endedAt) : "Сейчас онлайн"}</dd></div>
+                    <div><dt>Выход</dt><dd>{session.endedAt ? formatDateTime(session.endedAt) : "Не выходил"}</dd></div>
+                    <div><dt>Access-токен до</dt><dd>{formatDateTime(session.accessExpiresAt ?? "")}</dd></div>
+                    <div><dt>Refresh-сессия до</dt><dd>{formatDateTime(session.refreshExpiresAt ?? "")}</dd></div>
                     <div><dt>Активность</dt><dd>{formatDateTime(session.lastSeenAt)}</dd></div>
                     <div><dt>Длительность</dt><dd>{formatDuration(session.startedAt, session.endedAt ?? session.lastSeenAt)}</dd></div>
                   </dl>
@@ -156,7 +158,7 @@ export function MobileAccountSecurityPanels({
 }
 
 function buildSessionAnalytics(sessions: MobileAccountSession[]) {
-  const activeSessions = sessions.filter((session) => !session.endedAt);
+  const activeSessions = sessions.filter((session) => session.status !== "Вышел" && !session.endedAt);
   const completedSessions = sessions.filter((session) => Boolean(session.endedAt));
   const lastLoginAt = sessions
     .map((session) => session.startedAt)

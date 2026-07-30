@@ -21,7 +21,7 @@ internal sealed partial class EfMobileAppService(
         ?? Environment.GetEnvironmentVariable("PATROL360_CONTOUR_ID")
         ?? "patrol360-local-enterprise";
 
-    private static readonly TimeSpan AccessTokenLifetime = TimeSpan.FromHours(8);
+    private static readonly TimeSpan AccessTokenLifetime = TimeSpan.FromDays(7);
     // Device registration is long-lived. RefreshExpiresAt is retained for DTO
     // and legacy-database compatibility, but Refresh() does not reject a valid
     // rotating credential solely because this metadata date has passed. Access

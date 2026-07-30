@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Patrol360.Application;
 using Patrol360.Contracts;
 using Patrol360.Infrastructure.Persistence;
+using Patrol360.Infrastructure.Persistence.Entities;
 
 namespace Patrol360.Infrastructure.Tests;
 
@@ -1557,36 +1558,192 @@ public sealed class EmuDbIntegrationTests
         using var provider = BuildProvider(database.ConnectionString);
         await provider.InitializePatrolDatabaseAsync();
 
+        var unclassifiedEmployeeId = Guid.NewGuid();
+        var inactiveEmployeeId = Guid.NewGuid();
+        using (var scope = provider.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<Patrol360DbContext>();
+            context.Employees.AddRange(
+                new EmployeeEntity
+                {
+                    Id = unclassifiedEmployeeId,
+                    FullName = "Семёнов Алексей Тестовый",
+                    PersonnelNo = "TEST-ALL-001",
+                    Position = "Оператор-технолог",
+                    Department = "Тестовый цех",
+                    Status = "Активен",
+                    Shift = "День",
+                    LastSeenAt = DateTimeOffset.UtcNow,
+                },
+                new EmployeeEntity
+                {
+                    Id = inactiveEmployeeId,
+                    FullName = "Уволенный Сотрудник",
+                    PersonnelNo = "TEST-INACTIVE-001",
+                    Position = "Слесарь",
+                    Department = "Тестовый цех",
+                    Status = "Уволен",
+                    Shift = "День",
+                    LastSeenAt = DateTimeOffset.UtcNow,
+                });
+            context.SaveChanges();
+        }
+
         var options = UseShiftReport(provider, service => service.GetOptions());
-        var employee = Assert.Single(options.Employees.Take(1));
+        var unclassifiedOption = Assert.Single(options.Employees, row => row.Id == unclassifiedEmployeeId);
+        Assert.Null(unclassifiedOption.WorkerCategory);
+        Assert.DoesNotContain(options.Employees, row => row.Id == inactiveEmployeeId);
+        var employee = options.Employees.First(row => row.WorkerCategory is not null);
         var section = options.Sections.FirstOrDefault();
         var reportDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
         var request = new EmuCreateShiftReportDto(
             reportDate,
             "day",
-            employee.WorkerCategory,
+            employee.WorkerCategory!,
             employee.Id,
             [
                 new EmuCreateShiftReportLineDto("Pump inspection", 35, section?.Id, "Normal"),
                 new EmuCreateShiftReportLineDto("Equipment adjustment", 55, null, null),
             ]);
 
-        var created = UseShiftReport(provider, service => service.Create(request, null, "integration"));
+        Guid? ownerId = null;
+        var created = UseShiftReport(provider, service => service.Create(request, ownerId, "integration"));
         Assert.True(created.Succeeded);
         Assert.Equal(2, created.Value!.WorkCount);
         Assert.Equal(90, created.Value.TotalDurationMinutes);
 
-        var list = UseShiftReport(provider, service => service.GetList(new EmuShiftReportQueryDto(Date: reportDate)));
+        var list = await UseShiftReportAsync(provider, service => service.GetListAsync(new EmuShiftReportQueryDto(Date: reportDate)));
         Assert.Contains(list.Rows, row => row.Id == created.Value.Id && row.TotalDurationMinutes == 90);
-        var detail = UseShiftReport(provider, service => service.GetDetail(created.Value.Id));
+
+        var filtered = await UseShiftReportAsync(provider, service => service.GetListAsync(new EmuShiftReportQueryDto(Date: reportDate, ShiftType: "day", WorkerCategory: employee.WorkerCategory!, EmployeeId: employee.Id), ownerId));
+        Assert.Single(filtered.Rows);
+        Assert.Equal(created.Value.Id, filtered.Rows[0].Id);
+
+        var otherOwner = await UseShiftReportAsync(provider, service => service.GetListAsync(new EmuShiftReportQueryDto(Date: reportDate), Guid.NewGuid()));
+        Assert.Empty(otherOwner.Rows);
+        var detail = await UseShiftReportAsync(provider, service => service.GetDetailAsync(created.Value.Id));
         Assert.True(detail.Succeeded);
         Assert.Equal(2, detail.Value!.Lines.Count);
+
+        var unclassifiedRequest = new EmuCreateShiftReportDto(
+            reportDate,
+            "night",
+            "mechanic",
+            unclassifiedEmployeeId,
+            [new EmuCreateShiftReportLineDto("Unclassified employee work", 25, null, null)]);
+        var unclassifiedCreated = UseShiftReport(provider, service => service.Create(unclassifiedRequest, null, "integration"));
+        Assert.True(unclassifiedCreated.Succeeded);
+        Assert.Equal("mechanic", unclassifiedCreated.Value!.WorkerCategory);
 
         var duplicate = UseShiftReport(provider, service => service.Create(request, null, "integration"));
         Assert.False(duplicate.Succeeded);
         Assert.Contains("duplicate", duplicate.Errors.Keys);
     }
 
+    [DbIntegrationFact]
+    public async Task ShiftReportEmployeeCategoryCanBeAssignedChangedAndReset()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var original = UseShiftReport(provider, service => service.GetOptions().Employees.First());
+        Assert.Null(original.AssignedWorkerCategory);
+
+        var mechanic = UseShiftReport(provider, service => service.SetEmployeeCategory(
+            original.Id,
+            new EmuSetShiftReportEmployeeCategoryDto("mechanic")));
+        Assert.True(mechanic.Succeeded);
+        Assert.Equal("mechanic", mechanic.Value!.WorkerCategory);
+        Assert.Equal("mechanic", mechanic.Value.AssignedWorkerCategory);
+
+        var electrician = UseShiftReport(provider, service => service.SetEmployeeCategory(
+            original.Id,
+            new EmuSetShiftReportEmployeeCategoryDto("electrician")));
+        Assert.True(electrician.Succeeded);
+        Assert.Equal("electrician", electrician.Value!.WorkerCategory);
+        Assert.Equal("electrician", electrician.Value.AssignedWorkerCategory);
+
+        var withoutGroup = UseShiftReport(provider, service => service.SetEmployeeCategory(
+            original.Id,
+            new EmuSetShiftReportEmployeeCategoryDto("none")));
+        Assert.True(withoutGroup.Succeeded);
+        Assert.Null(withoutGroup.Value!.WorkerCategory);
+        Assert.Equal("none", withoutGroup.Value.AssignedWorkerCategory);
+
+        var reset = UseShiftReport(provider, service => service.SetEmployeeCategory(
+            original.Id,
+            new EmuSetShiftReportEmployeeCategoryDto(null)));
+        Assert.True(reset.Succeeded);
+        Assert.Equal(original.WorkerCategory, reset.Value!.WorkerCategory);
+        Assert.Null(reset.Value.AssignedWorkerCategory);
+
+        var invalid = UseShiftReport(provider, service => service.SetEmployeeCategory(
+            original.Id,
+            new EmuSetShiftReportEmployeeCategoryDto("invalid")));
+        Assert.False(invalid.Succeeded);
+        Assert.Contains("workerCategory", invalid.Errors.Keys);
+    }
+    [DbIntegrationFact]
+    public async Task FavoriteEmployeesUseSoftDeleteAndFavoriteOnlyFilter()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var options = UseShiftReport(provider, service => service.GetOptions());
+        var employees = options.Employees.Take(2).ToArray();
+        Assert.Equal(2, employees.Length);
+        var favoriteEmployee = employees[0];
+        var otherEmployee = employees[1];
+
+        if (UseCatalog(provider, catalog => catalog.GetFavoriteEmployees()).Any(item => item.EmployeeId == otherEmployee.Id))
+        {
+            Assert.True(UseCatalog(provider, catalog => catalog.RemoveFavoriteEmployee(otherEmployee.Id)).Succeeded);
+        }
+
+        var added = UseCatalog(provider, catalog => catalog.AddFavoriteEmployee(new EmuAddFavoriteEmployeeDto(favoriteEmployee.Id)));
+        Assert.True(added.Succeeded);
+        Assert.Contains(UseCatalog(provider, catalog => catalog.GetFavoriteEmployees()), item => item.EmployeeId == favoriteEmployee.Id);
+
+        var removed = UseCatalog(provider, catalog => catalog.RemoveFavoriteEmployee(favoriteEmployee.Id));
+        Assert.True(removed.Succeeded);
+        Assert.DoesNotContain(UseCatalog(provider, catalog => catalog.GetFavoriteEmployees()), item => item.EmployeeId == favoriteEmployee.Id);
+
+        var repeatedRemove = UseCatalog(provider, catalog => catalog.RemoveFavoriteEmployee(favoriteEmployee.Id));
+        Assert.True(repeatedRemove.Succeeded);
+
+        var restored = UseCatalog(provider, catalog => catalog.AddFavoriteEmployee(new EmuAddFavoriteEmployeeDto(favoriteEmployee.Id)));
+        Assert.True(restored.Succeeded);
+        Assert.Contains(UseCatalog(provider, catalog => catalog.GetFavoriteEmployees()), item => item.EmployeeId == favoriteEmployee.Id);
+
+        var reportDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        var firstRequest = new EmuCreateShiftReportDto(
+            reportDate,
+            "day",
+            favoriteEmployee.WorkerCategory ?? "mechanic",
+            favoriteEmployee.Id,
+            [new EmuCreateShiftReportLineDto("Favorite employee work", 35, null, null)]);
+        var secondRequest = new EmuCreateShiftReportDto(
+            reportDate,
+            "day",
+            otherEmployee.WorkerCategory ?? "mechanic",
+            otherEmployee.Id,
+            [new EmuCreateShiftReportLineDto("Other employee work", 55, null, null)]);
+
+        var firstReport = UseShiftReport(provider, service => service.Create(firstRequest, null, "integration"));
+        var secondReport = UseShiftReport(provider, service => service.Create(secondRequest, null, "integration"));
+        Assert.True(firstReport.Succeeded);
+        Assert.True(secondReport.Succeeded);
+
+        var favoriteOnly = await UseShiftReportAsync(
+            provider,
+            service => service.GetListAsync(new EmuShiftReportQueryDto(Date: reportDate, FavoriteOnly: true)));
+
+        Assert.Contains(favoriteOnly.Rows, row => row.Id == firstReport.Value!.Id);
+        Assert.DoesNotContain(favoriteOnly.Rows, row => row.Id == secondReport.Value!.Id);
+        Assert.Equal(1, favoriteOnly.Total);
+    }
     private static ServiceProvider BuildProvider(string connectionString)
     {
         var services = new ServiceCollection();
@@ -1628,6 +1785,11 @@ public sealed class EmuDbIntegrationTests
         return action(scope.ServiceProvider.GetRequiredService<IEmuShiftReportService>());
     }
 
+    private static async Task<T> UseShiftReportAsync<T>(ServiceProvider provider, Func<IEmuShiftReportService, Task<T>> action)
+    {
+        using var scope = provider.CreateScope();
+        return await action(scope.ServiceProvider.GetRequiredService<IEmuShiftReportService>());
+    }
     private static T UseShift<T>(ServiceProvider provider, Func<IEmuShiftService, T> action)
     {
         using var scope = provider.CreateScope();

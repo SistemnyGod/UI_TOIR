@@ -98,7 +98,7 @@ public sealed class EmuController(
         ToActionResult(catalogService.UpdateWorkTemplate(id, request));
 
     [HttpGet("favorite-employees")]
-    [RequirePermission("emu.view")]
+    [RequireAnyPermission("emu.view", "emu.shift-reports.create")]
     public ActionResult<IReadOnlyList<EmuFavoriteEmployeeDto>> FavoriteEmployees() => Ok(catalogService.GetFavoriteEmployees());
 
     [HttpGet("shift-templates")]
@@ -177,12 +177,12 @@ public sealed class EmuController(
     }
 
     [HttpPost("favorite-employees")]
-    [RequirePermission("emu.favorite-employees.manage")]
+    [RequireAnyPermission("emu.favorite-employees.manage", "emu.shift-reports.create")]
     public ActionResult<EmuFavoriteEmployeeDto> AddFavoriteEmployee(EmuAddFavoriteEmployeeDto request) =>
         ToActionResult(catalogService.AddFavoriteEmployee(request));
 
     [HttpDelete("favorite-employees/{employeeId:guid}")]
-    [RequirePermission("emu.favorite-employees.manage")]
+    [RequireAnyPermission("emu.favorite-employees.manage", "emu.shift-reports.create")]
     public ActionResult<EmuFavoriteEmployeeDto> RemoveFavoriteEmployee(Guid employeeId) =>
         ToActionResult(catalogService.RemoveFavoriteEmployee(employeeId));
 

@@ -166,6 +166,10 @@ internal sealed partial class EfMobileAppService
             if (historicalToken?.MobileAccountSession is not null)
             {
                 var historicalSession = historicalToken.MobileAccountSession;
+                if (historicalSession.RefreshExpiresAt <= now)
+                {
+                    return UnauthorizedResult("refresh_expired");
+                }
                 if (historicalSession.RevokedAt is not null)
                 {
                     return UnauthorizedResult("session_revoked");
@@ -255,6 +259,10 @@ internal sealed partial class EfMobileAppService
                         && item.DeviceId == request.DeviceId);
                 if (replayedSession is not null)
                 {
+                    if (replayedSession.RefreshExpiresAt <= now)
+                    {
+                        return UnauthorizedResult("refresh_expired");
+                    }
                     if (replayedSession.RevokedAt is not null)
                     {
                         return UnauthorizedResult("session_revoked");
@@ -295,6 +303,10 @@ internal sealed partial class EfMobileAppService
             }
 
             return UnauthorizedResult("device_session_not_found");
+        }
+        if (oldSession.RefreshExpiresAt <= now)
+        {
+            return UnauthorizedResult("refresh_expired");
         }
         if (oldSession.RevokedAt is not null)
         {

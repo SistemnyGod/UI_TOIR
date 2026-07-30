@@ -1194,7 +1194,9 @@ public sealed class MobileAppDbIntegrationTests
 
         var firstLogin = Login(provider, account.Account!.Login, "Patrol360!");
         Assert.True(firstLogin.Succeeded);
-        Assert.NotNull(AuthenticateMobileSession(provider, firstLogin.Session!.AccessToken));
+        var accessTokenLifetime = firstLogin.Session!.ExpiresAt - DateTimeOffset.UtcNow;
+        Assert.InRange(accessTokenLifetime, TimeSpan.FromDays(6.99), TimeSpan.FromDays(7.01));
+        Assert.NotNull(AuthenticateMobileSession(provider, firstLogin.Session.AccessToken));
         Assert.Null(AuthenticateMobileSession(provider, "invalid-token"));
 
         ExpireMobileSessions(database.ConnectionString, account.Account.Id);

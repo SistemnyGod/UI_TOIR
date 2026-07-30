@@ -1,7 +1,10 @@
 export type EmuShiftType = "day" | "night";
 export type EmuShiftReportCategory = "mechanic" | "electrician";
 
-export interface EmuShiftReportEmployeeOptionDto { id: string; fullName: string; personnelNo: string; position: string; department: string; workerCategory: EmuShiftReportCategory; }
+export type EmuShiftReportEmployeeAssignment = EmuShiftReportCategory | "none" | null;
+
+export interface EmuShiftReportEmployeeOptionDto { id: string; fullName: string; personnelNo: string; position: string; department: string; workerCategory: EmuShiftReportCategory | null; assignedWorkerCategory: EmuShiftReportEmployeeAssignment; }
+export interface EmuSetShiftReportEmployeeCategoryDto { workerCategory: EmuShiftReportEmployeeAssignment; }
 export interface EmuShiftReportSectionDto { id: string; name: string; code: string; isActive: boolean; sortOrder: number; }
 export interface EmuShiftReportShiftOptionDto { shiftType: EmuShiftType; name: string; startTime: string; endTime: string; crossesMidnight: boolean; }
 export interface EmuShiftReportOptionsDto { employees: EmuShiftReportEmployeeOptionDto[]; sections: EmuShiftReportSectionDto[]; shifts: EmuShiftReportShiftOptionDto[]; }
@@ -11,4 +14,4 @@ export interface EmuShiftReportLineDto extends EmuCreateShiftReportLineDto { id:
 export interface EmuShiftReportSummaryDto { id: string; reportDate: string; shiftType: EmuShiftType; workerCategory: EmuShiftReportCategory; employeeId: string; employeeName: string; personnelNo: string; position: string; department: string; status: string; workCount: number; totalDurationMinutes: number; createdByUserId: string | null; createdByName: string; submittedAt: string; }
 export interface EmuShiftReportDetailDto extends EmuShiftReportSummaryDto { lines: EmuShiftReportLineDto[]; }
 export interface EmuShiftReportListResponseDto { rows: EmuShiftReportSummaryDto[]; total: number; page: number; pageSize: number; pageCount: number; }
-export interface EmuShiftReportQuery { date?: string; shiftType?: EmuShiftType | ""; workerCategory?: EmuShiftReportCategory | ""; employeeId?: string; search?: string; page?: number; pageSize?: number; }
+export interface EmuShiftReportQuery { date?: string; dateFrom?: string; dateTo?: string; shiftType?: EmuShiftType | ""; workerCategory?: EmuShiftReportCategory | ""; employeeId?: string; search?: string; favoriteOnly?: boolean; page?: number; pageSize?: number; }

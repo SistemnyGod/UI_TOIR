@@ -45,7 +45,8 @@ async function refreshMobileDataInternal() {
     acceptedOperationIds: [],
     completedAssignmentIds: [],
     cancelledAssignmentIds: bootstrap.cancelledAssignmentIds ?? [],
-    snapshotRefreshed: true
+    snapshotRefreshed: true,
+    refreshedZones: ["requests", "activePatrols", "points", "references"]
   });
   const refreshTasks = [
     { name: "notifications", task: syncMobileNotifications() },
@@ -57,6 +58,14 @@ async function refreshMobileDataInternal() {
   );
   for (const failedTask of failedTasks) {
     void logMobileError(`mobile.refresh.${failedTask.name}.failed`, failedTask.reason);
+  }
+  const completedZones = refreshTasks.flatMap((task, index) => refreshResults[index]?.status === "fulfilled" ? task.name === "notifications" ? ["notifications"] : ["workItems"] : []);
+  if (completedZones.length > 0) {
+    emitSyncEvent({
+      acceptedOperationIds: [],
+      completedAssignmentIds: [],
+      refreshedZones: completedZones as ("workItems" | "notifications")[]
+    });
   }
   if (failedTasks.length > 0) {
     void logMobileAction({

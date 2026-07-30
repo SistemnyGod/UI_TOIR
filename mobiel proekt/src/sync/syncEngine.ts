@@ -1,5 +1,5 @@
 import { uploadMobileFile } from "@/api/fileApi";
-import { refreshStoredAccessToken } from "@/api/httpClient";
+import { refreshStoredAccessToken, refreshStoredAccessTokenIfNeeded } from "@/api/httpClient";
 import { getOutboxResult, postOutbox } from "@/api/mobileApi";
 import { MobileNetworkError } from "@/api/networkTimeout";
 import { checkServerConnection } from "@/api/serverHealthApi";
@@ -8,6 +8,7 @@ import { isReauthenticationRequiredError } from "@/auth/sessionErrors";
 import { hasUsableNetwork } from "@/core/network";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { logMobileError } from "@/services/mobileErrorReporter";
+import { triggerReportDeliveryDiagnostic } from "@/services/diagnosticReportService";
 import { reclaimAcceptedLocalMedia } from "@/services/localMediaReclamationService";
 import {
   listFilesByClientIds,
@@ -35,6 +36,7 @@ import {
   markOutboxCommandsWrongContour,
   markOutboxCommandsRejected,
   markOutboxCommandsRetryLater,
+  markReportDeliveryDiagnosticIfDue,
   markOutboxCommandsSending,
   markPendingOutboxCommandsRetryLater,
   reactivateRecoverableRejectedPointCommands,
@@ -53,7 +55,7 @@ import { getCommandAggregateKey } from "@/sync/outboxOrderingPolicy";
 import { mapWithConcurrency } from "@/sync/boundedAsync";
 import { shouldContinueOutboxSync } from "@/sync/outboxContinuationPolicy";
 import { scheduleNextOutboxRetry } from "@/sync/outboxRetryScheduler";
-import { emitSyncEvent, mergeSyncEvents, type SyncEvent } from "@/sync/syncEvents";
+import { emitSyncEvent, mergeSyncEvents, type RefreshZone, type SyncEvent } from "@/sync/syncEvents";
 import { extractUploadClientFileIds, extractUploadFileReferences } from "@/sync/uploadCandidatePolicy";
 import type { UploadFileReference } from "@/sync/uploadCandidatePolicy";
 import { FileUploadFailureDisposition, PermanentFileUploadError, getFileUploadFailureDisposition } from "@/domain/files/fileUploadPolicy";
@@ -231,6 +233,7 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions)
             await markOutboxCommandsRejected(ownerUserId, commandIds, readableError);
           } else {
             await markOutboxCommandsRetryLater(ownerUserId, commandIds, readableError, null, getRetryReason(error));
+            await maybeTriggerReportDeliveryDiagnostic(ownerUserId, command);
           }
           batchEvents.push(buildSyncEvent([command], [], [getCommandAssignmentId(command)].filter((id): id is string => id !== null)));
           throw error;
@@ -289,7 +292,24 @@ async function ensureAccessTokenForSync(
   aggregateKey?: string
 ): Promise<"ok" | "serverUnavailable" | "unauthenticated"> {
   if (await getAccessToken()) {
-    return "ok";
+    try {
+      await refreshStoredAccessTokenIfNeeded();
+      return "ok";
+    } catch (error) {
+      const readableError = getReadableSyncError(error);
+      if (isAuthRequiredError(error)) {
+        await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError, aggregateKey);
+        return "unauthenticated";
+      }
+
+      if (isOfflineNetworkError(error)) {
+        await markPendingOutboxCommandsWaitingNetwork(ownerUserId, readableError, aggregateKey);
+        return "serverUnavailable";
+      }
+
+      await markPendingOutboxCommandsRetryLater(ownerUserId, readableError, getRetryReason(error), aggregateKey);
+      return "serverUnavailable";
+    }
   }
 
   try {
@@ -339,6 +359,7 @@ async function postOutboxWithServerReconciliation(ownerUserId: string, commands:
     }
 
     await markOutboxCommandsRetryLater(ownerUserId, remainingCommandIds, getReadableSyncError(error), null, getRetryReason(error));
+    await Promise.all(commands.filter((command) => remainingCommandIds.includes(command.clientOperationId)).map((command) => maybeTriggerReportDeliveryDiagnostic(ownerUserId, command)));
 
     throw error;
   }
@@ -360,6 +381,21 @@ function isAcceptedOutboxResponse(response: OutboxResponse | null): response is 
   return response?.status === "accepted" || response?.status === "duplicate";
 }
 
+async function maybeTriggerReportDeliveryDiagnostic(ownerUserId: string, command: OutboxCommand) {
+  if (command.commandType !== "completePatrolAssignment") {
+    return;
+  }
+
+  try {
+    if (await markReportDeliveryDiagnosticIfDue(ownerUserId, command.clientOperationId)) {
+      void triggerReportDeliveryDiagnostic().catch((error) => {
+        void logMobileError("diagnostic.report_delivery.failed", error);
+      });
+    }
+  } catch (error) {
+    void logMobileError("diagnostic.report_delivery.threshold.failed", error);
+  }
+}
 function getCommandAssignmentId(command: OutboxCommand) {
   const payloadAssignmentId = command.payload.assignmentId;
   if (typeof payloadAssignmentId === "string" && payloadAssignmentId) {
@@ -421,12 +457,24 @@ function buildSyncEvent(
     .map(getCommandAssignmentId)
     .filter((assignmentId): assignmentId is string => assignmentId !== null);
 
+  const refreshedZones = new Set<RefreshZone>();
+  for (const command of commands) {
+    if (command.commandType === "completePatrolAssignment") {
+      refreshedZones.add("reportDelivery");
+      refreshedZones.add("activePatrols");
+      refreshedZones.add("points");
+    }
+    if (command.entityType === "workTask" || command.entityType === "shiftRemark") {
+      refreshedZones.add("workItems");
+    }
+  }
   return {
     acceptedOperationIds,
     completedAssignmentIds,
     cancelledAssignmentIds: Array.from(new Set(cancelledAssignmentIds)),
     changedAssignmentIds: Array.from(new Set([...changedAssignmentIds, ...additionalAssignmentIds])),
-    deliveryChangedAssignmentIds: Array.from(new Set(deliveryChangedAssignmentIds))
+    deliveryChangedAssignmentIds: Array.from(new Set(deliveryChangedAssignmentIds)),
+    refreshedZones: Array.from(refreshedZones)
   };
 }
 

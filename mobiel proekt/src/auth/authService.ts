@@ -107,7 +107,10 @@ export async function signIn(loginName: string, password: string) {
       await saveBootstrap(bootstrap);
     }
 
-    await setTokens(result.accessToken, result.refreshToken);
+    await setTokens(result.accessToken, result.refreshToken, {
+      accessExpiresAt: result.expiresAt,
+      refreshExpiresAt: result.refreshExpiresAt
+    });
     await setStoredOwnerUserId(result.user.serverUserId);
     await setOfflineSession({
       userId: result.user.serverUserId,

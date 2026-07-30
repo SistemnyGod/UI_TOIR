@@ -22,6 +22,11 @@ function submittedTime(value?: string) {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 }
 
+function reportDate(value: string) {
+  const [year, month, day] = value.split('-');
+  return year && month && day ? `${day}.${month}.${year}` : value;
+}
+
 function ShiftReportDetails({ detail, summary, error, onRetry }: { detail?: EmuShiftReportDetailDto; summary?: EmuShiftReportSummaryDto; error?: string; onRetry: () => void }) {
   if (error) {
     return (
@@ -32,7 +37,15 @@ function ShiftReportDetails({ detail, summary, error, onRetry }: { detail?: EmuS
       </div>
     );
   }
-  if (!detail) return <div className='emu-detail-state' aria-live='polite'>Загружаем список работ…</div>;
+  if (!detail) {
+    return (
+      <div className='emu-detail-state emu-detail-loading' role='status' aria-label='Загружаем список работ'>
+        <span className='emu-history-skeleton emu-history-skeleton-wide' />
+        <span className='emu-history-skeleton emu-history-skeleton-short' />
+        <span className='emu-history-skeleton emu-history-skeleton-wide' />
+      </div>
+    );
+  }
   return (
     <div className='emu-history-detail'>
       <div className='emu-detail-meta'>
@@ -46,20 +59,22 @@ function ShiftReportDetails({ detail, summary, error, onRetry }: { detail?: EmuS
         <span><b>Общее время</b>{formatDuration(summary?.totalDurationMinutes ?? detail.totalDurationMinutes)}</span>
         <span><b>Отправлен</b>{submittedTime(summary?.submittedAt ?? detail.submittedAt)}</span>
       </div>
-      <table>
-        <thead><tr><th>№</th><th>Выполненная работа</th><th>Время</th><th>Участок</th><th>Примечание</th></tr></thead>
-        <tbody>
-          {detail.lines.map((line) => (
-            <tr key={line.id}>
-              <td data-label='№'>{line.sequenceNo}</td>
-              <td data-label='Работа'>{line.workDescription}</td>
-              <td data-label='Время'>{formatDuration(line.durationMinutes)}</td>
-              <td data-label='Участок'>{line.sectionName || '—'}</td>
-              <td data-label='Примечание'>{line.note || '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className='emu-history-detail-table'>
+        <table>
+          <thead><tr><th>№</th><th>Выполненная работа</th><th>Время</th><th>Участок</th><th>Примечание</th></tr></thead>
+          <tbody>
+            {detail.lines.map((line) => (
+              <tr key={line.id}>
+                <td data-label='№'>{line.sequenceNo}</td>
+                <td data-label='Работа'>{line.workDescription}</td>
+                <td data-label='Время'>{formatDuration(line.durationMinutes)}</td>
+                <td data-label='Участок'>{line.sectionName || '—'}</td>
+                <td data-label='Примечание'>{line.note || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -72,6 +87,8 @@ export function ShiftReportHistoryGroup({
   detailErrors,
   onToggle,
   onRetry,
+  loading,
+  refreshing,
 }: {
   group: ShiftReportHistoryGroupKey;
   rows: EmuShiftReportSummaryDto[];
@@ -80,18 +97,26 @@ export function ShiftReportHistoryGroup({
   detailErrors: Record<string, string>;
   onToggle: (item: EmuShiftReportSummaryDto) => void;
   onRetry: (item: EmuShiftReportSummaryDto) => void;
+  loading: boolean;
+  refreshing: boolean;
 }) {
   return (
-    <section className='emu-shift-card emu-history-group'>
+    <section className={`emu-shift-card emu-history-group ${refreshing ? 'is-refreshing' : ''}`}>
       <header>
         <div><span>{categoryLabels[group.category]}</span><h2>{shiftLabels[group.shift]} смена</h2></div>
         <b aria-label={`${rows.length} отчётов`}>{rows.length}</b>
       </header>
-      {rows.length === 0 ? (
+      {loading && rows.length === 0 ? (
+        <div className='emu-history-loading' role='status' aria-label='Загружаем отчёты'>
+          <span className='emu-history-skeleton emu-history-skeleton-wide' />
+          <span className='emu-history-skeleton emu-history-skeleton-short' />
+        </div>
+      ) : rows.length === 0 ? (
         <div className='emu-history-empty'><span>Отчётов нет</span><small>В этой группе пока нет отправленных отчётов.</small></div>
       ) : rows.map((item) => {
         const isExpanded = expanded.has(item.id);
         const panelId = `shift-report-detail-${item.id}`;
+        const hasPanelContent = isExpanded || Boolean(details[item.id]) || Boolean(detailErrors[item.id]);
         return (
           <article className='emu-history-row' key={item.id}>
             <button
@@ -103,15 +128,16 @@ export function ShiftReportHistoryGroup({
             >
               <ChevronRight className='chevron' aria-hidden='true' size={20} />
               <span className='employee'><strong>{item.employeeName}</strong><small>{item.position} · {item.department || 'Подразделение не указано'}</small></span>
+              <span className='report-date'><strong>{reportDate(item.reportDate)}</strong><small>дата</small></span>
               <span><strong>{item.workCount}</strong><small>работ</small></span>
               <span><strong>{formatDuration(item.totalDurationMinutes)}</strong><small>общее время</small></span>
-              <span><strong>{new Date(item.submittedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</strong><small>отправлен</small></span>
+              <span><strong>{submittedTime(item.submittedAt)}</strong><small>отправлен</small></span>
             </button>
-            {isExpanded ? (
-              <div id={panelId} className='emu-history-detail-panel'>
-                <ShiftReportDetails detail={details[item.id]} summary={item} error={detailErrors[item.id]} onRetry={() => onRetry(item)} />
+            <div id={panelId} className={`emu-history-detail-panel ${isExpanded ? 'is-open' : ''}`} aria-hidden={!isExpanded}>
+              <div className='emu-history-detail-panel-inner'>
+                {hasPanelContent ? <ShiftReportDetails detail={details[item.id]} summary={item} error={detailErrors[item.id]} onRetry={() => onRetry(item)} /> : null}
               </div>
-            ) : null}
+            </div>
           </article>
         );
       })}

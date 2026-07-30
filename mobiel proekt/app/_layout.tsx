@@ -12,6 +12,7 @@ import { bootstrapApplication } from "@/core/bootstrap";
 import { classifyStartupError, StartupState } from "@/core/startupState";
 import { SessionGateProvider, SessionGuard } from "@/auth/SessionGate";
 import { isSessionUnlocked, setPendingSessionRoute } from "@/auth/sessionGateState";
+import { refreshStoredAccessTokenIfNeeded } from "@/api/httpClient";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { ThemeProvider, useAppTheme } from "@/features/settings/themePreference";
 import { registerPushNotifications, refreshPushRegistrationIfAllowed, syncMobileNotifications, subscribeToMobilePushEvents } from "@/services/notificationService";
@@ -65,6 +66,13 @@ export default function RootLayout() {
     }
 
     const stopPatrolSync = startPatrolSyncCoordinator();
+    void refreshStoredAccessTokenIfNeeded()
+      .catch((error) => {
+        void logMobileError("auth.refresh.startup.failed", error);
+      })
+      .finally(() => {
+        void requestPatrolSync({ mode: "normal" });
+      });
     void registerBackgroundSyncTask().catch((error) => {
       void logMobileError("background.sync.registration.failed", error);
     });
@@ -94,11 +102,17 @@ export default function RootLayout() {
 
     const appStateSubscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        requestMobileDataRefresh("appActive");
+        void refreshStoredAccessTokenIfNeeded()
+          .catch((error) => {
+            void logMobileError("auth.refresh.app_active.failed", error);
+          })
+          .finally(() => {
+            requestMobileDataRefresh("appActive");
+            void requestPatrolSync({ mode: "normal" });
+          });
         void getStoredOwnerUserId().then(scheduleNextOutboxRetry).catch((error) => {
           void logMobileError("sync.retry_schedule.failed", error);
         });
-        void requestPatrolSync({ mode: "normal" });
         void refreshPushRegistrationIfAllowed().catch(() => undefined);
       }
     });

@@ -141,6 +141,7 @@ internal sealed partial class EfEmuService
     public IReadOnlyList<EmuFavoriteEmployeeDto> GetFavoriteEmployees() =>
         dbContext.EmuFavoriteEmployees
             .AsNoTracking()
+            .Where(row => row.IsActive)
             .Include(row => row.Employee)
             .OrderBy(row => row.Employee.FullName)
             .Select(MapFavoriteEmployee)

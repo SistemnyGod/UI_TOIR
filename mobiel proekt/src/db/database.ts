@@ -217,7 +217,8 @@ async function initializeDatabaseOnce() {
       retry_reason TEXT,
       attempt_count INTEGER NOT NULL DEFAULT 0,
       last_error TEXT,
-      status TEXT NOT NULL
+      status TEXT NOT NULL,
+      diagnostic_last_created_at TEXT
     );
 
     CREATE TABLE IF NOT EXISTS sync_cursors (
@@ -540,7 +541,8 @@ async function ensureMobileColumns(db: SqlExecutor) {
     { name: "updated_at_local", sql: "ALTER TABLE outbox_commands ADD COLUMN updated_at_local TEXT" },
     { name: "attempt_count", sql: "ALTER TABLE outbox_commands ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0" },
     { name: "last_error", sql: "ALTER TABLE outbox_commands ADD COLUMN last_error TEXT" },
-    { name: "status", sql: "ALTER TABLE outbox_commands ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'" }
+    { name: "status", sql: "ALTER TABLE outbox_commands ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'" },
+    { name: "diagnostic_last_created_at", sql: "ALTER TABLE outbox_commands ADD COLUMN diagnostic_last_created_at TEXT" }
   ]);
 
   await ensureColumns(db, "work_tasks", [

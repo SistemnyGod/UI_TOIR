@@ -9,6 +9,7 @@ import { refreshMobileData } from "@/services/mobileDataRefreshService";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { requestMobileDataRefresh } from "@/sync/syncTriggers";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
+import { useSmoothRefreshIndicator } from "@/sync/useSmoothRefreshIndicator";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { ScreenList } from "@/ui/Screen";
@@ -33,7 +34,7 @@ export function RequestBoardScreen() {
   const { colors } = useAppTheme();
   const [items, setItems] = useState<RequestBoardItem[]>([]);
   const [activeTab, setActiveTab] = useState<RequestTab>("all");
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const smoothRefresh = useSmoothRefreshIndicator();
   const [message, setMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -60,14 +61,17 @@ export function RequestBoardScreen() {
   );
 
   useEffect(() => subscribeToSyncEvents(() => {
-    void loadLocal().catch((caught) => {
-      void logMobileError("patrol.request-board.refresh-load.failed", caught);
-      setLoadError(caught instanceof Error ? caught.message : "Не удалось обновить заявки.");
-    });
-  }), [loadLocal]);
+    smoothRefresh.beginRefresh();
+    void loadLocal()
+      .catch((caught) => {
+        void logMobileError("patrol.request-board.refresh-load.failed", caught);
+        setLoadError(caught instanceof Error ? caught.message : "Не удалось обновить заявки.");
+      })
+      .finally(smoothRefresh.endRefresh);
+  }), [loadLocal, smoothRefresh.beginRefresh, smoothRefresh.endRefresh]);
 
   async function handleRefresh() {
-    setIsRefreshing(true);
+    smoothRefresh.beginRefresh();
     setMessage(null);
     try {
       const updated = await refreshMobileData();
@@ -78,7 +82,7 @@ export function RequestBoardScreen() {
       setLoadError(error instanceof Error ? error.message : "Не удалось обновить заявки.");
       setMessage(error instanceof Error ? error.message : "Не удалось обновить заявки. Показаны локальные данные.");
     } finally {
-      setIsRefreshing(false);
+      smoothRefresh.endRefresh();
     }
   }
 
@@ -110,7 +114,7 @@ export function RequestBoardScreen() {
       data={filteredItems}
       keyExtractor={(item) => item.requestId}
       onRefresh={() => void handleRefresh()}
-      refreshing={isRefreshing}
+      refreshing={smoothRefresh.showRefreshIndicator}
       ListEmptyComponent={loadError ? (
         <Card>
           <Text style={[styles.text, { color: "#b91c1c" }]}>{loadError}</Text>
@@ -137,6 +141,7 @@ export function RequestBoardScreen() {
             value={activeTab}
           />
 
+          {smoothRefresh.showRefreshIndicator ? <Text style={[styles.message, { color: colors.mutedText }]}>Обновляем данные…</Text> : null}
           {message ? <Text style={[styles.message, { color: colors.mutedText }]}>{message}</Text> : null}
         </>
       }
