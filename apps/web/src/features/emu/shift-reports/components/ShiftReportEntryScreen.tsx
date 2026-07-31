@@ -4,6 +4,7 @@ import { ApiError } from '../../../../api/client';
 import type { EmuCreateShiftReportDto, EmuShiftReportCategory, EmuShiftReportEmployeeOptionDto, EmuShiftType } from '../../../../api/emuShiftReportContracts';
 import type { useEmuShiftReportsWorkspace } from '../../../../hooks/useEmuShiftReportsWorkspace';
 import { ModalShell } from '../../../../shared/ui';
+import { createClientUuid } from '../../../../shared/clientUuid';
 import {
   categoryLabels,
   createEmptyRows,
@@ -65,13 +66,18 @@ function parseDraft(raw: string | null): Draft | null {
   }
 }
 
-function readDraft(category: EmuShiftReportCategory): Draft | null {
+function draftOwnerPrefix(userId: string) {
+  return `${draftPrefix}.user.${userId}`;
+}
+
+function readDraft(category: EmuShiftReportCategory, userId: string): Draft | null {
   try {
     if (typeof window === 'undefined') return null;
-    const pointer = window.localStorage.getItem(`${draftPrefix}.last.${category}`);
+    const ownerPrefix = draftOwnerPrefix(userId);
+    const pointer = window.localStorage.getItem(`${ownerPrefix}.last.${category}`);
     const candidates = [
-      pointer?.startsWith(`${draftPrefix}.${category}.`) ? window.localStorage.getItem(pointer) : null,
-      window.localStorage.getItem(`${draftPrefix}.recovery.${category}`),
+      pointer?.startsWith(`${ownerPrefix}.${category}.`) ? window.localStorage.getItem(pointer) : null,
+      window.localStorage.getItem(`${ownerPrefix}.recovery.${category}`),
     ];
     for (const raw of candidates) {
       const draft = parseDraft(raw);
@@ -83,42 +89,59 @@ function readDraft(category: EmuShiftReportCategory): Draft | null {
   }
 }
 
-function writeDraft(category: EmuShiftReportCategory, employeeId: string, reportDate: string, shiftType: EmuShiftType, rows: WorkRow[]) {
+function writeDraft(category: EmuShiftReportCategory, employeeId: string, reportDate: string, shiftType: EmuShiftType, rows: WorkRow[], userId: string) {
   try {
     if (typeof window === 'undefined') return false;
-    const key = getDraftKey(category, employeeId, reportDate, shiftType);
+    const ownerPrefix = draftOwnerPrefix(userId);
+    const key = getDraftKey(category, employeeId, reportDate, shiftType, userId);
     const value: StoredDraft & { savedAt: string } = {
-      version: 1,
-      employeeId,
-      reportDate,
-      shiftType,
+      version: 1, employeeId, reportDate, shiftType,
       rows: rows.map(normalizeWorkRow).filter((row): row is WorkRow => row !== null),
       savedAt: new Date().toISOString(),
     };
     const serialized = JSON.stringify(value);
     window.localStorage.setItem(key, serialized);
-    window.localStorage.setItem(`${draftPrefix}.recovery.${category}`, serialized);
-    window.localStorage.setItem(`${draftPrefix}.last.${category}`, key);
+    window.localStorage.setItem(`${ownerPrefix}.recovery.${category}`, serialized);
+    window.localStorage.setItem(`${ownerPrefix}.last.${category}`, key);
     return true;
   } catch {
     return false;
   }
 }
 
-function removeDraft(category: EmuShiftReportCategory) {
+function removeDraft(category: EmuShiftReportCategory, userId: string) {
   try {
     if (typeof window === 'undefined') return;
-    const pointer = window.localStorage.getItem(`${draftPrefix}.last.${category}`);
-    if (pointer?.startsWith(`${draftPrefix}.${category}.`)) window.localStorage.removeItem(pointer);
-    window.localStorage.removeItem(`${draftPrefix}.recovery.${category}`);
-    window.localStorage.removeItem(`${draftPrefix}.last.${category}`);
+    const ownerPrefix = draftOwnerPrefix(userId);
+    const pointer = window.localStorage.getItem(`${ownerPrefix}.last.${category}`);
+    if (pointer?.startsWith(`${ownerPrefix}.${category}.`)) window.localStorage.removeItem(pointer);
+    window.localStorage.removeItem(`${ownerPrefix}.recovery.${category}`);
+    window.localStorage.removeItem(`${ownerPrefix}.last.${category}`);
   } catch {
     // Storage can be unavailable in private browsing; the form remains usable.
   }
-}export function ShiftReportEntryScreen({ workspace, onNotify, canManageFavorites }: { workspace: Workspace; onNotify: (message: string) => void; canManageFavorites: boolean }) {
+}
+
+function getEditorInstanceId() {
+  const key = 'patrol360.emu.shift-report.editor-instance.v1';
+  try {
+    const existing = window.sessionStorage.getItem(key);
+    if (existing) return existing;
+    const value = createClientUuid();
+    window.sessionStorage.setItem(key, value);
+    return value;
+  } catch {
+    return createClientUuid();
+  }
+}
+
+export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, canManageFavorites }: { workspace: Workspace; currentUserId: string; onNotify: (message: string) => void; canManageFavorites: boolean }) {
   const submitLockRef = useRef(false);
   const draftTimerRef = useRef<number | null>(null);
   const latestDraftRef = useRef<DraftSnapshot | null>(null);
+  const editorInstanceIdRef = useRef(getEditorInstanceId());
+  const serverVersionsRef = useRef<Record<string, number>>({});
+  const serverSaveChainRef = useRef<Promise<void>>(Promise.resolve());
   const [category, setCategory] = useState<EmuShiftReportCategory>('mechanic');
   const [hydratedCategory, setHydratedCategory] = useState<EmuShiftReportCategory | null>(null);
   const [employeeId, setEmployeeId] = useState('');
@@ -133,6 +156,8 @@ function removeDraft(category: EmuShiftReportCategory) {
   const [successMessage, setSuccessMessage] = useState('');
   const [draftStatus, setDraftStatus] = useState<DraftStatus>('idle');
   const [draftSavedAt, setDraftSavedAt] = useState('');
+  const [draftConflict, setDraftConflict] = useState('');
+  const [coordinationMessage, setCoordinationMessage] = useState('');
 
   const options = workspace.options;
   const employees = options?.employees ?? [];
@@ -140,9 +165,54 @@ function removeDraft(category: EmuShiftReportCategory) {
   const totalMinutes = usedRows.reduce((sum, item) => sum + getDurationMinutes(item), 0);
   const hasDraftData = Boolean(employeeId || rows.some(isWorkRowUsed) || reportDate !== localDate() || shiftType !== 'day');
 
+  function slotKey(snapshot: Pick<DraftSnapshot, 'employeeId' | 'reportDate' | 'shiftType'>) {
+    return `${snapshot.employeeId}.${snapshot.reportDate}.${snapshot.shiftType}`;
+  }
+
+  async function persistServerDraft(snapshot: DraftSnapshot) {
+    if (!snapshot.employeeId) return true;
+    const key = slotKey(snapshot);
+    try {
+      const result = await workspace.saveDraft({
+        employeeId: snapshot.employeeId, reportDate: snapshot.reportDate, shiftType: snapshot.shiftType,
+        workerCategory: snapshot.category, editorInstanceId: editorInstanceIdRef.current,
+        expectedVersion: serverVersionsRef.current[key] ?? null,
+        payloadJson: JSON.stringify({ version: 1, employeeId: snapshot.employeeId, reportDate: snapshot.reportDate, shiftType: snapshot.shiftType, rows: snapshot.rows }),
+      });
+      serverVersionsRef.current[key] = result.version;
+      if (latestDraftRef.current && slotKey(latestDraftRef.current) === key) {
+        setDraftConflict('');
+        setCoordinationMessage(`Серверный черновик защищён до ${new Date(result.leaseExpiresAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`);
+      }
+      return true;
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 409) {
+        const message = reason.problem?.detail || 'Этот отчёт уже редактируют на другом компьютере или во вкладке.';
+        if (latestDraftRef.current && slotKey(latestDraftRef.current) === key) setDraftConflict(message);
+        return false;
+      }
+      if (latestDraftRef.current && slotKey(latestDraftRef.current) === key) setCoordinationMessage('Локальная копия сохранена. Серверная защита временно недоступна.');
+      return true;
+    }
+  }
+
+  function queueServerDraft(snapshot: DraftSnapshot) {
+    serverSaveChainRef.current = serverSaveChainRef.current.then(async () => { await persistServerDraft(snapshot); });
+  }
+
+  function releaseCurrentServerDraft() {
+    const snapshot = latestDraftRef.current;
+    if (!snapshot?.employeeId) return;
+    const key = slotKey(snapshot);
+    delete serverVersionsRef.current[key];
+    setDraftConflict('');
+    setCoordinationMessage('');
+    void workspace.releaseDraft({ employeeId: snapshot.employeeId, reportDate: snapshot.reportDate, shiftType: snapshot.shiftType, editorInstanceId: editorInstanceIdRef.current }).catch(() => undefined);
+  }
+
   useEffect(() => {
     setHydratedCategory(null);
-    const draft = readDraft(category);
+    const draft = readDraft(category, currentUserId);
     setEmployeeId(draft?.employeeId ?? '');
     setReportDate(draft?.reportDate ?? localDate());
     setShiftType(draft?.shiftType ?? 'day');
@@ -153,7 +223,7 @@ function removeDraft(category: EmuShiftReportCategory) {
     setDraftStatus(draft ? 'restored' : 'idle');
     setDraftSavedAt('');
     setHydratedCategory(category);
-  }, [category]);
+  }, [category, currentUserId]);
 
   useEffect(() => {
     if (hydratedCategory !== category) return;
@@ -174,7 +244,7 @@ function removeDraft(category: EmuShiftReportCategory) {
       draftTimerRef.current = null;
     }
     if (!snapshot) {
-      removeDraft(category);
+      removeDraft(category, currentUserId);
       setDraftStatus('idle');
       setDraftSavedAt('');
       return;
@@ -185,9 +255,12 @@ function removeDraft(category: EmuShiftReportCategory) {
       draftTimerRef.current = null;
       const current = latestDraftRef.current;
       if (!current) return;
-      const saved = writeDraft(current.category, current.employeeId, current.reportDate, current.shiftType, current.rows);
+      const saved = writeDraft(current.category, current.employeeId, current.reportDate, current.shiftType, current.rows, currentUserId);
       setDraftStatus(saved ? 'saved' : 'error');
-      if (saved) setDraftSavedAt(new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }));
+      if (saved) {
+        setDraftSavedAt(new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }));
+        queueServerDraft(current);
+      }
     }, 250);
     draftTimerRef.current = timer;
 
@@ -195,7 +268,7 @@ function removeDraft(category: EmuShiftReportCategory) {
       window.clearTimeout(timer);
       if (draftTimerRef.current === timer) draftTimerRef.current = null;
     };
-  }, [category, employeeId, hydratedCategory, reportDate, rows, shiftType, hasDraftData]);
+  }, [category, currentUserId, employeeId, hydratedCategory, reportDate, rows, shiftType, hasDraftData]);
 
   useEffect(() => {
     const flushDraft = () => {
@@ -205,7 +278,7 @@ function removeDraft(category: EmuShiftReportCategory) {
       }
       const snapshot = latestDraftRef.current;
       if (snapshot) {
-        writeDraft(snapshot.category, snapshot.employeeId, snapshot.reportDate, snapshot.shiftType, snapshot.rows);
+        writeDraft(snapshot.category, snapshot.employeeId, snapshot.reportDate, snapshot.shiftType, snapshot.rows, currentUserId);
       }
     };
 
@@ -226,6 +299,14 @@ function removeDraft(category: EmuShiftReportCategory) {
     if (!hasDraftData || !navigator.storage?.persist) return;
     void navigator.storage.persist().catch(() => false);
   }, [hasDraftData]);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const snapshot = latestDraftRef.current;
+      if (snapshot?.employeeId) queueServerDraft(snapshot);
+    }, 45_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   function openDirectory() {
     setShowDirectoryDialog(true);
     void workspace.loadFavorites();
@@ -243,6 +324,7 @@ function removeDraft(category: EmuShiftReportCategory) {
 
   function switchCategory(value: EmuShiftReportCategory) {
     if (value === category) return;
+    releaseCurrentServerDraft();
     if (draftTimerRef.current !== null) {
       window.clearTimeout(draftTimerRef.current);
       draftTimerRef.current = null;
@@ -256,7 +338,7 @@ function removeDraft(category: EmuShiftReportCategory) {
         rows: rows.map((row) => ({ ...row })),
       };
       latestDraftRef.current = snapshot;
-      const saved = writeDraft(snapshot.category, snapshot.employeeId, snapshot.reportDate, snapshot.shiftType, snapshot.rows);
+      const saved = writeDraft(snapshot.category, snapshot.employeeId, snapshot.reportDate, snapshot.shiftType, snapshot.rows, currentUserId);
       setDraftStatus(saved ? 'saved' : 'error');
     } else {
       latestDraftRef.current = null;
@@ -269,6 +351,7 @@ function removeDraft(category: EmuShiftReportCategory) {
   }
 
   function chooseShift(value: EmuShiftType) {
+    if (value !== shiftType) releaseCurrentServerDraft();
     setShiftType(value);
     setNightWarning('');
     setSuccessMessage('');
@@ -289,12 +372,13 @@ function removeDraft(category: EmuShiftReportCategory) {
   }
 
   function clearDraft() {
+    releaseCurrentServerDraft();
     if (draftTimerRef.current !== null) {
       window.clearTimeout(draftTimerRef.current);
       draftTimerRef.current = null;
     }
     latestDraftRef.current = null;
-    removeDraft(category);
+    removeDraft(category, currentUserId);
     setEmployeeId('');
     setReportDate(localDate());
     setShiftType('day');
@@ -346,6 +430,17 @@ function removeDraft(category: EmuShiftReportCategory) {
       return;
     }
 
+    submitLockRef.current = true;
+    setSubmitting(true);
+    await serverSaveChainRef.current;
+    const claimed = await persistServerDraft({ category, employeeId, reportDate, shiftType, rows: rows.map((row) => ({ ...row })) });
+    if (!claimed) {
+      setErrors((current) => ({ ...current, form: 'Отчёт уже заполняют на другом компьютере. Выберите другого сотрудника или дождитесь освобождения черновика.' }));
+      submitLockRef.current = false;
+      setSubmitting(false);
+      return;
+    }
+
     const payload: EmuCreateShiftReportDto = {
       employeeId,
       reportDate,
@@ -353,8 +448,6 @@ function removeDraft(category: EmuShiftReportCategory) {
       workerCategory: category,
       lines: usedRows.map((item) => ({ workDescription: item.description.trim(), durationMinutes: getDurationMinutes(item), sectionId: item.sectionId || null, note: item.note.trim() || null })),
     };
-    submitLockRef.current = true;
-    setSubmitting(true);
     try {
       await workspace.create(payload);
       clearDraft();
@@ -414,13 +507,15 @@ function removeDraft(category: EmuShiftReportCategory) {
         onRetryFavorites={() => void workspace.loadFavorites()}
         nightWarning={nightWarning}
         successMessage={successMessage}
+        coordinationMessage={coordinationMessage}
+        draftConflict={draftConflict}
         submitting={submitting}
         hasDraftData={hasDraftData}
         reminder={<ShiftReportReminder />}
         onSubmit={submit}
         onSwitchCategory={switchCategory}
-        onEmployeeChange={(value) => { setEmployeeId(value); setSuccessMessage(''); }}
-        onDateChange={(value) => { setReportDate(value); setSuccessMessage(''); }}
+        onEmployeeChange={(value) => { if (value !== employeeId) releaseCurrentServerDraft(); setEmployeeId(value); setSuccessMessage(''); }}
+        onDateChange={(value) => { if (value !== reportDate) releaseCurrentServerDraft(); setReportDate(value); setSuccessMessage(''); }}
         onChooseShift={chooseShift}
         onUpdateRow={updateRow}
         onRemoveRow={removeRow}

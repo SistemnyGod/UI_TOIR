@@ -18,16 +18,19 @@ internal sealed partial class EfInventoryWorkflowService
         var card = dbContext.InventoryPpeCards
             .AsNoTracking()
             .Where(row => row.EmployeeId == employeeId && row.ArchivedAt == null)
-            .OrderByDescending(row => row.CreatedAt)
+            .OrderBy(row => row.Status == "draft" ? 0 : row.Status == "active" ? 1 : 2)
+            .ThenByDescending(row => row.CreatedAt)
             .Select(row => row.Id)
             .FirstOrDefault();
         var cardDetail = card == Guid.Empty ? null : LoadPpeCard(card);
 
-        var normalizedPosition = NormalizeOptional(employee.Position).ToLowerInvariant();
+        var normalizedPosition = NormalizeNormLookupText(employee.Position);
         var activeNormSet = dbContext.InventoryPpeNormSets
             .AsNoTracking()
             .Include(row => row.Rows)
-            .Where(row => row.PositionName.ToLower() == normalizedPosition && row.Status == "active" && row.ArchivedAt == null)
+            .Where(row => row.Status == "active" && !row.RequiresReview && row.ArchivedAt == null)
+            .ToList()
+            .Where(row => NormalizeNormLookupText(row.PositionName) == normalizedPosition)
             .OrderByDescending(row => row.EffectiveFrom)
             .ThenByDescending(row => row.UpdatedAt)
             .FirstOrDefault();
@@ -129,6 +132,10 @@ internal sealed partial class EfInventoryWorkflowService
         {
             return Failure<InventoryPpeCardDetailDto>("employeeId", "Employee not found");
         }
+        if (NormalizeInventoryEmployeeStatus(employee.Status) != "active")
+        {
+            return Failure<InventoryPpeCardDetailDto>("employeeId", "Only an active employee can receive PPE");
+        }
 
         var source = NormalizeStatus(request.Source);
         if (source is not ("active_norms" or "previous_card" or "empty"))
@@ -136,14 +143,36 @@ internal sealed partial class EfInventoryWorkflowService
             return Failure<InventoryPpeCardDetailDto>("source", "Unsupported PPE card source");
         }
 
+        var existingCard = dbContext.InventoryPpeCards
+            .Where(row => row.EmployeeId == employee.Id && row.ArchivedAt == null)
+            .OrderBy(row => row.Status == "draft" ? 0 : row.Status == "active" ? 1 : 2)
+            .ThenByDescending(row => row.CreatedAt)
+            .FirstOrDefault();
+        if (existingCard is not null)
+        {
+            if (existingCard.Status == "draft") return Success(MapPpeCardDetail(LoadPpeCard(existingCard.Id)!));
+            existingCard.Status = "draft";
+            existingCard.IssueType = NormalizePpeDraftIssueType(request.IssueType);
+            existingCard.ResponsibleName = NormalizePrintField(request.ResponsibleName, string.Empty, 240);
+            existingCard.Basis = NormalizePrintField(request.Basis, string.Empty, 600);
+            existingCard.Comment = NormalizeOptional(request.Comment);
+            ApplyPpeEmployeeDetails(existingCard, request.EmployeeDetails);
+            existingCard.Version += 1;
+            AddSystemLog("ppe_card", existingCard.Id, "draft_reopened", employee.FullName, DateTimeOffset.UtcNow);
+            dbContext.SaveChanges();
+            return Success(MapPpeCardDetail(LoadPpeCard(existingCard.Id)!));
+        }
+
         InventoryPpeNormSetEntity? normSet = null;
         if (source == "active_norms")
         {
-            var normalizedPosition = NormalizeOptional(employee.Position).ToLowerInvariant();
+            var normalizedPosition = NormalizeNormLookupText(employee.Position);
             normSet = request.NormSetId is not null
-                ? dbContext.InventoryPpeNormSets.Include(row => row.Rows).ThenInclude(row => row.Mappings).FirstOrDefault(row => row.Id == request.NormSetId && row.Status == "active")
+                ? dbContext.InventoryPpeNormSets.Include(row => row.Rows).ThenInclude(row => row.Mappings).FirstOrDefault(row => row.Id == request.NormSetId && row.Status == "active" && !row.RequiresReview && row.ArchivedAt == null)
                 : dbContext.InventoryPpeNormSets.Include(row => row.Rows).ThenInclude(row => row.Mappings)
-                    .Where(row => row.PositionName.ToLower() == normalizedPosition && row.Status == "active" && row.ArchivedAt == null)
+                    .Where(row => row.Status == "active" && !row.RequiresReview && row.ArchivedAt == null)
+                    .ToList()
+                    .Where(row => NormalizeNormLookupText(row.PositionName) == normalizedPosition)
                     .OrderByDescending(row => row.EffectiveFrom).FirstOrDefault();
             if (normSet is null)
             {
@@ -191,7 +220,18 @@ internal sealed partial class EfInventoryWorkflowService
 
         var now = DateTimeOffset.UtcNow;
         AddSystemLog("ppe_card", card.Id, "draft_created", $"{employee.FullName}; source={source}", now);
-        dbContext.SaveChanges();
+        try
+        {
+            dbContext.SaveChanges();
+        }
+        catch (DbUpdateException)
+        {
+            dbContext.ChangeTracker.Clear();
+            var competingCard = dbContext.InventoryPpeCards.AsNoTracking()
+                .Any(row => row.EmployeeId == employee.Id && row.ArchivedAt == null);
+            if (competingCard) return Failure<InventoryPpeCardDetailDto>("conflict", "У сотрудника уже есть действующая карточка СИЗ");
+            throw;
+        }
         return Success(MapPpeCardDetail(LoadPpeCard(card.Id)!));
     }
 
@@ -277,6 +317,14 @@ internal sealed partial class EfInventoryWorkflowService
             row.MappedItemId = row.RowType == "group" ? null : requestRow.MappedItemId;
             row.BrandModelArticle = row.RowType == "group" ? string.Empty : NormalizeOptional(requestRow.BrandModelArticle);
             row.DefaultUnitPriceMinor = row.RowType == "group" ? null : requestRow.DefaultUnitPriceMinor;
+            row.DraftIssuedAt = row.RowType == "group" ? null : requestRow.DraftIssuedAt;
+            row.DraftQuantity = row.RowType == "group" ? null : requestRow.DraftQuantity;
+            row.DraftUnitPriceMinor = row.RowType == "group" ? null : requestRow.DraftUnitPriceMinor;
+            row.DraftIssueMethod = row.RowType == "group" ? "personal" : NormalizeStatus(requestRow.DraftIssueMethod);
+            row.DraftSizeText = row.RowType == "group" ? string.Empty : NormalizeOptional(requestRow.DraftSizeText);
+            row.DraftWarehouseId = row.RowType == "group" ? null : requestRow.DraftWarehouseId;
+            row.DraftComment = row.RowType == "group" ? string.Empty : NormalizeOptional(requestRow.DraftComment);
+            row.DraftBrandModelArticle = row.RowType == "group" ? string.Empty : NormalizePrintField(requestRow.DraftBrandModelArticle, row.BrandModelArticle, 600);
             if (requestRow.Id is null || !rowsById.ContainsKey(row.Id)) dbContext.InventoryPpeCardNormRows.Add(row);
         }
 
@@ -372,6 +420,16 @@ internal sealed partial class EfInventoryWorkflowService
             .Include(row => row.NormRows).ThenInclude(row => row.SourceNormRow).ThenInclude(row => row!.Mappings)
             .FirstOrDefault(row => row.Id == cardId && row.ArchivedAt == null);
         if (card is null) return Failure<InventoryPpeCardDetailDto>("cardId", "PPE card not found");
+        var idempotencyKey = NormalizeOptional(request.IdempotencyKey);
+        if (idempotencyKey.Length > 0 && string.Equals(card.LastIssueBatchKey, idempotencyKey, StringComparison.Ordinal))
+        {
+            return Success(MapPpeCardDetail(LoadPpeCard(card.Id)!));
+        }
+        var employee = dbContext.Employees.FirstOrDefault(row => row.Id == card.EmployeeId);
+        if (employee is null || NormalizeInventoryEmployeeStatus(employee.Status) != "active")
+        {
+            return Failure<InventoryPpeCardDetailDto>("employeeId", "Only an active employee can receive PPE");
+        }
         if (card.Version != request.ExpectedVersion) return Failure<InventoryPpeCardDetailDto>("conflict", "PPE card was changed by another user");
 
         var normRows = card.NormRows.ToDictionary(row => row.Id);
@@ -386,6 +444,9 @@ internal sealed partial class EfInventoryWorkflowService
             }
             if (!items.TryGetValue(requested.ItemId, out var item)) return Failure<InventoryPpeCardDetailDto>("itemId", "PPE item not found");
             if (requested.Quantity <= 0) return Failure<InventoryPpeCardDetailDto>("quantity", "Quantity must be greater than zero");
+            var effectivePrice = requested.UnitPriceMinor ?? normRow.DefaultUnitPriceMinor ?? item.DefaultUnitPriceMinor;
+            if (effectivePrice is null || effectivePrice <= 0) return Failure<InventoryPpeCardDetailDto>("unitPriceMinor", "A positive unit price is required");
+            if (requested.WarehouseId is null || !dbContext.InventoryWarehouses.Any(row => row.Id == requested.WarehouseId.Value && !row.IsArchived)) return Failure<InventoryPpeCardDetailDto>("warehouseId", "An active warehouse is required");
             var method = NormalizeStatus(requested.IssueMethod);
             if (method is not ("personal" or "dispenser")) return Failure<InventoryPpeCardDetailDto>("issueMethod", "Unsupported issue method");
             var allowedItemIds = normRow.SourceNormRow?.Mappings.Where(row => row.ArchivedAt == null).Select(row => row.ItemId).ToHashSet() ?? [];
@@ -422,6 +483,17 @@ internal sealed partial class EfInventoryWorkflowService
         }
 
         card.Status = "active";
+        card.LastIssueBatchKey = idempotencyKey.Length == 0 ? null : idempotencyKey;
+        foreach (var preparedLine in prepared)
+        {
+            preparedLine.NormRow.DraftIssuedAt = null;
+            preparedLine.NormRow.DraftQuantity = null;
+            preparedLine.NormRow.DraftUnitPriceMinor = null;
+            preparedLine.NormRow.DraftSizeText = string.Empty;
+            preparedLine.NormRow.DraftWarehouseId = null;
+            preparedLine.NormRow.DraftComment = string.Empty;
+            preparedLine.NormRow.DraftBrandModelArticle = string.Empty;
+        }
         card.Version += 1;
         AddSystemLog("ppe_card", card.Id, "issue_batch_created", $"lines={prepared.Count}", now);
         try
@@ -559,11 +631,18 @@ internal sealed partial class EfInventoryWorkflowService
             row.NormPoint, row.IssuePeriodText, row.Quantity, row.QuantityText, row.LifeMonths,
             row.MappedItemId, row.MappedItem?.Name ?? string.Empty, row.BrandModelArticle, row.DefaultUnitPriceMinor,
             coverage, issuedQuantity,
-            row.SourceNormRow?.Mappings.Where(mapping => mapping.ArchivedAt == null).Select(MapNormMapping).ToList() ?? []);
+            row.SourceNormRow?.Mappings.Where(mapping => mapping.ArchivedAt == null).Select(MapNormMapping).ToList() ?? [],
+            row.DraftIssuedAt?.UtcDateTime, row.DraftQuantity, row.DraftUnitPriceMinor, row.DraftIssueMethod,
+            row.DraftSizeText, row.DraftWarehouseId, row.DraftComment, row.DraftBrandModelArticle);
     }
 
     private static InventoryPpeNormSetDto MapNormSet(InventoryPpeNormSetEntity row) =>
         new(row.Id, row.PositionName, row.VersionName, row.EffectiveFrom, row.EffectiveTo, row.SourceName, row.Status, row.RequiresReview, row.Version, row.Rows.Count);
+
+    private static InventoryPpeNormRowDto MapNormRow(InventoryPpeNormRowEntity row) =>
+        new(row.Id, row.ParentRowId, row.RowType, row.SortOrder, row.NormItemName, row.NormPoint, row.IssuePeriodText,
+            row.Quantity, row.QuantityText, row.LifeMonths,
+            row.Mappings.Where(mapping => mapping.ArchivedAt == null).OrderByDescending(mapping => mapping.IsDefault).Select(MapNormMapping).ToList());
 
     private static InventoryPpeNormMappingDto MapNormMapping(InventoryPpeNormCatalogMappingEntity row) =>
         new(row.Id, row.NormRowId, row.ItemId, row.Item.Name, row.Item.Sku, row.BrandModelArticle, row.DefaultUnitPriceMinor, row.IsDefault, row.Comment);

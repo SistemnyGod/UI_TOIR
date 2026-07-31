@@ -49,6 +49,77 @@ internal sealed class EfEmuShiftReportService(Patrol360DbContext dbContext) : IE
         dbContext.SaveChanges();
         return new(MapEmployeeOption(employee), new Dictionary<string, string[]>());
     }
+    public EmuCommandResult<EmuShiftReportDraftDto> SaveDraft(EmuSaveShiftReportDraftDto request, Guid? actorUserId, string actorName)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (request.ShiftType is not ("day" or "night")) errors["shiftType"] = ["Выберите дневную или ночную смену."];
+        if (request.WorkerCategory is not ("mechanic" or "electrician")) errors["workerCategory"] = ["Выберите категорию отчёта."];
+        if (string.IsNullOrWhiteSpace(request.EditorInstanceId) || request.EditorInstanceId.Trim().Length > 80) errors["editorInstanceId"] = ["Некорректный идентификатор редактора."];
+        if (string.IsNullOrWhiteSpace(request.PayloadJson) || request.PayloadJson.Length > 100_000) errors["payloadJson"] = ["Черновик превышает допустимый размер."];
+        else
+        {
+            try { using var _ = System.Text.Json.JsonDocument.Parse(request.PayloadJson); }
+            catch (System.Text.Json.JsonException) { errors["payloadJson"] = ["Черновик содержит некорректные данные."]; }
+        }
+        var employee = dbContext.Employees.AsNoTracking().SingleOrDefault(row => row.Id == request.EmployeeId);
+        if (employee is null || !IsActiveEmployee(employee)) errors["employeeId"] = ["Активный сотрудник не найден."];
+        if (errors.Count > 0) return new(null, errors);
+
+        var now = DateTimeOffset.UtcNow;
+        var editorInstanceId = request.EditorInstanceId.Trim();
+        var row = dbContext.EmuShiftReportDrafts.SingleOrDefault(item => item.EmployeeId == request.EmployeeId && item.ReportDate == request.ReportDate && item.ShiftType == request.ShiftType);
+        if (row is not null && row.EditorInstanceId != editorInstanceId && row.LeaseExpiresAt > now)
+        {
+            return new(null, new Dictionary<string, string[]> { ["conflict"] = [$"Черновик уже редактирует {row.EditorName}. Блокировка действует до {row.LeaseExpiresAt.ToLocalTime():HH:mm}."] });
+        }
+        if (row is not null && row.EditorInstanceId == editorInstanceId && request.ExpectedVersion.HasValue && request.ExpectedVersion.Value != row.Version)
+        {
+            return new(null, new Dictionary<string, string[]> { ["version"] = ["Черновик был изменён в другой операции. Обновите форму и повторите попытку."] });
+        }
+
+        if (row is null)
+        {
+            row = new EmuShiftReportDraftEntity { Id = Guid.NewGuid(), EmployeeId = request.EmployeeId, ReportDate = request.ReportDate, ShiftType = request.ShiftType, Version = 1 };
+            dbContext.EmuShiftReportDrafts.Add(row);
+        }
+        else
+        {
+            row.Version++;
+        }
+        row.WorkerCategory = request.WorkerCategory;
+        row.EditorInstanceId = editorInstanceId;
+        row.EditorUserId = actorUserId;
+        row.EditorName = string.IsNullOrWhiteSpace(actorName) ? "Пользователь" : actorName.Trim();
+        row.PayloadJson = request.PayloadJson;
+        row.UpdatedAt = now;
+        row.LeaseExpiresAt = now.AddMinutes(2);
+        try
+        {
+            dbContext.SaveChanges();
+        }
+        catch (DbUpdateException)
+        {
+            dbContext.ChangeTracker.Clear();
+            var competing = dbContext.EmuShiftReportDrafts.AsNoTracking().SingleOrDefault(item => item.EmployeeId == request.EmployeeId && item.ReportDate == request.ReportDate && item.ShiftType == request.ShiftType);
+            if (competing is not null) return new(null, new Dictionary<string, string[]> { ["conflict"] = [$"Черновик уже редактирует {competing.EditorName}."] });
+            throw;
+        }
+        return new(MapDraft(row), new Dictionary<string, string[]>());
+    }
+
+    public EmuCommandResult<bool> ReleaseDraft(EmuReleaseShiftReportDraftDto request, Guid? actorUserId)
+    {
+        var row = dbContext.EmuShiftReportDrafts.SingleOrDefault(item => item.EmployeeId == request.EmployeeId && item.ReportDate == request.ReportDate && item.ShiftType == request.ShiftType);
+        if (row is null) return new(true, new Dictionary<string, string[]>());
+        if (row.EditorInstanceId != request.EditorInstanceId.Trim())
+        {
+            return new(false, new Dictionary<string, string[]> { ["conflict"] = ["Черновик закреплён за другой вкладкой или компьютером."] });
+        }
+        dbContext.EmuShiftReportDrafts.Remove(row);
+        dbContext.SaveChanges();
+        return new(true, new Dictionary<string, string[]>());
+    }
+
     public EmuCommandResult<EmuShiftReportDetailDto> Create(EmuCreateShiftReportDto request, Guid? actorUserId, string actorName, IReadOnlyList<Guid>? allowedSectionIds = null)
     {
         var errors = Validate(request, allowedSectionIds);
@@ -84,6 +155,8 @@ internal sealed class EfEmuShiftReportService(Patrol360DbContext dbContext) : IE
             SectionNameSnapshot = line.SectionId is Guid sectionId ? sections[sectionId].Name : string.Empty,
             Note = line.Note?.Trim() ?? string.Empty, CreatedAt = now
         }).ToList();
+        var draft = dbContext.EmuShiftReportDrafts.SingleOrDefault(row => row.EmployeeId == request.EmployeeId && row.ReportDate == request.ReportDate && row.ShiftType == request.ShiftType);
+        if (draft is not null) dbContext.EmuShiftReportDrafts.Remove(draft);
         dbContext.EmuShiftReports.Add(report);
         try
         {
@@ -189,6 +262,7 @@ internal sealed class EfEmuShiftReportService(Patrol360DbContext dbContext) : IE
         return rows;
     }
 
+    private static EmuShiftReportDraftDto MapDraft(EmuShiftReportDraftEntity row) => new(row.Id, row.ReportDate, row.ShiftType, row.WorkerCategory, row.EmployeeId, row.EditorInstanceId, row.EditorUserId, row.EditorName, row.Version, row.PayloadJson, row.UpdatedAt, row.LeaseExpiresAt);
     private static EmuShiftReportSummaryDto MapSummary(EmuShiftReportEntity row) => new(row.Id, row.ReportDate, row.ShiftType, row.WorkerCategory, row.EmployeeId, row.EmployeeNameSnapshot, row.PersonnelNoSnapshot, row.PositionSnapshot, row.DepartmentSnapshot, row.Status, row.Lines.Count, row.Lines.Sum(line => line.DurationMinutes), row.CreatedByUserId, row.CreatedByName, row.SubmittedAt);
     private static EmuShiftReportDetailDto MapDetail(EmuShiftReportEntity row) => new(row.Id, row.ReportDate, row.ShiftType, row.WorkerCategory, row.EmployeeId, row.EmployeeNameSnapshot, row.PersonnelNoSnapshot, row.PositionSnapshot, row.DepartmentSnapshot, row.Status, row.Lines.Count, row.Lines.Sum(line => line.DurationMinutes), row.CreatedByUserId, row.CreatedByName, row.SubmittedAt, row.Lines.OrderBy(line => line.SequenceNo).Select(line => new EmuShiftReportLineDto(line.Id, line.SequenceNo, line.WorkDescription, line.DurationMinutes, line.SectionId, line.SectionNameSnapshot, line.Note)).ToArray());
     private static string Normalize(string value) => value.Trim().ToLowerInvariant().Replace('ё', 'е');

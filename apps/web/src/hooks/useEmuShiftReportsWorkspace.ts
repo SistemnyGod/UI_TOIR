@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   EmuCreateShiftReportDto,
+  EmuReleaseShiftReportDraftDto,
+  EmuSaveShiftReportDraftDto,
   EmuShiftReportDetailDto,
   EmuSetShiftReportEmployeeCategoryDto,
   EmuShiftReportOptionsDto,
@@ -164,6 +166,8 @@ export function useEmuShiftReportsWorkspace({ historyEnabled, optionsEnabled }: 
     }
     return result;
   }, [repository]);
+  const saveDraft = useCallback((payload: EmuSaveShiftReportDraftDto) => repository.saveDraft(payload), [repository]);
+  const releaseDraft = useCallback((payload: EmuReleaseShiftReportDraftDto) => repository.releaseDraft(payload), [repository]);
   const create = useCallback((payload: EmuCreateShiftReportDto) => repository.create(payload), [repository]);
-  return { options, rows, details, favoriteEmployees, favoritesLoading, favoritesError, loading, historyLoading, historyInitialized, historyTotal, historyPage, historyPageCount, error, create, loadOptions, loadFavorites, addFavoriteEmployee, removeFavoriteEmployee, setEmployeeCategory, loadHistory, cancelHistory, loadDetail };
+  return { options, rows, details, favoriteEmployees, favoritesLoading, favoritesError, loading, historyLoading, historyInitialized, historyTotal, historyPage, historyPageCount, error, create, saveDraft, releaseDraft, loadOptions, loadFavorites, addFavoriteEmployee, removeFavoriteEmployee, setEmployeeCategory, loadHistory, cancelHistory, loadDetail };
 }

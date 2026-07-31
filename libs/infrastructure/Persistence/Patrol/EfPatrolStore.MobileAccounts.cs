@@ -351,7 +351,7 @@ internal sealed partial class EfPatrolStore
             .Select(session => new MobileAccountSessionDto(
                 session.Id,
                 session.MobileAccountId,
-                session.RevokedAt != null ? "Вышел" : session.ExpiresAt <= now ? "Требует обновления" : "Онлайн",
+                session.RevokedAt != null ? "Вышел" : session.LastSeenAt < now.AddMinutes(-5) ? "Офлайн" : session.ExpiresAt <= now ? "Требует обновления" : "Онлайн",
                 session.DeviceId,
                 session.Device,
                 session.Platform,

@@ -15,8 +15,18 @@ import { hasUsableNetwork } from "@/core/network";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { collectDiagnosticContext } from "@/services/diagnosticContextService";
 
+type DiagnosticUploadKind = "daily" | "pending" | "manual";
+type QueuedDiagnosticUpload = {
+  kind: DiagnosticUploadKind;
+  upload: () => Promise<DiagnosticUploadResult>;
+  promise: Promise<DiagnosticUploadResult>;
+  resolve: (result: DiagnosticUploadResult) => void;
+  reject: (error: unknown) => void;
+};
+
 let activeUpload: Promise<DiagnosticUploadResult> | null = null;
-let activeUploadKind: "daily" | "pending" | "manual" | null = null;
+let activeUploadKind: DiagnosticUploadKind | null = null;
+let queuedUpload: QueuedDiagnosticUpload | null = null;
 const automaticDiagnosticsKey = "patrol360.diagnostics.automaticUpload";
 
 export type DiagnosticUploadResult =
@@ -38,12 +48,27 @@ export function triggerPendingDiagnosticReportUpload() {
 
 
 function scheduleDiagnosticUpload(
-  kind: "daily" | "pending" | "manual",
+  kind: DiagnosticUploadKind,
   upload: () => Promise<DiagnosticUploadResult>
 ) {
   if (activeUpload) {
-    return activeUpload;
+    if (kind !== "manual" || activeUploadKind === "manual") {
+      return activeUpload;
+    }
+    if (queuedUpload) {
+      return queuedUpload.promise;
+    }
+
+    let resolve!: (result: DiagnosticUploadResult) => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<DiagnosticUploadResult>((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    queuedUpload = { kind, upload, promise, resolve, reject };
+    return promise;
   }
+
   let request!: Promise<DiagnosticUploadResult>;
   request = (async () => {
     try {
@@ -55,9 +80,17 @@ function scheduleDiagnosticUpload(
       };
     }
   })().finally(() => {
-    if (activeUpload === request) {
-      activeUpload = null;
-      activeUploadKind = null;
+    if (activeUpload !== request) {
+      return;
+    }
+
+    activeUpload = null;
+    activeUploadKind = null;
+    const nextUpload = queuedUpload;
+    queuedUpload = null;
+    if (nextUpload) {
+      scheduleDiagnosticUpload(nextUpload.kind, nextUpload.upload)
+        .then(nextUpload.resolve, nextUpload.reject);
     }
   });
 

@@ -7,8 +7,10 @@ import type {
 import {
   applyItemSetToDraft,
   createIssueDraftLine,
+  clearPpeIssueWorkflowCache,
   mergeIssueDraftLine,
   readPpeIssueWorkflowCache,
+  writePpeIssueWorkflowCache,
   PPE_ISSUE_WORKFLOW_STORAGE_KEY,
   validateIssueDraftLine,
 } from "../features/inventory/ppe/ppeIssueDraft";
@@ -92,6 +94,37 @@ describe("PPE issue workflow draft", () => {
     expect(readPpeIssueWorkflowCache()).toBeNull();
   });
 
+  it("isolates persisted drafts by user", () => {
+    writePpeIssueWorkflowCache({
+      basis: "basis-a",
+      employeeId: "employee-1",
+      issueDate: "2026-07-23",
+      issueLines: [],
+      issueType: "primary",
+      responsibleName: "User A",
+      source: "empty",
+      idempotencyKey: "draft-user-a",
+      step: 1,
+    }, "user-a");
+    writePpeIssueWorkflowCache({
+      basis: "basis-b",
+      employeeId: "employee-2",
+      issueDate: "2026-07-23",
+      issueLines: [],
+      issueType: "primary",
+      responsibleName: "User B",
+      source: "empty",
+      idempotencyKey: "draft-user-b",
+      step: 1,
+    }, "user-b");
+
+    expect(readPpeIssueWorkflowCache("user-a")?.idempotencyKey).toBe("draft-user-a");
+    expect(readPpeIssueWorkflowCache("user-b")?.idempotencyKey).toBe("draft-user-b");
+
+    clearPpeIssueWorkflowCache("user-a");
+    expect(readPpeIssueWorkflowCache("user-a")).toBeNull();
+    expect(readPpeIssueWorkflowCache("user-b")?.employeeId).toBe("employee-2");
+  });
   it("preserves actual quantity and method when replacing a mapped item", () => {
     const currentRow = normRow("norm-current", "item-current", 2);
     const replacementRow = normRow("norm-current", "item-replacement", 2);

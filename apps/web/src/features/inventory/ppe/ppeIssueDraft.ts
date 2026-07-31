@@ -12,6 +12,9 @@ export type PpeIssueDraftLine = {
   itemId: string;
   quantity: number;
   unitPriceMinor: number | null;
+  sizeText: string;
+  warehouseId: string | null;
+  comment: string;
 };
 
 export type PpeIssueWorkflowCache = {
@@ -23,6 +26,7 @@ export type PpeIssueWorkflowCache = {
   issueType: "primary" | "planned" | "replacement" | "additional";
   responsibleName: string;
   source: "active_norms" | "previous_card" | "empty";
+  idempotencyKey?: string;
   step: 1 | 2 | 3 | 4;
 };
 
@@ -31,7 +35,18 @@ export type PpeIssueLineProblem = {
   text: string;
 };
 
-export const PPE_ISSUE_WORKFLOW_STORAGE_KEY = "patrol360.inventory.ppe.issue-workflow.v2";
+export const PPE_ISSUE_WORKFLOW_STORAGE_KEY = "patrol360.inventory.ppe.issue-workflow.v3";
+const LEGACY_PPE_ISSUE_WORKFLOW_STORAGE_KEY = "patrol360.inventory.ppe.issue-workflow.v2";
+
+export function getPpeIssueWorkflowStorageKey(userId = "", employeeId?: string | null, draftId?: string | null) {
+  const ownerKey = userId.trim() ? `${PPE_ISSUE_WORKFLOW_STORAGE_KEY}.${encodeURIComponent(userId.trim())}` : PPE_ISSUE_WORKFLOW_STORAGE_KEY;
+  if (!employeeId && !draftId) return ownerKey;
+  return `${ownerKey}.${encodeURIComponent(employeeId || "new")}.${encodeURIComponent(draftId || "new")}`;
+}
+
+function getPpeIssueWorkflowIndexKey(userId: string) {
+  return `${getPpeIssueWorkflowStorageKey(userId)}.active`;
+}
 
 export function createIssueDraftLine(
   row: InventoryPpeCardNormRowDto,
@@ -40,13 +55,16 @@ export function createIssueDraftLine(
 ): PpeIssueDraftLine | null {
   if (row.rowType !== "item" || !row.mappedItemId) return null;
   return {
-    brandModelArticle: row.brandModelArticle || row.mappedItemName,
+    brandModelArticle: row.draftBrandModelArticle || row.brandModelArticle || row.mappedItemName,
     cardNormRowId: row.id,
     issuedAt,
-    issueMethod: "personal",
+    issueMethod: row.draftIssueMethod === "dispenser" ? "dispenser" : "personal",
     itemId: row.mappedItemId,
-    quantity,
-    unitPriceMinor: row.defaultUnitPriceMinor ?? null,
+    quantity: row.draftQuantity ?? quantity,
+    unitPriceMinor: row.draftUnitPriceMinor ?? row.defaultUnitPriceMinor ?? null,
+    sizeText: row.draftSizeText ?? "",
+    warehouseId: row.draftWarehouseId ?? null,
+    comment: row.draftComment ?? "",
   };
 }
 
@@ -54,9 +72,14 @@ export function mergeIssueDraftLine(created: PpeIssueDraftLine, existing?: PpeIs
   if (!existing) return created;
   return {
     ...created,
+    brandModelArticle: existing.brandModelArticle || created.brandModelArticle,
     issuedAt: existing.issuedAt,
     issueMethod: existing.issueMethod,
     quantity: existing.quantity,
+    unitPriceMinor: existing.unitPriceMinor,
+    sizeText: existing.sizeText ?? created.sizeText,
+    warehouseId: existing.warehouseId ?? created.warehouseId,
+    comment: existing.comment ?? created.comment,
   };
 }
 
@@ -68,6 +91,8 @@ export function validateIssueDraftLine(
   if (!line.itemId) problems.push({ level: "error", text: "Не выбрана номенклатура" });
   if (!Number.isFinite(line.quantity) || line.quantity <= 0) problems.push({ level: "error", text: "Количество должно быть больше нуля" });
   if (!line.issuedAt) problems.push({ level: "error", text: "Не указана дата выдачи" });
+  if (!line.warehouseId) problems.push({ level: "error", text: "Не выбран склад" });
+  if (line.unitPriceMinor === null || !Number.isFinite(line.unitPriceMinor) || line.unitPriceMinor <= 0) problems.push({ level: "error", text: "Не указана цена за единицу" });
   if (row && line.quantity > row.quantity && row.quantity > 0) problems.push({ level: "warning", text: "Количество превышает норму" });
   if (row && line.quantity < row.quantity && row.quantity > 0) problems.push({ level: "warning", text: "Количество ниже нормы" });
   return problems;
@@ -166,14 +191,22 @@ export function applyItemSetToDraft(
   };
 }
 
-export function readPpeIssueWorkflowCache(): PpeIssueWorkflowCache | null {
+export function readPpeIssueWorkflowCache(userId = ""): PpeIssueWorkflowCache | null {
   if (typeof window === "undefined") return null;
-  try {
-    const value: unknown = JSON.parse(window.localStorage.getItem(PPE_ISSUE_WORKFLOW_STORAGE_KEY) ?? "null");
-    return isPpeIssueWorkflowCache(value) ? value : null;
-  } catch {
-    return null;
+  const normalizedUserId = userId.trim();
+  const activeKey = normalizedUserId ? window.localStorage.getItem(getPpeIssueWorkflowIndexKey(normalizedUserId)) : null;
+  const keys = normalizedUserId
+    ? Array.from(new Set([activeKey, getPpeIssueWorkflowStorageKey(normalizedUserId)].filter((key): key is string => Boolean(key))))
+    : [PPE_ISSUE_WORKFLOW_STORAGE_KEY, LEGACY_PPE_ISSUE_WORKFLOW_STORAGE_KEY];
+  for (const key of keys) {
+    try {
+      const value: unknown = JSON.parse(window.localStorage.getItem(key) ?? "null");
+      if (isPpeIssueWorkflowCache(value)) return value;
+    } catch {
+      // A damaged local copy must not prevent loading the server draft.
+    }
   }
+  return null;
 }
 
 function isPpeIssueWorkflowCache(value: unknown): value is PpeIssueWorkflowCache {
@@ -187,6 +220,7 @@ function isPpeIssueWorkflowCache(value: unknown): value is PpeIssueWorkflowCache
     typeof candidate.basis !== "string" ||
     typeof candidate.responsibleName !== "string" ||
     (candidate.draftId !== undefined && typeof candidate.draftId !== "string") ||
+    (candidate.idempotencyKey !== undefined && typeof candidate.idempotencyKey !== "string") ||
     !issueTypes.includes(candidate.issueType ?? "") ||
     !sources.includes(candidate.source ?? "") ||
     !Number.isInteger(candidate.step) || candidate.step! < 1 || candidate.step! > 4 ||
@@ -203,17 +237,32 @@ function isPpeIssueWorkflowCache(value: unknown): value is PpeIssueWorkflowCache
       typeof draftLine.issuedAt === "string" &&
       (draftLine.issueMethod === "personal" || draftLine.issueMethod === "dispenser") &&
       typeof draftLine.quantity === "number" && Number.isFinite(draftLine.quantity) && draftLine.quantity > 0 &&
-      (draftLine.unitPriceMinor === null || (typeof draftLine.unitPriceMinor === "number" && Number.isFinite(draftLine.unitPriceMinor)))
+      (draftLine.unitPriceMinor === null || draftLine.unitPriceMinor === undefined || (typeof draftLine.unitPriceMinor === "number" && Number.isFinite(draftLine.unitPriceMinor))) &&
+      (draftLine.sizeText === undefined || typeof draftLine.sizeText === "string") &&
+      (draftLine.warehouseId === undefined || draftLine.warehouseId === null || typeof draftLine.warehouseId === "string") &&
+      (draftLine.comment === undefined || typeof draftLine.comment === "string")
     );
   });
 }
 
-export function writePpeIssueWorkflowCache(value: PpeIssueWorkflowCache) {
+export function writePpeIssueWorkflowCache(value: PpeIssueWorkflowCache, userId = "") {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(PPE_ISSUE_WORKFLOW_STORAGE_KEY, JSON.stringify(value));
+  const normalizedUserId = userId.trim();
+  const key = getPpeIssueWorkflowStorageKey(normalizedUserId, value.employeeId, value.draftId);
+  window.localStorage.setItem(key, JSON.stringify(value));
+  if (normalizedUserId) window.localStorage.setItem(getPpeIssueWorkflowIndexKey(normalizedUserId), key);
 }
 
-export function clearPpeIssueWorkflowCache() {
+export function clearPpeIssueWorkflowCache(userId = "") {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(PPE_ISSUE_WORKFLOW_STORAGE_KEY);
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    for (const key of [PPE_ISSUE_WORKFLOW_STORAGE_KEY, LEGACY_PPE_ISSUE_WORKFLOW_STORAGE_KEY]) window.localStorage.removeItem(key);
+    return;
+  }
+  const indexKey = getPpeIssueWorkflowIndexKey(normalizedUserId);
+  const activeKey = window.localStorage.getItem(indexKey);
+  if (activeKey) window.localStorage.removeItem(activeKey);
+  window.localStorage.removeItem(indexKey);
+  window.localStorage.removeItem(getPpeIssueWorkflowStorageKey(normalizedUserId));
 }

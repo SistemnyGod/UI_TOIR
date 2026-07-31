@@ -216,7 +216,7 @@ export async function preserveOfflineSessionAfterRefreshFailure(reason: string) 
       ...offlineSession,
       revokedAt: null,
       revocationReason: reason,
-      requiresReenrollment: false
+      requiresReenrollment: true
     });
   }
 }

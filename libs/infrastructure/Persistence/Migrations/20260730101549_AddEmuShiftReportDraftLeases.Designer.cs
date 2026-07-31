@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Patrol360.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Patrol360.Infrastructure.Persistence;
 namespace Patrol360.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(Patrol360DbContext))]
-    partial class Patrol360DbContextModelSnapshot : ModelSnapshot
+    [Migration("20260730101549_AddEmuShiftReportDraftLeases")]
+    partial class AddEmuShiftReportDraftLeases
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2583,11 +2586,6 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("issue_type");
 
-                    b.Property<string>("LastIssueBatchKey")
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)")
-                        .HasColumnName("last_issue_batch_key");
-
                     b.Property<int?>("LegacyId")
                         .HasColumnType("integer")
                         .HasColumnName("legacy_id");
@@ -2632,11 +2630,6 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnName("version");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("EmployeeId")
-                        .IsUnique()
-                        .HasDatabaseName("ux_inventory_ppe_cards_employee_active")
-                        .HasFilter("archived_at IS NULL");
 
                     b.HasIndex("LegacyId")
                         .HasDatabaseName("ix_inventory_ppe_cards_legacy_id");
@@ -2868,47 +2861,6 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Property<long?>("DefaultUnitPriceMinor")
                         .HasColumnType("bigint")
                         .HasColumnName("default_unit_price_minor");
-
-                    b.Property<string>("DraftBrandModelArticle")
-                        .IsRequired()
-                        .HasMaxLength(600)
-                        .HasColumnType("character varying(600)")
-                        .HasColumnName("draft_brand_model_article");
-
-                    b.Property<string>("DraftComment")
-                        .IsRequired()
-                        .HasMaxLength(1200)
-                        .HasColumnType("character varying(1200)")
-                        .HasColumnName("draft_comment");
-
-                    b.Property<string>("DraftIssueMethod")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("draft_issue_method");
-
-                    b.Property<DateTimeOffset?>("DraftIssuedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("draft_issued_at");
-
-                    b.Property<decimal?>("DraftQuantity")
-                        .HasPrecision(12, 3)
-                        .HasColumnType("numeric(12,3)")
-                        .HasColumnName("draft_quantity");
-
-                    b.Property<string>("DraftSizeText")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)")
-                        .HasColumnName("draft_size_text");
-
-                    b.Property<long?>("DraftUnitPriceMinor")
-                        .HasColumnType("bigint")
-                        .HasColumnName("draft_unit_price_minor");
-
-                    b.Property<Guid?>("DraftWarehouseId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("draft_warehouse_id");
 
                     b.Property<string>("IssuePeriodText")
                         .IsRequired()

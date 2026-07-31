@@ -369,6 +369,10 @@ public sealed class InventoryController(
             Status: status,
             Position: position)));
 
+    [HttpGet("ppe/norm-sets/{normSetId:guid}")]
+    public ActionResult<InventoryPpeNormSetDetailDto> PpeNormSet(Guid normSetId) =>
+        ToActionResult(inventoryWorkflowService.GetPpeNormSet(normSetId));
+
     [HttpPost("ppe/norm-sets/import-draft")]
     [RequirePermission("inventory.ppe.manage")]
     [RequestSizeLimit(EmployeeImportMaxFileSizeBytes)]

@@ -1,7 +1,7 @@
 import { ApiClient } from "../api/client";
 import type { ApiRequestOptions } from "../api/client";
 import type { EmuAddFavoriteEmployeeDto, EmuFavoriteEmployeeDto } from "../api/contracts";
-import type { EmuCreateShiftReportDto, EmuSetShiftReportEmployeeCategoryDto, EmuShiftReportDetailDto, EmuShiftReportEmployeeOptionDto, EmuShiftReportListResponseDto, EmuShiftReportOptionsDto, EmuShiftReportQuery } from "../api/emuShiftReportContracts";
+import type { EmuCreateShiftReportDto, EmuReleaseShiftReportDraftDto, EmuSaveShiftReportDraftDto, EmuSetShiftReportEmployeeCategoryDto, EmuShiftReportDetailDto, EmuShiftReportDraftDto, EmuShiftReportEmployeeOptionDto, EmuShiftReportListResponseDto, EmuShiftReportOptionsDto, EmuShiftReportQuery } from "../api/emuShiftReportContracts";
 
 function queryString(params: EmuShiftReportQuery) {
   const query = new URLSearchParams();
@@ -18,6 +18,8 @@ export function createEmuShiftReportsRepository({ baseUrl }: { baseUrl?: string 
     setEmployeeCategory: (employeeId: string, payload: EmuSetShiftReportEmployeeCategoryDto) => client.put<EmuShiftReportEmployeeOptionDto, EmuSetShiftReportEmployeeCategoryDto>(`/api/v1/emu/shift-reports/employee-categories/${employeeId}`, payload),
     addFavoriteEmployee: (payload: EmuAddFavoriteEmployeeDto) => client.post<EmuFavoriteEmployeeDto, EmuAddFavoriteEmployeeDto>("/api/v1/emu/favorite-employees", payload),
     removeFavoriteEmployee: (employeeId: string) => client.delete<EmuFavoriteEmployeeDto>(`/api/v1/emu/favorite-employees/${employeeId}`),
+    saveDraft: (payload: EmuSaveShiftReportDraftDto) => client.put<EmuShiftReportDraftDto, EmuSaveShiftReportDraftDto>("/api/v1/emu/shift-reports/drafts/current", payload),
+    releaseDraft: (payload: EmuReleaseShiftReportDraftDto) => client.delete<void, EmuReleaseShiftReportDraftDto>("/api/v1/emu/shift-reports/drafts/current", payload),
     create: (payload: EmuCreateShiftReportDto) => client.post<EmuShiftReportDetailDto, EmuCreateShiftReportDto>("/api/v1/emu/shift-reports", payload),
     getList: (params: EmuShiftReportQuery, options?: ApiRequestOptions) => client.get<EmuShiftReportListResponseDto>(`/api/v1/emu/shift-reports${queryString(params)}`, options),
     getDetail: (id: string, options?: ApiRequestOptions) => client.get<EmuShiftReportDetailDto>(`/api/v1/emu/shift-reports/${id}`, options),

@@ -12,7 +12,6 @@ import { bootstrapApplication } from "@/core/bootstrap";
 import { classifyStartupError, StartupState } from "@/core/startupState";
 import { SessionGateProvider, SessionGuard } from "@/auth/SessionGate";
 import { isSessionUnlocked, setPendingSessionRoute } from "@/auth/sessionGateState";
-import { refreshStoredAccessTokenIfNeeded } from "@/api/httpClient";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { ThemeProvider, useAppTheme } from "@/features/settings/themePreference";
 import { registerPushNotifications, refreshPushRegistrationIfAllowed, syncMobileNotifications, subscribeToMobilePushEvents } from "@/services/notificationService";
@@ -20,8 +19,8 @@ import { installMobileErrorReporter, logMobileError } from "@/services/mobileErr
 import { sanitizeDiagnosticMessage } from "@/services/diagnosticReportPolicy";
 import { registerBackgroundSyncTask } from "@/sync/backgroundSyncTask";
 import { registerBackgroundNotificationTask } from "@/services/backgroundNotificationTask";
-import { requestMobileDataRefresh } from "@/sync/syncTriggers";
-import { requestPatrolSync, startPatrolSyncCoordinator } from "@/sync/PatrolSyncCoordinator";
+import { runMobileRecoveryCycle } from "@/sync/syncTriggers";
+import { startPatrolSyncCoordinator } from "@/sync/PatrolSyncCoordinator";
 import { cancelNextOutboxRetry, scheduleNextOutboxRetry } from "@/sync/outboxRetryScheduler";
 import { resolvePushNavigationTarget } from "@/services/pushNavigationResolver";
 
@@ -66,13 +65,7 @@ export default function RootLayout() {
     }
 
     const stopPatrolSync = startPatrolSyncCoordinator();
-    void refreshStoredAccessTokenIfNeeded()
-      .catch((error) => {
-        void logMobileError("auth.refresh.startup.failed", error);
-      })
-      .finally(() => {
-        void requestPatrolSync({ mode: "normal" });
-      });
+    void runMobileRecoveryCycle("appActive", "normal");
     void registerBackgroundSyncTask().catch((error) => {
       void logMobileError("background.sync.registration.failed", error);
     });
@@ -82,34 +75,23 @@ export default function RootLayout() {
     const unsubscribePushEvents = subscribeToMobilePushEvents({
       onNotification: () => {
         void syncMobileNotifications().catch(() => []);
-        requestMobileDataRefresh("push", { force: true });
-        requestPatrolSync();
+        void runMobileRecoveryCycle("push", "normal");
       },
       onNotificationResponse: (response) => {
         void syncMobileNotifications().catch(() => []);
-        requestMobileDataRefresh("notificationResponse", { force: true });
-        requestPatrolSync();
+        void runMobileRecoveryCycle("notificationResponse", "normal");
         openNotificationTarget(response);
       }
     });
 
     void registerPushNotifications()
       .then(() => syncMobileNotifications())
-      .then(() => {
-        requestMobileDataRefresh("appActive", { force: true });
-      })
+      .then(() => runMobileRecoveryCycle("appActive", "normal"))
       .catch(() => undefined);
 
     const appStateSubscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        void refreshStoredAccessTokenIfNeeded()
-          .catch((error) => {
-            void logMobileError("auth.refresh.app_active.failed", error);
-          })
-          .finally(() => {
-            requestMobileDataRefresh("appActive");
-            void requestPatrolSync({ mode: "normal" });
-          });
+        void runMobileRecoveryCycle("appActive", "normal");
         void getStoredOwnerUserId().then(scheduleNextOutboxRetry).catch((error) => {
           void logMobileError("sync.retry_schedule.failed", error);
         });

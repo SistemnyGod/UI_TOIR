@@ -1685,6 +1685,48 @@ public sealed class EmuDbIntegrationTests
         Assert.Contains("workerCategory", invalid.Errors.Keys);
     }
     [DbIntegrationFact]
+    public async Task ShiftReportDraftLeasePreventsConcurrentEditors()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var employee = UseShiftReport(provider, service => service.GetOptions().Employees.First());
+        var date = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        var first = UseShiftReport(provider, service => service.SaveDraft(
+            new EmuSaveShiftReportDraftDto(date, "day", "mechanic", employee.Id, "editor-a", null, "{\"rows\":[]}"),
+            null,
+            "Первый редактор"));
+        Assert.True(first.Succeeded);
+        Assert.Equal(1, first.Value!.Version);
+
+        var competing = UseShiftReport(provider, service => service.SaveDraft(
+            new EmuSaveShiftReportDraftDto(date, "day", "mechanic", employee.Id, "editor-b", null, "{\"rows\":[]}"),
+            null,
+            "Второй редактор"));
+        Assert.False(competing.Succeeded);
+        Assert.Contains("conflict", competing.Errors.Keys);
+
+        var updated = UseShiftReport(provider, service => service.SaveDraft(
+            new EmuSaveShiftReportDraftDto(date, "day", "mechanic", employee.Id, "editor-a", first.Value.Version, "{\"rows\":[1]}"),
+            first.Value.EditorUserId,
+            "Первый редактор"));
+        Assert.True(updated.Succeeded);
+        Assert.Equal(2, updated.Value!.Version);
+
+        var wrongRelease = UseShiftReport(provider, service => service.ReleaseDraft(new EmuReleaseShiftReportDraftDto(date, "day", employee.Id, "editor-b"), null));
+        Assert.False(wrongRelease.Succeeded);
+        var released = UseShiftReport(provider, service => service.ReleaseDraft(new EmuReleaseShiftReportDraftDto(date, "day", employee.Id, "editor-a"), null));
+        Assert.True(released.Succeeded);
+
+        var acquired = UseShiftReport(provider, service => service.SaveDraft(
+            new EmuSaveShiftReportDraftDto(date, "day", "mechanic", employee.Id, "editor-b", null, "{\"rows\":[]}"),
+            null,
+            "Второй редактор"));
+        Assert.True(acquired.Succeeded);
+    }
+
+    [DbIntegrationFact]
     public async Task FavoriteEmployeesUseSoftDeleteAndFavoriteOnlyFilter()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();

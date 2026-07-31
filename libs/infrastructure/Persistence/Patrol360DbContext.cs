@@ -177,6 +177,8 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
 
     internal DbSet<EmuShiftReportLineEntity> EmuShiftReportLines => Set<EmuShiftReportLineEntity>();
 
+    internal DbSet<EmuShiftReportDraftEntity> EmuShiftReportDrafts => Set<EmuShiftReportDraftEntity>();
+
     internal DbSet<PercoIntegrationSettingsEntity> PercoIntegrationSettings => Set<PercoIntegrationSettingsEntity>();
 
     internal DbSet<PercoIntegrationLogEntity> PercoIntegrationLogs => Set<PercoIntegrationLogEntity>();
@@ -1559,12 +1561,14 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
             entity.Property(row => row.RespiratorSize).HasColumnName("respirator_size").HasMaxLength(120).IsRequired();
             entity.Property(row => row.HandProtectionSize).HasColumnName("hand_protection_size").HasMaxLength(120).IsRequired();
             entity.Property(row => row.Version).HasColumnName("version").IsConcurrencyToken();
+            entity.Property(row => row.LastIssueBatchKey).HasColumnName("last_issue_batch_key").HasMaxLength(120);
             entity.Property(row => row.NormSetId).HasColumnName("norm_set_id");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.ArchivedAt).HasColumnName("archived_at");
             entity.HasOne(row => row.Employee).WithMany().HasForeignKey(row => row.EmployeeId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(row => row.NormSet).WithMany().HasForeignKey(row => row.NormSetId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(row => new { row.EmployeeId, row.ArchivedAt }).HasDatabaseName("ix_inventory_ppe_cards_employee_archived");
+            entity.HasIndex(row => row.EmployeeId).IsUnique().HasFilter("archived_at IS NULL").HasDatabaseName("ux_inventory_ppe_cards_employee_active");
             entity.HasIndex(row => row.LegacyId).HasDatabaseName("ix_inventory_ppe_cards_legacy_id");
         });
 
@@ -1686,6 +1690,14 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
             entity.Property(row => row.LifeMonths).HasColumnName("life_months");
             entity.Property(row => row.BrandModelArticle).HasColumnName("brand_model_article").HasMaxLength(600).IsRequired();
             entity.Property(row => row.DefaultUnitPriceMinor).HasColumnName("default_unit_price_minor");
+            entity.Property(row => row.DraftIssuedAt).HasColumnName("draft_issued_at");
+            entity.Property(row => row.DraftQuantity).HasColumnName("draft_quantity").HasPrecision(12, 3);
+            entity.Property(row => row.DraftUnitPriceMinor).HasColumnName("draft_unit_price_minor");
+            entity.Property(row => row.DraftIssueMethod).HasColumnName("draft_issue_method").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.DraftSizeText).HasColumnName("draft_size_text").HasMaxLength(120).IsRequired();
+            entity.Property(row => row.DraftWarehouseId).HasColumnName("draft_warehouse_id");
+            entity.Property(row => row.DraftComment).HasColumnName("draft_comment").HasMaxLength(1200).IsRequired();
+            entity.Property(row => row.DraftBrandModelArticle).HasColumnName("draft_brand_model_article").HasMaxLength(600).IsRequired();
             entity.HasOne(row => row.Card).WithMany(card => card.NormRows).HasForeignKey(row => row.CardId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(row => row.SourceNormRow).WithMany().HasForeignKey(row => row.SourceNormRowId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(row => row.ParentRow).WithMany(row => row.Children).HasForeignKey(row => row.ParentRowId).OnDelete(DeleteBehavior.Restrict);
@@ -2267,6 +2279,28 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
             entity.HasOne(row => row.Section).WithMany().HasForeignKey(row => row.SectionId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(row => new { row.ReportId, row.SequenceNo }).IsUnique().HasDatabaseName("ux_emu_shift_report_lines_report_sequence");
             entity.HasIndex(row => row.ReportId).HasDatabaseName("ix_emu_shift_report_lines_report");
+        });
+
+        modelBuilder.Entity<EmuShiftReportDraftEntity>(entity =>
+        {
+            entity.ToTable("emu_shift_report_drafts");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.ReportDate).HasColumnName("report_date");
+            entity.Property(row => row.ShiftType).HasColumnName("shift_type").HasMaxLength(20).IsRequired();
+            entity.Property(row => row.WorkerCategory).HasColumnName("worker_category").HasMaxLength(30).IsRequired();
+            entity.Property(row => row.EmployeeId).HasColumnName("employee_id");
+            entity.Property(row => row.EditorInstanceId).HasColumnName("editor_instance_id").HasMaxLength(80).IsRequired();
+            entity.Property(row => row.EditorUserId).HasColumnName("editor_user_id");
+            entity.Property(row => row.EditorName).HasColumnName("editor_name").HasMaxLength(220).IsRequired();
+            entity.Property(row => row.Version).HasColumnName("version").IsConcurrencyToken();
+            entity.Property(row => row.PayloadJson).HasColumnName("payload_json").HasColumnType("jsonb").IsRequired();
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.Property(row => row.LeaseExpiresAt).HasColumnName("lease_expires_at");
+            entity.HasOne(row => row.Employee).WithMany().HasForeignKey(row => row.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(row => row.EditorUser).WithMany().HasForeignKey(row => row.EditorUserId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(row => new { row.EmployeeId, row.ReportDate, row.ShiftType }).IsUnique().HasDatabaseName("ux_emu_shift_report_drafts_employee_date_shift");
+            entity.HasIndex(row => row.LeaseExpiresAt).HasDatabaseName("ix_emu_shift_report_drafts_lease_expires");
         });
     }
 

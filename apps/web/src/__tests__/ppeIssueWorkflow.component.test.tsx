@@ -67,6 +67,10 @@ describe("PPE issue workflow", () => {
     const quantity = quantities[0];
     await user.clear(quantity);
     await user.type(quantity, "1");
+    for (const price of screen.getAllByLabelText(/Цена/)) {
+      await user.clear(price);
+      await user.type(price, "100");
+    }
     await user.click(screen.getByRole("button", { name: /Предпросмотр печати/ }));
 
     expect(await screen.findByRole("heading", { name: "Печать и предпросмотр" })).toBeInTheDocument();

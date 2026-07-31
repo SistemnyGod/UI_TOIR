@@ -65,7 +65,15 @@ export function usePatrolHomeDashboard() {
 
   useEffect(() => {
     let isMounted = true;
-    const unsubscribe = subscribeToSyncEvents(() => {
+    const unsubscribe = subscribeToSyncEvents((event) => {
+      const touchesDashboard = event.refreshedZones?.some((zone) => zone === "requests" || zone === "activePatrols" || zone === "points") === true
+        || event.completedAssignmentIds.length > 0
+        || (event.changedAssignmentIds?.length ?? 0) > 0
+        || (event.cancelledAssignmentIds?.length ?? 0) > 0;
+      if (!touchesDashboard) {
+        return;
+      }
+
       void readDashboardSnapshot()
         .then((snapshot) => {
           if (isMounted) {

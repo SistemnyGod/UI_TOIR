@@ -49,7 +49,9 @@ test("technical refresh failure preserves offline data and does not create a ref
   const preserveEnd = tokenSource.indexOf("export async function revokeStoredSession", preserveStart);
   assert.ok(preserveStart >= 0 && preserveEnd > preserveStart);
   assert.doesNotMatch(tokenSource.slice(preserveStart, preserveEnd), /clearAuthTokens|clearTokens|lockSession/);
-  assert.match(tokenSource.slice(preserveStart, preserveEnd), /requiresReenrollment: false/);
+  assert.match(tokenSource.slice(preserveStart, preserveEnd), /requiresReenrollment: true/);
+  assert.match(httpSource, /markPendingOutboxCommandsAuthRequired\(ownerUserId, message\)/);
+  assert.match(httpSource, /требуется повторный вход/);
 });
 test("sync refuses a mixed-owner batch", () => {
   assert.deepEqual(

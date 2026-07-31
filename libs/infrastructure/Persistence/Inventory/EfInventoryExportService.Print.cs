@@ -72,6 +72,10 @@ internal sealed partial class EfInventoryExportService
             return Failure<InventoryGeneratedFileDto>("cardId", "PPE card not found");
         }
 
+        if (!string.Equals(card.Status, PpeIssueStatusCatalog.Active, StringComparison.OrdinalIgnoreCase))
+        {
+            return Failure<InventoryGeneratedFileDto>("cardStatus", "Сначала сохраните и завершите выдачу СИЗ");
+        }
         var normalizedFormat = Normalize(format);
         if (normalizedFormat.Length == 0)
         {

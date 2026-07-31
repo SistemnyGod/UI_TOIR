@@ -35,6 +35,8 @@ export function ShiftReportForm({
   sections,
   nightWarning,
   successMessage,
+  coordinationMessage,
+  draftConflict,
   submitting,
   hasDraftData,
   reminder,
@@ -71,6 +73,8 @@ export function ShiftReportForm({
   sections: EmuShiftReportSectionDto[];
   nightWarning: string;
   successMessage: string;
+  coordinationMessage: string;
+  draftConflict: string;
   submitting: boolean;
   hasDraftData: boolean;
   reminder?: ReactNode;
@@ -157,6 +161,8 @@ export function ShiftReportForm({
 
         {reminder}
 
+        {draftConflict ? <p className='emu-inline-notice emu-draft-conflict' role='alert'><AlertCircle aria-hidden='true' size={17} />{draftConflict}</p> : coordinationMessage ? <p className='emu-inline-notice emu-draft-coordination' role='status'>{coordinationMessage}</p> : null}
+
         {!sections.length ? <p className='emu-inline-notice'><AlertCircle aria-hidden='true' size={17} />Справочник участков пуст. Отчёт можно отправить без указания участка.</p> : null}
 
         <div className='emu-shift-table-wrap'>
@@ -176,7 +182,7 @@ export function ShiftReportForm({
           <button type='button' className='secondary add-row' disabled={rows.length >= 50 || submitting} onClick={onAddRow}><Plus aria-hidden='true' size={18} />Добавить строку</button>
           <span className='emu-row-limit'>{rows.length} из 50 строк</span>
           <button type='button' className='secondary' disabled={submitting || !hasDraftData} onClick={onRequestClear}>Очистить</button>
-          <button type='submit' className='primary' disabled={submitting || !employees.length}><Send aria-hidden='true' size={18} />{submitting ? 'Отправляем…' : 'Отправить отчёт'}</button>
+          <button type='submit' className='primary' disabled={submitting || !employees.length || Boolean(draftConflict)}><Send aria-hidden='true' size={18} />{submitting ? 'Отправляем…' : 'Отправить отчёт'}</button>
         </footer>
       </div>
     </form>

@@ -77,6 +77,7 @@ internal sealed class InventoryPpeCardEntity
     public string RespiratorSize { get; set; } = string.Empty;
     public string HandProtectionSize { get; set; } = string.Empty;
     public long Version { get; set; }
+    public string? LastIssueBatchKey { get; set; }
     public Guid? NormSetId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? ArchivedAt { get; set; }
@@ -189,6 +190,14 @@ internal sealed class InventoryPpeCardNormRowEntity
     public int? LifeMonths { get; set; }
     public string BrandModelArticle { get; set; } = string.Empty;
     public long? DefaultUnitPriceMinor { get; set; }
+    public DateTimeOffset? DraftIssuedAt { get; set; }
+    public decimal? DraftQuantity { get; set; }
+    public long? DraftUnitPriceMinor { get; set; }
+    public string DraftIssueMethod { get; set; } = "personal";
+    public string DraftSizeText { get; set; } = string.Empty;
+    public Guid? DraftWarehouseId { get; set; }
+    public string DraftComment { get; set; } = string.Empty;
+    public string DraftBrandModelArticle { get; set; } = string.Empty;
     public InventoryPpeCardEntity Card { get; set; } = null!;
     public InventoryPpeNormRowEntity? SourceNormRow { get; set; }
     public InventoryPpeCardNormRowEntity? ParentRow { get; set; }

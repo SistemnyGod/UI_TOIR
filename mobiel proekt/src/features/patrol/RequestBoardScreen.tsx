@@ -34,7 +34,7 @@ export function RequestBoardScreen() {
   const { colors } = useAppTheme();
   const [items, setItems] = useState<RequestBoardItem[]>([]);
   const [activeTab, setActiveTab] = useState<RequestTab>("all");
-  const smoothRefresh = useSmoothRefreshIndicator();
+  const { beginRefresh, endRefresh, showRefreshIndicator } = useSmoothRefreshIndicator();
   const [message, setMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -60,18 +60,27 @@ export function RequestBoardScreen() {
     }, [loadLocal])
   );
 
-  useEffect(() => subscribeToSyncEvents(() => {
-    smoothRefresh.beginRefresh();
+  useEffect(() => subscribeToSyncEvents((event) => {
+    const touchesRequests = event.refreshedZones?.includes("requests") === true
+      || event.acceptedOperationIds.length > 0
+      || (event.changedAssignmentIds?.length ?? 0) > 0
+      || event.completedAssignmentIds.length > 0
+      || (event.cancelledAssignmentIds?.length ?? 0) > 0;
+    if (!touchesRequests) {
+      return;
+    }
+
+    beginRefresh();
     void loadLocal()
       .catch((caught) => {
         void logMobileError("patrol.request-board.refresh-load.failed", caught);
         setLoadError(caught instanceof Error ? caught.message : "Не удалось обновить заявки.");
       })
-      .finally(smoothRefresh.endRefresh);
-  }), [loadLocal, smoothRefresh.beginRefresh, smoothRefresh.endRefresh]);
+      .finally(endRefresh);
+  }), [loadLocal, beginRefresh, endRefresh]);
 
   async function handleRefresh() {
-    smoothRefresh.beginRefresh();
+    beginRefresh();
     setMessage(null);
     try {
       const updated = await refreshMobileData();
@@ -82,7 +91,7 @@ export function RequestBoardScreen() {
       setLoadError(error instanceof Error ? error.message : "Не удалось обновить заявки.");
       setMessage(error instanceof Error ? error.message : "Не удалось обновить заявки. Показаны локальные данные.");
     } finally {
-      smoothRefresh.endRefresh();
+      endRefresh();
     }
   }
 
@@ -114,7 +123,7 @@ export function RequestBoardScreen() {
       data={filteredItems}
       keyExtractor={(item) => item.requestId}
       onRefresh={() => void handleRefresh()}
-      refreshing={smoothRefresh.showRefreshIndicator}
+      refreshing={showRefreshIndicator}
       ListEmptyComponent={loadError ? (
         <Card>
           <Text style={[styles.text, { color: "#b91c1c" }]}>{loadError}</Text>
@@ -141,7 +150,7 @@ export function RequestBoardScreen() {
             value={activeTab}
           />
 
-          {smoothRefresh.showRefreshIndicator ? <Text style={[styles.message, { color: colors.mutedText }]}>Обновляем данные…</Text> : null}
+          {showRefreshIndicator ? <Text style={[styles.message, { color: colors.mutedText }]}>Обновляем данные…</Text> : null}
           {message ? <Text style={[styles.message, { color: colors.mutedText }]}>{message}</Text> : null}
         </>
       }

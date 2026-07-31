@@ -826,6 +826,28 @@ export interface InventoryPpeNormSetDto {
   rowsCount: number;
 }
 
+export interface InventoryPpeNormSetDetailDto {
+  normSet: InventoryPpeNormSetDto;
+  rows: InventoryPpeNormRowDto[];
+  itemRowsCount: number;
+  mappedItemRowsCount: number;
+  unmappedItemRowsCount: number;
+}
+
+export interface InventoryPpeNormRowDto {
+  id: string;
+  parentRowId: string | null;
+  rowType: "group" | "item";
+  sortOrder: number;
+  normItemName: string;
+  normPoint: string;
+  issuePeriodText: string;
+  quantity: number;
+  quantityText: string;
+  lifeMonths: number | null;
+  mappings: InventoryPpeNormMappingDto[];
+}
+
 export interface InventoryPpeNormImportResultDto {
   sourceRows: number;
   normSetsCreated: number;
@@ -871,6 +893,14 @@ export interface InventoryPpeCardNormRowDto {
   coverageStatus: "not_issued" | "partial" | "issued" | "overdue";
   issuedQuantity: number;
   mappings: InventoryPpeNormMappingDto[];
+  draftIssuedAt?: string | null;
+  draftQuantity?: number | null;
+  draftUnitPriceMinor?: number | null;
+  draftIssueMethod?: "personal" | "dispenser" | string;
+  draftSizeText?: string;
+  draftWarehouseId?: string | null;
+  draftComment?: string;
+  draftBrandModelArticle?: string;
 }
 
 export interface InventoryPpeWorkspaceDto {
@@ -924,6 +954,14 @@ export interface UpsertInventoryPpeCardNormRowDto {
   mappedItemId?: string | null;
   brandModelArticle?: string | null;
   defaultUnitPriceMinor?: number | null;
+  draftIssuedAt?: string | null;
+  draftQuantity?: number | null;
+  draftUnitPriceMinor?: number | null;
+  draftIssueMethod?: "personal" | "dispenser" | null;
+  draftSizeText?: string | null;
+  draftWarehouseId?: string | null;
+  draftComment?: string | null;
+  draftBrandModelArticle?: string | null;
 }
 
 export interface UpdateInventoryPpeCardNormRowsDto {
@@ -961,6 +999,7 @@ export interface CreateInventoryPpeIssueBatchLineDto {
 export interface CreateInventoryPpeIssueBatchDto {
   expectedVersion: number;
   lines: CreateInventoryPpeIssueBatchLineDto[];
+  idempotencyKey?: string | null;
 }
 
 export interface ApplyInventoryPpeLineActionDto {

@@ -37,3 +37,21 @@ internal sealed class EmuShiftReportLineEntity
     public string Note { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }
 }
+
+internal sealed class EmuShiftReportDraftEntity
+{
+    public Guid Id { get; set; }
+    public DateOnly ReportDate { get; set; }
+    public string ShiftType { get; set; } = string.Empty;
+    public string WorkerCategory { get; set; } = string.Empty;
+    public Guid EmployeeId { get; set; }
+    public EmployeeEntity Employee { get; set; } = null!;
+    public string EditorInstanceId { get; set; } = string.Empty;
+    public Guid? EditorUserId { get; set; }
+    public SiteUserEntity? EditorUser { get; set; }
+    public string EditorName { get; set; } = string.Empty;
+    public long Version { get; set; }
+    public string PayloadJson { get; set; } = "{}";
+    public DateTimeOffset UpdatedAt { get; set; }
+    public DateTimeOffset LeaseExpiresAt { get; set; }
+}

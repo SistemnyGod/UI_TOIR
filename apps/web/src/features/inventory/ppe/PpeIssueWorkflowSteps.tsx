@@ -22,6 +22,7 @@ import type {
   InventoryEmployeeDto,
   InventoryItemSetDetailDto,
   InventoryPpeCardNormRowDto,
+  InventoryReferenceOptionDto,
   InventorySettingsDto,
 } from "../../../api/contracts";
 import { useInventoryRepository } from "../../../repositories/inventoryRepositoryContext";
@@ -225,7 +226,7 @@ function NormRows({ busy, rows, selectedIds, onOpenCatalog, onRemoveExtra, onTog
     })}</div>
   </>;
 }
-export function CompositionStep({ issueLines, onChange, onOpenCatalog, onRemove, rows, selectedEmployee }: { issueLines: PpeIssueDraftLine[]; onChange: (id: string, patch: Partial<PpeIssueDraftLine>) => void; onOpenCatalog: (row: InventoryPpeCardNormRowDto) => void; onRemove: (id: string) => void; rows: InventoryPpeCardNormRowDto[]; selectedEmployee: InventoryEmployeeDto | null }) {
+export function CompositionStep({ issueLines, onChange, onOpenCatalog, onRemove, rows, selectedEmployee, warehouses }: { issueLines: PpeIssueDraftLine[]; onChange: (id: string, patch: Partial<PpeIssueDraftLine>) => void; onOpenCatalog: (row: InventoryPpeCardNormRowDto) => void; onRemove: (id: string) => void; rows: InventoryPpeCardNormRowDto[]; selectedEmployee: InventoryEmployeeDto | null; warehouses: InventoryReferenceOptionDto[] }) {
   const rowsById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
   const review = useMemo(() => summarizeComposition(issueLines, rowsById), [issueLines, rowsById]);
   const [pendingRemove, setPendingRemove] = useState<PpeIssueDraftLine | null>(null);
@@ -238,11 +239,11 @@ export function CompositionStep({ issueLines, onChange, onOpenCatalog, onRemove,
     {issueLines.length ? <>
       <div className="ppe-issue-desktop-table ppe-issue-table-wrap">
         <table aria-label="Состав документа выдачи СИЗ" className="ppe-issue-table ppe-issue-composition-table">
-          <thead><tr><th>№</th><th>Норма сотрудника</th><th>Фактическое изделие</th><th>Дата</th><th>Количество</th><th>Способ</th><th>Проверка</th><th>Действия</th></tr></thead>
-          <tbody>{issueLines.map((line, index) => <CompositionTableRow index={index} key={line.cardNormRowId} line={line} row={rowsById.get(line.cardNormRowId)} onChange={onChange} onOpenCatalog={onOpenCatalog} onRemove={requestRemove} />)}</tbody>
+          <thead><tr><th>№</th><th>Норма сотрудника</th><th>Фактическое изделие</th><th>Дата</th><th>Количество</th><th>Цена</th><th>Размер</th><th>Склад</th><th>Комментарий</th><th>Способ</th><th>Проверка</th><th>Действия</th></tr></thead>
+          <tbody>{issueLines.map((line, index) => <CompositionTableRow index={index} key={line.cardNormRowId} line={line} row={rowsById.get(line.cardNormRowId)} onChange={onChange} onOpenCatalog={onOpenCatalog} onRemove={requestRemove} warehouses={warehouses} />)}</tbody>
         </table>
       </div>
-      <div className="ppe-issue-mobile-list">{issueLines.map((line, index) => <CompositionMobileRow index={index} key={line.cardNormRowId} line={line} row={rowsById.get(line.cardNormRowId)} onChange={onChange} onOpenCatalog={onOpenCatalog} onRemove={requestRemove} />)}</div>
+      <div className="ppe-issue-mobile-list">{issueLines.map((line, index) => <CompositionMobileRow index={index} key={line.cardNormRowId} line={line} row={rowsById.get(line.cardNormRowId)} onChange={onChange} onOpenCatalog={onOpenCatalog} onRemove={requestRemove} warehouses={warehouses} />)}</div>
     </> : <div className="ppe-issue-composition-empty"><PackageSearch size={28} /><div><strong>В документе пока нет позиций</strong><span>Вернитесь к подбору и добавьте СИЗ по норме или из каталога.</span></div></div>}
     </section>
     {pendingRemove ? (
@@ -270,7 +271,7 @@ export function CompositionStep({ issueLines, onChange, onOpenCatalog, onRemove,
   </>;
 }
 
-function CompositionTableRow({ index, line, row, onChange, onOpenCatalog, onRemove }: CompositionRowProps) {
+function CompositionTableRow({ index, line, row, onChange, onOpenCatalog, onRemove, warehouses }: CompositionRowProps) {
   const problems = validateIssueDraftLine(line, row);
   const tone = problemTone(problems);
   return <tr className={`ppe-issue-composition-row is-${tone}`}>
@@ -279,6 +280,10 @@ function CompositionTableRow({ index, line, row, onChange, onOpenCatalog, onRemo
     <td><div className="ppe-issue-product-cell"><strong>{row?.mappedItemName || "Номенклатура не выбрана"}</strong><small>{line.brandModelArticle || "Модель и артикул не указаны"}</small></div></td>
     <td><input aria-label={`Дата выдачи ${row?.normItemName ?? "позиции"}`} onChange={(event) => onChange(line.cardNormRowId, { issuedAt: event.target.value })} type="date" value={line.issuedAt} /></td>
     <td><input aria-label={`Количество ${row?.normItemName ?? "позиции"}`} inputMode="decimal" min="0.01" onChange={(event) => onChange(line.cardNormRowId, { quantity: Number(event.target.value) })} step="0.01" type="number" value={line.quantity} /></td>
+    <td><input aria-label={`Цена ${row?.normItemName ?? "позиции"}`} inputMode="decimal" min="0.01" onChange={(event) => { const value = Number(event.target.value); onChange(line.cardNormRowId, { unitPriceMinor: Number.isFinite(value) && value > 0 ? Math.round(value * 100) : null }); }} step="0.01" type="number" value={line.unitPriceMinor === null ? "" : (line.unitPriceMinor / 100).toFixed(2)} /></td>
+    <td><input aria-label={`Размер ${row?.normItemName ?? "позиции"}`} onChange={(event) => onChange(line.cardNormRowId, { sizeText: event.target.value })} placeholder="Размер" value={line.sizeText} /></td>
+    <td><select aria-label={`Склад ${row?.normItemName ?? "позиции"}`} onChange={(event) => onChange(line.cardNormRowId, { warehouseId: event.target.value || null })} value={line.warehouseId ?? ""}><option value="">Выберите склад</option>{warehouses.filter((warehouse) => warehouse.isActive).map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></td>
+    <td><textarea aria-label={`Комментарий ${row?.normItemName ?? "позиции"}`} onChange={(event) => onChange(line.cardNormRowId, { comment: event.target.value })} placeholder="Необязательно" rows={2} value={line.comment} /></td>
     <td><select aria-label={`Способ выдачи ${row?.normItemName ?? "позиции"}`} onChange={(event) => onChange(line.cardNormRowId, { issueMethod: event.target.value as PpeIssueDraftLine["issueMethod"] })} value={line.issueMethod}><option value="personal">Лично</option><option value="dispenser">Дозатор</option></select></td>
     <td><ProblemBadges problems={problems} /></td>
     <td><div className="ppe-issue-row-actions"><PpeButton disabled={!row} onClick={() => row && onOpenCatalog(row)} variant="secondary">Заменить</PpeButton><PpeButton aria-label="Исключить из текущего документа" icon={<Trash2 size={15} />} onClick={() => onRemove(line.cardNormRowId)} size="compact" variant="danger" /></div></td>
@@ -286,7 +291,7 @@ function CompositionTableRow({ index, line, row, onChange, onOpenCatalog, onRemo
 }
 
 function CompositionMobileRow(props: CompositionRowProps) {
-  const { index, line, row, onChange, onOpenCatalog, onRemove } = props;
+  const { index, line, row, onChange, onOpenCatalog, onRemove, warehouses } = props;
   const problems = validateIssueDraftLine(line, row);
   const tone = problemTone(problems);
   return <article className={`ppe-issue-mobile-row ppe-issue-composition-mobile is-${tone}`}>
@@ -296,6 +301,10 @@ function CompositionMobileRow(props: CompositionRowProps) {
     <div className="ppe-issue-mobile-fields">
       <label><span>Дата выдачи</span><input aria-label={`Дата выдачи ${row?.normItemName ?? "позиции"}`} onChange={(event) => onChange(line.cardNormRowId, { issuedAt: event.target.value })} type="date" value={line.issuedAt} /></label>
       <label><span>Фактическое количество</span><input aria-label={`Количество ${row?.normItemName ?? "позиции"}`} inputMode="decimal" min="0.01" onChange={(event) => onChange(line.cardNormRowId, { quantity: Number(event.target.value) })} step="0.01" type="number" value={line.quantity} /></label>
+      <label><span>Цена за единицу</span><input aria-label={`Цена ${row?.normItemName ?? "позиции"}`} inputMode="decimal" min="0.01" onChange={(event) => { const value = Number(event.target.value); onChange(line.cardNormRowId, { unitPriceMinor: Number.isFinite(value) && value > 0 ? Math.round(value * 100) : null }); }} step="0.01" type="number" value={line.unitPriceMinor === null ? "" : (line.unitPriceMinor / 100).toFixed(2)} /></label>
+      <label><span>Размер</span><input aria-label={`Размер ${row?.normItemName ?? "позиции"}`} onChange={(event) => onChange(line.cardNormRowId, { sizeText: event.target.value })} placeholder="Не указан" value={line.sizeText} /></label>
+      <label><span>Склад</span><select aria-label={`Склад ${row?.normItemName ?? "позиции"}`} onChange={(event) => onChange(line.cardNormRowId, { warehouseId: event.target.value || null })} value={line.warehouseId ?? ""}><option value="">Выберите склад</option>{warehouses.filter((warehouse) => warehouse.isActive).map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>
+      <label><span>Комментарий</span><textarea aria-label={`Комментарий ${row?.normItemName ?? "позиции"}`} onChange={(event) => onChange(line.cardNormRowId, { comment: event.target.value })} placeholder="Необязательно" rows={2} value={line.comment} /></label>
       <label><span>Способ выдачи</span><select aria-label={`Способ выдачи ${row?.normItemName ?? "позиции"}`} onChange={(event) => onChange(line.cardNormRowId, { issueMethod: event.target.value as PpeIssueDraftLine["issueMethod"] })} value={line.issueMethod}><option value="personal">Лично</option><option value="dispenser">Дозатор</option></select></label>
     </div>
     {row ? <div className="ppe-issue-mobile-norm-note">По норме: {row.quantityText || row.quantity} · {row.issuePeriodText || "период не указан"}</div> : null}
@@ -303,7 +312,7 @@ function CompositionMobileRow(props: CompositionRowProps) {
   </article>;
 }
 
-type CompositionRowProps = { index: number; line: PpeIssueDraftLine; row?: InventoryPpeCardNormRowDto; onChange: (id: string, patch: Partial<PpeIssueDraftLine>) => void; onOpenCatalog: (row: InventoryPpeCardNormRowDto) => void; onRemove: (id: string) => void };
+type CompositionRowProps = { index: number; line: PpeIssueDraftLine; row?: InventoryPpeCardNormRowDto; onChange: (id: string, patch: Partial<PpeIssueDraftLine>) => void; onOpenCatalog: (row: InventoryPpeCardNormRowDto) => void; onRemove: (id: string) => void; warehouses: InventoryReferenceOptionDto[] };
 type CompositionSummaryData = { total: number; ready: number; warnings: number; errors: number };
 
 function CompositionSummary({ summary }: { summary: CompositionSummaryData }) {
@@ -351,7 +360,7 @@ export function PrintStep({ committed, data, downloadFormat, errors, mode, onDow
         <div className="ppe-issue-print-warning" role="alert">
           <strong><AlertTriangle size={17} /> Документ пока нельзя сохранить</strong>
           <ul>{errors.map((error) => <li key={error}>{error}</li>)}</ul>
-          <span>Предпросмотр, печать и экспорт доступны: исправьте ошибки перед финальным сохранением.</span>
+          <span>Предпросмотр и локальная печать доступны. Официальные PDF и DOCX появятся после финального сохранения.</span>
         </div>
       ) : (
         <div className="ppe-issue-print-ready" role="status"><CheckCircle2 size={17} /><span><strong>Проверка пройдена</strong><small>Критических ошибок нет. Документ можно сохранить после просмотра.</small></span></div>
@@ -376,8 +385,8 @@ export function PrintStep({ committed, data, downloadFormat, errors, mode, onDow
           <div className="ppe-issue-export-actions">
             <PpeButton disabled={exportBusy || printBusy || saving} onClick={onPreview} variant="primary">Открыть крупно</PpeButton>
             <PpeButton disabled={exportBusy || printBusy || saving} icon={<Printer size={15} />} loading={printBusy} onClick={onPrint} variant="secondary">Печать</PpeButton>
-            <PpeButton disabled={exportBusy || printBusy || saving} icon={<FileText size={15} />} loading={downloadFormat === "pdf"} onClick={() => onDownload("pdf")} variant="secondary">PDF</PpeButton>
-            <PpeButton disabled={exportBusy || printBusy || saving} icon={<FileText size={15} />} loading={downloadFormat === "docx"} onClick={() => onDownload("docx")} variant="secondary">DOCX</PpeButton>
+            <PpeButton disabled={!committed || exportBusy || printBusy || saving} icon={<FileText size={15} />} loading={downloadFormat === "pdf"} onClick={() => onDownload("pdf")} title={committed ? "Скачать подтверждённый PDF" : "Сначала сохраните выдачу"} variant="secondary">PDF</PpeButton>
+            <PpeButton disabled={!committed || exportBusy || printBusy || saving} icon={<FileText size={15} />} loading={downloadFormat === "docx"} onClick={() => onDownload("docx")} title={committed ? "Скачать подтверждённый DOCX" : "Сначала сохраните выдачу"} variant="secondary">DOCX</PpeButton>
           </div>
         </div>
       </div>

@@ -19,6 +19,13 @@ const ownerMismatchMarkers = [
   "авторизация сброшена"
 ];
 
+const reenrollmentMarkers = [
+  "requires online sign-in",
+  "requires reenrollment",
+  "требуется повторный вход",
+  "требуется повторная регистрация"
+];
+
 const temporaryAuthRejectionMarkers = [
   "temporarily rejected",
   "временно отклонено",
@@ -43,6 +50,7 @@ export function isReauthenticationRequiredError(message: string | null | undefin
   if (temporaryAuthRejectionMarkers.some((marker) => normalized.includes(marker))) return false;
   return isSessionExpiredError(message)
     || ownerMismatchMarkers.some((marker) => normalized.includes(marker))
+    || reenrollmentMarkers.some((marker) => normalized.includes(marker))
     || missingMobileSessionKeyMarkers.some((marker) => normalized.includes(marker));
 }
 

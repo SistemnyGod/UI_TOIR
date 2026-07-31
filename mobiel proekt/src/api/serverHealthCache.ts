@@ -4,7 +4,7 @@ export type HealthProbeValue = {
 };
 
 export const serverHealthSuccessTtlMs = 30_000;
-export const serverHealthFailureTtlMs = 3_000;
+export const serverHealthFailureTtlMs = 30_000;
 
 type CacheEntry<TValue> = {
   value: TValue;

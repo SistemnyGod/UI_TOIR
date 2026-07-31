@@ -99,7 +99,7 @@ export function WorkAccountingScreen() {
   const [participationReason, setParticipationReason] = useState("");
   const [attachmentTask, setAttachmentTask] = useState<WorkItemDto | null>(null);
   const [attachmentRemark, setAttachmentRemark] = useState<RemarkAttachmentTarget>(null);
-  const smoothRefresh = useSmoothRefreshIndicator();
+  const { beginRefresh, endRefresh, showRefreshIndicator } = useSmoothRefreshIndicator();
 
   const reloadLocal = useCallback(async () => {
     const [nextTasks, nextRemarks, nextEmployees, nextSections] = await Promise.all([
@@ -119,14 +119,14 @@ export function WorkAccountingScreen() {
       return;
     }
 
-    smoothRefresh.beginRefresh();
+    beginRefresh();
     void reloadLocal()
       .catch((error) => {
         void logMobileError("emu.work-accounting.sync-refresh.failed", error);
         setRefreshError("Показаны сохранённые данные. Обновление с сервера не удалось.");
       })
-      .finally(smoothRefresh.endRefresh);
-  }), [reloadLocal, smoothRefresh.beginRefresh, smoothRefresh.endRefresh]);
+      .finally(endRefresh);
+  }), [reloadLocal, beginRefresh, endRefresh]);
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
@@ -447,7 +447,7 @@ export function WorkAccountingScreen() {
       </View>
 
       {message ? <Text style={[styles.message, { color: colors.primary }]}>{message}</Text> : null}
-      {smoothRefresh.showRefreshIndicator ? <StatusPill label="Обновляем данные…" tone="neutral" /> : null}
+      {showRefreshIndicator ? <StatusPill label="Обновляем данные…" tone="neutral" /> : null}
       {refreshError ? <StatusPill label={refreshError} tone="warning" /> : null}
 
       {tab === "tasks" ? (

@@ -53,6 +53,7 @@ export function isWorkRowUsed(value: WorkRow) {
   return Boolean(value.description.trim() || value.hours || value.minutes || value.sectionId || value.note.trim());
 }
 
-export function getDraftKey(category: EmuShiftReportCategory, employeeId: string, reportDate: string, shiftType: EmuShiftType) {
-  return `${draftPrefix}.${category}.${employeeId || '_'}.${reportDate}.${shiftType}`;
+export function getDraftKey(category: EmuShiftReportCategory, employeeId: string, reportDate: string, shiftType: EmuShiftType, userId?: string) {
+  const ownerPrefix = userId ? `${draftPrefix}.user.${userId}` : draftPrefix;
+  return `${ownerPrefix}.${category}.${employeeId || '_'}.${reportDate}.${shiftType}`;
 }

@@ -438,6 +438,26 @@ public sealed record InventoryPpeNormSetDto(
     long Version,
     int RowsCount);
 
+public sealed record InventoryPpeNormRowDto(
+    Guid Id,
+    Guid? ParentRowId,
+    string RowType,
+    int SortOrder,
+    string NormItemName,
+    string NormPoint,
+    string IssuePeriodText,
+    decimal Quantity,
+    string QuantityText,
+    int? LifeMonths,
+    IReadOnlyList<InventoryPpeNormMappingDto> Mappings);
+
+public sealed record InventoryPpeNormSetDetailDto(
+    InventoryPpeNormSetDto NormSet,
+    IReadOnlyList<InventoryPpeNormRowDto> Rows,
+    int ItemRowsCount,
+    int MappedItemRowsCount,
+    int UnmappedItemRowsCount);
+
 public sealed record InventoryPpeNormImportResultDto(
     int SourceRows,
     int NormSetsCreated,
@@ -480,7 +500,15 @@ public sealed record InventoryPpeCardNormRowDto(
     long? DefaultUnitPriceMinor,
     string CoverageStatus,
     decimal IssuedQuantity,
-    IReadOnlyList<InventoryPpeNormMappingDto> Mappings);
+    IReadOnlyList<InventoryPpeNormMappingDto> Mappings,
+    DateTime? DraftIssuedAt = null,
+    decimal? DraftQuantity = null,
+    long? DraftUnitPriceMinor = null,
+    string DraftIssueMethod = "personal",
+    string DraftSizeText = "",
+    Guid? DraftWarehouseId = null,
+    string DraftComment = "",
+    string DraftBrandModelArticle = "");
 
 public sealed record InventoryPpeWorkspaceDto(
     InventoryEmployeeDto Employee,
@@ -529,7 +557,15 @@ public sealed record UpsertInventoryPpeCardNormRowDto(
     int? LifeMonths,
     Guid? MappedItemId,
     string? BrandModelArticle = null,
-    long? DefaultUnitPriceMinor = null);
+    long? DefaultUnitPriceMinor = null,
+    DateTimeOffset? DraftIssuedAt = null,
+    decimal? DraftQuantity = null,
+    long? DraftUnitPriceMinor = null,
+    string? DraftIssueMethod = null,
+    string? DraftSizeText = null,
+    Guid? DraftWarehouseId = null,
+    string? DraftComment = null,
+    string? DraftBrandModelArticle = null);
 
 public sealed record UpdateInventoryPpeCardNormRowsDto(
     long ExpectedVersion,
@@ -562,7 +598,8 @@ public sealed record CreateInventoryPpeIssueBatchLineDto(
 
 public sealed record CreateInventoryPpeIssueBatchDto(
     long ExpectedVersion,
-    IReadOnlyList<CreateInventoryPpeIssueBatchLineDto> Lines);
+    IReadOnlyList<CreateInventoryPpeIssueBatchLineDto> Lines,
+    string? IdempotencyKey = null);
 
 public sealed record ApplyInventoryPpeLineActionDto(
     string Action,

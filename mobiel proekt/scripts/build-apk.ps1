@@ -19,6 +19,8 @@ param(
 
   [string]$ReleaseKeyAlias = $env:PATROL360_ANDROID_KEY_ALIAS,
 
+  [switch]$AllowDebug,
+
   [switch]$KeepBuildRoot
 )
 
@@ -32,6 +34,10 @@ if (-not [string]::IsNullOrWhiteSpace($Patrol360Environment)) {
 }
 if (-not [string]::IsNullOrWhiteSpace($PublicApiBaseUrl)) {
   $env:PATROL360_PUBLIC_API_URL = $PublicApiBaseUrl.Trim()
+}
+
+if ($Configuration -eq "Debug" -and -not $AllowDebug) {
+  throw "Debug APK is for local development only. Pass -AllowDebug explicitly when a non-production debug APK is required. Use -Configuration Release for phones."
 }
 
 function Invoke-Checked {
@@ -352,6 +358,16 @@ try {
       Invoke-Checked $zipAlign "-f" "-p" "4" $apk.FullName $alignedPath
       Invoke-Checked $apkSigner "sign" "--ks" $ReleaseKeystore "--ks-key-alias" $ReleaseKeyAlias "--ks-pass" "env:PATROL360_ANDROID_KEYSTORE_PASSWORD" "--key-pass" "env:PATROL360_ANDROID_KEY_PASSWORD" "--out" $destPath $alignedPath
       Invoke-Checked $apkSigner "verify" "--verbose" $destPath
+
+      $aapt = Join-Path $buildTools.FullName "aapt.exe"
+      $permissions = (& $aapt "dump" "permissions" $destPath | Out-String)
+      if ($permissions -match "android\.permission\.SYSTEM_ALERT_WINDOW") {
+        throw "Release APK contains SYSTEM_ALERT_WINDOW"
+      }
+      $badging = (& $aapt "dump" "badging" $destPath | Out-String)
+      if ($badging -match "application-debuggable") {
+        throw "Release APK is debuggable"
+      }
     }
     finally {
       Remove-Item -LiteralPath $alignedPath -Force -ErrorAction SilentlyContinue

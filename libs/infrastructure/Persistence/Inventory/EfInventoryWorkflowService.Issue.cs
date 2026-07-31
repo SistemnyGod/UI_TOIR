@@ -64,6 +64,10 @@ internal sealed partial class EfInventoryWorkflowService
         {
             return Failure<InventoryPpeCardDetailDto>("employeeId", "Employee not found");
         }
+        if (NormalizeInventoryEmployeeStatus(employee.Status) != "active")
+        {
+            return Failure<InventoryPpeCardDetailDto>("employeeId", "Only an active employee can receive PPE");
+        }
 
         var existingCard = dbContext.InventoryPpeCards
             .Where(row => row.EmployeeId == employee.Id && row.ArchivedAt == null)
@@ -92,7 +96,18 @@ internal sealed partial class EfInventoryWorkflowService
 
         dbContext.InventoryPpeCards.Add(card);
         AddSystemLog("ppe_card", card.Id, "created", employee.FullName, now);
-        dbContext.SaveChanges();
+        try
+        {
+            dbContext.SaveChanges();
+        }
+        catch (DbUpdateException)
+        {
+            dbContext.ChangeTracker.Clear();
+            var competingCard = dbContext.InventoryPpeCards.AsNoTracking()
+                .Any(row => row.EmployeeId == employee.Id && row.ArchivedAt == null);
+            if (competingCard) return Failure<InventoryPpeCardDetailDto>("conflict", "У сотрудника уже есть действующая карточка СИЗ");
+            throw;
+        }
 
         return Success(MapPpeCardDetail(LoadPpeCard(card.Id)!));
     }

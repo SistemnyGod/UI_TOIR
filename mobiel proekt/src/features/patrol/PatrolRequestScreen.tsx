@@ -34,15 +34,19 @@ export function PatrolRequestScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const actionInProgressRef = useRef(false);
+  const hasLoadedRef = useRef(false);
 
   const load = useCallback(async () => {
-    setIsLoading(true);
+    if (!hasLoadedRef.current) {
+      setIsLoading(true);
+    }
     try {
       const [item, existing] = await Promise.all([getRequestBoardItem(requestId), getAssignmentByRequestId(requestId)]);
       setRequest(item);
       setAssignment(existing);
       setLoadError(null);
     } finally {
+      hasLoadedRef.current = true;
       setIsLoading(false);
     }
   }, [requestId]);
@@ -62,12 +66,21 @@ export function PatrolRequestScreen() {
     }, [load])
   );
 
-  useEffect(() => subscribeToSyncEvents(() => {
+  useEffect(() => subscribeToSyncEvents((event) => {
+    const assignmentId = assignment?.assignmentId;
+    const touchesRequest = event.refreshedZones?.some((zone) => zone === "requests" || zone === "activePatrols") === true
+      || (assignmentId ? event.changedAssignmentIds?.includes(assignmentId) === true : false)
+      || (assignmentId ? event.completedAssignmentIds.includes(assignmentId) : false)
+      || (assignmentId ? event.cancelledAssignmentIds?.includes(assignmentId) === true : false);
+    if (!touchesRequest) {
+      return;
+    }
+
     void load().catch((caught) => {
       void logMobileError("patrol.request.sync-load.failed", caught);
       setLoadError(caught instanceof Error ? caught.message : "Не удалось обновить заявку.");
     });
-  }), [load]);
+  }), [assignment?.assignmentId, load]);
 
   async function runAction(action: () => Promise<void>) {
     if (actionInProgressRef.current) {

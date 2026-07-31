@@ -414,6 +414,7 @@ public sealed class InventoryControllerTests
         public InventoryListResponseDto<InventoryPpeNormMappingDto> GetPpeNormRowMappings(Guid normRowId, InventoryListQuery query) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryPpeNormMappingDto> UpsertPpeNormRowMapping(Guid normRowId, UpsertInventoryPpeNormMappingDto request) => throw new NotImplementedException();
         public InventoryListResponseDto<InventoryPpeNormSetDto> GetPpeNormSets(InventoryListQuery query) => throw new NotImplementedException();
+        public InventoryCommandResult<InventoryPpeNormSetDetailDto> GetPpeNormSet(Guid normSetId) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryPpeNormImportResultDto> ImportPpeNormSetsDraft(Stream source, string fileName) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryPpeNormSetDto> PublishPpeNormSet(Guid normSetId, PublishInventoryPpeNormSetDto request) => throw new NotImplementedException();
         public InventoryListResponseDto<InventoryHistoryDto> GetHistory(InventoryListQuery query) => throw new NotImplementedException();

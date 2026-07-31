@@ -33,24 +33,24 @@ export async function saveWorkItems(items: WorkItemDto[]) {
           )
           VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 'synced', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(task_id) DO UPDATE SET
-            title = excluded.title,
+            title = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.title ELSE excluded.title END,
             status = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.status ELSE excluded.status END,
-            planned_at = excluded.planned_at,
+            planned_at = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.planned_at ELSE excluded.planned_at END,
             revision = excluded.revision,
-            section_id = excluded.section_id,
-            section_name = excluded.section_name,
-            employee_id = excluded.employee_id,
-            employee_name = excluded.employee_name,
-            item_kind = excluded.item_kind,
-            work_session_id = excluded.work_session_id,
-            plan_task_id = excluded.plan_task_id,
-            description = excluded.description,
-            approval_status = excluded.approval_status,
-            source = excluded.source,
-            assigned_employees_json = excluded.assigned_employees_json,
-            actual_participants_json = excluded.actual_participants_json,
-            attachments_json = excluded.attachments_json,
-            capabilities_json = excluded.capabilities_json,
+            section_id = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.section_id ELSE excluded.section_id END,
+            section_name = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.section_name ELSE excluded.section_name END,
+            employee_id = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.employee_id ELSE excluded.employee_id END,
+            employee_name = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.employee_name ELSE excluded.employee_name END,
+            item_kind = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.item_kind ELSE excluded.item_kind END,
+            work_session_id = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.work_session_id ELSE excluded.work_session_id END,
+            plan_task_id = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.plan_task_id ELSE excluded.plan_task_id END,
+            description = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.description ELSE excluded.description END,
+            approval_status = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.approval_status ELSE excluded.approval_status END,
+            source = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.source ELSE excluded.source END,
+            assigned_employees_json = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.assigned_employees_json ELSE excluded.assigned_employees_json END,
+            actual_participants_json = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.actual_participants_json ELSE excluded.actual_participants_json END,
+            attachments_json = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.attachments_json ELSE excluded.attachments_json END,
+            capabilities_json = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.capabilities_json ELSE excluded.capabilities_json END,
             sync_status = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.sync_status ELSE 'synced' END
         `,
         [
@@ -142,7 +142,7 @@ export async function saveWorkTasks(tasks: WorkTaskDto[]) {
         INNER JOIN outbox_commands
           ON outbox_commands.entity_local_id = work_tasks.task_id
          AND outbox_commands.command_type IN ('createWorkTask', 'updateWorkTask', 'pauseWorkTask', 'resumeWorkTask', 'completeWorkTask')
-         AND outbox_commands.status IN ('pending', 'sending', 'retryLater')
+         AND outbox_commands.status IN ('pending', 'sending', 'retryLater', 'waiting_auth', 'waiting_network', 'wrong_contour', 'blocked')
          AND outbox_commands.contour_id = ?
          WHERE work_tasks.owner_user_id = ?
         ORDER BY outbox_commands.created_at_local ASC
@@ -210,15 +210,15 @@ export async function saveWorkTasks(tasks: WorkTaskDto[]) {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(task_id) DO UPDATE SET
             owner_user_id = excluded.owner_user_id,
-            title = excluded.title,
+            title = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.title ELSE excluded.title END,
             status = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.status ELSE excluded.status END,
-            planned_at = excluded.planned_at,
+            planned_at = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.planned_at ELSE excluded.planned_at END,
             revision = excluded.revision,
             completed_at_local = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.completed_at_local ELSE excluded.completed_at_local END,
-            section_id = excluded.section_id,
-            section_name = excluded.section_name,
-            employee_id = excluded.employee_id,
-            employee_name = excluded.employee_name,
+            section_id = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.section_id ELSE excluded.section_id END,
+            section_name = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.section_name ELSE excluded.section_name END,
+            employee_id = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.employee_id ELSE excluded.employee_id END,
+            employee_name = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.employee_name ELSE excluded.employee_name END,
             created_at_local = excluded.created_at_local,
             sync_status = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.sync_status ELSE excluded.sync_status END
         `,

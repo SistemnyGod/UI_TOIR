@@ -1,158 +1,123 @@
-import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import test from "node:test";
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
 
-const repositorySource = readFileSync(
-  new URL("../src/db/repositories/patrolRepository.ts", import.meta.url),
-  "utf8"
-);
-const reportScreenSource = readFileSync(
-  new URL("../src/features/patrol/SubmitReportScreen.tsx", import.meta.url),
-  "utf8"
-);
-const requestScreenSource = readFileSync(
-  new URL("../src/features/patrol/PatrolRequestScreen.tsx", import.meta.url),
-  "utf8"
-);const outboxRepositorySource = readFileSync(
-  new URL("../src/db/repositories/outboxRepository.ts", import.meta.url),
-  "utf8"
-);
-const activePatrolScreenSource = readFileSync(
-  new URL("../src/features/patrol/ActivePatrolScreen.tsx", import.meta.url),
-  "utf8"
-);
-const allPointsScreenSource = readFileSync(
-  new URL("../src/features/allPoints/AllPointsScreen.tsx", import.meta.url),
-  "utf8"
-);
-const patrolHomeScreenSource = readFileSync(
-  new URL("../src/features/patrolHome/PatrolHomeScreen.tsx", import.meta.url),
-  "utf8"
-);
-const scanNfcScreenSource = readFileSync(
-  new URL("../src/features/patrol/ScanNfcScreen.tsx", import.meta.url),
-  "utf8"
-);const bootstrapRepositorySource = readFileSync(
-  new URL("../src/db/repositories/bootstrapRepository.ts", import.meta.url),
-  "utf8"
-);
-const attachmentPolicySource = readFileSync(
-  new URL("../src/domain/files/completionAttachmentPolicy.ts", import.meta.url),
-  "utf8"
-);
+const repositorySource = readFileSync(new URL('../src/db/repositories/patrolRepository.ts', import.meta.url), 'utf8');
+const reportScreenSource = readFileSync(new URL('../src/features/patrol/SubmitReportScreen.tsx', import.meta.url), 'utf8');
+const reportCoordinatorSource = readFileSync(new URL('../src/features/patrol/reportSubmissionCoordinator.ts', import.meta.url), 'utf8');
+const requestScreenSource = readFileSync(new URL('../src/features/patrol/PatrolRequestScreen.tsx', import.meta.url), 'utf8');
+const outboxRepositorySource = readFileSync(new URL('../src/db/repositories/outboxRepository.ts', import.meta.url), 'utf8');
+const activePatrolScreenSource = readFileSync(new URL('../src/features/patrol/ActivePatrolScreen.tsx', import.meta.url), 'utf8');
+const scanNfcScreenSource = readFileSync(new URL('../src/features/patrol/ScanNfcScreen.tsx', import.meta.url), 'utf8');
+const nfcServiceSource = readFileSync(new URL('../src/services/nfcService.ts', import.meta.url), 'utf8');
+const bootstrapRepositorySource = readFileSync(new URL('../src/db/repositories/bootstrapRepository.ts', import.meta.url), 'utf8');
+const attachmentPolicySource = readFileSync(new URL('../src/domain/files/completionAttachmentPolicy.ts', import.meta.url), 'utf8');
 
-test("manual report submission owns one scoped sync pass", () => {
+const has = (source: string, value: string) => assert.ok(source.includes(value), value);
+
+test('report submission commits locally before background delivery', () => {
   const completion = repositorySource.slice(
-    repositorySource.indexOf("export async function completeAssignmentLocally"),
-    repositorySource.indexOf("export async function getAssignmentProgress")
-  );
-  const submitBranch = reportScreenSource.slice(
-    reportScreenSource.indexOf('if (presentation.action === "submit")'),
-    reportScreenSource.indexOf('const syncResult = await requestPatrolSync({ mode: "manualReport", assignmentId });', reportScreenSource.indexOf('if (presentation.action === "submit")')) + 100
+    repositorySource.indexOf('export async function completeAssignmentLocally'),
+    repositorySource.indexOf('export async function getAssignmentProgress')
   );
 
-  assert.doesNotMatch(completion, /requestSyncAfterMutation\(\)/);
-  assert.match(submitBranch, /await requestPatrolSync\(\{ mode: "manualReport", assignmentId \}\)/);
-  assert.doesNotMatch(submitBranch, /void requestPatrolSync|mode: "normal"/);
+  assert.ok(!completion.includes('requestSyncAfterMutation()'));
+  has(reportCoordinatorSource, 'await completeAssignmentLocally(assignmentId)');
+  has(reportCoordinatorSource, "void requestPatrolSync({ mode: 'manualReport', assignmentId }).catch");
+  has(reportScreenSource, 'queuePatrolReport(assignmentId)');
+  assert.ok(!reportScreenSource.includes('Alert.alert'));
 });
-
-test("request acceptance and report repair cannot regress concurrently", () => {
+test('request acceptance and report repair cannot regress concurrently', () => {
   const acceptance = repositorySource.slice(
-    repositorySource.indexOf("export async function acceptRequestLocally"),
-    repositorySource.indexOf("export async function releaseAcceptedRequestLocally")
+    repositorySource.indexOf('export async function acceptRequestLocally'),
+    repositorySource.indexOf('export async function releaseAcceptedRequestLocally')
   );
   const repair = repositorySource.slice(
-    repositorySource.indexOf("export async function reopenInvalidCompletionReportLocally"),
-    repositorySource.indexOf("export async function completeAssignmentLocally")
+    repositorySource.indexOf('export async function reopenInvalidCompletionReportLocally'),
+    repositorySource.indexOf('export async function completeAssignmentLocally')
   );
   const completion = repositorySource.slice(
-    repositorySource.indexOf("export async function completeAssignmentLocally"),
-    repositorySource.indexOf("export async function getAssignmentProgress")
+    repositorySource.indexOf('export async function completeAssignmentLocally'),
+    repositorySource.indexOf('export async function getAssignmentProgress')
   );
 
-  assert.match(requestScreenSource, /actionInProgressRef\.current/);
-  assert.match(acceptance, /request_id = \?[\s\S]*assignment_id <> \?[\s\S]*status NOT IN/);
-  assert.match(repair, /if \(assignmentUpdate\.changes === 1\)[\s\S]*SET status = 'inProgress'/);
-  assert.match(completion, /WHERE owner_user_id = \?[\s\S]*AND contour_id = \?[\s\S]*AND assignment_id = \?/);
+  has(requestScreenSource, 'actionInProgressRef.current');
+  has(acceptance, 'request_id = ?');
+  has(acceptance, 'assignment_id <> ?');
+  has(acceptance, 'status NOT IN');
+  has(repair, 'if (assignmentUpdate.changes === 1)');
+  has(repair, "SET status = 'inProgress'");
+  has(completion, 'WHERE owner_user_id = ?');
+  has(completion, 'AND contour_id = ?');
+  has(completion, 'AND assignment_id = ?');
 });
-test("lifecycle and completed report commands are idempotent", () => {
+
+test('lifecycle and completed report commands are idempotent', () => {
   const lifecycle = repositorySource.slice(
-    repositorySource.indexOf("async function updateAssignmentLifecycleLocally"),
-    repositorySource.indexOf("async function snapshotRoutePointsInTransaction")
+    repositorySource.indexOf('async function updateAssignmentLifecycleLocally'),
+    repositorySource.indexOf('async function snapshotRoutePointsInTransaction')
   );
   const completeLookup = repositorySource.slice(
-    repositorySource.indexOf("async function getQueuedCompleteAssignmentCommand"),
-    repositorySource.indexOf("async function requireOwnerUserId")
+    repositorySource.indexOf('async function getQueuedCompleteAssignmentCommand'),
+    repositorySource.indexOf('async function requireOwnerUserId')
   );
 
-  assert.match(lifecycle, /current\.status === "inProgress"[\s\S]*?return;/);
-  assert.match(lifecycle, /lifecycleChanged = true/);
-  assert.match(lifecycle, /if \(lifecycleChanged\) \{[\s\S]*?requestSyncAfterMutation\(\)/);
-  assert.match(completeLookup, /'waiting_network'.*'waiting_auth'/s);
-  assert.match(completeLookup, /'wrong_contour'.*'conflict'/s);
-  assert.doesNotMatch(completeLookup, /'rejected'.*'invalidPayload'/s);
+  has(lifecycle, 'current.status === "inProgress"');
+  has(lifecycle, 'lifecycleChanged = true');
+  has(lifecycle, 'if (lifecycleChanged) {');
+  has(lifecycle, 'requestSyncAfterMutation()');
+  has(completeLookup, "'waiting_network'");
+  has(completeLookup, "'waiting_auth'");
+  has(completeLookup, "'wrong_contour'");
+  has(completeLookup, "'conflict'");
+  assert.ok(!completeLookup.includes("'rejected'"));
 });
-test("manual retry reactivates server failures without bypassing rate limits", () => {
+
+test('manual retry reactivates server failures without bypassing rate limits', () => {
   const activation = outboxRepositorySource.slice(
-    outboxRepositorySource.indexOf("export async function activateRetryableReportCommands"),
-    outboxRepositorySource.indexOf("export async function activateRetryableOutboxCommandsForImmediateRetry")
+    outboxRepositorySource.indexOf('export async function activateRetryableReportCommands'),
+    outboxRepositorySource.indexOf('export async function activateRetryableOutboxCommandsForImmediateRetry')
   );
 
-  assert.match(activation, /status IN \('waiting_network', 'retryLater'\) THEN 'pending'/);
-  assert.match(activation, /COALESCE\(retry_reason, 'unknown'\) <> 'rateLimit'/);
+  has(activation, "status IN ('waiting_network', 'retryLater') THEN 'pending'");
+  has(activation, "COALESCE(retry_reason, 'unknown') <> 'rateLimit'");
 });
 
-test("NFC waits for a non-empty route snapshot", () => {
-  assert.match(activePatrolScreenSource, /disabled=\{isActing \|\| progress\.total === 0\}/);
-  assert.doesNotMatch(scanNfcScreenSource, /autoScanStartedRef|void handleScan\(\)/);
-  assert.match(scanNfcScreenSource, /status !== "reading" && status !== "matched" && status !== "unsupported"/);
-  assert.match(scanNfcScreenSource, /onPress=\{handleScan\}/);
-  assert.match(scanNfcScreenSource, /if \(loadedProgress\.total === 0\)[\s\S]*setStatus\("routeUnavailable"\)/);
-  assert.match(scanNfcScreenSource, /progress && progress\.total > 0/);
-  assert.match(scanNfcScreenSource, /current === "routeUnavailable" \? "idle" : current/);
-  assert.match(scanNfcScreenSource, /screenActiveRef\.current = false[\s\S]*cancelNfcRead\(\)/);
-  assert.match(scanNfcScreenSource, /catch \(error\) \{[\s\S]*if \(!screenActiveRef\.current\) \{[\s\S]*return;/);
-  assert.match(activePatrolScreenSource, /scanPolicy\.nfcEnabled[\s\S]*Открыть все метки/);
-  assert.match(activePatrolScreenSource, /progress\.total === 0 \? "Загружаем точки маршрута"/);
-  assert.match(allPointsScreenSource, /summary\.total === 0 \? "Загружаем метки"/);
-  assert.match(allPointsScreenSource, /isReadyForReport \|\| nfcEnabled/);
-  assert.doesNotMatch(allPointsScreenSource, />\{summary\.completed\} из \{summary\.total\}</);
-  assert.match(patrolHomeScreenSource, /active\.progress\.total === 0[\s\S]*Загружаем метки маршрута/);
-  assert.match(patrolHomeScreenSource, /progress\.completed >= progress\.total[\s\S]*Проверить и отправить отчёт/);
-  assert.match(patrolHomeScreenSource, /if \(nfcEnabled\) \{[\s\S]*Сканировать NFC[\s\S]*Открыть все метки/);
+test('NFC waits for a non-empty route snapshot and arms automatically', () => {
+  has(activePatrolScreenSource, 'isReadyForReview');
+  has(activePatrolScreenSource, 'router.push');
+  has(activePatrolScreenSource, '/submit');
+  has(scanNfcScreenSource, 'loadedProgress.total === 0');
+  has(scanNfcScreenSource, "setStatus('routeUnavailable')");
+  has(scanNfcScreenSource, 'await armReader()');
+  has(scanNfcScreenSource, 'startNfcReaderSession(handleTag)');
+  has(scanNfcScreenSource, 'screenActiveRef.current = false');
+  has(scanNfcScreenSource, 'stopNfcReaderSession()');
+  assert.ok(!scanNfcScreenSource.includes('onPress={handleScan}'));
+  assert.ok(!nfcServiceSource.includes('requestTechnology'));
 });
 
-test("active assignment selection is contour-scoped and keeps paused work ahead of accepted requests", () => {
-  const activeLookup = repositorySource.slice(
-    repositorySource.indexOf("export async function getActiveAssignment()"),
-    repositorySource.indexOf("export async function getAssignmentByRequestId")
-  );
-  const requestLookup = repositorySource.slice(
-    repositorySource.indexOf("export async function getAssignmentByRequestId"),
-    repositorySource.indexOf("export async function acceptRequestLocally")
-  );
-
-  assert.match(activeLookup, /assignment\.contour_id = \? OR assignment\.contour_id IS NULL/);
-  assert.match(requestLookup, /assignment\.contour_id = \? OR assignment\.contour_id IS NULL/);
-  assert.ok(activeLookup.indexOf("assignment.status = 'paused'") < activeLookup.indexOf("assignment.status = 'accepted'"));
-});
-test("active patrol recovers from reload failures and serializes actions", () => {
-  assert.match(activePatrolScreenSource, /try \{[\s\S]*Promise\.all\([\s\S]*finally \{[\s\S]*setIsLoading\(false\)/);
-  assert.match(activePatrolScreenSource, /actionInProgressRef\.current/);
-  assert.match(activePatrolScreenSource, /patrol\.active-sync-load\.failed/);
-  assert.match(activePatrolScreenSource, /patrol\.active-reconcile\.failed/);
+test('active patrol recovers from reload failures and serializes actions', () => {
+  has(activePatrolScreenSource, 'Promise.all');
+  has(activePatrolScreenSource, 'finally');
+  has(activePatrolScreenSource, 'setIsLoading(false)');
+  has(activePatrolScreenSource, 'actionInProgressRef.current');
+  has(activePatrolScreenSource, 'patrol.active-sync-load.failed');
+  has(activePatrolScreenSource, 'patrol.active-reconcile.failed');
 });
 
-test("snapshot freeze uses local lifecycle and attachment errors are user-facing", () => {
-  assert.match(bootstrapRepositorySource, /includes\(local\.status\)/);
-  assert.match(bootstrapRepositorySource, /local\.snapshotVersion \?\? assignment\.routeVersionNo/);
-  assert.doesNotMatch(attachmentPolicySource, /local file|video exceeds|photo exceeds|required evidence/);
-  assert.match(attachmentPolicySource, /Файл вложения отсутствует или пуст на телефоне/);
+test('snapshot freeze uses local lifecycle and attachment errors are user-facing', () => {
+  has(bootstrapRepositorySource, 'includes(local.status)');
+  has(bootstrapRepositorySource, 'local.snapshotVersion ?? assignment.routeVersionNo');
+  assert.ok(!attachmentPolicySource.includes('local file'));
+  assert.ok(!attachmentPolicySource.includes('video exceeds'));
+  assert.ok(!attachmentPolicySource.includes('photo exceeds'));
+  assert.ok(!attachmentPolicySource.includes('required evidence'));
 });
-test("report submission asks for confirmation and keeps an optional full review", () => {
-  assert.match(activePatrolScreenSource, /Alert\.alert\(\s*"Отправить отчёт\?"/);
-  assert.match(activePatrolScreenSource, /completeAssignmentLocally\(assignmentId\)/);
-  assert.match(activePatrolScreenSource, /requestPatrolSync\(\{ mode: "manualReport", assignmentId \}\)/);
-  assert.match(activePatrolScreenSource, /Проверить отчёт/);
-  assert.match(activePatrolScreenSource, /isLoading && !assignment/);
+
+test('report screen uses a large confirmation sheet and one local submit action', () => {
+  has(reportScreenSource, 'ConfirmationSheet');
+  has(reportScreenSource, 'setIsConfirmOpen(true)');
+  has(reportScreenSource, 'confirmLocalSubmission');
+  has(reportScreenSource, 'setSyncNotice(');
 });

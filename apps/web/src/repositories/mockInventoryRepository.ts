@@ -672,6 +672,10 @@ export function createMockInventoryRepository(): InventoryRepository {
       return pageRows([], {});
     },
 
+    async getPpeNormSet() {
+      throw new Error("В демонстрационном режиме детали нормативных наборов недоступны");
+    },
+
     async importPpeNormSetsDraft() {
       return {
         groupsCreated: 0,
@@ -1997,7 +2001,7 @@ function buildMockPpeNormRows(
   position: string,
   card: InventoryPpeCardDetailDto | null,
 ): InventoryPpeCardNormRowDto[] {
-  const sourceRows = card?.normRows?.length
+  const sourceRows: InventoryPpeCardNormRowDto[] = card?.normRows?.length
     ? card.normRows
     : store.settings.positionNorms
         .filter((row) => normalize(row.positionName) === normalize(position))

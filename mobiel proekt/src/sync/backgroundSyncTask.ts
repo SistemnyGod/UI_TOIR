@@ -3,8 +3,7 @@ import * as TaskManager from "expo-task-manager";
 
 import { initializeDatabase } from "@/db/database";
 import { logMobileError } from "@/services/mobileErrorReporter";
-import { triggerDailyDiagnosticReportUpload } from "@/services/diagnosticReportService";
-import { triggerPendingDiagnosticReportUpload } from "@/services/diagnosticReportService";
+import { triggerDailyDiagnosticReportUpload, triggerPendingDiagnosticReportUpload } from "@/services/diagnosticReportService";
 import { recoverStaleSendingOutboxCommands, runForegroundSync } from "@/sync/syncEngine";
 import { recordBackgroundSyncResult } from "@/sync/backgroundSyncState";
 

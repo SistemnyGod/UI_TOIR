@@ -24,8 +24,9 @@ import {
   setTokens
 } from "@/auth/tokenStorage";
 import { hasUsableNetwork } from "@/core/network";
-import { getMobileRuntimeConfig, getServerCandidateBaseUrls } from "@/core/serverSettings";
+import { getMobileRuntimeConfig, getServerCandidateBaseUrls, setServerBaseUrl } from "@/core/serverSettings";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
+import { markPendingOutboxCommandsAuthRequired } from "@/db/repositories/outboxRepository";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { MobileApiProtocolError, parseMobileResponse } from "@/api/protocolValidation";
 import { shouldRefreshAccessToken } from "@/auth/tokenExpiryPolicy";
@@ -147,6 +148,7 @@ async function sendMobileRequestWithFailover(
         continue;
       }
 
+      await setServerBaseUrl(apiBaseUrl).catch(() => undefined);
       return { apiBaseUrl, response };
     } catch (error) {
       invalidateServerHealthCache(apiBaseUrl);
@@ -315,7 +317,14 @@ async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: numb
       await preserveOfflineSessionAfterRefreshFailure(failureCode);
       await clearRefreshOperationId();
       await clearVolatileTokens();
-      throw new Error(recoverableRefreshFailureMessage(failureCode));
+      const message = recoverableRefreshFailureMessage(failureCode);
+      const ownerUserId = await getStoredOwnerUserId();
+      if (ownerUserId) {
+        await markPendingOutboxCommandsAuthRequired(ownerUserId, message).catch((error) => {
+          void logMobileError("auth.refresh.mark-waiting-auth.failed", error);
+        });
+      }
+      throw new Error(message);
     }
 
     if (failureCode === "session_revoked"
@@ -496,5 +505,5 @@ function explicitRevocationMessage(code: "session_revoked" | "device_revoked" | 
 function recoverableRefreshFailureMessage(
   code: "refresh_expired" | "device_reenrollment_required" | "device_session_not_found" | "device_mismatch"
 ) {
-  return "Сервер временно не восстановил мобильную сессию (" + code + "). Локальная работа и очередь отчётов сохранены; приложение повторит отправку автоматически.";
+  return "Для серверной синхронизации требуется повторный вход (" + code + "). Локальная работа и очередь отчётов сохранены; продолжайте работать офлайн.";
 }

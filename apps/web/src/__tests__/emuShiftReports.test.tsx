@@ -2,8 +2,9 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EmuShiftReportsScreen } from "../features/emu/shift-reports/EmuShiftReportsScreen";
+import { ApiError } from '../api/client';
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), getList: vi.fn(), getDetail: vi.fn(), getOptions: vi.fn(), getFavoriteEmployees: vi.fn(), addFavoriteEmployee: vi.fn(), removeFavoriteEmployee: vi.fn(), setEmployeeCategory: vi.fn() }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), getList: vi.fn(), getDetail: vi.fn(), getOptions: vi.fn(), getFavoriteEmployees: vi.fn(), addFavoriteEmployee: vi.fn(), removeFavoriteEmployee: vi.fn(), setEmployeeCategory: vi.fn(), saveDraft: vi.fn(), releaseDraft: vi.fn() }));
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -39,6 +40,8 @@ describe("EmuShiftReportsScreen", () => {
     mocks.addFavoriteEmployee.mockReset().mockResolvedValue({ id: "favorite-created", employeeId: "employee-2", fullName: "", personnelNo: "", position: "", department: "", status: "active", isActive: true, createdAt: "2026-07-29T00:00:00Z" });
     mocks.removeFavoriteEmployee.mockReset().mockResolvedValue({});
     mocks.setEmployeeCategory.mockReset();
+    mocks.saveDraft.mockReset().mockImplementation((payload) => Promise.resolve({ ...payload, id: 'draft-1', editorUserId: 'user-1', editorName: 'Admin', version: (payload.expectedVersion ?? 0) + 1, updatedAt: '2026-07-29T07:00:00Z', leaseExpiresAt: '2026-07-29T07:02:00Z' }));
+    mocks.releaseDraft.mockReset().mockResolvedValue(undefined);
     mocks.getOptions.mockReset().mockResolvedValue({
       employees: [
         { id: "employee-1", fullName: "Иванов Иван", personnelNo: "1", position: "Слесарь", department: "ЭМУ", workerCategory: "mechanic" },
@@ -94,12 +97,12 @@ describe("EmuShiftReportsScreen", () => {
     await chooseEmployee(user, "employee-1");
     await user.type(screen.getAllByPlaceholderText("Что выполнено")[0], "Работа слесаря");
     await user.click(screen.getByRole("tab", { name: "Электрики" }));
-    expect(localStorage.getItem("patrol360.emu.shift-report.draft.v1.last.mechanic")).not.toBeNull();
+    expect(localStorage.getItem("patrol360.emu.shift-report.draft.v1.user.user-1.last.mechanic")).not.toBeNull();
     await waitFor(() => expect(screen.getByLabelText(/Сотрудник/)).toHaveValue(""));
     await chooseEmployee(user, "employee-2");
     await user.type(screen.getAllByPlaceholderText("Что выполнено")[0], "Работа электрика");
     await user.click(screen.getByRole("tab", { name: "Слесари" }));
-    expect(localStorage.getItem("patrol360.emu.shift-report.draft.v1.last.electrician")).not.toBeNull();
+    expect(localStorage.getItem("patrol360.emu.shift-report.draft.v1.user.user-1.last.electrician")).not.toBeNull();
     await waitFor(() => expect(document.querySelector("[data-selected-employee-id='employee-1']")).toBeInTheDocument());
     expect(screen.getAllByPlaceholderText("Что выполнено")[0]).toHaveValue("Работа слесаря");
   });
@@ -419,7 +422,7 @@ describe("EmuShiftReportsScreen", () => {
 
     view.unmount();
 
-    const pointer = localStorage.getItem('patrol360.emu.shift-report.draft.v1.last.mechanic');
+    const pointer = localStorage.getItem('patrol360.emu.shift-report.draft.v1.user.user-1.last.mechanic');
     expect(pointer).not.toBeNull();
     const saved = JSON.parse(localStorage.getItem(pointer as string) ?? 'null') as { version?: number; rows?: Array<{ description?: string }> };
     expect(saved.version).toBe(1);
@@ -432,7 +435,7 @@ describe("EmuShiftReportsScreen", () => {
     await chooseEmployee(user, 'employee-1');
     await user.type(screen.getAllByPlaceholderText('Что выполнено')[0], 'Проверка редуктора');
     window.dispatchEvent(new Event('pagehide'));
-    expect(localStorage.getItem('patrol360.emu.shift-report.draft.v1.last.mechanic')).not.toBeNull();
+    expect(localStorage.getItem('patrol360.emu.shift-report.draft.v1.user.user-1.last.mechanic')).not.toBeNull();
     first.unmount();
 
     render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-entry' />);
@@ -449,9 +452,9 @@ describe("EmuShiftReportsScreen", () => {
     await user.type(screen.getAllByPlaceholderText('Что выполнено')[0], 'Резервный черновик');
     window.dispatchEvent(new Event('pagehide'));
 
-    const pointer = localStorage.getItem('patrol360.emu.shift-report.draft.v1.last.mechanic');
+    const pointer = localStorage.getItem('patrol360.emu.shift-report.draft.v1.user.user-1.last.mechanic');
     expect(pointer).not.toBeNull();
-    expect(localStorage.getItem('patrol360.emu.shift-report.draft.v1.recovery.mechanic')).not.toBeNull();
+    expect(localStorage.getItem('patrol360.emu.shift-report.draft.v1.user.user-1.recovery.mechanic')).not.toBeNull();
     localStorage.removeItem(pointer as string);
     first.unmount();
 
@@ -471,4 +474,15 @@ describe("EmuShiftReportsScreen", () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(localStorage.getItem('patrol360.emu.shift-report.reminder.dismissed.v1')).toBe('2026-07-29');
   });
+  it('blocks submission when another computer owns the same report draft', async () => {
+    const user = userEvent.setup();
+    mocks.saveDraft.mockRejectedValue(new ApiError('Черновик уже редактируется', 409, { problem: { status: 409, title: 'Черновик уже редактируется', detail: 'Черновик уже редактирует Другой пользователь.' } }));
+    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-entry' />);
+    await screen.findByRole('heading', { name: 'Сменный отчёт' });
+    await chooseEmployee(user, 'employee-1');
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Другой пользователь'));
+    expect(screen.getByRole('button', { name: 'Отправить отчёт' })).toBeDisabled();
+    expect(localStorage.getItem('patrol360.emu.shift-report.draft.v1.user.user-1.last.mechanic')).not.toBeNull();
+  });
+
 });

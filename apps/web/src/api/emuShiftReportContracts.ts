@@ -10,6 +10,9 @@ export interface EmuShiftReportShiftOptionDto { shiftType: EmuShiftType; name: s
 export interface EmuShiftReportOptionsDto { employees: EmuShiftReportEmployeeOptionDto[]; sections: EmuShiftReportSectionDto[]; shifts: EmuShiftReportShiftOptionDto[]; }
 export interface EmuCreateShiftReportLineDto { workDescription: string; durationMinutes: number; sectionId?: string | null; note?: string | null; }
 export interface EmuCreateShiftReportDto { reportDate: string; shiftType: EmuShiftType; workerCategory: EmuShiftReportCategory; employeeId: string; lines: EmuCreateShiftReportLineDto[]; }
+export interface EmuSaveShiftReportDraftDto { reportDate: string; shiftType: EmuShiftType; workerCategory: EmuShiftReportCategory; employeeId: string; editorInstanceId: string; expectedVersion: number | null; payloadJson: string; }
+export interface EmuReleaseShiftReportDraftDto { reportDate: string; shiftType: EmuShiftType; employeeId: string; editorInstanceId: string; }
+export interface EmuShiftReportDraftDto extends EmuSaveShiftReportDraftDto { id: string; editorUserId: string | null; editorName: string; version: number; updatedAt: string; leaseExpiresAt: string; }
 export interface EmuShiftReportLineDto extends EmuCreateShiftReportLineDto { id: string; sequenceNo: number; sectionName: string; }
 export interface EmuShiftReportSummaryDto { id: string; reportDate: string; shiftType: EmuShiftType; workerCategory: EmuShiftReportCategory; employeeId: string; employeeName: string; personnelNo: string; position: string; department: string; status: string; workCount: number; totalDurationMinutes: number; createdByUserId: string | null; createdByName: string; submittedAt: string; }
 export interface EmuShiftReportDetailDto extends EmuShiftReportSummaryDto { lines: EmuShiftReportLineDto[]; }

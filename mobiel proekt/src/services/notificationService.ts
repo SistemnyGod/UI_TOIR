@@ -85,12 +85,32 @@ export function subscribeToMobilePushEvents({
   onNotification: () => void;
   onNotificationResponse: (response: Notifications.NotificationResponse) => void;
 }) {
+  let lastResponseId: string | null = null;
+  const handleResponse = (response: Notifications.NotificationResponse) => {
+    const responseId = response.notification.request.identifier;
+    if (responseId === lastResponseId) {
+      return;
+    }
+    lastResponseId = responseId;
+    onNotificationResponse(response);
+  };
+
   const receivedSubscription = Notifications.addNotificationReceivedListener(() => {
     onNotification();
   });
   const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-    onNotificationResponse(response);
+    handleResponse(response);
   });
+
+  void Notifications.getLastNotificationResponseAsync()
+    .then((response) => {
+      if (response) {
+        handleResponse(response);
+      }
+    })
+    .catch(() => {
+      // A missing or unavailable cold-start response must not block app startup.
+    });
 
   return () => {
     receivedSubscription.remove();

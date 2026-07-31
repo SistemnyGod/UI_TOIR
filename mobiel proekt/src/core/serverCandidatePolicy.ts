@@ -5,9 +5,9 @@ export function orderServerCandidateBaseUrls(options: {
   allowedBaseUrls: string[];
 }) {
   const candidates = [
-    options.primaryBaseUrl,
-    options.preferredBaseUrl,
     options.storedBaseUrl,
+    options.preferredBaseUrl,
+    options.primaryBaseUrl,
     ...options.allowedBaseUrls
   ];
 

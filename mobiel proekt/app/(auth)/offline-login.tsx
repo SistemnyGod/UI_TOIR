@@ -9,7 +9,7 @@ import { consumePendingSessionRoute, markSessionUnlocked } from "@/auth/sessionG
 import { getOfflineSession, getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
 import { getLocalUserProfile } from "@/db/repositories/bootstrapRepository";
-import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
+import { runMobileRecoveryCycle } from "@/sync/syncTriggers";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -88,10 +88,7 @@ export default function OfflineLoginRoute() {
         authenticationSatisfied: true,
         expectedContourId: currentContourId
       });
-      if (access.mode === "emergency") {
-        router.replace("/(auth)/offline-emergency" as never);
-        return;
-      }
+
       if (access.mode !== "full") {
         setAuthError("Офлайн-доступ недоступен: сохранённая сессия не разрешает открыть рабочие разделы приложения.");
         return;
@@ -101,7 +98,7 @@ export default function OfflineLoginRoute() {
       // The network may have returned while the offline unlock screen was
       // open. NetInfo has already emitted its event in that case, so request
       // one non-blocking pass explicitly after unlocking the local session.
-      void triggerForegroundSyncWithRetry({ mode: "normal" });
+      void runMobileRecoveryCycle("appActive", "normal");
       router.replace((consumePendingSessionRoute() ?? "/(tabs)/patrol") as never);
     } catch {
       setAuthError("На устройстве не настроена безопасная блокировка. Офлайн-данные не открыты.");
@@ -166,7 +163,7 @@ export default function OfflineLoginRoute() {
         label={isAuthenticating ? "Проверяем доступ..." : "Продолжить офлайн"}
         onPress={() => void continueOffline()}
       />
-      <PrimaryButton label="Войти онлайн" onPress={() => router.replace("/(auth)/login")} />
+      <PrimaryButton label={requiresReenrollment ? "Подтвердить вход для синхронизации" : "Войти онлайн"} onPress={() => router.replace("/(auth)/login")} />
     </Screen>
   );
 }

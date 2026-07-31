@@ -42,6 +42,29 @@ internal sealed partial class EfInventoryWorkflowService
         return ToListResponse(rows, total, paging);
     }
 
+    public InventoryCommandResult<InventoryPpeNormSetDetailDto> GetPpeNormSet(Guid normSetId)
+    {
+        var normSet = dbContext.InventoryPpeNormSets
+            .AsNoTracking()
+            .Include(row => row.Rows)
+                .ThenInclude(row => row.Mappings)
+                    .ThenInclude(mapping => mapping.Item)
+            .FirstOrDefault(row => row.Id == normSetId && row.ArchivedAt == null);
+        if (normSet is null)
+        {
+            return Failure<InventoryPpeNormSetDetailDto>("normSetId", "PPE norm set not found");
+        }
+
+        var itemRows = normSet.Rows.Where(row => row.RowType == "item").ToList();
+        var mappedRows = itemRows.Count(row => row.Mappings.Any(mapping => mapping.ArchivedAt == null));
+        return Success(new InventoryPpeNormSetDetailDto(
+            MapNormSet(normSet),
+            normSet.Rows.OrderBy(row => row.SortOrder).Select(MapNormRow).ToList(),
+            itemRows.Count,
+            mappedRows,
+            itemRows.Count - mappedRows));
+    }
+
     public InventoryCommandResult<InventoryPpeNormImportResultDto> ImportPpeNormSetsDraft(Stream source, string fileName)
     {
         if (!fileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
@@ -74,7 +97,15 @@ internal sealed partial class EfInventoryWorkflowService
 
         var now = DateTimeOffset.UtcNow;
         var effectiveFrom = ReadNormEffectiveDate(fileName);
+        var catalogItems = dbContext.InventoryItems
+            .AsNoTracking()
+            .Include(item => item.Category)
+            .Where(item => item.IsActive)
+            .ToList()
+            .Where(IsPpeCatalogItem)
+            .ToList();
         var createdSets = new List<InventoryPpeNormSetEntity>();
+        var mappingWarnings = new List<string>();
         foreach (var position in document.Positions)
         {
             var normSet = new InventoryPpeNormSetEntity
@@ -90,9 +121,11 @@ internal sealed partial class EfInventoryWorkflowService
                 CreatedAt = now,
                 UpdatedAt = now
             };
+            var mappedCount = 0;
+            var itemCount = 0;
             foreach (var sourceRow in position.Rows.OrderBy(row => row.SortOrder))
             {
-                normSet.Rows.Add(new InventoryPpeNormRowEntity
+                var normRow = new InventoryPpeNormRowEntity
                 {
                     Id = sourceRow.Id,
                     NormSetId = normSet.Id,
@@ -105,11 +138,37 @@ internal sealed partial class EfInventoryWorkflowService
                     Quantity = sourceRow.Quantity,
                     QuantityText = sourceRow.QuantityText,
                     LifeMonths = sourceRow.LifeMonths
-                });
+                };
+                if (normRow.RowType == "item")
+                {
+                    itemCount += 1;
+                    var catalogItem = FindNormCatalogMatch(normRow.NormItemName, catalogItems);
+                    if (catalogItem is not null)
+                    {
+                        normRow.Mappings.Add(new InventoryPpeNormCatalogMappingEntity
+                        {
+                            Id = Guid.NewGuid(),
+                            NormRowId = normRow.Id,
+                            ItemId = catalogItem.Id,
+                            BrandModelArticle = string.Join(" / ", new[] { catalogItem.BrandName, catalogItem.ModelName, catalogItem.Article }
+                                .Where(value => !string.IsNullOrWhiteSpace(value))),
+                            DefaultUnitPriceMinor = catalogItem.DefaultUnitPriceMinor,
+                            IsDefault = true,
+                            CreatedAt = now,
+                            UpdatedAt = now
+                        });
+                        mappedCount += 1;
+                    }
+                }
+                normSet.Rows.Add(normRow);
             }
             createdSets.Add(normSet);
             dbContext.InventoryPpeNormSets.Add(normSet);
             AddSystemLog("ppe_norm_set", normSet.Id, "draft_imported", $"{position.PositionName}; {fileName}; rows={position.Rows.Count}", now);
+            if (itemCount > mappedCount)
+            {
+                mappingWarnings.Add($"{position.PositionName}: сопоставлено {mappedCount} из {itemCount}; вручную сопоставьте оставшиеся строки по категориям СИЗ.");
+            }
         }
 
         dbContext.SaveChanges();
@@ -119,7 +178,7 @@ internal sealed partial class EfInventoryWorkflowService
             document.GroupsCreated,
             document.ItemsCreated,
             document.SkippedRows,
-            document.Warnings,
+            document.Warnings.Concat(mappingWarnings).ToList(),
             createdSets.Select(MapNormSet).ToList()));
     }
 
@@ -231,6 +290,60 @@ internal sealed partial class EfInventoryWorkflowService
 
     private static string NormalizeWorkbookText(string value) =>
         Regex.Replace(value ?? string.Empty, @"\s+", " ").Trim();
+
+    private static bool IsPpeCatalogItem(InventoryItemEntity item)
+    {
+        var kind = item.ItemKind.Trim();
+        var category = item.Category?.Name?.Trim() ?? string.Empty;
+        return item.IsActive && (kind.Contains("СИЗ", StringComparison.OrdinalIgnoreCase)
+            || kind.Contains("спец", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("ppe", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("siz", StringComparison.OrdinalIgnoreCase)
+            || category.Contains("СИЗ", StringComparison.OrdinalIgnoreCase)
+            || category.Contains("спецодеж", StringComparison.OrdinalIgnoreCase)
+            || category.Contains("ppe", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static InventoryItemEntity? FindNormCatalogMatch(string normItemName, IReadOnlyList<InventoryItemEntity> catalogItems)
+    {
+        var normValue = NormalizeNormLookupText(normItemName);
+        if (normValue.Length == 0) return null;
+
+        var exact = catalogItems
+            .Where(item => new[] { item.Name, item.NormItemName, item.ActualItemName }
+                .Select(NormalizeNormLookupText)
+                .Any(value => value.Length > 0 && value == normValue))
+            .ToList();
+        if (exact.Count == 1) return exact[0];
+        if (exact.Count > 1) return null;
+
+        var contains = catalogItems
+            .Select(item => new
+            {
+                Item = item,
+                Values = new[] { item.Name, item.NormItemName, item.ActualItemName }
+                    .Select(NormalizeNormLookupText)
+                    .Where(value => value.Length >= 14)
+                    .Distinct()
+                    .ToList()
+            })
+            .SelectMany(candidate => candidate.Values
+                .Where(value => normValue.Contains(value, StringComparison.Ordinal) || value.Contains(normValue, StringComparison.Ordinal))
+                .Select(value => new { candidate.Item, Length = value.Length }))
+            .OrderByDescending(candidate => candidate.Length)
+            .ToList();
+        if (contains.Count == 0) return null;
+        var bestLength = contains[0].Length;
+        var best = contains.Where(candidate => candidate.Length == bestLength).Select(candidate => candidate.Item).DistinctBy(item => item.Id).ToList();
+        return best.Count == 1 ? best[0] : null;
+    }
+
+    private static string NormalizeNormLookupText(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim().ToLowerInvariant().Replace('ё', 'е');
+        normalized = Regex.Replace(normalized, @"[^0-9a-zа-я]+", " ");
+        return Regex.Replace(normalized, @"\s+", " ").Trim();
+    }
 
     private static void ValidatePpeNormTextLength(int rowNumber, string normItemName, string normPoint)
     {

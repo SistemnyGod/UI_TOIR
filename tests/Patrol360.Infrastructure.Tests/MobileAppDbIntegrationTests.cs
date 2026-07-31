@@ -738,7 +738,7 @@ public sealed class MobileAppDbIntegrationTests
             "РџРµС‚СЂРѕРІ РРІР°РЅ РђР»РµРєСЃР°РЅРґСЂРѕРІРёС‡",
             "selected",
             $"mobile_{Guid.NewGuid():N}"[..18],
-            "РњР°СЂС€СЂСѓС‚РЅС‹Р№ РѕР±С…РѕРґС‡РёРє",
+                        "Маршрутный обходчик",
             BindEmployee: true,
             RestrictToBoundDevice: false,
             TemporaryPassword: false,
@@ -764,7 +764,7 @@ public sealed class MobileAppDbIntegrationTests
             "РџРµС‚СЂРѕРІ РРІР°РЅ РђР»РµРєСЃР°РЅРґСЂРѕРІРёС‡",
             "selected",
             $"mobile_{Guid.NewGuid():N}"[..18],
-            "РњР°СЂС€СЂСѓС‚РЅС‹Р№ РѕР±С…РѕРґС‡РёРє",
+                        "Маршрутный обходчик",
             BindEmployee: true,
             RestrictToBoundDevice: false,
             TemporaryPassword: false,
@@ -861,7 +861,7 @@ public sealed class MobileAppDbIntegrationTests
         Assert.Equal("assigned", boardItem.Status);
         var bootstrappedAssignment = Assert.Single(bootstrap.Assignments, item => item.RequestId == requestId);
         Assert.Equal(created.Assignment!.Id, bootstrappedAssignment.AssignmentId);
-        Assert.Equal("accepted", bootstrappedAssignment.Status);
+        Assert.Equal("assigned", bootstrappedAssignment.Status);
 
         var accepted = UseMobileApp(provider, mobile => mobile.SaveOutbox(session.AccessToken, new MobileOutboxBatchDto([
             BuildLifecycleCommand(
@@ -1183,7 +1183,7 @@ public sealed class MobileAppDbIntegrationTests
             employee.FullName,
             "selected",
             $"auth_{Guid.NewGuid():N}"[..18],
-            "РњР°СЂС€СЂСѓС‚РЅС‹Р№ РѕР±С…РѕРґС‡РёРє",
+                        "Маршрутный обходчик",
             BindEmployee: true,
             RestrictToBoundDevice: false,
             TemporaryPassword: false,

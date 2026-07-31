@@ -34,20 +34,20 @@ export default function OfflineEmergencyRoute() {
 
   if (!profile) {
     return (
-      <Screen title="Emergency view" subtitle="Reading saved data.">
+      <Screen title="Офлайн-доступ" subtitle="Сохранённые данные.">
         <ActivityIndicator />
       </Screen>
     );
   }
 
   return (
-    <Screen title="Emergency view" subtitle="Read-only mode. Work actions and uploads are blocked.">
+    <Screen title="Офлайн-доступ" subtitle="Только просмотр. Рабочие действия и отправка временно недоступны.">
       <Card>
-        <Text style={styles.label}>Saved user</Text>
+        <Text style={styles.label}>Пользователь</Text>
         <Text style={styles.title}>{profile.fullName}</Text>
-        <Text style={styles.text}>The protected offline period has expired. Connect to the server and sign in online to continue patrols.</Text>
+        <Text style={styles.text}>Локальная сессия не разрешает открыть рабочие разделы. Подключитесь к серверу и войдите в приложение онлайн.</Text>
       </Card>
-      <PrimaryButton label="Sign in online" onPress={() => router.replace("/(auth)/login")} />
+      <PrimaryButton label="Войти онлайн" onPress={() => router.replace("/(auth)/login")} />
     </Screen>
   );
 }

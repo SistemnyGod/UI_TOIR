@@ -1,6 +1,6 @@
 import * as FileSystem from "expo-file-system/legacy";
 
-import { refreshStoredAccessToken } from "@/api/httpClient";
+import { refreshStoredAccessToken, refreshStoredAccessTokenIfNeeded } from "@/api/httpClient";
 import { MobileApiProtocolError } from "@/api/protocolValidation";
 import { invalidateServerHealthCache, probeServerHealthCached } from "@/api/serverHealthApi";
 import { MobileNetworkError, photoUploadTimeoutMs, serverUnavailableMessage, videoUploadTimeoutMs } from "@/api/networkTimeout";
@@ -18,6 +18,7 @@ import { fileUploadResponseSchema } from "@/api/schemas";
 export async function uploadMobileFile(file: LocalMobileFile) {
   await validateMobileFileBeforeUpload(file);
 
+  await refreshStoredAccessTokenIfNeeded();
   const token = await getAccessToken();
   const runtimeConfig = await getMobileRuntimeConfig();
   let { apiBaseUrl, result } = await uploadFileWithFailover(runtimeConfig.apiBaseUrl, runtimeConfig.syncProtocolVersion, runtimeConfig.contourId, file, token);

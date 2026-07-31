@@ -21,6 +21,34 @@ public sealed class EmuShiftReportsController(
         return Ok(service.GetOptions(GetAllowedSectionIds(actor)));
     }
 
+    [HttpPut("drafts/current")]
+    [RequirePermission("emu.shift-reports.create")]
+    public ActionResult<EmuShiftReportDraftDto> SaveDraft(EmuSaveShiftReportDraftDto request)
+    {
+        var actor = ReadCurrentUser();
+        var result = service.SaveDraft(request, actor.UserId, actor.DisplayName);
+        if (result.Succeeded && result.Value is not null) return Ok(result.Value);
+        if (result.Errors.TryGetValue("conflict", out var conflict) || result.Errors.TryGetValue("version", out conflict))
+        {
+            return Conflict(new ProblemDetails { Status = StatusCodes.Status409Conflict, Title = "Черновик уже редактируется", Detail = conflict.FirstOrDefault() });
+        }
+        return ValidationProblem(new ValidationProblemDetails(result.Errors.ToDictionary(item => item.Key, item => item.Value)) { Title = "Не удалось сохранить черновик" });
+    }
+
+    [HttpDelete("drafts/current")]
+    [RequirePermission("emu.shift-reports.create")]
+    public IActionResult ReleaseDraft(EmuReleaseShiftReportDraftDto request)
+    {
+        var actor = ReadCurrentUser();
+        var result = service.ReleaseDraft(request, actor.UserId);
+        if (result.Succeeded) return NoContent();
+        if (result.Errors.TryGetValue("conflict", out var conflict))
+        {
+            return Conflict(new ProblemDetails { Status = StatusCodes.Status409Conflict, Title = "Черновик закреплён за другим редактором", Detail = conflict.FirstOrDefault() });
+        }
+        return ValidationProblem(new ValidationProblemDetails(result.Errors.ToDictionary(item => item.Key, item => item.Value)));
+    }
+
     [HttpPut("employee-categories/{employeeId:guid}")]
     [RequirePermission("emu.shift-reports.create")]
     public ActionResult<EmuShiftReportEmployeeOptionDto> SetEmployeeCategory(Guid employeeId, EmuSetShiftReportEmployeeCategoryDto request)

@@ -245,7 +245,7 @@ export function InventoryScreen({
         ) : current.id === "inventory-ppe-history" ? (
           <InventoryPpeHistoryScreen onNavigate={onNavigate} />
         ) : current.id === "inventory-ppe-create" ? (
-          <InventoryPpeCreateScreen onNavigate={onNavigate} onNotify={onNotify} />
+          <InventoryPpeCreateScreen currentUserId={currentUser?.id} onNavigate={onNavigate} onNotify={onNotify} />
         ) : current.id === "inventory-custody" ? (
           <InventoryCustodyScreen
             documents={state.custodyDocuments}

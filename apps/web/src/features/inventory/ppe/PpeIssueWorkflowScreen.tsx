@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, X } from "lucide-react";
 import type {
   InventoryEmployeeDto,
@@ -17,6 +17,7 @@ import {
   applyItemSetToDraft,
   clearPpeIssueWorkflowCache,
   createIssueDraftLine,
+  getPpeIssueWorkflowStorageKey,
   mergeIssueDraftLine,
   readPpeIssueWorkflowCache,
   validateIssueDraftLine,
@@ -40,19 +41,23 @@ import "../styles/ppe-ui-system.css";
 
 type WorkflowStep = 1 | 2 | 3 | 4;
 
-const today = new Date().toISOString().slice(0, 10);
+function getLocalDateInputValue(date = new Date()) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+const today = getLocalDateInputValue();
 const emptyEmployeeDetails: PpeEmployeeCardDetails = {
   clothingSize: "", gender: "", handProtectionSize: "", headSize: "", height: "", respiratorSize: "", shoeSize: "",
 };
 
-export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (screen: ScreenId) => void; onNotify: (message: string) => void }) {
+export function PpeIssueWorkflowScreen({ onNavigate, onNotify, currentUserId = "anonymous" }: { onNavigate: (screen: ScreenId) => void; onNotify: (message: string) => void; currentUserId?: string }) {
   const repository = useInventoryRepository();
-  const [cache] = useState(readPpeIssueWorkflowCache);
+  const [cache] = useState(() => readPpeIssueWorkflowCache(currentUserId));
   const restoreStarted = useRef(false);
   const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query);
   const [employees, setEmployees] = useState<InventoryEmployeeDto[]>([]);
-  const [employeeId, setEmployeeId] = useState(cache?.employeeId ?? window.localStorage.getItem("patrol360.inventory.ppe.employee") ?? "");
+  const [employeeId, setEmployeeId] = useState(cache?.employeeId ?? window.localStorage.getItem(getPpeIssueWorkflowStorageKey(currentUserId) + ".employee") ?? "");
   const [employeeDetails, setEmployeeDetails] = useState<PpeEmployeeCardDetails>(emptyEmployeeDetails);
   const [issueDate, setIssueDate] = useState(cache?.issueDate ?? today);
   const [issueType, setIssueType] = useState<IssueType>(cache?.issueType ?? "planned");
@@ -81,24 +86,56 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
   const [committed, setCommitted] = useState(false);
   const [error, setError] = useState("");
+  const compositionSaveTimer = useRef<number | null>(null);
+  const compositionSaveBusy = useRef(false);
+  const lastCompositionSignature = useRef("");
+  const issueBatchKey = useRef(cache?.idempotencyKey ?? createClientUuid());
 
   useEffect(() => {
-    let cancelled = false;
-    setLoadingEmployees(true);
-    repository.getEmployees({ page: 1, pageSize: 60, query: deferredQuery, status: "active" })
-      .then((result) => { if (!cancelled) { setEmployees(result.rows); if (!employeeId && result.rows[0]) setEmployeeId(result.rows[0].id); } })
-      .catch((reason) => { if (!cancelled) setError(messageOf(reason, "Не удалось загрузить сотрудников")); })
-      .finally(() => { if (!cancelled) setLoadingEmployees(false); });
-    return () => { cancelled = true; };
-  }, [deferredQuery, repository]);
-
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setLoadingEmployees(true);
+      void (async () => {
+        try {
+          const all: InventoryEmployeeDto[] = [];
+          let page = 1;
+          let pageCount = 1;
+          do {
+            const result = await repository.getEmployees({ page, pageSize: 100, query, status: "active" }, { signal: controller.signal });
+            all.push(...result.rows);
+            pageCount = result.pageCount;
+            page += 1;
+          } while (page <= pageCount && !controller.signal.aborted);
+          if (controller.signal.aborted) return;
+          setEmployees(all);
+          if (all[0]) setEmployeeId((current) => current || all[0].id);
+        } catch (reason) {
+          if (!controller.signal.aborted) setError(messageOf(reason, "Не удалось загрузить сотрудников"));
+        } finally {
+          if (!controller.signal.aborted) setLoadingEmployees(false);
+        }
+      })();
+    }, 300);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, repository]);
   useEffect(() => {
     let cancelled = false;
     setSettingsError("");
-    repository.getSettings().then((result) => { if (!cancelled) setSettings(result); }).catch((reason) => { if (!cancelled) setSettingsError(messageOf(reason, "Не удалось загрузить наборы СИЗ")); });
+    repository.getSettings().then((result) => { if (!cancelled) { setSettings(result); const defaultWarehouseId = result.warehouses.find((warehouse) => warehouse.isActive)?.id ?? null; if (defaultWarehouseId) setIssueLines((current) => current.map((line) => line.warehouseId ? line : { ...line, warehouseId: defaultWarehouseId })); } }).catch((reason) => { if (!cancelled) setSettingsError(messageOf(reason, "Не удалось загрузить наборы СИЗ")); });
     return () => { cancelled = true; };
   }, [repository, settingsReloadToken]);
 
+  useEffect(() => {
+    const defaultWarehouseId = settings?.warehouses.find((warehouse) => warehouse.isActive)?.id ?? null;
+    if (!defaultWarehouseId) return;
+    setIssueLines((current) => {
+      const next = current.map((line) => line.warehouseId ? line : { ...line, warehouseId: defaultWarehouseId });
+      return next.some((line, index) => line !== current[index]) ? next : current;
+    });
+  }, [issueLines, settings]);
   useEffect(() => {
     if (!cache?.draftId || restoreStarted.current) return;
     restoreStarted.current = true;
@@ -106,13 +143,17 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
     repository.getPpeCard(cache.draftId)
       .then((restored) => {
         setDraft(restored);
-        setRows([...(restored.normRows ?? [])].sort((left, right) => left.sortOrder - right.sortOrder));
+        const restoredRows = [...(restored.normRows ?? [])].sort((left, right) => left.sortOrder - right.sortOrder);
+        setRows(restoredRows);
+        if (!cache.issueLines.length) {
+          setIssueLines(restoredRows.map((row) => createIssueDraftLine(row, cache.issueDate)).filter((line): line is PpeIssueDraftLine => Boolean(line)));
+        }
         setEmployeeDetails({ ...emptyEmployeeDetails, ...restored.employeeDetails });
         setIssueType(restored.issueType ?? cache.issueType);
         setResponsible(restored.responsibleName ?? cache.responsibleName);
         setBasis(restored.basis ?? cache.basis);
       })
-      .catch(() => { clearPpeIssueWorkflowCache(); setStep(1); setIssueLines([]); })
+      .catch(() => { clearPpeIssueWorkflowCache(currentUserId); setStep(1); setIssueLines([]); })
       .finally(() => setLoadingWorkspace(false));
   }, [cache, repository]);
 
@@ -134,8 +175,32 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
 
   useEffect(() => {
     if (committed) return;
-    writePpeIssueWorkflowCache({ basis, draftId: draft?.id, employeeId, issueDate, issueLines, issueType, responsibleName: responsible, source, step });
-  }, [basis, committed, draft?.id, employeeId, issueDate, issueLines, issueType, responsible, source, step]);
+    writePpeIssueWorkflowCache({ basis, draftId: draft?.id, employeeId, idempotencyKey: issueBatchKey.current, issueDate, issueLines, issueType, responsibleName: responsible, source, step }, currentUserId);
+  }, [basis, committed, currentUserId, draft?.id, employeeId, issueDate, issueLines, issueType, responsible, source, step]);
+
+  useEffect(() => {
+    if (!draft || committed || savingRef.current) return;
+    const signature = JSON.stringify(issueLines.map((line) => [line.cardNormRowId, line.issuedAt, line.quantity, line.unitPriceMinor, line.issueMethod, line.sizeText, line.warehouseId, line.comment]));
+    if (signature === lastCompositionSignature.current) return;
+    if (compositionSaveTimer.current !== null) window.clearTimeout(compositionSaveTimer.current);
+    compositionSaveTimer.current = window.setTimeout(() => {
+      if (savingRef.current || compositionSaveBusy.current) return;
+      compositionSaveBusy.current = true;
+      lastCompositionSignature.current = signature;
+      const lineByRow = new Map(issueLines.map((line) => [line.cardNormRowId, line]));
+      const nextRows = rows.map((row) => {
+        const line = lineByRow.get(row.id);
+        if (row.rowType !== "item") return row;
+        if (!line) return { ...row, draftIssuedAt: null, draftQuantity: null, draftUnitPriceMinor: null, draftIssueMethod: "personal" as const, draftSizeText: "", draftWarehouseId: null, draftComment: "", draftBrandModelArticle: "" };
+        return { ...row, draftIssuedAt: toApiDate(line.issuedAt), draftQuantity: line.quantity, draftUnitPriceMinor: line.unitPriceMinor, draftIssueMethod: line.issueMethod, draftSizeText: line.sizeText, draftWarehouseId: line.warehouseId, draftComment: line.comment, draftBrandModelArticle: line.brandModelArticle };
+      });
+      void repository.updatePpeCardNormRows(draft.id, { expectedVersion: draft.version ?? 0, rows: nextRows.map(toNormPayload) })
+        .then((saved) => { setDraft(saved); setRows([...(saved.normRows ?? nextRows)].sort((left, right) => left.sortOrder - right.sortOrder)); })
+        .catch((reason) => { lastCompositionSignature.current = ""; setError(messageOf(reason, "Не удалось сохранить состав черновика")); })
+        .finally(() => { compositionSaveBusy.current = false; });
+    }, 500);
+    return () => { if (compositionSaveTimer.current !== null) window.clearTimeout(compositionSaveTimer.current); };
+  }, [committed, draft, issueLines, repository, rows]);
 
   const selectedEmployee = useMemo(() => employees.find((employee) => employee.id === employeeId) ?? workspace?.employee ?? null, [employeeId, employees, workspace?.employee]);
   const itemRows = useMemo(() => rows.filter((row) => row.rowType === "item"), [rows]);
@@ -173,7 +238,7 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
         : await repository.createPpeCardDraft({ basis: basis.trim(), cardDate: toApiDate(issueDate), employeeDetails: toApiEmployeeDetails(employeeDetails), employeeId, issueType, responsibleName: responsible.trim(), source });
       setDraft(saved);
       setRows([...(saved.normRows ?? rows)].sort((left, right) => left.sortOrder - right.sortOrder));
-      window.localStorage.setItem("patrol360.inventory.ppe.employee", employeeId);
+      window.localStorage.setItem(getPpeIssueWorkflowStorageKey(currentUserId) + ".employee", employeeId);
       setStep(2);
       onNotify(draft ? "Реквизиты черновика сохранены" : "Черновик документа выдачи подготовлен");
     } catch (reason) { setError(messageOf(reason, "Не удалось сохранить черновик")); }
@@ -330,9 +395,10 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
     try {
       const saved = await repository.createPpeIssueBatch(draft.id, {
         expectedVersion: draft.version ?? 0,
-        lines: issueLines.map((line) => ({ brandModelArticle: line.brandModelArticle, cardNormRowId: line.cardNormRowId, issueMethod: line.issueMethod, issuedAt: toApiDate(line.issuedAt), itemId: line.itemId, quantity: line.quantity, unitPriceMinor: line.unitPriceMinor })),
+        idempotencyKey: issueBatchKey.current,
+        lines: issueLines.map((line) => ({ brandModelArticle: line.brandModelArticle, cardNormRowId: line.cardNormRowId, issueMethod: line.issueMethod, issuedAt: toApiDate(line.issuedAt), itemId: line.itemId, quantity: line.quantity, unitPriceMinor: line.unitPriceMinor, sizeText: line.sizeText, comment: line.comment, warehouseId: line.warehouseId })),
       });
-      setDraft(saved); setCommitted(true); clearPpeIssueWorkflowCache();
+      setDraft(saved); setCommitted(true); clearPpeIssueWorkflowCache(currentUserId);
       onNotify(`Документ выдачи сохранён: ${issueLines.length} позиций`);
     } catch (reason) { setError(messageOf(reason, "Не удалось сохранить выдачу")); }
     finally { endSaving(); }
@@ -352,7 +418,7 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
     }
   }
   async function download(format: "pdf" | "docx") {
-    if (!draft || downloadRef.current) return;
+    if (!draft || !committed || downloadRef.current) return;
     downloadRef.current = format;
     setDownloadFormat(format);
     try { const file = await repository.printPpeCard(draft.id, printMode === "sheet" ? "sheet" : "card", format); saveApiFile(file); onNotify(`${format.toUpperCase()} сформирован`); }
@@ -366,7 +432,7 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify }: { onNavigate: (
     {error ? <div className="ppe-issue-error" role="alert"><X size={17} />{error}</div> : null}
     {step === 1 ? <EmployeeDocumentStep basis={basis} details={employeeDetails} draftExists={Boolean(draft)} employee={selectedEmployee} employees={employees} employeeId={employeeId} issueDate={issueDate} issueType={issueType} loading={loadingEmployees || loadingWorkspace} onBasisChange={setBasis} onDetailsChange={patchEmployeeDetails} onEmployeeChange={setEmployeeId} onIssueDateChange={setIssueDate} onIssueTypeChange={setIssueType} onQueryChange={setQuery} query={query} responsible={responsible} onResponsibleChange={setResponsible} source={source} sourceReady={Boolean(workspace?.activeNormSet)} onSourceChange={setSource} onContinue={() => void saveDocumentDraft()} saving={saving} /> : null}
     {step === 2 ? <SelectionStep categories={categories} issueLines={issueLines} itemRows={itemRows} loadingItems={saving} onAddCatalog={() => void addCatalogRow()} onApplySet={applySet} onOpenCatalog={setMappingRow} onRemoveExtra={(id) => void removeExtraRow(id)} onSelectAll={selectAllMapped} onToggle={toggleRow} selectionTab={selectionTab} setSelectionTab={setSelectionTab} settings={settings} settingsError={settingsError} onRetrySettings={() => setSettingsReloadToken((value) => value + 1)} /> : null}
-    {step === 3 ? <CompositionStep issueLines={issueLines} onChange={patchIssueLine} onOpenCatalog={setMappingRow} onRemove={removeIssueLine} rows={rows} selectedEmployee={selectedEmployee} /> : null}
+    {step === 3 ? <CompositionStep issueLines={issueLines} onChange={patchIssueLine} onOpenCatalog={setMappingRow} onRemove={removeIssueLine} rows={rows} selectedEmployee={selectedEmployee} warehouses={settings?.warehouses ?? []} /> : null}
     {step === 4 ? <PrintStep committed={committed} data={printData} errors={blockingErrors} mode={printMode} downloadFormat={downloadFormat} onDownload={(format) => void download(format)} onModeChange={setPrintMode} onPreview={() => setPreviewOpen(true)} onPrint={() => handlePrint(printData, printMode)} printBusy={printing} onSave={() => void commitIssue()} saving={saving} /> : null}
     <footer className="ppe-issue-workflow-footer"><PpeButton disabled={step === 1 || saving || Boolean(downloadFormat) || printing} icon={<ArrowLeft size={16} />} onClick={() => setStep((current) => Math.max(1, current - 1) as WorkflowStep)} variant="secondary">Назад</PpeButton><span>{step} из 4</span>{step === 2 ? <PpeButton disabled={saving || Boolean(downloadFormat) || printing} icon={<ArrowRight size={16} />} onClick={goToComposition} variant="primary">К составу</PpeButton> : null}{step === 3 ? <PpeButton disabled={saving || Boolean(downloadFormat) || printing} icon={<ArrowRight size={16} />} onClick={goToPrint} variant="primary">Предпросмотр печати</PpeButton> : null}{step === 4 && committed ? <PpeButton icon={<ArrowRight size={16} />} onClick={() => onNavigate("inventory-ppe")} variant="primary">Открыть карточку</PpeButton> : null}</footer>
     {mappingRow ? <PpeCatalogModal allowMultiple={!mappingRow.sourceNormRowId} normRow={mappingRow} onClose={() => setMappingRow(null)} onConfirm={saveMapping} /> : null}
@@ -412,7 +478,7 @@ function buildPrintData({ cardId, employee, employeeDetails, issueLines, rows }:
 
 function createExtraGroup(sortOrder: number): InventoryPpeCardNormRowDto { return { brandModelArticle: "", coverageStatus: "not_issued", defaultUnitPriceMinor: null, id: createClientUuid(), issuePeriodText: "", issuedQuantity: 0, lifeMonths: null, mappedItemId: null, mappedItemName: "", mappings: [], normItemName: "Дополнительная выдача", normPoint: "", parentRowId: null, quantity: 0, quantityText: "", rowType: "group", sortOrder, sourceNormRowId: null }; }
 function createExtraRow(parentRowId: string, sortOrder: number): InventoryPpeCardNormRowDto { return { brandModelArticle: "", coverageStatus: "not_issued", defaultUnitPriceMinor: null, id: createClientUuid(), issuePeriodText: "Дополнительная выдача", issuedQuantity: 0, lifeMonths: null, mappedItemId: null, mappedItemName: "", mappings: [], normItemName: "Дополнительное СИЗ", normPoint: "Дополнительная выдача", parentRowId, quantity: 1, quantityText: "1 шт.", rowType: "item", sortOrder, sourceNormRowId: null }; }
-function toNormPayload(row: InventoryPpeCardNormRowDto) { return { brandModelArticle: row.brandModelArticle, defaultUnitPriceMinor: row.defaultUnitPriceMinor, id: row.id, issuePeriodText: row.issuePeriodText, lifeMonths: row.lifeMonths, mappedItemId: row.mappedItemId, normItemName: row.normItemName, normPoint: row.normPoint, parentRowId: row.parentRowId, quantity: row.quantity, quantityText: row.quantityText, rowType: row.rowType, sortOrder: row.sortOrder, sourceNormRowId: row.sourceNormRowId }; }
+function toNormPayload(row: InventoryPpeCardNormRowDto) { return { brandModelArticle: row.brandModelArticle, defaultUnitPriceMinor: row.defaultUnitPriceMinor, draftIssuedAt: row.draftIssuedAt ?? null, draftQuantity: row.draftQuantity ?? null, draftUnitPriceMinor: row.draftUnitPriceMinor ?? null, draftIssueMethod: (row.draftIssueMethod === "dispenser" ? "dispenser" : "personal") as "personal" | "dispenser", draftSizeText: row.draftSizeText ?? "", draftWarehouseId: row.draftWarehouseId ?? null, draftComment: row.draftComment ?? "", draftBrandModelArticle: row.draftBrandModelArticle ?? "", id: row.id, issuePeriodText: row.issuePeriodText, lifeMonths: row.lifeMonths, mappedItemId: row.mappedItemId, normItemName: row.normItemName, normPoint: row.normPoint, parentRowId: row.parentRowId, quantity: row.quantity, quantityText: row.quantityText, rowType: row.rowType, sortOrder: row.sortOrder, sourceNormRowId: row.sourceNormRowId }; }
 function toApiEmployeeDetails(details: PpeEmployeeCardDetails) { return { clothingSize: details.clothingSize ?? "", gender: details.gender ?? "", handProtectionSize: details.handProtectionSize ?? "", headSize: details.headSize ?? "", height: details.height ?? "", respiratorSize: details.respiratorSize ?? "", shoeSize: details.shoeSize ?? "" }; }
 function toApiDate(value: string) { return new Date(`${value}T12:00:00`).toISOString(); }
 function messageOf(value: unknown, fallback: string) { return value instanceof Error ? value.message : fallback; }

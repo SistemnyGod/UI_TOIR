@@ -1,22 +1,28 @@
-import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { getStoredOwnerUserId } from "@/auth/tokenStorage";
-import { getReportDeliveryState } from "@/db/repositories/outboxRepository";
-import { completeAssignmentLocally, getReportReadiness, reopenInvalidCompletionReportLocally, ReportReadiness } from "@/db/repositories/patrolRepository";
-import { getReportDeliveryPresentation } from "@/features/patrol/reportDeliveryPresentation";
-import { groupReportProblems, ReportProblemGroup } from "@/features/patrol/reportReadinessPresentation";
-import { useAppTheme } from "@/features/settings/themePreference";
-import { logMobileError } from "@/services/mobileErrorReporter";
-import { shouldReloadReportAfterSync, subscribeToSyncEvents } from "@/sync/syncEvents";
-import { requestPatrolSync } from "@/sync/PatrolSyncCoordinator";
-import { Card } from "@/ui/Card";
-import { PrimaryButton } from "@/ui/PrimaryButton";
-import { Screen } from "@/ui/Screen";
-import { StatusPill } from "@/ui/StatusPill";
-import type { ReportDeliveryState, ReportDeliveryStateSnapshot } from "@/domain/reporting/reportDeliveryState";
+import type { ReportDeliveryState, ReportDeliveryStateSnapshot } from '@/domain/reporting/reportDeliveryState';
+import { getStoredOwnerUserId } from '@/auth/tokenStorage';
+import { getReportDeliveryState } from '@/db/repositories/outboxRepository';
+import {
+  getReportReadiness,
+  reopenInvalidCompletionReportLocally,
+  ReportReadiness
+} from '@/db/repositories/patrolRepository';
+import { getReportDeliveryPresentation } from '@/features/patrol/reportDeliveryPresentation';
+import { groupReportProblems, ReportProblemGroup } from '@/features/patrol/reportReadinessPresentation';
+import { useAppTheme } from '@/features/settings/themePreference';
+import { logMobileError } from '@/services/mobileErrorReporter';
+import { shouldReloadReportAfterSync, subscribeToSyncEvents } from '@/sync/syncEvents';
+import { requestPatrolSync } from '@/sync/PatrolSyncCoordinator';
+import { queuePatrolReport } from '@/features/patrol/reportSubmissionCoordinator';
+import { Card } from '@/ui/Card';
+import { ConfirmationSheet } from '@/ui/ConfirmationSheet';
+import { PrimaryButton } from '@/ui/PrimaryButton';
+import { Screen } from '@/ui/Screen';
+import { StatusPill } from '@/ui/StatusPill';
 
 type DeliveryState = ReportDeliveryStateSnapshot | null;
 
@@ -27,53 +33,48 @@ export function SubmitReportScreen() {
   const [readiness, setReadiness] = useState<ReportReadiness | null>(null);
   const [delivery, setDelivery] = useState<DeliveryState>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [reloadRevision, setReloadRevision] = useState(0);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
-  const confirmationOpenRef = useRef(false);
+
+  const reload = useCallback(async () => {
+    setLoadError(null);
+    try {
+      const ownerUserId = await getStoredOwnerUserId();
+      const [loadedReadiness, loadedDelivery] = await Promise.all([
+        getReportReadiness(assignmentId),
+        ownerUserId ? getReportDeliveryState(ownerUserId, assignmentId) : Promise.resolve(null)
+      ]);
+      setReadiness(loadedReadiness);
+      setDelivery(loadedDelivery);
+    } catch (error) {
+      void logMobileError('report.screen.load.failed', error);
+      setLoadError(error instanceof Error ? error.message : 'Не удалось прочитать локальный отчёт');
+    }
+  }, [assignmentId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void reload();
+    }, [reload])
+  );
 
   useEffect(
     () => subscribeToSyncEvents((event) => {
       if (shouldReloadReportAfterSync(event, assignmentId)) {
-        setReloadRevision((value) => value + 1);
+        void reload();
       }
     }),
-    [assignmentId]
+    [assignmentId, reload]
   );
 
-  const load = useCallback(() => {
-    void reloadRevision;
-    let isMounted = true;
-
-    setLoadError(null);
-    void Promise.all([getReportReadiness(assignmentId), loadDelivery(assignmentId)])
-      .then(([loadedReadiness, loadedDelivery]) => {
-        if (isMounted) {
-          setReadiness(loadedReadiness);
-          setDelivery(loadedDelivery);
-        }
-      })
-      .catch((error) => {
-        void logMobileError("report.screen.load.failed", error);
-        if (isMounted) {
-          setLoadError(error instanceof Error ? error.message : "Не удалось прочитать локальный отчёт.");
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [assignmentId, reloadRevision]);
-
-  useFocusEffect(load);
-
-  const presentation = useMemo(
-    () => getReportDeliveryPresentation(delivery),
-    [delivery]
-  );
   const problemGroups = useMemo(
     () => groupReportProblems(readiness?.problems ?? []),
     [readiness]
+  );
+  const presentation = useMemo(
+    () => getReportDeliveryPresentation(delivery),
+    [delivery]
   );
 
   async function handlePrimaryAction() {
@@ -81,324 +82,193 @@ export function SubmitReportScreen() {
       return;
     }
 
-    if (presentation.action === "serverSettings") {
-      router.push("/(auth)/server-settings");
+    if (!readiness?.ready) {
+      router.push(`/patrol/assignment/${assignmentId}/all-points?filter=attention`);
       return;
     }
 
-    if (presentation.action === "repair") {
+    if (presentation.action === 'serverSettings') {
+      router.push('/(auth)/server-settings');
+      return;
+    }
+
+    if (presentation.action === 'signIn') {
+      router.push('/(auth)/login');
+      return;
+    }
+
+    if (presentation.action === 'wait') {
+      setSyncNotice('Отчёт уже отправляется. Дождитесь результата синхронизации.');
+      return;
+    }
+
+    if (presentation.action === 'done') {
+      router.replace('/(tabs)/patrol');
+      return;
+    }
+
+    if (presentation.action === 'repair') {
       setIsSubmitting(true);
-      setSyncNotice(null);
       try {
         await reopenInvalidCompletionReportLocally(assignmentId);
         router.push(`/patrol/assignment/${assignmentId}/all-points?filter=attention`);
       } catch (error) {
-        setSyncNotice(error instanceof Error ? error.message : "Не удалось открыть отчёт для исправления.");
+        setSyncNotice(error instanceof Error ? error.message : 'Не удалось открыть точки для исправления');
       } finally {
         setIsSubmitting(false);
       }
       return;
     }
 
-    if (presentation.action === "signIn") {
-      router.push("/(auth)/login");
+    if (presentation.action === 'retry') {
+      setIsSubmitting(true);
+      setSyncNotice(null);
+      try {
+        await requestPatrolSync({ mode: 'manualReport', assignmentId });
+        await reload();
+        setSyncNotice('Повторная отправка запланирована');
+      } catch (error) {
+        setSyncNotice(error instanceof Error ? error.message : 'Отчёт останется в очереди и будет отправлен автоматически');
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
 
-    if (presentation.action === "done") {
-      router.replace("/(tabs)/patrol");
+    setIsConfirmOpen(true);
+  }
+
+  async function confirmLocalSubmission() {
+    if (isSubmitting || !readiness?.ready) {
       return;
     }
 
-    if (!readiness?.ready && presentation.action === "submit") {
-      return;
-    }
-
+    setIsConfirmOpen(false);
     setIsSubmitting(true);
     setSyncNotice(null);
 
     try {
-      if (presentation.action === "submit") {
-        await completeAssignmentLocally(assignmentId);
-        const syncResult = await requestPatrolSync({ mode: "manualReport", assignmentId });
-        const updatedDelivery = await loadDelivery(assignmentId);
-        setDelivery(updatedDelivery);
-        setSyncNotice(updatedDelivery?.status === "sending"
-          ? "Отправка уже выполняется. Подождите завершения текущей попытки."
-          : getSyncNotice(syncResult.skipped));
-        return;
-      }
-
-      const syncResult = await requestPatrolSync({ mode: "manualReport", assignmentId });
-      const updatedDelivery = await loadDelivery(assignmentId);
-      setDelivery(updatedDelivery);
-      setSyncNotice(updatedDelivery?.status === "sending"
-        ? "Отправка уже выполняется. Подождите завершения текущей попытки."
-        : getSyncNotice(syncResult.skipped));
+      await queuePatrolReport(assignmentId);
+      await reload();
+      setSyncNotice('Отчёт сохранён на телефоне и отправляется автоматически');
     } catch (error) {
-      setDelivery(await loadDelivery(assignmentId));
-      setSyncNotice(error instanceof Error ? error.message : "Не удалось запустить отправку. Отчет сохранен на телефоне.");
+      setSyncNotice(error instanceof Error
+        ? error.message
+        : 'Не удалось сохранить отчёт на телефоне');
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  function openProblem(problem: ReportProblemGroup) {
-    if (problem.pointId === "route-empty") {
-      router.push(`/patrol/assignment/${assignmentId}/all-points`);
-      return;
-    }
-
-    router.push(`/patrol/assignment/${assignmentId}/point/${problem.pointId}/fill`);
-  }
-
-  function confirmReportSubmission() {
-    if (confirmationOpenRef.current || isSubmitting || !readiness?.ready || presentation.action !== "submit") {
-      return;
-    }
-
-    confirmationOpenRef.current = true;
-    Alert.alert(
-      "Отправить отчёт?",
-      "Отчёт будет сохранён на телефоне и отправлен автоматически при наличии сети.",
-      [
-        {
-          text: "Нет",
-          style: "cancel",
-          onPress: () => {
-            confirmationOpenRef.current = false;
-          }
-        },
-        {
-          text: "Да, отправить",
-          onPress: () => {
-            confirmationOpenRef.current = false;
-            void handlePrimaryAction();
-          }
-        }
-      ]
-    );
-  }
-  async function handleScreenPrimaryAction() {
-    if (!readiness?.ready) {
-      setIsSubmitting(true);
-      setSyncNotice(null);
-      try {
-        await reopenInvalidCompletionReportLocally(assignmentId);
-        router.push(`/patrol/assignment/${assignmentId}/all-points?filter=attention`);
-      } catch (error) {
-        setSyncNotice(error instanceof Error ? error.message : "Не удалось открыть точки для исправления.");
-      } finally {
-        setIsSubmitting(false);
-      }
-      return;
-    }
-
-    if (presentation.action === "submit") {
-      confirmReportSubmission();
-      return;
-    }
-
-    await handlePrimaryAction();
-  }
-
   if (!readiness) {
     return (
-      <Screen title="Отправка отчета" subtitle="Проверяем точки и локально сохраненные данные.">
+      <Screen title='Отправка отчёта' subtitle='Проверяем локальные результаты обхода'>
         {loadError ? (
           <Card>
-            <Text style={styles.loadError}>{loadError}</Text>
-            <PrimaryButton
-              icon="refresh-outline"
-              label="Повторить проверку"
-              onPress={() => setReloadRevision((value) => value + 1)}
-              variant="secondary"
-            />
+            <Text style={styles.error}>{loadError}</Text>
+            <PrimaryButton icon='refresh-outline' label='Повторить проверку' onPress={() => void reload()} variant='secondary' />
           </Card>
-        ) : <ActivityIndicator />}
+        ) : (
+          <Card><ActivityIndicator color={colors.primary} /></Card>
+        )}
       </Screen>
     );
   }
 
-  const actionDisabled = isSubmitting || presentation.action === "wait" || (!readiness.ready && problemGroups.length === 0);
+  const actionDisabled = isSubmitting || presentation.action === 'wait' || !readiness.ready && problemGroups.length === 0;
   const primaryLabel = !readiness.ready
-    ? "Открыть незаполненные"
-    : presentation.buttonLabel;
-  const primaryIcon = !readiness.ready ? "arrow-forward-outline" : actionIcon(presentation.action);
+    ? 'Открыть незаполненные'
+    : presentation.action === 'done'
+      ? 'К списку обходов'
+      : presentation.action === 'retry'
+      ? 'Повторить отправку'
+      : presentation.action === 'repair'
+          ? 'Исправить отчёт'
+          : presentation.action === 'wait'
+            ? 'Отчёт отправляется'
+          : 'Завершить и отправить';
 
   return (
     <Screen
       bottomAction={
         <PrimaryButton
           disabled={actionDisabled}
-          icon={primaryIcon}
-          label={isSubmitting ? "Отправляем…" : primaryLabel}
-          onPress={() => void handleScreenPrimaryAction()}
-          size="large"
+          icon={isSubmitting ? 'time-outline' : 'send-outline'}
+          label={isSubmitting ? 'Сохраняем отчёт…' : primaryLabel}
+          onPress={() => void handlePrimaryAction()}
+          size='large'
         />
       }
-      title="Проверка отчёта"
-      subtitle="Исправьте незаполненные точки или завершите обход."
+      title='Проверка отчёта'
+      subtitle='Результаты сохраняются на телефоне до подтверждённой доставки'
     >
       <Card>
         <View style={styles.row}>
-          <Text style={[styles.title, { color: colors.text }]}>{readiness.assignment?.routeName ?? "Обход"}</Text>
+          <Text style={[styles.title, { color: colors.text }]}>
+            {readiness.assignment?.routeName ?? 'Обход'}
+          </Text>
           <StatusPill
-            label={readiness.ready ? "Все точки заполнены" : `Осталось: ${problemGroups.length}`}
-            tone={readiness.ready ? "success" : "warning"}
+            label={readiness.ready ? 'Все точки заполнены' : `Осталось: ${problemGroups.length}`}
+            tone={readiness.ready ? 'success' : 'warning'}
           />
         </View>
         <View style={styles.progressRow}>
-          <ProgressValue label="Пройдено" value={`${readiness.progress.completed}/${readiness.progress.total}`} />
-          <ProgressValue label="Замечания" value={String(readiness.progress.issues)} />
-          <ProgressValue label="Отложено" value={String(readiness.progress.deferred)} />
+          <ProgressValue label='Пройдено' value={`${readiness.progress.completed}/${readiness.progress.total}`} />
+          <ProgressValue label='Замечания' value={String(readiness.progress.issues)} />
+          <ProgressValue label='Отложено' value={String(readiness.progress.deferred)} />
         </View>
       </Card>
 
-      <DeliveryCard
-        detail={presentation.detail}
-        lastUpdate={delivery?.updatedAtLocal ?? null}
-        title={isSubmitting ? "Проверяем доставку…" : presentation.title}
-        tone={presentation.tone}
-        status={delivery?.status ?? null}
-      />
+      <Card>
+        <View style={styles.deliveryHeader}>
+          <Ionicons color={colors.primary} name='cloud-upload-outline' size={24} />
+          <View style={styles.deliveryText}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{presentation.title}</Text>
+            <Text style={[styles.text, { color: colors.mutedText }]}>{presentation.detail}</Text>
+            <Text style={[styles.statusText, { color: colors.mutedText }]}>
+              {deliveryStateLabel(delivery?.status ?? null)}
+            </Text>
+          </View>
+        </View>
+      </Card>
 
-      {readiness.problems.length > 0 ? (
+      {problemGroups.length > 0 ? (
         <Card>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Нужно заполнить перед отправкой</Text>
           {problemGroups.map((problem) => (
             <ProblemGroupButton
               key={problem.pointId}
-              onPress={() => openProblem(problem)}
+              onPress={() => router.push(`/patrol/assignment/${assignmentId}/point/${problem.pointId}/fill`)}
               problem={problem}
             />
           ))}
         </Card>
       ) : null}
-      <Text style={styles.syncStatusLine}>{delivery?.status === "delivered" && delivery.deliveredAt ? `Отчёт доставлен: ${formatDateTime(delivery.deliveredAt)}` : "Отчёт хранится на телефоне до подтверждения сервером."}</Text>
-      {syncNotice ? <Text accessibilityLiveRegion="polite" style={styles.notice}>{syncNotice}</Text> : null}
-      {loadError ? <Text accessibilityLiveRegion="polite" style={styles.loadError}>{loadError}</Text> : null}
 
+      {syncNotice ? <Text accessibilityLiveRegion='polite' style={styles.notice}>{syncNotice}</Text> : null}
+      {loadError ? <Text accessibilityLiveRegion='polite' style={styles.error}>{loadError}</Text> : null}
 
-      <View style={styles.secondaryLinks}>
-        <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.replace("/(tabs)/patrol")} style={styles.secondaryLink}>
-          <Ionicons color={colors.primary} name="list-outline" size={18} />
-          <Text style={[styles.secondaryLinkText, { color: colors.primary }]}>К списку обходов</Text>
+      <View style={styles.links}>
+        <Pressable accessibilityRole='button' onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} style={styles.link}>
+          <Ionicons color={colors.primary} name='list-outline' size={18} />
+          <Text style={[styles.linkText, { color: colors.primary }]}>Все точки</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} style={styles.secondaryLink}>
-          <Ionicons color={colors.primary} name="list-outline" size={18} />
-          <Text style={[styles.secondaryLinkText, { color: colors.primary }]}>Все точки</Text>
+        <Pressable accessibilityRole='button' onPress={() => router.push('/settings/sync-queue' as never)} style={styles.link}>
+          <Ionicons color={colors.primary} name='cloud-upload-outline' size={18} />
+          <Text style={[styles.linkText, { color: colors.primary }]}>Статус отправки</Text>
         </Pressable>
-        {presentation.action !== "done" ? (
-          <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push("/settings/sync-queue" as never)} style={styles.secondaryLink}>
-            <Ionicons color={colors.primary} name="cloud-upload-outline" size={18} />
-            <Text style={[styles.secondaryLinkText, { color: colors.primary }]}>Подробнее об отправке</Text>
-          </Pressable>
-        ) : null}
       </View>
+
+      <ConfirmationSheet
+        confirmLabel='Да, завершить'
+        disabled={isSubmitting}
+        message='Отчёт будет сразу сохранён на телефоне. При наличии сети отправка начнётся автоматически.'
+        onCancel={() => setIsConfirmOpen(false)}
+        onConfirm={() => void confirmLocalSubmission()}
+        title='Завершить и отправить отчёт?'
+        visible={isConfirmOpen}
+      />
     </Screen>
-  );
-}
-
-async function loadDelivery(assignmentId: string) {
-  const ownerUserId = await getStoredOwnerUserId();
-  return ownerUserId ? getReportDeliveryState(ownerUserId, assignmentId) : null;
-}
-
-function getSyncNotice(skipped: "offline" | "serverUnavailable" | "unauthenticated" | "wrongContour" | "failed" | null) {
-  if (skipped === "offline") return "Нет подключения. Отчёт сохранён после ручной отправки; очередь доставит его после появления сети.";
-  if (skipped === "serverUnavailable") return "Сервер временно недоступен. Отчёт остаётся на телефоне; следующий повтор уже запланирован.";
-  if (skipped === "unauthenticated") return "Для продолжения отправки необходимо войти. Повторно проходить точки не потребуется.";
-  if (skipped === "wrongContour") return "Подключён сервер другого контура. Автоматическая отправка остановлена до исправления настроек.";
-  if (skipped === "failed") return "Отправка прервалась. Данные сохранены — можно повторить сейчас или дождаться автоматической отправки.";
-  return "Отчёт сохранён после ручной отправки. Очередь доставит его после подключения к сети.";
-}
-function actionIcon(action: ReturnType<typeof getReportDeliveryPresentation>["action"]): keyof typeof Ionicons.glyphMap {
-  switch (action) {
-    case "retry":
-      return "refresh-outline";
-    case "repair":
-      return "build-outline";
-    case "signIn":
-      return "log-in-outline";
-    case "done":
-      return "checkmark-circle-outline";
-    case "wait":
-      return "time-outline";
-    default:
-      return "send-outline";
-  }
-}
-
-function DeliveryCard({
-  detail,
-  lastUpdate,
-  title,
-  tone,
-  status
-}: {
-  detail: string;
-  lastUpdate: string | null;
-  title: string;
-  tone: "neutral" | "success" | "warning" | "danger";
-  status: ReportDeliveryState["status"] | null;
-}) {
-  const palette = deliveryPalette[tone];
-  return (
-    <View
-      accessibilityLiveRegion="polite"
-      style={[styles.deliveryCard, { backgroundColor: palette.background, borderColor: palette.border }]}
-    >
-      <View style={[styles.deliveryIcon, { backgroundColor: palette.iconBackground }]}>
-        <Ionicons color={palette.color} name={palette.icon} size={24} />
-      </View>
-      <View style={styles.deliveryText}>
-        <Text style={[styles.deliveryTitle, { color: palette.color }]}>{title}</Text>
-        <Text style={styles.deliveryDetail}>{detail}</Text>
-        <Text style={styles.deliveryState}>{deliveryStateLabel(status)}</Text>
-        {lastUpdate ? <Text style={styles.deliveryTime}>Обновлено {formatTime(lastUpdate)}</Text> : null}
-      </View>
-    </View>
-  );
-}
-
-function ProblemGroupButton({
-  onPress,
-  problem
-}: {
-  onPress: () => void;
-  problem: ReportProblemGroup;
-}) {
-  const { colors } = useAppTheme();
-  const title = `${problem.orderIndex}. ${problem.pointName}`;
-
-  return (
-    <Pressable
-      accessibilityLabel={`${title}. ${problem.reasons.join(". ")}`}
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.problemButton,
-        { backgroundColor: colors.card, borderColor: colors.border },
-        pressed ? styles.problemButtonPressed : null
-      ]}
-    >
-      <View style={styles.problemHeader}>
-        <View style={styles.problemTitleRow}>
-          <Ionicons color="#b45309" name="alert-circle-outline" size={20} />
-          <Text style={[styles.problemTitle, { color: colors.text }]}>{title}</Text>
-        </View>
-        <Ionicons color={colors.primary} name="chevron-forward" size={20} />
-      </View>
-      <View style={styles.problemReasons}>
-        {problem.reasons.map((reason) => (
-          <View key={reason} style={styles.problemReasonRow}>
-            <View style={styles.problemReasonDot} />
-            <Text style={[styles.problemReason, { color: colors.mutedText }]}>{reason}</Text>
-          </View>
-        ))}
-      </View>
-    </Pressable>
   );
 }
 
@@ -411,193 +281,157 @@ function ProgressValue({ label, value }: { label: string; value: string }) {
   );
 }
 
-function deliveryStateLabel(status: ReportDeliveryState["status"] | null) {
-  if (status === "delivered") return "Сервер: принят";
-  if (status === "queued" || status === "sending") return "Телефон: сохранено локально — сервер: ожидает";
-  if (status === "retryScheduled" || status === "waitingNetwork") return "Телефон: сохранено локально — сервер: повтор позже";
-  if (status === "repairRequired" || status === "conflict" || status === "blockedByDependency" || status === "wrongContour") return "Телефон: сохранено локально — сервер: нужно действие";
-  return "Телефон: сохранено локально";
+function ProblemGroupButton({
+  onPress,
+  problem
+}: {
+  onPress: () => void;
+  problem: ReportProblemGroup;
+}) {
+  const { colors } = useAppTheme();
+  return (
+    <Pressable
+      accessibilityLabel={`${problem.orderIndex}. ${problem.pointName}. ${problem.reasons.join('. ')}`}
+      accessibilityRole='button'
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.problemButton,
+        { backgroundColor: colors.card, borderColor: colors.border },
+        pressed ? styles.pressed : null
+      ]}
+    >
+      <View style={styles.problemHeader}>
+        <Text style={[styles.problemTitle, { color: colors.text }]}>
+          {problem.orderIndex}. {problem.pointName}
+        </Text>
+        <Ionicons color={colors.primary} name='chevron-forward' size={20} />
+      </View>
+      {problem.reasons.map((reason) => (
+        <Text key={reason} style={[styles.reason, { color: colors.mutedText }]}>• {reason}</Text>
+      ))}
+    </Pressable>
+  );
 }
 
-function formatTime(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+function deliveryStateLabel(status: ReportDeliveryState['status'] | null) {
+  if (status === 'delivered') return 'Сервер: принято';
+  if (status === 'queued' || status === 'sending') return 'Телефон: сохранено — отправляется';
+  if (status === 'retryScheduled' || status === 'waitingNetwork') return 'Телефон: сохранено — повтор будет автоматически';
+  if (status === 'repairRequired' || status === 'conflict' || status === 'blockedByDependency' || status === 'wrongContour') {
+    return 'Телефон: сохранено — требуется действие';
+  }
+  return 'Телефон: сохранено локально';
 }
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
-}
-
-const deliveryPalette = {
-  neutral: { background: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8", iconBackground: "#dbeafe", icon: "cloud-upload-outline" as const },
-  success: { background: "#ecfdf5", border: "#bbf7d0", color: "#15803d", iconBackground: "#dcfce7", icon: "checkmark-circle-outline" as const },
-  warning: { background: "#fffbeb", border: "#fde68a", color: "#b45309", iconBackground: "#fef3c7", icon: "time-outline" as const },
-  danger: { background: "#fef2f2", border: "#fecaca", color: "#b91c1c", iconBackground: "#fee2e2", icon: "alert-circle-outline" as const }
-};
 
 const styles = StyleSheet.create({
-  deliveryCard: {
-    alignItems: "flex-start",
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    padding: 15
-  },
-  deliveryDetail: {
-    color: "#475569",
-    fontSize: 14,
-    lineHeight: 20
-  },
-  deliveryIcon: {
-    alignItems: "center",
-    borderRadius: 12,
-    height: 44,
-    justifyContent: "center",
-    width: 44
-  },
-  deliveryText: {
-    flex: 1,
-    gap: 4
-  },
-  deliveryState: {
-    color: "#334155",
-    fontSize: 12,
-    fontWeight: "800"
-  },
-  deliveryTime: {
-    color: "#64748b",
-    fontSize: 12,
-    fontWeight: "700"
-  },
-  deliveryTitle: {
-    fontSize: 17,
-    fontWeight: "900"
-  },
-  loadError: {
-    color: "#b91c1c",
-    fontSize: 14,
-    lineHeight: 20
-  },
-  syncStatusLine: {
-    color: "#64748b",
-    fontSize: 12,
-    fontWeight: "700"
-  },
-  notice: {
-    backgroundColor: "#f8fafc",
-    borderColor: "#cbd5e1",
-    borderRadius: 12,
-    borderWidth: 1,
-    color: "#334155",
-    fontSize: 14,
-    lineHeight: 20,
-    padding: 12
-  },
-  primaryAction: {
-    marginTop: 2
-  },
-  secondaryLinks: {
-    alignItems: "flex-start",
-    gap: 2
-  },
-  secondaryLink: {
-    alignItems: "center",
-    flexDirection: "row",
+  row: {
+    alignItems: 'center',
+    flexDirection: 'row',
     gap: 8,
-    minHeight: 48,
-    paddingHorizontal: 4
+    justifyContent: 'space-between'
   },
-  secondaryLinkText: {
-    fontSize: 14,
-    fontWeight: "800"
-  },
-  problemButton: {
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 9,
-    minHeight: 56,
-    paddingHorizontal: 13,
-    paddingVertical: 12
-  },
-  problemButtonPressed: {
-    opacity: 0.72
-  },
-  problemHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between"
-  },
-  problemReason: {
+  title: {
     flex: 1,
-    fontSize: 14,
-    lineHeight: 19
-  },
-  problemReasonDot: {
-    backgroundColor: "#f59e0b",
-    borderRadius: 3,
-    height: 6,
-    marginTop: 7,
-    width: 6
-  },
-  problemReasonRow: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 9
-  },
-  problemReasons: {
-    gap: 5,
-    paddingLeft: 29,
-    paddingRight: 20
-  },
-  problemTitle: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "800",
-    lineHeight: 20
-  },
-  problemTitleRow: {
-    alignItems: "center",
-    flex: 1,
-    flexDirection: "row",
-    gap: 9,
-    minWidth: 0
-  },
-  progressLabel: {
-    color: "#64748b",
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase"
-  },
-  progressNumber: {
-    color: "#0f172a",
-    fontSize: 18,
-    fontWeight: "900"
+    fontSize: 20,
+    fontWeight: '800'
   },
   progressRow: {
-    flexDirection: "row",
-    gap: 8
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 14
   },
   progressValue: {
-    backgroundColor: "#f6f9fe",
+    backgroundColor: '#f6f9fe',
     borderRadius: 10,
     flex: 1,
     gap: 2,
     minWidth: 0,
     padding: 10
   },
-  row: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "space-between"
+  progressLabel: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase'
+  },
+  progressNumber: {
+    color: '#0f172a',
+    fontSize: 18,
+    fontWeight: '900'
+  },
+  deliveryHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12
+  },
+  deliveryText: {
+    flex: 1,
+    gap: 4
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: "800"
+    fontSize: 17,
+    fontWeight: '900'
   },
-  title: {
+  text: {
+    fontSize: 14,
+    lineHeight: 20
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '800'
+  },
+  problemButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
+    marginTop: 10,
+    minHeight: 56,
+    padding: 12
+  },
+  problemHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between'
+  },
+  problemTitle: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: "800"
+    fontSize: 15,
+    fontWeight: '800'
+  },
+  reason: {
+    fontSize: 13,
+    lineHeight: 18
+  },
+  pressed: {
+    opacity: 0.72
+  },
+  links: {
+    gap: 2
+  },
+  link: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    minHeight: 48,
+    paddingHorizontal: 4
+  },
+  linkText: {
+    fontSize: 14,
+    fontWeight: '800'
+  },
+  notice: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+    borderRadius: 12,
+    borderWidth: 1,
+    color: '#166534',
+    fontSize: 14,
+    lineHeight: 20,
+    padding: 12
+  },
+  error: {
+    color: '#b91c1c',
+    fontSize: 14,
+    lineHeight: 20
   }
 });

@@ -1,6 +1,6 @@
 import type { OfflineSessionState } from "@/auth/offlineSession";
 
-export type OfflineAccessMode = "full" | "emergency" | "denied";
+export type OfflineAccessMode = "full" | "denied";
 
 export type OfflineAccessReason =
   | "allowed"

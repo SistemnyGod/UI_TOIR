@@ -76,6 +76,8 @@ public interface IInventoryWorkflowService
 
     InventoryListResponseDto<InventoryPpeNormSetDto> GetPpeNormSets(InventoryListQuery query);
 
+    InventoryCommandResult<InventoryPpeNormSetDetailDto> GetPpeNormSet(Guid normSetId);
+
     InventoryCommandResult<InventoryPpeNormImportResultDto> ImportPpeNormSetsDraft(Stream source, string fileName);
 
     InventoryCommandResult<InventoryPpeNormSetDto> PublishPpeNormSet(Guid normSetId, PublishInventoryPpeNormSetDto request);

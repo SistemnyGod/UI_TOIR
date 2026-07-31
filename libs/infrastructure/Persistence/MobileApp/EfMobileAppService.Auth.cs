@@ -304,10 +304,7 @@ internal sealed partial class EfMobileAppService
 
             return UnauthorizedResult("device_session_not_found");
         }
-        if (oldSession.RefreshExpiresAt <= now)
-        {
-            return UnauthorizedResult("refresh_expired");
-        }
+
         if (oldSession.RevokedAt is not null)
         {
             return UnauthorizedResult("session_revoked");

@@ -1,12 +1,13 @@
 import NetInfo from "@react-native-community/netinfo";
 
+import { refreshStoredAccessTokenIfNeeded } from "@/api/httpClient";
+
 import { isReauthenticationRequiredError } from "@/auth/sessionErrors";
 import { canAttemptServerConnection } from "@/core/networkPolicy";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { logMobileError } from "@/services/mobileErrorReporter";
-import { triggerDailyDiagnosticReportUpload } from "@/services/diagnosticReportService";
+import { triggerDailyDiagnosticReportUpload, triggerPendingDiagnosticReportUpload } from "@/services/diagnosticReportService";
 import { refreshMobileData } from "@/services/mobileDataRefreshService";
-import { triggerPendingDiagnosticReportUpload } from "@/services/diagnosticReportService";
 import { createMutationSyncScheduler } from "@/sync/mutationSyncScheduler";
 import { registerMutationSyncRequester, requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 import { registerOutboxRetrySchedulerRunner } from "@/sync/outboxRetryScheduler";
@@ -18,6 +19,9 @@ const mutationSyncDebounceMs = 50;
 
 let fallbackRefreshInterval: ReturnType<typeof setInterval> | null = null;
 let scheduledRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
+let scheduledRefreshDueAt = 0;
+let scheduledRefreshForce = false;
+let networkRecoveryPromise: Promise<void> | null = null;
 let lastRefreshStartedAt = 0;
 let activeRefreshPromise: Promise<boolean> | null = null;
 let lastNetworkUsable: boolean | null = null;
@@ -33,8 +37,7 @@ export type MobileDataRefreshReason = "push" | "notificationResponse" | "network
 
 export function subscribeToNetworkSync() {
   fallbackRefreshInterval ??= setInterval(() => {
-    requestMobileDataRefresh("fallback");
-    void triggerForegroundSyncWithRetry({ mode: "normal" });
+    void runMobileRecoveryCycle("fallback", "normal");
   }, fallbackRefreshMs);
 
   const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
@@ -52,10 +55,7 @@ export function subscribeToNetworkSync() {
     }
 
     if (networkBecameUsable) {
-      requestMobileDataRefresh("network");
-      void triggerForegroundSyncWithRetry({ mode: "networkRecovered" });
-      void triggerPendingDiagnosticReportUpload();
-      void triggerDailyDiagnosticReportUpload();
+      void runMobileRecoveryCycle("network", "networkRecovered");
     }
   });
 
@@ -68,10 +68,40 @@ export function subscribeToNetworkSync() {
     if (scheduledRefreshTimeout) {
       clearTimeout(scheduledRefreshTimeout);
       scheduledRefreshTimeout = null;
+      scheduledRefreshDueAt = 0;
+      scheduledRefreshForce = false;
     }
   };
 }
 
+export async function runMobileRecoveryCycle(
+  reason: MobileDataRefreshReason,
+  mode: ForegroundSyncOptions["mode"] = "normal"
+) {
+  if (networkRecoveryPromise) {
+    return networkRecoveryPromise;
+  }
+
+  networkRecoveryPromise = (async () => {
+    try {
+      const accessToken = await refreshStoredAccessTokenIfNeeded();
+      if (!accessToken) {
+        return;
+      }
+
+      await triggerForegroundSyncWithRetry({ mode });
+      await refreshMobileData();
+      void triggerPendingDiagnosticReportUpload();
+      void triggerDailyDiagnosticReportUpload();
+    } catch (error) {
+      void logMobileError(`mobile.recovery.${reason}.failed`, error);
+    }
+  })().finally(() => {
+    networkRecoveryPromise = null;
+  });
+
+  return networkRecoveryPromise;
+}
 export type TriggerForegroundSyncResult = ForegroundSyncResult | {
   sent: 0;
   skipped: "failed";
@@ -135,12 +165,12 @@ export function requestMobileDataRefresh(
   const elapsedMs = now - lastRefreshStartedAt;
 
   if (activeRefreshPromise) {
-    scheduleMobileDataRefresh(reason, options.force ? 1_000 : refreshCooldownMs);
+    scheduleMobileDataRefresh(reason, options.force ? 1_000 : refreshCooldownMs, options.force === true);
     return;
   }
 
   if (!options.force && elapsedMs < refreshCooldownMs) {
-    scheduleMobileDataRefresh(reason, refreshCooldownMs - elapsedMs);
+    scheduleMobileDataRefresh(reason, refreshCooldownMs - elapsedMs, false);
     return;
   }
 
@@ -155,13 +185,23 @@ export function requestMobileDataRefresh(
     });
 }
 
-function scheduleMobileDataRefresh(reason: MobileDataRefreshReason, delayMs: number) {
-  if (scheduledRefreshTimeout) {
+function scheduleMobileDataRefresh(reason: MobileDataRefreshReason, delayMs: number, force: boolean) {
+  const dueAt = Date.now() + Math.max(0, delayMs);
+  if (scheduledRefreshTimeout && scheduledRefreshDueAt <= dueAt) {
+    scheduledRefreshForce ||= force;
     return;
   }
+  if (scheduledRefreshTimeout) {
+    clearTimeout(scheduledRefreshTimeout);
+  }
 
+  scheduledRefreshDueAt = dueAt;
+  scheduledRefreshForce = force;
   scheduledRefreshTimeout = setTimeout(() => {
+    const shouldForce = scheduledRefreshForce;
     scheduledRefreshTimeout = null;
-    requestMobileDataRefresh(reason);
-  }, delayMs);
+    scheduledRefreshDueAt = 0;
+    scheduledRefreshForce = false;
+    requestMobileDataRefresh(reason, { force: shouldForce });
+  }, Math.max(0, dueAt - Date.now()));
 }

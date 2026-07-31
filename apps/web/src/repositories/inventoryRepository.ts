@@ -1,4 +1,4 @@
-import { ApiClient } from "../api/client";
+import { ApiClient, type ApiRequestOptions } from "../api/client";
 import type {
   ApplyInventoryPpeLineActionDto,
   CreateEmployeeDto,
@@ -41,6 +41,7 @@ import type {
   InventoryPpeHistoryRowDto,
   InventoryPpeNormImportResultDto,
   InventoryPpeNormMappingDto,
+  InventoryPpeNormSetDetailDto,
   InventoryPpeNormSetDto,
   InventoryPpeWorkspaceDto,
   InventoryPpeModuleOptionsDto,
@@ -302,6 +303,10 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
       );
     },
 
+    getPpeNormSet(normSetId: string) {
+      return client.get<InventoryPpeNormSetDetailDto>(`/api/v1/inventory/ppe/norm-sets/${normSetId}`);
+    },
+
     importPpeNormSetsDraft(file: File) {
       const formData = new FormData();
       formData.append("file", file);
@@ -445,9 +450,10 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
       );
     },
 
-    getEmployees(params: InventoryListParams = {}) {
+    getEmployees(params: InventoryListParams = {}, options: ApiRequestOptions = {}) {
       return client.get<InventoryListResponseDto<InventoryEmployeeDto>>(
         `/api/v1/inventory/employees${toQueryString(params)}`,
+        options,
       );
     },
 
@@ -488,8 +494,8 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
       return client.patch<InventoryUserDto, undefined>(`/api/v1/inventory/users/${id}/disable`, undefined);
     },
 
-    getSettings() {
-      return client.get<InventorySettingsDto>("/api/v1/inventory/settings");
+    getSettings(options: ApiRequestOptions = {}) {
+      return client.get<InventorySettingsDto>("/api/v1/inventory/settings", options);
     },
 
     getItemSet(id: string) {

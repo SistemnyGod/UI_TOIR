@@ -1,12 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { listSyncQueueFiles, SyncQueueFileItem } from "@/db/repositories/filesRepository";
 import { listSyncQueueCommands, SyncQueueCommandItem } from "@/db/repositories/outboxRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
+import { countWaitingAuthItems } from "@/features/syncQueue/syncQueueAuthPolicy";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { requestMobileDataRefresh, triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
@@ -31,9 +32,12 @@ export function SyncQueueScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedErrorId, setExpandedErrorId] = useState<string | null>(null);
   const [actionInProgressId, setActionInProgressId] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const load = useCallback(async () => {
-    setIsLoading(true);
+    if (!hasLoadedRef.current) {
+      setIsLoading(true);
+    }
     try {
       const ownerUserId = await getStoredOwnerUserId();
       if (!ownerUserId) {
@@ -51,6 +55,7 @@ export function SyncQueueScreen() {
       setLoadError(caught instanceof Error ? caught.message : "Не удалось прочитать очередь отправки.");
       void logMobileError("sync.queue.load.failed", caught);
     } finally {
+      hasLoadedRef.current = true;
       setIsLoading(false);
     }
   }, []);
@@ -120,6 +125,7 @@ export function SyncQueueScreen() {
 
   const summary = useMemo(() => buildQueueSummary(state), [state]);
   const pendingCount = state.commands.length + state.files.length;
+  const waitingAuthCount = countWaitingAuthItems(state.commands);
   const retryableCount = state.commands.filter((command) => ["pending", "sending", "retryLater"].includes(command.status)).length
     + state.files.filter((file) => file.status !== "failed").length;
 
@@ -158,6 +164,22 @@ export function SyncQueueScreen() {
           <Text style={styles.notice}>
             Требуют проверки: {summary.errors}. Откройте запись ниже, чтобы увидеть причину и исправить данные.
           </Text>
+        ) : null}
+
+        {waitingAuthCount > 0 ? (
+          <View accessibilityLiveRegion="polite" style={styles.authNotice}>
+            <Text style={styles.authNoticeTitle}>Нужно подтвердить вход</Text>
+            <Text style={[styles.text, { color: colors.mutedText }]}>
+              Локальные данные сохранены. После подтверждения приложение автоматически отправит {waitingAuthCount} ожидающих операций.
+            </Text>
+            <PrimaryButton
+              icon="log-in-outline"
+              label="Подтвердить вход для синхронизации"
+              onPress={() => router.push("/(auth)/login")}
+              size="large"
+              variant="secondary"
+            />
+          </View>
         ) : null}
 
         {feedback ? <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text> : null}
@@ -566,6 +588,19 @@ const styles = StyleSheet.create({
     color: "#0b1f3f",
     fontSize: 13,
     fontWeight: "700"
+  },
+  authNotice: {
+    gap: 10,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: "#fff7ed",
+    borderWidth: 1,
+    borderColor: "#fdba74"
+  },
+  authNoticeTitle: {
+    color: "#9a3412",
+    fontSize: 16,
+    fontWeight: "800"
   },
   notice: {
     backgroundColor: "#eff6ff",

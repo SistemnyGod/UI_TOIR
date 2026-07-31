@@ -3496,3 +3496,16 @@
     display: none;
   }
 }
+
+.emu-draft-conflict {
+  border-color: #f3b4b4;
+  background: #fff4f4;
+  color: #9f2626;
+}
+
+.emu-draft-coordination {
+  border-color: #b9d5ff;
+  background: #f3f8ff;
+  color: #315b91;
+  font-size: 12px;
+}

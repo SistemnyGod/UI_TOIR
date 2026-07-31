@@ -73,7 +73,7 @@ export async function getOrCreatePendingDiagnosticReport(
     `SELECT payload_json FROM mobile_diagnostic_reports WHERE owner_user_id = ? AND status = 'pending' ORDER BY created_at_local LIMIT 1`,
     [ownerUserId]
   );
-  if (pending) {
+  if (pending && !options.force) {
     return JSON.parse(pending.payload_json) as MobileDiagnosticReport;
   }
 
@@ -174,7 +174,26 @@ export async function getOrCreatePendingDiagnosticReport(
         [ownerUserId]
       );
       if (existing) {
-        existingPayloadJson = existing.payload_json;
+        if (!options.force) {
+          existingPayloadJson = existing.payload_json;
+          return;
+        }
+
+        const existingReport = JSON.parse(existing.payload_json) as MobileDiagnosticReport;
+        const refreshedReport: MobileDiagnosticReport = {
+          ...report,
+          reportId: existingReport.reportId,
+          periodStart: existingReport.periodStart
+        };
+        existingPayloadJson = JSON.stringify(refreshedReport);
+        await tx.runAsync(
+          `
+            UPDATE mobile_diagnostic_reports
+            SET period_end = ?, payload_json = ?, last_error = NULL
+            WHERE report_id = ? AND owner_user_id = ? AND status = 'pending'
+          `,
+          [refreshedReport.periodEnd, existingPayloadJson, existingReport.reportId, ownerUserId]
+        );
         return;
       }
 
