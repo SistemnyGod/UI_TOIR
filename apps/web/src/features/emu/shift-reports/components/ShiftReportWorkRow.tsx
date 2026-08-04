@@ -1,7 +1,41 @@
 import { Trash2 } from "lucide-react";
+import { useLayoutEffect, useRef, type ChangeEvent, type TextareaHTMLAttributes } from "react";
 import type { EmuShiftReportSectionDto } from "../../../../api/emuShiftReportContracts";
 import type { WorkRow } from "../shiftReportUi";
 import { DurationInput } from "./DurationInput";
+
+type AutoResizeTextareaProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value"> & {
+  value: string;
+};
+
+function resizeTextarea(element: HTMLTextAreaElement) {
+  element.style.height = "0px";
+  element.style.height = `${element.scrollHeight}px`;
+}
+
+function AutoResizeTextarea({ value, onChange, className = "", ...props }: AutoResizeTextareaProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    if (textareaRef.current) resizeTextarea(textareaRef.current);
+  }, [value]);
+
+  function handleChange(event: ChangeEvent<HTMLTextAreaElement>) {
+    resizeTextarea(event.currentTarget);
+    onChange?.(event);
+  }
+
+  return (
+    <textarea
+      {...props}
+      ref={textareaRef}
+      className={`emu-autosize-textarea ${className}`.trim()}
+      rows={2}
+      value={value}
+      onChange={handleChange}
+    />
+  );
+}
 
 export function ShiftReportWorkRow({
   index,
@@ -24,7 +58,7 @@ export function ShiftReportWorkRow({
     <tr>
       <td data-label="№"><span className="emu-row-number">{index + 1}</span></td>
       <td data-label="Выполненная работа">
-        <textarea
+        <AutoResizeTextarea
           id={`description-${row.id}`}
           value={row.description}
           onChange={(event) => onChange({ description: event.target.value })}
@@ -49,7 +83,7 @@ export function ShiftReportWorkRow({
         </select>
       </td>
       <td data-label="Примечание">
-        <textarea
+        <AutoResizeTextarea
           aria-label={`Примечание, строка ${index + 1}`}
           value={row.note}
           onChange={(event) => onChange({ note: event.target.value })}
@@ -61,8 +95,8 @@ export function ShiftReportWorkRow({
         <button
           type="button"
           className="emu-row-delete"
-          aria-label={`${index < 5 ? "Очистить" : "Удалить"} строку ${index + 1}`}
-          title={index < 5 ? "Очистить строку" : "Удалить строку"}
+          aria-label={'Удалить строку ' + (index + 1)}
+          title='Удалить строку'
           onClick={onRemove}
         >
           <Trash2 aria-hidden="true" size={17} />

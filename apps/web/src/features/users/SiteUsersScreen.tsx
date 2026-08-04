@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { RoleAccessPanel } from "./components/RoleAccessPanel";
 import { SiteUserAccessPanel } from "./components/SiteUserAccessPanel";
 import { SiteUserFormPanel } from "./components/SiteUserFormPanel";
 import { SiteUsersTablePanel } from "./components/SiteUsersTablePanel";
@@ -25,30 +24,19 @@ export function SiteUsersScreen({
   onSelectUser: (id: string) => void;
   onShowTemporaryPassword: (notice: TemporarySiteUserPasswordNotice) => void;
 }) {
-  const siteUsersWorkspace = useSiteUsersWorkspace({
+  const workspace = useSiteUsersWorkspace({
     dataSourceMode,
     showTemporaryPassword: onShowTemporaryPassword,
     showToast: onNotify,
   });
-  const siteUsers = siteUsersWorkspace.users;
-  const selectedFromId = findSiteUser(siteUsers, selectedUserId);
-  const selected = selectedFromId ?? siteUsers[0];
+  const selected = findSiteUser(workspace.users, selectedUserId) ?? workspace.users[0];
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
   const [editingUser, setEditingUser] = useState<SiteUser | undefined>();
-  const [profileUserId, setProfileUserId] = useState<string | undefined>();
-  const profileUser = profileUserId ? findSiteUser(siteUsers, profileUserId) : undefined;
+  const [hasUnsavedAccessChanges, setHasUnsavedAccessChanges] = useState(false);
 
   useEffect(() => {
-    if (!selectedFromId && siteUsers.length > 0) {
-      onSelectUser(siteUsers[0].id);
-    }
-  }, [onSelectUser, selectedFromId, siteUsers]);
-
-  useEffect(() => {
-    if (profileUserId && !profileUser) {
-      setProfileUserId(undefined);
-    }
-  }, [profileUser, profileUserId]);
+    if (!selected && workspace.users.length > 0) onSelectUser(workspace.users[0].id);
+  }, [onSelectUser, selected, workspace.users]);
 
   useEffect(() => {
     if (createIntent > 0 && canManage) {
@@ -62,58 +50,41 @@ export function SiteUsersScreen({
     setFormMode("create");
   }
 
-  function openEditModal(user: SiteUser) {
-    setEditingUser(user);
-    setFormMode("edit");
-    setProfileUserId(undefined);
-  }
-
   function closeFormModal() {
     setFormMode(null);
     setEditingUser(undefined);
   }
 
-  function openProfileModal(user: SiteUser) {
-    setProfileUserId(user.id);
-  }
-
-  function closeProfileModal() {
-    setProfileUserId(undefined);
-  }
-
-  async function createUser(payload: Parameters<typeof siteUsersWorkspace.createUser>[0]) {
-    await siteUsersWorkspace.createUser(payload);
+  async function createUser(payload: Parameters<typeof workspace.createUser>[0]) {
+    await workspace.createUser(payload);
     closeFormModal();
   }
 
-  async function updateUser(userId: string, payload: Parameters<typeof siteUsersWorkspace.updateUser>[1]) {
-    await siteUsersWorkspace.updateUser(userId, payload);
+  async function updateUser(userId: string, payload: Parameters<typeof workspace.updateUser>[1]) {
+    await workspace.updateUser(userId, payload);
     closeFormModal();
   }
 
   async function updateUserRole(userId: string, role: SiteUser["role"]) {
-    const target = findSiteUser(siteUsers, userId);
+    const target = findSiteUser(workspace.users, userId);
     if (!target) return;
-
-    await siteUsersWorkspace.updateUser(userId, {
+    await workspace.updateUser(userId, {
       fullName: target.fullName,
       login: target.login,
       permissionCodes: target.directPermissions ?? [],
+      permissionOverrides: target.permissionOverrides ?? [],
+      requirePasswordChange: target.requirePasswordChange,
       role,
       status: target.status,
     });
   }
 
-  async function resetProfilePassword() {
-    if (!profileUser) return;
-    await siteUsersWorkspace.resetPassword(profileUser);
+  function handleSelectUser(id: string) {
+    if (id === selected?.id) return;
+    if (hasUnsavedAccessChanges && !window.confirm("\u0415\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f. \u041f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0438\u0442\u044c\u0441\u044f \u0431\u0435\u0437 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f?")) return;
+    setHasUnsavedAccessChanges(false);
+    onSelectUser(id);
   }
-
-  async function toggleProfileBlock() {
-    if (!profileUser) return;
-    await siteUsersWorkspace.toggleBlockUser(profileUser);
-  }
-
   return (
     <>
       <section className="user-admin-screen">
@@ -121,35 +92,39 @@ export function SiteUsersScreen({
           <div className="users-main-column user-admin-main">
             <SiteUsersTablePanel
               canManage={canManage}
-              errorMessage={siteUsersWorkspace.errorMessage}
+              errorMessage={workspace.errorMessage}
               onOpenCreate={openCreateModal}
-              onOpenProfile={openProfileModal}
-              onRetry={siteUsersWorkspace.refreshUsers}
-              onSelectUser={onSelectUser}
+              onOpenProfile={(user) => handleSelectUser(user.id)}
+              onRetry={workspace.refreshUsers}
+              onSelectUser={handleSelectUser}
               selectedUserId={selected?.id}
-              status={siteUsersWorkspace.status}
-              users={siteUsers}
+              status={workspace.status}
+              users={workspace.users}
             />
-
-            {siteUsersWorkspace.status === "error" ? (
+            {workspace.status === "error" ? (
               <EmptyState
-                title="API пользователей не ответил"
-                description={siteUsersWorkspace.errorMessage}
-                action={<button className="button ghost" onClick={siteUsersWorkspace.refreshUsers} type="button">Повторить загрузку</button>}
+                title="Не удалось загрузить пользователей"
+                description={workspace.errorMessage}
+                action={<button className="button ghost" onClick={workspace.refreshUsers} type="button">Повторить</button>}
               />
-            ) : (
-              <RoleAccessPanel users={siteUsers} />
-            )}
+            ) : null}
           </div>
 
           <SiteUserAccessPanel
             canManage={canManage}
-            loadAccess={siteUsersWorkspace.loadUserAccess}
+            catalog={workspace.catalog}
+            emuSections={workspace.emuSections}
+            loadAccess={workspace.loadUserAccess}
+            loadAudit={workspace.loadAudit}
+            loadSessions={workspace.loadSessions}
             onChangeRole={updateUserRole}
+            onDirtyChange={setHasUnsavedAccessChanges}
+            onEditProfile={(target) => { setEditingUser(target); setFormMode("edit"); }}
             onNotify={onNotify}
-            onOpenProfile={openProfileModal}
-            onSavePermissions={siteUsersWorkspace.saveUserPermissions}
-            onSaveScopes={siteUsersWorkspace.saveUserScopes}
+            onExportAudit={workspace.exportAudit}
+            onSavePermissions={workspace.saveUserPermissions}
+            onSaveScopes={workspace.saveUserScopes}
+            onToggleBlock={workspace.toggleBlockUser}
             user={selected}
           />
         </div>
@@ -160,6 +135,7 @@ export function SiteUsersScreen({
           <div className="site-user-modal site-user-modal-wide" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
             <SiteUserFormPanel
               canManage={canManage}
+              catalog={workspace.catalog}
               initialUser={editingUser}
               mode={formMode}
               onClose={closeFormModal}
@@ -170,49 +146,6 @@ export function SiteUsersScreen({
           </div>
         </div>
       ) : null}
-
-      {profileUser ? (
-        <div className="site-user-modal-backdrop" onMouseDown={closeProfileModal}>
-          <div className="site-user-modal site-user-profile-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
-            <header>
-              <div className="site-user-access-identity">
-                <span>{getInitials(profileUser.fullName || profileUser.login)}</span>
-                <div>
-                  <h2>{profileUser.fullName || profileUser.login}</h2>
-                  <p>{profileUser.login} · {profileUser.role}</p>
-                </div>
-              </div>
-              <button className="button ghost" onClick={closeProfileModal} type="button">Закрыть</button>
-            </header>
-            <div className="site-user-profile-facts">
-              <span><b>Логин</b>{profileUser.login}</span>
-              <span><b>Роль</b>{profileUser.role}</span>
-              <span><b>Статус</b>{profileUser.status}</span>
-              <span><b>Создан</b>{profileUser.createdAt}</span>
-              <span><b>Последний вход</b>{profileUser.lastLogin}</span>
-              <span><b>Итоговых прав</b>{profileUser.access.length}</span>
-              <span><b>Индивидуальных</b>{profileUser.directPermissions?.length ?? 0}</span>
-            </div>
-            <footer className="site-user-modal-actions">
-              <button className="button ghost" disabled={!canManage} onClick={() => openEditModal(profileUser)} type="button">
-                Изменить
-              </button>
-              <button className="button ghost" disabled={!canManage} onClick={resetProfilePassword} type="button">
-                Пересоздать пароль
-              </button>
-              <button className="button ghost danger" disabled={!canManage} onClick={toggleProfileBlock} type="button">
-                {profileUser.status === "Заблокирован" ? "Разблокировать" : "Заблокировать"}
-              </button>
-            </footer>
-          </div>
-        </div>
-      ) : null}
     </>
   );
-}
-
-function getInitials(value: string) {
-  const parts = value.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "П";
-  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
 }

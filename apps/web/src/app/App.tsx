@@ -15,6 +15,7 @@ import { Topbar, type TopbarNotification } from "./shell/Topbar";
 import { WorkspaceHeader } from "./shell/WorkspaceHeader";
 import { TemporaryPasswordPanel } from "../features/mobileAccounts/components/TemporaryPasswordPanel";
 import { LoginScreen } from "./auth/LoginScreen";
+import { ForcedPasswordChangeScreen } from "./auth/ForcedPasswordChangeScreen";
 import { type RequestModalState } from "../domain/serviceRequests";
 import { createApiAssignmentsRepository } from "../repositories/assignmentsRepository";
 import { employeesFallback } from "../repositories/employeesRepository";
@@ -394,6 +395,17 @@ export function App() {
 
   function setDataSourceMode(nextMode: DataSourceMode) {
     setStoredDataSourceMode(configuredDataSourceMode ?? nextMode);
+  }
+
+  if (dataSourceMode === "api" && hasApiSession && session.user?.requirePasswordChange) {
+    return (
+      <ForcedPasswordChangeScreen
+        errorMessage={session.errorMessage}
+        isSubmitting={session.status === "loading"}
+        onChangePassword={session.changePassword}
+        onLogout={() => void handleLogout()}
+      />
+    );
   }
 
   if (dataSourceMode === "api" && !hasApiSession) {

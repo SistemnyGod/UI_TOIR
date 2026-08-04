@@ -35,10 +35,16 @@ public sealed class SiteBearerAuthenticationHandler(
             return Task.FromResult(AuthenticateResult.Fail("Bearer session is invalid or expired."));
         }
 
+        if (user.RequirePasswordChange && !IsPasswordRecoveryRoute(Request.Path))
+        {
+            return Task.FromResult(AuthenticateResult.Fail("Password change is required."));
+        }
+
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Name, user.Login),
+            new("require_password_change", user.RequirePasswordChange ? "true" : "false"),
         };
         claims.AddRange(user.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
         claims.AddRange(user.Permissions.Select(permission => new Claim("permission", permission)));
@@ -47,4 +53,9 @@ public sealed class SiteBearerAuthenticationHandler(
         var ticket = new AuthenticationTicket(principal, SchemeName);
         return Task.FromResult(AuthenticateResult.Success(ticket));
     }
+
+    private static bool IsPasswordRecoveryRoute(PathString path) =>
+        path.StartsWithSegments("/api/v1/auth/me")
+        || path.StartsWithSegments("/api/v1/auth/change-password")
+        || path.StartsWithSegments("/api/v1/auth/logout");
 }

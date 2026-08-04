@@ -12,6 +12,8 @@ internal sealed class SiteUserAccessScopeEntity
 
     public Guid ScopeId { get; set; }
 
+    public int SortOrder { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public Guid? CreatedByUserId { get; set; }

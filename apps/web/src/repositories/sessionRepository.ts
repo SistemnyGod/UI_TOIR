@@ -1,5 +1,5 @@
 import { ApiClient } from "../api/client";
-import type { AuthSessionDto, LoginRequestDto, SessionUserDto } from "../api/contracts";
+import type { AuthSessionDto, ChangePasswordDto, LoginRequestDto, SessionUserDto } from "../api/contracts";
 
 export const sessionTokenStorageKey = "patrol360.sessionToken";
 export const sessionExpiresAtStorageKey = "patrol360.sessionExpiresAt";
@@ -10,6 +10,7 @@ export interface SessionRepository {
   login(payload: LoginRequestDto): Promise<AuthSessionDto>;
   me(): Promise<SessionUserDto>;
   logout(): Promise<void>;
+  changePassword(payload: ChangePasswordDto): Promise<AuthSessionDto>;
 }
 
 export function createSessionRepository({ baseUrl }: { baseUrl?: string } = {}): SessionRepository {
@@ -24,6 +25,9 @@ export function createSessionRepository({ baseUrl }: { baseUrl?: string } = {}):
     },
     logout() {
       return client.post<void>("/api/v1/auth/logout");
+    },
+    changePassword(payload) {
+      return client.post<AuthSessionDto, ChangePasswordDto>("/api/v1/auth/change-password", payload);
     },
   };
 }

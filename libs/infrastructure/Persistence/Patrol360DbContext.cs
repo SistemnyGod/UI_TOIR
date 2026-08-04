@@ -79,6 +79,8 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
 
     internal DbSet<SiteUserAccessScopeEntity> SiteUserAccessScopes => Set<SiteUserAccessScopeEntity>();
 
+    internal DbSet<SiteUserAuditEventEntity> SiteUserAuditEvents => Set<SiteUserAuditEventEntity>();
+
     internal DbSet<SiteUserSessionEntity> SiteUserSessions => Set<SiteUserSessionEntity>();
 
     internal DbSet<InventoryCategoryEntity> InventoryCategories => Set<InventoryCategoryEntity>();
@@ -244,6 +246,7 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
         ConfigureSiteUserPermissions(modelBuilder);
         ConfigureSiteUserAccessScopes(modelBuilder);
         ConfigureSiteUserSessions(modelBuilder);
+        ConfigureSiteUserAuditEvents(modelBuilder);
         ConfigureInventoryCategories(modelBuilder);
         ConfigureInventoryUnits(modelBuilder);
         ConfigureInventoryItems(modelBuilder);
@@ -1101,6 +1104,7 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
             entity.Property(user => user.Status).HasColumnName("status").HasMaxLength(60).IsRequired();
             entity.Property(user => user.CreatedAt).HasColumnName("created_at");
             entity.Property(user => user.LastLoginAt).HasColumnName("last_login_at");
+            entity.Property(user => user.RequirePasswordChange).HasColumnName("require_password_change");
 
             entity.HasIndex(user => user.NormalizedLogin)
                 .IsUnique()
@@ -1137,6 +1141,10 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
             entity.Property(permission => permission.Id).HasColumnName("id");
             entity.Property(permission => permission.Code).HasColumnName("code").HasMaxLength(160).IsRequired();
             entity.Property(permission => permission.Name).HasColumnName("name").HasMaxLength(220).IsRequired();
+            entity.Property(permission => permission.ModuleKey).HasColumnName("module_key").HasMaxLength(80).IsRequired();
+            entity.Property(permission => permission.Category).HasColumnName("category").HasMaxLength(80).IsRequired();
+            entity.Property(permission => permission.IsViewDefault).HasColumnName("is_view_default");
+            entity.Property(permission => permission.DisplayOrder).HasColumnName("display_order");
 
             entity.HasIndex(permission => permission.Code)
                 .IsUnique()
@@ -1197,6 +1205,7 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
 
             entity.Property(userPermission => userPermission.SiteUserId).HasColumnName("site_user_id");
             entity.Property(userPermission => userPermission.PermissionId).HasColumnName("permission_id");
+            entity.Property(userPermission => userPermission.Effect).HasColumnName("effect").HasMaxLength(16).IsRequired();
 
             entity.HasOne(userPermission => userPermission.SiteUser)
                 .WithMany(user => user.Permissions)
@@ -1225,6 +1234,7 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
             entity.Property(scope => scope.ModuleKey).HasColumnName("module_key").HasMaxLength(80).IsRequired();
             entity.Property(scope => scope.ScopeType).HasColumnName("scope_type").HasMaxLength(80).IsRequired();
             entity.Property(scope => scope.ScopeId).HasColumnName("scope_id");
+            entity.Property(scope => scope.SortOrder).HasColumnName("sort_order");
             entity.Property(scope => scope.CreatedAt).HasColumnName("created_at");
             entity.Property(scope => scope.CreatedByUserId).HasColumnName("created_by_user_id");
 
@@ -1254,6 +1264,9 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
             entity.Property(session => session.CreatedAt).HasColumnName("created_at");
             entity.Property(session => session.ExpiresAt).HasColumnName("expires_at");
             entity.Property(session => session.RevokedAt).HasColumnName("revoked_at");
+            entity.Property(session => session.IpAddress).HasColumnName("ip_address").HasMaxLength(120);
+            entity.Property(session => session.UserAgent).HasColumnName("user_agent").HasMaxLength(512);
+            entity.Property(session => session.LastSeenAt).HasColumnName("last_seen_at");
 
             entity.HasOne(session => session.SiteUser)
                 .WithMany(user => user.Sessions)
@@ -1265,6 +1278,30 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
                 .HasDatabaseName("ux_site_user_sessions_token_hash");
             entity.HasIndex(session => new { session.SiteUserId, session.ExpiresAt })
                 .HasDatabaseName("ix_site_user_sessions_user_expires");
+        });
+    }
+
+    private static void ConfigureSiteUserAuditEvents(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SiteUserAuditEventEntity>(entity =>
+        {
+            entity.ToTable("site_user_audit_events");
+            entity.HasKey(audit => audit.Id);
+            entity.Property(audit => audit.Id).HasColumnName("id");
+            entity.Property(audit => audit.SiteUserId).HasColumnName("site_user_id");
+            entity.Property(audit => audit.ActorUserId).HasColumnName("actor_user_id");
+            entity.Property(audit => audit.ActorName).HasColumnName("actor_name").HasMaxLength(220);
+            entity.Property(audit => audit.EventType).HasColumnName("event_type").HasMaxLength(120).IsRequired();
+            entity.Property(audit => audit.ModuleKey).HasColumnName("module_key").HasMaxLength(80);
+            entity.Property(audit => audit.Details).HasColumnName("details").HasMaxLength(1000).IsRequired();
+            entity.Property(audit => audit.BeforeJson).HasColumnName("before_json").HasColumnType("jsonb");
+            entity.Property(audit => audit.AfterJson).HasColumnName("after_json").HasColumnType("jsonb");
+            entity.Property(audit => audit.CreatedAt).HasColumnName("created_at");
+            entity.Property(audit => audit.IpAddress).HasColumnName("ip_address").HasMaxLength(120);
+            entity.Property(audit => audit.UserAgent).HasColumnName("user_agent").HasMaxLength(512);
+            entity.HasOne(audit => audit.SiteUser).WithMany().HasForeignKey(audit => audit.SiteUserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(audit => new { audit.SiteUserId, audit.CreatedAt }).HasDatabaseName("ix_site_user_audit_user_created");
+            entity.HasIndex(audit => new { audit.EventType, audit.CreatedAt }).HasDatabaseName("ix_site_user_audit_type_created");
         });
     }
 

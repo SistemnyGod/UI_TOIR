@@ -159,7 +159,7 @@ export function ShiftReportHistoryScreen({ workspace }: { workspace: Workspace }
         {workspace.error ? <p className='emu-form-error'><AlertCircle aria-hidden='true' size={17} />{workspace.error}<button type='button' onClick={() => void refresh()}>Повторить</button></p> : null}
       </div>
 
-      <div className={`emu-history-grid ${refreshing ? 'is-refreshing' : ''}`} aria-busy={workspace.historyLoading || initialHistoryLoading}>
+      <div className={`emu-history-grid ${refreshing ? 'is-refreshing' : ''} ${visibleGroups.length === 1 ? 'is-single' : ''}`} aria-busy={workspace.historyLoading || initialHistoryLoading}>
         {visibleGroups.map((group) => (
           <ShiftReportHistoryGroup
             key={`${group.category}-${group.shift}`}

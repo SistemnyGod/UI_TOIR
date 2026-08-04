@@ -1,4 +1,4 @@
-import { BriefcaseBusiness, Clock3 } from 'lucide-react';
+import { Bell, BriefcaseBusiness, Clock3 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '../../../../api/client';
 import type { EmuCreateShiftReportDto, EmuShiftReportCategory, EmuShiftReportEmployeeOptionDto, EmuShiftType } from '../../../../api/emuShiftReportContracts';
@@ -153,6 +153,8 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
   const [nightWarning, setNightWarning] = useState('');
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [showDirectoryDialog, setShowDirectoryDialog] = useState(false);
+  const [showReminderDialog, setShowReminderDialog] = useState(false);
+  const [pendingRowRemoval, setPendingRowRemoval] = useState<number | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [draftStatus, setDraftStatus] = useState<DraftStatus>('idle');
   const [draftSavedAt, setDraftSavedAt] = useState('');
@@ -313,6 +315,10 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
   }
 
   function selectDirectoryEmployee(employee: EmuShiftReportEmployeeOptionDto) {
+    if (employee.workerCategory && employee.workerCategory !== category) {
+      onNotify('Сотрудник относится к группе «' + categoryLabels[employee.workerCategory] + '». Переключите вкладку отчёта.');
+      return;
+    }
     setEmployeeId(employee.id);
     setSuccessMessage('');
     setShowDirectoryDialog(false);
@@ -346,8 +352,23 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
     setCategory(value);
   }
 
+  function deleteRow(index: number) {
+    setRows((current) => current.filter((_, rowIndex) => rowIndex !== index));
+    setPendingRowRemoval(null);
+  }
+
   function removeRow(index: number) {
-    setRows((current) => index < 5 ? current.map((item, rowIndex) => rowIndex === index ? createWorkRow() : item) : current.filter((_, rowIndex) => rowIndex !== index));
+    const row = rows[index];
+    if (!row) return;
+    if (isWorkRowUsed(row)) {
+      setPendingRowRemoval(index);
+      return;
+    }
+    deleteRow(index);
+  }
+
+  function confirmRowRemoval() {
+    if (pendingRowRemoval !== null) deleteRow(pendingRowRemoval);
   }
 
   function chooseShift(value: EmuShiftType) {
@@ -477,11 +498,25 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
             {draftStatus === 'idle' ? 'Изменения сохраняются локально' : null}
           </div>
         </div>
-        <div className='emu-shift-kpis' aria-label='Сводка отчёта'>
-          <div><BriefcaseBusiness aria-hidden='true' size={18} /><b>{usedRows.length}</b><span>Работ</span></div>
-          <div><Clock3 aria-hidden='true' size={18} /><b>{formatDuration(totalMinutes)}</b><span>Общее время</span></div>
+        <div className='emu-shift-header-actions'>
+          <button
+            type='button'
+            className='emu-notification-settings-button'
+            aria-haspopup='dialog'
+            aria-expanded={showReminderDialog}
+            onClick={() => setShowReminderDialog(true)}
+          >
+            <Bell aria-hidden='true' size={18} />
+            Уведомления
+          </button>
+          <div className='emu-shift-kpis' aria-label='Сводка отчёта'>
+            <div><BriefcaseBusiness aria-hidden='true' size={18} /><b>{usedRows.length}</b><span>Работ</span></div>
+            <div><Clock3 aria-hidden='true' size={18} /><b>{formatDuration(totalMinutes)}</b><span>Общее время</span></div>
+          </div>
         </div>
       </header>
+
+      <ShiftReportReminder open={showReminderDialog} onClose={() => setShowReminderDialog(false)} />
 
       <ShiftReportForm
         category={category}
@@ -511,7 +546,6 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
         draftConflict={draftConflict}
         submitting={submitting}
         hasDraftData={hasDraftData}
-        reminder={<ShiftReportReminder />}
         onSubmit={submit}
         onSwitchCategory={switchCategory}
         onEmployeeChange={(value) => { if (value !== employeeId) releaseCurrentServerDraft(); setEmployeeId(value); setSuccessMessage(''); }}
@@ -525,6 +559,22 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
 
 
       {showClearDialog ? <ModalShell className='emu-shift-confirm-dialog' title='Очистить черновик?' subtitle='Все заполненные строки текущей вкладки будут удалены.' onClose={() => setShowClearDialog(false)} actions={<><button type='button' className='button ghost' onClick={() => setShowClearDialog(false)}>Отмена</button><button type='button' className='button danger' onClick={clearDraft}>Очистить</button></>}><p>Черновик {categoryLabels[category].toLowerCase()} нельзя будет восстановить после очистки.</p></ModalShell> : null}
+      {pendingRowRemoval !== null ? (
+        <ModalShell
+          className='emu-shift-confirm-dialog'
+          title='Удалить строку?'
+          subtitle='В строке есть заполненные данные. После удаления их нельзя будет восстановить.'
+          onClose={() => setPendingRowRemoval(null)}
+          actions={
+            <>
+              <button type='button' className='button ghost' onClick={() => setPendingRowRemoval(null)}>Нет</button>
+              <button type='button' className='button danger' onClick={confirmRowRemoval}>Да</button>
+            </>
+          }
+        >
+          <p>Вы уверены, что хотите удалить строку {pendingRowRemoval + 1}?</p>
+        </ModalShell>
+      ) : null}
     </main>
   );
 }

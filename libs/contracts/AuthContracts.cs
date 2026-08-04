@@ -14,9 +14,16 @@ public sealed record SessionUserDto(
     string Login,
     string DisplayName,
     IReadOnlyList<string> Roles,
-    IReadOnlyList<string> Permissions);
+    IReadOnlyList<string> Permissions,
+    bool RequirePasswordChange = false);
 
 public sealed record AuthSessionDto(
     SessionUserDto User,
     string AccessToken,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt,
+    bool RequirePasswordChange = false);
+
+public sealed record ChangePasswordDto(
+    string CurrentPassword,
+    string NewPassword,
+    string ConfirmPassword);

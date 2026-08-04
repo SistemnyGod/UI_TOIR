@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Panel } from "../../../shared/ui";
+import type { SiteUserAccessCatalogDto } from "../../../api/contracts";
 import type { SiteUser } from "../../../types";
 import type { SiteUserFormPayload } from "../../../repositories/siteUsersRepository";
 import { SITE_USER_ROLES, SITE_USER_STATUSES } from "../../../repositories/siteUsersRepository";
@@ -10,19 +10,22 @@ const defaultPayload: SiteUserFormPayload = {
   initialPassword: "",
   login: "",
   permissionCodes: [],
-  role: "Оператор",
-  status: "Активен",
+  permissionOverrides: [],
+  enabledModuleKeys: [],
+  requirePasswordChange: true,
+  role: SITE_USER_ROLES[0],
+  status: SITE_USER_STATUSES[0],
 };
 
 function payloadFromUser(user?: SiteUser): SiteUserFormPayload {
   if (!user) return defaultPayload;
-
   return {
-    confirmPassword: "",
+    ...defaultPayload,
     fullName: user.fullName,
-    initialPassword: "",
     login: user.login,
     permissionCodes: user.directPermissions ?? [],
+    permissionOverrides: user.permissionOverrides ?? [],
+    requirePasswordChange: user.requirePasswordChange ?? false,
     role: user.role,
     status: user.status,
   };
@@ -30,6 +33,7 @@ function payloadFromUser(user?: SiteUser): SiteUserFormPayload {
 
 export function SiteUserFormPanel({
   canManage = true,
+  catalog,
   initialUser,
   mode = initialUser ? "edit" : "create",
   onClose,
@@ -38,6 +42,7 @@ export function SiteUserFormPanel({
   onUpdateUser,
 }: {
   canManage?: boolean;
+  catalog?: SiteUserAccessCatalogDto | null;
   initialUser?: SiteUser;
   mode?: "create" | "edit";
   onClose?: () => void;
@@ -46,236 +51,127 @@ export function SiteUserFormPanel({
   onUpdateUser?: (userId: string, payload: SiteUserFormPayload) => Promise<void> | void;
 }) {
   const [payload, setPayload] = useState<SiteUserFormPayload>(() => payloadFromUser(initialUser));
-  const [passwordNotice, setPasswordNotice] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [saving, setSaving] = useState(false);
+  const isEdit = mode === "edit" && Boolean(initialUser);
 
   useEffect(() => {
-    setPayload(payloadFromUser(initialUser));
-    setPasswordNotice(false);
-    setShowPassword(false);
-    setShowConfirmPassword(false);
-  }, [initialUser]);
+    const next = payloadFromUser(initialUser);
+    if (!initialUser && catalog?.modules.length && !next.enabledModuleKeys?.length) {
+      next.enabledModuleKeys = catalog.modules.map((module) => module.key);
+    }
+    setPayload(next);
+  }, [catalog, initialUser]);
 
-  const isEdit = mode === "edit" && Boolean(initialUser);
   const password = payload.initialPassword?.trim() ?? "";
-  const confirmPassword = payload.confirmPassword?.trim() ?? "";
-  const passwordIsValid = isEdit || (password.length >= 8 && password === confirmPassword);
-  const isValid = payload.login.trim().length > 0 && payload.fullName.trim().length > 0 && passwordIsValid;
-  const passwordStatus = !isEdit && password.length > 0
-    ? password.length < 8
-      ? "Минимум 8 символов"
-      : confirmPassword.length === 0
-        ? "Введите подтверждение пароля"
-        : password === confirmPassword
-          ? "Пароль подтверждён"
-          : "Пароли не совпадают"
-    : "";
-  const passwordStatusTone = passwordStatus === "Пароль подтверждён" ? "is-valid" : passwordStatus === "Пароли не совпадают" ? "is-error" : "";
-  const roleHint = useMemo(() => {
-    if (payload.role === "Администратор") return "Полный доступ ко всем модулям. Используйте только для системных администраторов.";
-    if (payload.role === "Оператор ЭМУ") return "Базовая роль для учета работ. Точные права и участки задаются в правой панели доступа.";
-    if (payload.role === "Руководитель") return "Отчеты, аналитика и контроль команды без системного администрирования.";
-    if (payload.role === "Аудитор") return "Просмотр, аудит и экспорт без изменения данных.";
-    return "Базовая роль для обходов, назначений и результатов.";
-  }, [payload.role]);
+  const confirmation = payload.confirmPassword?.trim() ?? "";
+  const passwordValid = isEdit || (password.length >= 8 && password === confirmation);
+  const valid = payload.login.trim().length > 0 && payload.fullName.trim().length > 0 && passwordValid;
+  const selectedModules = useMemo(() => new Set(payload.enabledModuleKeys ?? []), [payload.enabledModuleKeys]);
 
-  function clearForm() {
-    setPayload(payloadFromUser(initialUser));
-    setPasswordNotice(false);
-    setShowPassword(false);
-    setShowConfirmPassword(false);
-    onNotify(isEdit ? "Форма редактирования восстановлена" : "Форма пользователя очищена");
+  function update<K extends keyof SiteUserFormPayload>(key: K, value: SiteUserFormPayload[K]) {
+    setPayload((current) => ({ ...current, [key]: value }));
   }
 
-  function requestPasswordResetNotice() {
-    setPasswordNotice(true);
-    onNotify("Сброс пароля будет выполнен через backend");
+  function toggleModule(moduleKey: string) {
+    setPayload((current) => {
+      const next = new Set(current.enabledModuleKeys ?? []);
+      next.has(moduleKey) ? next.delete(moduleKey) : next.add(moduleKey);
+      return { ...current, enabledModuleKeys: [...next] };
+    });
   }
 
   async function submit() {
-    if (!canManage) {
-      onNotify("Недостаточно прав для управления пользователями.");
-      return;
-    }
-
-    if (payload.login.trim().length === 0 || payload.fullName.trim().length === 0) {
-      onNotify("Заполните логин и ФИО пользователя");
-      return;
-    }
-
-    if (!isEdit && password.length < 8) {
-      onNotify("Укажите временный пароль не короче 8 символов");
-      return;
-    }
-
-    if (!isEdit && password !== confirmPassword) {
-      onNotify("Пароль и подтверждение не совпадают");
+    if (!valid) {
+      onNotify("Заполните обязательные поля и проверьте совпадение паролей.");
       return;
     }
 
     setSaving(true);
     try {
-      if (isEdit && initialUser) {
-        await onUpdateUser?.(initialUser.id, payload);
-      } else {
-        await onCreateUser?.(payload);
-      }
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "Не удалось сохранить пользователя");
+      if (isEdit && initialUser) await onUpdateUser?.(initialUser.id, payload);
+      else await onCreateUser?.(payload);
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Panel
-      title={isEdit ? "Редактирование пользователя" : "Новый пользователь"}
-      note={isEdit ? "Измените профиль, роль и статус. Индивидуальные права настраиваются в правой панели." : "Создайте учетную запись. Временный пароль будет показан после сохранения."}
-      className="site-user-form-panel"
-      actions={
-        <button className="button ghost" onClick={onClose} type="button">
-          Закрыть
-        </button>
-      }
-    >
-      <div className="site-user-form-layout">
+    <div className="site-user-form">
+      <header className="site-user-form-header">
+        <div>
+          <span className="eyebrow">Администрирование</span>
+          <h2>{isEdit ? "Редактирование пользователя" : "Новый пользователь"}</h2>
+          <p>Создайте учётную запись и назначьте базовый доступ.</p>
+        </div>
+        <button className="icon-button" onClick={onClose} type="button" aria-label="Закрыть">×</button>
+      </header>
+
+      <div className="site-user-form-grid">
         <section className="site-user-form-section">
-          <h4>Профиль</h4>
-          <p className="site-user-form-intro">Заполните обязательные поля, затем проверьте роль и статус перед сохранением.</p>
-          <div className="site-user-form-grid">
-            <label>
-              Логин
-              <input
-                autoComplete="username"
-                required
-                value={payload.login}
-                onChange={(event) => setPayload((current) => ({ ...current, login: event.target.value }))}
-                placeholder="login"
-                disabled={isEdit}
-              />
-            </label>
-            <label>
-              ФИО
-              <input
-                required
-                value={payload.fullName}
-                onChange={(event) => setPayload((current) => ({ ...current, fullName: event.target.value }))}
-                placeholder="Фамилия Имя Отчество"
-              />
-            </label>
-            <label>
-              Роль
-              <select value={payload.role} onChange={(event) => setPayload((current) => ({ ...current, role: event.target.value as SiteUser["role"] }))}>
-                {SITE_USER_ROLES.map((role) => <option key={role}>{role}</option>)}
-              </select>
-            </label>
-            <label>
-              Статус
-              <select value={payload.status} onChange={(event) => setPayload((current) => ({ ...current, status: event.target.value as SiteUser["status"] }))}>
-                {SITE_USER_STATUSES.map((status) => <option key={status}>{status}</option>)}
-              </select>
-            </label>
-            {!isEdit ? (
-              <>
-                <label>
-                  Временный пароль
-                  <span className="site-user-secret-field">
-                    <input
-                      aria-describedby="site-user-password-hint"
-                      autoComplete="new-password"
-                      minLength={8}
-                      onChange={(event) => setPayload((current) => ({ ...current, initialPassword: event.target.value }))}
-                      placeholder="Минимум 8 символов"
-                      required
-                      type={showPassword ? "text" : "password"}
-                      value={payload.initialPassword ?? ""}
-                    />
-                    <button
-                      aria-label={showPassword ? "Скрыть временный пароль" : "Показать временный пароль"}
-                      className="site-user-secret-toggle"
-                      onClick={() => setShowPassword((current) => !current)}
-                      type="button"
-                    >
-                      {showPassword ? "Скрыть" : "Показать"}
-                    </button>
-                  </span>
-                </label>
-                <label>
-                  Подтвердите пароль
-                  <span className="site-user-secret-field">
-                    <input
-                      aria-describedby="site-user-password-hint"
-                      autoComplete="new-password"
-                      minLength={8}
-                      onChange={(event) => setPayload((current) => ({ ...current, confirmPassword: event.target.value }))}
-                      placeholder="Повторите пароль"
-                      required
-                      type={showConfirmPassword ? "text" : "password"}
-                      value={payload.confirmPassword ?? ""}
-                    />
-                    <button
-                      aria-label={showConfirmPassword ? "Скрыть подтверждение пароля" : "Показать подтверждение пароля"}
-                      className="site-user-secret-toggle"
-                      onClick={() => setShowConfirmPassword((current) => !current)}
-                      type="button"
-                    >
-                      {showConfirmPassword ? "Скрыть" : "Показать"}
-                    </button>
-                  </span>
-                </label>
-                <p className={`site-user-password-hint span-2 ${passwordStatusTone}`} id="site-user-password-hint">
-                  {passwordStatus || "Минимум 8 символов. Пароль не хранится в открытом виде."}
-                </p>
-              </>
-            ) : null}
-          </div>
+          <h3>Профиль</h3>
+          <label>Логин *<input autoComplete="username" value={payload.login} onChange={(event) => update("login", event.target.value)} placeholder="Введите логин" /></label>
+          <label>ФИО *<input value={payload.fullName} onChange={(event) => update("fullName", event.target.value)} placeholder="Введите ФИО полностью" /></label>
+          <label>Роль *
+            <select value={payload.role} onChange={(event) => update("role", event.target.value as SiteUser["role"])}>
+              {SITE_USER_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+            </select>
+          </label>
+          <label>Status
+            <select value={payload.status} onChange={(event) => update("status", event.target.value as SiteUser["status"])}>
+              {SITE_USER_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+            </select>
+          </label>
+          {!isEdit ? (
+            <>
+              <label>Временный пароль *
+                <input autoComplete="new-password" type="password" value={payload.initialPassword} onChange={(event) => update("initialPassword", event.target.value)} placeholder="Минимум 8 символов" />
+              </label>
+              <label>Подтвердите пароль *
+                <input autoComplete="new-password" type="password" value={payload.confirmPassword} onChange={(event) => update("confirmPassword", event.target.value)} placeholder="Повторите пароль" />
+              </label>
+              <label className="site-user-check-row"><input checked={payload.requirePasswordChange !== false} onChange={(event) => update("requirePasswordChange", event.target.checked)} type="checkbox" /> Потребовать смену пароля при первом входе</label>
+            </>
+          ) : null}
         </section>
 
-        <aside className="site-user-form-aside">
-          <h4>Права и пароль</h4>
-          <p>{roleHint}</p>
-          <div className="site-user-form-summary">
-            <span>
-              <b>Роль</b>
-              {payload.role}
-            </span>
-            <span>
-              <b>Статус</b>
-              {payload.status}
-            </span>
+        <section className="site-user-form-section">
+          <div className="site-user-form-section-heading">
+            <div><h3>Быстрый доступ</h3><p>Role rights remain the baseline. Selected modules get базовых прав просмотра.</p></div>
+            <strong>{selectedModules.size}/{catalog?.modules.length ?? 0}</strong>
           </div>
-          <div className="site-user-password-callout">
-            <strong>Пароль</strong>
-            <span>{isEdit ? "Сброс выполняется сервером и не показывает постоянный пароль в интерфейсе." : "Пароль задается вручную при создании. Передайте его пользователю по защищенному каналу."}</span>
-            {isEdit ? (
-              <button className="button ghost small" onClick={requestPasswordResetNotice} type="button">
-                Запросить сброс пароля
+          <div className="site-user-role-cards">
+            {SITE_USER_ROLES.map((role) => (
+              <button className={"site-user-role-card " + (payload.role === role ? "is-selected" : "")} key={role} onClick={() => update("role", role)} type="button">
+                <span className="site-user-role-radio" />
+                <strong>{role}</strong>
+                <small>{role === SITE_USER_ROLES[4] ? "Полный доступ к системе" : role === SITE_USER_ROLES[3] ? "Просмотр и аудит" : "Операционный доступ"}</small>
               </button>
-            ) : null}
-            {passwordNotice ? <em>Пароль не генерируется в UI</em> : null}
+            ))}
           </div>
-          <ul>
-            <li>Роль задает базовый набор прав.</li>
-            <li>Индивидуальные права добавляются или снимаются справа во вкладке “Права”.</li>
-            <li>Ограничения по участкам ЭМУ задаются во вкладке “Участки”.</li>
-            <li>{isEdit ? "Сброс пароля доступен в профиле пользователя." : "Созданный пароль не хранится в открытом виде."}</li>
-          </ul>
-        </aside>
+          <h3>Модули</h3>
+          <div className="site-user-module-checks">
+            {(catalog?.modules ?? []).map((module) => (
+              <label className="site-user-module-check" key={module.key}>
+                <input checked={selectedModules.has(module.key)} onChange={() => toggleModule(module.key)} type="checkbox" />
+                <span><strong>{module.name || module.key}</strong><small>{module.description}</small></span>
+              </label>
+            ))}
+            {!catalog?.modules.length ? <p className="user-access-muted">Каталог доступа загружается или недоступен.</p> : null}
+          </div>
+          <div className="site-user-create-summary">
+            <strong>Будет назначено</strong>
+            <span>{selectedModules.size} модулей · безопасный профиль роли</span>
+            <span>{catalog?.modules.filter((module) => selectedModules.has(module.key)).reduce((sum, module) => sum + module.permissions.filter((permission) => permission.isViewDefault).length, 0) ?? 0} базовых прав просмотра</span>
+          </div>
+        </section>
       </div>
 
       <footer className="site-user-modal-actions">
-        <button className="button ghost" onClick={clearForm} type="button">
-          Очистить
-        </button>
-        <button className="button ghost" onClick={onClose} type="button">
-          Отмена
-        </button>
-        <button className="button primary" disabled={!canManage || !isValid || saving} onClick={submit} type="button">
-          {saving ? "Сохраняем..." : isEdit ? "Сохранить изменения" : "Создать пользователя"}
+        <button className="button ghost" onClick={onClose} type="button">Отмена</button>
+        <button className="button primary" disabled={!canManage || !valid || saving} onClick={() => void submit()} type="button">
+          {saving ? "Сохранение..." : isEdit ? "Сохранить изменения" : "Создать пользователя"}
         </button>
       </footer>
-    </Panel>
+    </div>
   );
 }

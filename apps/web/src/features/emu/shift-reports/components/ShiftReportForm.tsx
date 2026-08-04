@@ -1,5 +1,5 @@
 import { AlertCircle, Plus, Send, Wrench, Zap } from 'lucide-react';
-import type { FormEvent, ReactNode } from 'react';
+import type { FormEvent } from 'react';
 import type { EmuFavoriteEmployeeDto } from '../../../../api/contracts';
 import type {
   EmuShiftReportCategory,
@@ -39,7 +39,6 @@ export function ShiftReportForm({
   draftConflict,
   submitting,
   hasDraftData,
-  reminder,
   onSubmit,
   onSwitchCategory,
   onEmployeeChange,
@@ -77,7 +76,6 @@ export function ShiftReportForm({
   draftConflict: string;
   submitting: boolean;
   hasDraftData: boolean;
-  reminder?: ReactNode;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onSwitchCategory: (value: EmuShiftReportCategory) => void;
   onEmployeeChange: (value: string) => void;
@@ -132,6 +130,7 @@ export function ShiftReportForm({
       <div id='shift-report-form-panel' className='emu-shift-panel' role='tabpanel' aria-labelledby={`shift-report-tab-${category}`}>
         <div className='emu-shift-fields'>
           <EmployeePicker
+            category={category}
             employees={employees}
             favoriteEmployees={favoriteEmployees}
             favoriteLoading={favoriteLoading}
@@ -158,8 +157,6 @@ export function ShiftReportForm({
             {nightWarning ? <small className='warning'>{nightWarning}</small> : null}
           </fieldset>
         </div>
-
-        {reminder}
 
         {draftConflict ? <p className='emu-inline-notice emu-draft-conflict' role='alert'><AlertCircle aria-hidden='true' size={17} />{draftConflict}</p> : coordinationMessage ? <p className='emu-inline-notice emu-draft-coordination' role='status'>{coordinationMessage}</p> : null}
 

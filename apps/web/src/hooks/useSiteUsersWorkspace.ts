@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError } from "../api/client";
-import type { SiteUserAccessDto, SiteUserAccessScopeUpsertDto } from "../api/contracts";
+import type {
+  PermissionOverrideDto,
+  SiteUserAccessCatalogDto,
+  SiteUserAccessDto,
+  SiteUserAccessScopeUpsertDto,
+  SiteUserAuditPageDto,
+  SiteUserSessionsDto,
+} from "../api/contracts";
 import type { DataSourceMode, DataSourceStatus, SiteUser } from "../types";
 import {
+  buildCompatibilityAccessCatalog,
   createApiSiteUsersRepository,
   siteUsersFallback,
   type SiteUserFormPayload,
@@ -25,6 +33,8 @@ export function useSiteUsersWorkspace({
 }) {
   const apiSiteUsers = useMemo(() => createApiSiteUsersRepository(), []);
   const [apiUsers, setApiUsers] = useState<SiteUser[]>([]);
+  const [catalog, setCatalog] = useState<SiteUserAccessCatalogDto | null>(null);
+  const [emuSections, setEmuSections] = useState<Array<{ id: string; name: string; isActive: boolean; sortOrder: number }>>([]);
   const [status, setStatus] = useState<DataSourceStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
 
@@ -41,11 +51,25 @@ export function useSiteUsersWorkspace({
     setErrorMessage(undefined);
 
     try {
-      const nextUsers = await apiSiteUsers.getUsers();
-      setApiUsers(nextUsers);
+      const useServerCatalog = import.meta.env.VITE_SITE_USER_ACCESS_CATALOG === "true";
+      const [usersResult, sectionsResult, rolesResult, catalogResult] = await Promise.allSettled([
+        apiSiteUsers.getUsers(),
+        apiSiteUsers.getEmuSections(),
+        apiSiteUsers.getRoles(),
+        useServerCatalog ? apiSiteUsers.getAccessCatalog() : Promise.resolve(null),
+      ]);
+      if (usersResult.status === "rejected") {
+        throw usersResult.reason;
+      }
+      const nextCatalog = catalogResult.status === "fulfilled" && catalogResult.value
+        ? catalogResult.value
+        : buildCompatibilityAccessCatalog(rolesResult.status === "fulfilled" ? rolesResult.value : [], usersResult.value);
+      setApiUsers(usersResult.value);
+      setCatalog(nextCatalog);
+      setEmuSections(sectionsResult.status === "fulfilled" ? sectionsResult.value : []);
       setStatus("ready");
     } catch (error) {
-      const message = formatApiError(error, "Не удалось загрузить пользователей сайта");
+      const message = formatApiError(error, "Не удалось загрузить пользователей");
       setApiUsers([]);
       setStatus("error");
       setErrorMessage(message);
@@ -58,7 +82,7 @@ export function useSiteUsersWorkspace({
 
   async function createUser(payload: SiteUserFormPayload) {
     if (dataSourceMode !== "api") {
-      showToast("Пользователь сохранен как локальный UI-черновик");
+      showToast("Local draft mode is active.");
       return;
     }
 
@@ -68,80 +92,126 @@ export function useSiteUsersWorkspace({
       showTemporaryPassword({
         accountLogin: result.user.login,
         password: result.temporaryPassword || payload.initialPassword || "",
-        title: "Пароль пользователя сайта задан",
+        title: "Temporary password",
       });
-      showToast(`Пользователь ${result.user.login} создан`);
+      showToast("User " + result.user.login + " created.");
     } catch (error) {
-      showToast(formatApiError(error, "Пользователь не создан"));
+      showToast(formatApiError(error, "User was not created."));
       throw error;
     }
   }
 
   async function updateUser(userId: string, payload: SiteUserFormPayload) {
     if (dataSourceMode !== "api") {
-      showToast("Изменения пользователя будут сохранены после подключения backend API");
+      showToast("Changes will be saved after the backend is connected.");
       return;
     }
 
     try {
       const result = await apiSiteUsers.updateUser(userId, payload);
       setApiUsers((current) => current.map((user) => user.id === userId ? result : user));
-      showToast(`Пользователь ${result.login} обновлен`);
+      showToast("User " + result.login + " updated.");
     } catch (error) {
-      showToast(formatApiError(error, "Пользователь не обновлен"));
+      showToast(formatApiError(error, "User was not updated."));
       throw error;
     }
   }
 
   const loadUserAccess = useCallback(async (userId: string): Promise<SiteUserAccessDto | null> => {
-    if (dataSourceMode !== "api") {
-      return null;
-    }
+    if (dataSourceMode !== "api") return null;
 
     try {
       return await apiSiteUsers.getAccess(userId);
     } catch (error) {
-      showToast(formatApiError(error, "Не удалось загрузить права пользователя"));
+      showToast(formatApiError(error, "Could not load user access."));
       return null;
     }
   }, [apiSiteUsers, dataSourceMode, showToast]);
 
-  async function saveUserPermissions(userId: string, permissionCodes: string[]) {
+  const loadAudit = useCallback(async (userId: string, page = 1): Promise<SiteUserAuditPageDto | null> => {
+    if (dataSourceMode !== "api") return null;
+    try {
+      return await apiSiteUsers.getAudit(userId, { page, pageSize: 10 });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        return { items: [], page, pageSize: 10, totalCount: 0, changedPermissionsLast30Days: 0 };
+      }
+      showToast(formatApiError(error, "Не удалось загрузить аудит пользователя."));
+      return null;
+    }
+  }, [apiSiteUsers, dataSourceMode, showToast]);
+
+  const loadSessions = useCallback(async (userId: string): Promise<SiteUserSessionsDto | null> => {
+    if (dataSourceMode !== "api") return null;
+    try {
+      return await apiSiteUsers.getSessions(userId);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        return { items: [], activeCount: 0 };
+      }
+      showToast(formatApiError(error, "Не удалось загрузить активные сессии."));
+      return null;
+    }
+  }, [apiSiteUsers, dataSourceMode, showToast]);
+
+  async function exportAudit(userId: string) {
+    if (dataSourceMode !== "api") return;
+    try {
+      const file = await apiSiteUsers.exportAudit(userId);
+      const url = URL.createObjectURL(file.blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = file.downloadName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      showToast(error instanceof ApiError && error.status === 404 ? "Экспорт аудита станет доступен после обновления API." : formatApiError(error, "Не удалось экспортировать аудит."));
+    }
+  }
+  async function saveUserPermissions(
+    userId: string,
+    permissionCodes: string[],
+    permissionOverrides: PermissionOverrideDto[] = [],
+  ) {
     if (dataSourceMode !== "api") {
-      showToast("Индивидуальные права будут сохранены после подключения backend API");
+      showToast("Permission changes are available in API mode.");
       return null;
     }
 
     try {
-      const updated = await apiSiteUsers.updatePermissions(userId, permissionCodes);
+      const updated = await apiSiteUsers.updatePermissions(userId, permissionCodes, permissionOverrides);
       setApiUsers((current) => current.map((user) => user.id === userId ? updated : user));
-      showToast("Индивидуальные права сохранены");
+      showToast("Настройки прав сохранены.");
       return updated;
     } catch (error) {
-      showToast(formatApiError(error, "Права не сохранены"));
+      showToast(formatApiError(error, "Не удалось сохранить права."));
       throw error;
     }
   }
 
-  async function saveUserScopes(userId: string, scopes: SiteUserAccessScopeUpsertDto[]) {
+  async function saveUserScopes(
+    userId: string,
+    scopes: SiteUserAccessScopeUpsertDto[],
+    scopeMode: "all" | "selected" = "selected",
+  ) {
     if (dataSourceMode !== "api") {
-      showToast("Ограничения по участкам будут сохранены после подключения backend API");
+      showToast("EMU scope changes are available in API mode.");
       return null;
     }
 
     try {
-      const updated = await apiSiteUsers.updateScopes(userId, scopes);
-      showToast("Ограничения по участкам сохранены");
+      const updated = await apiSiteUsers.updateScopes(userId, scopes, scopeMode);
+      showToast("Доступ к участкам ЭМУ сохранен.");
       return updated;
     } catch (error) {
-      showToast(formatApiError(error, "Участки не сохранены"));
+      showToast(formatApiError(error, "Не удалось сохранить доступ к участкам ЭМУ."));
       throw error;
     }
   }
 
   async function toggleBlockUser(user: SiteUser) {
     if (dataSourceMode !== "api") {
-      showToast("Блокировка будет доступна после подключения backend API");
+      showToast("Blocking is available in API mode.");
       return;
     }
 
@@ -150,16 +220,16 @@ export function useSiteUsersWorkspace({
         ? await apiSiteUsers.unblockUser(user.id)
         : await apiSiteUsers.blockUser(user.id);
       setApiUsers((current) => current.map((item) => item.id === user.id ? updated : item));
-      showToast(updated.status === "Заблокирован" ? "Пользователь заблокирован" : "Пользователь разблокирован");
+      showToast("User status updated.");
     } catch (error) {
-      showToast(formatApiError(error, "Статус пользователя не изменен"));
+      showToast(formatApiError(error, "User status was not changed."));
       throw error;
     }
   }
 
   async function resetPassword(user: SiteUser) {
     if (dataSourceMode !== "api") {
-      showToast("Сброс пароля будет выполнен через backend");
+      showToast("Password reset is available in API mode.");
       return;
     }
 
@@ -168,18 +238,23 @@ export function useSiteUsersWorkspace({
       showTemporaryPassword({
         accountLogin: user.login,
         password: result.temporaryPassword,
-        title: "Новый временный пароль",
+        title: "New temporary password",
       });
-      showToast("Пароль пересоздан");
+      showToast("Temporary password regenerated.");
     } catch (error) {
-      showToast(formatApiError(error, "Пароль не пересоздан"));
+      showToast(formatApiError(error, "Password was not reset."));
       throw error;
     }
   }
 
   return {
+    catalog,
     createUser,
+    emuSections,
     errorMessage,
+    exportAudit,
+    loadAudit,
+    loadSessions,
     loadUserAccess,
     refreshUsers,
     resetPassword,

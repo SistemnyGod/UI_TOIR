@@ -113,10 +113,11 @@ export function ShiftReportHistoryGroup({
         </div>
       ) : rows.length === 0 ? (
         <div className='emu-history-empty'><span>Отчётов нет</span><small>В этой группе пока нет отправленных отчётов.</small></div>
-      ) : rows.map((item) => {
+      ) : (
+        <div className='emu-history-row-list'>
+          {rows.map((item) => {
         const isExpanded = expanded.has(item.id);
         const panelId = `shift-report-detail-${item.id}`;
-        const hasPanelContent = isExpanded || Boolean(details[item.id]) || Boolean(detailErrors[item.id]);
         return (
           <article className='emu-history-row' key={item.id}>
             <button
@@ -135,12 +136,14 @@ export function ShiftReportHistoryGroup({
             </button>
             <div id={panelId} className={`emu-history-detail-panel ${isExpanded ? 'is-open' : ''}`} aria-hidden={!isExpanded}>
               <div className='emu-history-detail-panel-inner'>
-                {hasPanelContent ? <ShiftReportDetails detail={details[item.id]} summary={item} error={detailErrors[item.id]} onRetry={() => onRetry(item)} /> : null}
+                {isExpanded ? <ShiftReportDetails detail={details[item.id]} summary={item} error={detailErrors[item.id]} onRetry={() => onRetry(item)} /> : null}
               </div>
             </div>
           </article>
         );
-      })}
+          })}
+        </div>
+      )}
     </section>
   );
 }

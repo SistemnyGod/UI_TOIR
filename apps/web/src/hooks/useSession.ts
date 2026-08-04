@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError } from "../api/client";
 import type { DataSourceMode } from "../types";
-import type { SessionUserDto } from "../api/contracts";
+import type { ChangePasswordDto, SessionUserDto } from "../api/contracts";
 import {
   clearStoredSessionToken,
   createSessionRepository,
+  getStoredRememberMe,
   getStoredSessionToken,
   setStoredLastLogin,
   setStoredSessionToken,
@@ -127,6 +128,20 @@ export function useSession(dataSourceMode: DataSourceMode) {
     }
   }
 
+  async function changePassword(payload: ChangePasswordDto) {
+    if (dataSourceMode !== "api") return false;
+    setErrorMessage(undefined);
+    try {
+      const nextSession = await repository.changePassword(payload);
+      setStoredSessionToken(nextSession.accessToken, getStoredRememberMe(), nextSession.expiresAt);
+      setUser(nextSession.user);
+      setStatus("authenticated");
+      return true;
+    } catch (error) {
+      setErrorMessage(getSessionErrorMessage(error));
+      return false;
+    }
+  }
   async function logout() {
     if (dataSourceMode === "api" && getStoredSessionToken()) {
       try {
@@ -143,6 +158,7 @@ export function useSession(dataSourceMode: DataSourceMode) {
   }
 
   return {
+    changePassword,
     errorMessage,
     isAuthenticated: status === "authenticated",
     login,

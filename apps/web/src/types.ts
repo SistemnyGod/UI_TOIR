@@ -280,6 +280,9 @@ export interface SiteUser {
   access: string[];
   directPermissions?: string[];
   recentSessions: string[];
+  roleCode?: string;
+  permissionOverrides?: Array<{ code: string; effect: "allow" | "deny" }>;
+  requirePasswordChange?: boolean;
 }
 
 export interface RouteOption {

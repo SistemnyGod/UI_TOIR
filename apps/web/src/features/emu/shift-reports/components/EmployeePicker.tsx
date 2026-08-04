@@ -1,10 +1,11 @@
 import { ChevronDown, Search, Settings2, Star, UserRound, X } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { EmuFavoriteEmployeeDto } from '../../../../api/contracts';
-import type { EmuShiftReportEmployeeOptionDto } from '../../../../api/emuShiftReportContracts';
+import type { EmuShiftReportCategory, EmuShiftReportEmployeeOptionDto } from '../../../../api/emuShiftReportContracts';
 import { employeeCategoryLabel, filterAndSortEmployees } from '../employeeDirectorySearch';
 
 type EmployeePickerProps = {
+  category: EmuShiftReportCategory;
   employees: EmuShiftReportEmployeeOptionDto[];
   favoriteEmployees: EmuFavoriteEmployeeDto[];
   favoriteLoading: boolean;
@@ -18,6 +19,7 @@ type EmployeePickerProps = {
 };
 
 export function EmployeePicker({
+  category,
   employees,
   favoriteEmployees,
   favoriteLoading,
@@ -37,10 +39,11 @@ export function EmployeePicker({
   const [activeIndex, setActiveIndex] = useState(0);
   const favoriteIds = useMemo(() => new Set(favoriteEmployees.filter((item) => item.isActive).map((item) => item.employeeId)), [favoriteEmployees]);
   const selectedEmployee = employees.find((employee) => employee.id === selectedId);
-  const favoriteOptions = useMemo(() => employees.filter((employee) => favoriteIds.has(employee.id)), [employees, favoriteIds]);
+  const categoryEmployees = useMemo(() => employees.filter((employee) => employee.workerCategory === category), [category, employees]);
+  const favoriteOptions = useMemo(() => categoryEmployees.filter((employee) => favoriteIds.has(employee.id)), [categoryEmployees, favoriteIds]);
   const visibleEmployees = useMemo(
-    () => filterAndSortEmployees(employees, query, favoriteIds, { favoriteOnly: mode === 'favorites' }),
-    [employees, favoriteIds, mode, query],
+    () => filterAndSortEmployees(categoryEmployees, query, favoriteIds, { favoriteOnly: mode === 'favorites' }),
+    [categoryEmployees, favoriteIds, mode, query],
   );
 
   useEffect(() => {
@@ -141,7 +144,7 @@ export function EmployeePicker({
           <div className='emu-employee-picker-popover'>
             <div className='emu-employee-picker-tabs' role='tablist' aria-label='Источник сотрудников'>
               <button type='button' role='tab' aria-selected={mode === 'all'} className={mode === 'all' ? 'active' : ''} onClick={() => setMode('all')}>
-                Все сотрудники <span>{employees.length}</span>
+                Все сотрудники <span>{categoryEmployees.length}</span>
               </button>
               <button type='button' role='tab' aria-selected={mode === 'favorites'} className={mode === 'favorites' ? 'active' : ''} onClick={() => setMode('favorites')}>
                 <Star aria-hidden='true' size={14} fill='currentColor' />Избранные <span>{favoriteOptions.length}</span>

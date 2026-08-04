@@ -15,4 +15,10 @@ internal sealed class SiteUserSessionEntity
     public DateTimeOffset ExpiresAt { get; set; }
 
     public DateTimeOffset? RevokedAt { get; set; }
+
+    public string? IpAddress { get; set; }
+
+    public string? UserAgent { get; set; }
+
+    public DateTimeOffset? LastSeenAt { get; set; }
 }

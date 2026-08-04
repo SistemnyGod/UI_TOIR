@@ -1,5 +1,6 @@
-import { Bell, BellRing, ChevronDown, Clock3, Monitor, Settings2, X } from 'lucide-react';
+import { Bell, BellRing, Clock3, Monitor, Settings2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { ModalShell } from '../../../../shared/ui';
 
 const SETTINGS_KEY = 'patrol360.emu.shift-report.reminder.v1';
 const DISMISSED_KEY = 'patrol360.emu.shift-report.reminder.dismissed.v1';
@@ -43,6 +44,7 @@ function storageSet(key: string, value: string) {
     return false;
   }
 }
+
 function readSettings(): ReminderSettings {
   try {
     const stored = JSON.parse(storageGet(SETTINGS_KEY) ?? 'null') as Partial<ReminderSettings> | null;
@@ -62,19 +64,14 @@ function notificationPermission(): NotificationPermission | 'unsupported' {
   return typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
 }
 
-export function ShiftReportReminder() {
+export function ShiftReportReminder({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [settings, setSettings] = useState<ReminderSettings>(readSettings);
-  const [expanded, setExpanded] = useState(false);
   const [due, setDue] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(notificationPermission);
   const secureContext = typeof window !== 'undefined' && window.isSecureContext !== false;
 
   useEffect(() => {
-    try {
-      storageSet(SETTINGS_KEY, JSON.stringify(settings));
-    } catch {
-      // Reminder settings are optional; the report form remains fully usable.
-    }
+    storageSet(SETTINGS_KEY, JSON.stringify(settings));
   }, [settings]);
 
   useEffect(() => {
@@ -111,11 +108,7 @@ export function ShiftReportReminder() {
   }
 
   function dismiss() {
-    try {
-      storageSet(DISMISSED_KEY, localDay());
-    } catch {
-      // The banner still closes for the current render.
-    }
+    storageSet(DISMISSED_KEY, localDay());
     setDue(false);
   }
 
@@ -137,24 +130,25 @@ export function ShiftReportReminder() {
   }
 
   return (
-    <div className='emu-reminder-stack'>
+    <>
       {due ? (
-        <div className='emu-reminder-banner' role='alert'>
-          <BellRing aria-hidden='true' size={19} />
-          <div><strong>Пора отправить сменный отчёт</strong><span>Проверьте сохранённый черновик и отправьте отчёт за смену.</span></div>
-          <button type='button' aria-label='Закрыть напоминание' onClick={dismiss}><X aria-hidden='true' size={17} /></button>
+        <div className='emu-reminder-stack'>
+          <div className='emu-reminder-banner' role='alert'>
+            <BellRing aria-hidden='true' size={19} />
+            <div><strong>Пора отправить сменный отчёт</strong><span>Проверьте сохранённый черновик и отправьте отчёт за смену.</span></div>
+            <button type='button' aria-label='Закрыть напоминание' onClick={dismiss}><X aria-hidden='true' size={17} /></button>
+          </div>
         </div>
       ) : null}
 
-      <section className={`emu-reminder-panel ${expanded ? 'is-expanded' : ''}`}>
-        <button type='button' className='emu-reminder-heading' aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}>
-          <span className='emu-reminder-icon'><Bell aria-hidden='true' size={17} /></span>
-          <span><strong>Напоминание об отчёте</strong><small>{settings.enabled ? `Каждый день в ${settings.time}` : 'Выключено'}</small></span>
-          <span className={`emu-reminder-state ${settings.enabled ? 'is-on' : ''}`}>{settings.enabled ? 'Включено' : 'Выключено'}</span>
-          <ChevronDown aria-hidden='true' size={17} />
-        </button>
-
-        {expanded ? (
+      {open ? (
+        <ModalShell
+          className='emu-reminder-dialog'
+          title='Настройки уведомлений'
+          subtitle={settings.enabled ? `Напоминание включено ежедневно в ${settings.time}.` : 'Настройте время и способы получения напоминания.'}
+          onClose={onClose}
+          actions={<button type='button' className='button primary' onClick={onClose}>Готово</button>}
+        >
           <div className='emu-reminder-settings'>
             <label className='emu-reminder-time'><span><Clock3 aria-hidden='true' size={15} />Время</span><input type='time' value={settings.time} onChange={(event) => update({ time: event.target.value })} /></label>
             <label className='emu-reminder-toggle'><input type='checkbox' checked={settings.enabled} onChange={(event) => update({ enabled: event.target.checked })} /><span /><b>Включить напоминание</b></label>
@@ -169,8 +163,8 @@ export function ShiftReportReminder() {
               {permission === 'unsupported' ? <span>Этот браузер не поддерживает системные уведомления.</span> : null}
             </div>
           </div>
-        ) : null}
-      </section>
-    </div>
+        </ModalShell>
+      ) : null}
+    </>
   );
 }

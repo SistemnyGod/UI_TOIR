@@ -54,6 +54,39 @@ describe("EmuShiftReportsScreen", () => {
     });
   });
 
+  it('filters the employee picker by the active report category', async () => {
+    const user = userEvent.setup();
+    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-entry' />);
+    await screen.findByRole('heading', { name: 'Сменный отчёт' });
+
+    await user.click(screen.getByRole('tab', { name: 'Электрики' }));
+    await user.click(screen.getByRole('combobox', { name: /Сотрудник/ }));
+
+    expect(screen.queryByRole('option', { name: /Иванов Иван/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Петров Пётр/ })).toBeInTheDocument();
+  });
+  it('deletes empty base rows immediately and confirms deletion of filled rows', async () => {
+    const user = userEvent.setup();
+    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-entry' />);
+    await screen.findByRole('heading', { name: 'Сменный отчёт' });
+
+    await waitFor(() => expect(screen.getAllByPlaceholderText('Что выполнено')).toHaveLength(5));
+    await user.click(screen.getByRole('button', { name: 'Удалить строку 1' }));
+    expect(screen.getAllByPlaceholderText('Что выполнено')).toHaveLength(4);
+
+    await user.type(screen.getAllByPlaceholderText('Что выполнено')[0], 'Осмотр насоса');
+    await user.click(screen.getByRole('button', { name: 'Удалить строку 1' }));
+    expect(screen.getByRole('dialog', { name: 'Удалить строку?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Да' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Нет' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Нет' }));
+    expect(screen.getAllByPlaceholderText('Что выполнено')).toHaveLength(4);
+
+    await user.click(screen.getByRole('button', { name: 'Удалить строку 1' }));
+    await user.click(screen.getByRole('button', { name: 'Да' }));
+    expect(screen.getAllByPlaceholderText('Что выполнено')).toHaveLength(3);
+  });
   it("keeps five base rows, validates partial rows, updates KPIs and sends minute durations", async () => {
     const user = userEvent.setup();
     let uuidSeed = 0;
@@ -220,24 +253,24 @@ describe("EmuShiftReportsScreen", () => {
     expect(within(dialog).getByRole("button", { name: "Добавить Иванов Иван в избранные" })).toBeInTheDocument();
   });
 
-  it("selects any employee without switching the report tab or losing the draft", async () => {
+  it("prevents selecting an employee from another report category", async () => {
     const user = userEvent.setup();
-    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen="emu-shift-report-entry" />);
+    const onNotify = vi.fn();
+    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={onNotify} screen="emu-shift-report-entry" />);
     await screen.findByRole("heading", { name: "Сменный отчёт" });
 
     await chooseEmployee(user, "employee-1");
     await user.type(screen.getAllByPlaceholderText("Что выполнено")[0], "Работа слесаря");
-
     await user.click(screen.getByRole("button", { name: "Справочник сотрудников" }));
     const dialog = screen.getByRole("dialog", { name: "Справочник сотрудников ЭМУ" });
     await user.click(within(dialog).getByRole("tab", { name: /Электрики/ }));
     await user.click(within(dialog).getByRole("option", { name: /Петров Пётр/ }));
 
-    await waitFor(() => expect(document.querySelector("[data-selected-employee-id='employee-2']")).toBeInTheDocument());
+    expect(document.querySelector("[data-selected-employee-id='employee-1']")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Слесари" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getAllByPlaceholderText("Что выполнено")[0]).toHaveValue("Работа слесаря");
+    expect(onNotify).toHaveBeenCalledWith(expect.stringContaining("Электрики"));
   });
-
   it("finds an unclassified employee by personnel number and selects with the keyboard", async () => {
     const user = userEvent.setup();
     render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen="emu-shift-report-entry" />);
@@ -259,6 +292,7 @@ describe("EmuShiftReportsScreen", () => {
 
     render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen="emu-shift-report-history" />);
     await waitFor(() => expect(mocks.getList).toHaveBeenCalledTimes(1), { timeout: 1200 });
+    expect(mocks.getList.mock.calls[0][0]).toEqual(expect.objectContaining({ pageSize: 24 }));
     expect(document.querySelector('.emu-shift-header > div > span')).not.toBeInTheDocument();
     expect(document.querySelectorAll('.emu-history-loading')).toHaveLength(4);
     expect(document.querySelectorAll('.emu-history-empty')).toHaveLength(0);
@@ -340,6 +374,7 @@ describe("EmuShiftReportsScreen", () => {
       favoriteOnly: true,
     }));    expect(await screen.findByRole("heading", { name: "История сменных отчётов" })).toBeInTheDocument();
     await screen.findByText("Иванов Иван");
+    expect(document.querySelectorAll('.emu-history-row-list')).toHaveLength(2);
     expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(4);
 
     const mechanic = screen.getByRole("button", { name: /Иванов Иван/ });
@@ -355,6 +390,7 @@ describe("EmuShiftReportsScreen", () => {
     await user.click(mechanic);
     expect(mechanicPanel).not.toHaveClass("is-open");
     expect(mechanicPanel).toBeInTheDocument();
+    expect(screen.queryByText("Осмотр насоса")).not.toBeInTheDocument();
     expect(mocks.getDetail).toHaveBeenCalledTimes(2);
   });
 
@@ -463,6 +499,36 @@ describe("EmuShiftReportsScreen", () => {
     await waitFor(() => expect(screen.getAllByPlaceholderText('Что выполнено')[0]).toHaveValue('Резервный черновик'));
   });
 
+  it('grows report textareas as multiline content is entered', async () => {
+    vi.spyOn(HTMLTextAreaElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLTextAreaElement) {
+      return this.value.includes('\n') ? 118 : 42;
+    });
+    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-entry' />);
+    await screen.findByRole('heading', { name: 'Сменный отчёт' });
+
+    const description = screen.getAllByPlaceholderText('Что выполнено')[0];
+    const note = screen.getAllByPlaceholderText('Необязательно')[0];
+    expect(description).toHaveClass('emu-autosize-textarea');
+    expect(note).toHaveClass('emu-autosize-textarea');
+    expect(description).toHaveStyle({ height: '42px' });
+
+    fireEvent.change(description, { target: { value: 'Первая строка\nВторая строка' } });
+    expect(description).toHaveStyle({ height: '118px' });
+  });
+
+  it('opens notification settings from the page header instead of rendering them in the form', async () => {
+    const user = userEvent.setup();
+    render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen='emu-shift-report-entry' />);
+    await screen.findByRole('heading', { name: 'Сменный отчёт' });
+
+    expect(screen.queryByText('Напоминание об отчёте')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Уведомления' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Настройки уведомлений' });
+    expect(within(dialog).getByText('Включить напоминание')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Готово' }));
+    expect(screen.queryByRole('dialog', { name: 'Настройки уведомлений' })).not.toBeInTheDocument();
+  });
   it('shows a configured in-app reminder and lets the user dismiss it', async () => {
     localStorage.setItem('patrol360.emu.shift-report.reminder.v1', JSON.stringify({ enabled: true, time: '00:00', inApp: true, desktop: false }));
     const user = userEvent.setup();

@@ -3116,7 +3116,7 @@
 }
 
 .emu-entry-page .emu-shift-fields {
-  grid-template-columns: minmax(300px, 1.45fr) minmax(175px, .55fr) minmax(245px, .8fr);
+  grid-template-columns: minmax(300px, 1.45fr) 160px minmax(245px, .8fr);
   gap: 12px;
   padding: 14px 16px;
   border-bottom: 1px solid #e6edf6;
@@ -3508,4 +3508,110 @@
   background: #f3f8ff;
   color: #315b91;
   font-size: 12px;
+}
+/* Shift-report entry autosize fields and notification controls. */
+.emu-entry-page .emu-shift-table .emu-autosize-textarea {
+  overflow-y: hidden;
+  resize: none;
+}
+
+.emu-shift-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.emu-notification-settings-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 13px;
+  border: 1px solid #cbd9eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #2357a7;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgb(35 55 85 / 7%);
+  transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+}
+
+.emu-notification-settings-button:hover {
+  border-color: #8eb5ef;
+  background: #f5f9ff;
+}
+
+.emu-notification-settings-button:focus-visible {
+  outline: 3px solid rgb(37 99 235 / 20%);
+  outline-offset: 2px;
+}
+
+.emu-entry-page > .emu-reminder-stack {
+  max-width: 1480px;
+  margin: 0 auto 12px;
+  padding: 0;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.emu-reminder-dialog {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.emu-reminder-dialog .emu-reminder-settings {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0;
+  border-top: 0;
+}
+
+.emu-reminder-dialog .emu-reminder-settings > * {
+  min-height: 58px;
+  padding: 12px;
+  border: 1px solid #e0e8f3;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.emu-reminder-dialog .emu-reminder-permission {
+  min-height: 40px;
+  margin-top: 0;
+}
+
+@media (max-width: 760px) {
+  .emu-shift-header-actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .emu-notification-settings-button {
+    width: 100%;
+  }
+
+  .emu-reminder-dialog .emu-reminder-settings {
+    grid-template-columns: 1fr;
+  }
+}
+/* Keep large history groups usable without stretching the whole page. */
+.emu-history-row-list {
+  max-height: min(520px, 58vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scroll-behavior: smooth;
+}
+
+@media (max-width: 760px) {
+  .emu-history-row-list {
+    max-height: 55vh;
+  }
+}
+
+.emu-history-grid.is-single .emu-history-group {
+  grid-column: 1 / -1;
 }

@@ -100,7 +100,7 @@ export function useEmuShiftReportsWorkspace({ historyEnabled, optionsEnabled }: 
     }
 
     try {
-      const result = await repository.getList({ ...query, pageSize: 100 }, { signal: controller.signal });
+      const result = await repository.getList({ ...query, pageSize: 24 }, { signal: controller.signal });
       if (mountedRef.current && historyAbortRef.current === controller) {
         setRows(result.rows);
         setHistoryTotal(result.total);
@@ -131,7 +131,16 @@ export function useEmuShiftReportsWorkspace({ historyEnabled, optionsEnabled }: 
     const pending = detailRequestsRef.current[id];
     if (pending) return pending;
     const request = repository.getDetail(id).then((detail) => {
-      if (mountedRef.current) setDetails((current) => ({ ...current, [id]: detail }));
+      if (mountedRef.current) {
+        setDetails((current) => {
+          const next = { ...current, [id]: detail };
+          const keys = Object.keys(next);
+          if (keys.length <= 100) return next;
+          const trimmed = { ...next };
+          keys.slice(0, keys.length - 100).forEach((key) => delete trimmed[key]);
+          return trimmed;
+        });
+      }
       return detail;
     }).finally(() => {
       delete detailRequestsRef.current[id];

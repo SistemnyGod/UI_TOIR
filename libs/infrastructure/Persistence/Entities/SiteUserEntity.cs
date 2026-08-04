@@ -18,6 +18,8 @@ internal sealed class SiteUserEntity
 
     public DateTimeOffset? LastLoginAt { get; set; }
 
+    public bool RequirePasswordChange { get; set; }
+
     public List<SiteUserRoleEntity> Roles { get; set; } = [];
 
     public List<SiteUserPermissionEntity> Permissions { get; set; } = [];

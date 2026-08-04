@@ -16,7 +16,7 @@ public sealed class AuthController(IAuthSessionService authSessionService) : Con
     [EnableRateLimiting("web-auth")]
     public ActionResult<AuthSessionDto> Login(LoginRequestDto request)
     {
-        var result = authSessionService.Login(request);
+        var result = authSessionService.Login(request, ClientIp(), UserAgent());
         if (result.Errors.Count > 0)
         {
             return AuthValidationProblem(result.Errors);
@@ -26,8 +26,8 @@ public sealed class AuthController(IAuthSessionService authSessionService) : Con
         {
             return Unauthorized(new ProblemDetails
             {
-                Title = "Не удалось войти",
-                Detail = "Проверьте логин и пароль.",
+                Title = "Unable to sign in",
+                Detail = "Check the login and password.",
                 Status = StatusCodes.Status401Unauthorized
             });
         }
@@ -42,6 +42,25 @@ public sealed class AuthController(IAuthSessionService authSessionService) : Con
         var token = ReadBearerToken();
         var user = token is null ? null : authSessionService.GetCurrentUser(token);
         return user is null ? Unauthorized() : Ok(user);
+    }
+
+    [HttpPost("change-password")]
+    [Authorize]
+    public ActionResult<AuthSessionDto> ChangePassword(ChangePasswordDto request)
+    {
+        var token = ReadBearerToken();
+        var result = token is null
+            ? new AuthChangePasswordResult(null, true, new Dictionary<string, string[]>())
+            : authSessionService.ChangePassword(token, request);
+
+        if (result.Errors.Count > 0)
+        {
+            return AuthValidationProblem(result.Errors);
+        }
+
+        return result.Unauthorized || result.Session is null
+            ? Unauthorized()
+            : Ok(result.Session);
     }
 
     [HttpPost("logout")]
@@ -71,11 +90,15 @@ public sealed class AuthController(IAuthSessionService authSessionService) : Con
             : null;
     }
 
+    private string? ClientIp() => ControllerContext?.HttpContext?.Connection.RemoteIpAddress?.ToString();
+
+    private string? UserAgent() => ControllerContext?.HttpContext?.Request.Headers.UserAgent.ToString();
+
     private ActionResult AuthValidationProblem(IReadOnlyDictionary<string, string[]> errors) =>
         ValidationProblem(new ValidationProblemDetails(errors.ToDictionary(item => item.Key, item => item.Value))
         {
-            Title = "Вход не выполнен",
-            Detail = "Заполните логин и пароль.",
+            Title = "Authentication request was not completed",
+            Detail = "Check the submitted fields.",
             Status = StatusCodes.Status400BadRequest
         });
 }

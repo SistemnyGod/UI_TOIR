@@ -22,12 +22,20 @@ export interface SessionUserDto {
   displayName: string;
   roles: string[];
   permissions: string[];
+  requirePasswordChange?: boolean;
 }
 
 export interface AuthSessionDto {
   user: SessionUserDto;
   accessToken: string;
   expiresAt: string;
+  requirePasswordChange?: boolean;
+}
+
+export interface ChangePasswordDto {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
 }
 
 export interface SystemNotificationDto {
@@ -42,6 +50,32 @@ export interface SystemNotificationDto {
   navigateTo: string | null;
 }
 
+export interface PermissionOverrideDto {
+  code: string;
+  effect: "allow" | "deny";
+}
+
+export interface PermissionCatalogItemDto {
+  code: string;
+  name: string;
+  moduleKey: string;
+  category: string;
+  isViewDefault: boolean;
+  displayOrder: number;
+}
+
+export interface AccessModuleDto {
+  key: string;
+  name: string;
+  description: string;
+  permissions: PermissionCatalogItemDto[];
+}
+
+export interface SiteUserAccessCatalogDto {
+  roles: RoleDto[];
+  modules: AccessModuleDto[];
+}
+
 export interface SiteUserDto {
   id: string;
   login: string;
@@ -52,6 +86,15 @@ export interface SiteUserDto {
   lastLoginAt: string | null;
   permissions: string[];
   directPermissions: string[];
+  permissionOverrides?: PermissionOverrideDto[];
+  requirePasswordChange?: boolean;
+}
+
+export interface SiteUserListResponseDto {
+  items: SiteUserDto[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
 }
 
 export interface SiteUserAccessScopeDto {
@@ -60,6 +103,7 @@ export interface SiteUserAccessScopeDto {
   scopeType: string;
   scopeId: string;
   scopeName: string;
+  sortOrder?: number;
 }
 
 export interface SiteUserAccessDto {
@@ -68,20 +112,25 @@ export interface SiteUserAccessDto {
   directPermissions: string[];
   effectivePermissions: string[];
   scopes: SiteUserAccessScopeDto[];
+  permissionOverrides?: PermissionOverrideDto[];
+  scopeMode?: "all" | "selected";
 }
 
 export interface UpdateSiteUserPermissionsDto {
   permissionCodes: string[];
+  permissionOverrides?: PermissionOverrideDto[];
 }
 
 export interface SiteUserAccessScopeUpsertDto {
   moduleKey: string;
   scopeType: string;
   scopeId: string;
+  sortOrder?: number;
 }
 
 export interface UpdateSiteUserScopesDto {
   scopes: SiteUserAccessScopeUpsertDto[];
+  scopeMode?: "all" | "selected";
 }
 
 export interface RoleDto {
@@ -98,6 +147,9 @@ export interface CreateSiteUserDto {
   status: string;
   initialPassword?: string;
   permissionCodes?: string[];
+  enabledModuleKeys?: string[];
+  permissionOverrides?: PermissionOverrideDto[];
+  requirePasswordChange?: boolean;
 }
 
 export interface UpdateSiteUserDto {
@@ -106,6 +158,8 @@ export interface UpdateSiteUserDto {
   roleCodes: string[];
   status: string;
   permissionCodes?: string[];
+  permissionOverrides?: PermissionOverrideDto[];
+  requirePasswordChange?: boolean;
 }
 
 export interface SiteUserCreatedDto {
@@ -116,6 +170,42 @@ export interface SiteUserCreatedDto {
 export interface ResetSiteUserPasswordDto {
   temporaryPassword: string;
   resetAt: string;
+}
+
+export interface SiteUserAuditEventDto {
+  id: string;
+  siteUserId: string;
+  actorName: string | null;
+  eventType: string;
+  moduleKey: string | null;
+  details: string;
+  beforeJson: string | null;
+  afterJson: string | null;
+  createdAt: string;
+  ipAddress: string | null;
+}
+
+export interface SiteUserAuditPageDto {
+  items: SiteUserAuditEventDto[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  changedPermissionsLast30Days: number;
+}
+
+export interface SiteUserSessionDto {
+  id: string;
+  createdAt: string;
+  lastSeenAt: string | null;
+  expiresAt: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  isCurrent: boolean;
+}
+
+export interface SiteUserSessionsDto {
+  items: SiteUserSessionDto[];
+  activeCount: number;
 }
 
 export interface AssignmentDto {

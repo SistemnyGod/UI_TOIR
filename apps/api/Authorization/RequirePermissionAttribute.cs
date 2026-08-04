@@ -30,10 +30,24 @@ internal static class PermissionAuthorization
         {
             context.Result = new UnauthorizedObjectResult(new ProblemDetails
             {
-                Title = "Требуется авторизация",
-                Detail = "Передайте Bearer token активной сессии.",
+                Title = "РўСЂРµР±СѓРµС‚СЃСЏ Р°РІС‚РѕСЂРёР·Р°С†РёСЏ",
+                Detail = "РџРµСЂРµРґР°Р№С‚Рµ Bearer token Р°РєС‚РёРІРЅРѕР№ СЃРµСЃСЃРёРё.",
                 Status = StatusCodes.Status401Unauthorized
             });
+            return;
+        }
+
+        if (principal.HasClaim("require_password_change", "true"))
+        {
+            context.Result = new ObjectResult(new ProblemDetails
+            {
+                Title = "Password change required",
+                Detail = "Change the temporary password before using the application.",
+                Status = StatusCodes.Status403Forbidden
+            })
+            {
+                StatusCode = StatusCodes.Status403Forbidden
+            };
             return;
         }
 
@@ -45,8 +59,8 @@ internal static class PermissionAuthorization
             var permissionList = string.Join(", ", permissions);
             context.Result = new ObjectResult(new ProblemDetails
             {
-                Title = "Недостаточно прав",
-                Detail = $"Для действия требуется одно из прав: {permissionList}.",
+                Title = "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ",
+                Detail = $"Р”Р»СЏ РґРµР№СЃС‚РІРёСЏ С‚СЂРµР±СѓРµС‚СЃСЏ РѕРґРЅРѕ РёР· РїСЂР°РІ: {permissionList}.",
                 Status = StatusCodes.Status403Forbidden
             })
             {
