@@ -4,18 +4,30 @@ import {
   createApiPatrolDataRepository,
   createMockPatrolDataRepository,
   emptyPatrolDataSnapshot,
+  type PatrolDataAccess,
   type PatrolDataSnapshot,
 } from "../repositories/patrolDataRepository";
 import { subscribeAssignmentAutoRefresh } from "../features/patrol/assignments/assignmentAutoRefresh";
 
-export function usePatrolDataSource(mode: DataSourceMode) {
+export function usePatrolDataSource(mode: DataSourceMode, access?: PatrolDataAccess) {
   const [snapshot, setSnapshot] = useState<PatrolDataSnapshot>(() => emptyPatrolDataSnapshot());
   const [status, setStatus] = useState<DataSourceStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
 
+  const dashboardAccess = access?.dashboard ?? true;
+  const employeeAccess = access?.employees ?? true;
+  const routeAccess = access?.routes ?? true;
   const client = useMemo(
-    () => (mode === "api" ? createApiPatrolDataRepository() : createMockPatrolDataRepository()),
-    [mode],
+    () => (mode === "api"
+      ? createApiPatrolDataRepository({
+          access: {
+            dashboard: dashboardAccess,
+            employees: employeeAccess,
+            routes: routeAccess,
+          },
+        })
+      : createMockPatrolDataRepository()),
+    [dashboardAccess, employeeAccess, mode, routeAccess],
   );
 
   const refresh = useCallback(

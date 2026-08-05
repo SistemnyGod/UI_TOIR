@@ -304,9 +304,11 @@ internal sealed class EfSiteUserAdminService(Patrol360DbContext dbContext) : ISi
         if (scopeErrors.Count > 0) return new UpdateSiteUserScopesResult(null, scopeErrors);
 
         var before = user.AccessScopes.Select(scope => scope.ScopeId).ToArray();
-        dbContext.SiteUserAccessScopes.RemoveRange(user.AccessScopes);
+        var existingScopes = user.AccessScopes.ToArray();
+        dbContext.SiteUserAccessScopes.RemoveRange(existingScopes);
+        user.AccessScopes.Clear();
         var now = DateTimeOffset.UtcNow;
-        user.AccessScopes = request.Scopes
+        var nextScopes = request.Scopes
             .Where(scope => scope.ScopeId != Guid.Empty)
             .Select(scope => new SiteUserAccessScopeEntity
             {
@@ -323,19 +325,27 @@ internal sealed class EfSiteUserAdminService(Patrol360DbContext dbContext) : ISi
             .Select(group => group.First())
             .ToList();
 
+        foreach (var scope in nextScopes)
+        {
+            user.AccessScopes.Add(scope);
+            dbContext.SiteUserAccessScopes.Add(scope);
+        }
+
         var scopeAll = user.Permissions.FirstOrDefault(item => item.Permission.Code == "emu.scope.all");
         if (scopeAll is null)
         {
             var permission = dbContext.Permissions.FirstOrDefault(item => item.Code == "emu.scope.all");
             if (permission is not null)
             {
-                user.Permissions.Add(new SiteUserPermissionEntity
+                var scopeOverride = new SiteUserPermissionEntity
                 {
                     SiteUserId = user.Id,
                     PermissionId = permission.Id,
                     Permission = permission,
                     Effect = request.ScopeMode.Equals("all", StringComparison.OrdinalIgnoreCase) ? "allow" : "deny"
-                });
+                };
+                user.Permissions.Add(scopeOverride);
+                dbContext.SiteUserPermissions.Add(scopeOverride);
             }
         }
         else
@@ -443,18 +453,58 @@ internal sealed class EfSiteUserAdminService(Patrol360DbContext dbContext) : ISi
 
     private void ReplacePermissionOverrides(SiteUserEntity user, IReadOnlyList<PermissionOverrideDto> overrides)
     {
-        user.Permissions.Clear();
+        var userIsTracked = dbContext.Entry(user).State != EntityState.Detached;
+        var requestedOverrides = new Dictionary<Guid, (PermissionEntity Permission, string Effect)>();
         foreach (var item in overrides)
         {
             var permission = ResolvePermissions([item.Code]).FirstOrDefault();
-            if (permission is null) continue;
-            user.Permissions.Add(new SiteUserPermissionEntity
+            if (permission is not null)
+            {
+                requestedOverrides[permission.Id] = (permission, NormalizeEffect(item.Effect));
+            }
+        }
+
+        if (!userIsTracked)
+        {
+            user.Permissions.Clear();
+            foreach (var requested in requestedOverrides.Values)
+            {
+                user.Permissions.Add(new SiteUserPermissionEntity
+                {
+                    SiteUserId = user.Id,
+                    PermissionId = requested.Permission.Id,
+                    Permission = requested.Permission,
+                    Effect = requested.Effect
+                });
+            }
+
+            return;
+        }
+
+        foreach (var existing in user.Permissions.ToArray())
+        {
+            if (requestedOverrides.Remove(existing.PermissionId, out var requested))
+            {
+                existing.Permission = requested.Permission;
+                existing.Effect = requested.Effect;
+                continue;
+            }
+
+            user.Permissions.Remove(existing);
+            dbContext.SiteUserPermissions.Remove(existing);
+        }
+
+        foreach (var requested in requestedOverrides.Values)
+        {
+            var permissionOverride = new SiteUserPermissionEntity
             {
                 SiteUserId = user.Id,
-                PermissionId = permission.Id,
-                Permission = permission,
-                Effect = NormalizeEffect(item.Effect)
-            });
+                PermissionId = requested.Permission.Id,
+                Permission = requested.Permission,
+                Effect = requested.Effect
+            };
+            user.Permissions.Add(permissionOverride);
+            dbContext.SiteUserPermissions.Add(permissionOverride);
         }
     }
 

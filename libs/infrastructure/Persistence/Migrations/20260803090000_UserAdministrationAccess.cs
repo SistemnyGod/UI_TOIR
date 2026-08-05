@@ -1,10 +1,13 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Patrol360.Infrastructure.Persistence.Migrations;
 
+[DbContext(typeof(Patrol360DbContext))]
+[Migration("20260803090000_UserAdministrationAccess")]
 public partial class UserAdministrationAccess : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

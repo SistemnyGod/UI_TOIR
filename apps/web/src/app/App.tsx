@@ -71,7 +71,12 @@ export function App() {
   const requestsEnabled = requestModal !== null || screen === "dashboard" || screen === "assign" || screen === "schedule";
   const scheduleResultsEnabled = screen === "schedule";
   const mobileAccountsEnabled = screen === "accounts";
-  const patrolData = usePatrolDataSource(dataAccessMode);
+  const patrolDataAccess = useMemo(() => ({
+    dashboard: dataAccessMode !== "api" || hasPermission(session.user, "dashboard.read"),
+    employees: dataAccessMode !== "api" || hasPermission(session.user, "employees.read"),
+    routes: dataAccessMode !== "api" || hasPermission(session.user, "routes.read"),
+  }), [dataAccessMode, session.user]);
+  const patrolData = usePatrolDataSource(dataAccessMode, patrolDataAccess);
   const scheduleResultHistory = useResultsWorkspace({
     dataSourceMode: dataAccessMode,
     enabled: scheduleResultsEnabled,
@@ -91,7 +96,7 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const systemNotifications = useSystemNotifications({
     dataSourceMode,
-    enabled: hasApiSession,
+    enabled: hasApiSession && hasPermission(session.user, "dashboard.read"),
     showToast,
   });
 

@@ -15,6 +15,18 @@ export interface PatrolDataRepository {
   getSnapshot: () => Promise<PatrolDataSnapshot>;
 }
 
+export interface PatrolDataAccess {
+  dashboard: boolean;
+  employees: boolean;
+  routes: boolean;
+}
+
+const fullPatrolDataAccess: PatrolDataAccess = {
+  dashboard: true,
+  employees: true,
+  routes: true,
+};
+
 const mockSnapshot: PatrolDataSnapshot = {
   activePatrols,
   dashboardMetrics,
@@ -31,9 +43,11 @@ export function createMockPatrolDataRepository(): PatrolDataRepository {
 }
 
 export function createApiPatrolDataRepository({
+  access = fullPatrolDataAccess,
   baseUrl,
   fetcher,
 }: {
+  access?: PatrolDataAccess;
   baseUrl?: string;
   fetcher?: typeof fetch;
 } = {}): PatrolDataRepository {
@@ -42,15 +56,17 @@ export function createApiPatrolDataRepository({
   return {
     async getSnapshot() {
       const [summary, assignments, routes, employees] = await Promise.all([
-        client.get<DashboardSummaryDto>("/api/v1/dashboards/summary"),
-        client.get<AssignmentDto[]>("/api/v1/dashboards/active-patrols"),
-        client.get<RouteDto[]>("/api/v1/routes?includeArchived=true"),
-        client.get<EmployeeDto[]>("/api/v1/employees"),
+        access.dashboard ? client.get<DashboardSummaryDto>("/api/v1/dashboards/summary") : Promise.resolve(null),
+        access.dashboard ? client.get<AssignmentDto[]>("/api/v1/dashboards/active-patrols") : Promise.resolve([]),
+        access.routes ? client.get<RouteDto[]>("/api/v1/routes?includeArchived=true") : Promise.resolve([]),
+        access.employees ? client.get<EmployeeDto[]>("/api/v1/employees") : Promise.resolve([]),
       ]);
 
       return {
         activePatrols: assignments.map(mapApiAssignment),
-        dashboardMetrics: mapDashboardMetrics(summary, routes.filter((route) => route.status !== "Архив").length),
+        dashboardMetrics: summary
+          ? mapDashboardMetrics(summary, routes.filter((route) => route.status !== "Архив").length)
+          : [],
         employees: employees.map(mapEmployee),
         routeDirectory: routes.map(mapRoute),
       };

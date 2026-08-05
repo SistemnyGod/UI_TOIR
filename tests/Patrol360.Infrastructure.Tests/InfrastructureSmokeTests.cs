@@ -87,6 +87,12 @@ public class InfrastructureSmokeTests
     }
 
     [Fact]
+    public void UserAdministrationMigrationIsDiscoverableByEf()
+    {
+        AssertMigrationId<UserAdministrationAccess>("20260803090000_UserAdministrationAccess");
+    }
+
+    [Fact]
     public void PercoRepairMigrationsAreDiscoverableByEf()
     {
         AssertMigrationId<PercoIntegrationStage1>("20260602120000_PercoIntegrationStage1");
