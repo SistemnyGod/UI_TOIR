@@ -426,8 +426,15 @@ export function EmuWorkAccountingScreen({
                 />
               ))
             ) : carriedOverWork.length === 0 ? (
-              <div className="emu-empty-state">
-                {boardWork.length > 0 ? "Карточек с выбранным состоянием нет." : "Карточек на суточной доске нет. Создайте работу или откройте историю выполненных работ."}
+              <div className="emu-empty-state emu-work-empty-state">
+                <span className="emu-empty-state-copy">
+                  {boardWork.length > 0 ? "Карточек с выбранным состоянием нет." : "Карточек на суточной доске нет. Создайте работу или откройте историю выполненных работ."}
+                </span>
+                {boardWork.length === 0 && canCreate ? (
+                  <button className="emu-primary-button emu-empty-state-action" onClick={() => openModal("create")} type="button">
+                    Создать работу
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>

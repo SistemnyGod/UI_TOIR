@@ -34,7 +34,7 @@ const serverLifecycleSource = readFileSync(
   "utf8"
 );
 
-test("recovers a legacy rejected start before sending its queued completed report", () => {
+test("requires explicit acceptance before starting a legacy rejected request", () => {
   assert.match(repositorySource, /command_type = 'startPatrolAssignment'/);
   assert.match(repositorySource, /status = 'rejected'/);
   assert.match(repositorySource, /command_type = 'completePatrolAssignment'/);
@@ -51,9 +51,12 @@ test("recovers a legacy rejected start before sending its queued completed repor
   assert.match(repositorySource, /CASE WHEN status = 'completedLocal' THEN status ELSE 'inProgress' END/);
   assert.match(queueScreenSource, /completePatrolAssignment.*Отчёт.*Маршрут/);
   assert.doesNotMatch(queueScreenSource, /Boolean\(command\.lastError\)/);
-  assert.match(nfcScreenSource, /case "blocked":/);
-  assert.match(serverOutboxSource, /TryRecoverRejectedLegacyStart/);
-  assert.match(serverOutboxSource, /existing\.EntityLocalId, command\.EntityLocalId/);
-  assert.match(serverLifecycleSource, /allowMissingAcceptRecovery/);
-  assert.match(serverLifecycleSource, /assignment\.Status = AssignmentStatusValues\.Accepted/);
+  assert.match(nfcScreenSource, /'blocked'/);
+  assert.match(serverOutboxSource, /RejectLegacyTakePatrolRequest/);
+  assert.doesNotMatch(serverOutboxSource, /ProcessTakePatrolRequest\(account, command\)/);
+  assert.doesNotMatch(serverOutboxSource, /TryRecoverRejectedLegacyStart/);
+  assert.doesNotMatch(serverLifecycleSource, /allowMissingAcceptRecovery/);
+  const startIndex = serverLifecycleSource.indexOf("ProcessStartPatrolAssignment");
+  const serverStartFunction = serverLifecycleSource.slice(startIndex, serverLifecycleSource.indexOf("ProcessPausePatrolAssignment", startIndex));
+  assert.doesNotMatch(serverStartFunction, /AssignmentStatusValues\.Accepted/);
 });

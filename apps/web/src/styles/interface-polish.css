@@ -591,3 +591,26 @@
     padding-inline: 6px;
   }
 }
+
+/* Dashboard: keep the five KPI cards balanced on a standard laptop width. */
+@media (min-width: 901px) and (max-width: 1500px) {
+  body .screen-area .dashboard-am-kpis {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  body .screen-area .dashboard-am-kpi {
+    grid-column: span 2;
+  }
+
+  body .screen-area .dashboard-am-kpi:nth-child(4),
+  body .screen-area .dashboard-am-kpi:nth-child(5) {
+    grid-column: span 3;
+  }
+}
+
+/* Sidebar: preserve readable labels in the compact desktop shell. */
+@media (min-width: 901px) {
+  body .app-shell:not(.sidebar-collapsed) .nav-item-label {
+    line-height: 1.2;
+  }
+}

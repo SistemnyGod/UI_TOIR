@@ -330,7 +330,7 @@ export function FavoritesModal({
 }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(10);
   const [employeeToRemove, setEmployeeToRemove] = useState<EmuEmployeeOption | null>(null);
   const activeFavoriteIds = new Set(workspace.settings.favoriteEmployees.filter((employee) => employee.isActive).map((employee) => employee.employeeId));
   const candidates = filterEmployees(employeeOptions, search).filter((employee) => !activeFavoriteIds.has(employee.id));
@@ -369,7 +369,7 @@ export function FavoritesModal({
   }
 
   return (
-    <ModalFrame wide onClose={onClose} title="Избранные сотрудники ЭМУ">
+    <ModalFrame className="emu-favorites-modal-frame" wide onClose={onClose} title="Избранные сотрудники ЭМУ">
       <div className="emu-favorite-grid">
         <section className="emu-reference-block">
           <h4>Избранные</h4>

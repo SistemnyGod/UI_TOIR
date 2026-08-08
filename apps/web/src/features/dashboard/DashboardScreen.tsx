@@ -165,9 +165,6 @@ export function DashboardScreen({
           <p>Короткая картина по заявкам, активным обходам, результатам, замечаниям и готовности маршрутов.</p>
         </div>
         <div className="dashboard-am-hero-actions">
-          <button className="button ghost" onClick={() => onNavigate("results")} type="button">
-            Открыть результаты
-          </button>
           <button className="button primary" onClick={() => onCreateRequest()} type="button">
             Создать заявку
           </button>

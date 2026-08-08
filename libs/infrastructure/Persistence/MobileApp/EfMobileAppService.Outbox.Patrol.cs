@@ -62,16 +62,6 @@ internal sealed partial class EfMobileAppService
                 && item.ClientOperationId == command.ClientOperationId);
         if (existing is not null)
         {
-            var recoveredResponse = TryRecoverRejectedLegacyStart(
-                account,
-                session.MobileAccountId,
-                existing,
-                command,
-                transaction);
-            if (recoveredResponse is not null)
-            {
-                return recoveredResponse;
-            }
 
             var recoveredDependency = TryRecoverRejectedPatrolDependency(
                 account,
@@ -106,7 +96,7 @@ internal sealed partial class EfMobileAppService
         var response = command.CommandType.ToLowerInvariant() switch
             {
                 var type when type.Equals("takePatrolRequest", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessTakePatrolRequest(account, command),
+                    RejectLegacyTakePatrolRequest(command),
                 var type when type.Equals("acceptPatrolRequest", StringComparison.OrdinalIgnoreCase) =>
                     ProcessAcceptPatrolRequest(account, command),
                 var type when type.Equals("releasePatrolRequest", StringComparison.OrdinalIgnoreCase) =>
@@ -381,60 +371,6 @@ internal sealed partial class EfMobileAppService
         trackedOperation.EntityServerId = NormalizeNullableText(response.ServerEntityId ?? command.EntityServerId);
         trackedOperation.ResponseJson = JsonSerializer.Serialize(response, JsonOptions);
         trackedOperation.AttemptCount = Math.Max(trackedOperation.AttemptCount, command.AttemptCount);
-        dbContext.SaveChanges();
-        transaction.Commit();
-        return response;
-    }
-    private MobileOutboxResponseDto? TryRecoverRejectedLegacyStart(
-        MobileAccountEntity account,
-        Guid mobileAccountId,
-        MobileOutboxOperationEntity existing,
-        MobileOutboxCommandDto command,
-        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction)
-    {
-        if (!existing.CommandType.Equals("startPatrolAssignment", StringComparison.OrdinalIgnoreCase)
-            || !command.CommandType.Equals("startPatrolAssignment", StringComparison.OrdinalIgnoreCase)
-            || !existing.Status.Equals("rejected", StringComparison.OrdinalIgnoreCase)
-            || !existing.ResponseJson.Contains(
-                "Only an accepted patrol assignment can be started.",
-                StringComparison.Ordinal)
-            || !string.Equals(existing.EntityLocalId, command.EntityLocalId, StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        if (!HasEquivalentLegacyStartPayload(existing.PayloadJson, command.Payload))
-        {
-            return Conflict(
-                command.ClientOperationId,
-                "clientOperationId is already used with a different start payload.",
-                "clientOperationReuse");
-        }
-
-        if (dbContext.Database.IsNpgsql())
-        {
-            var patrolLockKey = BuildPatrolCommandLockKey(command);
-            if (patrolLockKey is not null)
-            {
-                dbContext.Database.ExecuteSqlInterpolated(
-                    $"SELECT pg_advisory_xact_lock(hashtextextended({patrolLockKey}, 0))");
-            }
-        }
-        var response = ProcessStartPatrolAssignment(account, command, allowMissingAcceptRecovery: true);
-        if (!response.Status.Equals("accepted", StringComparison.OrdinalIgnoreCase)
-            && !response.Status.Equals("duplicate", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        var trackedOperation = dbContext.MobileOutboxOperations.First(item =>
-            item.MobileAccountId == mobileAccountId
-            && item.ClientOperationId == existing.ClientOperationId);
-        trackedOperation.Status = response.Status;
-        trackedOperation.EntityServerId = NormalizeNullableText(response.ServerEntityId ?? command.EntityServerId);
-        trackedOperation.ResponseJson = JsonSerializer.Serialize(response, JsonOptions);
-        trackedOperation.AttemptCount = Math.Max(trackedOperation.AttemptCount, command.AttemptCount);
-
         dbContext.SaveChanges();
         transaction.Commit();
         return response;

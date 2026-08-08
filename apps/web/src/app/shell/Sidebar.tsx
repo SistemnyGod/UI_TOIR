@@ -109,6 +109,7 @@ export function Sidebar({
         key={item.id}
         onClick={() => navigateFromModule(item.id)}
         tabIndex={isModuleOpen ? 0 : -1}
+        title={getScreenLabel(item)}
         type="button"
       >
         <span className="nav-icon">
@@ -133,6 +134,7 @@ export function Sidebar({
           aria-expanded={isOpen}
           className={`nav-item module-trigger ${active ? "active" : ""} ${isOpen ? "open" : ""}`}
           onClick={() => toggleModule(moduleId)}
+          title={copy.title}
           type="button"
         >
           <span className="nav-item-main">
@@ -200,6 +202,7 @@ export function Sidebar({
                 onNavigate(usersScreen.id);
                 setOpenModule(null);
               }}
+              title={getScreenLabel(usersScreen)}
               type="button"
             >
               <span className="nav-icon">
@@ -214,6 +217,7 @@ export function Sidebar({
                   onNavigate(percoScreen.id);
                   setOpenModule(null);
                 }}
+                title={getScreenLabel(percoScreen)}
                 type="button"
               >
                 <span className="nav-icon">

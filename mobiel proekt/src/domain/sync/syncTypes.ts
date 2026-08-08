@@ -12,7 +12,8 @@ export type OutboxCommandStatus =
   | "rejected"
   | "conflict"
   | "superseded"
-  | "cancelled";
+  | "cancelled"
+  | "cancelledLocal";
 
 export type OutboxCommandType =
   | "takePatrolRequest"

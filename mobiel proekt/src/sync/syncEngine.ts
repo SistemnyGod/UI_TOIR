@@ -41,6 +41,7 @@ import {
   markPendingOutboxCommandsRetryLater,
   reactivateRecoverableRejectedPointCommands,
   reactivateRecoverableRejectedStartCommands,
+  resetSendingOutboxCommandsForProcessRestart,
   resetStaleSendingOutboxCommands
 } from "@/db/repositories/outboxRepository";
 import type { OutboxRetryReason } from "@/db/repositories/outboxRepository";
@@ -484,6 +485,13 @@ export async function recoverStaleSendingOutboxCommands() {
     await resetStaleSendingOutboxCommands(ownerUserId, getStaleSendingBoundaryIso());
   }
 }
+export async function recoverSendingOutboxCommandsAfterProcessRestart() {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (ownerUserId) {
+    await resetSendingOutboxCommandsForProcessRestart(ownerUserId);
+  }
+}
+
 
 export async function prepareManualSyncRetry() {
   await runForegroundSync({ mode: "manualAll" });

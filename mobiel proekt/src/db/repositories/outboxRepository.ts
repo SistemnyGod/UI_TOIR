@@ -73,7 +73,7 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25,
             AND previous.contour_id = candidate.contour_id
             AND previous.aggregate_key = candidate.aggregate_key
             AND previous.sequence_no < candidate.sequence_no
-            AND previous.status NOT IN ('accepted', 'duplicate', 'superseded', 'cancelled')
+            AND previous.status NOT IN ('accepted', 'duplicate', 'superseded', 'cancelled', 'cancelledLocal')
         )
       ORDER BY candidate.sequence_no ASC,
                candidate.created_at_local ASC,
@@ -130,7 +130,7 @@ export async function getNextOutboxRetryAt(ownerUserId: string): Promise<string 
             AND previous.contour_id = candidate.contour_id
             AND previous.aggregate_key = candidate.aggregate_key
             AND previous.sequence_no < candidate.sequence_no
-            AND previous.status NOT IN ('accepted', 'duplicate', 'superseded', 'cancelled')
+            AND previous.status NOT IN ('accepted', 'duplicate', 'superseded', 'cancelled', 'cancelledLocal')
         )
     `,
     [ownerUserId, currentContourId]
@@ -986,6 +986,18 @@ export async function resetStaleSendingOutboxCommands(
         AND (? IS NULL OR aggregate_key = ?)
     `,
     [updatedAtLocal, updatedAtLocal, ownerUserId, currentContourId, staleBeforeIso, aggregateKey ?? null, aggregateKey ?? null]
+  ));
+}
+
+export async function resetSendingOutboxCommandsForProcessRestart(ownerUserId: string) {
+  const db = await getDatabase();
+  const updatedAtLocal = new Date().toISOString();
+
+  await withSqliteBusyRetry(() => db.runAsync(
+    "UPDATE outbox_commands SET status = 'retryLater', next_attempt_at = ?, retry_reason = 'unknown', " +
+    "last_error = COALESCE(last_error, 'Sending resumed after application restart.'), last_attempt_at = NULL, updated_at_local = ? " +
+    "WHERE owner_user_id = ? AND contour_id = ? AND status = 'sending'",
+    [updatedAtLocal, updatedAtLocal, ownerUserId, currentContourId]
   ));
 }
 
@@ -2260,6 +2272,21 @@ export async function retryOutboxConflictWithRevision(
             AND status IN ('needsDispatcherDecision', 'syncError', 'inProgress')
         `,
         [ownerUserId, command.entity_local_id]
+      );
+      await tx.runAsync(
+        `
+          UPDATE patrol_request_board
+          SET status = 'completedLocal'
+          WHERE owner_user_id = ?
+            AND request_id = (
+              SELECT request_id
+              FROM patrol_assignments
+              WHERE owner_user_id = ? AND assignment_id = ?
+              LIMIT 1
+            )
+            AND status IN ('needsDispatcherDecision', 'syncError', 'inProgress')
+        `,
+        [ownerUserId, ownerUserId, command.entity_local_id]
       );
     })
   );

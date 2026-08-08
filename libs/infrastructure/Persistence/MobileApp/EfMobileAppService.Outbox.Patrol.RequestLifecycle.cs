@@ -25,137 +25,9 @@ internal sealed partial class EfMobileAppService
         };
     }
 
-    private MobileOutboxResponseDto ProcessTakePatrolRequest(MobileAccountEntity account, MobileOutboxCommandDto command)
-    {
-        var boundEmployeeIds = GetBoundEmployeeIds(account);
-        if (boundEmployeeIds.Count == 0)
-        {
-            return Rejected(command.ClientOperationId, "Mobile account has no linked employees.");
-        }
+    private MobileOutboxResponseDto RejectLegacyTakePatrolRequest(MobileOutboxCommandDto command) =>
+        Rejected(command.ClientOperationId, "Manual acceptance is required. Legacy takePatrolRequest is disabled.");
 
-        var requestId = ReadGuid(command.Payload, "requestId");
-        var routeId = ReadGuid(command.Payload, "routeId");
-        var requestRevision = ReadLong(command.Payload, "requestRevision");
-        if (requestId is null || routeId is null || requestRevision is null)
-        {
-            return Rejected(command.ClientOperationId, "takePatrolRequest payload is incomplete.");
-        }
-
-        if (!Guid.TryParse(command.EntityLocalId, out var clientAssignmentId))
-        {
-            return Rejected(command.ClientOperationId, "takePatrolRequest entityLocalId must contain client assignment id.");
-        }
-
-        var patrolRequest = dbContext.PatrolRequests
-            .Include(item => item.Assignment)
-            .FirstOrDefault(item => item.Id == requestId.Value);
-        if (patrolRequest is null || patrolRequest.RouteId != routeId.Value)
-        {
-            return Conflict(command.ClientOperationId, "Patrol request is not available on the server.");
-        }
-
-        if (patrolRequest.Status == AssignmentStatusValues.Cancelled)
-        {
-            return Conflict(command.ClientOperationId, "Patrol request was cancelled by dispatcher.", "assignmentCancelled");
-        }
-
-        if (patrolRequest.Status == AssignmentStatusValues.Completed)
-        {
-            return Conflict(command.ClientOperationId, "Patrol request is already completed.");
-        }
-
-        var serverRevision = patrolRequest.CreatedAt.ToUnixTimeMilliseconds();
-        if (serverRevision != requestRevision.Value)
-        {
-            return Conflict(command.ClientOperationId, "Patrol request was changed after mobile bootstrap.");
-        }
-
-        if (patrolRequest.EmployeeId is not null && !boundEmployeeIds.Contains(patrolRequest.EmployeeId.Value))
-        {
-            return Conflict(command.ClientOperationId, "Patrol request belongs to another employee.");
-        }
-
-        if (patrolRequest.Assignment is not null)
-        {
-            return Conflict(command.ClientOperationId, "Patrol request is already assigned.");
-        }
-
-        var requestAcceptTransition = PatrolAssignmentStateMachine.Evaluate(
-            "acceptPatrolRequest",
-            patrolRequest.Status);
-        if (requestAcceptTransition.Kind != PatrolTransitionKind.Allowed)
-        {
-            return Conflict(command.ClientOperationId, requestAcceptTransition.Message);
-        }
-
-        if (dbContext.Assignments.Any(item => item.Id == clientAssignmentId))
-        {
-            return Conflict(command.ClientOperationId, "Client assignment id is already used.");
-        }
-
-        var employeeId = patrolRequest.EmployeeId ?? boundEmployeeIds.First();
-        if (dbContext.Database.IsNpgsql())
-        {
-            var employeePatrolLock = $"patrol-start:{employeeId:N}";
-            dbContext.Database.ExecuteSqlInterpolated(
-                $"SELECT pg_advisory_xact_lock(hashtextextended({employeePatrolLock}, 0))");
-        }
-
-        if (dbContext.Assignments
-            .AsNoTracking()
-            .Any(item => item.EmployeeId == employeeId
-                && (item.Status == AssignmentStatusValues.InProgress
-                    || item.Status == AssignmentStatusValues.Paused)))
-        {
-            return Conflict(
-                command.ClientOperationId,
-                "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0435 \u0438\u043b\u0438 \u043f\u0435\u0440\u0435\u0434\u0430\u0439\u0442\u0435 \u0442\u0435\u043a\u0443\u0449\u0438\u0439 \u043e\u0431\u0445\u043e\u0434.",
-                "activePatrolExists");
-        }
-
-        var employee = dbContext.Employees.FirstOrDefault(item => item.Id == employeeId);
-        var route = dbContext.Routes.FirstOrDefault(item => item.Id == routeId.Value && !item.IsArchived);
-        if (employee is null || route is null)
-        {
-            return Conflict(command.ClientOperationId, "Employee or route is no longer available.");
-        }
-
-        var routeRevision = GetOrCreateCurrentRouteRevision(route);
-
-        var startedAt = ReadDateTimeOffset(command.Payload, "takenAtLocal") ?? DateTimeOffset.UtcNow;
-        var assignment = new AssignmentEntity
-        {
-            Id = clientAssignmentId,
-            PatrolRequestId = patrolRequest.Id,
-            EmployeeId = employee.Id,
-            RouteId = route.Id,
-            RouteVersionNo = route.VersionNo,
-            RouteRevisionId = routeRevision.Id,
-            RouteRevision = routeRevision,
-            Shift = string.IsNullOrWhiteSpace(employee.Shift) ? "-" : employee.Shift,
-            Status = AssignmentStatusValues.InProgress,
-            PlannedAt = BuildPlannedStartAt(patrolRequest.ScheduledDate, patrolRequest.ScheduledTime),
-            StartedAt = startedAt.ToUniversalTime(),
-            ProgressPercent = 1,
-            LockVersion = 1,
-        };
-
-        patrolRequest.EmployeeId ??= employee.Id;
-        patrolRequest.EmployeeName = employee.FullName;
-        patrolRequest.RouteId = route.Id;
-        patrolRequest.RouteName = route.Name;
-        patrolRequest.Status = AssignmentStatusValues.InProgress;
-        dbContext.Assignments.Add(assignment);
-
-        return new MobileOutboxResponseDto(
-            command.ClientOperationId,
-            "accepted",
-            assignment.Id.ToString(),
-            assignment.LockVersion,
-            "Request assigned",
-            null,
-            null);
-    }
 
     private MobileOutboxResponseDto ProcessAcceptPatrolRequest(MobileAccountEntity account, MobileOutboxCommandDto command)
     {
@@ -344,8 +216,7 @@ internal sealed partial class EfMobileAppService
 
     private MobileOutboxResponseDto ProcessStartPatrolAssignment(
         MobileAccountEntity account,
-        MobileOutboxCommandDto command,
-        bool allowMissingAcceptRecovery = false)
+        MobileOutboxCommandDto command)
     {
         var assignment = FindMobileAssignment(account, command, includeRequest: true);
         if (assignment is null)
@@ -373,25 +244,6 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Closed patrol assignment cannot be started.");
         }
 
-        if (allowMissingAcceptRecovery
-            && (assignment.Status == AssignmentStatusValues.Waiting
-                || assignment.Status == AssignmentStatusValues.Assigned))
-        {
-            var acceptTransition = PatrolAssignmentStateMachine.Evaluate(
-                "acceptPatrolRequest",
-                assignment.Status);
-            if (acceptTransition.Kind != PatrolTransitionKind.Allowed)
-            {
-                return BuildPatrolTransitionResponse(command, assignment, acceptTransition);
-            }
-
-            assignment.Status = AssignmentStatusValues.Accepted;
-            assignment.LockVersion += 1;
-            if (assignment.PatrolRequest is not null)
-            {
-                assignment.PatrolRequest.Status = AssignmentStatusValues.Accepted;
-            }
-        }
         var startTransition = PatrolAssignmentStateMachine.Evaluate(
             "startPatrolAssignment",
             assignment.Status);

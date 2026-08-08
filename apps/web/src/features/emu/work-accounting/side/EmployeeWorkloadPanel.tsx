@@ -57,11 +57,10 @@ export function EmployeeWorkloadPanel({
             }} type="button">
             <strong>{formatEmployeeShortName(employee.fullName)}</strong>
             <span>{employee.position || employee.department}</span>
-            {employee.status !== "free" ? <em>{employeeWorkloadLabel(employee.status)}</em> : null}
+            <em>{employeeWorkloadLabel(employee.status)}</em>
           </button>
         ))}
       </div>
     </div>
   );
 }
-

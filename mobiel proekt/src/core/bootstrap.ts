@@ -4,10 +4,11 @@ import { pruneMobileActionLog } from "@/db/repositories/mobileActionLogRepositor
 import { deleteOrphanPatrolPhotos } from "@/services/fileStorageService";
 import { reclaimAcceptedLocalMedia } from "@/services/localMediaReclamationService";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
-import { recoverStaleSendingOutboxCommands } from "@/sync/syncEngine";
+import { recoverSendingOutboxCommandsAfterProcessRestart, recoverStaleSendingOutboxCommands } from "@/sync/syncEngine";
 
 export async function bootstrapApplication() {
   await initializeDatabase();
+  await recoverSendingOutboxCommandsAfterProcessRestart();
   await recoverStaleSendingOutboxCommands();
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
