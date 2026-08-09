@@ -24,10 +24,6 @@
 }
 
 @media (max-width: 760px) {
-  .emu-modal-backdrop {
-    padding: 10px;
-  }
-
   .emu-modal,
   .emu-modal-wide {
     width: min(100%, calc(100vw - 20px));
@@ -173,4 +169,3 @@
     opacity: 0.035;
   }
 }
-

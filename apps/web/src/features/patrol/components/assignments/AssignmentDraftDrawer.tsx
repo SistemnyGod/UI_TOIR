@@ -1,4 +1,4 @@
-import { Chip, EmptyState } from "../../../../shared/ui";
+import { Button, Chip, EmptyState } from "../../../../shared/ui";
 import type { DataSourceStatus, Employee, RouteOption, ScreenId, ServiceRequest } from "../../../../types";
 
 interface AssignmentDraftDrawerProps {
@@ -63,9 +63,9 @@ export function AssignmentDraftDrawer({
           title="Выберите сотрудника и маршрут"
           description="После выбора здесь появятся заявка, смена, дата, проверка конфликтов и кнопка отправки."
           action={
-            <button className="button ghost" onClick={() => onNavigate("routes")} type="button">
+            <Button onClick={() => onNavigate("routes")} variant="ghost">
               Проверить маршруты
-            </button>
+            </Button>
           }
         />
       ) : (
@@ -153,12 +153,12 @@ export function AssignmentDraftDrawer({
             </div>
           )}
           <div className="drawer-actions">
-            <button className="button ghost danger-outline" onClick={() => onNotify("Черновик назначения очищен")} type="button">
+            <Button className="danger-outline" onClick={() => onNotify("Черновик назначения очищен")} variant="ghost">
               Отменить
-            </button>
-            <button className="button primary" disabled={!canSubmit} onClick={() => void onAssign()} type="button">
+            </Button>
+            <Button disabled={!canSubmit} onClick={() => void onAssign()} variant="primary">
               {isCreating ? "Назначаем..." : "Назначить сейчас"}
-            </button>
+            </Button>
           </div>
         </>
       )}

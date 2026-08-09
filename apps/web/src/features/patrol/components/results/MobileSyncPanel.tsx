@@ -1,5 +1,5 @@
 import type { MobileDeviceHealth, MobileSyncConflict } from "../../../../types";
-import { Chip, EmptyState, Panel } from "../../../../shared/ui";
+import { Button, Chip, EmptyState, Panel } from "../../../../shared/ui";
 
 export function MobileSyncPanel({
   conflicts,
@@ -19,7 +19,7 @@ export function MobileSyncPanel({
   return (
     <Panel
       title="Мобильная синхронизация"
-      actions={<button className="button ghost" onClick={onRefresh} type="button">Обновить</button>}
+      actions={<Button onClick={onRefresh} variant="ghost">Обновить</Button>}
     >
       {status === "loading" ? (
         <EmptyState title="Проверяем мобильные отчеты" description="Загружаем устройства, зависшие команды и конфликты." />
@@ -70,15 +70,15 @@ export function MobileSyncPanel({
                     </details>
                   </div>
                   <div className="inline-actions">
-                    <button className="button ghost" onClick={() => onResolve(conflict.mobileAccountId, conflict.clientOperationId, "repeatRequested")} type="button">
+                    <Button onClick={() => onResolve(conflict.mobileAccountId, conflict.clientOperationId, "repeatRequested")} variant="ghost">
                       Повторить
-                    </button>
-                    <button className="button ghost" onClick={() => onResolve(conflict.mobileAccountId, conflict.clientOperationId, "rejected")} type="button">
+                    </Button>
+                    <Button onClick={() => onResolve(conflict.mobileAccountId, conflict.clientOperationId, "rejected")} variant="ghost">
                       Отклонить
-                    </button>
-                    <button className="button primary" onClick={() => onResolve(conflict.mobileAccountId, conflict.clientOperationId, "accepted")} type="button">
+                    </Button>
+                    <Button onClick={() => onResolve(conflict.mobileAccountId, conflict.clientOperationId, "accepted")} variant="primary">
                       Принять
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))}

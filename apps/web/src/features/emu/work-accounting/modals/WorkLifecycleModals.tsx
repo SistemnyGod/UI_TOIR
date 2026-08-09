@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { EmuCarryOverWorkSessionDto, EmuCompleteWorkSessionDto, EmuPauseWorkSessionDto, EmuResumeWorkSessionDto, EmuWorkSessionDto } from "../../../../api/contracts";
 import type { EmuWorkspace } from "../../../../hooks/useEmuWorkspace";
 import { ModalFrame } from "../components/ModalFrame";
+import { Button } from "../../../../shared/ui";
 import { WorkSummary } from "../components/WorkSummary";
 import { activeEmployeeStatus, addDays, employeeStatusLabel, formatEmployeeShortName, toDateInput, toLocalIso, toTimeInput, toggle } from "../workAccountingUtils";
 
@@ -72,7 +73,7 @@ export function PauseWorkModal({ initialEmployeeId = "", onClose, onNotify, work
       <label className="emu-textarea-label">Комментарий к паузе<textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Например: нет кабеля, ожидаем склад" /></label>
       <div className="emu-modal-actions">
         <button onClick={onClose} type="button">Отмена</button>
-        <button className="emu-primary-button" disabled={employeeIds.length === 0 || !waitReasonId} onClick={() => void submit()} type="button">Пауза</button>
+        <Button disabled={employeeIds.length === 0 || !waitReasonId} onClick={() => void submit()} variant="primary">Пауза</Button>
       </div>
     </ModalFrame>
   );
@@ -119,7 +120,7 @@ export function ResumeWorkModal({ initialEmployeeId = "", onClose, onNotify, wor
       <label className="emu-textarea-label">Комментарий<textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Причина ожидания устранена" /></label>
       <div className="emu-modal-actions">
         <button onClick={onClose} type="button">Отмена</button>
-        <button className="emu-primary-button" disabled={employeeIds.length === 0} onClick={() => void submit()} type="button">Продолжить</button>
+        <Button disabled={employeeIds.length === 0} onClick={() => void submit()} variant="primary">Продолжить</Button>
       </div>
     </ModalFrame>
   );
@@ -203,7 +204,7 @@ export function CompleteWorkModal({ onClose, onNotify, workspace, work }: { onCl
       {completionBeforeArrival ? <div className="emu-card-warning">Время окончания не может быть раньше времени прихода выбранных сотрудников.</div> : null}
       <div className="emu-modal-actions">
         <button onClick={onClose} type="button">Отмена</button>
-        <button className="emu-primary-button" disabled={employeeIds.length === 0 || !resultComment.trim() || (reasonRequired && !notCompletedReasonId) || completionBeforeArrival} onClick={() => void submit()} type="button">Завершить работу</button>
+        <Button disabled={employeeIds.length === 0 || !resultComment.trim() || (reasonRequired && !notCompletedReasonId) || completionBeforeArrival} onClick={() => void submit()} variant="primary">Завершить работу</Button>
       </div>
     </ModalFrame>
   );
@@ -244,7 +245,7 @@ export function CarryOverWorkModal({ onClose, onNotify, workspace, work }: { onC
       {isInvalidDate ? <div className="emu-card-warning">Новая дата должна быть позже текущей даты работы.</div> : null}
       <div className="emu-modal-actions">
         <button onClick={onClose} type="button">Отмена</button>
-        <button className="emu-primary-button" disabled={!comment.trim() || isInvalidDate} onClick={() => void submit()} type="button">Перенести</button>
+        <Button disabled={!comment.trim() || isInvalidDate} onClick={() => void submit()} variant="primary">Перенести</Button>
       </div>
     </ModalFrame>
   );
@@ -268,7 +269,7 @@ export function DeleteWorkModal({ onClose, onNotify, workspace, work }: { onClos
       <label className="emu-textarea-label">Причина удаления<textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label>
       <div className="emu-modal-actions">
         <button onClick={onClose} type="button">Отмена</button>
-        <button className="emu-danger-button" disabled={!reason.trim()} onClick={() => void submit()} type="button">Удалить</button>
+        <Button disabled={!reason.trim()} onClick={() => void submit()} variant="danger">Удалить</Button>
       </div>
     </ModalFrame>
   );

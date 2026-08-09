@@ -1,4 +1,4 @@
-import { Chip, EmptyState, Panel, ProgressBar } from "../../../../shared/ui";
+import { Button, Chip, EmptyState, Panel, ProgressBar } from "../../../../shared/ui";
 import type { ActivePatrol, DataSourceStatus } from "../../../../types";
 
 interface ActiveAssignmentsPanelProps {
@@ -32,9 +32,9 @@ export function ActiveAssignmentsPanel({
             title="Назначения API не загружены"
             description={errorMessage || "Проверьте backend и повторите загрузку. Локальные записи в API mode не подмешиваются."}
             action={
-              <button className="button ghost" onClick={() => void onRetry?.()} type="button">
+              <Button onClick={() => void onRetry?.()} variant="ghost">
                 Повторить
-              </button>
+              </Button>
             }
           />
         ) : activePatrols.length > 0 ? (
@@ -53,30 +53,28 @@ export function ActiveAssignmentsPanel({
                   <ProgressBar value={item.progress} />
                   <Chip>{item.status}</Chip>
                   <div className="inline-actions">
-                    <button
-                      className="button ghost"
+                    <Button
                       disabled={!canManage || savingAssignmentId === item.id}
                       onClick={() => void onRunCommand?.(item.id, "start")}
-                      type="button"
+                      variant="ghost"
                     >
                       Старт
-                    </button>
-                    <button
-                      className="button ghost"
+                    </Button>
+                    <Button
                       disabled={!canManage || savingAssignmentId === item.id}
                       onClick={() => void onRunCommand?.(item.id, "complete")}
-                      type="button"
+                      variant="ghost"
                     >
                       Завершить
-                    </button>
-                    <button
-                      className="button ghost danger-outline"
+                    </Button>
+                    <Button
+                      className="danger-outline"
                       disabled={!canManage || savingAssignmentId === item.id}
                       onClick={() => void onRunCommand?.(item.id, "cancel")}
-                      type="button"
+                      variant="ghost"
                     >
                       Отмена
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -87,13 +85,12 @@ export function ActiveAssignmentsPanel({
             title="Активных назначений нет"
             description="Назначения появятся после отправки сотруднику."
             action={
-              <button
-                className="button ghost"
+              <Button
                 onClick={() => onNotify("Сначала выберите заявку, сотрудника и маршрут")}
-                type="button"
+                variant="ghost"
               >
                 Подготовить назначение
-              </button>
+              </Button>
             }
           />
         )}

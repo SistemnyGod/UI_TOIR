@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { CreateServiceRequestPayload, EmployeeDirectoryItem, PatrolResult, RouteDirectoryItem } from "../../../../types";
-import { Chip } from "../../../../shared/ui";
+import { Button, Chip, ModalShell } from "../../../../shared/ui";
 import { buildNotificationText, getDateInputValue } from "./requestModalUtils";
 
 export function RequestCreateModal({
@@ -82,24 +82,13 @@ export function RequestCreateModal({
   }
 
   return (
-    <form
-      aria-label="Создание заявки на обход"
-      aria-modal="true"
-      className="modal-window request-modal request-create-modal"
-      onMouseDown={(event) => event.stopPropagation()}
-      onSubmit={submit}
-      role="dialog"
+    <ModalShell
+      className="request-create-modal"
+      onClose={onClose}
+      subtitle="Выберите сотрудника, маршрут и дату. Уведомление сотруднику отправляется автоматически после создания заявки."
+      title="Заявка на проведение обхода"
     >
-      <div className="modal-head">
-        <div>
-          <span className="modal-kicker">Новая заявка</span>
-          <h2>Заявка на проведение обхода</h2>
-          <p>Выберите сотрудника, маршрут и дату. Уведомление сотруднику отправляется автоматически после создания заявки.</p>
-        </div>
-        <button aria-label="Закрыть" className="modal-close" onClick={onClose} type="button">
-          ×
-        </button>
-      </div>
+      <form className="request-modal request-create-form" onSubmit={submit}>
 
       {sourceResult ? (
         <div className="source-card">
@@ -223,14 +212,15 @@ export function RequestCreateModal({
       </div>
 
       <div className="modal-actions">
-        <button className="button ghost" onClick={onClose} type="button">
+        <Button onClick={onClose} variant="ghost">
           Отмена
-        </button>
-        <button className="button primary" type="submit">
+        </Button>
+        <Button type="submit" variant="primary">
           Создать заявку
-        </button>
+        </Button>
       </div>
-    </form>
+      </form>
+    </ModalShell>
   );
 }
 

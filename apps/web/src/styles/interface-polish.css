@@ -68,7 +68,7 @@
   .modal-backdrop, .assign-am-modal-backdrop, .results-review-modal-backdrop,
   .inventory-settings-modal-backdrop, .inventory-operations-dialog-backdrop,
   .inventory-employees-dialog-backdrop, .inventory-ppe-picker-backdrop,
-  .emu-modal-backdrop, .perco-modal-backdrop, .site-user-modal-backdrop
+  .perco-modal-backdrop, .site-user-modal-backdrop
 ) {
   overflow: auto;
   overscroll-behavior: contain;
@@ -225,7 +225,7 @@
     .modal-backdrop, .assign-am-modal-backdrop, .results-review-modal-backdrop,
     .inventory-settings-modal-backdrop, .inventory-operations-dialog-backdrop,
     .inventory-employees-dialog-backdrop, .inventory-ppe-picker-backdrop,
-    .emu-modal-backdrop, .perco-modal-backdrop, .site-user-modal-backdrop
+    .perco-modal-backdrop, .site-user-modal-backdrop
   ) {
     align-items: flex-end;
     padding: 0;
@@ -592,19 +592,16 @@
   }
 }
 
-/* Dashboard: keep the five KPI cards balanced on a standard laptop width. */
-@media (min-width: 901px) and (max-width: 1500px) {
+/* Dashboard: keep all five KPI cards balanced on standard laptop widths. */
+@media (min-width: 1181px) and (max-width: 1500px) {
   body .screen-area .dashboard-am-kpis {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
+}
 
-  body .screen-area .dashboard-am-kpi {
-    grid-column: span 2;
-  }
-
-  body .screen-area .dashboard-am-kpi:nth-child(4),
-  body .screen-area .dashboard-am-kpi:nth-child(5) {
-    grid-column: span 3;
+@media (min-width: 901px) and (max-width: 1180px) {
+  body .screen-area .dashboard-am-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 

@@ -1,4 +1,5 @@
 import { AlertTriangle, CalendarDays, Route, Send, UserPlus } from "./AssignmentIcons";
+import { Button } from "../../../shared/ui";
 
 interface AssignmentSelectionBarProps {
   canCreate: boolean;
@@ -56,10 +57,10 @@ export function AssignmentSelectionBar({
           Есть конфликт назначения
         </span>
       ) : null}
-      <button className="button primary assign-am-selection-create" disabled={disabled} onClick={onCreate} type="button">
+      <Button className="assign-am-selection-create" disabled={disabled} onClick={onCreate} variant="primary">
         <Send size={17} />
         {isCreating ? "Создаём…" : "Создать заявку"}
-      </button>
+      </Button>
     </section>
   );
 }

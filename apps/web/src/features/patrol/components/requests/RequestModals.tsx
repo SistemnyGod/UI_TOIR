@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import type {
   CreateServiceRequestPayload,
   EmployeeDirectoryItem,
@@ -7,6 +7,7 @@ import type {
   ServiceRequest,
 } from "../../../../types";
 import type { RequestModalState } from "../../../../domain/serviceRequests";
+import { Button, ModalShell } from "../../../../shared/ui";
 import { RequestCreateModal } from "./RequestCreateModal";
 import { RequestViewModal } from "./RequestViewModal";
 
@@ -33,54 +34,17 @@ export function RequestModals({
 }) {
   const [isCreateDirty, setIsCreateDirty] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-  const modalRootRef = useRef<HTMLDivElement | null>(null);
-  const returnFocusRef = useRef<HTMLElement | null>(null);
 
-  useEffect(() => {
-    if (!modal) {
-      setIsCreateDirty(false);
-      setShowCloseConfirm(false);
-      return undefined;
-    }
-
-    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    window.setTimeout(() => {
-      focusFirstControl(modalRootRef.current);
-    }, 0);
-
-    return () => {
-      returnFocusRef.current?.focus();
-    };
-  }, [modal]);
-
-  useEffect(() => {
-    if (!modal) return undefined;
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      if (showCloseConfirm) {
-        setShowCloseConfirm(false);
-        return;
-      }
-      requestClose();
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  });
-
-  useEffect(() => {
-    if (!showCloseConfirm) return;
-    window.setTimeout(() => {
-      focusFirstControl(modalRootRef.current?.querySelector(".confirm-window") ?? null);
-    }, 0);
-  }, [showCloseConfirm]);
-
-  if (!modal) return null;
+  if (!modal) {
+    return null;
+  }
 
   function requestClose() {
-    if (modal?.kind === "create" && isCreateDirty) {
+    if (!modal) {
+      return;
+    }
+
+    if (modal.kind === "create" && isCreateDirty) {
       setShowCloseConfirm(true);
       return;
     }
@@ -95,7 +59,7 @@ export function RequestModals({
   }
 
   return (
-    <div className="modal-backdrop" onMouseDown={requestClose} ref={modalRootRef}>
+    <>
       {modal.kind === "view" && request ? (
         <RequestViewModal
           request={request}
@@ -104,29 +68,15 @@ export function RequestModals({
         />
       ) : null}
       {modal.kind === "view" && !request ? (
-        <section
-          aria-label="Заявка не найдена"
-          aria-modal="true"
-          className="modal-window request-modal"
-          onMouseDown={(event) => event.stopPropagation()}
-          role="dialog"
+        <ModalShell
+          actions={<Button onClick={requestClose} variant="primary">Закрыть</Button>}
+          className="request-modal"
+          onClose={requestClose}
+          subtitle="Запись отсутствует в текущем списке заявок. Обновите данные или создайте новую заявку."
+          title="Заявка не найдена"
         >
-          <div className="modal-head">
-            <div>
-              <span className="modal-kicker">Заявка на обход</span>
-              <h2>Заявка не найдена</h2>
-              <p>Запись отсутствует в текущем списке заявок. Обновите данные или создайте новую заявку.</p>
-            </div>
-            <button aria-label="Закрыть" className="modal-close" onClick={requestClose} type="button">
-              ×
-            </button>
-          </div>
-          <div className="modal-actions">
-            <button className="button primary" onClick={requestClose} type="button">
-              Закрыть
-            </button>
-          </div>
-        </section>
+          <p>Создайте новую заявку или обновите список, чтобы повторить попытку.</p>
+        </ModalShell>
       ) : null}
       {modal.kind === "create" ? (
         <RequestCreateModal
@@ -143,45 +93,25 @@ export function RequestModals({
         />
       ) : null}
       {showCloseConfirm ? (
-        <section
-          aria-label="Закрыть форму без сохранения"
-          aria-modal="true"
-          className="modal-window confirm-window"
-          onMouseDown={(event) => event.stopPropagation()}
-          role="alertdialog"
+        <ModalShell
+          actions={
+            <>
+              <Button onClick={() => setShowCloseConfirm(false)} variant="ghost">
+                Вернуться к форме
+              </Button>
+              <Button className="danger-primary" onClick={closeWithoutSaving} variant="danger">
+                Закрыть без сохранения
+              </Button>
+            </>
+          }
+          className="confirm-window"
+          onClose={() => setShowCloseConfirm(false)}
+          subtitle="В заявке есть несохраненные изменения. Если закрыть окно, черновик будет потерян."
+          title="Закрыть форму?"
         >
-          <div className="modal-head">
-            <div>
-              <h2>Закрыть форму?</h2>
-              <p>В заявке есть несохраненные изменения. Если закрыть окно, черновик будет потерян.</p>
-            </div>
-          </div>
-          <div className="modal-actions">
-            <button className="button ghost" onClick={() => setShowCloseConfirm(false)} type="button">
-              Вернуться к форме
-            </button>
-            <button className="button primary danger-primary" onClick={closeWithoutSaving} type="button">
-              Закрыть без сохранения
-            </button>
-          </div>
-        </section>
+          <p>Выберите «Вернуться к форме», чтобы продолжить редактирование.</p>
+        </ModalShell>
       ) : null}
-    </div>
+    </>
   );
-}
-
-function focusFirstControl(root: HTMLElement | null) {
-  if (!root) return;
-
-  const firstControl = root.querySelector<HTMLElement>(
-    [
-      "button:not([disabled])",
-      "input:not([disabled])",
-      "select:not([disabled])",
-      "textarea:not([disabled])",
-      "[tabindex]:not([tabindex='-1'])",
-    ].join(","),
-  );
-
-  firstControl?.focus();
 }

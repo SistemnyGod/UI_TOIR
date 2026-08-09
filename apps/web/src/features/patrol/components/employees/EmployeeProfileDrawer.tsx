@@ -1,4 +1,4 @@
-import { Chip, EmptyState, Field } from "../../../../shared/ui";
+import { Button, Chip, EmptyState, Field } from "../../../../shared/ui";
 import type { EmployeeDirectoryItem, ScreenId } from "../../../../types";
 
 interface EmployeeProfileDrawerProps {
@@ -39,21 +39,21 @@ export function EmployeeProfileDrawer({
           </div>
 
           <div className="employee-profile-primary-action">
-            <button className="button primary" onClick={() => onNavigate("assign")} type="button">
+            <Button onClick={() => onNavigate("assign")} variant="primary">
               Назначить маршрут
-            </button>
+            </Button>
           </div>
 
           <div className="drawer-actions employee-profile-actions">
-            <button className="button ghost" disabled={!canManage || isSaving} onClick={() => onEditEmployee(employee)} type="button">
+            <Button disabled={!canManage || isSaving} onClick={() => onEditEmployee(employee)} variant="ghost">
               Редактировать
-            </button>
-            <button className="button ghost" disabled={!canManage || isSaving} onClick={() => onRemoveFromPatrol(employee.id)} type="button">
+            </Button>
+            <Button disabled={!canManage || isSaving} onClick={() => onRemoveFromPatrol(employee.id)} variant="ghost">
               Убрать из обхода
-            </button>
-            <button className="button ghost danger-text" disabled={!canManage || isSaving} onClick={() => onDeactivateEmployee(employee.id)} type="button">
+            </Button>
+            <Button className="danger-text" disabled={!canManage || isSaving} onClick={() => onDeactivateEmployee(employee.id)} variant="ghost">
               Деактивировать в справочнике
-            </button>
+            </Button>
           </div>
 
           <section className="employee-profile-section">

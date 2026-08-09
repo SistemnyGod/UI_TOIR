@@ -4,6 +4,7 @@ import type { EmuWorkspace } from "../../../../hooks/useEmuWorkspace";
 import { ModalFrame } from "../components/ModalFrame";
 import { DecisionList } from "./DecisionPanels";
 import { addDays, buildShiftInsights, formatDate, formatMinutes, formatShiftSource, formatTime, toDateInput, toLocalIso, toTimeInput } from "../workAccountingUtils";
+import { Button } from "../../../../shared/ui";
 
 export function ShiftSummaryPanel({
   canAdjustShift,
@@ -192,9 +193,8 @@ export function ShiftAdjustModal({
       <label className="emu-textarea-label">Комментарий<textarea value={comment} onChange={(event) => setComment(event.target.value)} /></label>
       <div className="emu-modal-actions">
         <button onClick={onClose} type="button">Отмена</button>
-        <button className="emu-primary-button" disabled={!reason.trim()} onClick={() => void submit()} type="button">Сохранить смену</button>
+        <Button disabled={!reason.trim()} onClick={() => void submit()} variant="primary">Сохранить смену</Button>
       </div>
     </ModalFrame>
   );
 }
-

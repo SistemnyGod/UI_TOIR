@@ -6,6 +6,7 @@ import type {
   EmuShiftType,
 } from '../../../../api/emuShiftReportContracts';
 import type { useEmuShiftReportsWorkspace } from '../../../../hooks/useEmuShiftReportsWorkspace';
+import { Button, PageHeader } from '../../../../shared/ui';
 import { localDate } from '../shiftReportUi';
 import { ShiftReportHistoryFilters } from './ShiftReportHistoryFilters';
 import { shiftReportHistoryGroups, ShiftReportHistoryGroup } from './ShiftReportHistoryGroup';
@@ -127,16 +128,18 @@ export function ShiftReportHistoryScreen({ workspace }: { workspace: Workspace }
 
   return (
     <main className='emu-shift-report-page emu-history-page'>
-      <header className='emu-shift-header emu-history-header'>
-        <div>
-          <h1>История сменных отчётов</h1>
-          <p>Дневные и ночные отчёты слесарей и электриков за выбранный период.</p>
-          <div className='emu-history-period-summary'><CalendarRange aria-hidden='true' size={15} /><span>{periodLabel}</span><b>{workspace.historyInitialized ? `${workspace.historyTotal} отч.` : 'Загрузка…'}</b></div>
-        </div>
-        <button type='button' className='emu-refresh-button' disabled={workspace.historyLoading} onClick={() => void refresh()}>
+      <PageHeader
+        className='emu-shift-header emu-history-header'
+        description='Дневные и ночные отчёты слесарей и электриков за выбранный период.'
+        eyebrow='ЭМУ · СМЕННЫЕ ОТЧЁТЫ'
+        title='История сменных отчётов'
+        actions={(
+          <Button className='emu-refresh-button' disabled={workspace.historyLoading} onClick={() => void refresh()} variant='secondary'>
           <RefreshCw className={workspace.historyLoading ? 'spin' : ''} aria-hidden='true' size={17} />{workspace.historyLoading ? 'Обновляем…' : 'Обновить'}
-        </button>
-      </header>
+          </Button>
+        )}
+      />
+      <div className='emu-history-period-summary'><CalendarRange aria-hidden='true' size={15} /><span>{periodLabel}</span><b>{workspace.historyInitialized ? `${workspace.historyTotal} отч.` : 'Загрузка…'}</b></div>
 
       <ShiftReportHistoryFilters
         dateFrom={dateFrom}

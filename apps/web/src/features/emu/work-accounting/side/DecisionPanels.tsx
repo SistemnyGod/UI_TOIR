@@ -3,6 +3,7 @@ import type { EmuDecisionDto, EmuResolveDecisionDto } from "../../../../api/cont
 import type { EmuWorkspace } from "../../../../hooks/useEmuWorkspace";
 import { ModalFrame } from "../components/ModalFrame";
 import { decisionTypeLabel, formatDate, formatMinutes, formatTime } from "../workAccountingUtils";
+import { Button } from "../../../../shared/ui";
 
 export function DecisionList({
   canResolveDecision,
@@ -229,10 +230,9 @@ export function ResolveDecisionModal({
         />
       </label>
       <div className="emu-modal-actions">
-        <button className="emu-secondary-button" onClick={onClose} type="button">Отмена</button>
-        <button className="emu-primary-button" onClick={submit} type="button">Закрыть решение</button>
+        <Button onClick={onClose} variant="secondary">Отмена</Button>
+        <Button onClick={submit} variant="primary">Закрыть решение</Button>
       </div>
     </ModalFrame>
   );
 }
-

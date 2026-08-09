@@ -11,12 +11,12 @@ import {
   Plus,
   RefreshCw,
   Users,
-  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { EmuAuditEventDto, EmuPlanTaskDto, EmuWorkSessionDto, EmuWorkSessionEmployeeDto } from "../../api/contracts";
 import { buildEmuEmployeeWorkload, normalizeEmuText, type EmuEmployeeWorkload } from "../../domain/emuWorkBoard";
 import type { EmuWorkspace } from "../../hooks/useEmuWorkspace";
+import { Button, ModalShell, PageHeader, Panel } from "../../shared/ui";
 import type { EmployeeDirectoryItem } from "../../types";
 
 type MetricTone = "blue" | "green" | "orange" | "red";
@@ -145,25 +145,27 @@ export function EmuDashboardScreen({
 
   return (
     <section className="emu-page emu-dashboard-page">
-      <div className="emu-dashboard-header">
-        <div>
-          <h2>Дашборд ЭМУ</h2>
-          <p>Оперативная сводка по активным работам, смене, участкам, сотрудникам и проблемам.</p>
-        </div>
-        <div className="emu-dashboard-header-actions">
-          <button className="emu-shift-select" type="button">
+      <PageHeader
+        className="emu-dashboard-header"
+        description="Оперативная сводка по активным работам, смене, участкам, сотрудникам и проблемам."
+        eyebrow="ЭМУ"
+        title="Дашборд ЭМУ"
+        actions={(
+          <div className="emu-dashboard-header-actions">
+          <Button className="emu-shift-select" variant="secondary">
             {shiftStatus.shiftDate} ({shiftStatus.timeRange})
-          </button>
-          <button className="emu-secondary-button" onClick={openHistory} type="button">
+          </Button>
+          <Button variant="secondary" onClick={openHistory}>
             <BarChart3 size={17} />
             История
-          </button>
-          <button className="emu-secondary-button" onClick={() => void workspace.reload()} type="button">
+          </Button>
+          <Button variant="secondary" onClick={() => void workspace.reload()}>
             <RefreshCw size={17} />
             Обновить
-          </button>
-        </div>
-      </div>
+          </Button>
+          </div>
+        )}
+      />
 
       {workspace.error ? <div className="emu-alert">{workspace.error}</div> : null}
 
@@ -310,7 +312,7 @@ function ShiftStatusCard({ shift }: { shift: ShiftStatus }) {
 
 function AreaSummary({ areas, onOpenSection }: { areas: AreaLoad[]; onOpenSection: (sectionName: string) => void }) {
   return (
-    <article className="emu-dashboard-card">
+    <Panel className="emu-dashboard-card">
       <header>
         <div>
           <h3>Оперативная сводка по участкам</h3>
@@ -329,7 +331,7 @@ function AreaSummary({ areas, onOpenSection }: { areas: AreaLoad[]; onOpenSectio
           </button>
         ))}
       </div>
-    </article>
+    </Panel>
   );
 }
 
@@ -338,7 +340,7 @@ function TrendCard({ points }: { points: TrendPoint[] }) {
   const hasData = points.some((point) => point.value > 0);
 
   return (
-    <article className="emu-dashboard-card">
+    <Panel className="emu-dashboard-card">
       <header>
         <div>
           <h3>Динамика выполнения работ</h3>
@@ -355,7 +357,7 @@ function TrendCard({ points }: { points: TrendPoint[] }) {
           </div>
         ))}
       </div>
-    </article>
+    </Panel>
   );
 }
 
@@ -371,7 +373,7 @@ function QuickActions({
   onReportProblem: () => void;
 }) {
   return (
-    <article className="emu-dashboard-card emu-dashboard-actions">
+    <Panel className="emu-dashboard-card emu-dashboard-actions">
       <header>
         <div>
           <h3>Быстрые действия</h3>
@@ -379,24 +381,24 @@ function QuickActions({
         </div>
       </header>
       <div className="emu-quick-actions">
-        <button className="primary" onClick={onCreateWork} type="button">
+        <Button variant="primary" onClick={onCreateWork}>
           <Plus size={18} />
           Создать работу
-        </button>
-        <button onClick={onOpenProblemWork} type="button">
+        </Button>
+        <Button variant="secondary" onClick={onOpenProblemWork}>
           <AlertTriangle size={18} />
           Открыть проблемные
-        </button>
-        <button onClick={onOpenHistory} type="button">
+        </Button>
+        <Button variant="secondary" onClick={onOpenHistory}>
           <BarChart3 size={18} />
           История
-        </button>
-        <button onClick={onReportProblem} type="button">
+        </Button>
+        <Button variant="secondary" onClick={onReportProblem}>
           <Download size={18} />
           PERCo
-        </button>
+        </Button>
       </div>
-    </article>
+    </Panel>
   );
 }
 
@@ -411,7 +413,7 @@ function EmployeeOccupancy({ items, onOpenEmployee }: { items: EmuEmployeeWorklo
   const top = (items.some((item) => item.status !== "free") ? items.filter((item) => item.status !== "free") : items).slice(0, 5);
 
   return (
-    <article className="emu-dashboard-card">
+    <Panel className="emu-dashboard-card">
       <header>
         <div>
           <h3>Занятость сотрудников</h3>
@@ -451,13 +453,13 @@ function EmployeeOccupancy({ items, onOpenEmployee }: { items: EmuEmployeeWorklo
           ))}
         </div>
       </div>
-    </article>
+    </Panel>
   );
 }
 
 function SectionRisks({ items, onOpenSection }: { items: SectionRisk[]; onOpenSection: (sectionName: string) => void }) {
   return (
-    <article className="emu-dashboard-card">
+    <Panel className="emu-dashboard-card">
       <header>
         <div>
           <h3>Проблемные участки</h3>
@@ -479,7 +481,7 @@ function SectionRisks({ items, onOpenSection }: { items: SectionRisk[]; onOpenSe
           </button>
         ))}
       </div>
-    </article>
+    </Panel>
   );
 }
 
@@ -522,22 +524,24 @@ function DashboardDrilldownModal({
     .slice(0, 6);
 
   return (
-    <div className="emu-modal-backdrop" onMouseDown={onClose} role="presentation">
-      <section aria-modal="true" className="emu-modal emu-modal-wide emu-dashboard-drilldown" onMouseDown={(event) => event.stopPropagation()} role="dialog">
-        <header>
-          <div className="emu-dashboard-drilldown-title">
-            <span>{isEmployee ? employeeInitials(title) : "УЧ"}</span>
-            <div>
-              <h3>{isEmployee ? "Карточка сотрудника" : "Карточка участка"}</h3>
-              <p>{title}</p>
-              <small>{subtitle}</small>
-            </div>
-          </div>
-          <button aria-label="Закрыть" onClick={onClose} type="button">
-            <X size={18} />
-          </button>
-        </header>
-
+    <ModalShell
+      className="emu-modal-wide emu-dashboard-drilldown"
+      title={`${isEmployee ? "Карточка сотрудника" : "Карточка участка"}: ${title}`}
+      subtitle={subtitle}
+      onClose={onClose}
+      actions={(
+        <>
+          <Button variant="secondary" onClick={onOpenHistory}>
+            <BarChart3 size={17} />
+            Открыть историю
+          </Button>
+          <Button variant="primary" onClick={onOpenAccounting}>
+            <ChevronRight size={17} />
+            Перейти в учет работ
+          </Button>
+        </>
+      )}
+    >
         <div className="emu-dashboard-drilldown-body">
           <section className="emu-dashboard-drilldown-kpis">
             <DashboardDetailKpi label="Активных" value={relevantActive.length} />
@@ -592,18 +596,7 @@ function DashboardDrilldownModal({
           </section>
         </div>
 
-        <footer className="emu-modal-actions">
-          <button className="emu-secondary-button" onClick={onOpenHistory} type="button">
-            <BarChart3 size={17} />
-            Открыть историю
-          </button>
-          <button className="emu-primary-button" onClick={onOpenAccounting} type="button">
-            <ChevronRight size={17} />
-            Перейти в учет работ
-          </button>
-        </footer>
-      </section>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -618,7 +611,7 @@ function DashboardDetailKpi({ label, value }: { label: string; value: string | n
 
 function ActiveWorks({ items, onOpenAll }: { items: EmuWorkSessionDto[]; onOpenAll: () => void }) {
   return (
-    <article className="emu-dashboard-card">
+    <Panel className="emu-dashboard-card">
       <header>
         <div>
           <h3>Активные работы</h3>
@@ -646,13 +639,13 @@ function ActiveWorks({ items, onOpenAll }: { items: EmuWorkSessionDto[]; onOpenA
           );
         })}
       </div>
-    </article>
+    </Panel>
   );
 }
 
 function Events({ events }: { events: EmuAuditEventDto[] }) {
   return (
-    <article className="emu-dashboard-card">
+    <Panel className="emu-dashboard-card">
       <header>
         <div>
           <h3>Последние события</h3>
@@ -672,13 +665,13 @@ function Events({ events }: { events: EmuAuditEventDto[] }) {
           </article>
         ))}
       </div>
-    </article>
+    </Panel>
   );
 }
 
 function Incidents({ incidents }: { incidents: IncidentItem[] }) {
   return (
-    <article className="emu-dashboard-card">
+    <Panel className="emu-dashboard-card">
       <header>
         <div>
           <h3>Инциденты и проблемы</h3>
@@ -695,7 +688,7 @@ function Incidents({ incidents }: { incidents: IncidentItem[] }) {
           </article>
         ))}
       </div>
-    </article>
+    </Panel>
   );
 }
 
@@ -705,7 +698,7 @@ function KeyIndicators({ stats }: { stats: QuickStats }) {
   const offset = circumference - (stats.planPercent / 100) * circumference;
 
   return (
-    <article className="emu-dashboard-card emu-key-indicators">
+    <Panel className="emu-dashboard-card emu-key-indicators">
       <header>
         <div>
           <h3>Ключевые показатели</h3>
@@ -713,7 +706,7 @@ function KeyIndicators({ stats }: { stats: QuickStats }) {
         </div>
       </header>
       <div className="emu-dashboard-donut">
-        <svg viewBox="0 0 100 100">
+        <svg aria-label={`План-факт: ${stats.planPercent}%`} role="img" viewBox="0 0 100 100">
           <circle cx="50" cy="50" fill="none" r={radius} stroke="#e8f1ff" strokeWidth="9" />
           <circle
             cx="50"
@@ -749,7 +742,7 @@ function KeyIndicators({ stats }: { stats: QuickStats }) {
           <dd>{stats.overdue}</dd>
         </div>
       </dl>
-    </article>
+    </Panel>
   );
 }
 
@@ -953,9 +946,10 @@ function buildIncidents(
 }
 
 function buildQuickStats(workspace: EmuWorkspace, active: number, completedToday: number, overdue: number): QuickStats {
-  const planned = workspace.planTasks.filter((task) => text(task.status) === "Запланировано").length;
+  const scheduledPlan = workspace.planTasks.filter((task) => text(task.status) === "Запланировано").length;
   const completedPlan = workspace.planTasks.filter((task) => text(task.status) === "Выполнено").length;
-  const planPercent = planned + completedPlan > 0 ? Math.round((completedPlan / (planned + completedPlan)) * 100) : completedToday > 0 ? 100 : 0;
+  const planned = scheduledPlan + completedPlan;
+  const planPercent = planned > 0 ? Math.round((completedPlan / planned) * 100) : 0;
   return {
     completed: completedToday,
     inWork: active,
@@ -1007,13 +1001,6 @@ function collectWorkEmployees(works: EmuWorkSessionDto[]) {
   });
 
   return Array.from(byEmployee.values()).sort((a, b) => b.workMinutes - a.workMinutes || a.fullName.localeCompare(b.fullName, "ru"));
-}
-
-function employeeInitials(fullName: string) {
-  const parts = fullName.trim().split(/\s+/).filter(Boolean);
-  const first = parts[0]?.[0] ?? "С";
-  const second = parts[1]?.[0] ?? "";
-  return `${first}${second}`.toUpperCase();
 }
 
 function hasWorkingParticipant(work: EmuWorkSessionDto) {

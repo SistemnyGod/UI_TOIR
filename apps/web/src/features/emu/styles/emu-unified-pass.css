@@ -656,10 +656,6 @@
 }
 
 @media (max-width: 640px) {
-  .emu-primary-button,
-  .emu-secondary-button,
-  .emu-ghost-button,
-  .emu-danger-button,
   .emu-command-button,
   .emu-create-actions button,
   .emu-modal-actions button,
@@ -735,18 +731,11 @@
   width: 100%;
 }
 
-.emu-work-main .emu-panel-actions > .emu-secondary-button,
-.emu-work-main .emu-panel-actions > .emu-primary-button,
 .emu-work-main .emu-panel-actions > .emu-density-switch button,
 .emu-work-main .emu-panel-actions > .emu-work-filters button {
   min-height: 32px;
   padding-left: 11px;
   padding-right: 11px;
-}
-
-.emu-work-main .emu-panel-actions > .emu-secondary-button:last-child {
-  justify-self: end;
-  order: 5;
 }
 
 @media (max-width: 1180px) {
@@ -770,12 +759,6 @@
     width: 100%;
   }
 
-  .emu-work-main .emu-panel-actions > .emu-secondary-button,
-  .emu-work-main .emu-panel-actions > .emu-primary-button,
-  .emu-work-main .emu-panel-actions > .emu-secondary-button:last-child {
-    justify-self: stretch;
-    width: 100%;
-  }
 }
 .emu-history-pagination {
   align-items: center;
@@ -902,17 +885,6 @@
   margin: 0;
 }
 
-.emu-history-modal-backdrop {
-  align-items: center;
-  background: rgba(9, 30, 66, 0.38);
-  display: flex;
-  inset: 0;
-  justify-content: center;
-  padding: 24px;
-  position: fixed;
-  z-index: 80;
-}
-
 .emu-history-employee-modal {
   background: #fff;
   border: 1px solid #cfe0f5;
@@ -920,31 +892,16 @@
   box-shadow: 0 24px 70px rgba(12, 34, 66, 0.24);
   max-height: min(760px, calc(100vh - 48px));
   max-width: 1180px;
-  overflow: auto;
-  padding: 16px;
   width: min(1180px, 100%);
 }
 
-.emu-history-employee-modal > header {
-  align-items: flex-start;
-  border-bottom: 1px solid #d8e6f8;
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 12px;
-}
-
-.emu-history-employee-modal > header h3 {
-  margin: 2px 0;
-}
-
-.emu-history-employee-modal > nav {
+.emu-history-employee-modal .modal-shell-body > nav {
   display: flex;
   gap: 6px;
   padding: 12px 0;
 }
 
-.emu-history-employee-modal > nav button {
+.emu-history-employee-modal .modal-shell-body > nav button {
   background: #f4f8fd;
   border: 1px solid #d7e5f7;
   border-radius: 8px;
@@ -954,7 +911,7 @@
   padding: 8px 12px;
 }
 
-.emu-history-employee-modal > nav button.active {
+.emu-history-employee-modal .modal-shell-body > nav button.active {
   background: #206bff;
   border-color: #206bff;
   color: #fff;
@@ -992,9 +949,6 @@
     grid-template-columns: 1fr;
   }
 
-  .emu-history-modal-backdrop {
-    padding: 8px;
-  }
 }
 
 /* EMU dashboard and work accounting final unification pass. */
@@ -1333,12 +1287,6 @@
     width: 100%;
   }
 
-  .emu-shell .emu-dashboard-header-actions .emu-secondary-button {
-    justify-content: center;
-    min-width: 0;
-    width: 100%;
-  }
-
   .emu-shell .emu-dashboard-top-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1408,7 +1356,6 @@
     grid-column: auto;
   }
 
-  .emu-shell .emu-dashboard-header-actions .emu-secondary-button,
   .emu-shell .emu-quick-actions button {
     min-height: 36px;
   }
@@ -1750,7 +1697,93 @@
 }
 
 /* Compact employee workload panel */
-.emu-shell .emu-workload-panel{gap:8px}.emu-shell .emu-workload-panel>.emu-side-heading h3{font-size:14px}.emu-shell .emu-workload-panel>.emu-side-heading span{display:none}.emu-shell .emu-workload-panel>input{min-height:34px;border-radius:7px;font-size:12px}.emu-shell .emu-workload-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;padding:3px}.emu-shell .emu-workload-filters button{font-size:10px;min-height:26px;min-width:0;padding:3px 4px}.emu-shell .emu-workload-filters button span{font-size:10px;margin-left:2px}.emu-shell .emu-workload-list{gap:4px;max-height:280px}.emu-shell .emu-workload-list button{gap:1px;padding:7px 8px}.emu-shell .emu-workload-list button strong{font-size:12px}.emu-shell .emu-workload-list button span,.emu-shell .emu-workload-list button em{font-size:10px}
+.emu-shell .emu-workload-panel {
+  gap: 8px;
+}
+
+.emu-shell .emu-workload-panel > .emu-side-heading h3 {
+  font-size: 14px;
+}
+
+.emu-shell .emu-workload-panel > .emu-side-heading span {
+  display: none;
+}
+
+.emu-shell .emu-workload-panel > input {
+  min-height: 34px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.emu-shell .emu-workload-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 8px;
+  overflow: visible;
+  padding: 8px;
+}
+
+.emu-shell .emu-workload-filters > label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  width: 100%;
+}
+
+.emu-shell .emu-workload-filters > .section-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  width: 100%;
+  gap: 4px;
+  margin: 0;
+  overflow: visible;
+  padding: 4px;
+}
+
+.emu-shell .emu-workload-filters > .section-tabs .section-tab {
+  min-width: 0;
+  min-height: 34px;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 5px 6px;
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.emu-shell .emu-workload-filters > .section-tabs .section-tab span {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.emu-shell .emu-workload-filters > .section-tabs .section-tab small {
+  flex: 0 0 auto;
+  margin: 0;
+  font-size: 10px;
+}
+
+.emu-shell .emu-workload-list {
+  gap: 4px;
+  max-height: 280px;
+}
+
+.emu-shell .emu-workload-list button {
+  gap: 1px;
+  padding: 7px 8px;
+}
+
+.emu-shell .emu-workload-list button strong {
+  font-size: 12px;
+}
+
+.emu-shell .emu-workload-list button span,
+.emu-shell .emu-workload-list button em {
+  font-size: 10px;
+}
 
 /* Dashboard density pass: calmer background, tighter cards, and bounded long lists. */
 .emu-shell-dashboard {
@@ -1886,30 +1919,43 @@
 }
 
 .emu-shell-dashboard .emu-dashboard-occupancy-grid {
-  gap: 6px;
+  gap: 8px;
 }
 
 .emu-shell-dashboard .emu-dashboard-occupancy-grid article {
-  min-height: 52px;
-  padding: 7px;
+  min-height: 60px;
+  padding: 9px 10px;
 }
 
 .emu-shell-dashboard .emu-dashboard-occupancy-grid article span {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .emu-shell-dashboard .emu-dashboard-occupancy-grid article strong {
-  font-size: 20px;
+  font-size: 22px;
 }
 
 .emu-shell-dashboard .emu-dashboard-occupancy-list {
-  max-height: 152px;
+  max-height: 204px;
   overflow-y: auto;
 }
 
 .emu-shell-dashboard .emu-dashboard-occupancy-list button {
-  gap: 2px;
-  padding: 7px 8px;
+  min-height: 68px;
+  gap: 3px;
+  padding: 8px 10px;
+}
+
+.emu-shell-dashboard .emu-dashboard-occupancy-list button strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.emu-shell-dashboard .emu-dashboard-occupancy-list button span {
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 1.25;
 }
 
 .emu-shell-dashboard .emu-event-list,
@@ -1929,9 +1975,41 @@
 }
 
 .emu-shell-dashboard .emu-key-indicators .emu-dashboard-donut {
-  height: 72px;
-  margin: 10px auto 4px;
-  width: 72px;
+  height: 96px;
+  margin: 12px auto 2px;
+  width: 96px;
+}
+
+.emu-shell-dashboard .emu-key-indicators > dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.emu-shell-dashboard .emu-key-indicators > dl > div {
+  min-width: 0;
+  border: 1px solid #e1eaf7;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 8px 10px;
+}
+
+.emu-shell-dashboard .emu-key-indicators > dl dt {
+  overflow-wrap: anywhere;
+  color: #5b6b83;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.emu-shell-dashboard .emu-key-indicators > dl dd {
+  margin: 4px 0 0;
+  color: #0b63f6;
+  font-size: 21px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  line-height: 1;
 }
 
 @container emu-shell (max-width: 1240px) {
@@ -1974,6 +2052,11 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .emu-shell-dashboard .emu-key-indicators .emu-dashboard-donut {
+    height: 84px;
+    width: 84px;
+  }
+
   .emu-shell-dashboard .emu-dashboard-middle-grid .emu-dashboard-actions,
   .emu-shell-dashboard .emu-dashboard-bottom-grid > .emu-dashboard-card:first-child {
     grid-column: auto;
@@ -1987,6 +2070,11 @@
 
   .emu-shell-dashboard .emu-dashboard-top-grid .emu-dashboard-shift {
     grid-column: auto;
+  }
+
+  .emu-shell-dashboard .emu-key-indicators .emu-dashboard-donut {
+    height: 76px;
+    width: 76px;
   }
 }
 

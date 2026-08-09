@@ -3,5 +3,7 @@ export * from "./CompactTable";
 export * from "./KpiStrip";
 export * from "./ModalShell";
 export * from "./PaginationBar";
+export * from "./PageHeader";
+export * from "./FilterBar";
 export * from "./primitives";
 export * from "./Skeleton";

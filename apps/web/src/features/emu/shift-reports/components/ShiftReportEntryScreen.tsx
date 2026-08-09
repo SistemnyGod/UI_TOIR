@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '../../../../api/client';
 import type { EmuCreateShiftReportDto, EmuShiftReportCategory, EmuShiftReportEmployeeOptionDto, EmuShiftType } from '../../../../api/emuShiftReportContracts';
 import type { useEmuShiftReportsWorkspace } from '../../../../hooks/useEmuShiftReportsWorkspace';
-import { ModalShell } from '../../../../shared/ui';
+import { Button, ModalShell, PageHeader } from '../../../../shared/ui';
 import { createClientUuid } from '../../../../shared/clientUuid';
 import {
   categoryLabels,
@@ -485,36 +485,38 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
 
   return (
     <main className='emu-shift-report-page emu-entry-page'>
-      <header className='emu-shift-header'>
-        <div>
-          <h1>Сменный отчёт</h1>
-          <p>Зафиксируйте выполненные за смену работы. Черновик сохраняется автоматически.</p>
-          <div className={`emu-draft-status is-${draftStatus}`} role='status' aria-live='polite'>
+      <PageHeader
+        className='emu-shift-header'
+        description='Зафиксируйте выполненные за смену работы. Черновик сохраняется автоматически.'
+        eyebrow='ЭМУ · СМЕННЫЕ ОТЧЁТЫ'
+        title='Сменный отчёт'
+        actions={(
+          <div className='emu-shift-header-actions'>
+          <Button
+            className='emu-notification-settings-button'
+            aria-haspopup='dialog'
+            aria-expanded={showReminderDialog}
+            onClick={() => setShowReminderDialog(true)}
+            variant='secondary'
+          >
+            <Bell aria-hidden='true' size={18} />
+            Уведомления
+          </Button>
+          <div className='emu-shift-kpis' aria-label='Сводка отчёта'>
+            <div><BriefcaseBusiness aria-hidden='true' size={18} /><b>{usedRows.length}</b><span>Работ</span></div>
+            <div><Clock3 aria-hidden='true' size={18} /><b>{formatDuration(totalMinutes)}</b><span>Общее время</span></div>
+          </div>
+          </div>
+        )}
+      />
+      <div className={`emu-draft-status is-${draftStatus}`} role='status' aria-live='polite'>
             <span className='emu-draft-status-dot' aria-hidden='true' />
             {draftStatus === 'saving' ? 'Сохраняем черновик…' : null}
             {draftStatus === 'saved' ? `Черновик сохранён${draftSavedAt ? ` в ${draftSavedAt}` : ''}` : null}
             {draftStatus === 'restored' ? 'Черновик восстановлен после обновления' : null}
             {draftStatus === 'error' ? 'Черновик не сохранён — проверьте настройки браузера' : null}
             {draftStatus === 'idle' ? 'Изменения сохраняются локально' : null}
-          </div>
-        </div>
-        <div className='emu-shift-header-actions'>
-          <button
-            type='button'
-            className='emu-notification-settings-button'
-            aria-haspopup='dialog'
-            aria-expanded={showReminderDialog}
-            onClick={() => setShowReminderDialog(true)}
-          >
-            <Bell aria-hidden='true' size={18} />
-            Уведомления
-          </button>
-          <div className='emu-shift-kpis' aria-label='Сводка отчёта'>
-            <div><BriefcaseBusiness aria-hidden='true' size={18} /><b>{usedRows.length}</b><span>Работ</span></div>
-            <div><Clock3 aria-hidden='true' size={18} /><b>{formatDuration(totalMinutes)}</b><span>Общее время</span></div>
-          </div>
-        </div>
-      </header>
+      </div>
 
       <ShiftReportReminder open={showReminderDialog} onClose={() => setShowReminderDialog(false)} />
 
@@ -558,7 +560,7 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
       />
 
 
-      {showClearDialog ? <ModalShell className='emu-shift-confirm-dialog' title='Очистить черновик?' subtitle='Все заполненные строки текущей вкладки будут удалены.' onClose={() => setShowClearDialog(false)} actions={<><button type='button' className='button ghost' onClick={() => setShowClearDialog(false)}>Отмена</button><button type='button' className='button danger' onClick={clearDraft}>Очистить</button></>}><p>Черновик {categoryLabels[category].toLowerCase()} нельзя будет восстановить после очистки.</p></ModalShell> : null}
+      {showClearDialog ? <ModalShell className='emu-shift-confirm-dialog' title='Очистить черновик?' subtitle='Все заполненные строки текущей вкладки будут удалены.' onClose={() => setShowClearDialog(false)} actions={<><Button onClick={() => setShowClearDialog(false)} variant='ghost'>Отмена</Button><Button onClick={clearDraft} variant='danger'>Очистить</Button></>}><p>Черновик {categoryLabels[category].toLowerCase()} нельзя будет восстановить после очистки.</p></ModalShell> : null}
       {pendingRowRemoval !== null ? (
         <ModalShell
           className='emu-shift-confirm-dialog'
@@ -567,8 +569,8 @@ export function ShiftReportEntryScreen({ workspace, currentUserId, onNotify, can
           onClose={() => setPendingRowRemoval(null)}
           actions={
             <>
-              <button type='button' className='button ghost' onClick={() => setPendingRowRemoval(null)}>Нет</button>
-              <button type='button' className='button danger' onClick={confirmRowRemoval}>Да</button>
+              <Button onClick={() => setPendingRowRemoval(null)} variant='ghost'>Нет</Button>
+              <Button onClick={confirmRowRemoval} variant='danger'>Да</Button>
             </>
           }
         >

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Chip, EmptyState, Panel } from "../../../../shared/ui";
+import { Button, Chip, EmptyState, FilterBar, Panel } from "../../../../shared/ui";
 import type { EmployeeDirectoryItem } from "../../../../types";
 
 interface EmployeeDirectoryPanelProps {
@@ -70,19 +70,18 @@ export function EmployeeDirectoryPanel({
       actions={
         <>
           {onOpenAddFromAccounting ? (
-            <button className="button ghost" disabled={!canManage || isSaving} onClick={onOpenAddFromAccounting} type="button">
+            <Button disabled={!canManage || isSaving} onClick={onOpenAddFromAccounting} variant="ghost">
               Выбрать из справочника
-            </button>
+            </Button>
           ) : null}
-          <button
-            className="button primary"
+          <Button
             disabled={!canManage || isSaving}
             onClick={onOpenCreate}
             title={!canManage ? "Недостаточно прав для управления сотрудниками." : undefined}
-            type="button"
+            variant="primary"
           >
             Создать сотрудника
-          </button>
+          </Button>
         </>
       }
     >
@@ -92,7 +91,7 @@ export function EmployeeDirectoryPanel({
         <span><strong>{mobileCount}</strong> с мобильным входом</span>
       </div>
 
-      <div className="filters employee-filters">
+      <FilterBar ariaLabel="Фильтры сотрудников обхода" className="filters employee-filters">
         <label className="wide-filter">
           Поиск
           <input
@@ -130,7 +129,7 @@ export function EmployeeDirectoryPanel({
             {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </label>
-      </div>
+      </FilterBar>
 
       {filteredEmployees.length > 0 ? (
         <div className="employee-roster-list">
@@ -167,17 +166,17 @@ export function EmployeeDirectoryPanel({
           description={employees.length > 0 ? "Измените фильтры или сбросьте поисковый запрос." : "Выберите сотрудников из общего справочника или создайте нового."}
           action={
             employees.length > 0 && hasActiveFilters ? (
-              <button className="button ghost" onClick={resetFilters} type="button">Сбросить фильтры</button>
+              <Button onClick={resetFilters} variant="ghost">Сбросить фильтры</Button>
             ) : (
               <div className="inline-actions">
                 {onOpenAddFromAccounting ? (
-                  <button className="button ghost" disabled={!canManage || isSaving} onClick={onOpenAddFromAccounting} type="button">
+                  <Button disabled={!canManage || isSaving} onClick={onOpenAddFromAccounting} variant="ghost">
                     Выбрать из справочника
-                  </button>
+                  </Button>
                 ) : null}
-                <button className="button primary" disabled={!canManage || isSaving} onClick={onOpenCreate} type="button">
+                <Button disabled={!canManage || isSaving} onClick={onOpenCreate} variant="primary">
                   Создать сотрудника
-                </button>
+                </Button>
               </div>
             )
           }

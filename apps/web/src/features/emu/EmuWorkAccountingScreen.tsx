@@ -8,6 +8,7 @@ import type { EmuWorkspace } from "../../hooks/useEmuWorkspace";
 import { useStoredState } from "../../hooks/useStoredState";
 import { hasPermission } from "../../security/permissions";
 import type { EmployeeDirectoryItem } from "../../types";
+import { Button, FilterBar, PageHeader, Panel } from "../../shared/ui";
 import {
   buildEmuEmployeeWorkload,
   filterEmuWorkBySection,
@@ -34,6 +35,8 @@ import {
   WorkBoardSection,
   WorkCard,
   WorkFilterTabs,
+  WorkPeriodFilter,
+  WorkSearchFilter,
 } from "./work-accounting/WorkAccountingBoard";
 import { ResolveDecisionModal, WorkSidePanel } from "./work-accounting/WorkSidePanel";
 import {
@@ -83,6 +86,9 @@ export function EmuWorkAccountingScreen({
   );
   const [workFilter, setWorkFilter] = useState<WorkCardFilter>(preferences.workFilter);
   const [sectionFilter, setSectionFilter] = useState(preferences.sectionFilter);
+  const [periodFrom, setPeriodFrom] = useState("");
+  const [periodTo, setPeriodTo] = useState("");
+  const [workSearch, setWorkSearch] = useState("");
   const [density, setDensity] = useState<WorkDensity>(preferences.density);
   const [collapsedSections, setCollapsedSections] = useState<string[]>(preferences.collapsedSections);
   const [createPresetEmployeeId, setCreatePresetEmployeeId] = useState("");
@@ -90,7 +96,7 @@ export function EmuWorkAccountingScreen({
   const [liveClock, setLiveClock] = useState<Date>(() => new Date());
   const boardWork = useMemo(
     () =>
-      workspace.workSessions.rows
+      [...workspace.workSessions.rows]
         .filter(isVisibleOnDailyBoard)
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
     [workspace.workSessions.rows],
@@ -99,16 +105,39 @@ export function EmuWorkAccountingScreen({
     () => filterEmuWorkBySection(boardWork, sectionFilter),
     [boardWork, sectionFilter],
   );
-  const ongoingWork = sectionFilteredBoardWork;
+  const filteredBoardWork = useMemo(() => {
+    const query = workSearch.trim().toLocaleLowerCase("ru-RU");
+
+    return sectionFilteredBoardWork.filter((work) => {
+      const workDate = work.workDate.slice(0, 10);
+      if (periodFrom && workDate < periodFrom) return false;
+      if (periodTo && workDate > periodTo) return false;
+      if (!query) return true;
+
+      return [
+        work.workNumber,
+        work.sectionName,
+        work.taskDescription,
+        work.createdByName,
+        ...work.employees.map((employee) => employee.fullNameSnapshot),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase("ru-RU")
+        .includes(query);
+    });
+  }, [periodFrom, periodTo, sectionFilteredBoardWork, workSearch]);
+  const ongoingWork = filteredBoardWork;
   const visibleShiftRemarks = useMemo(
     () => workspace.shiftRemarks.rows.filter((remark) => !sectionFilter || remark.sectionId === sectionFilter),
     [sectionFilter, workspace.shiftRemarks.rows],
   );
-  const workFilterCounts = useMemo(() => buildWorkFilterCounts(sectionFilteredBoardWork), [sectionFilteredBoardWork]);
+  const workFilterCounts = useMemo(() => buildWorkFilterCounts(filteredBoardWork), [filteredBoardWork]);
   const visibleWork = useMemo(
-    () => sectionFilteredBoardWork.filter((work) => workFilter === "all" || resolveWorkCardState(work) === workFilter),
-    [sectionFilteredBoardWork, workFilter],
+    () => filteredBoardWork.filter((work) => workFilter === "all" || resolveWorkCardState(work) === workFilter),
+    [filteredBoardWork, workFilter],
   );
+  const hasActiveBoardFilters = Boolean(sectionFilter || periodFrom || periodTo || workSearch.trim() || workFilter !== "all");
   const carriedOverWork = useMemo(() => visibleWork.filter((work) => work.isCarriedOver && !work.completedAt), [visibleWork]);
   const regularVisibleWork = useMemo(() => visibleWork.filter((work) => !work.isCarriedOver), [visibleWork]);
   const boardSections = useMemo(() => groupEmuWorkBySection(regularVisibleWork), [regularVisibleWork]);
@@ -217,6 +246,14 @@ export function EmuWorkAccountingScreen({
     setCollapsedSections((value) => toggle(value, sectionId));
   }
 
+  function clearBoardFilters() {
+    setSectionFilter("");
+    setPeriodFrom("");
+    setPeriodTo("");
+    setWorkSearch("");
+    setWorkFilter("all");
+  }
+
   function createWorkForEmployee(employeeId: string) {
     setCreatePresetEmployeeId(employeeId);
     setSideSelection({ employeeId, kind: "employee" });
@@ -298,24 +335,24 @@ export function EmuWorkAccountingScreen({
 
   return (
     <section className="emu-page">
-      <div className="emu-page-heading emu-work-accounting-heading">
-        <div>
-          <h2>Учет работ ЭМУ</h2>
-          <p>Суточная доска активных работ, пауз, переносов и решений диспетчера.</p>
-        </div>
-        <div className="emu-heading-actions">
+      <PageHeader
+        className="emu-page-heading emu-work-accounting-heading"
+        description="Суточная доска активных работ, пауз, переносов и решений диспетчера."
+        eyebrow="ЭМУ"
+        title="Учет работ ЭМУ"
+        actions={(
+          <div className="emu-heading-actions">
           {canViewPlan ? (
-            <button className="emu-secondary-button" onClick={() => openModal("plan")} type="button">
+            <Button variant="secondary" onClick={() => openModal("plan")}>
               Доска задач
-            </button>
+            </Button>
           ) : null}
           {canCreate ? (
-            <button className="emu-primary-button" onClick={() => openModal("create")} type="button">
-              <span>↗</span> Отправить в работу
-            </button>
+            <Button variant="primary" onClick={() => openModal("create")}>Создать работу</Button>
           ) : null}
-        </div>
-      </div>
+          </div>
+        )}
+      />
 
       <div className="emu-kpi-row">
         {workspace.dashboard.metrics.map((metric) => (
@@ -330,42 +367,36 @@ export function EmuWorkAccountingScreen({
         ))}
       </div>
 
-      {workspace.error ? <div className="emu-alert">{workspace.error}</div> : null}
+      {workspace.error ? <div className="emu-alert" role="alert">{workspace.error}</div> : null}
 
       <WorkAttentionSummary activeWork={ongoingWork} />
       <MobileShiftRemarksPanel remarks={visibleShiftRemarks} total={workspace.shiftRemarks.total} />
 
       <div className="emu-work-layout">
-        <section className="emu-panel emu-work-main">
-          <div className="emu-panel-header">
-            <div className="emu-work-panel-title">
-              <h3>Карточки работ</h3>
-              <span>Доска показывает незавершенные карточки; завершенные доступны в истории</span>
-            </div>
-            <div className="emu-panel-actions emu-work-panel-actions">
-              {canManageDirectories ? (
-                <button className="emu-secondary-button" onClick={() => openModal("catalogs")} type="button">
-                  Справочники
-                </button>
-              ) : null}
-              {canManageFavorites ? (
-                <button className="emu-secondary-button" onClick={() => openModal("favorites")} type="button">
-                  Избранные
-                </button>
-              ) : null}
-            </div>
-          </div>
+        <Panel
+          className="emu-work-main"
+          note="Доска показывает незавершенные карточки; завершенные доступны в истории"
+          title="Карточки работ"
+          actions={(
+            <>
+              {canManageDirectories ? <Button variant="secondary" onClick={() => openModal("catalogs")}>Справочники</Button> : null}
+              {canManageFavorites ? <Button variant="secondary" onClick={() => openModal("favorites")}>Избранные</Button> : null}
+            </>
+          )}
+        >
 
-          <div className="emu-work-board-toolbar" aria-label="Фильтры карточек работ">
+          <FilterBar ariaLabel="Фильтры карточек работ" className="emu-work-board-toolbar">
             <div className="emu-work-board-toolbar-main">
               <span className="emu-work-board-toolbar-label">Фильтры доски</span>
               <SectionQuickFilter sections={activeSections(workspace)} value={sectionFilter} onChange={setSectionFilter} />
+              <WorkPeriodFilter from={periodFrom} onChangeFrom={setPeriodFrom} onChangeTo={setPeriodTo} onClear={() => { setPeriodFrom(""); setPeriodTo(""); }} to={periodTo} />
+              <WorkSearchFilter onChange={setWorkSearch} onClear={() => setWorkSearch("")} value={workSearch} />
             </div>
             <div className="emu-work-board-toolbar-secondary">
               <DensitySwitch value={density} onChange={setDensity} />
               <WorkFilterTabs counts={workFilterCounts} onChange={setWorkFilter} value={workFilter} />
             </div>
-          </div>
+          </FilterBar>
 
           <div className={`emu-board-stack density-${density}`}>
             {carriedOverWork.length > 0 ? (
@@ -426,19 +457,27 @@ export function EmuWorkAccountingScreen({
                 />
               ))
             ) : carriedOverWork.length === 0 ? (
-              <div className="emu-empty-state emu-work-empty-state">
+              <div className="emu-empty-state emu-work-empty-state" role="status" aria-live="polite">
                 <span className="emu-empty-state-copy">
-                  {boardWork.length > 0 ? "Карточек с выбранным состоянием нет." : "Карточек на суточной доске нет. Создайте работу или откройте историю выполненных работ."}
+                  {boardWork.length === 0
+                    ? "Карточек на суточной доске нет. Создайте работу или откройте историю выполненных работ."
+                    : filteredBoardWork.length === 0
+                      ? "По выбранным фильтрам карточки не найдены."
+                      : "Карточек с выбранным состоянием нет."}
                 </span>
-                {boardWork.length === 0 && canCreate ? (
-                  <button className="emu-primary-button emu-empty-state-action" onClick={() => openModal("create")} type="button">
+                {hasActiveBoardFilters ? (
+                  <Button className="emu-empty-state-action" onClick={clearBoardFilters} variant="secondary">
+                    Сбросить фильтры
+                  </Button>
+                ) : boardWork.length === 0 && canCreate ? (
+                  <Button className="emu-empty-state-action" onClick={() => openModal("create")} variant="primary">
                     Создать работу
-                  </button>
+                  </Button>
                 ) : null}
               </div>
             ) : null}
           </div>
-        </section>
+        </Panel>
 
         <WorkSidePanel
           canAdjustShift={canAdjustShift}
@@ -542,14 +581,12 @@ export function EmuWorkAccountingScreen({
 
 function MobileShiftRemarksPanel({ remarks, total }: { remarks: EmuShiftRemarkDto[]; total: number }) {
   return (
-    <section className="emu-panel emu-shift-remarks-panel">
-      <div className="emu-panel-header">
-        <div>
-          <h3>Замечания из мобильного приложения</h3>
-          <span>Сотрудники фиксируют замечания на телефоне; после синхронизации они появляются здесь.</span>
-        </div>
-        <span className="emu-decision-badge">Всего: {total}</span>
-      </div>
+    <Panel
+      className="emu-shift-remarks-panel"
+      note="Сотрудники фиксируют замечания на телефоне; после синхронизации они появляются здесь."
+      title="Замечания из мобильного приложения"
+      actions={<span className="emu-decision-badge">Всего: {total}</span>}
+    >
       {remarks.length === 0 ? (
         <div className="emu-empty-state">Замечаний по выбранному участку пока нет.</div>
       ) : (
@@ -593,7 +630,7 @@ function MobileShiftRemarksPanel({ remarks, total }: { remarks: EmuShiftRemarkDt
           ))}
         </div>
       )}
-    </section>
+    </Panel>
   );
 }
 

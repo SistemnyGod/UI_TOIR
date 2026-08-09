@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent, MouseEvent as ReactMouseEvent } from "react";
 import type { RouteFormPayload, RoutePoint, RoutePointFormPayload } from "../../../../types";
 import { createClientUuid } from "../../../../shared/clientUuid";
+import { Button, ModalShell } from "../../../../shared/ui";
 import { emptyPointDraft } from "./PointEditorForm";
 
 type MaybePromise<T> = T | Promise<T>;
@@ -44,30 +45,6 @@ export function RouteCreateModal({
     setEditingPointId(null);
     setError("");
   }, [draft.territory, isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onCancel();
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onCancel]);
 
   if (!isOpen) return null;
 
@@ -171,30 +148,13 @@ export function RouteCreateModal({
     points.some((point) => point.id !== editingPointId && point.tag.trim().toLowerCase() === normalizedPointTag);
 
   return (
-    <div
-      className="modal-backdrop route-create-backdrop"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) closeModal(event);
-      }}
+    <ModalShell
+      className="route-create-modal"
+      onClose={() => closeModal()}
+      subtitle="Заполните маршрут, добавьте контрольные точки и расставьте порядок обхода перед сохранением."
+      title="Создание маршрута"
     >
-      <section
-        aria-labelledby="route-create-modal-title"
-        className="modal-window route-create-modal"
-        role="dialog"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <form onSubmit={handleSubmit}>
-          <header className="modal-head">
-            <div>
-              <span className="modal-kicker">Маршрут и точки</span>
-              <h2 id="route-create-modal-title">Создание маршрута</h2>
-              <p>Заполните маршрут, добавьте контрольные точки и расставьте порядок обхода перед сохранением.</p>
-            </div>
-            <button aria-label="Закрыть" className="icon-button route-modal-close" onClick={closeModal} title="Закрыть" type="button">
-              x
-            </button>
-          </header>
+      <form onSubmit={handleSubmit}>
 
           <div className="route-create-body">
             <section className="route-create-section">
@@ -221,7 +181,7 @@ export function RouteCreateModal({
             <section className="route-create-section point-builder">
               <div className="section-line-title">
                 <h3>{editingPointId ? "Редактирование точки" : "Новая точка"}</h3>
-                <button className="button ghost compact-button" onClick={resetPointDraft} type="button">Очистить</button>
+                <Button className="compact-button" onClick={resetPointDraft} variant="ghost">Очистить</Button>
               </div>
               <div className="form-grid two route-point-builder-grid">
                 <label>
@@ -251,9 +211,9 @@ export function RouteCreateModal({
                   <textarea rows={3} maxLength={2000} value={pointDraft.instruction} onChange={(event) => patchPoint({ instruction: event.currentTarget.value })} />
                 </label>
               </div>
-              <button className="button primary route-create-add-point" disabled={hasDuplicateTag} onClick={addOrUpdatePoint} type="button">
+              <Button className="route-create-add-point" disabled={hasDuplicateTag} onClick={addOrUpdatePoint} variant="primary">
                 {editingPointId ? "Сохранить точку" : "Добавить точку"}
-              </button>
+              </Button>
             </section>
 
             {error ? <div className="notice danger-soft route-create-error"><strong>{error}</strong></div> : null}
@@ -296,12 +256,11 @@ export function RouteCreateModal({
           </div>
 
           <footer className="route-create-footer">
-            <button className="button ghost" onClick={closeModal} type="button">Отмена</button>
-            <button className="button primary" type="submit">Создать маршрут{points.length ? ` с точками (${points.length})` : ""}</button>
+            <Button onClick={closeModal} variant="ghost">Отмена</Button>
+            <Button type="submit" variant="primary">Создать маршрут{points.length ? ` с точками (${points.length})` : ""}</Button>
           </footer>
-        </form>
-      </section>
-    </div>
+      </form>
+    </ModalShell>
   );
 }
 

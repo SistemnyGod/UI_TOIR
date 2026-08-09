@@ -1,6 +1,6 @@
 import type { FormEvent } from "react";
 import type { RouteDirectoryItem, RouteFormPayload, RouteMode, RoutePoint, ScreenId } from "../../../../types";
-import { EmptyState, Panel, SectionTabs } from "../../../../shared/ui";
+import { Button, EmptyState, Panel, SectionTabs } from "../../../../shared/ui";
 import { RouteEditorForm } from "./RouteEditorForm";
 import { RoutePointTable } from "./RoutePointTable";
 
@@ -57,12 +57,12 @@ export function RouteWorkspacePanel({
       actions={
         selectedRoute ? (
           <>
-            <button className="button ghost compact-button" disabled={!canManage} onClick={onStartRouteEdit} type="button">
+            <Button className="compact-button" disabled={!canManage} onClick={onStartRouteEdit} variant="ghost">
               Редактировать
-            </button>
-            <button className="button ghost compact-button" disabled={!canAssign} onClick={() => onNavigate("assign")} type="button">
+            </Button>
+            <Button className="compact-button" disabled={!canAssign} onClick={() => onNavigate("assign")} variant="ghost">
               Назначить
-            </button>
+            </Button>
           </>
         ) : null
       }
@@ -83,9 +83,9 @@ export function RouteWorkspacePanel({
           title="Нет выбранного маршрута"
           description="Редактор точек, схема маршрута и история появятся после создания или выбора маршрута."
           action={
-            <button className="button primary" disabled={!canManage} onClick={onStartRouteCreate} type="button">
+            <Button disabled={!canManage} onClick={onStartRouteCreate} variant="primary">
               Создать маршрут
-            </button>
+            </Button>
           }
         />
       ) : (
@@ -161,9 +161,9 @@ function RouteModeContent({
       <div className="route-point-section">
         <div className="section-line-title">
           <h3>Точки маршрута</h3>
-          <button className="button ghost compact-button" disabled={!canManage} onClick={onStartPointCreate} type="button">
+          <Button className="compact-button" disabled={!canManage} onClick={onStartPointCreate} variant="ghost">
             + Добавить точку
-          </button>
+          </Button>
         </div>
         {routePoints.length > 0 ? (
           <RoutePointTable
@@ -179,9 +179,9 @@ function RouteModeContent({
             title="Точек в маршруте нет"
             description="Добавьте контрольные точки, порядок обхода и NFC/QR-метки."
             action={
-              <button className="button ghost" disabled={!canManage} onClick={onStartPointCreate} type="button">
+              <Button disabled={!canManage} onClick={onStartPointCreate} variant="ghost">
                 Добавить точку
-              </button>
+              </Button>
             }
           />
         )}

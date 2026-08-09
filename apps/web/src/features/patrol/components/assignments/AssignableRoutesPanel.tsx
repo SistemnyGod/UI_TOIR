@@ -1,4 +1,4 @@
-import { Chip, EmptyState, Panel } from "../../../../shared/ui";
+import { Button, Chip, EmptyState, Panel } from "../../../../shared/ui";
 import type { RouteOption, ScreenId } from "../../../../types";
 
 interface AssignableRoutesPanelProps {
@@ -40,9 +40,9 @@ export function AssignableRoutesPanel({ routes, selectedRouteId, onNavigate, onS
           title="Маршрутов для назначения нет"
           description="Маршруты появятся после заполнения справочника маршрутов и точек."
           action={
-            <button className="button ghost" onClick={() => onNavigate("routes")} type="button">
+            <Button onClick={() => onNavigate("routes")} variant="ghost">
               Открыть маршруты
-            </button>
+            </Button>
           }
         />
       )}

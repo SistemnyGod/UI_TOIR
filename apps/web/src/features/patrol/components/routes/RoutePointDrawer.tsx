@@ -1,7 +1,6 @@
-import { useEffect } from "react";
 import type { FormEvent, MouseEvent as ReactMouseEvent } from "react";
 import type { RouteDirectoryItem, RoutePoint, RoutePointFormPayload } from "../../../../types";
-import { EmptyState } from "../../../../shared/ui";
+import { EmptyState, ModalShell } from "../../../../shared/ui";
 import { PointEditorForm, pointToDraft } from "./PointEditorForm";
 
 type MaybePromise<T> = T | Promise<T>;
@@ -33,30 +32,6 @@ export function RoutePointDrawer({
   onDelete,
   onSubmit,
 }: RoutePointDrawerProps) {
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        handleCancel();
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, point]);
-
   if (!isOpen) return null;
 
   function handleCancel() {
@@ -70,20 +45,19 @@ export function RoutePointDrawer({
     handleCancel();
   }
 
+  const title = !route
+    ? "Точка не выбрана"
+    : editorMode === "create"
+      ? "Новая точка"
+      : "Редактирование точки";
+
   return (
-    <div
-      className="modal-backdrop route-point-backdrop"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) closeModal(event);
-      }}
-      role="presentation"
+    <ModalShell
+      className="route-point-modal"
+      onClose={() => closeModal()}
+      subtitle={route?.name}
+      title={title}
     >
-      <section
-        aria-labelledby="route-point-modal-title"
-        className="modal-window route-point-modal"
-        onMouseDown={(event) => event.stopPropagation()}
-        role="dialog"
-      >
       {!route ? (
         <EmptyState title="Точка не выбрана" description="Сначала создайте или выберите маршрут." />
       ) : (
@@ -106,7 +80,6 @@ export function RoutePointDrawer({
           />
         )
       )}
-      </section>
-    </div>
+    </ModalShell>
   );
 }

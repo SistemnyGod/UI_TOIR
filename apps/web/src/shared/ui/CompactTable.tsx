@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 
 export type CompactTableColumn<T> = {
   key: string;
@@ -13,16 +13,28 @@ export function CompactTable<T>({
   rows,
   getRowKey,
   emptyText = "Нет данных",
+  loading = false,
+  error,
   className = "",
+  getRowClassName,
+  onRowContextMenu,
+  onRowClick,
+  onRowDoubleClick,
 }: {
   columns: CompactTableColumn<T>[];
   rows: T[];
   getRowKey: (row: T) => string;
   emptyText?: string;
+  loading?: boolean;
+  error?: string;
   className?: string;
+  getRowClassName?: (row: T) => string;
+  onRowClick?: (row: T) => void;
+  onRowContextMenu?: (event: ReactMouseEvent<HTMLTableRowElement>, row: T) => void;
+  onRowDoubleClick?: (row: T) => void;
 }) {
   return (
-    <div className={`compact-table-wrap ${className}`}>
+    <div aria-busy={loading} className={`compact-table-wrap ${className}`}>
       <table className="compact-table">
         <thead>
           <tr>
@@ -34,7 +46,19 @@ export function CompactTable<T>({
           </tr>
         </thead>
         <tbody>
-          {rows.length === 0 ? (
+          {loading ? (
+            <tr>
+              <td className="compact-table-state" colSpan={columns.length}>
+                Загрузка…
+              </td>
+            </tr>
+          ) : error ? (
+            <tr>
+              <td aria-live="assertive" className="compact-table-state compact-table-state-error" colSpan={columns.length}>
+                {error}
+              </td>
+            </tr>
+          ) : rows.length === 0 ? (
             <tr>
               <td className="compact-table-empty" colSpan={columns.length}>
                 {emptyText}
@@ -42,7 +66,23 @@ export function CompactTable<T>({
             </tr>
           ) : (
             rows.map((row) => (
-              <tr key={getRowKey(row)}>
+              <tr
+                className={getRowClassName?.(row)}
+                key={getRowKey(row)}
+                onClick={onRowClick ? (event) => {
+                  if (event.target instanceof Element && event.target.closest("button, a, input, select, textarea")) return;
+                  onRowClick(row);
+                } : undefined}
+                onKeyDown={onRowClick ? (event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onRowClick(row);
+                  }
+                } : undefined}
+                onContextMenu={onRowContextMenu ? (event) => onRowContextMenu(event, row) : undefined}
+                onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+              >
                 {columns.map((column) => (
                   <td key={column.key} style={{ textAlign: column.align }}>
                     {column.render(row)}

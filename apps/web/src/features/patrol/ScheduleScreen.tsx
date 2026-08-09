@@ -130,29 +130,19 @@ export function ScheduleScreen({
       </div>
 
       {selected ? (
-        <div
-          className="schedule-plan-modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              onSelectCell("");
-            }
-          }}
-          role="presentation"
-        >
-          <ScheduleEditPanel
-            canManage={canManage}
-            employees={scheduleEmployees}
-            resultHistory={selectedResultHistory.results}
-            resultHistoryMode={selectedResultHistory.mode}
-            routes={routeDirectory}
-            selected={selected}
-            onClose={() => onSelectCell("")}
-            onCreateScheduledRequest={onCreateScheduledRequest}
-            onNotify={onNotify}
-            onOpenRequestById={onOpenRequestById}
-            onRunAssignmentCommand={onRunAssignmentCommand}
-          />
-        </div>
+        <ScheduleEditPanel
+          canManage={canManage}
+          employees={scheduleEmployees}
+          resultHistory={selectedResultHistory.results}
+          resultHistoryMode={selectedResultHistory.mode}
+          routes={routeDirectory}
+          selected={selected}
+          onClose={() => onSelectCell("")}
+          onCreateScheduledRequest={onCreateScheduledRequest}
+          onNotify={onNotify}
+          onOpenRequestById={onOpenRequestById}
+          onRunAssignmentCommand={onRunAssignmentCommand}
+        />
       ) : null}
     </div>
   );

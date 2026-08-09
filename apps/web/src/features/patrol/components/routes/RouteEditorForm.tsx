@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
 import type { RouteDirectoryItem, RouteFormPayload } from "../../../../types";
+import { Button } from "../../../../shared/ui";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -32,7 +33,7 @@ export function RouteEditorForm({
     <form className="route-form-card" onSubmit={onSubmit}>
       <div className="section-line-title">
         <h3>{mode === "create" ? "Создание маршрута" : "Редактирование маршрута"}</h3>
-        {onDelete ? <button className="button danger-outline compact-button" onClick={onDelete} type="button">Удалить</button> : null}
+        {onDelete ? <Button className="compact-button" onClick={onDelete} variant="danger">Удалить</Button> : null}
       </div>
       <div className="form-grid two route-form-grid">
         <label>
@@ -49,8 +50,8 @@ export function RouteEditorForm({
         </label>
       </div>
       <div className="form-actions">
-        <button className="button ghost" onClick={onCancel} type="button">Отмена</button>
-        <button className="button primary" type="submit">{mode === "create" ? "Создать маршрут" : "Сохранить маршрут"}</button>
+        <Button onClick={onCancel} variant="ghost">Отмена</Button>
+        <Button type="submit" variant="primary">{mode === "create" ? "Создать маршрут" : "Сохранить маршрут"}</Button>
       </div>
     </form>
   );

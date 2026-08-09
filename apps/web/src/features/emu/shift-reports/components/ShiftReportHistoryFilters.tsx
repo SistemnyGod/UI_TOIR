@@ -1,5 +1,6 @@
 import { Search, Star, X } from 'lucide-react';
 import type { EmuShiftReportCategory, EmuShiftType } from '../../../../api/emuShiftReportContracts';
+import { FilterBar } from '../../../../shared/ui';
 import { ShiftReportDateRangePicker } from './ShiftReportDateRangePicker';
 
 export function ShiftReportHistoryFilters({
@@ -33,7 +34,7 @@ export function ShiftReportHistoryFilters({
 }) {
   const hasAdditionalFilters = Boolean(shiftType || category || search.trim() || favoriteOnly);
   return (
-    <section className='emu-shift-card emu-history-filters' aria-label='Фильтры истории'>
+    <FilterBar ariaLabel='Фильтры истории' className='emu-shift-card emu-history-filters'>
       <div className='emu-history-period'>
         <ShiftReportDateRangePicker dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange} />
         <div className='emu-history-presets' aria-label='Быстрый выбор периода'>
@@ -50,6 +51,6 @@ export function ShiftReportHistoryFilters({
         <label className='emu-history-favorite-filter'><input type='checkbox' checked={favoriteOnly} onChange={(event) => onFavoriteOnlyChange(event.target.checked)} /><Star aria-hidden='true' size={14} fill={favoriteOnly ? 'currentColor' : 'none'} />Только избранные</label>
         {hasAdditionalFilters ? <button type='button' className='emu-history-reset-button' onClick={onReset}>Сбросить фильтры</button> : null}
       </div>
-    </section>
+    </FilterBar>
   );
 }

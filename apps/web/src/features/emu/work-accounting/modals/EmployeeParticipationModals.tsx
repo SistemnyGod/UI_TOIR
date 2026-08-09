@@ -3,6 +3,7 @@ import type { EmuWorkSessionEmployeeDto, EmuWorkSessionDto } from "../../../../a
 import type { EmuWorkspace } from "../../../../hooks/useEmuWorkspace";
 import { EmployeePicker } from "../components/EmployeePicker";
 import { ModalFrame } from "../components/ModalFrame";
+import { Button } from "../../../../shared/ui";
 import { WorkSummary } from "../components/WorkSummary";
 import type { EmuEmployeeOption } from "../types";
 import { filterEmployees, toDateInput, toLocalIso, toTimeInput } from "../workAccountingUtils";
@@ -63,7 +64,7 @@ export function AddEmployeeToWorkModal({
       <label className="emu-textarea-label">Комментарий<textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Почему сотрудник добавлен позже" /></label>
       <div className="emu-modal-actions">
         <button onClick={onClose} type="button">Отмена</button>
-        <button className="emu-primary-button" disabled={!employeeIds[0] || !comment.trim()} onClick={() => void submit()} type="button">Добавить</button>
+        <Button disabled={!employeeIds[0] || !comment.trim()} onClick={() => void submit()} variant="primary">Добавить</Button>
       </div>
     </ModalFrame>
   );
@@ -114,7 +115,7 @@ export function FinishEmployeeParticipationModal({
       <label className="emu-textarea-label">Причина / комментарий<textarea value={comment} onChange={(event) => setComment(event.target.value)} /></label>
       <div className="emu-modal-actions">
         <button onClick={onClose} type="button">Отмена</button>
-        <button className="emu-primary-button" disabled={!comment.trim()} onClick={() => void submit()} type="button">Завершить участие</button>
+        <Button disabled={!comment.trim()} onClick={() => void submit()} variant="primary">Завершить участие</Button>
       </div>
     </ModalFrame>
   );
@@ -155,9 +156,8 @@ export function MarkMistakenEmployeeModal({
       <label className="emu-textarea-label">Причина<textarea value={comment} onChange={(event) => setComment(event.target.value)} /></label>
       <div className="emu-modal-actions">
         <button onClick={onClose} type="button">Отмена</button>
-        <button className="emu-danger-button" disabled={!comment.trim()} onClick={() => void submit()} type="button">Отметить ошибочно</button>
+        <Button disabled={!comment.trim()} onClick={() => void submit()} variant="danger">Отметить ошибочно</Button>
       </div>
     </ModalFrame>
   );
 }
-

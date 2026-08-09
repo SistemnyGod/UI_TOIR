@@ -90,12 +90,6 @@
   text-align: center;
 }
 
-.patrol-employee-picker-modal .modal-actions {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-}
-
 @media (max-width: 1050px) {
   .employees-workspace-screen .employee-directory-summary {
     grid-template-columns: repeat(3, minmax(120px, 1fr));
@@ -176,17 +170,4 @@
     justify-self: start;
   }
 
-  .screen-area .patrol-employee-picker-modal .modal-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .screen-area .patrol-employee-picker-modal .modal-actions .button {
-    min-height: 44px;
-  }
-
-  .screen-area .patrol-employee-picker-modal .modal-actions .button.primary {
-    grid-column: 1 / -1;
-    grid-row: 1;
-  }
 }

@@ -1,6 +1,6 @@
 import { Bell, BellRing, Clock3, Monitor, Settings2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { ModalShell } from '../../../../shared/ui';
+import { Button, ModalShell } from '../../../../shared/ui';
 
 const SETTINGS_KEY = 'patrol360.emu.shift-report.reminder.v1';
 const DISMISSED_KEY = 'patrol360.emu.shift-report.reminder.dismissed.v1';
@@ -147,7 +147,7 @@ export function ShiftReportReminder({ open, onClose }: { open: boolean; onClose:
           title='Настройки уведомлений'
           subtitle={settings.enabled ? `Напоминание включено ежедневно в ${settings.time}.` : 'Настройте время и способы получения напоминания.'}
           onClose={onClose}
-          actions={<button type='button' className='button primary' onClick={onClose}>Готово</button>}
+          actions={<Button onClick={onClose} variant='primary'>Готово</Button>}
         >
           <div className='emu-reminder-settings'>
             <label className='emu-reminder-time'><span><Clock3 aria-hidden='true' size={15} />Время</span><input type='time' value={settings.time} onChange={(event) => update({ time: event.target.value })} /></label>

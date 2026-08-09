@@ -1,5 +1,6 @@
 import { CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '../../../../shared/ui';
 
 const MONTHS = [
   'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
@@ -193,8 +194,8 @@ export function ShiftReportDateRangePicker({
           <footer>
             <span>{selectingEnd ? 'Теперь выберите дату «по» или подтвердите один день.' : `Выбран период: ${label}`}</span>
             <div>
-              <button type='button' className='button secondary' onClick={() => setOpen(false)}>Отмена</button>
-              {selectingEnd ? <button type='button' className='button primary' onClick={selectOneDay}>Выбрать один день</button> : null}
+              <Button onClick={() => setOpen(false)} variant='secondary'>Отмена</Button>
+              {selectingEnd ? <Button onClick={selectOneDay} variant='primary'>Выбрать один день</Button> : null}
             </div>
           </footer>
         </div>

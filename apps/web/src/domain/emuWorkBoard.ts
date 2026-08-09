@@ -128,7 +128,7 @@ export function filterEmuEmployeeWorkload(
     .filter((employee) => (status === "all" ? true : employee.status === status))
     .filter((employee) => {
       if (!normalized) return true;
-      return [employee.fullName, employee.personnelNo, employee.position, employee.department]
+      return [employee.fullName, employee.personnelNo, employee.position, employee.department, ...employee.sectionNames]
         .filter(Boolean)
         .some((text) => text.toLowerCase().includes(normalized));
     });

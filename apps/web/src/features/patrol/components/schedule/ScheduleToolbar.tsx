@@ -1,4 +1,4 @@
-import { SectionTabs } from "../../../../shared/ui";
+import { Button, FilterBar, SectionTabs } from "../../../../shared/ui";
 import type { ScheduleMode } from "../../../../types";
 
 interface ScheduleToolbarProps {
@@ -27,7 +27,7 @@ export function ScheduleToolbar({
   onShiftFilterChange,
 }: ScheduleToolbarProps) {
   return (
-    <div className="planning-toolbar">
+    <FilterBar className="planning-toolbar">
       <SectionTabs
         value={mode}
         onChange={onModeChange}
@@ -59,19 +59,18 @@ export function ScheduleToolbar({
             <option value="night">Ночная</option>
           </select>
         </label>
-        <button className="button ghost" onClick={() => onModeChange("exceptions")} type="button">
+        <Button variant="ghost" onClick={() => onModeChange("exceptions")}>
           Корректировки
-        </button>
-        <button
-          className="button primary"
+        </Button>
+        <Button
           disabled={!canManage}
           onClick={() => onNotify("Выберите ячейку расписания и сохраните заявку на обход")}
-          type="button"
+          variant="primary"
         >
           Создать обход
-        </button>
+        </Button>
       </div>
-    </div>
+    </FilterBar>
   );
 }
 

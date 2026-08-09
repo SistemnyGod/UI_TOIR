@@ -6,9 +6,9 @@ import {
   ExternalLink,
   PlusCircle,
   ScanLine,
-  X,
 } from "lucide-react";
 import type { PatrolResult } from "../../../types";
+import { ModalShell } from "../../../shared/ui";
 import { PointResultTable } from "./PointResultTable";
 import type { ResultGroup } from "./resultTypes";
 
@@ -19,6 +19,7 @@ interface PatrolResultDetailsProps {
   onExport: () => void;
   onOpenRequest: () => void;
   onOpenAttachment: (result: PatrolResult, order?: number) => void;
+  onBeforeOpenAttachment?: (element: HTMLElement) => void;
   photoLoadingResultId: string | null;
   exportInProgress?: boolean;
 }
@@ -30,6 +31,7 @@ export function PatrolResultDetails({
   onExport,
   onOpenRequest,
   onOpenAttachment,
+  onBeforeOpenAttachment,
   photoLoadingResultId,
   exportInProgress = false,
 }: PatrolResultDetailsProps) {
@@ -55,38 +57,27 @@ export function PatrolResultDetails({
   }, [group.results, pointMode, pointQuery]);
 
   return (
-    <div className="results-review-modal-backdrop" onMouseDown={onClose}>
-      <section
-        className="results-review-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Просмотр результата обхода"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header className="results-review-modal-head">
-          <div>
-            <h3>Детальный просмотр обхода</h3>
-            <p>
-              {group.route} · {group.employee} · {group.territory}
-            </p>
-          </div>
-          <div className="results-review-modal-head-actions">
-            {hasAttention ? (
-              <span className="results-review-modal-alert">
-                <AlertTriangle size={16} />
-                Есть замечания
-              </span>
-            ) : (
-              <span className="results-review-modal-ok">
-                <CheckCircle2 size={16} />
-                Подтверждено
-              </span>
-            )}
-            <button type="button" className="icon-button" onClick={onClose} aria-label="Закрыть">
-              <X size={20} />
-            </button>
-          </div>
-        </header>
+    <ModalShell
+      className="results-review-modal"
+      onClose={onClose}
+      subtitle={`${group.route} · ${group.employee} · ${group.territory}`}
+      title="Детальный просмотр обхода"
+    >
+      <div className="results-review-modal-head">
+        <div className="results-review-modal-head-actions">
+          {hasAttention ? (
+            <span className="results-review-modal-alert">
+              <AlertTriangle size={16} />
+              Есть замечания
+            </span>
+          ) : (
+            <span className="results-review-modal-ok">
+              <CheckCircle2 size={16} />
+              Подтверждено
+            </span>
+          )}
+        </div>
+      </div>
 
         <div className="results-review-modal-toolbar">
           <div className="results-review-tabs">
@@ -131,6 +122,7 @@ export function PatrolResultDetails({
             group={group}
             results={filteredResults}
             onOpenAttachment={onOpenAttachment}
+            onBeforeOpenAttachment={onBeforeOpenAttachment}
             photoLoadingResultId={photoLoadingResultId}
           />
 
@@ -201,8 +193,7 @@ export function PatrolResultDetails({
             Создать заявку
           </button>
         </footer>
-      </section>
-    </div>
+    </ModalShell>
   );
 }
 

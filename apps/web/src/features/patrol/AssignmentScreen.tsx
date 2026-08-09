@@ -63,6 +63,7 @@ import { AssignmentSelectionBar } from "./assignments/AssignmentSelectionBar";
 import { subscribeAssignmentAutoRefresh } from "./assignments/assignmentAutoRefresh";
 import "./assignments/assignmentWorkspace.css";
 import { useAssignmentsWorkspace } from "../../hooks/useAssignmentsWorkspace";
+import { Button, CompactTable, FilterBar, IconButton, ModalShell, Panel, type CompactTableColumn } from "../../shared/ui";
 import {
   mapEmployeeToAssignable,
   mapRouteToAssignable,
@@ -600,7 +601,7 @@ export function AssignmentScreen({
 
   return (
     <div className="assign-am-screen">
-      <section className="assign-am-filters assign-am-search-only">
+      <FilterBar ariaLabel="Фильтры назначения обхода" className="assign-am-filters assign-am-search-only">
         <label className="assign-am-search">
           <input
             onChange={(event) => setSearch(event.currentTarget.value)}
@@ -610,7 +611,7 @@ export function AssignmentScreen({
           />
           <Search size={19} />
         </label>
-      </section>
+      </FilterBar>
 
       <AssignmentSelectionBar
         canCreate={canManage && requestListStatus !== "error"}
@@ -805,32 +806,30 @@ function PeriodFilter({
     <div className="assign-am-period-filter">
       <span>
         <small>Период</small>
-        <button className="assign-am-period-button" onClick={onOpen} type="button">
+        <Button className="assign-am-period-button" onClick={onOpen} variant="ghost">
           <strong>{formatPeriodLabel(dateFrom, dateTo)}</strong>
           <em>Выбрать</em>
-        </button>
+        </Button>
       </span>
       <CalendarDays size={17} />
       {isOpen ? (
         <div className="assign-am-period-popover">
           <div className="date-range-calendar-head">
-            <button
-              aria-label="Предыдущий месяц"
+            <IconButton
+              label="Предыдущий месяц"
               className="icon-button"
               onClick={() => setCalendarMonth((current) => addMonths(current, -1))}
-              type="button"
             >
               ‹
-            </button>
+            </IconButton>
             <strong>{formatMonthLabel(calendarMonth)}</strong>
-            <button
-              aria-label="Следующий месяц"
+            <IconButton
+              label="Следующий месяц"
               className="icon-button"
               onClick={() => setCalendarMonth((current) => addMonths(current, 1))}
-              type="button"
             >
               ›
-            </button>
+            </IconButton>
           </div>
           <div className="date-range-calendar-weekdays" aria-hidden="true">
             {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => (
@@ -854,8 +853,8 @@ function PeriodFilter({
             <span>{formatPeriodLabel(draftFrom, draftTo)}</span>
           </div>
           <div className="date-range-actions">
-            <button className="button ghost" onClick={onClear} type="button">Очистить</button>
-            <button className="button primary" onClick={onApply} type="button">Применить</button>
+            <Button onClick={onClear} variant="ghost">Очистить</Button>
+            <Button onClick={onApply} variant="primary">Применить</Button>
           </div>
         </div>
       ) : null}
@@ -915,7 +914,7 @@ function EmployeesPanel({
   shiftSettings: ShiftTimeSettings;
 }) {
   return (
-    <section className="assign-am-panel">
+    <Panel className="assign-am-panel">
       <PanelHeader actionLabel="Настроить избранных" count={employees.length} icon={UserPlus} onAction={onOpenPicker} title="Сотрудники" />
       <div className="assign-am-shift-settings-bar">
         <span>
@@ -968,7 +967,7 @@ function EmployeesPanel({
           title={totalEmployees > 0 ? "Сотрудники не найдены" : "Сотрудников нет"}
         />
       )}
-    </section>
+    </Panel>
   );
 }
 
@@ -989,7 +988,6 @@ function AssignmentEmployeePickerModal({
   const visibleEmployees = employees
     .filter((employee) => !normalizedSearch || [employee.name, employee.role, employee.zone].join(" ").toLowerCase().includes(normalizedSearch))
     .slice(0, 80);
-
   function toggleEmployee(employeeId: string) {
     if (favoriteSet.has(employeeId)) {
       onChange(favoriteEmployeeIds.filter((id) => id !== employeeId));
@@ -1000,44 +998,53 @@ function AssignmentEmployeePickerModal({
   }
 
   return createPortal(
-    <div className="assign-am-modal-backdrop" onClick={onClose}>
-      <section className="assign-am-employee-picker" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
-        <header>
-          <div>
-            <h2>Избранные сотрудники для назначений</h2>
-            <p>Избранные сотрудники поднимаются выше в списке назначений. Общий справочник не меняется.</p>
-          </div>
-          <button className="assign-am-picker-close" onClick={onClose} type="button">×</button>
-        </header>
+    <ModalShell
+      className="assign-am-employee-picker"
+      onClose={onClose}
+      subtitle="Избранные сотрудники поднимаются выше в списке назначений. Общий справочник не меняется."
+      title="Избранные сотрудники для назначений"
+    >
         <div className="assign-am-picker-toolbar">
           <label>
             <span>Поиск сотрудника</span>
-            <input autoFocus value={search} onChange={(event) => setSearch(event.currentTarget.value)} placeholder="ФИО, должность, подразделение" />
+            <input aria-label="Поиск сотрудников в избранном" value={search} onChange={(event) => setSearch(event.currentTarget.value)} placeholder="ФИО, должность, подразделение" />
           </label>
-          <strong>{favoriteEmployeeIds.length} добавлено из {employees.length}</strong>
+          <strong aria-live="polite">Показано {visibleEmployees.length} из {employees.length} · добавлено {favoriteEmployeeIds.length}</strong>
         </div>
         <div className="assign-am-picker-list">
-          {visibleEmployees.map((employee) => {
-            const selected = favoriteSet.has(employee.id);
-            return (
-              <button className={`assign-am-picker-employee ${selected ? "selected" : ""}`} key={employee.id} onClick={() => toggleEmployee(employee.id)} type="button">
-                <Avatar name={employee.name} />
-                <span>
-                  <strong>{employee.name}</strong>
-                  <small>{employee.role}</small>
-                  <em>{employee.zone}</em>
-                </span>
-                <b>{selected ? "Добавлен" : "Добавить"}</b>
-              </button>
-            );
-          })}
+          {visibleEmployees.length ? visibleEmployees.map((employee) => {
+              const selected = favoriteSet.has(employee.id);
+              return (
+                <button
+                  aria-label={`${employee.name}. ${employee.role}. ${employee.zone}. ${selected ? "Добавлен" : "Добавить"}`}
+                  aria-pressed={selected}
+                  className={`assign-am-picker-employee ${selected ? "selected" : ""}`}
+                  key={employee.id}
+                  onClick={() => toggleEmployee(employee.id)}
+                  type="button"
+                >
+                  <Avatar name={employee.name} />
+                  <span>
+                    <strong title={employee.name}>{employee.name}</strong>
+                    <small title={employee.role}>{employee.role}</small>
+                    <em title={employee.zone}>{employee.zone}</em>
+                  </span>
+                  <b>{selected ? "Добавлен" : "Добавить"}</b>
+                </button>
+              );
+            }) : (
+              <div className="assign-am-picker-empty" role="status">
+                <strong>{employees.length === 0 ? "Сотрудников нет" : "Сотрудники не найдены"}</strong>
+                <span>{employees.length === 0 ? "Справочник сотрудников пока пуст." : "Измените поисковый запрос, чтобы увидеть сотрудников."}</span>
+                {normalizedSearch ? <Button onClick={() => setSearch("")} variant="ghost">Очистить поиск</Button> : null}
+              </div>
+            )}
         </div>
         <footer>
-          <button className="button ghost" onClick={() => onChange([])} type="button">Очистить список</button>
-          <button className="button primary" onClick={onClose} type="button">Готово</button>
+          <Button onClick={() => onChange([])} variant="ghost">Очистить список</Button>
+          <Button onClick={onClose} variant="primary">Готово</Button>
         </footer>
-      </section>
-    </div>,
+    </ModalShell>,
     document.body,
   );
 }
@@ -1060,15 +1067,12 @@ function ShiftSettingsModal({
   }
 
   return (
-    <div className="assign-am-modal-backdrop" onClick={onClose}>
-      <section className="assign-am-shift-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
-        <header>
-          <div>
-            <h2>Настройка смен</h2>
-            <p>Время применяется ко всем сотрудникам в списке назначений.</p>
-          </div>
-          <button className="assign-am-picker-close" onClick={onClose} type="button">×</button>
-        </header>
+    <ModalShell
+      className="assign-am-shift-modal"
+      onClose={onClose}
+      subtitle="Время применяется ко всем сотрудникам в списке назначений."
+      title="Настройка смен"
+    >
         <div className="assign-am-shift-modal-grid">
           <fieldset>
             <legend>Дневная смена</legend>
@@ -1114,14 +1118,13 @@ function ShiftSettingsModal({
           </fieldset>
         </div>
         <footer>
-          <button className="button ghost" onClick={onReset} type="button">По умолчанию</button>
+          <Button onClick={onReset} variant="ghost">По умолчанию</Button>
           <span>
             День {formatShiftRange(draft.dayStart, draft.dayEnd)} · Ночь {formatShiftRange(draft.nightStart, draft.nightEnd)}
           </span>
-          <button className="button primary" onClick={() => onSave(draft)} type="button">Сохранить</button>
+          <Button onClick={() => onSave(draft)} variant="primary">Сохранить</Button>
         </footer>
-      </section>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -1143,7 +1146,7 @@ function RoutesPanel({
   onSelectRoute: (id: string) => void;
 }) {
   return (
-    <section className="assign-am-panel">
+    <Panel className="assign-am-panel">
       <PanelHeader count={routes.length} icon={Route} title="Доступные маршруты" />
       {routes.length ? (
         <div className="assign-am-list routes">
@@ -1188,7 +1191,7 @@ function RoutesPanel({
           title="Маршрутов для назначения нет"
         />
       )}
-    </section>
+    </Panel>
   );
 }
 
@@ -1273,7 +1276,7 @@ function EmployeeHistoryPanel({
   ].filter(Boolean)).size;
 
   return (
-    <section className="assign-am-panel assign-am-history-panel">
+    <Panel className="assign-am-panel assign-am-history-panel">
       <PanelHeader actionLabel="Создать заявку" count={activeRequestItems.length} icon={Plus} onAction={onOpenRequest} title="История сотрудника" />
       {employee ? (
         <>
@@ -1363,7 +1366,7 @@ function EmployeeHistoryPanel({
           title="Сотрудник не выбран"
         />
       )}
-    </section>
+    </Panel>
   );
 }
 
@@ -1389,15 +1392,12 @@ function RequestModal({
   }, []);
 
   return createPortal(
-    <div className="assign-am-modal-backdrop" onClick={onClose}>
-      <section className="assign-am-request-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
-        <header>
-          <div>
-            <h2>Создание заявки на обход</h2>
-            <p>Выберите маршрут и заполните параметры назначения в одном окне.</p>
-          </div>
-          <button aria-label="Закрыть окно создания заявки" className="assign-am-picker-close" onClick={onClose} type="button">×</button>
-        </header>
+    <ModalShell
+      className="assign-am-request-modal"
+      onClose={onClose}
+      subtitle="Выберите маршрут и заполните параметры назначения в одном окне."
+      title="Создание заявки на обход"
+    >
         <div className="assign-am-request-modal-body">
           <section className="assign-am-modal-route-picker">
             <PanelHeader count={routes.length} icon={Route} title="Маршрут" />
@@ -1430,8 +1430,7 @@ function RequestModal({
           </section>
           <RequestPanel {...requestProps} />
         </div>
-      </section>
-    </div>,
+    </ModalShell>,
     document.body,
   );
 }
@@ -1560,11 +1559,11 @@ function RequestPanel({
       ) : null}
 
       <div className="assign-am-form-actions">
-        <button className="button ghost" onClick={onSaveDraft} type="button">Сохранить как черновик</button>
-        <button className="button primary" disabled={disabled} onClick={() => void onAssign()} type="button">
+        <Button onClick={onSaveDraft} variant="ghost">Сохранить как черновик</Button>
+        <Button disabled={disabled} onClick={() => void onAssign()} variant="primary">
           <Send size={17} />
           {isCreating ? "Отправка..." : "Отправить заявку"}
-        </button>
+        </Button>
       </div>
     </section>
   );
@@ -1629,6 +1628,65 @@ function ActiveAssignmentsCard({
   const currentAssignments = assignments.filter(isAssignmentCurrent);
   const waitingCount = currentAssignments.filter((assignment) => assignmentStatusText(assignment.status) === "Ожидает начала").length;
   const inProgressCount = currentAssignments.filter((assignment) => assignmentStatusText(assignment.status) === "Выполняется").length;
+  const columns: CompactTableColumn<ActivePatrol>[] = [
+    {
+      key: "employee",
+      header: "Сотрудник",
+      render: (assignment) => <strong className="patrol-active-table-primary" title={assignment.employee}>{assignment.employee}</strong>,
+      width: "18%",
+    },
+    {
+      key: "route",
+      header: "Маршрут",
+      render: (assignment) => <span className="patrol-active-table-route" title={assignment.route}>{assignment.route}</span>,
+      width: "20%",
+    },
+    {
+      key: "started-at",
+      header: "Начало",
+      render: (assignment) => <span>{formatAssignmentActionTime(assignment)}</span>,
+      width: "12%",
+    },
+    {
+      key: "status",
+      header: "Статус",
+      render: (assignment) => <StatusPill value={assignment.status} />,
+      width: "13%",
+    },
+    {
+      key: "progress",
+      header: "Прогресс",
+      render: (assignment) => (
+        <span
+          aria-label={`Прогресс обхода ${assignment.progress}%`}
+          aria-valuemax={100}
+          aria-valuemin={0}
+          aria-valuenow={assignment.progress}
+          className="patrol-active-table-progress"
+          role="progressbar"
+        >
+          <i style={{ width: `${assignment.progress}%` }} />
+        </span>
+      ),
+      width: "12%",
+    },
+    {
+      key: "actions",
+      header: "Действия",
+      render: (assignment) => {
+        const started = assignmentStatusText(assignment.status) === "Выполняется";
+        const saving = savingAssignmentId === assignment.id;
+        return (
+          <div className="patrol-active-table-actions">
+            <Button disabled={!canManage || started || saving} onClick={() => void onRunCommand(assignment.id, "start")} variant="ghost">Начать</Button>
+            <Button disabled={!canManage || saving} onClick={() => void onRunCommand(assignment.id, "complete")} variant="ghost">Завершить</Button>
+            <Button className="danger-outline" disabled={!canManage || saving} onClick={() => void onRunCommand(assignment.id, "cancel")} variant="ghost">Отменить</Button>
+          </div>
+        );
+      },
+      width: "25%",
+    },
+  ];
 
   return (
     <section className="assign-am-card assign-am-current-routes-card">
@@ -1644,27 +1702,12 @@ function ActiveAssignmentsCard({
             <span><strong>{inProgressCount}</strong><small>выполняются</small></span>
             <span><strong>{currentAssignments.length}</strong><small>всего активных</small></span>
           </div>
-          <div className="assign-am-table current-routes">
-            <div className="head"><span>Сотрудник</span><span>Маршрут</span><span>Начало</span><span>Статус</span><span>Прогресс</span><span>Действия</span></div>
-            {currentAssignments.map((assignment) => {
-              const statusText = assignmentStatusText(assignment.status);
-              const started = statusText === "Выполняется";
-              return (
-                <div className="row" key={assignment.id}>
-                  <strong>{assignment.employee}</strong>
-                  <span>{assignment.route}</span>
-                  <span>{formatAssignmentActionTime(assignment)}</span>
-                  <StatusPill value={assignment.status} />
-                  <span className="assign-am-progress"><i style={{ width: `${assignment.progress}%` }} /></span>
-                  <div className="actions">
-                    <button disabled={!canManage || started || savingAssignmentId === assignment.id} onClick={() => void onRunCommand(assignment.id, "start")} type="button">Начать</button>
-                    <button disabled={!canManage || savingAssignmentId === assignment.id} onClick={() => void onRunCommand(assignment.id, "complete")} type="button">Завершить</button>
-                    <button className="danger" disabled={!canManage || savingAssignmentId === assignment.id} onClick={() => void onRunCommand(assignment.id, "cancel")} type="button">Отменить</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <CompactTable
+            className="patrol-active-assignments-table"
+            columns={columns}
+            getRowKey={(assignment) => assignment.id}
+            rows={currentAssignments}
+          />
         </>
       ) : (
         <EmptyPanel description="Назначенные маршруты появятся здесь после отправки заявки сотруднику. Отмененные и завершенные обходы в этот список не попадают." title="Текущих назначенных маршрутов нет" />
@@ -1742,15 +1785,12 @@ function CompleteAssignmentModal({
   }
 
   return (
-    <div className="assign-am-modal-backdrop" onClick={onClose}>
-      <section className="assign-am-complete-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
-        <header>
-          <div>
-            <h2>Завершить обход</h2>
-            <p>{assignment.employee} · {assignment.route}</p>
-          </div>
-          <button className="button ghost" onClick={onClose} type="button">Закрыть</button>
-        </header>
+    <ModalShell
+      className="assign-am-complete-modal"
+      onClose={onClose}
+      subtitle={`${assignment.employee} · ${assignment.route}`}
+      title="Завершить обход"
+    >
         <div className="assign-am-complete-summary">
           <span>{assignment.status}</span>
           <strong>{assignment.progress}%</strong>
@@ -1906,14 +1946,13 @@ function CompleteAssignmentModal({
           </section>
         ) : null}
         <footer>
-          <button className="button ghost" onClick={onClose} type="button">Отмена</button>
-          <button className="button primary" disabled={saving} onClick={submit} type="button">
+          <Button onClick={onClose} variant="ghost">Отмена</Button>
+          <Button disabled={saving} onClick={submit} variant="primary">
             <CheckCircle2 size={17} />
             {saving ? "Сохранение..." : "Завершить обход"}
-          </button>
+          </Button>
         </footer>
-      </section>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -2024,7 +2063,7 @@ function EmptyPanel({ actionLabel, description, onAction, title }: { actionLabel
     <div className="assign-am-empty">
       <strong>{title}</strong>
       <span>{description}</span>
-      {actionLabel ? <button className="button ghost" onClick={() => void onAction?.()} type="button">{actionLabel}</button> : null}
+      {actionLabel ? <Button onClick={() => void onAction?.()} variant="ghost">{actionLabel}</Button> : null}
     </div>
   );
 }

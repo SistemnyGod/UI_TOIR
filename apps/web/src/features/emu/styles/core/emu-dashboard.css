@@ -515,23 +515,25 @@
 
 .emu-dashboard-occupancy-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
 }
 
 .emu-dashboard-occupancy-grid article {
+  min-height: 56px;
   border: 1px solid #e1ebf7;
   border-radius: 8px;
   background: #f8fbff;
-  padding: 10px;
+  padding: 9px 10px;
 }
 
 .emu-dashboard-occupancy-grid span,
 .emu-dashboard-occupancy-list span,
 .emu-dashboard-section-risks span {
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
+  line-height: 1.25;
 }
 
 .emu-dashboard-occupancy-grid strong {
@@ -539,6 +541,7 @@
   margin-top: 4px;
   color: #0b63f6;
   font-size: 22px;
+  font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 
@@ -788,15 +791,15 @@
   align-items: center;
   justify-content: center;
   margin: 0;
-  transform: translateY(-8px);
+  transform: translateY(-11px);
   color: #0f172a;
-  font-size: 22px;
+  font-size: 24px;
   line-height: 1;
   text-align: center;
 }
 
 .emu-key-indicators .emu-dashboard-donut > span {
-  bottom: 29px;
+  bottom: 34px;
   color: #64748b;
   font-size: 10px;
   line-height: 1;
@@ -1014,4 +1017,3 @@
   align-items: center;
   gap: 8px;
 }
-

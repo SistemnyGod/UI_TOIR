@@ -1,4 +1,4 @@
-import { Chip, EmptyState, Panel } from "../../../../shared/ui";
+import { Button, Chip, EmptyState, Panel } from "../../../../shared/ui";
 import type { Employee, ScreenId } from "../../../../types";
 
 interface AssignableEmployeesPanelProps {
@@ -41,9 +41,9 @@ export function AssignableEmployeesPanel({
           title="Сотрудников нет"
           description="Список будет загружаться из справочника сотрудников. Пока можно настроить внешний вид назначения."
           action={
-            <button className="button ghost" onClick={() => onNavigate("employees")} type="button">
+            <Button onClick={() => onNavigate("employees")} variant="ghost">
               Открыть сотрудников
-            </button>
+            </Button>
           }
         />
       )}

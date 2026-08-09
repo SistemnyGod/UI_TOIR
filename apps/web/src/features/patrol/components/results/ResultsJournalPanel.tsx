@@ -1,8 +1,8 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ApiFileResponse } from "../../../../api/client";
 import type { ResultFilterOptions } from "../../../../repositories/resultsRepository";
 import type { PatrolResult, ResultMode, ScreenId } from "../../../../types";
-import { Chip, EmptyState, Panel, SectionTabs } from "../../../../shared/ui";
+import { Button, Chip, CompactTable, EmptyState, FilterBar, IconButton, Panel, SectionTabs, type CompactTableColumn } from "../../../../shared/ui";
 
 export function ResultsJournalPanel({
   mode,
@@ -72,6 +72,37 @@ export function ResultsJournalPanel({
     [dateFrom, dateTo, results, route, search, shift, territory],
   );
   const resultGroups = useMemo(() => buildResultGroups(filteredResults), [filteredResults]);
+  const journalRows = useMemo<JournalRow[]>(
+    () => resultGroups.flatMap((group) => [
+      { group, id: `group:${group.id}` },
+      ...group.results.map((result) => ({ group, id: result.id, result })),
+    ]),
+    [resultGroups],
+  );
+
+  const journalColumns: CompactTableColumn<JournalRow>[] = [
+    { key: "status", header: "Статус", render: (row) => <Chip>{row.result?.status ?? row.group.status}</Chip>, width: "150px" },
+    {
+      key: "point",
+      header: "Точка",
+      render: (row) => row.result ? <span><strong>{row.result.point}</strong><span className="muted-line">ID: {row.result.pointId}</span></span> : <span><strong>{row.group.route}</strong><span className="muted-line">Обход: {formatShortId(row.group.assignmentId)}</span></span>,
+      width: "210px",
+    },
+    { key: "employee", header: "Сотрудник", render: (row) => row.result ? <span><strong>{row.result.employee}</strong><span className="muted-line">ID: {row.result.employeeId}</span></span> : `${row.group.points} точек · ${row.group.issues} замечаний`, width: "210px" },
+    { key: "route", header: "Маршрут", render: (row) => row.result?.route ?? row.group.route, width: "180px" },
+    { key: "shift", header: "Смена", render: (row) => <Chip>{row.result?.shift ?? row.group.shift}</Chip>, width: "110px" },
+    {
+      key: "planned",
+      header: "План / факт",
+      render: (row) => <span>{row.result?.plannedAt ?? row.group.plannedAt}<span className="muted-line">{row.result?.actualAt ?? row.group.actualAt}</span></span>,
+      width: "150px",
+    },
+    { key: "deviation", header: "Отклонение", render: (row) => row.result?.deviation ?? row.group.deviation, width: "120px" },
+    { key: "photos", header: "Фото", render: (row) => row.result?.photos ?? row.group.photos, align: "right", width: "75px" },
+    { key: "issue", header: "Тип замечания", render: (row) => row.result?.issueType ?? row.group.issueType, width: "150px" },
+    { key: "severity", header: "Серьезность", render: (row) => row.result?.severity === "-" || row.group.severity === "-" ? "-" : <Chip>{row.result?.severity ?? row.group.severity}</Chip>, width: "130px" },
+    { key: "comment", header: "Комментарий", render: (row) => row.result?.comment ?? row.group.comment, width: "220px" },
+  ];
 
   useEffect(() => {
     onFiltersChange?.({
@@ -162,9 +193,9 @@ export function ResultsJournalPanel({
       title="Журнал результатов"
       note="Фильтры и таблица результатов обходов"
       actions={
-        <button className="button primary" onClick={exportCsv} type="button">
+        <Button onClick={exportCsv} variant="primary">
           Экспорт
-        </button>
+        </Button>
       }
     >
       <SectionTabs
@@ -177,33 +208,31 @@ export function ResultsJournalPanel({
           { id: "photos", label: "С фото", count: totalResults.filter((item) => item.photos > 0).length },
         ]}
       />
-      <div className="filters">
+      <FilterBar ariaLabel="Фильтры журнала результатов" className="filters">
         <div className="date-range-filter">
           <span>Период</span>
-          <button className="date-range-button" onClick={openPeriodPicker} type="button">
+          <Button className="date-range-button" onClick={openPeriodPicker} variant="ghost">
             <strong>{formatPeriodLabel(dateFrom, dateTo)}</strong>
             <small>Выбрать</small>
-          </button>
+          </Button>
           {periodOpen ? (
             <div className="date-range-popover calendar-popover">
               <div className="date-range-calendar-head">
-                <button
-                  aria-label="Предыдущий месяц"
+                <IconButton
+                  label="Предыдущий месяц"
                   className="icon-button"
                   onClick={() => setPeriodMonth((current) => addMonths(current, -1))}
-                  type="button"
                 >
                   ‹
-                </button>
+                </IconButton>
                 <strong>{formatMonthLabel(periodMonth)}</strong>
-                <button
-                  aria-label="Следующий месяц"
+                <IconButton
+                  label="Следующий месяц"
                   className="icon-button"
                   onClick={() => setPeriodMonth((current) => addMonths(current, 1))}
-                  type="button"
                 >
                   ›
-                </button>
+                </IconButton>
               </div>
               <div className="date-range-calendar-weekdays" aria-hidden="true">
                 {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => (
@@ -227,8 +256,8 @@ export function ResultsJournalPanel({
                 <span>{formatPeriodLabel(periodDraftFrom, periodDraftTo)}</span>
               </div>
               <div className="date-range-actions">
-                <button className="button ghost" onClick={clearPeriod} type="button">Очистить</button>
-                <button className="button primary" onClick={applyPeriod} type="button">Применить</button>
+                <Button onClick={clearPeriod} variant="ghost">Очистить</Button>
+                <Button onClick={applyPeriod} variant="primary">Применить</Button>
               </div>
             </div>
           ) : null}
@@ -274,71 +303,20 @@ export function ResultsJournalPanel({
             value={search}
           />
         </label>
-        <button className="button ghost" onClick={resetFilters} type="button">
+        <Button onClick={resetFilters} variant="ghost">
           Сбросить
-        </button>
-      </div>
+        </Button>
+      </FilterBar>
       {filteredResults.length > 0 ? (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Статус</th>
-                <th>Точка</th>
-                <th>Сотрудник</th>
-                <th>Маршрут</th>
-                <th>Смена</th>
-                <th>План / факт</th>
-                <th>Отклонение</th>
-                <th>Фото</th>
-                <th>Тип замечания</th>
-                <th>Серьезность</th>
-                <th>Комментарий</th>
-              </tr>
-            </thead>
-            <tbody>
-              {resultGroups.map((group) => (
-                <Fragment key={group.id}>
-                  <tr className="result-group-row clickable" onClick={() => onSelectResult(group.firstResultId)}>
-                    <td><Chip>{group.status}</Chip></td>
-                    <td colSpan={3}>
-                      <strong>{group.route}</strong>
-                      <span className="muted-line">
-                        Обход: {formatShortId(group.assignmentId)} · точек: {group.points} · замечаний: {group.issues}
-                      </span>
-                    </td>
-                    <td><Chip>{group.shift}</Chip></td>
-                    <td>{group.plannedAt}<span className="muted-line">{group.actualAt}</span></td>
-                    <td>{group.deviation}</td>
-                    <td>{group.photos}</td>
-                    <td>{group.issueType}</td>
-                    <td>{group.severity === "-" ? "-" : <Chip>{group.severity}</Chip>}</td>
-                    <td>{group.comment}</td>
-                  </tr>
-                  {group.results.map((result) => (
-                    <tr
-                      className={`clickable ${selectedResultId === result.id ? "selected" : ""}`}
-                      key={result.id}
-                      onClick={() => onSelectResult(result.id)}
-                    >
-                      <td><Chip>{result.status}</Chip></td>
-                      <td><strong>{result.point}</strong><span className="muted-line">ID: {result.pointId}</span></td>
-                      <td><strong>{result.employee}</strong><span className="muted-line">ID: {result.employeeId}</span></td>
-                      <td>{result.route}</td>
-                      <td><Chip>{result.shift}</Chip></td>
-                      <td>{result.plannedAt}<span className="muted-line">{result.actualAt}</span></td>
-                      <td className={result.deviation.startsWith("+") ? "danger-text" : "success-text"}>{result.deviation}</td>
-                      <td>{result.photos}</td>
-                      <td>{result.issueType}</td>
-                      <td>{result.severity === "-" ? "-" : <Chip>{result.severity}</Chip>}</td>
-                      <td>{result.comment}</td>
-                    </tr>
-                  ))}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <CompactTable
+          className="results-journal-compact-table"
+          columns={journalColumns}
+          emptyText="Результаты по текущим фильтрам не найдены"
+          getRowClassName={(row) => row.result && selectedResultId === row.result.id ? "selected" : row.result ? "" : "result-group-row"}
+          getRowKey={(row) => row.id}
+          onRowClick={(row) => onSelectResult(row.result?.id ?? row.group.firstResultId)}
+          rows={journalRows}
+        />
       ) : (
         <EmptyState
           title={results.length === 0 ? "Результатов нет" : "По фильтрам ничего не найдено"}
@@ -349,9 +327,9 @@ export function ResultsJournalPanel({
           }
           action={
             results.length === 0 ? (
-              <button className="button ghost" onClick={() => onNavigate("assign")} type="button">Перейти к назначениям</button>
+              <Button onClick={() => onNavigate("assign")} variant="ghost">Перейти к назначениям</Button>
             ) : (
-              <button className="button ghost" onClick={resetFilters} type="button">Сбросить фильтры</button>
+              <Button onClick={resetFilters} variant="ghost">Сбросить фильтры</Button>
             )
           }
         />
@@ -531,6 +509,12 @@ interface ResultGroup {
   shift: PatrolResult["shift"];
   status: PatrolResult["status"];
 }
+
+type JournalRow = {
+  group: ResultGroup;
+  id: string;
+  result?: PatrolResult;
+};
 
 function buildResultGroups(results: PatrolResult[]): ResultGroup[] {
   const groups = new Map<string, PatrolResult[]>();

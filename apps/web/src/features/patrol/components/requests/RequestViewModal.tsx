@@ -1,5 +1,5 @@
 import type { ServiceRequest } from "../../../../types";
-import { Chip, Field } from "../../../../shared/ui";
+import { Button, Chip, Field, ModalShell } from "../../../../shared/ui";
 
 export function RequestViewModal({
   request,
@@ -17,22 +17,22 @@ export function RequestViewModal({
   const timeline = request.timeline.filter(Boolean);
 
   return (
-    <section
-      aria-label="Просмотр заявки на обход"
-      aria-modal="true"
-      className="modal-window request-modal request-view-modal"
-      onMouseDown={(event) => event.stopPropagation()}
-      role="dialog"
+    <ModalShell
+      actions={
+        <>
+          <Button onClick={onCreateRelated} variant="ghost">
+            Повторить заявку
+          </Button>
+          <Button onClick={onClose} variant="primary">
+            Закрыть
+          </Button>
+        </>
+      }
+      className="request-view-modal"
+      onClose={onClose}
+      subtitle={`Заявка на обход · ${request.id}`}
+      title={request.title || "Заявка на обход"}
     >
-      <div className="modal-head">
-        <div>
-          <span className="modal-kicker">Заявка на обход · {request.id}</span>
-          <h2>{request.title || "Заявка на обход"}</h2>
-        </div>
-        <button aria-label="Закрыть" className="modal-close" onClick={onClose} type="button">
-          ×
-        </button>
-      </div>
 
       <div className="request-state-grid">
         <div>
@@ -86,14 +86,6 @@ export function RequestViewModal({
         ) : null}
       </div>
 
-      <div className="modal-actions">
-        <button className="button ghost" onClick={onCreateRelated} type="button">
-          Повторить заявку
-        </button>
-        <button className="button primary" onClick={onClose} type="button">
-          Закрыть
-        </button>
-      </div>
-    </section>
+    </ModalShell>
   );
 }

@@ -25,6 +25,7 @@ import type { EmuWorkspace } from "../../../hooks/useEmuWorkspace";
 import { useStoredState } from "../../../hooks/useStoredState";
 import { hasPermission } from "../../../security/permissions";
 import type { EmployeeDirectoryItem } from "../../../types";
+import { Button, CompactTable, ModalShell, PageHeader, type CompactTableColumn } from "../../../shared/ui";
 import { EmuHistoryFilters } from "./EmuHistoryFilters";
 import { EmuHistoryKpiStrip } from "./EmuHistoryKpiStrip";
 import { EmuHistoryRightPanel } from "./EmuHistoryRightPanel";
@@ -417,22 +418,24 @@ export function EmuWorkHistoryWorkspace({
 
   return (
     <section className={`emu-page emu-history-v2 view-mode-${displayMode}`}>
-      <div className="emu-history-v2-header">
-        <div>
-          <h2>История выполненных работ</h2>
-          <p>Отчеты, анализ времени и результатов по сотрудникам, участкам и карточкам.</p>
-        </div>
-        <div className="emu-history-view-actions">
+      <PageHeader
+        className="emu-history-v2-header"
+        description="Отчеты, анализ времени и результатов по сотрудникам, участкам и карточкам."
+        eyebrow="ЭМУ · ИСТОРИЯ"
+        title="История выполненных работ"
+        actions={(
+          <div className="emu-history-view-actions">
           <span>Обновлено {new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span>
-          <button className="emu-secondary-button" onClick={() => void workspace.reload()} type="button">Обновить</button>
-          <button aria-pressed={displayMode === "detailed"} className={displayMode === "detailed" ? "emu-primary-button" : "emu-secondary-button"} onClick={() => setDisplayMode("detailed")} type="button">
+          <Button onClick={() => void workspace.reload()} variant="secondary">Обновить</Button>
+          <Button aria-pressed={displayMode === "detailed"} onClick={() => setDisplayMode("detailed")} variant={displayMode === "detailed" ? "primary" : "secondary"}>
             <LayoutList size={16} /> Подробный вид
-          </button>
-          <button aria-pressed={displayMode === "compact"} className={displayMode === "compact" ? "emu-primary-button" : "emu-secondary-button"} onClick={() => setDisplayMode("compact")} type="button">
+          </Button>
+          <Button aria-pressed={displayMode === "compact"} onClick={() => setDisplayMode("compact")} variant={displayMode === "compact" ? "primary" : "secondary"}>
             <Grid3X3 size={16} /> Компактный вид
-          </button>
-        </div>
-      </div>
+          </Button>
+          </div>
+        )}
+      />
 
       <EmuHistoryTabs
         activeView={activeView}
@@ -533,10 +536,12 @@ export function EmuWorkHistoryWorkspace({
               setSelectedId={setSelectedId}
             />
           ) : null}
-          {activeView === "employees" ? <EmployeesView rows={employeeBreakdown} selectedEmployeeId={employeeReportId} onPickEmployee={openEmployeeReport} /> : null}
+          {activeView === "employees" ? <EmployeesView errorMessage={workspace.error} loading={historyLoading} rows={employeeBreakdown} selectedEmployeeId={employeeReportId} onPickEmployee={openEmployeeReport} /> : null}
           {activeView === "sections" ? (
             <SectionsView
               expandedSectionId={expandedSectionId}
+              errorMessage={workspace.error}
+              loading={historyLoading}
               loadingSectionId={sectionWorkLoadingId}
               onSectionPageChange={(id, nextPage, nextPageSize) => void loadSectionWorks(id, nextPage, nextPageSize)}
               onToggleSection={(id) => {
@@ -631,15 +636,42 @@ function HistoryPagination({
         </select>
       </label>
       <div>
-        <button className="emu-secondary-button" disabled={loading || result.page <= 1} onClick={() => onPageChange(result.page - 1)} type="button">Назад</button>
+        <Button disabled={loading || result.page <= 1} onClick={() => onPageChange(result.page - 1)} variant="secondary">Назад</Button>
         <strong>{result.page} / {result.pageCount}</strong>
-        <button className="emu-secondary-button" disabled={loading || result.page >= result.pageCount} onClick={() => onPageChange(result.page + 1)} type="button">Вперед</button>
+        <Button disabled={loading || result.page >= result.pageCount} onClick={() => onPageChange(result.page + 1)} variant="secondary">Вперед</Button>
       </div>
     </div>
   );
 }
 
-function EmployeesView({ onPickEmployee, rows, selectedEmployeeId }: { onPickEmployee: (id: string) => void; rows: EmployeeTimeBreakdown[]; selectedEmployeeId: string }) {
+function EmployeesView({
+  errorMessage,
+  loading,
+  onPickEmployee,
+  rows,
+  selectedEmployeeId,
+}: {
+  errorMessage?: string;
+  loading: boolean;
+  onPickEmployee: (id: string) => void;
+  rows: EmployeeTimeBreakdown[];
+  selectedEmployeeId: string;
+}) {
+  const columns: CompactTableColumn<EmployeeTimeBreakdown>[] = [
+    { key: "employee", header: "Сотрудник", render: (employee) => <strong>{employee.employeeName}</strong>, width: "220px" },
+    { key: "works", header: "Работ", render: (employee) => employee.workCount, align: "right", width: "96px" },
+    { key: "work-time", header: "Работа", render: (employee) => formatMinutes(employee.workMinutes), align: "right", width: "120px" },
+    { key: "pauses", header: "Паузы", render: (employee) => formatMinutes(employee.waitingMinutes + employee.otherWorkMinutes), align: "right", width: "120px" },
+    { key: "total", header: "Итого", render: (employee) => formatMinutes(employee.totalMinutes), align: "right", width: "120px" },
+    {
+      key: "average",
+      header: "Среднее",
+      render: (employee) => formatMinutes(employee.workCount ? Math.round(employee.totalMinutes / employee.workCount) : 0),
+      align: "right",
+      width: "120px",
+    },
+  ];
+
   return (
     <>
       <div className="emu-history-card-row">
@@ -651,36 +683,25 @@ function EmployeesView({ onPickEmployee, rows, selectedEmployeeId }: { onPickEmp
           </button>
         ))}
       </div>
-      <table className="emu-history-data-table">
-        <thead>
-          <tr>
-            <th>Сотрудник</th>
-            <th>Работ</th>
-            <th>Работа</th>
-            <th>Паузы</th>
-            <th>Итого</th>
-            <th>Среднее</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((employee) => (
-            <tr key={employee.employeeId} onClick={() => onPickEmployee(employee.employeeId)}>
-              <td><strong>{employee.employeeName}</strong></td>
-              <td>{employee.workCount}</td>
-              <td>{formatMinutes(employee.workMinutes)}</td>
-              <td>{formatMinutes(employee.waitingMinutes + employee.otherWorkMinutes)}</td>
-              <td>{formatMinutes(employee.totalMinutes)}</td>
-              <td>{formatMinutes(employee.workCount ? Math.round(employee.totalMinutes / employee.workCount) : 0)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <CompactTable
+        className="emu-history-table-wrap emu-history-breakdown-table"
+        columns={columns}
+        emptyText="За выбранный период сотрудники не найдены"
+        error={errorMessage}
+        getRowClassName={(employee) => selectedEmployeeId === employee.employeeId ? "selected" : ""}
+        getRowKey={(employee) => employee.employeeId}
+        loading={loading && rows.length === 0}
+        onRowClick={(employee) => onPickEmployee(employee.employeeId)}
+        rows={rows}
+      />
     </>
   );
 }
 
 function SectionsView({
+  errorMessage,
   expandedSectionId,
+  loading,
   loadingSectionId = "",
   onPickSection = () => undefined,
   onSectionPageChange,
@@ -689,7 +710,9 @@ function SectionsView({
   selectedSectionId = "",
   workResults = {},
 }: {
+  errorMessage?: string;
   expandedSectionId?: string;
+  loading: boolean;
   loadingSectionId?: string;
   onPickSection?: (id: string) => void;
   onSectionPageChange?: (id: string, page: number, pageSize: number) => void;
@@ -755,34 +778,26 @@ function SectionsView({
           </button>
         ))}
       </div>
-      <table className="emu-history-data-table">
-        <thead>
-          <tr>
-            <th>Участок</th>
-            <th>Работ</th>
-            <th>Сотрудников</th>
-            <th>Активное время</th>
-            <th>Паузы</th>
-            <th>Среднее</th>
-            <th>Выполнено</th>
-            <th>Проблемы</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((section) => (
-            <tr key={section.sectionId} onClick={() => onPickSection(section.sectionId)}>
-              <td><strong>{section.sectionName}</strong></td>
-              <td>{section.workCount}</td>
-              <td>{section.employeeCount}</td>
-              <td>{formatMinutes(section.workMinutes)}</td>
-              <td>{formatMinutes(section.waitingMinutes)}</td>
-              <td>{formatMinutes(section.averageMinutes)}</td>
-              <td>{section.completedPercent}%</td>
-              <td>{section.problemCount}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <CompactTable
+        className="emu-history-table-wrap emu-history-breakdown-table"
+        columns={[
+          { key: "section", header: "Участок", render: (section) => <strong>{section.sectionName}</strong>, width: "240px" },
+          { key: "works", header: "Работ", render: (section) => section.workCount, align: "right", width: "96px" },
+          { key: "employees", header: "Сотрудников", render: (section) => section.employeeCount, align: "right", width: "128px" },
+          { key: "work-time", header: "Активное время", render: (section) => formatMinutes(section.workMinutes), align: "right", width: "140px" },
+          { key: "pauses", header: "Паузы", render: (section) => formatMinutes(section.waitingMinutes), align: "right", width: "110px" },
+          { key: "average", header: "Среднее", render: (section) => formatMinutes(section.averageMinutes), align: "right", width: "110px" },
+          { key: "completed", header: "Выполнено", render: (section) => `${section.completedPercent}%`, align: "right", width: "110px" },
+          { key: "problems", header: "Проблемы", render: (section) => section.problemCount, align: "right", width: "100px" },
+        ] satisfies CompactTableColumn<SectionBreakdown>[]}
+        emptyText="За выбранный период участки не найдены"
+        error={errorMessage}
+        getRowClassName={(section) => selectedSectionId === section.sectionId ? "selected" : ""}
+        getRowKey={(section) => section.sectionId}
+        loading={loading && rows.length === 0}
+        onRowClick={(section) => onPickSection(section.sectionId)}
+        rows={rows}
+      />
     </>
   );
 }
@@ -886,16 +901,13 @@ function EmployeeReportModal({
   const monthTotals = calculateMonthTotals(summaries);
 
   return (
-    <div className="emu-history-modal-backdrop" role="dialog" aria-modal="true">
-      <section className="emu-history-employee-modal">
-        <header>
-          <div>
-            <span>Отчет по сотруднику</span>
-            <h3>{employee.fullName}</h3>
-            <p>{[employee.personnelNo, employee.position, employee.department].filter(Boolean).join(" · ") || "сотрудник"}</p>
-          </div>
-          <button className="emu-secondary-button" onClick={onClose} type="button">Закрыть</button>
-        </header>
+    <ModalShell
+      className="emu-history-employee-modal"
+      title={`Отчет по сотруднику: ${employee.fullName}`}
+      subtitle={[employee.personnelNo, employee.position, employee.department].filter(Boolean).join(" · ") || "сотрудник"}
+      onClose={onClose}
+      actions={<Button variant="secondary" onClick={onClose}>Закрыть</Button>}
+    >
         <nav>
           <button className={tab === "summary" ? "active" : ""} onClick={() => setTab("summary")} type="button">Сводка</button>
           <button className={tab === "sections" ? "active" : ""} onClick={() => setTab("sections")} type="button">По участкам</button>
@@ -945,8 +957,7 @@ function EmployeeReportModal({
             summaries={summaries}
           />
         ) : null}
-      </section>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -985,7 +996,7 @@ function EmployeeMonthAnalytics({
             Месяц
             <input type="month" value={month} onChange={(event) => onMonthChange(event.target.value)} />
           </label>
-          <button className="emu-secondary-button" onClick={onClose} type="button">Закрыть</button>
+          <Button onClick={onClose} variant="secondary">Закрыть</Button>
         </div>
       </div>
 

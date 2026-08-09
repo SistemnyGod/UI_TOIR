@@ -1,6 +1,6 @@
 import type { FormEvent } from "react";
 import type { RouteDirectoryItem, RoutePoint, RoutePointFormPayload } from "../../../../types";
-import { EmptyState, Field } from "../../../../shared/ui";
+import { Button, EmptyState, Field } from "../../../../shared/ui";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -49,20 +49,13 @@ export function PointEditorForm({
       <EmptyState
         title="Точка не выбрана"
         description="Выберите точку в таблице или добавьте новую."
-        action={<button className="button ghost" onClick={onCreate} type="button">Добавить точку</button>}
+        action={<Button onClick={onCreate} variant="ghost">Добавить точку</Button>}
       />
     );
   }
 
   return (
     <form onSubmit={onSubmit}>
-      <div className="drawer-title">
-        <div>
-          <h2 id="route-point-modal-title">{mode === "create" ? "Новая точка" : "Редактирование точки"}</h2>
-          <p>{route.name}</p>
-        </div>
-        <button className="icon-button" onClick={onCancel} title="Отменить" type="button">×</button>
-      </div>
       <div className="route-point-editor-body">
         <section className="route-point-editor-section">
           <div className="route-point-editor-section-head">
@@ -144,9 +137,9 @@ export function PointEditorForm({
         </div>
       ) : null}
       <div className="drawer-actions">
-        {onDelete ? <button className="button danger-outline" onClick={onDelete} type="button">Удалить</button> : null}
-        <button className="button ghost" onClick={onCancel} type="button">Отмена</button>
-        <button className="button primary" disabled={hasDuplicateTag} type="submit">{mode === "create" ? "Добавить точку" : "Сохранить точку"}</button>
+        {onDelete ? <Button className="danger-outline" onClick={onDelete} variant="danger">Удалить</Button> : null}
+        <Button onClick={onCancel} variant="ghost">Отмена</Button>
+        <Button disabled={hasDuplicateTag} type="submit" variant="primary">{mode === "create" ? "Добавить точку" : "Сохранить точку"}</Button>
       </div>
     </form>
   );

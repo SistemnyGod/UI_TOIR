@@ -1,6 +1,7 @@
 import type { EmuWorkSessionDto } from "../../../../api/contracts";
 import type { EmuWorkspace } from "../../../../hooks/useEmuWorkspace";
 import { collectWorkingConflicts } from "../workAccountingUtils";
+import { Button } from "../../../../shared/ui";
 
 export function CatalogSummary({ onOpenCatalogs, workspace }: { onOpenCatalogs: () => void; workspace: EmuWorkspace }) {
   const sections = workspace.settings.sections;
@@ -29,9 +30,9 @@ export function CatalogSummary({ onOpenCatalogs, workspace }: { onOpenCatalogs: 
           </article>
         ))}
       </div>
-      <button className="emu-secondary-button" onClick={onOpenCatalogs} type="button">
+      <Button onClick={onOpenCatalogs} variant="secondary">
         Открыть справочники
-      </button>
+      </Button>
     </section>
   );
 }
@@ -57,4 +58,3 @@ export function WorkAttentionSummary({ activeWork }: { activeWork: EmuWorkSessio
     </section>
   );
 }
-

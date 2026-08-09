@@ -4,6 +4,7 @@ import type { EmuWorkspace } from "../../../../hooks/useEmuWorkspace";
 import { useStoredState } from "../../../../hooks/useStoredState";
 import { EmployeePicker } from "../components/EmployeePicker";
 import { ModalFrame } from "../components/ModalFrame";
+import { Button } from "../../../../shared/ui";
 import { WorkSummary } from "../components/WorkSummary";
 import { buildCreateWorkEmployeeOptions, buildCreateWorkTemplates } from "../createWorkOptions";
 import { emuCreateWorkDraftKey, type EmuCreateWorkDraft, type EmuEmployeeOption } from "../types";
@@ -107,7 +108,7 @@ export function CreateWorkModal({
         taskDescription,
         workDate,
       });
-      onNotify("Работа отправлена в работу");
+      onNotify("Работа создана и отправлена в работу");
       onClose();
     } catch (error) {
       onNotify(error instanceof Error ? error.message : "Не удалось создать работу");
@@ -128,7 +129,7 @@ export function CreateWorkModal({
       wide
       onClose={onClose}
       subtitle="Заполните участок, время прихода, выберите сотрудников и опишите задачу."
-      title="Отправить в работу / Новая работа"
+      title="Создать работу"
     >
       <div className="emu-create-work-body">
         <section className="emu-create-work-section emu-create-work-basics" aria-label="Параметры работы">
@@ -199,7 +200,7 @@ export function CreateWorkModal({
         </div>
         <div className="emu-create-actions-primary">
           {missingRequirements.length > 0 && !hasConflict ? <span>Заполните: {missingRequirements.join(", ")}</span> : null}
-          <button className="emu-primary-button emu-action-submit" disabled={isSaving || missingRequirements.length > 0 || hasConflict} onClick={() => void submit()} type="button"><span>↗</span> {isSaving ? "Отправляем..." : "Отправить в работу"}</button>
+          <Button className="emu-action-submit" disabled={isSaving || missingRequirements.length > 0 || hasConflict} onClick={() => void submit()} variant="primary"><span>＋</span> {isSaving ? "Создаём..." : "Создать работу"}</Button>
         </div>
       </div>
     </ModalFrame>
@@ -294,7 +295,7 @@ export function EditWorkModal({
       {needsCorrectionComment ? <div className="emu-card-warning">Для ручной корректировки даты или времени нужен комментарий.</div> : null}
       <div className="emu-modal-actions">
         <button onClick={onClose} type="button">Отмена</button>
-        <button className="emu-primary-button" disabled={!sectionId || employeeIds.length === 0 || !taskDescription.trim() || hasConflict || needsCorrectionComment} onClick={() => void submit()} type="button">Сохранить</button>
+        <Button disabled={!sectionId || employeeIds.length === 0 || !taskDescription.trim() || hasConflict || needsCorrectionComment} onClick={() => void submit()} variant="primary">Сохранить</Button>
       </div>
     </ModalFrame>
   );

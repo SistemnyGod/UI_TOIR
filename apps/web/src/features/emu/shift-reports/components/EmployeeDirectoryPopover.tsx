@@ -2,7 +2,7 @@ import { BookUser, ChevronDown, RotateCcw, Search, Star, UserRound, X } from 'lu
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EmuFavoriteEmployeeDto } from '../../../../api/contracts';
 import type { EmuShiftReportEmployeeAssignment, EmuShiftReportEmployeeOptionDto } from '../../../../api/emuShiftReportContracts';
-import { ModalShell } from '../../../../shared/ui';
+import { Button, ModalShell } from '../../../../shared/ui';
 import {
   employeeCategoryLabel,
   filterAndSortEmployees,
@@ -15,6 +15,8 @@ const categoryFilters: Array<{ value: EmployeeCategoryFilter; label: string }> =
   { value: 'electrician', label: 'Электрики' },
   { value: 'other', label: 'Другие' },
 ];
+
+const pageSizeOptions = [5, 10, 25, 50, 100] as const;
 
 type EmployeeDirectoryPopoverProps = {
   employees: EmuShiftReportEmployeeOptionDto[];
@@ -59,6 +61,8 @@ export function EmployeeDirectoryPopover({
   const [department, setDepartment] = useState('');
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(pageSizeOptions[0]);
   const [pendingId, setPendingId] = useState('');
   const [categoryPendingId, setCategoryPendingId] = useState('');
   const [mutationError, setMutationError] = useState('');
@@ -80,6 +84,10 @@ export function EmployeeDirectoryPopover({
     () => filterAndSortEmployees(employees, query, favoriteIds, { category, department, favoriteOnly }),
     [category, department, employees, favoriteIds, favoriteOnly, query],
   );
+  const totalPages = Math.max(1, Math.ceil(visibleEmployees.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  const pagedEmployees = visibleEmployees.slice(pageStart, pageStart + pageSize);
   const activeFilterCount = Number(Boolean(query.trim())) + Number(category !== 'all') + Number(Boolean(department)) + Number(favoriteOnly);
 
   useEffect(() => {
@@ -89,12 +97,15 @@ export function EmployeeDirectoryPopover({
     setDepartment('');
     setQuery('');
     setActiveIndex(0);
+    setPage(1);
+    setPageSize(pageSizeOptions[0]);
     setMutationError('');
     window.requestAnimationFrame(() => searchRef.current?.focus());
   }, [open]);
 
   useEffect(() => {
     setActiveIndex(0);
+    setPage(1);
   }, [category, department, favoriteOnly, query]);
 
   function resetFilters() {
@@ -103,6 +114,7 @@ export function EmployeeDirectoryPopover({
     setDepartment('');
     setQuery('');
     setActiveIndex(0);
+    setPage(1);
     searchRef.current?.focus();
   }
 
@@ -118,7 +130,7 @@ export function EmployeeDirectoryPopover({
     }
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      setActiveIndex((current) => Math.min(current + 1, Math.max(visibleEmployees.length - 1, 0)));
+      setActiveIndex((current) => Math.min(current + 1, Math.max(pagedEmployees.length - 1, 0)));
       return;
     }
     if (event.key === 'ArrowUp') {
@@ -126,9 +138,9 @@ export function EmployeeDirectoryPopover({
       setActiveIndex((current) => Math.max(current - 1, 0));
       return;
     }
-    if (event.key === 'Enter' && visibleEmployees[activeIndex]) {
+    if (event.key === 'Enter' && pagedEmployees[activeIndex]) {
       event.preventDefault();
-      choose(visibleEmployees[activeIndex]);
+      choose(pagedEmployees[activeIndex]);
     }
   }
 
@@ -175,7 +187,7 @@ export function EmployeeDirectoryPopover({
           title='Справочник сотрудников ЭМУ'
           subtitle='Все активные сотрудники предприятия. Категорию отчёта определяет выбранная вкладка формы.'
           onClose={onClose}
-          actions={<button type='button' className='button primary' onClick={onClose}>Готово</button>}
+          actions={<Button onClick={onClose} variant='primary'>Готово</Button>}
         >
           <div className='emu-directory-toolbar'>
             <div className='emu-directory-tabs' role='tablist' aria-label='Категория сотрудников'>
@@ -196,7 +208,7 @@ export function EmployeeDirectoryPopover({
                 aria-label='Поиск сотрудника'
                 aria-expanded='true'
                 aria-controls='emu-directory-listbox'
-                aria-activedescendant={visibleEmployees[activeIndex] ? `emu-directory-option-${visibleEmployees[activeIndex].id}` : undefined}
+                aria-activedescendant={pagedEmployees[activeIndex] ? `emu-directory-option-${pagedEmployees[activeIndex].id}` : undefined}
                 value={query}
                 placeholder='ФИО, табельный номер, должность или подразделение'
                 autoComplete='off'
@@ -229,7 +241,7 @@ export function EmployeeDirectoryPopover({
           </div>
 
           <div id='emu-directory-listbox' className='emu-directory-list' role='listbox' aria-label='Сотрудники' aria-live='polite'>
-            {visibleEmployees.length ? visibleEmployees.map((employee, index) => {
+            {pagedEmployees.length ? pagedEmployees.map((employee, index) => {
               const isFavorite = favoriteIds.has(employee.id);
               const isSelected = selectedEmployeeId === employee.id;
   return (
@@ -284,14 +296,27 @@ export function EmployeeDirectoryPopover({
               <div className='emu-directory-empty'>
                 <strong>Сотрудники не найдены</strong>
                 <small>Измените запрос или сбросьте выбранные фильтры.</small>
-                <button type='button' className='button secondary' onClick={resetFilters}>Сбросить фильтры</button>
+                <Button onClick={resetFilters} variant='secondary'>Сбросить фильтры</Button>
               </div>
             )}
           </div>
 
           <div className='emu-directory-footer'>
-            <span>{visibleEmployees.length} из {employees.length} сотрудников · {favoriteIds.size} избранных · фильтров: {activeFilterCount}</span>
-            {activeFilterCount ? <button type='button' onClick={resetFilters}>Сбросить фильтры</button> : null}
+            <span className='emu-directory-footer-summary'>
+              {visibleEmployees.length ? `${pageStart + 1}–${Math.min(pageStart + pageSize, visibleEmployees.length)} из ${visibleEmployees.length}` : '0'} сотрудников · {favoriteIds.size} избранных · фильтров: {activeFilterCount}
+            </span>
+            <div className='emu-directory-pagination' aria-label='Пагинация сотрудников'>
+              <label>
+                Показывать
+                <select aria-label='Количество сотрудников на странице' value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); setActiveIndex(0); }}>
+                  {pageSizeOptions.map((size) => <option key={size} value={size}>{size}</option>)}
+                </select>
+              </label>
+              <button aria-label='Предыдущая страница' disabled={currentPage <= 1} type='button' onClick={() => { setPage((current) => Math.max(1, current - 1)); setActiveIndex(0); }}>Назад</button>
+              <span aria-live='polite'>Стр. {currentPage} из {totalPages}</span>
+              <button aria-label='Следующая страница' disabled={currentPage >= totalPages} type='button' onClick={() => { setPage((current) => Math.min(totalPages, current + 1)); setActiveIndex(0); }}>Вперёд</button>
+              {activeFilterCount ? <button className='emu-directory-footer-reset' type='button' onClick={resetFilters}>Сбросить фильтры</button> : null}
+            </div>
           </div>
         </ModalShell>
       ) : null}

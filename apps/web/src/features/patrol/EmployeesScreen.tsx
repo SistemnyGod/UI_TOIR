@@ -5,6 +5,7 @@ import { EmployeeMobileAccessPanel } from "./components/employees/EmployeeMobile
 import { EmployeeProfileDrawer } from "./components/employees/EmployeeProfileDrawer";
 import { employeesFallback, findEmployee } from "../../repositories/employeesRepository";
 import { createApiAssignmentsRepository } from "../../repositories/assignmentsRepository";
+import { Button, ModalShell } from "../../shared/ui";
 import {
   loadAssignmentFavoriteEmployeeIds,
   saveAssignmentFavoriteEmployeeIds,
@@ -280,25 +281,23 @@ export function PatrolEmployeePickerModal({
   const pending = isApplying || isSaving;
 
   return (
-    <div className="modal-backdrop" onMouseDown={pending ? undefined : onClose}>
-      <section
-        aria-labelledby="patrol-employee-picker-title"
-        aria-modal="true"
-        className="modal-window patrol-employee-picker-modal"
-        onKeyDown={(event) => {
-          if (event.key === "Escape" && !pending) onClose();
-        }}
-        onMouseDown={(event) => event.stopPropagation()}
-        role="dialog"
-      >
-        <header className="modal-head">
-          <div>
-            <h2 id="patrol-employee-picker-title">Сотрудники для обходов</h2>
-            <p>Выберите сотрудников из общего справочника. Изменения применятся одной операцией после сохранения.</p>
-          </div>
-          <button aria-label="Закрыть" className="icon-button" disabled={pending} onClick={onClose} type="button">×</button>
-        </header>
-
+    <ModalShell
+      className="patrol-employee-picker-modal"
+      title="Сотрудники для обходов"
+      subtitle="Выберите сотрудников из общего справочника. Изменения применятся одной операцией после сохранения."
+      onClose={pending ? () => undefined : onClose}
+      actions={(
+        <>
+          <Button disabled={pending || draftIds.length === 0} onClick={() => setDraftIds([])} variant="ghost">
+            Очистить выбор
+          </Button>
+          <Button disabled={pending} onClick={onClose} variant="ghost">Отмена</Button>
+          <Button disabled={pending} isLoading={pending} onClick={applySelection} variant="primary">
+            Сохранить список
+          </Button>
+        </>
+      )}
+    >
         <div className="patrol-employee-picker-toolbar">
           <label>
             Поиск
@@ -335,17 +334,7 @@ export function PatrolEmployeePickerModal({
           }) : <p className="patrol-employee-picker-empty">По запросу сотрудники не найдены.</p>}
         </div>
 
-        <footer className="modal-actions">
-          <button className="button ghost" disabled={pending || draftIds.length === 0} onClick={() => setDraftIds([])} type="button">
-            Очистить выбор
-          </button>
-          <button className="button ghost" disabled={pending} onClick={onClose} type="button">Отмена</button>
-          <button className="button primary" disabled={pending} onClick={applySelection} type="button">
-            {pending ? "Сохранение..." : "Сохранить список"}
-          </button>
-        </footer>
-      </section>
-    </div>
+    </ModalShell>
   );
 }
 

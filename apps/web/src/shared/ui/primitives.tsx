@@ -252,20 +252,26 @@ function MetricGlyph({ icon, tone }: { icon: string; tone: Tone }) {
 }
 
 export function SectionTabs<T extends string>({
+  activeClassName = "",
+  ariaLabel,
+  className = "",
   value,
   tabs,
   onChange,
 }: {
+  activeClassName?: string;
+  ariaLabel?: string;
+  className?: string;
   value: T;
   tabs: Array<{ id: T; label: string; count?: string | number }>;
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="section-tabs" role="tablist">
+    <div aria-label={ariaLabel} className={`section-tabs ${className}`.trim()} role="tablist">
       {tabs.map((tab) => (
         <button
           aria-selected={value === tab.id}
-          className={`section-tab ${value === tab.id ? "active" : ""}`}
+          className={`section-tab ${value === tab.id ? `active ${activeClassName}` : ""}`.trim()}
           key={tab.id}
           onClick={() => onChange(tab.id)}
           role="tab"

@@ -4,6 +4,7 @@ import type { EmuWorkspace } from "../../../../hooks/useEmuWorkspace";
 import type { EmployeeDirectoryItem } from "../../../../types";
 import type { EmuEmployeeOption } from "../types";
 import { ModalFrame } from "../components/ModalFrame";
+import { Button } from "../../../../shared/ui";
 import { filterEmployees, formatEmployeeShortName, isSystemOtherSection } from "../workAccountingUtils";
 
 type CatalogTab = "sections" | "waitReasons" | "notCompletedReasons" | "templates";
@@ -103,7 +104,7 @@ export function CatalogsModal({ onClose, onNotify, workspace }: { onClose: () =>
             <span className="emu-catalog-save-dot" aria-hidden="true" />
             <span>Изменения сохраняются автоматически после добавления или редактирования.</span>
           </div>
-          <button className="emu-primary-button" onClick={onClose} type="button"><span aria-hidden="true">✓</span> Сохранить и закрыть</button>
+          <Button onClick={onClose} variant="primary"><span aria-hidden="true">✓</span> Сохранить и закрыть</Button>
         </footer>
       </div>
     </ModalFrame>
@@ -295,7 +296,7 @@ export function TemplateBlock({ onNotify, workspace }: { onNotify: (message: str
         <span>Описание и ожидаемый результат</span>
         <textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Кратко опишите, что нужно сделать и какой результат получить" />
       </label>
-      <button className="emu-primary-button emu-template-add-button" disabled={!name.trim()} onClick={() => void create()} type="button">Добавить типовую работу</button>
+      <Button className="emu-template-add-button" disabled={!name.trim()} onClick={() => void create()} variant="primary">Добавить типовую работу</Button>
       <div className="emu-template-list-toolbar">
         <input className="emu-reference-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск по типовым работам" />
         <span>{filteredTemplates.length} из {workspace.settings.workTemplates.length}</span>
@@ -332,7 +333,8 @@ export function FavoritesModal({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [employeeToRemove, setEmployeeToRemove] = useState<EmuEmployeeOption | null>(null);
-  const activeFavoriteIds = new Set(workspace.settings.favoriteEmployees.filter((employee) => employee.isActive).map((employee) => employee.employeeId));
+  const favoriteEmployees = workspace.settings.favoriteEmployees.filter((employee) => employee.isActive);
+  const activeFavoriteIds = new Set(favoriteEmployees.map((employee) => employee.employeeId));
   const candidates = filterEmployees(employeeOptions, search).filter((employee) => !activeFavoriteIds.has(employee.id));
   const totalPages = Math.max(1, Math.ceil(candidates.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -369,18 +371,26 @@ export function FavoritesModal({
   }
 
   return (
-    <ModalFrame className="emu-favorites-modal-frame" wide onClose={onClose} title="Избранные сотрудники ЭМУ">
+    <ModalFrame className="emu-favorites-modal-frame" subtitle="Закрепите сотрудников для быстрого назначения работ" wide onClose={onClose} title="Избранные сотрудники ЭМУ">
       <div className="emu-favorite-grid">
         <section className="emu-reference-block">
-          <h4>Избранные</h4>
+          <div className="emu-reference-heading">
+            <div>
+              <span className="emu-reference-kicker">Быстрый выбор</span>
+              <h4>Избранные сотрудники</h4>
+              <span>{favoriteEmployees.length ? "Закреплены для быстрых назначений" : "Добавьте сотрудников из общего справочника"}</span>
+            </div>
+            <em aria-label={`Избранных сотрудников: ${favoriteEmployees.length}`}>{favoriteEmployees.length}</em>
+          </div>
           <div className="emu-reference-list">
-            {workspace.settings.favoriteEmployees.filter((employee) => employee.isActive).map((employee) => (
+            {favoriteEmployees.map((employee) => (
               <div className="emu-reference-row" key={employee.employeeId}>
                 <span title={employee.fullName}>{formatEmployeeShortName(employee.fullName)}</span>
                 <em>{employee.position || employee.department}</em>
                 <button onClick={() => setEmployeeToRemove({ department: employee.department, fullName: employee.fullName, id: employee.employeeId, personnelNo: employee.personnelNo, position: employee.position, status: employee.status as EmployeeDirectoryItem["status"] })} type="button">Убрать</button>
               </div>
             ))}
+            {favoriteEmployees.length === 0 ? <div className="emu-favorites-empty"><strong>Список пока пуст</strong><span>Найдите сотрудника справа и добавьте его в быстрый список.</span></div> : null}
           </div>
           {employeeToRemove ? (
             <div className="emu-nested-confirm">
@@ -388,7 +398,7 @@ export function FavoritesModal({
               <p>Сотрудник будет скрыт только из быстрого списка. История работ и общий справочник сотрудников не изменятся.</p>
               <div className="emu-modal-actions">
                 <button onClick={() => setEmployeeToRemove(null)} type="button">Отмена</button>
-                <button className="emu-danger-button" onClick={() => void remove(employeeToRemove.id)} type="button">Убрать из избранных</button>
+                <Button onClick={() => void remove(employeeToRemove.id)} variant="danger">Убрать из избранных</Button>
               </div>
             </div>
           ) : null}
@@ -396,12 +406,14 @@ export function FavoritesModal({
         <section className="emu-reference-block">
           <div className="emu-reference-heading">
             <div>
+              <span className="emu-reference-kicker">Каталог</span>
               <h4>Общий справочник сотрудников</h4>
               <span>Найдено {candidates.length} · страница {currentPage} из {totalPages}</span>
             </div>
+            <em aria-label={`Найдено сотрудников: ${candidates.length}`}>{candidates.length}</em>
           </div>
           <div className="emu-reference-toolbar">
-            <input value={search} onChange={(event) => updateSearch(event.target.value)} placeholder="Поиск по ФИО, должности, подразделению" />
+            <input aria-label="Поиск сотрудников" value={search} onChange={(event) => updateSearch(event.target.value)} placeholder="Поиск по ФИО, должности, подразделению" />
             <label>
               Показать
               <select value={pageSize} onChange={(event) => updatePageSize(event.target.value)}>

@@ -1,4 +1,4 @@
-import { EmptyState, Panel } from "../../../../shared/ui";
+import { Button, EmptyState, Panel } from "../../../../shared/ui";
 import type { DataSourceStatus, ScheduleCell, ScheduleMode } from "../../../../types";
 
 interface ScheduleGridPanelProps {
@@ -75,9 +75,9 @@ export function ScheduleGridPanel({
             title="Расписание не загружено"
             description={errorMessage || "Backend API не вернул справочники для формирования плана."}
             action={
-              <button className="button ghost" onClick={() => void onRetry()} type="button">
+              <Button onClick={() => void onRetry()} variant="ghost">
                 Повторить загрузку
-              </button>
+              </Button>
             }
           />
         ) : scheduleCells.length > 0 ? (
@@ -106,13 +106,12 @@ export function ScheduleGridPanel({
             title="Нет данных для расписания"
             description="Добавьте сотрудников и маршруты, затем создайте плановый обход через выбранную ячейку."
             action={
-              <button
-                className="button ghost"
+              <Button
                 onClick={() => onNotify("Для формирования плана нужны сотрудники и маршруты в backend-справочниках")}
-                type="button"
+                variant="ghost"
               >
                 Что нужно подключить
-              </button>
+              </Button>
             }
           />
         )

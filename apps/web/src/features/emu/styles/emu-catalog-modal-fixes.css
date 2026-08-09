@@ -1,9 +1,4 @@
 /* Scroll and density fixes for EMU catalogs/favorites modals. */
-.emu-modal-backdrop {
-  overflow: hidden;
-  padding: 18px;
-}
-
 .emu-modal,
 .emu-modal-wide {
   display: flex;
@@ -89,11 +84,6 @@
 }
 
 @media (max-width: 900px) {
-  .emu-modal-backdrop {
-    align-items: stretch;
-    padding: 8px;
-  }
-
   .emu-modal,
   .emu-modal-wide {
     max-height: calc(100dvh - 16px);

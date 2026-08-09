@@ -62,7 +62,7 @@ export function EmuScreen({
     return (
       <div className="emu-shell">
         <section className="emu-page">
-          <div className="emu-panel emu-empty-state">
+          <div className="emu-panel emu-empty-state" role="status" aria-live="polite" aria-busy="true">
             <strong>Загружаем данные ЭМУ из backend</strong>
             <span>Получаем настройки, активные работы, недельный план и историю изменений.</span>
           </div>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { RouteDirectoryItem } from "../../../../types";
-import { EmptyState, Panel } from "../../../../shared/ui";
+import { Button, EmptyState, Panel } from "../../../../shared/ui";
 
 export function RouteDirectoryPanel({
   canManage = true,
@@ -30,9 +30,9 @@ export function RouteDirectoryPanel({
       title="Маршруты"
       note="Локальный справочник маршрутов и архив"
       actions={
-        <button className="button primary compact-button" disabled={!canManage} onClick={onCreateRoute} type="button">
+        <Button className="compact-button" disabled={!canManage} onClick={onCreateRoute} variant="primary">
           + Создать
-        </button>
+        </Button>
       }
     >
       <label className="full-label">
@@ -63,9 +63,9 @@ export function RouteDirectoryPanel({
           title="Маршрутов нет"
           description="Создайте первый маршрут, затем добавьте точки и NFC-метки."
           action={
-            <button className="button ghost" disabled={!canManage} onClick={onCreateRoute} type="button">
+            <Button disabled={!canManage} onClick={onCreateRoute} variant="ghost">
               Создать маршрут
-            </button>
+            </Button>
           }
         />
       )}

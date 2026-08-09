@@ -4,6 +4,7 @@ import type { EmuWorkspace } from "../../../../hooks/useEmuWorkspace";
 import type { EmuEmployeeOption } from "../types";
 import { EmployeePicker } from "../components/EmployeePicker";
 import { ModalFrame } from "../components/ModalFrame";
+import { Button } from "../../../../shared/ui";
 import { activeSections, formatDate, formatEmployeeShortName, getSystemOtherSection, mondayOf, parseDateInput, toDateInput, toggle } from "../workAccountingUtils";
 
 export function PlanBoardModal({
@@ -256,12 +257,12 @@ export function PlanBoardModal({
               <option>Высокий</option>
               <option>Срочно</option>
             </select>
-            <button className="emu-primary-button" disabled={!title.trim() || employeeIds.length === 0} onClick={() => void createTask()} type="button">{editingTask ? "Сохранить" : "Добавить"}</button>
+            <Button disabled={!title.trim() || employeeIds.length === 0} onClick={() => void createTask()} variant="primary">{editingTask ? "Сохранить" : "Добавить"}</Button>
           </div>
           <label className="emu-textarea-label">Описание<textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Что нужно сделать, критерий выполнения" /></label>
           <div className="emu-plan-options">
-            {editingTask ? <button className="emu-secondary-button" onClick={resetTaskForm} type="button">Отменить изменение</button> : null}
-            {canApprovePlan ? <button className="emu-secondary-button" onClick={() => void approveWeek()} type="button">Согласовать неделю ({weekApprovalCount})</button> : null}
+            {editingTask ? <Button onClick={resetTaskForm} variant="secondary">Отменить изменение</Button> : null}
+            {canApprovePlan ? <Button onClick={() => void approveWeek()} variant="secondary">Согласовать неделю ({weekApprovalCount})</Button> : null}
           </div>
           <div className="emu-check-list compact">
             {employeeOptions.slice(0, 12).map((employee) => (
@@ -277,7 +278,7 @@ export function PlanBoardModal({
       )}
       {!canManagePlan && canApprovePlan ? (
         <div className="emu-plan-options">
-          <button className="emu-secondary-button" onClick={() => void approveWeek()} type="button">Согласовать неделю ({weekApprovalCount})</button>
+          <Button onClick={() => void approveWeek()} variant="secondary">Согласовать неделю ({weekApprovalCount})</Button>
         </div>
       ) : null}
       <div className="emu-kanban">
@@ -317,7 +318,7 @@ export function PlanBoardModal({
           <label className="emu-textarea-label">Комментарий<textarea value={rejectComment} onChange={(event) => setRejectComment(event.target.value)} placeholder="Причина отклонения" /></label>
           <div className="emu-modal-actions">
             <button onClick={() => { setRejectTask(null); setRejectComment(""); }} type="button">Отмена</button>
-            <button className="emu-danger-button" disabled={!rejectComment.trim()} onClick={() => void rejectSelectedTask()} type="button">Отклонить</button>
+            <Button disabled={!rejectComment.trim()} onClick={() => void rejectSelectedTask()} variant="danger">Отклонить</Button>
           </div>
         </div>
       ) : null}
@@ -330,7 +331,7 @@ export function PlanBoardModal({
           <label className="emu-textarea-label">Причина переноса<textarea value={rescheduleComment} onChange={(event) => setRescheduleComment(event.target.value)} placeholder="Почему переносим задачу" /></label>
           <div className="emu-modal-actions">
             <button onClick={() => { setRescheduleTask(null); setRescheduleComment(""); }} type="button">Отмена</button>
-            <button className="emu-primary-button" disabled={!rescheduleComment.trim() || rescheduleDate === rescheduleTask.plannedDate} onClick={() => void confirmRescheduleTask()} type="button">Перенести</button>
+            <Button disabled={!rescheduleComment.trim() || rescheduleDate === rescheduleTask.plannedDate} onClick={() => void confirmRescheduleTask()} variant="primary">Перенести</Button>
           </div>
         </div>
       ) : null}
@@ -340,7 +341,7 @@ export function PlanBoardModal({
           <p>Будет согласовано задач: {weekApprovalCount}. Действие попадет в историю изменений плана.</p>
           <div className="emu-modal-actions">
             <button onClick={() => setConfirmWeekApproval(false)} type="button">Отмена</button>
-            <button className="emu-primary-button" onClick={() => void confirmApproveWeek()} type="button">Согласовать неделю</button>
+            <Button onClick={() => void confirmApproveWeek()} variant="primary">Согласовать неделю</Button>
           </div>
         </div>
       ) : null}

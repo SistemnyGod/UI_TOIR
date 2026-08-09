@@ -5854,8 +5854,15 @@ label textarea {
   display: grid;
   width: min(1060px, calc(100vw - 48px));
   max-height: min(780px, calc(100vh - 48px));
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
+}
+
+.patrol-employee-picker-modal .modal-shell-body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  padding: 0;
 }
 
 .patrol-employee-picker-toolbar {
@@ -9560,7 +9567,7 @@ tr.selected {
   background: #f8fafc;
 }
 
-.drawer-actions .button {
+.drawer-actions :where(.button, .ui-button) {
   min-height: 44px;
   justify-content: center;
   border-radius: 10px;
@@ -10323,7 +10330,7 @@ body,
   min-width: 0;
 }
 
-.dashboard-am-hero span {
+.dashboard-am-hero .ui-page-header__eyebrow {
   display: block;
   margin-bottom: 4px;
   color: var(--am-blue);
@@ -10376,6 +10383,7 @@ body,
 .dashboard-am-kpi {
   display: flex;
   min-height: 116px;
+  min-width: 0;
   align-items: center;
   gap: 14px;
   padding: 14px 18px;
@@ -10410,6 +10418,7 @@ body,
 
 .dashboard-am-kpi p {
   margin: 0;
+  overflow-wrap: anywhere;
   color: #172b52;
   font-size: 13px;
   font-weight: 900;
@@ -10429,7 +10438,7 @@ body,
 .dashboard-am-updated {
   display: block;
   margin-top: 7px;
-  color: var(--am-muted);
+  color: #4f6384;
   font-size: 13px;
   font-weight: 720;
   line-height: 1.35;
@@ -10625,7 +10634,7 @@ body,
 }
 
 .dashboard-am-metrics dt {
-  color: var(--am-muted);
+  color: #526986;
   font-size: 13px;
   font-weight: 800;
 }
@@ -10771,7 +10780,7 @@ body,
 }
 
 .dashboard-am-latest-row span {
-  color: var(--am-muted);
+  color: #4f6384;
   font-size: 12px;
   font-weight: 600;
 }
@@ -10838,7 +10847,7 @@ body,
 .dashboard-am-action-grid small {
   display: block;
   margin-top: 2px;
-  color: #5a6f91;
+  color: #425c7c;
   font-size: 11px;
   font-weight: 800;
   line-height: 1.2;
@@ -10996,7 +11005,7 @@ body,
 
 .dashboard-am-empty span,
 .dashboard-am-error span {
-  color: var(--am-muted);
+  color: #4f6384;
   font-size: 12px;
   line-height: 1.35;
 }
@@ -11011,7 +11020,7 @@ body,
   font-weight: 900;
 }
 
-@media (max-width: 1500px) {
+@media (max-width: 1180px) {
   .dashboard-am-kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -11112,7 +11121,8 @@ body,
     justify-content: flex-start;
   }
 
-  .dashboard-am-hero-actions .button {
+  .dashboard-am-hero-actions .button,
+  .dashboard-am-hero-actions .ui-button {
     flex: 1 1 180px;
   }
 
@@ -11218,7 +11228,8 @@ body,
     grid-template-columns: 1fr;
   }
 
-  .dashboard-am-hero-actions .button {
+  .dashboard-am-hero-actions .button,
+  .dashboard-am-hero-actions .ui-button {
     width: 100%;
   }
 
@@ -18318,7 +18329,7 @@ em,
   color: #0b63f6;
 }
 
-.results-review-filter-tabs button span {
+.results-review-filter-tabs button small {
   min-width: 22px;
   min-height: 22px;
   display: inline-grid;
@@ -18349,102 +18360,6 @@ em,
   background: transparent;
   color: #173762;
   font-weight: 700;
-}
-
-.results-review-row {
-  display: grid;
-  grid-template-columns: 122px minmax(0, 1fr) minmax(130px, auto) auto;
-  gap: 14px;
-  align-items: center;
-  padding: 13px;
-  border: 1px solid #d7e4f5;
-  border-left: 4px solid #0b63f6;
-  border-radius: 12px;
-  background: #fff;
-}
-
-.results-review-row.is-active {
-  border-color: #0b63f6;
-  box-shadow: 0 12px 26px rgba(11, 99, 246, 0.12);
-}
-
-.results-review-row-main {
-  min-width: 0;
-}
-
-.results-review-row-title {
-  display: grid;
-  gap: 2px;
-}
-
-.results-review-row-title h3 {
-  margin: 0;
-  color: #071b3d;
-  font-size: 16px;
-  overflow-wrap: anywhere;
-}
-
-.results-review-row-title span,
-.results-review-row-main p,
-.results-review-row-time span {
-  color: #66728a;
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.results-review-row-main p {
-  margin: 5px 0 0;
-}
-
-.results-review-row-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-top: 9px;
-}
-
-.results-review-row-tags span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 8px;
-  border-radius: 999px;
-  background: #f1f6ff;
-  color: #31517c;
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.results-review-row-tags span.is-warning {
-  background: #fff7ed;
-  color: #c2410c;
-}
-
-.results-review-row-time {
-  display: grid;
-  justify-items: end;
-  gap: 3px;
-}
-
-.results-review-row-time strong {
-  color: #071b3d;
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-.results-review-row-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.results-review-row-actions button {
-  min-height: 34px;
-  padding: 0 11px;
-  border: 1px solid #bfdbfe;
-  border-radius: 9px;
-  background: #eff6ff;
-  color: #0b63f6;
-  font-weight: 750;
 }
 
 .results-review-inspector-content {
@@ -19478,7 +19393,7 @@ em,
   box-shadow: 0 8px 18px rgba(11, 99, 246, 0.22);
 }
 
-.results-review-filter-tabs button.is-active span {
+.results-review-filter-tabs button.is-active small {
   background: rgba(255, 255, 255, 0.18);
   color: #fff;
 }
@@ -20659,7 +20574,6 @@ em,
 .inventory-ppe-wizard-actions button,
 .inventory-dashboard-action,
 .emu-actions button,
-.emu-panel-actions button,
 .emu-modal-actions button,
 .perco-tabs button,
 .perco-action-button,
@@ -20689,7 +20603,6 @@ em,
 .assign-am-panel-action:hover,
 .results-review-row-actions button:hover,
 .inventory-ppe-actions button:hover,
-.emu-panel-actions button:hover,
 .perco-action-button:hover,
 .site-user-row-actions button:hover {
   transform: translateY(-1px);
@@ -20700,7 +20613,6 @@ em,
 .primary-button,
 .create-button,
 .site-user-primary,
-.emu-primary-button,
 .inventory-primary-button,
 .perco-primary-button {
   background: var(--ui-blue);
@@ -20720,12 +20632,6 @@ em,
   border-color: var(--ui-blue-dark);
 }
 
-.emu-primary-button:hover {
-  background: var(--ui-blue);
-  border-color: #8fb8ff;
-  box-shadow: 0 0 0 3px rgba(23, 105, 255, 0.14), 0 10px 22px rgba(23, 105, 255, 0.18);
-}
-
 .button.secondary,
 .button.is-secondary,
 .secondary-button,
@@ -20733,18 +20639,10 @@ em,
 .assign-am-panel-action,
 .results-review-row-actions button,
 .inventory-ppe-actions button,
-.emu-panel-actions button,
 .perco-tabs button,
 .site-user-row-actions button {
   background: #fff;
   border: 1px solid var(--ui-line-strong);
-  color: var(--ui-text);
-}
-
-.emu-panel-actions .emu-primary-button:hover {
-  background: #fff;
-  border-color: #8fb8ff;
-  box-shadow: 0 0 0 3px rgba(23, 105, 255, 0.14), 0 8px 18px rgba(23, 105, 255, 0.12);
   color: var(--ui-text);
 }
 
@@ -21000,7 +20898,6 @@ tr:hover td,
 .inventory-operations-dialog-backdrop,
 .inventory-employees-dialog-backdrop,
 .inventory-ppe-picker-backdrop,
-.emu-modal-backdrop,
 .perco-modal-backdrop,
 .site-user-modal-backdrop {
   align-items: center;
@@ -21205,7 +21102,6 @@ tr:hover td,
   .inventory-operations-dialog-backdrop,
   .inventory-employees-dialog-backdrop,
   .inventory-ppe-picker-backdrop,
-  .emu-modal-backdrop,
   .perco-modal-backdrop,
   .site-user-modal-backdrop {
     align-items: flex-end;
@@ -21528,7 +21424,7 @@ tr:hover td,
   font-weight: 900;
 }
 
-.screen-area :where(.dashboard-am-actions, .dashboard-am-panel-actions, .assign-am-actions, .assign-am-toolbar, .results-review-actions, .results-review-row-actions, .inventory-employees-actions, .inventory-ppe-actions, .inventory-ppe-command-actions, .inventory-ppe-panel-actions, .inventory-ppe-wizard-actions, .emu-heading-actions, .emu-panel-actions, .emu-modal-actions, .perco-actions, .perco-hero-actions, .perco-dashboard-actions, .site-users-toolbar, .site-user-row-actions, .site-user-access-actions, .site-user-modal-actions) {
+.screen-area :where(.dashboard-am-actions, .dashboard-am-panel-actions, .assign-am-actions, .assign-am-toolbar, .results-review-actions, .results-review-row-actions, .inventory-employees-actions, .inventory-ppe-actions, .inventory-ppe-command-actions, .inventory-ppe-panel-actions, .inventory-ppe-wizard-actions, .emu-heading-actions, .emu-modal-actions, .perco-actions, .perco-hero-actions, .perco-dashboard-actions, .site-users-toolbar, .site-user-row-actions, .site-user-access-actions, .site-user-modal-actions) {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
@@ -21645,7 +21541,7 @@ tr:hover td,
   background: #f8fbff;
 }
 
-.screen-area :where(.modal-backdrop, .assign-am-modal-backdrop, .results-review-modal-backdrop, .inventory-settings-modal-backdrop, .inventory-operations-dialog-backdrop, .inventory-employees-dialog-backdrop, .inventory-ppe-picker-backdrop, .emu-modal-backdrop, .perco-modal-backdrop, .site-user-modal-backdrop) {
+.screen-area :where(.modal-backdrop, .assign-am-modal-backdrop, .results-review-modal-backdrop, .inventory-settings-modal-backdrop, .inventory-operations-dialog-backdrop, .inventory-employees-dialog-backdrop, .inventory-ppe-picker-backdrop, .perco-modal-backdrop, .site-user-modal-backdrop) {
   backdrop-filter: blur(7px);
   background: rgba(15, 23, 42, 0.42);
 }
@@ -23172,7 +23068,7 @@ tr:hover td,
   box-shadow: 0 10px 22px rgba(23, 105, 255, 0.22);
 }
 
-.screen-area .results-review-screen .results-review-filter-tabs button span {
+.screen-area .results-review-screen .results-review-filter-tabs button small {
   min-width: 22px;
   height: 22px;
   display: inline-grid;
@@ -23185,7 +23081,7 @@ tr:hover td,
   font-weight: 900;
 }
 
-.screen-area .results-review-screen .results-review-filter-tabs button.is-active span {
+.screen-area .results-review-screen .results-review-filter-tabs button.is-active small {
   background: rgba(255, 255, 255, 0.2);
   color: #fff;
 }
@@ -24690,8 +24586,9 @@ body .app-shell:not(.sidebar-collapsed) .nav-item-label {
   font-size: 13px;
   font-weight: 850;
   line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 body .app-shell:not(.sidebar-collapsed) .nav-chevron {
@@ -24756,8 +24653,9 @@ body .app-shell:not(.sidebar-collapsed) .sidebar-submenu-item strong,
 body .app-shell:not(.sidebar-collapsed) .sidebar-submenu-item small {
   display: block;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 body .app-shell:not(.sidebar-collapsed) .sidebar-submenu-item strong {
@@ -24868,7 +24766,7 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
   box-shadow: 0 10px 22px rgba(22, 119, 255, 0.18);
 }
 
-.screen-area .results-review-screen .results-review-filter-tabs button span {
+.screen-area .results-review-screen .results-review-filter-tabs button small {
   min-width: 22px;
   height: 22px;
   margin-left: 7px;
@@ -24880,7 +24778,7 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
   font-size: 12px;
 }
 
-.screen-area .results-review-screen .results-review-filter-tabs button.is-active span {
+.screen-area .results-review-screen .results-review-filter-tabs button.is-active small {
   background: rgba(255, 255, 255, 0.2);
   color: #ffffff;
 }
@@ -25098,7 +24996,7 @@ body .app-shell:not(.sidebar-collapsed) .module-trigger,
 body .app-shell:not(.sidebar-collapsed) .nav-list > .nav-item {
   border: 1px solid transparent;
   border-radius: 8px;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 8px;
   transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
@@ -25151,7 +25049,7 @@ body .app-shell:not(.sidebar-collapsed) .sidebar-submenu-list {
 body .app-shell:not(.sidebar-collapsed) .sidebar-submenu-item {
   border-radius: 8px;
   grid-template-columns: 26px minmax(0, 1fr);
-  min-height: 36px;
+  min-height: 40px;
   padding: 5px 7px;
   transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }

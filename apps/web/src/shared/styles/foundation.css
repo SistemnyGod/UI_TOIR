@@ -1,0 +1,318 @@
+.ui-page-header {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--space-5);
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.ui-page-header__copy {
+  min-width: 0;
+}
+
+.ui-page-header__eyebrow {
+  color: var(--ui-blue);
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  margin-bottom: var(--space-1);
+  text-transform: uppercase;
+}
+
+.ui-page-header__title {
+  color: var(--color-text-strong);
+  font-size: clamp(22px, 2vw, 28px);
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1.12;
+  margin: 0;
+}
+
+.ui-page-header__description {
+  color: var(--ui-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: var(--space-2) 0 0;
+  max-width: 760px;
+}
+
+.ui-page-header__actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+  .ui-page-header {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .ui-page-header__actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+.ui-page-header__actions > * {
+    width: 100%;
+  }
+}
+
+.ui-filter-bar {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.ui-filter-bar > label,
+.ui-filter-bar > .toolbar-field {
+  min-width: 140px;
+}
+
+.ui-filter-bar input,
+.ui-filter-bar select {
+  max-width: 100%;
+}
+
+.compact-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.compact-table {
+  border-collapse: collapse;
+  min-width: 720px;
+  width: 100%;
+}
+
+.compact-table th,
+.compact-table td {
+  border-bottom: 1px solid var(--ui-border, #dbe5f1);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.compact-table th {
+  background: var(--ui-surface-muted, #f6f9fd);
+  color: var(--ui-muted, #5d718f);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.compact-table td {
+  color: var(--color-text, #1c3151);
+  font-size: 13px;
+}
+
+.compact-table tbody tr[tabindex="0"] {
+  cursor: pointer;
+}
+
+.compact-table tbody tr[tabindex="0"]:focus-visible {
+  outline: 3px solid rgba(23, 105, 255, 0.22);
+  outline-offset: -3px;
+}
+
+.compact-table-empty {
+  color: var(--ui-muted, #5d718f);
+  padding: 28px 16px !important;
+  text-align: center !important;
+}
+
+.compact-table-state {
+  color: var(--ui-muted, #5d718f);
+  font-weight: 700;
+  padding: 28px 16px !important;
+  text-align: center !important;
+}
+
+.compact-table-state-error {
+  color: var(--ui-danger, #b42318);
+}
+
+.emu-history-breakdown-table .compact-table {
+  min-width: 820px;
+}
+
+.route-points-compact-table .compact-table {
+  min-width: 940px;
+}
+
+.route-points-compact-table .compact-table td,
+.emu-history-breakdown-table .compact-table td {
+  overflow-wrap: anywhere;
+}
+
+.modal-shell {
+  background: var(--ui-surface, #ffffff);
+  border: 1px solid var(--ui-border, #dbe5f1);
+  border-radius: var(--ui-radius-card, 14px);
+  box-shadow: var(--ui-shadow-modal, 0 28px 80px rgba(15, 36, 71, 0.24));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: calc(100dvh - 40px);
+  overflow: hidden;
+  width: min(760px, calc(100vw - 40px));
+}
+
+.modal-shell-header {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--ui-border, #dbe5f1);
+  display: flex;
+  gap: var(--space-4);
+  justify-content: space-between;
+  padding: 18px 20px 14px;
+}
+
+.modal-shell-header h2,
+.modal-shell-header p {
+  margin: 0;
+}
+
+.modal-shell-header h2 {
+  color: var(--color-text-strong, #152e56);
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.modal-shell-header p {
+  color: var(--ui-muted, #5d718f);
+  font-size: 12px;
+  line-height: 1.45;
+  margin-top: 6px;
+}
+
+.modal-shell-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 20px;
+}
+
+.modal-shell-actions {
+  align-items: center;
+  border-top: 1px solid var(--ui-border, #dbe5f1);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 12px 20px;
+}
+
+/* ModalShell variants keep the existing patrol layouts while sharing one focus and backdrop contract. */
+.modal-backdrop {
+  overscroll-behavior: contain;
+  z-index: 5000;
+}
+
+.modal-shell.request-create-modal,
+.modal-shell.employee-form-modal {
+  width: min(880px, calc(100vw - 56px));
+}
+
+.modal-shell.request-view-modal,
+.modal-shell.confirm-window {
+  width: min(760px, calc(100vw - 40px));
+}
+
+.modal-shell.assign-am-employee-picker {
+  width: min(980px, calc(100vw - 48px));
+}
+
+.modal-shell.assign-am-shift-modal {
+  width: min(640px, calc(100vw - 48px));
+}
+
+.modal-shell.assign-am-request-modal,
+.modal-shell.route-create-modal {
+  width: min(1120px, calc(100vw - 48px));
+}
+
+.modal-shell.assign-am-complete-modal {
+  width: min(980px, calc(100vw - 48px));
+}
+
+.modal-shell.route-edit-modal {
+  width: min(760px, calc(100vw - 48px));
+}
+
+.modal-shell.route-point-modal {
+  width: min(920px, calc(100vw - 48px));
+}
+
+.modal-shell.schedule-plan-modal {
+  width: min(760px, calc(100vw - 48px));
+}
+
+.modal-shell.results-review-modal {
+  max-height: min(86vh, 900px);
+  width: min(1120px, calc(100vw - 32px));
+}
+
+.modal-shell.results-photo-preview {
+  max-height: min(92vh, 960px);
+  width: min(1280px, calc(100vw - 32px));
+}
+
+.modal-shell.route-create-modal .modal-shell-body,
+.modal-shell.route-edit-modal .modal-shell-body,
+.modal-shell.route-point-modal .modal-shell-body,
+.modal-shell.employee-form-modal .modal-shell-body,
+.modal-shell.request-create-modal .modal-shell-body {
+  padding: 0;
+}
+
+.modal-shell.route-create-modal .modal-shell-body > form,
+.modal-shell.route-point-modal .modal-shell-body > form,
+.modal-shell.employee-form-modal .modal-shell-body > form,
+.modal-shell.request-create-modal .modal-shell-body > form {
+  min-width: 0;
+}
+
+.modal-shell.route-create-modal .route-create-body,
+.modal-shell.route-point-modal .route-point-editor-body,
+.modal-shell.results-review-modal .results-review-modal-body,
+.modal-shell.results-photo-preview .results-photo-preview-body {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .modal-shell.request-create-modal,
+  .modal-shell.employee-form-modal,
+  .modal-shell.request-view-modal,
+  .modal-shell.confirm-window,
+  .modal-shell.assign-am-employee-picker,
+  .modal-shell.assign-am-shift-modal,
+  .modal-shell.assign-am-request-modal,
+  .modal-shell.assign-am-complete-modal,
+  .modal-shell.route-create-modal,
+  .modal-shell.route-edit-modal,
+  .modal-shell.route-point-modal,
+  .modal-shell.schedule-plan-modal,
+  .modal-shell.results-review-modal,
+  .modal-shell.results-photo-preview {
+    max-height: 100dvh;
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .modal-shell {
+    max-height: 100dvh;
+    width: 100%;
+  }
+
+  .modal-shell-body {
+    padding: 14px;
+  }
+}

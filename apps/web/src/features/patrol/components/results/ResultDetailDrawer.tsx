@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { downloadResultAttachment } from "../../../../repositories/resultsRepository";
 import type { PatrolResult, ScreenId } from "../../../../types";
-import { Chip, EmptyState, Field } from "../../../../shared/ui";
+import { Button, Chip, EmptyState, Field } from "../../../../shared/ui";
 
 export function ResultDetailDrawer({
   canCreateRequest = true,
@@ -150,8 +150,7 @@ export function ResultDetailDrawer({
       </ol>
 
       <div className="drawer-actions">
-        <button
-          className="button ghost"
+        <Button
           disabled={!result.attachments?.length}
           onClick={() => {
             const firstAttachment = result.attachments?.[0];
@@ -161,19 +160,19 @@ export function ResultDetailDrawer({
               onNotify("Фото не приложены");
             }
           }}
-          type="button"
+          variant="ghost"
         >
           Открыть вложения
-        </button>
-        <button className="button ghost" onClick={() => onNavigate("routes")} type="button">
+        </Button>
+        <Button onClick={() => onNavigate("routes")} variant="ghost">
           Перейти к маршруту
-        </button>
-        <button className="button ghost" disabled={!canCreateRequest} onClick={() => onCreateRequest(result.id)} type="button">
+        </Button>
+        <Button disabled={!canCreateRequest} onClick={() => onCreateRequest(result.id)} variant="ghost">
           Создать заявку
-        </button>
-        <button className="button primary" onClick={() => onOpenRequest(result.id)} type="button">
+        </Button>
+        <Button onClick={() => onOpenRequest(result.id)} variant="primary">
           Открыть заявку
-        </button>
+        </Button>
       </div>
     </aside>
   );

@@ -102,3 +102,119 @@
     min-height: 44px;
   }
 }
+
+/* Active assignments use the shared table primitive. Keep the table readable on narrow screens through a bounded scroll region. */
+.screen-area .assign-am-screen .patrol-active-assignments-table {
+  max-height: 390px;
+  overflow: auto;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-card);
+  background: var(--ui-surface);
+  scrollbar-width: thin;
+}
+
+.screen-area .assign-am-screen .patrol-active-assignments-table .compact-table {
+  min-width: 900px;
+  table-layout: fixed;
+}
+
+.screen-area .assign-am-screen .patrol-active-assignments-table th,
+.screen-area .assign-am-screen .patrol-active-assignments-table td {
+  padding: 9px 10px;
+}
+
+.screen-area .assign-am-screen .patrol-active-assignments-table td {
+  overflow: hidden;
+}
+
+.screen-area .assign-am-screen .patrol-active-table-primary,
+.screen-area .assign-am-screen .patrol-active-table-route {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen-area .assign-am-screen .patrol-active-table-primary {
+  color: var(--ui-text);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.screen-area .assign-am-screen .patrol-active-table-route {
+  color: var(--ui-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.screen-area .assign-am-screen .patrol-active-table-progress {
+  display: block;
+  width: 100%;
+  max-width: 92px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--ui-border);
+}
+
+.screen-area .assign-am-screen .patrol-active-table-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ui-blue);
+}
+
+.screen-area .assign-am-screen .patrol-active-table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.screen-area .assign-am-screen .patrol-active-table-actions .button {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.screen-area .assign-am-screen .assign-am-picker-empty {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 5px;
+  justify-items: start;
+  padding: 18px;
+  border: 1px dashed var(--ui-border);
+  border-radius: var(--ui-radius-card);
+  background: var(--ui-surface-muted);
+  color: var(--ui-muted);
+}
+
+.screen-area .assign-am-screen .assign-am-picker-empty strong {
+  color: var(--ui-text);
+  font-size: 13px;
+}
+
+.screen-area .assign-am-screen .assign-am-picker-empty span {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.screen-area .assign-am-screen .assign-am-picker-empty .button {
+  margin-top: 4px;
+}
+
+@media (max-width: 760px) {
+  .screen-area .assign-am-screen .patrol-active-assignments-table {
+    max-height: 360px;
+  }
+
+  .screen-area .assign-am-screen .patrol-active-assignments-table .compact-table {
+    min-width: 840px;
+  }
+
+  .screen-area .assign-am-screen .assign-am-picker-empty {
+    padding: 14px;
+  }
+}

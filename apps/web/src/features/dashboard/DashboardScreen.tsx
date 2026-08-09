@@ -2,6 +2,7 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { useResultsWorkspace } from "../../hooks/useResultsWorkspace";
 import { isTerminalPatrolRequestStatus } from "../../domain/patrolRequestStatus";
 import { subscribeAssignmentAutoRefresh } from "../patrol/assignments/assignmentAutoRefresh";
+import { Button, PageHeader, Panel } from "../../shared/ui";
 import type {
   ActivePatrol,
   DataSourceMode,
@@ -158,18 +159,19 @@ export function DashboardScreen({
 
   return (
     <div className="dashboard-am">
-      <section className="dashboard-am-hero">
-        <div>
-          <span>Обход</span>
-          <h1>Дашборд смены</h1>
-          <p>Короткая картина по заявкам, активным обходам, результатам, замечаниям и готовности маршрутов.</p>
-        </div>
-        <div className="dashboard-am-hero-actions">
-          <button className="button primary" onClick={() => onCreateRequest()} type="button">
-            Создать заявку
-          </button>
-        </div>
-      </section>
+      <PageHeader
+        actions={(
+          <div className="dashboard-am-hero-actions">
+            <Button variant="primary" onClick={() => onCreateRequest()}>
+              Создать заявку
+            </Button>
+          </div>
+        )}
+        className="dashboard-am-hero"
+        description="Короткая картина по заявкам, активным обходам, результатам, замечаниям и готовности маршрутов."
+        eyebrow="Обход"
+        title="Дашборд смены"
+      />
 
       <section className="dashboard-am-kpis" aria-label="Показатели смены">
         {kpis.map((card) => (
@@ -192,7 +194,7 @@ export function DashboardScreen({
           onRefreshResults={refreshResults}
           remaining={remaining}
         />
-        <QuickActions onCreateRequest={() => onCreateRequest()} onNavigate={onNavigate} />
+        <QuickActions onNavigate={onNavigate} />
       </section>
 
       <section className="dashboard-am-lists">
@@ -227,12 +229,12 @@ function RoutesEmptyNotice({ onNavigate }: { onNavigate: (screen: ScreenId) => v
         </p>
       </div>
       <div className="dashboard-am-setup-actions">
-        <button className="button primary" onClick={() => onNavigate("routes")} type="button">
+        <Button variant="primary" onClick={() => onNavigate("routes")}>
           Добавить маршрут
-        </button>
-        <button className="button ghost" onClick={() => onNavigate("assign")} type="button">
+        </Button>
+        <Button variant="ghost" onClick={() => onNavigate("assign")}>
           К назначениям
-        </button>
+        </Button>
       </div>
     </article>
   );
@@ -412,10 +414,9 @@ function LatestResultsPreview({
   );
 }
 
-function QuickActions({ onCreateRequest, onNavigate }: { onCreateRequest: () => void; onNavigate: (screen: ScreenId) => void }) {
+function QuickActions({ onNavigate }: { onNavigate: (screen: ScreenId) => void }) {
   const actions: Array<{ icon: DashboardIconName; label: string; hint: string; onClick: () => void }> = [
     { icon: "map", label: "Маршруты", hint: "точки и NFC", onClick: () => onNavigate("routes") },
-    { icon: "document", label: "Новая заявка", hint: "создать обход", onClick: onCreateRequest },
     { icon: "target", label: "Результаты", hint: "журнал обходов", onClick: () => onNavigate("results") },
     { icon: "mobile", label: "Мобильные", hint: "аккаунты входа", onClick: () => onNavigate("accounts") },
   ];
@@ -581,10 +582,10 @@ function ListPanel({
   title: string;
 }) {
   return (
-    <article className="dashboard-am-panel dashboard-am-list-panel">
+    <Panel className="dashboard-am-panel dashboard-am-list-panel">
       <PanelHeader action={action} onAction={onAction} title={title} />
       <div className="dashboard-am-list">{children}</div>
-    </article>
+    </Panel>
   );
 }
 
@@ -593,9 +594,9 @@ function PanelHeader({ action, onAction, title }: { action?: string; onAction?: 
     <header className="dashboard-am-panel-head">
       <h2>{title}</h2>
       {action && onAction ? (
-        <button onClick={onAction} type="button">
+        <Button variant="ghost" onClick={onAction}>
           {action}
-        </button>
+        </Button>
       ) : null}
     </header>
   );

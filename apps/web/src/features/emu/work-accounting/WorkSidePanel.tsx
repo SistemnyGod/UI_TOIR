@@ -9,6 +9,7 @@ import { DecisionList } from "./side/DecisionPanels";
 import { EmployeeWorkloadPanel } from "./side/EmployeeWorkloadPanel";
 import { ShiftAdjustModal, ShiftSummaryPanel } from "./side/ShiftPanels";
 import { activeEmployeeStatus, employeeStatusLabel, employeeWorkloadLabel, formatEmployeeShortName, formatMinutes, initials, toDateInput } from "./workAccountingUtils";
+import { Button } from "../../../shared/ui";
 
 export { ResolveDecisionModal } from "./side/DecisionPanels";
 
@@ -132,7 +133,7 @@ export function WorkSidePanel({
           </div>
         ) : null}
         {canUpdate && !selectedWork.completedAt ? (
-          <button className="emu-secondary-button" onClick={() => onAddEmployee(selectedWork.id)} type="button">+ Добавить сотрудника</button>
+          <Button onClick={() => onAddEmployee(selectedWork.id)} variant="secondary">+ Добавить сотрудника</Button>
         ) : null}
         <div className="emu-side-list">
           {selectedWork.employees.map((employee) => {
@@ -185,7 +186,7 @@ export function WorkSidePanel({
           <em className={`emu-workload-pill status-${selectedEmployee.status}`}>{employeeWorkloadLabel(selectedEmployee.status)}</em>
         </div>
         {canCreate && selectedEmployee.status === "free" ? (
-          <button className="emu-primary-button" onClick={() => onCreateForEmployee(selectedEmployee.employeeId)} type="button">Создать работу</button>
+          <Button onClick={() => onCreateForEmployee(selectedEmployee.employeeId)} variant="primary">Создать работу</Button>
         ) : null}
         <div className="emu-side-list">
           <strong>Текущие карточки</strong>

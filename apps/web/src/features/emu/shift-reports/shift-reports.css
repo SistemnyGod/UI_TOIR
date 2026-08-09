@@ -3615,3 +3615,406 @@
 .emu-history-grid.is-single .emu-history-group {
   grid-column: 1 / -1;
 }
+
+/* Keep the employee directory compact and paginate the visible rows. */
+.emu-shift-report-page .emu-directory-dialog {
+  max-height: min(720px, calc(100dvh - 64px));
+}
+
+.emu-shift-report-page .emu-directory-dialog .modal-shell-body {
+  align-content: start;
+  grid-template-rows: auto auto auto auto;
+}
+
+.emu-shift-report-page .emu-directory-list {
+  height: auto;
+  max-height: min(300px, 38vh);
+  min-height: 0;
+}
+
+.emu-shift-report-page .emu-directory-toolbar {
+  gap: 6px;
+  padding: 10px 14px;
+}
+
+.emu-shift-report-page .emu-directory-tabs,
+.emu-shift-report-page .emu-directory-modes {
+  padding: 3px;
+}
+
+.emu-shift-report-page .emu-directory-tabs button,
+.emu-shift-report-page .emu-directory-modes button {
+  min-height: 32px;
+  padding: 5px 10px;
+}
+
+.emu-shift-report-page .emu-directory-item {
+  min-height: 50px;
+  contain-intrinsic-size: 50px;
+}
+
+.emu-shift-report-page .emu-directory-footer {
+  align-items: center;
+  flex-wrap: wrap;
+  min-height: 48px;
+  padding: 7px 18px;
+  border-top: 1px solid #e0eaf5;
+  background: #f8fbff;
+}
+
+.emu-shift-report-page .emu-directory-footer-summary {
+  color: #627896;
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.emu-shift-report-page .emu-directory-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.emu-shift-report-page .emu-directory-pagination label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #617593;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.emu-shift-report-page .emu-directory-pagination select {
+  min-height: 28px;
+  padding: 0 24px 0 7px;
+  border: 1px solid #c8d9ee;
+  border-radius: 7px;
+  background: #fff;
+  color: #244773;
+  font: inherit;
+  font-weight: 800;
+}
+
+.emu-shift-report-page .emu-directory-pagination > button {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid #c8d9ee;
+  border-radius: 7px;
+  background: #fff;
+  color: #2458a9;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.emu-shift-report-page .emu-directory-pagination > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.emu-shift-report-page .emu-directory-pagination > span {
+  min-width: 64px;
+  color: #536d91;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.emu-shift-report-page .emu-directory-pagination .emu-directory-footer-reset {
+  min-height: 28px;
+  padding-inline: 7px;
+  border: 0;
+  background: transparent;
+  color: #205bd0;
+  font-size: 10px;
+}
+
+@media (max-width: 760px) {
+  .emu-shift-report-page .emu-directory-dialog {
+    max-height: calc(100dvh - 16px);
+  }
+
+  .emu-shift-report-page .emu-directory-list {
+    max-height: min(300px, 42vh);
+  }
+
+  .emu-shift-report-page .emu-directory-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .emu-shift-report-page .emu-directory-footer-summary,
+  .emu-shift-report-page .emu-directory-pagination {
+    margin-left: 0;
+  }
+
+  .emu-shift-report-page .emu-directory-pagination {
+    justify-content: space-between;
+  }
+}
+
+/* A transformed page-transition becomes the containing block for fixed dialogs. */
+.screen-area:has(.emu-shift-report-page .modal-backdrop) .page-transition {
+  animation: none;
+  transform: none;
+}
+
+/* Entry screen visual polish: stronger hierarchy for the daily work form. */
+.emu-entry-page {
+  background:
+    radial-gradient(circle at 88% 0%, rgba(190, 220, 255, 0.62), transparent 34rem),
+    linear-gradient(180deg, #f6faff 0%, #edf4fc 100%);
+}
+
+.emu-entry-page .emu-shift-header {
+  position: relative;
+  isolation: isolate;
+  align-items: center;
+  max-width: 1480px;
+  margin-bottom: 18px;
+  padding: 18px 20px;
+  overflow: hidden;
+  border: 1px solid #cbdff7;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #ffffff 0%, #f6faff 62%, #edf5ff 100%);
+  box-shadow: 0 14px 38px rgba(35, 71, 119, 0.11);
+}
+
+.emu-entry-page .emu-shift-header::after {
+  position: absolute;
+  z-index: -1;
+  top: -90px;
+  right: -50px;
+  width: 280px;
+  height: 220px;
+  border-radius: 50%;
+  background: rgba(105, 165, 245, 0.12);
+  content: "";
+  filter: blur(2px);
+}
+
+.emu-entry-page .emu-shift-header > * {
+  position: relative;
+  z-index: 1;
+}
+
+.emu-entry-page .emu-shift-header h1 {
+  color: #102f5e;
+  font-size: clamp(28px, 2.2vw, 34px);
+}
+
+.emu-entry-page .emu-shift-header p {
+  color: #5d7190;
+}
+
+.emu-entry-page .emu-shift-header-actions {
+  align-items: stretch;
+}
+
+.emu-entry-page .emu-shift-kpis > div {
+  border-color: #c9ddf6;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 8px 20px rgba(45, 88, 143, 0.08);
+}
+
+.emu-entry-page .emu-draft-status {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 10px;
+  padding: 5px 11px;
+  border-color: #cfe2f8;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 5px 14px rgba(45, 88, 143, 0.06);
+}
+
+.emu-entry-page .emu-shift-form {
+  border: 1px solid #c8dcf5;
+  border-radius: 18px;
+  box-shadow: 0 18px 42px rgba(34, 67, 111, 0.12);
+}
+
+.emu-entry-page .emu-shift-tabs-row {
+  gap: 12px;
+  padding: 10px 16px 0;
+  border-bottom: 1px solid #dbe8f8;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+}
+
+.emu-entry-page .emu-shift-tabs {
+  gap: 6px;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.emu-entry-page .emu-shift-tabs button {
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-bottom: 3px solid transparent;
+  border-radius: 10px 10px 0 0;
+}
+
+.emu-entry-page .emu-shift-tabs button.active {
+  border-color: #d2e3f8;
+  border-bottom-color: #2167e8;
+  background: #eef5ff;
+  box-shadow: inset 0 1px 0 #ffffff;
+}
+
+.emu-entry-page .emu-employee-directory-trigger {
+  min-height: 38px;
+  border-color: #c8dbf4;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #2458a9;
+  box-shadow: 0 4px 12px rgba(45, 88, 143, 0.06);
+}
+
+.emu-entry-page .emu-employee-directory-trigger:hover {
+  border-color: #8bb6ef;
+  background: #f2f7ff;
+  box-shadow: 0 7px 16px rgba(45, 88, 143, 0.1);
+}
+
+.emu-entry-page .emu-shift-fields {
+  gap: 14px;
+  padding: 16px;
+  border-bottom-color: #dbe8f8;
+  background: linear-gradient(180deg, #f8fbff 0%, #f2f7fd 100%);
+}
+
+.emu-entry-page .emu-shift-fields input,
+.emu-entry-page .emu-shift-fields select {
+  border-color: #c5d8f0;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.emu-entry-page .emu-shift-segment {
+  border-color: #c5d8f0;
+  border-radius: 11px;
+  background: #edf4fc;
+}
+
+.emu-entry-page .emu-shift-table-wrap {
+  width: calc(100% - 32px);
+  margin: 0 16px;
+  overflow: auto;
+  border: 1px solid #d3e2f5;
+  border-radius: 14px;
+  background: #fbfdff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.emu-entry-page .emu-shift-table {
+  min-width: 920px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.emu-entry-page .emu-shift-table th {
+  height: 38px;
+  padding: 7px 8px;
+  border-bottom: 1px solid #d5e3f4;
+  background: #edf4fc;
+  color: #4f6688;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.emu-entry-page .emu-shift-table td {
+  padding: 8px;
+  border-top-color: #e3edf8;
+}
+
+.emu-entry-page .emu-shift-table tbody tr:nth-child(even) {
+  background: #f8fbff;
+}
+
+.emu-entry-page .emu-shift-table tbody tr:hover {
+  background: #eef6ff;
+}
+
+.emu-entry-page .emu-row-number {
+  border: 1px solid #d3e3f7;
+  background: #eaf3ff;
+  color: #2b5d9f;
+}
+
+.emu-entry-page .emu-shift-table input,
+.emu-entry-page .emu-shift-table select,
+.emu-entry-page .emu-shift-table textarea {
+  border-color: #c8daf1;
+  border-radius: 9px;
+  background: #ffffff;
+}
+
+.emu-entry-page .emu-shift-actions {
+  gap: 10px;
+  padding: 13px 16px;
+  border-top-color: #d3e2f5;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.emu-entry-page .emu-shift-actions .add-row {
+  border-color: #b9d3f4;
+  background: #f0f6ff;
+  color: #1d5fc4;
+}
+
+.emu-entry-page .emu-shift-actions .primary {
+  border-color: #1f65e8;
+  background: linear-gradient(135deg, #2874ef, #1558d5);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+}
+
+@media (max-width: 760px) {
+  .emu-entry-page .emu-shift-header {
+    padding: 16px;
+    border-radius: 15px;
+  }
+
+  .emu-entry-page .emu-draft-status {
+    width: auto;
+    margin-inline: 0;
+  }
+
+  .emu-entry-page .emu-shift-tabs-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .emu-entry-page .emu-shift-tabs button {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .emu-entry-page .emu-employee-directory-trigger {
+    width: 100%;
+  }
+
+  .emu-entry-page .emu-shift-table-wrap {
+    width: calc(100% - 20px);
+    margin-inline: 10px;
+  }
+
+  .emu-entry-page .emu-shift-actions {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding: 12px 10px;
+  }
+
+  .emu-entry-page .emu-shift-actions .primary {
+    grid-column: 1 / -1;
+  }
+
+  .emu-entry-page .emu-row-limit {
+    align-self: center;
+  }
+}

@@ -2,7 +2,10 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
 import "./styles.css";
+import "./shared/styles/tokens.css";
 import "./styles/interface-polish.css";
+import "./shared/styles/foundation.css";
+import "./styles/non-ppe-ui.css";
 
 const chunkReloadKey = "patrol360:chunk-reload";
 

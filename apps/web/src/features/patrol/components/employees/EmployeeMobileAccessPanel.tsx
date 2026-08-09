@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ScreenId } from "../../../../types";
+import { Button, ModalShell } from "../../../../shared/ui";
 
 export function EmployeeMobileAccessPanel({
   onNavigate,
@@ -13,31 +14,18 @@ export function EmployeeMobileAccessPanel({
   return (
     <>
       <div className="employee-access-help-row">
-        <button className="button ghost" onClick={() => setIsHelpOpen(true)} type="button">
+        <Button onClick={() => setIsHelpOpen(true)} variant="ghost">
           Помощь
-        </button>
+        </Button>
       </div>
 
       {isHelpOpen ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setIsHelpOpen(false)}>
-          <section
-            aria-labelledby="employee-access-help-title"
-            className="modal-window employee-access-help-modal"
-            role="dialog"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <header className="modal-head">
-              <div>
-                <h2 id="employee-access-help-title">Как устроен мобильный доступ</h2>
-                <p>
-                  Сотрудники и аккаунты телефона разделены: аккаунт нужен для входа в мобильное приложение, сотрудник привязывается к нему отдельно.
-                </p>
-              </div>
-              <button className="modal-close" onClick={() => setIsHelpOpen(false)} type="button">
-                Закрыть
-              </button>
-            </header>
-
+        <ModalShell
+          className="employee-access-help-modal"
+          onClose={() => setIsHelpOpen(false)}
+          subtitle="Сотрудники и аккаунты телефона разделены: аккаунт нужен для входа в мобильное приложение, сотрудник привязывается к нему отдельно."
+          title="Как устроен мобильный доступ"
+        >
             <div className="employee-access-help-body">
               <div className="access-flow">
                 <div className="access-step">
@@ -58,31 +46,28 @@ export function EmployeeMobileAccessPanel({
               </div>
 
               <div className="access-actions">
-                <button
-                  className="button primary"
+                <Button
                   onClick={() => {
                     setIsHelpOpen(false);
                     onNavigate("accounts");
                   }}
-                  type="button"
+                  variant="primary"
                 >
                   Создать аккаунт телефона
-                </button>
-                <button
-                  className="button ghost"
+                </Button>
+                <Button
                   onClick={() => {
                     setIsHelpOpen(false);
                     onNavigate("accounts");
                     onNotify("Выберите аккаунт телефона и укажите ФИО сотрудника в блоке привязки");
                   }}
-                  type="button"
+                  variant="ghost"
                 >
                   Быстрая привязка
-                </button>
+                </Button>
               </div>
             </div>
-          </section>
-        </div>
+        </ModalShell>
       ) : null}
     </>
   );

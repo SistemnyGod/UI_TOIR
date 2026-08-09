@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bell, CalendarDays, ChevronDown, Clock3, MapPin, Moon, UserRound, X } from "lucide-react";
-import { Chip, Field } from "../../../../shared/ui";
+import { Bell, CalendarDays, ChevronDown, Clock3, MapPin, Moon, UserRound } from "lucide-react";
+import { Button, Chip, Field, ModalShell } from "../../../../shared/ui";
 import type {
   CreateServiceRequestPayload,
   CompleteAssignmentPayload,
@@ -185,20 +185,14 @@ export function ScheduleEditPanel({
   }
 
   return (
-    <aside className="edit-modal schedule-plan-modal" role="dialog" aria-modal="true" aria-labelledby="schedule-plan-modal-title">
-      <div className="drawer-title">
-        <div>
-          <h2 id="schedule-plan-modal-title">{isExisting ? "Плановый обход" : "Создание планового обхода"}</h2>
-          <p>
-            {selected.day} · {selected.shift}
-          </p>
-        </div>
-        <div className="schedule-plan-modal-head-actions">
-          <Chip>{getSelectedChipLabel(selected)}</Chip>
-          <button className="icon-button schedule-plan-close-button" onClick={onClose} type="button" aria-label="Закрыть">
-            <X aria-hidden="true" size={18} strokeWidth={2.6} />
-          </button>
-        </div>
+    <ModalShell
+      className="schedule-plan-modal"
+      onClose={onClose}
+      subtitle={`${selected.day} · ${selected.shift}`}
+      title={isExisting ? "Плановый обход" : "Создание планового обхода"}
+    >
+      <div className="schedule-plan-modal-status">
+        <Chip>{getSelectedChipLabel(selected)}</Chip>
       </div>
 
       {isExisting ? (
@@ -218,60 +212,55 @@ export function ScheduleEditPanel({
                 Для замечаний, выбора точки, severity и фото используйте полную форму результата в назначениях.
               </p>
               <div>
-                <button
-                  className="button ghost"
+                <Button
                   disabled={commandSaving === "complete"}
                   onClick={() => setShowQuickCompleteConfirm(false)}
-                  type="button"
+                  variant="ghost"
                 >
                   Отмена
-                </button>
-                <button
-                  className="button primary"
+                </Button>
+                <Button
                   disabled={!canRunCommand}
                   onClick={() => void runCommand("complete")}
-                  type="button"
+                  variant="primary"
                 >
                   {commandSaving === "complete" ? "Завершение..." : "Подтвердить быстрое завершение"}
-                </button>
+                </Button>
               </div>
             </div>
           ) : null}
 
           <div className="schedule-command-bar">
-            <button
-              className="button ghost"
+            <Button
               disabled={!selected.requestId}
               onClick={() => selected.requestId && onOpenRequestById(selected.requestId)}
-              type="button"
+              variant="ghost"
             >
               Открыть заявку
-            </button>
-            <button
-              className="button ghost"
+            </Button>
+            <Button
               disabled={!canRunCommand}
               onClick={() => void runCommand("start")}
-              type="button"
+              variant="ghost"
             >
               {commandSaving === "start" ? "Запуск..." : "Начать обход"}
-            </button>
-            <button
-              className="button ghost"
+            </Button>
+            <Button
               disabled={!canRunCommand || routeRequiresChecklist}
               onClick={() => void runCommand("complete")}
               title={routeRequiresChecklist ? "Маршрут требует чек-лист точек. Завершите обход на экране назначений." : undefined}
-              type="button"
+              variant="ghost"
             >
               {commandSaving === "complete" ? "Завершение..." : "Быстро завершить"}
-            </button>
-            <button
-              className="button danger-outline"
+            </Button>
+            <Button
+              className="danger-outline"
               disabled={!canRunCommand}
               onClick={() => void runCommand("cancel")}
-              type="button"
+              variant="danger"
             >
               {commandSaving === "cancel" ? "Отмена..." : "Отменить"}
-            </button>
+            </Button>
           </div>
         </>
       ) : null}
@@ -357,24 +346,22 @@ export function ScheduleEditPanel({
       />
 
       <div className="drawer-actions">
-        <button
-          className="button ghost"
+        <Button
           disabled={saving}
           onClick={onClose}
-          type="button"
+          variant="ghost"
         >
           Отмена
-        </button>
-        <button
-          className="button primary"
+        </Button>
+        <Button
           disabled={!canManage || saving || !selectedEmployee || !selectedRoute}
           onClick={() => void submitScheduleItem()}
-          type="button"
+          variant="primary"
         >
           {saving ? "Сохранение..." : isExisting ? "Создать еще обход" : "Сохранить заявку"}
-        </button>
+        </Button>
       </div>
-    </aside>
+    </ModalShell>
   );
 }
 
@@ -464,14 +451,13 @@ function ScheduleResultHistory({
                 <Field label="Комментарий" value={selectedResult.comment || "Без комментария"} />
                 <Field label="Фото" value={`${selectedResult.photos || 0}`} />
               </dl>
-              <button
-                className="button ghost"
+              <Button
                 disabled={!canManage}
                 onClick={() => onApplyResult(selectedResult)}
-                type="button"
+                variant="ghost"
               >
                 Назначить по результату
-              </button>
+              </Button>
             </article>
           ) : null}
       </div>

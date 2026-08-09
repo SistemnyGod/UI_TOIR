@@ -123,7 +123,7 @@ export function WorkCard({
               {!isCompleted && hasPaused && canPause ? <button onClick={() => runQuickAction(onResume)} role="menuitem" type="button">Продолжить</button> : null}
               {!isCompleted && hasWorking && canPause ? <button onClick={() => runQuickAction(onPause)} role="menuitem" type="button">Пауза</button> : null}
               {!isCompleted && canUpdate ? <button onClick={() => runQuickAction(onCarryOver)} role="menuitem" type="button">Перенести</button> : null}
-              {!isCompleted && canComplete ? <button onClick={() => runQuickAction(onComplete)} role="menuitem" type="button">Завершить</button> : null}
+              {!isCompleted && canComplete ? <button onClick={() => runQuickAction(onComplete)} role="menuitem" type="button">Завершить работу</button> : null}
               {canDelete ? <button className="danger" onClick={() => runQuickAction(onDelete)} role="menuitem" type="button">Удалить</button> : null}
             </div>
           </div>,

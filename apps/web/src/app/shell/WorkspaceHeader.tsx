@@ -1,5 +1,5 @@
 import type { ScreenConfig, ScreenId } from "../../types";
-import { Button } from "../../shared/ui/primitives";
+import { Button, PageHeader } from "../../shared/ui";
 
 export function WorkspaceHeader({
   canUsePrimaryAction = true,
@@ -19,12 +19,9 @@ export function WorkspaceHeader({
   }
 
   return (
-    <section className="workspace-head">
-      <div>
-        <h1>{currentScreen.title}</h1>
-        <p>{currentScreen.subtitle}</p>
-      </div>
-      <div className="workspace-actions">
+    <PageHeader
+      actions={(
+        <div className="workspace-actions">
         {screen === "assign" ? (
           <Button variant="ghost" onClick={onPrimaryAction}>
             Проверить маршрут
@@ -38,7 +35,11 @@ export function WorkspaceHeader({
         >
           {screen === "assign" ? "Создать заявку" : currentScreen.createLabel}
         </Button>
-      </div>
-    </section>
+        </div>
+      )}
+      className="workspace-head"
+      description={currentScreen.subtitle}
+      title={currentScreen.title}
+    />
   );
 }

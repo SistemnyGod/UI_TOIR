@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { X } from "lucide-react";
 import type { EmployeeDirectoryItem, EmployeeFormPayload } from "../../../../types";
+import { Button, ModalShell } from "../../../../shared/ui";
 
 type EmployeeFormMode = "create" | "edit";
 
@@ -73,25 +73,13 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
   }
 
   return (
-    <div className="modal-backdrop" onMouseDown={onClose}>
-      <form
-        aria-labelledby="employee-form-title"
-        aria-modal="true"
-        className="modal-window request-modal request-create-modal employee-form-modal"
-        onMouseDown={(event) => event.stopPropagation()}
-        onSubmit={submitForm}
-        role="dialog"
-      >
-        <div className="modal-head">
-          <div>
-            <span className="modal-kicker">Справочник сотрудников</span>
-            <h2 id="employee-form-title">{mode === "create" ? "Создать сотрудника" : "Редактировать сотрудника"}</h2>
-            <p>Данные используются для заявок на обход и привязки к мобильным аккаунтам.</p>
-          </div>
-          <button aria-label="Закрыть" className="modal-close employee-form-close" onClick={onClose} title="Закрыть" type="button">
-            <X aria-hidden="true" size={18} strokeWidth={2.5} />
-          </button>
-        </div>
+    <ModalShell
+      className="request-create-modal employee-form-modal"
+      onClose={onClose}
+      subtitle="Данные используются для заявок на обход и привязки к мобильным аккаунтам."
+      title={mode === "create" ? "Создать сотрудника" : "Редактировать сотрудника"}
+    >
+      <form onSubmit={submitForm}>
 
         {errorMessage ? <div className="employee-form-error" role="alert">{errorMessage}</div> : null}
 
@@ -99,7 +87,6 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
           <label>
             ФИО
             <input
-              autoFocus
               required
               value={draft.fullName}
               onChange={(event) => setDraft({ ...draft, fullName: event.currentTarget.value })}
@@ -198,18 +185,18 @@ export function EmployeeFormModal({ employee, mode, onClose, onDelete, onSubmit,
 
         <div className="modal-actions">
           {mode === "edit" ? (
-            <button className="button danger" disabled={isSubmitting} onClick={deleteEmployee} type="button">
+            <Button disabled={isSubmitting} onClick={deleteEmployee} variant="danger">
               Деактивировать
-            </button>
+            </Button>
           ) : null}
-          <button className="button ghost" disabled={isSubmitting} onClick={onClose} type="button">
+          <Button disabled={isSubmitting} onClick={onClose} variant="ghost">
             Отмена
-          </button>
-          <button className="button primary" disabled={isSubmitting} type="submit">
+          </Button>
+          <Button disabled={isSubmitting} type="submit" variant="primary">
             {isSubmitting ? "Сохранение..." : "Сохранить"}
-          </button>
+          </Button>
         </div>
       </form>
-    </div>
+    </ModalShell>
   );
 }

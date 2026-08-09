@@ -7,10 +7,11 @@ interface PointResultTableProps {
   group: ResultGroup;
   results: PatrolResult[];
   onOpenAttachment: (result: PatrolResult, order?: number) => void;
+  onBeforeOpenAttachment?: (element: HTMLElement) => void;
   photoLoadingResultId: string | null;
 }
 
-export function PointResultTable({ group, results, onOpenAttachment, photoLoadingResultId }: PointResultTableProps) {
+export function PointResultTable({ group, results, onOpenAttachment, onBeforeOpenAttachment, photoLoadingResultId }: PointResultTableProps) {
   const pointOrderByResultId = useMemo(
     () => new Map(group.results.map((result, index) => [result.id, index + 1])),
     [group.results],
@@ -66,6 +67,7 @@ export function PointResultTable({ group, results, onOpenAttachment, photoLoadin
                     isLoading={photoLoadingResultId === result.id}
                     isVideo={firstMedia ? isVideoAttachment(firstMedia) : false}
                     onOpen={() => onOpenAttachment(result, pointOrder)}
+                    onBeforeOpen={(element) => onBeforeOpenAttachment?.(element)}
                     photoCount={photoCount}
                     result={result}
                   />
@@ -85,12 +87,14 @@ function PointPhotoThumb({
   isLoading,
   isVideo,
   onOpen,
+  onBeforeOpen,
   photoCount,
   result,
 }: {
   isLoading: boolean;
   isVideo: boolean;
   onOpen: () => void;
+  onBeforeOpen: (element: HTMLElement) => void;
   photoCount: number;
   result: PatrolResult;
 }) {
@@ -99,7 +103,13 @@ function PointPhotoThumb({
   const previewUrl: string | undefined = undefined;
 
   return (
-    <button type="button" onClick={onOpen} disabled={isLoading} aria-label="Открыть вложения точки">
+    <button
+      type="button"
+      onClick={onOpen}
+      onMouseDown={(event) => onBeforeOpen(event.currentTarget)}
+      disabled={isLoading}
+      aria-label="Открыть вложения точки"
+    >
       {previewUrl ? (
         <img alt={result.point ? `Фото точки ${result.point}` : "Фото точки"} src={previewUrl} />
       ) : (

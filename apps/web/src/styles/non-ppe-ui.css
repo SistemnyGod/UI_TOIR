@@ -1,0 +1,425 @@
+/* Shared finishing layer for Patrol and EMU only. PPE/Inventory has its own UI contract. */
+:where(
+  .emu-shell,
+  .assign-am-screen,
+  .results-review-screen,
+  .employees-screen,
+  .routes-screen,
+  .schedule-screen,
+  .mobile-am-screen
+) {
+  color: var(--color-text, #1c3151);
+}
+
+:where(
+  .emu-shell,
+  .assign-am-screen,
+  .results-review-screen,
+  .employees-screen,
+  .routes-screen,
+  .schedule-screen,
+  .mobile-am-screen
+) :where(.panel, .emu-panel, .assign-am-panel, .results-review-panel) {
+  border-color: var(--ui-border, #dbe5f1);
+  border-radius: 14px;
+  box-shadow: 0 10px 26px rgb(29 72 128 / 6%);
+}
+
+:where(
+  .emu-shell,
+  .assign-am-screen,
+  .results-review-screen,
+  .employees-screen,
+  .routes-screen,
+  .schedule-screen,
+  .mobile-am-screen
+) :where(input, select, textarea):focus-visible {
+  border-color: #4d91ef;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 15%);
+  outline: 0;
+}
+
+:where(
+  .emu-shell,
+  .assign-am-screen,
+  .results-review-screen,
+  .employees-screen,
+  .routes-screen,
+  .schedule-screen,
+  .mobile-am-screen
+) :where(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid rgb(37 99 235 / 24%);
+  outline-offset: 2px;
+}
+
+:where(
+  .emu-shell,
+  .assign-am-screen,
+  .results-review-screen,
+  .employees-screen,
+  .routes-screen,
+  .schedule-screen,
+  .mobile-am-screen
+) :where(.empty-state, .emu-empty-state, .assign-am-empty, .results-review-empty) {
+  border: 1px dashed #c8d9ee;
+  border-radius: 12px;
+  min-height: 112px;
+}
+
+:where(
+  .modal-shell.emu-modal,
+  .modal-shell.assign-am-employee-picker,
+  .modal-shell.assign-am-shift-modal,
+  .modal-shell.assign-am-request-modal,
+  .modal-shell.assign-am-complete-modal,
+  .modal-shell.request-create-modal,
+  .modal-shell.request-view-modal,
+  .modal-shell.employee-form-modal,
+  .modal-shell.employee-access-help-modal,
+  .modal-shell.route-create-modal,
+  .modal-shell.route-edit-modal,
+  .modal-shell.route-point-modal,
+  .modal-shell.schedule-plan-modal,
+  .modal-shell.results-review-modal,
+  .modal-shell.results-photo-preview
+) {
+  border-color: #bcd2ef;
+  box-shadow: 0 28px 80px rgb(9 34 75 / 26%);
+}
+
+:where(
+  .modal-shell.emu-modal,
+  .modal-shell.assign-am-employee-picker,
+  .modal-shell.assign-am-shift-modal,
+  .modal-shell.assign-am-request-modal,
+  .modal-shell.assign-am-complete-modal,
+  .modal-shell.request-create-modal,
+  .modal-shell.request-view-modal,
+  .modal-shell.employee-form-modal,
+  .modal-shell.employee-access-help-modal,
+  .modal-shell.route-create-modal,
+  .modal-shell.route-edit-modal,
+  .modal-shell.route-point-modal,
+  .modal-shell.schedule-plan-modal,
+  .modal-shell.results-review-modal,
+  .modal-shell.results-photo-preview
+) .modal-shell-header {
+  background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
+}
+
+:where(
+  .modal-shell.emu-modal,
+  .modal-shell.assign-am-employee-picker,
+  .modal-shell.assign-am-shift-modal,
+  .modal-shell.assign-am-request-modal,
+  .modal-shell.assign-am-complete-modal,
+  .modal-shell.request-create-modal,
+  .modal-shell.request-view-modal,
+  .modal-shell.employee-form-modal,
+  .modal-shell.employee-access-help-modal,
+  .modal-shell.route-create-modal,
+  .modal-shell.route-edit-modal,
+  .modal-shell.route-point-modal,
+  .modal-shell.schedule-plan-modal,
+  .modal-shell.results-review-modal,
+  .modal-shell.results-photo-preview,
+  .modal-shell.emu-directory-dialog
+) .modal-shell-close {
+  align-items: center;
+  appearance: none;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f8ff 100%);
+  border: 1px solid #c9dbf2;
+  border-radius: 11px;
+  box-shadow: 0 3px 10px rgb(38 84 145 / 10%);
+  color: #355579;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 38px;
+  justify-content: center;
+  min-height: 38px;
+  min-width: 38px;
+  padding: 0;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+:where(
+  .modal-shell.emu-modal,
+  .modal-shell.assign-am-employee-picker,
+  .modal-shell.assign-am-shift-modal,
+  .modal-shell.assign-am-request-modal,
+  .modal-shell.assign-am-complete-modal,
+  .modal-shell.request-create-modal,
+  .modal-shell.request-view-modal,
+  .modal-shell.employee-form-modal,
+  .modal-shell.employee-access-help-modal,
+  .modal-shell.route-create-modal,
+  .modal-shell.route-edit-modal,
+  .modal-shell.route-point-modal,
+  .modal-shell.schedule-plan-modal,
+  .modal-shell.results-review-modal,
+  .modal-shell.results-photo-preview,
+  .modal-shell.emu-directory-dialog
+) .modal-shell-close:hover {
+  background: linear-gradient(180deg, #eef6ff 0%, #e4efff 100%);
+  border-color: #8db5ed;
+  box-shadow: 0 7px 16px rgb(37 99 235 / 16%);
+  color: #1457a6;
+  transform: translateY(-1px);
+}
+
+:where(
+  .modal-shell.emu-modal,
+  .modal-shell.assign-am-employee-picker,
+  .modal-shell.assign-am-shift-modal,
+  .modal-shell.assign-am-request-modal,
+  .modal-shell.assign-am-complete-modal,
+  .modal-shell.request-create-modal,
+  .modal-shell.request-view-modal,
+  .modal-shell.employee-form-modal,
+  .modal-shell.employee-access-help-modal,
+  .modal-shell.route-create-modal,
+  .modal-shell.route-edit-modal,
+  .modal-shell.route-point-modal,
+  .modal-shell.schedule-plan-modal,
+  .modal-shell.results-review-modal,
+  .modal-shell.results-photo-preview,
+  .modal-shell.emu-directory-dialog
+) .modal-shell-close:focus-visible {
+  outline: 3px solid rgb(37 99 235 / 24%);
+  outline-offset: 2px;
+}
+
+/* The employee directory is portalled to body, so keep its controls scoped to the dialog. */
+.modal-shell.emu-directory-dialog .emu-directory-reset,
+.modal-shell.emu-directory-dialog .emu-directory-footer-reset {
+  align-items: center;
+  appearance: none;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f8ff 100%);
+  border: 1px solid #c9dbf2;
+  border-radius: 9px;
+  box-shadow: 0 2px 7px rgb(38 84 145 / 8%);
+  color: #315a91;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  gap: 6px;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 11px;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.modal-shell.emu-directory-dialog .emu-directory-reset:hover,
+.modal-shell.emu-directory-dialog .emu-directory-footer-reset:hover {
+  background: #eef6ff;
+  border-color: #8db5ed;
+  box-shadow: 0 6px 14px rgb(37 99 235 / 12%);
+  color: #1457a6;
+  transform: translateY(-1px);
+}
+
+.modal-shell.emu-directory-dialog .emu-directory-reset:active,
+.modal-shell.emu-directory-dialog .emu-directory-footer-reset:active {
+  box-shadow: 0 2px 7px rgb(38 84 145 / 8%);
+  transform: translateY(0);
+}
+
+.modal-shell.emu-directory-dialog .emu-directory-footer {
+  align-items: center;
+  background: #f8fbff;
+  border-top: 1px solid #e0eaf5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 8px 18px;
+  text-align: left;
+}
+
+.modal-shell.emu-directory-dialog .emu-directory-footer-summary {
+  color: #627896;
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.modal-shell.emu-directory-dialog .emu-directory-pagination {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.modal-shell.emu-directory-dialog .emu-directory-pagination label {
+  align-items: center;
+  color: #617593;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 800;
+  gap: 5px;
+}
+
+.modal-shell.emu-directory-dialog .emu-directory-pagination select {
+  appearance: none;
+  background: #ffffff;
+  border: 1px solid #c8d9ee;
+  border-radius: 8px;
+  color: #244773;
+  font: inherit;
+  font-weight: 800;
+  min-height: 32px;
+  min-width: 64px;
+  padding: 0 25px 0 9px;
+}
+
+.modal-shell.emu-directory-dialog .emu-directory-pagination > button {
+  align-items: center;
+  appearance: none;
+  background: #ffffff;
+  border: 1px solid #c8d9ee;
+  border-radius: 8px;
+  color: #2458a9;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 11px;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.modal-shell.emu-directory-dialog .emu-directory-pagination > button:not(:disabled):hover {
+  background: #eef6ff;
+  border-color: #8db5ed;
+  box-shadow: 0 6px 14px rgb(37 99 235 / 12%);
+  color: #1457a6;
+  transform: translateY(-1px);
+}
+
+.modal-shell.emu-directory-dialog .emu-directory-pagination > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.modal-shell.emu-directory-dialog .emu-directory-pagination > span {
+  color: #536d91;
+  font-size: 10px;
+  font-weight: 800;
+  min-width: 64px;
+  text-align: center;
+}
+
+.modal-shell.emu-directory-dialog .modal-shell-actions {
+  background: #ffffff;
+  padding: 10px 18px 12px;
+}
+
+.modal-shell.emu-directory-dialog .modal-shell-actions .ui-button.is-primary {
+  background: linear-gradient(180deg, #2476ff 0%, #1769ff 100%);
+  border: 1px solid #1769ff;
+  border-radius: 10px;
+  box-shadow: 0 8px 18px rgb(23 105 255 / 20%);
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  min-height: 38px;
+  padding: 0 16px;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.modal-shell.emu-directory-dialog .modal-shell-actions .ui-button.is-primary:hover {
+  background: linear-gradient(180deg, #3984ff 0%, #0f5ee8 100%);
+  border-color: #0f5ee8;
+  box-shadow: 0 11px 22px rgb(23 105 255 / 26%);
+  transform: translateY(-1px);
+}
+
+.modal-shell.emu-directory-dialog :is(button, select):focus-visible {
+  outline: 3px solid rgb(37 99 235 / 24%);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  :where(
+    .modal-shell.emu-modal,
+    .modal-shell.assign-am-employee-picker,
+    .modal-shell.assign-am-shift-modal,
+    .modal-shell.assign-am-request-modal,
+    .modal-shell.assign-am-complete-modal,
+    .modal-shell.request-create-modal,
+    .modal-shell.request-view-modal,
+    .modal-shell.employee-form-modal,
+    .modal-shell.employee-access-help-modal,
+    .modal-shell.route-create-modal,
+    .modal-shell.route-edit-modal,
+    .modal-shell.route-point-modal,
+    .modal-shell.schedule-plan-modal,
+    .modal-shell.results-review-modal,
+    .modal-shell.results-photo-preview
+  ) .modal-shell-header {
+    padding: 14px;
+  }
+
+  :where(
+    .modal-shell.emu-modal,
+    .modal-shell.assign-am-employee-picker,
+    .modal-shell.assign-am-shift-modal,
+    .modal-shell.assign-am-request-modal,
+    .modal-shell.assign-am-complete-modal,
+    .modal-shell.request-create-modal,
+    .modal-shell.request-view-modal,
+    .modal-shell.employee-form-modal,
+    .modal-shell.employee-access-help-modal,
+    .modal-shell.route-create-modal,
+    .modal-shell.route-edit-modal,
+    .modal-shell.route-point-modal,
+    .modal-shell.schedule-plan-modal,
+    .modal-shell.results-review-modal,
+    .modal-shell.results-photo-preview
+  ) .modal-shell-actions {
+    padding: 10px 14px max(10px, env(safe-area-inset-bottom));
+  }
+
+  .modal-shell.emu-directory-dialog .emu-directory-footer {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 8px 12px;
+  }
+
+  .modal-shell.emu-directory-dialog .emu-directory-footer-summary,
+  .modal-shell.emu-directory-dialog .emu-directory-pagination {
+    margin-left: 0;
+  }
+
+  .modal-shell.emu-directory-dialog .emu-directory-pagination {
+    justify-content: space-between;
+    width: 100%;
+  }
+}

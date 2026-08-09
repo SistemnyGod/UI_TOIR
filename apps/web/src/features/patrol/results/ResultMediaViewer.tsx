@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, FileText, Image as ImageIcon, Video, X } from "lucide-react";
+import type { RefObject } from "react";
+import { AlertTriangle, CheckCircle2, FileText, Image as ImageIcon, Video } from "lucide-react";
 import { downloadResultAttachment } from "../../../repositories/resultsRepository";
+import { ModalShell } from "../../../shared/ui";
 import type { PatrolResult, PatrolResultAttachment } from "../../../types";
 
 export interface ResultMediaPreviewState {
@@ -15,9 +17,10 @@ interface ResultMediaViewerProps {
   onClose: () => void;
   onDownload: (attachment: PatrolResultAttachment) => void;
   onSelect: (index: number) => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
-export function ResultMediaViewer({ preview, onClose, onDownload, onSelect }: ResultMediaViewerProps) {
+export function ResultMediaViewer({ preview, onClose, onDownload, onSelect, returnFocusRef }: ResultMediaViewerProps) {
   const attachment = preview.attachments[preview.index] ?? preview.attachments[0];
   const [objectUrl, setObjectUrl] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -57,16 +60,13 @@ export function ResultMediaViewer({ preview, onClose, onDownload, onSelect }: Re
   if (!attachment) return null;
 
   return (
-    <div className="results-photo-preview-backdrop" onMouseDown={onClose}>
-      <section className="results-photo-preview" role="dialog" aria-modal="true" aria-label="Просмотр вложений точки обхода" onMouseDown={(event) => event.stopPropagation()}>
-        <header className="results-photo-preview-head">
-          <div>
-            <p>Вложения точки обхода</p>
-            <h2>{preview.result.point}</h2>
-            <span>{preview.result.route} · {formatPointActualTime(preview.result.actualAt)}</span>
-          </div>
-          <button type="button" aria-label="Закрыть просмотр" onClick={onClose}><X size={20} /></button>
-        </header>
+    <ModalShell
+      className="results-photo-preview"
+      onClose={onClose}
+      restoreFocusRef={returnFocusRef}
+      subtitle={`${preview.result.route} · ${formatPointActualTime(preview.result.actualAt)}`}
+      title={preview.result.point || "Вложения точки обхода"}
+    >
 
         <div className="results-photo-preview-body">
           <aside className="results-photo-preview-list" aria-label="Список вложений">
@@ -150,8 +150,7 @@ export function ResultMediaViewer({ preview, onClose, onDownload, onSelect }: Re
             </button>
           </div>
         </footer>
-      </section>
-    </div>
+    </ModalShell>
   );
 }
 

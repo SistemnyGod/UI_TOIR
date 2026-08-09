@@ -1,5 +1,6 @@
 import { CalendarDays, ChevronDown, ChevronUp, Download, Filter, RotateCcw, Search, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Button, FilterBar, IconButton } from "../../../shared/ui";
 import { addMonths, buildCalendarDays, formatDate, formatMonthLabel, formatPeriodLabel, getCalendarDayClass, normalizeDateRange, parseDateKey, startOfMonth } from "../../patrol/assignments/assignmentDateUtils";
 import { statusFilterOptions } from "./emuHistoryTypes";
 
@@ -161,21 +162,21 @@ export function EmuHistoryFilters({
   }
 
   return (
-    <section className="emu-history-filter-card">
+    <FilterBar ariaLabel="Фильтры истории выполненных работ" className="emu-history-filter-card">
       <div className="emu-history-period-field">
         <span>Период</span>
         <div className="emu-history-period-picker">
           <CalendarDays size={16} />
-          <button aria-expanded={periodOpen} aria-haspopup="dialog" className="emu-history-period-trigger" onClick={openPeriodPicker} type="button">
+          <Button aria-expanded={periodOpen} aria-haspopup="dialog" className="emu-history-period-trigger" onClick={openPeriodPicker} variant="ghost">
             <strong>{formatPeriodLabel(dateFrom, dateTo)}</strong>
             <small>{periodOpen ? "Закрыть" : "Выбрать"}</small>
-          </button>
+          </Button>
           {periodOpen ? (
             <div className="emu-history-period-popover date-range-popover calendar-popover" role="dialog" aria-label="Выбор периода">
               <div className="date-range-calendar-head">
-                <button aria-label="Предыдущий месяц" className="icon-button" onClick={() => setPeriodMonth((current) => addMonths(current, -1))} type="button">‹</button>
+                <IconButton label="Предыдущий месяц" className="icon-button" onClick={() => setPeriodMonth((current) => addMonths(current, -1))}>‹</IconButton>
                 <strong>{formatMonthLabel(periodMonth)}</strong>
-                <button aria-label="Следующий месяц" className="icon-button" onClick={() => setPeriodMonth((current) => addMonths(current, 1))} type="button">›</button>
+                <IconButton label="Следующий месяц" className="icon-button" onClick={() => setPeriodMonth((current) => addMonths(current, 1))}>›</IconButton>
               </div>
               <div className="date-range-calendar-weekdays" aria-hidden="true">
                 {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => <span key={day}>{day}</span>)}
@@ -192,8 +193,8 @@ export function EmuHistoryFilters({
                 <small>{periodDraftFrom && !periodDraftTo ? "Теперь выберите дату окончания" : "Диапазон готов к применению"}</small>
               </div>
               <div className="date-range-actions">
-                <button className="emu-secondary-button" onClick={clearPeriod} type="button">Очистить</button>
-                <button className="emu-primary-button" disabled={!periodDraftFrom || !periodDraftTo} onClick={applyPeriod} type="button">Применить</button>
+                <Button onClick={clearPeriod} variant="secondary">Очистить</Button>
+                <Button disabled={!periodDraftFrom || !periodDraftTo} onClick={applyPeriod} variant="primary">Применить</Button>
               </div>
             </div>
           ) : null}
@@ -223,10 +224,10 @@ export function EmuHistoryFilters({
           />
         </div>
         {employeeId && selectedEmployee ? (
-          <button className="emu-history-selected-employee" onClick={() => { setEmployeeId(""); setEmployeeSearch(""); }} type="button">
+          <Button className="emu-history-selected-employee" onClick={() => { setEmployeeId(""); setEmployeeSearch(""); }} variant="ghost">
             {selectedEmployee.fullName}
             <span>Сбросить</span>
-          </button>
+          </Button>
         ) : employeeSearch.trim().length >= 2 ? (
           <div className="emu-history-employee-results">
             {filteredEmployeeOptions.map((employee) => (
@@ -293,10 +294,10 @@ export function EmuHistoryFilters({
         </label>
       ) : null}
       <div className="emu-history-filter-settings">
-        <button className="emu-history-filter-settings-toggle" onClick={() => setFilterSettingsOpen((value) => !value)} type="button">
+        <Button className="emu-history-filter-settings-toggle" onClick={() => setFilterSettingsOpen((value) => !value)} variant="ghost">
           <Settings2 size={15} /> Настроить фильтры <span>{visibleFilterCount}/{visibleFilterOptions.length}</span>
           {filterSettingsOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-        </button>
+        </Button>
         {filterSettingsOpen ? (
           <div className="emu-history-filter-settings-menu" role="group" aria-label="Видимые дополнительные фильтры">
             {visibleFilterOptions.map((option) => (
@@ -317,11 +318,11 @@ export function EmuHistoryFilters({
           </div>
         ) : <span className="emu-history-filter-hidden-note">Дополнительные флаги скрыты</span>}
         <div className="emu-history-filter-buttons">
-          <button className="emu-primary-button" onClick={onApply} type="button"><Filter size={16} /> Применить</button>
-          <button className="emu-secondary-button" onClick={onReset} type="button"><RotateCcw size={16} /> Сбросить</button>
-          {canExportReports ? <button className="emu-secondary-button" onClick={onExport} type="button"><Download size={16} /> Экспорт</button> : null}
+          <Button onClick={onApply} variant="primary"><Filter size={16} /> Применить</Button>
+          <Button onClick={onReset} variant="secondary"><RotateCcw size={16} /> Сбросить</Button>
+          {canExportReports ? <Button onClick={onExport} variant="secondary"><Download size={16} /> Экспорт</Button> : null}
         </div>
       </div>
-    </section>
+    </FilterBar>
   );
 }

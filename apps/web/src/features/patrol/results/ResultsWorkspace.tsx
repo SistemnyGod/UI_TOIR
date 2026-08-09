@@ -10,6 +10,7 @@ import {
   ExternalLink,
   FileText,
   MapPinned,
+  MoreVertical,
   PlusCircle,
   RefreshCw,
   Search,
@@ -24,8 +25,8 @@ import type { DataSourceMode, PatrolResult, PatrolResultAttachment, ResultMode, 
 import { PatrolResultDetails } from "./PatrolResultDetails";
 import { ResultMediaViewer, type ResultMediaPreviewState } from "./ResultMediaViewer";
 import { FoundRemarksView } from "./FoundRemarksView";
-import { ResultsListRow } from "./ResultsListRow";
 import type { DurationSummary, ResultGroup } from "./resultTypes";
+import { Button, CompactTable, PageHeader, SectionTabs, type CompactTableColumn } from "../../../shared/ui";
 import "./resultsWorkspace.css";
 
 export interface ResultsScreenProps {
@@ -99,6 +100,7 @@ export function ResultsWorkspace({
   const detailRequestsRef = useRef(new Map<string, Promise<PatrolResult>>());
   const [photoLoadingResultId, setPhotoLoadingResultId] = useState<string | null>(null);
   const [mediaPreview, setMediaPreview] = useState<ResultMediaPreviewState | null>(null);
+  const mediaTriggerRef = useRef<HTMLElement | null>(null);
   const [activeView, setActiveView] = useState<"results" | "remarks">("results");
   const [exportInProgress, setExportInProgress] = useState(false);
   const [mutatingGroupId, setMutatingGroupId] = useState<string | null>(null);
@@ -374,6 +376,93 @@ export function ResultsWorkspace({
     addToast?.("Открыта форма заявки по результату обхода", "success");
   };
 
+  const resultColumns: CompactTableColumn<ResultGroup>[] = [
+    {
+      key: "status",
+      header: "Статус",
+      render: (group) => <StatusPill issue={group.issuePoints > 0 || group.issues > 0} />,
+      width: "150px",
+    },
+    {
+      key: "route",
+      header: "Маршрут / сотрудник",
+      render: (group) => (
+        <span className="results-review-table-main">
+          <strong>{group.route}</strong>
+          <span>{group.employee} · {group.territory}</span>
+        </span>
+      ),
+      width: "260px",
+    },
+    { key: "shift", header: "Смена", render: (group) => displayShift(group.shift), width: "110px" },
+    {
+      key: "time",
+      header: "Время",
+      render: (group) => (
+        <span className="results-review-table-meta">
+          <strong>{group.firstScanAt ?? "нет времени"}</strong>
+          <small>{group.duration.label}</small>
+        </span>
+      ),
+      width: "150px",
+    },
+    {
+      key: "points",
+      header: "Точки",
+      render: (group) => (
+        <span className="results-review-table-meta">
+          <strong>{group.points}</strong>
+          <small>{group.okPoints} исправно · {group.issuePoints} проблем</small>
+        </span>
+      ),
+      align: "right",
+      width: "150px",
+    },
+    { key: "photos", header: "Медиа", render: (group) => group.photos, align: "right", width: "80px" },
+    {
+      key: "actions",
+      header: "Действия",
+      render: (group) => (
+        <div className="results-review-table-actions">
+          <Button className="secondary-action" onClick={(event) => { event.stopPropagation(); openDetails(group); }} variant="secondary">
+            Подробнее
+          </Button>
+          {canCreateRequest ? (
+            <Button className="primary-action" onClick={(event) => { event.stopPropagation(); void createRequest(group); }} variant="primary">
+              Заявка
+            </Button>
+          ) : null}
+          <div className="results-review-row-menu-wrap">
+            <button
+              aria-expanded={actionMenuGroupId === group.id}
+              aria-haspopup="menu"
+              aria-label={`Действия результата: ${group.route}, ${group.employee}`}
+              className="results-review-row-more"
+              disabled={!canManageResults || mutatingGroupId === group.id}
+              onClick={(event) => { event.stopPropagation(); openRowMenu(group); }}
+              type="button"
+            >
+              <MoreVertical size={18} />
+            </button>
+            {actionMenuGroupId === group.id ? (
+              <div className="results-review-row-menu" role="menu" onClick={(event) => event.stopPropagation()}>
+                <button data-action="archive" disabled={mutatingGroupId === group.id} onClick={() => void handleGroupAction(group, "archive")} role="menuitem" type="button">
+                  <Archive size={16} />
+                  В архив
+                </button>
+                <button className="is-danger" data-action="delete" disabled={mutatingGroupId === group.id} onClick={() => void handleGroupAction(group, "delete")} role="menuitem" type="button">
+                  <Trash2 size={16} />
+                  Удалить результаты
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ),
+      width: "260px",
+    },
+  ];
+
   if (error) {
     return (
       <div className="results-review-screen">
@@ -381,9 +470,9 @@ export function ResultsWorkspace({
           <AlertTriangle size={32} />
           <h3>Не удалось загрузить результаты</h3>
           <p>{error}</p>
-          <button type="button" className="primary-action" onClick={() => void refreshResults()}>
+          <Button variant="primary" className="primary-action" onClick={() => void refreshResults()}>
             Повторить загрузку
-          </button>
+          </Button>
         </section>
       </div>
     );
@@ -391,25 +480,27 @@ export function ResultsWorkspace({
 
   return (
     <div className="results-review-screen" onClick={() => setContextMenu(null)}>
-      <div className="results-review-hero">
-        <div>
-          <p className="results-review-eyebrow">Обходы</p>
-          <h1>Результаты обходов</h1>
-          <p>Контроль статусов точек, замечаний, ручных отметок и вложений по завершенным обходам.</p>
-        </div>
-        <div className="results-review-actions">
-          <button type="button" className="secondary-action" disabled={!selectedGroup} onClick={() => onOpenRequest?.(selectedGroup?.results[0]?.id)}>
-            <ExternalLink size={17} />
-            Открыть заявку
-          </button>
-          {canCreateRequest ? (
-            <button type="button" className="primary-action" disabled={!selectedGroup} onClick={() => void createRequest()}>
-              <PlusCircle size={17} />
-              Создать заявку
-            </button>
-          ) : null}
-        </div>
-      </div>
+      <PageHeader
+        actions={(
+          <div className="results-review-actions">
+            <Button variant="secondary" className="secondary-action" disabled={!selectedGroup} onClick={() => onOpenRequest?.(selectedGroup?.results[0]?.id)}>
+              <ExternalLink size={17} />
+              Открыть заявку
+            </Button>
+            {canCreateRequest ? (
+              <Button variant="primary" className="primary-action" disabled={!selectedGroup} onClick={() => void createRequest()}>
+                <PlusCircle size={17} />
+                Создать заявку
+              </Button>
+            ) : null}
+          </div>
+        )}
+        className="results-review-hero"
+        description="Контроль статусов точек, замечаний, ручных отметок и вложений по завершенным обходам."
+        eyebrow="Обходы"
+        eyebrowClassName="results-review-eyebrow"
+        title="Результаты обходов"
+      />
 
       <nav className="results-review-view-tabs" aria-label={"\u0420\u0430\u0437\u0434\u0435\u043b\u044b \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u043e\u0432"}>
         <button className={activeView === "results" ? "is-active" : ""} onClick={() => setActiveView("results")} type="button">
@@ -437,20 +528,14 @@ export function ResultsWorkspace({
       <section className="results-review-layout">
         <div className="results-review-main">
           <div className="results-review-toolbar">
-            <div className="results-review-filter-tabs" aria-label="Фильтр результатов">
-              {FILTERS.map((filter) => (
-                <button
-                  key={filter.id}
-                  type="button"
-                  className={activeMode === filter.id ? "is-active" : ""}
-                  aria-pressed={activeMode === filter.id}
-                  onClick={() => changeFilter(filter.id)}
-                >
-                  {filter.label}
-                  <span>{counters[filter.id]}</span>
-                </button>
-              ))}
-            </div>
+            <SectionTabs
+              activeClassName="is-active"
+              ariaLabel="Фильтр результатов"
+              className="results-review-filter-tabs"
+              onChange={changeFilter}
+              tabs={FILTERS.map((filter) => ({ ...filter, count: counters[filter.id] }))}
+              value={activeMode}
+            />
             <label className="results-review-route-filter">
               <MapPinned size={17} />
               <span>Маршрут</span>
@@ -476,15 +561,15 @@ export function ResultsWorkspace({
               <span className="results-review-list-summary" aria-live="polite">
                 Показано {filteredGroups.length} из {visibleGroups.length}
               </span>
-              <button
+              <Button
                 className="secondary-action results-review-refresh"
                 disabled={loading}
                 onClick={() => void refreshResults()}
-                type="button"
+                variant="secondary"
               >
                 <RefreshCw aria-hidden="true" size={16} />
                 {loading ? "Обновляем…" : "Обновить"}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -505,31 +590,22 @@ export function ResultsWorkspace({
               </p>
             </section>
           ) : (
-            <div className="results-review-list">
-              {filteredGroups.map((group) => (
-                <ResultsListRow
-                  key={group.id}
-                  group={group}
-                  active={selectedGroup?.id === group.id}
-                  onSelect={() => selectGroup(group)}
-                  onOpen={() => openDetails(group)}
-                  onCreateRequest={() => void createRequest(group)}
-                  menuOpen={actionMenuGroupId === group.id}
-                  onOpenMenu={() => openRowMenu(group)}
-                  onOpenContextMenu={(event) => openContextPanel(event, group)}
-                  onArchive={() => void handleGroupAction(group, "archive")}
-                  onDelete={() => void handleGroupAction(group, "delete")}
-                  actionInProgress={mutatingGroupId === group.id}
-                  canCreateRequest={canCreateRequest}
-                  canManageResults={canManageResults}
-                />
-              ))}
-            </div>
+            <CompactTable
+              className="results-review-compact-table"
+              columns={resultColumns}
+              emptyText="Результаты по текущим фильтрам не найдены"
+              getRowClassName={(group) => `${selectedGroup?.id === group.id ? "selected" : ""} ${group.issuePoints > 0 || group.issues > 0 ? "has-issues" : ""}`.trim()}
+              getRowKey={(group) => group.id}
+              onRowClick={(group) => selectGroup(group)}
+              onRowContextMenu={(event, group) => openContextPanel(event, group)}
+              onRowDoubleClick={(group) => openDetails(group)}
+              rows={filteredGroups}
+            />
           )}
           {hasMoreResults ? (
-            <button className="secondary-action" disabled={loadMoreStatus === "loading"} onClick={() => void loadMoreResults()} type="button">
+            <Button className="secondary-action" disabled={loadMoreStatus === "loading"} onClick={() => void loadMoreResults()} variant="secondary">
               {loadMoreStatus === "loading" ? "Загружаем…" : "Загрузить ещё"}
-            </button>
+            </Button>
           ) : null}
         </div>
 
@@ -581,6 +657,9 @@ export function ResultsWorkspace({
           onExport={() => void exportPatrolResults(modalGroup)}
           onOpenRequest={() => onOpenRequest?.(modalGroup.results[0]?.id)}
           onOpenAttachment={openAttachment}
+          onBeforeOpenAttachment={(element) => {
+            mediaTriggerRef.current = element;
+          }}
           photoLoadingResultId={photoLoadingResultId}
           exportInProgress={exportInProgress}
         />
@@ -591,6 +670,7 @@ export function ResultsWorkspace({
           onClose={() => setMediaPreview(null)}
           onDownload={(attachment) => void downloadPreviewAttachment(attachment)}
           onSelect={(index) => setMediaPreview((current) => (current ? { ...current, index } : current))}
+          returnFocusRef={mediaTriggerRef}
         />
       ) : null}
     </div>
@@ -709,13 +789,13 @@ function ResultInspector({
         </div>
       </dl>
       <div className="results-review-inspector-actions">
-        <button type="button" className="primary-action" onClick={onOpen}>
+        <Button className="primary-action" onClick={onOpen} variant="primary">
           Открыть просмотр
-        </button>
+        </Button>
         {canCreateRequest ? (
-          <button type="button" className="secondary-action" onClick={onCreateRequest}>
+          <Button className="secondary-action" onClick={onCreateRequest} variant="secondary">
             Создать заявку
-          </button>
+          </Button>
         ) : null}
       </div>
     </section>
