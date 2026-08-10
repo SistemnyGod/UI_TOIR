@@ -45,6 +45,25 @@ describe("PPE UI primitives", () => {
     expect(document.body.style.overflow).toBe("");
   });
 
+  it("labels the dialog by its title, traps Tab and hides the background from assistive technology", async () => {
+    const user = userEvent.setup();
+    render(<ModalHarness />);
+    const opener = screen.getByRole("button", { name: "Открыть каталог" });
+
+    await user.click(opener);
+    const dialog = await screen.findByRole("dialog", { name: "Каталог СИЗ" });
+    const title = dialog.querySelector("h2");
+    expect(title).not.toBeNull();
+    expect(dialog).toHaveAttribute("aria-labelledby", title?.id);
+    expect(opener.closest("[aria-hidden='true']")).not.toBeNull();
+
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Поиск" })).toHaveFocus());
+    await user.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await user.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+  });
+
   it("keeps a busy modal open and disables its close action", async () => {
     const user = userEvent.setup();
     render(<ModalHarness closeDisabled />);

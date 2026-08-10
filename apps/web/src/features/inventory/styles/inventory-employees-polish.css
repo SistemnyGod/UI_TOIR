@@ -1,0 +1,476 @@
+/* Employees accounting screen: the same calm, compact workspace language as the catalog. */
+.inventory-employees-screen {
+  gap: 14px;
+}
+
+.inventory-employees-screen .inventory-employees-commandbar {
+  min-height: 82px;
+  padding: 16px 18px;
+  border-color: #d7e4f3;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #ffffff 0%, #f7fbff 100%);
+  box-shadow: 0 10px 28px rgb(15 49 92 / 7%), 0 1px 2px rgb(15 23 42 / 4%);
+}
+
+.inventory-employees-screen .inventory-employees-title {
+  gap: 14px;
+}
+
+.inventory-employees-screen .inventory-employees-title-icon {
+  width: 44px;
+  height: 44px;
+  flex-basis: 44px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #2f78f5 0%, #1558d7 100%);
+  box-shadow: 0 8px 18px rgb(37 99 235 / 18%);
+}
+
+.inventory-employees-screen .inventory-employees-title p {
+  margin: 0 0 2px;
+  color: #1769ff;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.inventory-employees-screen .inventory-employees-title h1 {
+  color: #102a51;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+
+.inventory-employees-screen .inventory-employees-title span {
+  margin-top: 5px;
+  color: #667b99;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.inventory-employees-screen .inventory-employees-actions {
+  gap: 8px;
+}
+
+.inventory-employees-screen .inventory-employees-actions .button,
+.inventory-employees-screen .inventory-employees-pager .button,
+.inventory-employees-screen .inventory-employees-row-actions .button,
+.inventory-employees-screen .inventory-employees-inspector-actions .button {
+  min-height: 36px;
+  border-radius: 10px;
+  padding-inline: 12px;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.inventory-employees-screen .inventory-employees-actions .button:hover,
+.inventory-employees-screen .inventory-employees-pager .button:hover,
+.inventory-employees-screen .inventory-employees-row-actions .button:hover,
+.inventory-employees-screen .inventory-employees-inspector-actions .button:hover {
+  transform: translateY(-1px);
+}
+
+.inventory-employees-screen .button.primary {
+  border-color: #1769ff;
+  background: linear-gradient(180deg, #2476ff 0%, #1769ff 100%);
+  box-shadow: 0 8px 18px rgb(23 105 255 / 19%);
+  color: #ffffff;
+}
+
+.inventory-employees-screen .button.primary:hover {
+  border-color: #0f5ee8;
+  background: linear-gradient(180deg, #3984ff 0%, #0f5ee8 100%);
+  box-shadow: 0 11px 22px rgb(23 105 255 / 25%);
+}
+
+.inventory-employees-screen .button.ghost {
+  border-color: #c5d7ec;
+  background: #ffffff;
+  color: #17345f;
+}
+
+.inventory-employees-screen .button.ghost:hover {
+  border-color: #8eb4e7;
+  background: #f3f8ff;
+}
+
+.inventory-employees-screen .button.ghost.danger,
+.inventory-employees-screen .button.danger {
+  border-color: #f1c1c1;
+  background: #fff7f7;
+  color: #b42318;
+}
+
+.inventory-employees-screen .button.ghost.danger:hover,
+.inventory-employees-screen .button.danger:hover {
+  border-color: #e49a96;
+  background: #ffe9e7;
+}
+
+.inventory-employees-screen .inventory-employees-kpis {
+  gap: 10px;
+}
+
+.inventory-employees-screen .inventory-employees-kpi {
+  min-height: 76px;
+  padding: 12px 14px;
+  border-color: #d7e4f3;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgb(15 49 92 / 5%);
+}
+
+.inventory-employees-screen .inventory-employees-kpi span {
+  color: #7184a0;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.inventory-employees-screen .inventory-employees-kpi strong {
+  font-size: 24px;
+  letter-spacing: -0.02em;
+}
+
+.inventory-employees-screen .inventory-employees-kpi.tone-blue {
+  border-top: 2px solid #6b9ef4;
+}
+
+.inventory-employees-screen .inventory-employees-kpi.tone-green {
+  border-top: 2px solid #5ac39d;
+}
+
+.inventory-employees-screen .inventory-employees-kpi.tone-red {
+  border-top: 2px solid #ed9292;
+}
+
+.inventory-employees-screen .inventory-employees-filters {
+  gap: 8px;
+  padding: 10px;
+  border-color: #d7e4f3;
+  border-radius: 12px;
+  background: #f8fbff;
+  box-shadow: 0 6px 18px rgb(15 49 92 / 4%);
+}
+
+.inventory-employees-screen .inventory-employees-search,
+.inventory-employees-screen .inventory-employees-filters select {
+  min-height: 38px;
+  height: 38px;
+  border-color: #c5d7ec;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #17345f;
+}
+
+.inventory-employees-screen .inventory-employees-search {
+  padding-inline: 11px;
+}
+
+.inventory-employees-screen .inventory-employees-search:focus-within,
+.inventory-employees-screen .inventory-employees-filters select:focus {
+  border-color: #5c9afa;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 10%);
+  outline: none;
+}
+
+.inventory-employees-screen .inventory-employees-search input,
+.inventory-employees-screen .inventory-employees-filters select {
+  font-size: 12px;
+}
+
+.inventory-employees-screen .inventory-employees-workspace {
+  gap: 12px;
+}
+
+.inventory-employees-screen .inventory-employees-table-card,
+.inventory-employees-screen .inventory-employees-inspector {
+  border-color: #d7e4f3;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 10px 26px rgb(15 49 92 / 6%);
+}
+
+.inventory-employees-screen .inventory-employees-table-card {
+  padding: 0;
+}
+
+.inventory-employees-screen .inventory-employees-panel-head {
+  min-height: 64px;
+  padding: 12px 14px;
+  border-bottom-color: #dce7f3;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+}
+
+.inventory-employees-screen .inventory-employees-panel-head h2 {
+  color: #102a51;
+  font-size: 17px;
+}
+
+.inventory-employees-screen .inventory-employees-panel-head p {
+  margin-top: 3px;
+  color: #7184a0;
+  font-size: 11px;
+}
+
+.inventory-employees-screen .inventory-employees-pager {
+  gap: 6px;
+}
+
+.inventory-employees-screen .inventory-employees-pager > span {
+  min-width: 42px;
+  color: #7184a0;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.inventory-employees-screen .inventory-employees-pager .button {
+  min-height: 32px;
+  padding-inline: 10px;
+  font-size: 11px;
+}
+
+.inventory-employees-screen .inventory-employees-table-wrap {
+  border-radius: 0;
+  scrollbar-color: #b9cce5 #f5f8fc;
+}
+
+.inventory-employees-screen .inventory-employees-table {
+  min-width: 820px;
+  table-layout: fixed;
+}
+
+.inventory-employees-screen .inventory-employees-table th {
+  padding: 9px 11px;
+  border-bottom-color: #dce7f3;
+  background: #f4f8fd;
+  color: #7184a0;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+
+.inventory-employees-screen .inventory-employees-table td {
+  padding: 10px 11px;
+  border-top: 0;
+  border-bottom: 1px solid #e4edf6;
+  color: #29466f;
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+.inventory-employees-screen .inventory-employees-table tbody tr {
+  transition: background 160ms ease;
+}
+
+.inventory-employees-screen .inventory-employees-table tbody tr:hover td,
+.inventory-employees-screen .inventory-employees-table tbody tr.is-selected td {
+  background: #f2f7ff;
+}
+
+.inventory-employees-screen .inventory-employees-table tbody tr.is-selected {
+  box-shadow: inset 3px 0 0 #1769ff;
+}
+
+.inventory-employees-screen .inventory-employees-person {
+  gap: 8px;
+}
+
+.inventory-employees-screen .inventory-employees-person > span {
+  width: 36px;
+  height: 36px;
+  flex-basis: 36px;
+  border-radius: 10px;
+  background: #eaf3ff;
+  color: #1769ff;
+}
+
+.inventory-employees-screen .inventory-employees-person strong {
+  color: #17345f;
+  font-size: 12px;
+}
+
+.inventory-employees-screen .inventory-employees-person small {
+  color: #7a8da7;
+  font-size: 10px;
+}
+
+.inventory-employees-screen .inventory-employees-row-actions {
+  gap: 6px;
+}
+
+.inventory-employees-screen .inventory-employees-row-actions .button {
+  min-height: 30px;
+  padding-inline: 9px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.inventory-employees-screen .inventory-employees-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 23px;
+  padding-inline: 8px;
+  border-radius: 999px;
+  background: #dff8ec;
+  color: #047857;
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.inventory-employees-screen .inventory-employees-status.archived,
+.inventory-employees-screen .inventory-employees-status.disabled,
+.inventory-employees-screen .inventory-employees-status.inactive {
+  background: #fff0e7;
+  color: #a3440b;
+}
+
+.inventory-employees-screen .inventory-employees-inspector {
+  top: 16px;
+  gap: 10px;
+  padding: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.inventory-employees-screen .inventory-employees-inspector-card {
+  gap: 10px;
+  padding: 0 0 12px;
+  border-bottom-color: #e0eaf5;
+}
+
+.inventory-employees-screen .inventory-employees-inspector-head {
+  gap: 10px;
+}
+
+.inventory-employees-screen .inventory-employees-inspector-head > span {
+  width: 48px;
+  height: 48px;
+  flex-basis: 48px;
+  border-radius: 12px;
+  background: #eaf3ff;
+  color: #1769ff;
+}
+
+.inventory-employees-screen .inventory-employees-inspector h2 {
+  color: #102a51;
+  font-size: 18px;
+  line-height: 1.22;
+}
+
+.inventory-employees-screen .inventory-employees-inspector p {
+  color: #7184a0;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.inventory-employees-screen .inventory-employees-inspector-actions {
+  gap: 7px;
+}
+
+.inventory-employees-screen .inventory-employees-inspector-actions .button {
+  width: 100%;
+  min-height: 36px;
+  font-size: 12px;
+}
+
+.inventory-employees-screen .inventory-employees-details {
+  gap: 6px;
+}
+
+.inventory-employees-screen .inventory-employees-details div {
+  gap: 3px;
+  padding: 8px 9px;
+  border-color: #e0eaf5;
+  border-radius: 9px;
+  background: #ffffff;
+}
+
+.inventory-employees-screen .inventory-employees-details dt {
+  color: #7a8da7;
+  font-size: 10px;
+}
+
+.inventory-employees-screen .inventory-employees-details dd {
+  color: #29466f;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.inventory-employees-screen .inventory-employees-inspector-hints {
+  gap: 6px;
+  padding-top: 10px;
+  border-top-color: #e0eaf5;
+}
+
+.inventory-employees-screen .inventory-employees-inspector-hints h3 {
+  color: #17345f;
+  font-size: 13px;
+}
+
+.inventory-employees-screen .inventory-employees-inspector-hints p {
+  grid-template-columns: 16px 1fr;
+  font-size: 10px;
+}
+
+.inventory-employees-screen .inventory-employees-state {
+  border-color: #d7e4f3;
+  border-radius: 12px;
+  box-shadow: 0 8px 22px rgb(15 49 92 / 5%);
+}
+
+@media (min-width: 1100px) {
+  .inventory-employees-screen .inventory-employees-filters.inventory-employees-filters-wide {
+    grid-template-columns: minmax(280px, 1.7fr) repeat(4, minmax(130px, 1fr));
+  }
+
+  .inventory-employees-screen .inventory-employees-workspace {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+
+  .inventory-employees-screen .inventory-employees-table-card {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .inventory-employees-screen .inventory-employees-inspector {
+    position: sticky;
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+  }
+
+  .inventory-employees-screen .inventory-employees-table-wrap {
+    max-height: min(620px, calc(100vh - 430px));
+    overflow: auto;
+  }
+}
+
+@media (max-width: 1099px) {
+  .inventory-employees-screen .inventory-employees-table-wrap {
+    max-height: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .inventory-employees-screen .inventory-employees-commandbar {
+    align-items: stretch;
+  }
+
+  .inventory-employees-screen .inventory-employees-actions {
+    justify-content: flex-start;
+  }
+
+  .inventory-employees-screen .inventory-employees-actions .button {
+    flex: 1 1 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .inventory-employees-screen .inventory-employees-commandbar {
+    padding: 14px;
+  }
+
+  .inventory-employees-screen .inventory-employees-title h1 {
+    font-size: 24px;
+  }
+
+  .inventory-employees-screen .inventory-employees-kpi {
+    min-height: 68px;
+  }
+}

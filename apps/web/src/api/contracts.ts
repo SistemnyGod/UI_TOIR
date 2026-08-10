@@ -964,6 +964,25 @@ export interface InventoryPpeNormMappingDto {
   comment: string;
 }
 
+export interface InventoryPpeNormCandidateDto {
+  normRowId: string;
+  normSetId: string;
+  normSetVersion: number;
+  normItemName: string;
+  normPoint: string;
+  quantity: number;
+  quantityText: string;
+  issuePeriodText: string;
+  lifeMonths: number | null;
+  alreadyIssuedQuantity: number;
+  availableQuantity: number;
+  mappingId: string | null;
+  previouslyConfirmedCount: number;
+  status: "confirmed_mapping" | "candidate" | "incompatible" | "limit_exhausted" | "manual_control_required";
+  reasons: string[];
+  warnings: string[];
+}
+
 export interface InventoryPpeCardNormRowDto {
   id: string;
   sourceNormRowId: string | null;
@@ -991,6 +1010,12 @@ export interface InventoryPpeCardNormRowDto {
   draftWarehouseId?: string | null;
   draftComment?: string;
   draftBrandModelArticle?: string;
+  alreadyIssuedQuantity?: number;
+  availableQuantity?: number;
+  entitlementStatus?: "resolved" | "manual_control_required" | "not_applicable" | string;
+  entitlementPeriodFrom?: string | null;
+  entitlementPeriodTo?: string | null;
+  entitlementWarnings?: string[];
 }
 
 export interface InventoryPpeWorkspaceDto {
@@ -1084,6 +1109,7 @@ export interface CreateInventoryPpeIssueBatchLineDto {
   brandModelArticle?: string | null;
   comment?: string | null;
   warehouseId?: string | null;
+  isAdditional?: boolean;
 }
 
 export interface CreateInventoryPpeIssueBatchDto {

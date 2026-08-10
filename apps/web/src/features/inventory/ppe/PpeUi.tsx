@@ -100,7 +100,19 @@ export function PpeModalShell({
     ppeModalStack.push(modalId);
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
+    const backdrop = modalRef.current?.closest<HTMLElement>(".ppe-ui-modal-backdrop");
+    const backgroundElements = Array.from(document.body.children)
+      .filter((element): element is HTMLElement => element instanceof HTMLElement && element !== backdrop)
+      .map((element) => ({
+        element,
+        ariaHidden: element.getAttribute("aria-hidden"),
+        inert: element.inert,
+      }));
     document.body.style.overflow = "hidden";
+    backgroundElements.forEach(({ element }) => {
+      element.setAttribute("aria-hidden", "true");
+      element.inert = true;
+    });
 
     const modal = modalRef.current;
     const preferred = initialFocusSelector
@@ -137,12 +149,26 @@ export function PpeModalShell({
       }
     }
 
+    function keepFocusInside(event: FocusEvent) {
+      if (ppeModalStack[ppeModalStack.length - 1] !== modalId || !modal) return;
+      if (event.target instanceof Node && modal.contains(event.target)) return;
+      const focusable = modal.querySelector<HTMLElement>(focusableSelector);
+      (focusable ?? modal).focus();
+    }
+
     document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("focusin", keepFocusInside);
     return () => {
       const stackIndex = ppeModalStack.lastIndexOf(modalId);
       if (stackIndex >= 0) ppeModalStack.splice(stackIndex, 1);
       document.body.style.overflow = previousOverflow;
+      backgroundElements.forEach(({ element, ariaHidden, inert }) => {
+        if (ariaHidden === null) element.removeAttribute("aria-hidden");
+        else element.setAttribute("aria-hidden", ariaHidden);
+        element.inert = inert;
+      });
       document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("focusin", keepFocusInside);
       window.requestAnimationFrame(() => previouslyFocused?.focus());
     };
   }, [initialFocusSelector]);
@@ -160,6 +186,7 @@ export function PpeModalShell({
         aria-label={ariaLabel}
         aria-modal="true"
         aria-describedby={description ? `${titleId}-description` : undefined}
+        aria-labelledby={titleId}
         className={`ppe-v2-modal ppe-ui-modal ${className}`.trim()}
         ref={modalRef}
         role="dialog"
@@ -168,7 +195,7 @@ export function PpeModalShell({
         <header className="ppe-v2-modal-head ppe-ui-modal-head">
           <div>
             {eyebrow ? <span className="ppe-v2-eyebrow">{eyebrow}</span> : null}
-            <h2 id={titleId}>{title}</h2>
+            <h2 aria-label={ariaLabel} id={titleId}>{title}</h2>
             {description ? <p id={`${titleId}-description`}>{description}</p> : null}
           </div>
           <PpeButton aria-label="Закрыть" disabled={closeDisabled} icon={<X size={20} />} onClick={onClose} variant="icon" />

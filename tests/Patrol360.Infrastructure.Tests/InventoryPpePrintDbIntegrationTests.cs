@@ -169,19 +169,19 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.DoesNotContain("Форвард", cardXml, StringComparison.Ordinal);
         Assert.DoesNotContain("Эксперт К3, SIM-06/K", cardXml, StringComparison.Ordinal);
 
-        Assert.Contains(helmetNorm, sheetXml, StringComparison.Ordinal);
+        Assert.Contains("Каска защ. синяя СОМЗ", sheetXml, StringComparison.Ordinal);
         Assert.Contains("СОМЗ", sheetXml, StringComparison.Ordinal);
         Assert.Contains("1 шт.", sheetXml, StringComparison.Ordinal);
-        Assert.Contains(suitNorm, sheetXml, StringComparison.Ordinal);
+        Assert.Contains("Костюм утепленный Форвард", sheetXml, StringComparison.Ordinal);
         Assert.Contains("Форвард", sheetXml, StringComparison.Ordinal);
-        Assert.Contains(jacketNorm, sheetXml, StringComparison.Ordinal);
+        Assert.Contains("Куртка Эксперт К3 / SIM-06/K", sheetXml, StringComparison.Ordinal);
         Assert.Contains("Эксперт К3, SIM-06/K", sheetXml, StringComparison.Ordinal);
         Assert.DoesNotContain(winterSection, sheetXml, StringComparison.Ordinal);
         Assert.DoesNotContain(raincoatNorm, sheetXml, StringComparison.Ordinal);
         Assert.DoesNotContain("Плащ влагозащитный Prosafe", sheetXml, StringComparison.Ordinal);
-        Assert.DoesNotContain("Каска защ. синяя СОМЗ", sheetXml, StringComparison.Ordinal);
-        Assert.DoesNotContain("Костюм утепленный Форвард", sheetXml, StringComparison.Ordinal);
-        Assert.DoesNotContain("Куртка Эксперт К3 / SIM-06/K", sheetXml, StringComparison.Ordinal);
+        Assert.DoesNotContain(helmetNorm, sheetXml, StringComparison.Ordinal);
+        Assert.DoesNotContain(suitNorm, sheetXml, StringComparison.Ordinal);
+        Assert.DoesNotContain(jacketNorm, sheetXml, StringComparison.Ordinal);
     }
 
     [DbIntegrationFact]
@@ -328,7 +328,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
     }
 
     [DbIntegrationFact]
-    public async Task PpeDocxPrintUsesNormNamesAndFiltersSignatureRows()
+    public async Task PpeDocxPrintSeparatesNormNamesFromActualCatalogRows()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
         using var provider = BuildProvider(database.ConnectionString);
@@ -476,7 +476,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.Contains(replacementNormName, sheetXml, StringComparison.Ordinal);
         Assert.Contains("Форвард", sheetXml, StringComparison.Ordinal);
         Assert.Contains("1 шт.", sheetXml, StringComparison.Ordinal);
-        Assert.DoesNotContain(issuedItem.Name, sheetXml, StringComparison.Ordinal);
+        Assert.Contains(issuedItem.Name, sheetXml, StringComparison.Ordinal);
         Assert.Contains(returnedNormName, sheetXml, StringComparison.Ordinal);
         Assert.Contains("Ansell", sheetXml, StringComparison.Ordinal);
         Assert.DoesNotContain(notIssuedNormName, sheetXml, StringComparison.Ordinal);

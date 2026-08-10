@@ -116,7 +116,7 @@
 }
 
 .inventory-web-shell .button:not(.primary):not(.danger),
-.inventory-web-shell button:not(.primary):not(.danger):not(.inventory-ppe-row-menu-button) {
+.inventory-web-shell button:not(.primary):not(.danger):not(.inventory-ppe-row-menu-button):not(.ppe-ui-button) {
   border-color: var(--inventory-border);
   background: linear-gradient(180deg, #fff, #f8fbff);
   color: var(--inventory-text);
@@ -348,4 +348,3 @@
     border-radius: 10px;
   }
 }
-

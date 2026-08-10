@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PpeIssueWorkflowScreen } from "../features/inventory/ppe/PpeIssueWorkflowScreen";
+import { getPpeIssueWorkflowStorageKey } from "../features/inventory/ppe/ppeIssueDraft";
 import { InventoryRepositoryProvider } from "../repositories/inventoryRepositoryContext";
 import { createMockInventoryRepository } from "../repositories/mockInventoryRepository";
 
@@ -27,9 +28,10 @@ describe("PPE issue workflow", () => {
     });
     const repository = createMockInventoryRepository();
     const employees = await repository.getEmployees({ pageSize: 100 });
-    const employee = employees.rows[0];
+    const settings = await repository.getSettings();
+    const employee = employees.rows.find((candidate) => settings.positionNorms.some((norm) => norm.positionName.trim().toLocaleLowerCase("ru") === candidate.position.trim().toLocaleLowerCase("ru"))) ?? employees.rows[0];
     expect(employee).toBeTruthy();
-    window.localStorage.setItem("patrol360.inventory.ppe.employee", employee!.id);
+    window.localStorage.setItem(`${getPpeIssueWorkflowStorageKey("anonymous")}.employee`, employee!.id);
     const createBatchImplementation = repository.createPpeIssueBatch.bind(repository);
     const createBatch = vi.spyOn(repository, "createPpeIssueBatch");
     const printPpeCard = vi.spyOn(repository, "printPpeCard");
@@ -43,22 +45,33 @@ describe("PPE issue workflow", () => {
 
     await screen.findByText(employee!.fullName);
     await user.type(screen.getByLabelText(/Ответственный/), "Иванов И.И.");
-    await user.click(screen.getByRole("button", { name: /Пустой документ/ }));
     const continueButton = screen.getByRole("button", { name: /Продолжить к подбору/ });
     await waitFor(() => expect(continueButton).toBeEnabled());
     await user.click(continueButton);
 
     expect(await screen.findByRole("heading", { name: "Подбор СИЗ" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Из каталога" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("В этом разделе позиций пока нет")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Добавить из каталога/ }));
-    const dialog = await screen.findByRole("dialog", { name: "Сопоставить норму с номенклатурой" });
-    await waitFor(() => expect(dialog.querySelectorAll(".ppe-catalog-item-card").length).toBeGreaterThanOrEqual(2));
+    const dialog = await screen.findByRole("dialog", { name: "Выбрать спецодежду из номенклатуры" });
+    await waitFor(() => expect(dialog.querySelectorAll(".ppe-catalog-item-card").length).toBeGreaterThanOrEqual(1));
+    await waitFor(() => expect(dialog.querySelector<HTMLInputElement>("#ppe-catalog-picker-search")).toHaveFocus());
     const catalogItems = dialog.querySelectorAll<HTMLButtonElement>(".ppe-catalog-item-card");
     await user.click(catalogItems[0]);
-    await user.click(catalogItems[1]);
-    const selectedQuantity = screen.getByLabelText(/Количество/);
-    await user.clear(selectedQuantity);
-    await user.type(selectedQuantity, "2");
-    await user.click(screen.getByRole("button", { name: "Добавить выбранные (2)" }));
+    expect(screen.getByLabelText("Параметры выбранной позиции")).toBeInTheDocument();
+    const nextCatalogPage = screen.getByRole("button", { name: "Следующая страница" });
+    if (!nextCatalogPage.hasAttribute("disabled")) {
+      await user.click(nextCatalogPage);
+      await waitFor(() => expect(dialog.querySelector(".ppe-catalog-item-grid")).toHaveAttribute("aria-busy", "false"));
+      expect(screen.getByLabelText("Параметры выбранной позиции")).toBeInTheDocument();
+    }
+    await user.click(screen.getByRole("button", { name: "Сохранить выбор" }));
+    expect(screen.getByText(/Норма не определена/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Подобрать норму" }));
+    const normDialog = await screen.findByRole("dialog", { name: "Подходящие нормы АТОМ" });
+    await waitFor(() => expect(normDialog.querySelector<HTMLInputElement>("#ppe-norm-selection-search")).toHaveFocus());
+    await waitFor(() => expect(normDialog.querySelectorAll(".ppe-norm-candidate-card").length).toBeGreaterThanOrEqual(1));
+    await user.click(screen.getAllByRole("button", { name: "Выбрать норму" })[0]);
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: /К составу/ }));
 
@@ -91,8 +104,8 @@ describe("PPE issue workflow", () => {
     await user.click(screen.getByRole("button", { name: "PDF" }));
     await waitFor(() => expect(printPpeCard).toHaveBeenCalledWith(expect.any(String), "sheet", "pdf"));
     const batchPayload = createBatch.mock.calls[0][1];
-    expect(batchPayload.lines).toHaveLength(2);
-    expect(batchPayload.lines.some((line) => line.quantity === 2)).toBe(true);
+    expect(batchPayload.lines).toHaveLength(1);
+    expect(batchPayload.lines[0].quantity).toBe(1);
   });
 
   it("показывает ошибку загрузки наборов и позволяет повторить запрос", async () => {

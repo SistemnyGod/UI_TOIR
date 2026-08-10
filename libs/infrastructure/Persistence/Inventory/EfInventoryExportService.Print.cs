@@ -110,7 +110,13 @@ internal sealed partial class EfInventoryExportService
                 (line.IsSectionTitle || IsSectionTitle(line.PrintItemName)) ? string.Empty : (line.QuantityText ?? string.Empty),
                 PpeUnitPriceMinor(line),
                 (PpeUnitPriceMinor(line) ?? 0) * line.Quantity,
-                line.IsSectionTitle || IsSectionTitle(line.PrintItemName)))
+                line.IsSectionTitle || IsSectionTitle(line.PrintItemName),
+                line.Item.Name,
+                line.IssueMethod,
+                line.ReturnedAt,
+                line.ReturnedQuantity,
+                line.WriteOffActDate,
+                line.WriteOffActNumber))
             .ToList();
         var printLines = isSheet
             ? lines.Where(line => !line.IsSectionTitle && PpeIssueStatusCatalog.IsSignatureStatus(line.Status)).ToList()
@@ -130,17 +136,7 @@ internal sealed partial class EfInventoryExportService
             card.RespiratorSize,
             card.HandProtectionSize);
 
-        var paragraphs = new List<string>
-        {
-            title,
-            $"Сотрудник: {card.Employee.FullName}",
-            $"Должность: {card.Position}",
-            $"Статус карточки: {ToPpeStatusLabel(card.Status)}",
-            $"Дата создания: {card.CreatedAt.LocalDateTime:dd.MM.yyyy HH:mm}",
-            string.Empty,
-            "Строки СИЗ:"
-        };
-        paragraphs.AddRange(lines.Select(line => $"{line.ItemName}; количество: {PpePrintQuantityText(line)}; статус: {ToPpeStatusLabel(line.Status)}; выдано: {line.IssuedAt}; до: {line.DueAt}"));
+        var paragraphs = BuildPpePrintParagraphs(title, isSheet, card, printLines);
         var fileBaseName = isSheet
             ? $"ppe-signature-sheet-{card.Employee.PersonnelNo}-{card.Id:N}"
             : $"ppe-personal-card-{card.Employee.PersonnelNo}-{card.Id:N}";
@@ -155,6 +151,62 @@ internal sealed partial class EfInventoryExportService
         }
 
         return BuildPrintFile(fileBaseName, title, paragraphs, normalizedFormat, "ppe_card", card.Id);
+    }
+
+    private static List<string> BuildPpePrintParagraphs(
+        string title,
+        bool isSheet,
+        InventoryPpeCardEntity card,
+        IReadOnlyList<PpePrintLine> lines)
+    {
+        var paragraphs = new List<string>
+        {
+            title,
+            $"Сотрудник: {card.Employee.FullName}",
+            $"Должность: {card.Position}",
+            $"Статус карточки: {ToPpeStatusLabel(card.Status)}",
+            $"Дата создания: {card.CreatedAt.LocalDateTime:dd.MM.yyyy HH:mm}",
+            string.Empty,
+            isSheet ? "Фактически выданная номенклатура:" : "Нормативные строки СИЗ:"
+        };
+
+        if (isSheet)
+        {
+            paragraphs.AddRange(lines.Select(line =>
+                $"{(string.IsNullOrWhiteSpace(line.CatalogName) ? line.ItemName : line.CatalogName)}; модель/марка/артикул: {line.Model}; количество: {line.Quantity:0.###} {line.Unit}; способ: {IssueMethodText(line)}; дата: {line.IssuedAt}; возврат: {ReturnDateText(line)}; акт списания: {WriteOffActText(line)}"));
+        }
+        else
+        {
+            paragraphs.AddRange(lines.Select(line =>
+                $"{line.ItemName}; пункт нормы: {line.NormPoint}; периодичность: {line.IssuePeriodText}; количество на период: {PpePrintQuantityText(line)}"));
+        }
+
+        return paragraphs;
+    }
+
+    private static string IssueMethodText(PpePrintLine line) => Normalize(line.IssueMethod) switch
+    {
+        "dispenser" => "Дозатор",
+        "personal" => "Лично",
+        _ => line.LifeMonths is null or <= 0 && string.IsNullOrWhiteSpace(line.DueAt) ? "Дозатор" : "Лично"
+    };
+
+    private static string ReturnDateText(PpePrintLine line) =>
+        line.ReturnedAt is not null ? FormatDate(line.ReturnedAt) : IsReturnStatus(line.Status) ? line.DueAt : "";
+
+    private static bool IsReturnStatus(string status) =>
+        string.Equals(status, "returned", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, "written_off", StringComparison.OrdinalIgnoreCase);
+
+    private static string WriteOffActText(PpePrintLine line)
+    {
+        if (!string.Equals(line.Status, "written_off", StringComparison.OrdinalIgnoreCase))
+        {
+            return "";
+        }
+
+        var value = string.Join(", ", new[] { FormatDate(line.WriteOffActDate), line.WriteOffActNumber }.Where(item => !string.IsNullOrWhiteSpace(item)));
+        return value.Length == 0 ? "Требуется акт" : value;
     }
 
     private InventoryCommandResult<InventoryGeneratedFileDto> BuildPrintFile(

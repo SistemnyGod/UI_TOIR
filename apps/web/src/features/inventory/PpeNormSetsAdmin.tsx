@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { CheckCircle2, ChevronDown, ChevronRight, RefreshCw, Search, ShieldCheck, Upload } from "lucide-react";
 import type { InventoryItemDto, InventoryPpeNormRowDto, InventoryPpeNormSetDetailDto, InventoryPpeNormSetDto } from "../../api/contracts";
 import { useInventoryRepository } from "../../repositories/inventoryRepositoryContext";
+import { matchesPpeSearchText, rankPpeCatalogItemsForNorm } from "./ppe/ppeNormSearch";
 
 type Props = {
+  initialSearch?: string;
   onNotify: (message: string) => void;
 };
 
@@ -13,7 +15,7 @@ const statusLabel: Record<InventoryPpeNormSetDto["status"], string> = {
   draft: "Черновик",
 };
 
-export function PpeNormSetsAdmin({ onNotify }: Props) {
+export function PpeNormSetsAdmin({ initialSearch = "", onNotify }: Props) {
   const repository = useInventoryRepository();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<InventoryPpeNormSetDto[]>([]);
@@ -28,23 +30,25 @@ export function PpeNormSetsAdmin({ onNotify }: Props) {
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [mappingRowId, setMappingRowId] = useState("");
+  const [search, setSearch] = useState(initialSearch);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
-      const response = await repository.getPpeNormSets({ page: 1, pageSize: 100 });
+      const response = await repository.getPpeNormSets({ page: 1, pageSize: 100, query: search.trim() || undefined });
       setRows(response.rows);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Не удалось загрузить нормативные наборы");
     } finally {
       setLoading(false);
     }
-  }, [repository]);
+  }, [repository, search]);
 
   useEffect(() => {
-    void load();
+    const timeout = window.setTimeout(() => void load(), 250);
+    return () => window.clearTimeout(timeout);
   }, [load]);
 
   async function importWorkbook(event: ChangeEvent<HTMLInputElement>) {
@@ -123,7 +127,7 @@ export function PpeNormSetsAdmin({ onNotify }: Props) {
     }
   }
 
-  async function saveMapping(normSetId: string, normRow: InventoryPpeNormRowDto, itemId: string) {
+  async function saveMapping(normSetId: string, normRow: InventoryPpeNormRowDto, itemId: string, isDefault = false) {
     if (!itemId) return;
     const item = catalogItems.find((candidate) => candidate.id === itemId);
     if (!item) return;
@@ -132,7 +136,7 @@ export function PpeNormSetsAdmin({ onNotify }: Props) {
       setError("");
       const mapping = await repository.upsertPpeNormRowMapping(normRow.id, {
         itemId,
-        isDefault: true,
+        isDefault,
         defaultUnitPriceMinor: item.defaultUnitPriceMinor,
       });
       setDetails((current) => {
@@ -140,7 +144,7 @@ export function PpeNormSetsAdmin({ onNotify }: Props) {
         if (!detail) return current;
         const nextRows = detail.rows.map((candidate) => candidate.id !== normRow.id ? candidate : {
           ...candidate,
-          mappings: [mapping, ...candidate.mappings.filter((existing) => existing.itemId !== mapping.itemId).map((existing) => ({ ...existing, isDefault: false }))],
+          mappings: [mapping, ...candidate.mappings.filter((existing) => existing.itemId !== mapping.itemId).map((existing) => ({ ...existing, isDefault: mapping.isDefault ? false : existing.isDefault }))],
         });
         return {
           ...current,
@@ -190,6 +194,18 @@ export function PpeNormSetsAdmin({ onNotify }: Props) {
         <span className="is-review"><small>Требуют проверки</small><strong>{reviewCount}</strong></span>
       </div>
 
+      <div className="inventory-ppe-norm-search">
+        <Search aria-hidden="true" size={17} />
+        <input
+          aria-label="Поиск по нормам СИЗ"
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Должность, вид СИЗ, пункт нормы — например: зимняя обувь"
+          type="search"
+          value={search}
+        />
+        {search ? <button className="button ghost" onClick={() => setSearch("")} type="button">Сбросить</button> : null}
+      </div>
+
       {error ? <div className="inventory-ppe-norm-message is-error">{error}</div> : null}
       {loading ? <div className="inventory-ppe-norm-message">Загружаем нормативные наборы...</div> : null}
       {!loading && !rows.length ? (
@@ -203,6 +219,10 @@ export function PpeNormSetsAdmin({ onNotify }: Props) {
       <div className="inventory-ppe-norm-set-list">
         {rows.map((row) => {
           const reviewed = reviewedIds.includes(row.id);
+          const detail = details[row.id];
+          const detailItemRows = detail?.rows.filter((candidate) => candidate.rowType === "item") ?? [];
+          const mappedRows = detailItemRows.filter((candidate) => candidate.mappings.length > 0).length;
+          const unmappedRows = detailItemRows.length - mappedRows;
           return (
             <article className={`inventory-ppe-norm-set is-${row.status}`} key={row.id}>
               <div className="inventory-ppe-norm-set-main">
@@ -222,21 +242,25 @@ export function PpeNormSetsAdmin({ onNotify }: Props) {
                 </button>
                 {row.status === "draft" ? (
                   <div className="inventory-ppe-norm-publish-actions">
+                    <div className={`inventory-ppe-norm-readiness ${detail ? "is-loaded" : ""}`}>
+                      {detail ? <><strong>{mappedRows} из {detailItemRows.length} строк сопоставлены</strong><span>{unmappedRows ? `${unmappedRows} строк потребуют ручного выбора номенклатуры при выдаче.` : "Все нормативные строки имеют хотя бы одно соответствие."}</span></> : <><strong>Сначала проверьте состав набора</strong><span>Откройте категории и сопоставления перед публикацией.</span></>}
+                    </div>
                     <label>
                       <input
                         checked={reviewed}
+                        disabled={!detail}
                         onChange={(event) => setReviewedIds((current) => event.target.checked ? [...current, row.id] : current.filter((id) => id !== row.id))}
                         type="checkbox"
                       />
-                      Набор проверен
+                      Проверил нормативный состав и периодичность
                     </label>
-                    <button className="button primary" disabled={!reviewed || publishingId === row.id} onClick={() => void publish(row)} type="button">
+                    <button className="button primary" disabled={!detail || !reviewed || publishingId === row.id} onClick={() => void publish(row)} type="button">
                       <CheckCircle2 size={15} /> {publishingId === row.id ? "Публикация..." : "Опубликовать"}
                     </button>
                   </div>
                 ) : null}
               </div>
-              {expandedId === row.id && details[row.id] ? <NormSetDetails detail={details[row.id]} catalogItems={catalogItems} catalogLoading={catalogLoading} categoryFilter={categoryFilter} onCategoryChange={setCategoryFilter} onSaveMapping={(normRow, itemId) => void saveMapping(row.id, normRow, itemId)} mappingRowId={mappingRowId} /> : null}
+              {expandedId === row.id && details[row.id] ? <NormSetDetails detail={details[row.id]} catalogItems={catalogItems} catalogLoading={catalogLoading} categoryFilter={categoryFilter} onCategoryChange={setCategoryFilter} onSaveMapping={(normRow, itemId, isDefault) => void saveMapping(row.id, normRow, itemId, isDefault)} mappingRowId={mappingRowId} /> : null}
             </article>
           );
         })}
@@ -259,12 +283,24 @@ function NormSetDetails({
   catalogLoading: boolean;
   categoryFilter: string;
   onCategoryChange: (value: string) => void;
-  onSaveMapping: (row: InventoryPpeNormRowDto, itemId: string) => void;
+  onSaveMapping: (row: InventoryPpeNormRowDto, itemId: string, isDefault?: boolean) => void;
   mappingRowId: string;
 }) {
+  const [normSearch, setNormSearch] = useState("");
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const normalizedCatalogSearch = catalogSearch.trim().toLocaleLowerCase("ru");
   const groups = detail.rows.filter((row) => row.rowType === "group");
-  const visibleGroups = groups.filter((group) => categoryFilter === "all" || group.id === categoryFilter);
-  const ungrouped = detail.rows.filter((row) => row.rowType === "item" && !row.parentRowId && categoryFilter === "all");
+  const matchesNorm = (row: InventoryPpeNormRowDto) => matchesPpeSearchText([row.normItemName, row.normPoint, row.issuePeriodText], normSearch);
+  const visibleGroups = groups.filter((group) => {
+    if (categoryFilter !== "all" && group.id !== categoryFilter) return false;
+    return !normSearch.trim() || matchesNorm(group) || detail.rows.some((row) => row.parentRowId === group.id && row.rowType === "item" && matchesNorm(row));
+  });
+  const ungrouped = detail.rows.filter((row) => row.rowType === "item" && !row.parentRowId && categoryFilter === "all" && matchesNorm(row));
+  const filteredCatalogItems = useMemo(() => {
+    if (!normalizedCatalogSearch) return catalogItems;
+    return catalogItems.filter((item) => [item.name, item.sku, item.article, item.modelName, item.brandName]
+      .filter(Boolean).join(" ").toLocaleLowerCase("ru").includes(normalizedCatalogSearch));
+  }, [catalogItems, normalizedCatalogSearch]);
 
   return (
     <div className="inventory-ppe-norm-details">
@@ -280,11 +316,14 @@ function NormSetDetails({
             {groups.map((group) => <option key={group.id} value={group.id}>{group.normItemName}</option>)}
           </select>
         </label>
-        <small>{catalogLoading ? "Загружаем активный каталог СИЗ…" : `В каталоге ${catalogItems.length} активных позиций`}</small>
+        <label><Search size={14} /><span>Найти норму</span><input onChange={(event) => setNormSearch(event.target.value)} placeholder="Обувь, зимняя, п. 4.7…" type="search" value={normSearch} /></label>
+        <label><Search size={14} /><span>Номенклатура</span><input onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Название, артикул, модель…" type="search" value={catalogSearch} /></label>
+        <small>{catalogLoading ? "Загружаем каталог СИЗ…" : `Показано ${filteredCatalogItems.length} из ${catalogItems.length} позиций`}</small>
       </div>
       <div className="inventory-ppe-norm-category-list">
-        {ungrouped.length ? <NormCategoryRows title="Без категории" rows={ungrouped} catalogItems={catalogItems} onSaveMapping={onSaveMapping} mappingRowId={mappingRowId} /> : null}
-        {visibleGroups.map((group) => <NormCategoryRows key={group.id} title={group.normItemName} rows={detail.rows.filter((row) => row.parentRowId === group.id && row.rowType === "item")} catalogItems={catalogItems} onSaveMapping={onSaveMapping} mappingRowId={mappingRowId} />)}
+        {ungrouped.length ? <NormCategoryRows title="Без категории" rows={ungrouped} catalogItems={filteredCatalogItems} onSaveMapping={onSaveMapping} mappingRowId={mappingRowId} /> : null}
+        {visibleGroups.map((group) => <NormCategoryRows key={group.id} title={group.normItemName} rows={detail.rows.filter((row) => row.parentRowId === group.id && row.rowType === "item" && matchesNorm(row))} catalogItems={filteredCatalogItems} onSaveMapping={onSaveMapping} mappingRowId={mappingRowId} />)}
+        {!ungrouped.length && !visibleGroups.length ? <div className="inventory-ppe-norm-message">По заданному поиску нормативные строки не найдены.</div> : null}
       </div>
     </div>
   );
@@ -300,7 +339,7 @@ function NormCategoryRows({
   title: string;
   rows: InventoryPpeNormRowDto[];
   catalogItems: InventoryItemDto[];
-  onSaveMapping: (row: InventoryPpeNormRowDto, itemId: string) => void;
+  onSaveMapping: (row: InventoryPpeNormRowDto, itemId: string, isDefault?: boolean) => void;
   mappingRowId: string;
 }) {
   if (!rows.length) return null;
@@ -310,6 +349,8 @@ function NormCategoryRows({
       <div className="inventory-ppe-norm-row-list">
         {rows.map((row) => {
           const defaultMapping = row.mappings.find((mapping) => mapping.isDefault) ?? row.mappings[0];
+          const mappedIds = new Set(row.mappings.map((mapping) => mapping.itemId));
+          const selectableItems = catalogItems.filter((item) => !mappedIds.has(item.id));
           return (
             <div className="inventory-ppe-norm-row" key={row.id}>
               <div className="inventory-ppe-norm-row-copy">
@@ -317,16 +358,103 @@ function NormCategoryRows({
                 <small>{row.quantityText || "Количество не распознано"}{row.lifeMonths ? ` · ${row.lifeMonths} мес.` : ""}</small>
                 <small className="is-point">{row.normPoint || "Основание не указано"}</small>
               </div>
-              <select aria-label={`Сопоставление: ${row.normItemName}`} disabled={mappingRowId === row.id || !catalogItems.length} onChange={(event) => onSaveMapping(row, event.target.value)} value={defaultMapping?.itemId ?? ""}>
-                <option value="">Не сопоставлено</option>
-                {catalogItems.map((item) => <option key={item.id} value={item.id}>{item.name}{item.sku ? ` · ${item.sku}` : ""}</option>)}
-              </select>
+              {row.mappings.length ? <div className="inventory-ppe-norm-mappings" aria-label={`Допустимая номенклатура: ${row.normItemName}`}>
+                {row.mappings.map((mapping) => <span className={mapping.isDefault ? "is-default" : ""} key={mapping.id}>
+                  <span><strong>{mapping.itemName}</strong><small>{mapping.itemSku || "Без артикула"}</small></span>
+                  {mapping.isDefault ? <em>Основное</em> : <button disabled={mappingRowId === row.id} onClick={() => onSaveMapping(row, mapping.itemId, true)} type="button">Сделать основным</button>}
+                </span>)}
+              </div> : null}
+              <NormCatalogSelector
+                disabled={mappingRowId === row.id}
+                items={selectableItems}
+                onSelect={(itemId) => onSaveMapping(row, itemId, row.mappings.length === 0)}
+                row={row}
+              />
               {mappingRowId === row.id ? <span className="inventory-ppe-norm-row-saving">Сохранение…</span> : defaultMapping ? <span className="inventory-ppe-norm-row-ready">Готово</span> : <span className="inventory-ppe-norm-row-warning">Нужно выбрать</span>}
             </div>
           );
         })}
       </div>
     </section>
+  );
+}
+
+function NormCatalogSelector({
+  disabled,
+  items,
+  onSelect,
+  row,
+}: {
+  disabled: boolean;
+  items: InventoryItemDto[];
+  onSelect: (itemId: string) => void;
+  row: InventoryPpeNormRowDto;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [showOther, setShowOther] = useState(false);
+  const deferredQuery = useDeferredValue(query);
+  const matches = useMemo(
+    () => rankPpeCatalogItemsForNorm(row, items, deferredQuery, showOther, showOther ? 40 : 12),
+    [deferredQuery, items, row, showOther],
+  );
+
+  function select(itemId: string) {
+    onSelect(itemId);
+    setOpen(false);
+    setQuery("");
+    setShowOther(false);
+  }
+
+  return (
+    <div className="inventory-ppe-norm-catalog-selector">
+      <button
+        aria-expanded={open}
+        className="inventory-ppe-norm-catalog-trigger"
+        disabled={disabled || !items.length}
+        onClick={() => setOpen((current) => !current)}
+        type="button"
+      >
+        <Search aria-hidden="true" size={14} />
+        {row.mappings.length ? "Добавить допустимый товар" : "Подобрать товар из номенклатуры"}
+        <ChevronDown aria-hidden="true" size={14} />
+      </button>
+      {open ? (
+        <div className="inventory-ppe-norm-catalog-popover">
+          <label>
+            <span>Поиск внутри этой нормы</span>
+            <input
+              autoFocus
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Например: сапоги зимние, артикул…"
+              type="search"
+              value={query}
+            />
+          </label>
+          <div className="inventory-ppe-norm-catalog-result-head">
+            <span>{showOther ? "Все найденные позиции" : "Рекомендуемые соответствия"}</span>
+            <b>{matches.length}</b>
+          </div>
+          <div className="inventory-ppe-norm-catalog-results">
+            {matches.map(({ item, reasons }) => (
+              <button key={item.id} onClick={() => select(item.id)} type="button">
+                <span>
+                  <strong>{item.name}</strong>
+                  <small>{[item.sku || item.article, item.category, item.unit].filter(Boolean).join(" · ") || "Без дополнительных данных"}</small>
+                </span>
+                <span className="inventory-ppe-norm-match-reasons">
+                  {reasons.slice(0, 2).map((reason) => <em className={reason === "Требует ручной проверки" ? "is-warning" : ""} key={reason}>{reason}</em>)}
+                </span>
+              </button>
+            ))}
+            {!matches.length ? <p>{query ? "По этому запросу подходящие позиции не найдены." : "Автоматические рекомендации не найдены."}</p> : null}
+          </div>
+          <button className="inventory-ppe-norm-show-other" onClick={() => setShowOther((current) => !current)} type="button">
+            {showOther ? "Показывать только подходящие" : "Показать остальные позиции для ручного выбора"}
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

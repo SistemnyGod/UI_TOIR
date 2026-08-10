@@ -142,3 +142,207 @@
     min-width: 210px;
   }
 }
+
+/* Keep the results toolbar dense: filters stay on one compact line, while
+   the count and refresh action use a short footer row instead of creating a
+   third wrapped line. */
+.screen-area .results-review-screen .results-review-toolbar {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-areas:
+    "filters route search"
+    "actions actions actions";
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 240px) minmax(220px, 1fr);
+  padding: 8px;
+}
+
+.screen-area .results-review-screen .results-review-filter-tabs {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  grid-area: filters;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.screen-area .results-review-screen .results-review-filter-tabs .section-tab {
+  flex: 0 0 auto;
+  font-size: 11px;
+  gap: 4px;
+  min-height: 32px;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.screen-area .results-review-screen .results-review-filter-tabs .section-tab small {
+  font-size: 10px;
+  min-width: 17px;
+  padding: 2px 4px;
+}
+
+.screen-area .results-review-screen .results-review-route-filter {
+  align-items: center;
+  display: flex;
+  font-size: 11px;
+  gap: 5px;
+  grid-area: route;
+  min-height: 34px;
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.screen-area .results-review-screen .results-review-route-filter select {
+  font-size: 11px;
+  min-width: 0;
+  padding: 0 4px;
+}
+
+.screen-area .results-review-screen .results-review-search {
+  align-items: center;
+  display: flex;
+  grid-area: search;
+  min-height: 34px;
+  min-width: 0;
+}
+
+.screen-area .results-review-screen .results-review-search input {
+  font-size: 11px;
+  height: 32px;
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.screen-area .results-review-screen .results-review-toolbar-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  grid-area: actions;
+  justify-content: flex-end;
+  min-height: 32px;
+}
+
+.screen-area .results-review-screen .results-review-list-summary {
+  font-size: 11px;
+}
+
+.screen-area .results-review-screen .results-review-refresh {
+  min-height: 32px;
+  padding-inline: 10px;
+}
+
+@media (max-width: 1180px) {
+  .screen-area .results-review-screen .results-review-toolbar {
+    grid-template-areas:
+      "filters route"
+      "search search"
+      "actions actions";
+    grid-template-columns: minmax(0, 1fr) minmax(190px, 260px);
+  }
+}
+
+@media (max-width: 760px) {
+  .screen-area .results-review-screen .results-review-toolbar {
+    grid-template-areas:
+      "filters"
+      "route"
+      "search"
+      "actions";
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .screen-area .results-review-screen .results-review-filter-tabs {
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .screen-area .results-review-screen .results-review-toolbar-actions {
+    justify-content: space-between;
+  }
+}
+
+/* Final density pass: keep the first viewport focused on the results list. */
+.screen-area .results-review-screen .results-review-metric {
+  align-items: center;
+  gap: 8px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  min-height: 72px;
+  padding: 10px;
+}
+
+.screen-area .results-review-screen .results-review-metric-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.screen-area .results-review-screen .results-review-metric-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.screen-area .results-review-screen .results-review-metric > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.screen-area .results-review-screen .results-review-metric small {
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+.screen-area .results-review-screen .results-review-metric strong {
+  font-size: 20px;
+  line-height: 1.05;
+}
+
+.screen-area .results-review-screen .results-review-metric p {
+  margin: 1px 0 0;
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+.screen-area .results-review-screen .results-review-filter-tabs {
+  margin: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.screen-area .results-review-screen .results-review-filter-tabs .section-tab {
+  font-size: 10px;
+  gap: 3px;
+  min-height: 30px;
+  padding: 4px 6px;
+}
+
+.screen-area .results-review-screen .results-review-filter-tabs .section-tab small {
+  font-size: 9px;
+  min-width: 16px;
+  padding: 1px 3px;
+}
+
+.screen-area .results-review-screen .results-review-route-filter,
+.screen-area .results-review-screen .results-review-search {
+  align-self: center;
+  height: 32px;
+  min-height: 32px;
+}
+
+.screen-area .results-review-screen .results-review-route-filter select,
+.screen-area .results-review-screen .results-review-search input {
+  height: 30px;
+}
+
+.screen-area .results-review-screen .results-review-toolbar {
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.screen-area .results-review-screen .results-review-toolbar-actions,
+.screen-area .results-review-screen .results-review-refresh {
+  min-height: 28px;
+  height: 28px;
+}

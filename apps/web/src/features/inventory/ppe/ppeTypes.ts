@@ -27,6 +27,12 @@ export type PrintLine = {
   printItemName?: string | null;
   quantity: number;
   quantityText?: string | null;
+  normQuantity?: number;
+  normQuantityText?: string | null;
+  returnedAt?: string | null;
+  returnedQuantity?: number | null;
+  writeOffActDate?: string | null;
+  writeOffActNumber?: string | null;
   status: string;
   unit: string;
   unitPrice: number;
@@ -69,6 +75,8 @@ export type PpeWizardLine = {
   isSectionTitle?: boolean;
   item: InventoryItemDto;
   normPoint: string;
+  normQuantity?: number;
+  normQuantityText?: string;
   printItemName: string;
   priceText: string;
   quantityText: string;

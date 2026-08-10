@@ -74,6 +74,8 @@ public interface IInventoryWorkflowService
 
     InventoryCommandResult<InventoryPpeNormMappingDto> UpsertPpeNormRowMapping(Guid normRowId, UpsertInventoryPpeNormMappingDto request);
 
+    IReadOnlyList<InventoryPpeNormCandidateDto> GetPpeNormCandidates(Guid itemId, Guid employeeId, decimal quantity, DateOnly? issueDate);
+
     InventoryListResponseDto<InventoryPpeNormSetDto> GetPpeNormSets(InventoryListQuery query);
 
     InventoryCommandResult<InventoryPpeNormSetDetailDto> GetPpeNormSet(Guid normSetId);

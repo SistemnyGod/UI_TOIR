@@ -1,0 +1,242 @@
+/* Overview polish: keep this screen on the same soft accounting visual system. */
+.inventory-overview-screen {
+  --overview-line: #dbe7f6;
+  --overview-line-strong: #c4d8f0;
+  --overview-text: #15345c;
+  --overview-muted: #68809f;
+  --overview-surface: rgba(255, 255, 255, 0.96);
+  --overview-soft: #f7faff;
+  color: var(--overview-text);
+}
+
+.inventory-overview-screen .inventory-overview-commandbar,
+.inventory-overview-screen .inventory-overview-kpi,
+.inventory-overview-screen .inventory-overview-main,
+.inventory-overview-screen .inventory-overview-side,
+.inventory-overview-screen .inventory-overview-history,
+.inventory-overview-screen .inventory-overview-table-wrap {
+  outline: none;
+  border-color: var(--overview-line) !important;
+  box-shadow: 0 8px 24px rgba(40, 76, 124, 0.055);
+}
+
+.inventory-overview-screen .inventory-overview-commandbar {
+  min-height: 82px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: linear-gradient(100deg, #fff 0%, #fff 64%, #f2f7ff 100%);
+}
+
+.inventory-overview-screen .inventory-overview-title {
+  gap: 12px;
+}
+
+.inventory-overview-screen .inventory-overview-title-icon {
+  width: 42px;
+  height: 42px;
+  flex-basis: 42px;
+  border-radius: 12px;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
+}
+
+.inventory-overview-screen .inventory-overview-title h1 {
+  color: var(--overview-text);
+  font-size: 25px;
+  letter-spacing: -0.02em;
+}
+
+.inventory-overview-screen .inventory-overview-title span,
+.inventory-overview-screen .inventory-overview-panel-head p {
+  color: var(--overview-muted);
+}
+
+.inventory-overview-screen .inventory-overview-actions .button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--overview-line-strong);
+  border-radius: 9px;
+  box-shadow: 0 4px 12px rgba(39, 78, 132, 0.06);
+}
+
+.inventory-overview-screen .inventory-overview-actions .button:not(.primary) {
+  color: var(--overview-text);
+  background: #fff;
+}
+
+.inventory-overview-screen .inventory-overview-actions .button:not(.primary):hover {
+  border-color: #8eb5ef;
+  background: #f5f9ff;
+}
+
+.inventory-overview-screen .inventory-overview-actions .button.primary {
+  border-color: #2563eb;
+  background: #2563eb;
+  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.18);
+}
+
+.inventory-overview-screen .inventory-overview-kpi {
+  min-height: 70px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--overview-surface);
+}
+
+.inventory-overview-screen .inventory-overview-kpi > span {
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+  border-radius: 10px;
+}
+
+.inventory-overview-screen .inventory-overview-kpi strong {
+  color: var(--overview-text);
+  font-size: 22px;
+}
+
+.inventory-overview-screen .inventory-overview-kpi p {
+  color: var(--overview-muted);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.inventory-overview-screen .inventory-overview-main,
+.inventory-overview-screen .inventory-overview-side,
+.inventory-overview-screen .inventory-overview-history {
+  border-radius: 14px;
+  background: var(--overview-surface);
+}
+
+.inventory-overview-screen .inventory-overview-main,
+.inventory-overview-screen .inventory-overview-side,
+.inventory-overview-screen .inventory-overview-history {
+  padding: 14px;
+}
+
+.inventory-overview-screen .inventory-overview-panel-head {
+  margin: -2px 0 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e8f0fa;
+}
+
+.inventory-overview-screen .inventory-overview-panel-head h2,
+.inventory-overview-screen .inventory-overview-side h2 {
+  color: var(--overview-text);
+  font-size: 16px;
+}
+
+.inventory-overview-screen .inventory-overview-side {
+  gap: 8px;
+}
+
+.inventory-overview-screen .inventory-overview-side h2 {
+  margin: 0 0 2px;
+}
+
+.inventory-overview-screen .inventory-overview-shortcut,
+.inventory-overview-screen .inventory-overview-attention-list button {
+  border: 1px solid var(--overview-line) !important;
+  border-radius: 10px;
+  background: var(--overview-soft);
+  box-shadow: none;
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.inventory-overview-screen .inventory-overview-shortcut {
+  min-height: 36px;
+  color: var(--overview-text);
+}
+
+.inventory-overview-screen .inventory-overview-shortcut:hover,
+.inventory-overview-screen .inventory-overview-attention-list button:hover {
+  border-color: #8eb5ef !important;
+  background: #f1f7ff;
+  box-shadow: 0 5px 14px rgba(39, 78, 132, 0.08);
+  transform: translateY(-1px);
+}
+
+.inventory-overview-screen .inventory-overview-shortcut svg:first-child {
+  color: #2563eb;
+}
+
+.inventory-overview-screen .inventory-overview-state {
+  min-height: 112px;
+  border: 1px dashed var(--overview-line-strong) !important;
+  border-radius: 12px;
+  background: #f9fbff;
+  box-shadow: none;
+}
+
+.inventory-overview-screen .inventory-overview-state > span {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+.inventory-overview-screen .inventory-overview-state strong {
+  color: var(--overview-text);
+}
+
+.inventory-overview-screen .inventory-overview-state p {
+  color: var(--overview-muted);
+}
+
+.inventory-overview-screen .inventory-overview-table-wrap {
+  overflow: auto;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.inventory-overview-screen .inventory-overview-table th {
+  color: #6b83a2;
+  background: #f4f8fd;
+  border-bottom-color: var(--overview-line);
+  font-size: 10px;
+}
+
+.inventory-overview-screen .inventory-overview-table td {
+  color: var(--overview-text);
+  border-bottom-color: #edf3fa;
+}
+
+.inventory-overview-screen .inventory-overview-table tbody tr:hover {
+  background: #f8fbff;
+}
+
+.inventory-overview-screen .inventory-overview-action {
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid #cfe0f6;
+  background: #edf4ff;
+  color: #245bb9;
+  font-size: 11px;
+}
+
+@media (max-width: 860px) {
+  .inventory-overview-screen .inventory-overview-commandbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .inventory-overview-screen .inventory-overview-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .inventory-overview-screen .inventory-overview-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .inventory-overview-screen .inventory-overview-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-overview-screen .inventory-overview-title h1 {
+    font-size: 22px;
+  }
+
+  .inventory-overview-screen .inventory-overview-table {
+    min-width: 720px;
+  }
+}

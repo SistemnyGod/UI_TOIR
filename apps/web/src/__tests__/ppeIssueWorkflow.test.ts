@@ -125,6 +125,38 @@ describe("PPE issue workflow draft", () => {
     expect(readPpeIssueWorkflowCache("user-a")).toBeNull();
     expect(readPpeIssueWorkflowCache("user-b")?.employeeId).toBe("employee-2");
   });
+
+  it("persists selected catalog items without inventing normative issue lines", () => {
+    const selected = item("item-selected", "Каска защитная");
+    writePpeIssueWorkflowCache({
+      basis: "Приказ № 882н",
+      employeeId: "employee-1",
+      issueDate: "2026-07-23",
+      issueLines: [],
+      issueType: "primary",
+      responsibleName: "Бухгалтер",
+      selectedCatalogItems: [{
+        comment: "",
+        item: selected,
+        localId: "selected-1",
+        mappingId: null,
+        normResolutionStatus: "unresolved",
+        normRowId: null,
+        quantity: 1,
+        sizeText: "",
+        unitPriceMinor: 10000,
+        warehouseId: "warehouse-1",
+      }],
+      source: "empty",
+      idempotencyKey: "draft-selected-item",
+      step: 2,
+    }, "user-selected");
+
+    const restored = readPpeIssueWorkflowCache("user-selected");
+    expect(restored?.issueLines).toEqual([]);
+    expect(restored?.selectedCatalogItems).toHaveLength(1);
+    expect(restored?.selectedCatalogItems?.[0].normResolutionStatus).toBe("unresolved");
+  });
   it("preserves actual quantity and method when replacing a mapped item", () => {
     const currentRow = normRow("norm-current", "item-current", 2);
     const replacementRow = normRow("norm-current", "item-replacement", 2);
@@ -173,14 +205,49 @@ describe("PPE issue workflow draft", () => {
 
     expect(row.quantity).toBe(2);
     expect(line.quantity).toBe(1);
-    expect(validateIssueDraftLine(line, row)).toContainEqual({
+    expect(validateIssueDraftLine(line, row)).not.toContainEqual({
       level: "warning",
       text: "Количество ниже нормы",
     });
   });
+
+  it("blocks a quantity above the server-provided available entitlement", () => {
+    const row = { ...normRow("norm-available", "item-1", 6), alreadyIssuedQuantity: 4, availableQuantity: 2, entitlementStatus: "resolved" as const };
+    const line = createIssueDraftLine(row, "2026-07-23", 3)!;
+
+    expect(validateIssueDraftLine(line, row)).toContainEqual(expect.objectContaining({ level: "error", text: "Доступно по норме: 2; выбрано: 3" }));
+  });
 });
 
 describe("PPE issue mock API", () => {
+  it("returns norm candidates in confirmation priority order", async () => {
+    const repository = createMockInventoryRepository();
+    const [employees, settings, items] = await Promise.all([
+      repository.getEmployees({ pageSize: 100 }),
+      repository.getSettings(),
+      repository.getPpeItems({ pageSize: 100 }),
+    ]);
+    const employee = employees.rows.find((candidate) =>
+      settings.positionNorms.some((norm) => norm.positionName.trim().toLocaleLowerCase("ru") === candidate.position.trim().toLocaleLowerCase("ru")),
+    );
+    const catalogItem = items.rows.find((candidate) => candidate.itemKind === "ppe" && candidate.isActive);
+    expect(employee).toBeTruthy();
+    expect(catalogItem).toBeTruthy();
+
+    const candidates = await repository.getPpeNormCandidates(catalogItem!.id, {
+      employeeId: employee!.id,
+      issueDate: "2026-07-23",
+      quantity: 1,
+    });
+
+    expect(candidates.length).toBeGreaterThan(0);
+    expect(candidates[0]).toEqual(expect.objectContaining({
+      availableQuantity: expect.any(Number),
+      normRowId: expect.any(String),
+      status: expect.stringMatching(/confirmed_mapping|candidate|incompatible|limit_exhausted/),
+    }));
+  });
+
   it("persists draft requisites and creates issue rows atomically", async () => {
     const repository = createMockInventoryRepository();
     const [employees, settings] = await Promise.all([
@@ -241,8 +308,9 @@ describe("PPE issue mock API", () => {
     const afterFailure = await repository.getPpeHistory({ employeeId: employee!.id, pageSize: 100 });
     expect(afterFailure.total).toBe(before.total);
 
-    const saved = await repository.createPpeIssueBatch(updated.id, {
+    const batchPayload = {
       expectedVersion: updated.version ?? 0,
+      idempotencyKey: "ppe-batch-test-key",
       lines: rows.map((row) => ({
         cardNormRowId: row.id,
         issueMethod: "personal" as const,
@@ -251,8 +319,11 @@ describe("PPE issue mock API", () => {
         quantity: 1,
         unitPriceMinor: null,
       })),
-    });
+    };
+    const saved = await repository.createPpeIssueBatch(updated.id, batchPayload);
     expect(saved.lines.filter((line) => line.status === "issued")).toHaveLength(rows.length);
+    const repeated = await repository.createPpeIssueBatch(updated.id, batchPayload);
+    expect(repeated.lines).toHaveLength(saved.lines.length);
   });
 });
 function createMemoryStorage(): Storage {

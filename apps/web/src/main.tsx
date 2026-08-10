@@ -6,6 +6,8 @@ import "./shared/styles/tokens.css";
 import "./styles/interface-polish.css";
 import "./shared/styles/foundation.css";
 import "./styles/non-ppe-ui.css";
+import "./styles/button-polish.css";
+import "./styles/sidebar-navigation-polish.css";
 
 const chunkReloadKey = "patrol360:chunk-reload";
 

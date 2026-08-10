@@ -22,39 +22,6 @@
   width: 100%;
 }
 
-.emu-shell-work-accounting .emu-work-period-filter {
-  align-items: center;
-  background: #fff;
-  border: 1px solid #d7e3f5;
-  border-radius: 10px;
-  display: grid;
-  gap: 6px;
-  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) auto;
-  margin: 0;
-  min-inline-size: 0;
-  padding: 4px 8px;
-}
-
-.emu-shell-work-accounting .emu-work-period-filter legend {
-  color: #6b7891;
-  font-size: 11px;
-  font-weight: 800;
-  grid-column: 1 / -1;
-  padding: 0;
-}
-
-.emu-shell-work-accounting .emu-work-period-filter label {
-  align-items: center;
-  display: contents;
-}
-
-.emu-shell-work-accounting .emu-work-period-filter label span {
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.emu-shell-work-accounting .emu-work-period-filter input,
 .emu-shell-work-accounting .emu-work-search-filter input {
   min-width: 0;
   width: 100%;
@@ -513,5 +480,49 @@
 
   .emu-favorites-modal-frame .emu-reference-list {
     max-height: 280px;
+  }
+}
+
+/* Work accounting: keep only the controls that are useful for the daily board. */
+.emu-shell-work-accounting .emu-work-board-toolbar-main {
+  grid-template-columns: max-content minmax(190px, 0.8fr) minmax(280px, 1.4fr);
+}
+
+.emu-shell-work-accounting .emu-work-board-toolbar-main .emu-work-search-filter {
+  grid-column: auto;
+}
+
+.emu-shell-work-accounting .emu-work-search-filter {
+  min-height: 34px;
+  border-color: #c9d9ee;
+  box-shadow: 0 3px 10px rgba(31, 72, 126, 0.05);
+}
+
+.emu-shell-work-accounting .emu-work-search-filter:focus-within {
+  border-color: #3e83ef;
+  box-shadow: 0 0 0 3px rgba(62, 131, 239, 0.13);
+}
+
+.emu-shell-work-accounting .emu-work-search-filter input {
+  min-height: 30px;
+}
+
+@media (max-width: 1100px) and (min-width: 921px) {
+  .emu-shell-work-accounting .emu-work-board-toolbar-main {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+
+  .emu-shell-work-accounting .emu-work-board-toolbar-main .emu-work-search-filter {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 920px) {
+  .emu-shell-work-accounting .emu-work-board-toolbar-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .emu-shell-work-accounting .emu-work-board-toolbar-main .emu-work-search-filter {
+    grid-column: 1;
   }
 }

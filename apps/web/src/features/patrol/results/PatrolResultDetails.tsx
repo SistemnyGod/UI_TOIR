@@ -39,7 +39,6 @@ export function PatrolResultDetails({
   const [pointQuery, setPointQuery] = useState("");
   const issueResults = group.results.filter(hasResultIssue);
   const mediaResults = group.results.filter((result) => getAttachmentCount(result) > 0);
-  const plannedAt = group.plannedAt ?? "нет данных";
   const startedAt = group.startedAt ?? group.firstScanAt ?? "нет данных";
   const finishedAt = group.finishedAt ?? group.lastScanAt ?? "нет данных";
   const hasAttention = group.issuePoints > 0 || issueResults.length > 0;
@@ -128,39 +127,23 @@ export function PatrolResultDetails({
 
           <aside className="results-review-modal-route">
             <section className="results-review-route-card">
-              <h4>Маршрут</h4>
+              <h4>Обход</h4>
               <dl>
                 <div>
                   <dt>Маршрут</dt>
                   <dd>{group.route}</dd>
                 </div>
                 <div>
-                  <dt>Территория</dt>
-                  <dd>{group.territory}</dd>
+                  <dt>Назначен</dt>
+                  <dd>{group.employee}</dd>
                 </div>
                 <div>
-                  <dt>Смена</dt>
-                  <dd>{group.shift}</dd>
-                </div>
-                <div>
-                  <dt>План обхода</dt>
-                  <dd>{plannedAt}</dd>
-                </div>
-                <div>
-                  <dt>Начало обхода</dt>
+                  <dt>Начало</dt>
                   <dd>{startedAt}</dd>
                 </div>
                 <div>
-                  <dt>Окончание обхода</dt>
+                  <dt>Окончание</dt>
                   <dd>{finishedAt}</dd>
-                </div>
-                <div>
-                  <dt>Итог времени</dt>
-                  <dd>{group.duration.label}</dd>
-                </div>
-                <div>
-                  <dt>Источник данных</dt>
-                  <dd>{sourceLabel(group.results[0]?.source)}</dd>
                 </div>
               </dl>
             </section>

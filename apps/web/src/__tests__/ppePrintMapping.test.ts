@@ -42,11 +42,23 @@ describe("ppe print mapping", () => {
     const data = printDataFromDetail(cardDetail(), inventoryItems());
     const html = buildPrintHtml(data, "sheet");
 
-    expect(html).toContain("Каска защитная от механических воздействий");
+    expect(html).toContain("Каска защитная");
+    expect(html).not.toContain("Каска защитная от механических воздействий");
     expect(html).toContain("Форвард, Эксперт К3/SIM-06/K");
     expect(html).toContain("10.06.2026");
     expect(html).not.toContain("Средства защиты головы:");
     expect(html).not.toContain("Перчатки диэлектрические");
+  });
+
+  it("keeps normative quantity in the personal card and actual partial quantity in the issue sheet", () => {
+    const data = printDataFromDetail(cardDetail({ lines: [{ ...issuedLine(), quantity: 0.5, quantityText: "1 шт." }] }), inventoryItems());
+    const cardHtml = buildPrintHtml(data, "card");
+    const sheetHtml = buildPrintHtml(data, "sheet");
+    const line = data.lines[0];
+
+    expect(line).toMatchObject({ quantity: 0.5, normQuantity: 1, normQuantityText: "1 шт." });
+    expect(cardHtml).toContain("1 шт.");
+    expect(sheetHtml).toContain("0,5 шт.");
   });
 
   it("keeps personal-card source order but sorts signature rows by issue date", () => {
@@ -54,12 +66,14 @@ describe("ppe print mapping", () => {
       ...issuedLine(),
       id: "ppe-line-later",
       issuedAt: "2026-06-20T00:00:00.000Z",
+      itemName: "Фактическая поздняя выдача",
       printItemName: "Поздняя выдача",
     };
     const earlier = {
       ...issuedLine(),
       id: "ppe-line-earlier",
       issuedAt: "2026-06-01T00:00:00.000Z",
+      itemName: "Фактическая ранняя выдача",
       printItemName: "Ранняя выдача",
     };
     const data = printDataFromDetail(cardDetail({ lines: [later, earlier] }), inventoryItems());
@@ -68,7 +82,7 @@ describe("ppe print mapping", () => {
 
     expect(data.lines.map((line) => line.printItemName)).toEqual(["Поздняя выдача", "Ранняя выдача"]);
     expect(cardHtml.indexOf("Поздняя выдача")).toBeLessThan(cardHtml.indexOf("Ранняя выдача"));
-    expect(sheetHtml.indexOf("Ранняя выдача")).toBeLessThan(sheetHtml.indexOf("Поздняя выдача"));
+    expect(sheetHtml.indexOf("Фактическая ранняя выдача")).toBeLessThan(sheetHtml.indexOf("Фактическая поздняя выдача"));
   });
 
   it("keeps returned issued PPE in the signature sheet return block", () => {
@@ -81,7 +95,7 @@ describe("ppe print mapping", () => {
     const data = printDataFromDetail(cardDetail({ lines: [sectionLine(), returnedLine, notIssuedLine()] }), inventoryItems());
     const html = buildPrintHtml(data, "sheet");
 
-    expect(html).toContain(returnedLine.printItemName);
+    expect(html).toContain(returnedLine.itemName);
     expect(html).toContain("01.07.2026");
     expect(html).not.toContain(notIssuedLine().printItemName);
   });
@@ -96,7 +110,7 @@ describe("ppe print mapping", () => {
     const data = printDataFromDetail(cardDetail({ lines: [sectionLine(), writtenOffLine, notIssuedLine()] }), inventoryItems());
     const html = buildPrintHtml(data, "sheet");
 
-    expect(html).toContain(writtenOffLine.printItemName);
+    expect(html).toContain(writtenOffLine.itemName);
     expect(html).toContain("02.07.2026");
     expect(html).toContain("Требуется акт");
     expect(html).not.toContain(notIssuedLine().printItemName);

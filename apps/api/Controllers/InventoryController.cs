@@ -313,6 +313,17 @@ public sealed class InventoryController(
             Math.Max(1, (int)Math.Ceiling(rows.Count / (double)paging.PageSize))));
     }
 
+    [HttpGet("ppe/items/{itemId:guid}/norm-candidates")]
+    public ActionResult<IReadOnlyList<InventoryPpeNormCandidateDto>> PpeNormCandidates(
+        Guid itemId,
+        [FromQuery] Guid employeeId,
+        [FromQuery] decimal quantity = 1,
+        [FromQuery] DateOnly? issueDate = null)
+    {
+        if (quantity <= 0) return BadRequest("quantity must be greater than zero");
+        return Ok(inventoryWorkflowService.GetPpeNormCandidates(itemId, employeeId, quantity, issueDate));
+    }
+
     [HttpPost("ppe/cards")]
     [RequirePermission("inventory.ppe.manage")]
     public ActionResult<InventoryPpeCardDetailDto> CreatePpeCard(CreateInventoryPpeCardDto request) =>

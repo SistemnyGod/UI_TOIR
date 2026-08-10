@@ -1,0 +1,16 @@
+/* Keep expanded module navigation in normal flow so the last submenu item
+   cannot overlap the next module trigger or the settings section. */
+@media (min-width: 901px) {
+  body .app-shell:not(.sidebar-collapsed) .sidebar-submenu {
+    max-height: none;
+    overflow: visible;
+  }
+
+  body .app-shell:not(.sidebar-collapsed) .sidebar-submenu-list {
+    padding-bottom: 12px;
+  }
+
+  body .app-shell:not(.sidebar-collapsed) .module-nav.is-open + .module-nav {
+    margin-top: 8px;
+  }
+}

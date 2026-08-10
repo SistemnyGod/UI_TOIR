@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { buildNotificationText } from "./components/requests/requestModalUtils";
 import { AssignmentStatusBadge as StatusPill } from "./assignments/AssignmentStatusBadge";
@@ -11,6 +11,7 @@ import {
   FileText,
   ListChecks,
   MapPin,
+  MoreVertical,
   Plus,
   Route,
   Search,
@@ -1382,15 +1383,6 @@ function RequestModal({
   routes: RouteOption[];
   selectedRouteId?: string;
 }) {
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, []);
-
   return createPortal(
     <ModalShell
       className="assign-am-request-modal"
@@ -1625,66 +1617,130 @@ function ActiveAssignmentsCard({
   savingAssignmentId?: string;
   status: DataSourceStatus;
 }) {
+  const [openActionMenu, setOpenActionMenu] = useState<{ assignmentId: string; left: number; top: number } | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
   const currentAssignments = assignments.filter(isAssignmentCurrent);
   const waitingCount = currentAssignments.filter((assignment) => assignmentStatusText(assignment.status) === "Ожидает начала").length;
   const inProgressCount = currentAssignments.filter((assignment) => assignmentStatusText(assignment.status) === "Выполняется").length;
+
+  useEffect(() => {
+    if (!openActionMenu) return undefined;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest(".patrol-active-table-actions, .patrol-active-table-action-menu")) return;
+      setOpenActionMenu(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenActionMenu(null);
+    };
+    const handleViewportChange = () => setOpenActionMenu(null);
+
+    actionMenuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus({ preventScroll: true });
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", handleViewportChange);
+    window.addEventListener("resize", handleViewportChange);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", handleViewportChange);
+      window.removeEventListener("resize", handleViewportChange);
+    };
+  }, [openActionMenu]);
+
   const columns: CompactTableColumn<ActivePatrol>[] = [
     {
-      key: "employee",
-      header: "Сотрудник",
-      render: (assignment) => <strong className="patrol-active-table-primary" title={assignment.employee}>{assignment.employee}</strong>,
-      width: "18%",
-    },
-    {
-      key: "route",
-      header: "Маршрут",
-      render: (assignment) => <span className="patrol-active-table-route" title={assignment.route}>{assignment.route}</span>,
-      width: "20%",
-    },
-    {
-      key: "started-at",
-      header: "Начало",
-      render: (assignment) => <span>{formatAssignmentActionTime(assignment)}</span>,
-      width: "12%",
-    },
-    {
-      key: "status",
-      header: "Статус",
-      render: (assignment) => <StatusPill value={assignment.status} />,
-      width: "13%",
-    },
-    {
-      key: "progress",
-      header: "Прогресс",
+      key: "assignment",
+      header: "Назначение",
       render: (assignment) => (
-        <span
-          aria-label={`Прогресс обхода ${assignment.progress}%`}
-          aria-valuemax={100}
-          aria-valuemin={0}
-          aria-valuenow={assignment.progress}
-          className="patrol-active-table-progress"
-          role="progressbar"
-        >
-          <i style={{ width: `${assignment.progress}%` }} />
+        <span className="patrol-active-table-assignment">
+          <strong className="patrol-active-table-primary" title={assignment.employee}>{assignment.employee}</strong>
+          <span className="patrol-active-table-route" title={assignment.route}>{assignment.route}</span>
         </span>
       ),
-      width: "12%",
+      width: "52%",
+    },
+    {
+      key: "state",
+      header: "Состояние",
+      render: (assignment) => (
+        <span className="patrol-active-table-state">
+          <span className="patrol-active-table-state-line">
+            <StatusPill value={assignment.status} />
+            <small>{formatAssignmentActionTime(assignment)}</small>
+          </span>
+          <span className="patrol-active-table-progress-line">
+            <span
+              aria-label={`Прогресс обхода ${assignment.progress}%`}
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={assignment.progress}
+              className="patrol-active-table-progress"
+              role="progressbar"
+            >
+              <i style={{ width: `${assignment.progress}%` }} />
+            </span>
+            <small>{assignment.progress}%</small>
+          </span>
+        </span>
+      ),
+      width: "38%",
     },
     {
       key: "actions",
-      header: "Действия",
+      header: <span className="visually-hidden">Действия</span>,
       render: (assignment) => {
         const started = assignmentStatusText(assignment.status) === "Выполняется";
         const saving = savingAssignmentId === assignment.id;
+        const menuOpen = openActionMenu?.assignmentId === assignment.id;
+        const runCommand = (command: "start" | "cancel" | "complete") => {
+          setOpenActionMenu(null);
+          void onRunCommand(assignment.id, command);
+        };
+        const toggleMenu = (event: ReactMouseEvent<HTMLButtonElement>) => {
+          if (menuOpen) {
+            setOpenActionMenu(null);
+            return;
+          }
+          const rect = event.currentTarget.getBoundingClientRect();
+          const menuWidth = 196;
+          const menuHeight = 116;
+          const gap = 6;
+          const opensUp = rect.bottom + gap + menuHeight > window.innerHeight && rect.top > menuHeight + gap;
+          setOpenActionMenu({
+            assignmentId: assignment.id,
+            left: Math.max(8, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)),
+            top: opensUp ? Math.max(8, rect.top - menuHeight - gap) : Math.min(rect.bottom + gap, window.innerHeight - menuHeight - 8),
+          });
+        };
         return (
           <div className="patrol-active-table-actions">
-            <Button disabled={!canManage || started || saving} onClick={() => void onRunCommand(assignment.id, "start")} variant="ghost">Начать</Button>
-            <Button disabled={!canManage || saving} onClick={() => void onRunCommand(assignment.id, "complete")} variant="ghost">Завершить</Button>
-            <Button className="danger-outline" disabled={!canManage || saving} onClick={() => void onRunCommand(assignment.id, "cancel")} variant="ghost">Отменить</Button>
+            <IconButton
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              disabled={!canManage || saving}
+              label={`Действия по маршруту: ${assignment.route}`}
+              onClick={toggleMenu}
+            >
+              <MoreVertical size={18} />
+            </IconButton>
+            {menuOpen && typeof document !== "undefined" ? createPortal(
+              <div
+                className="patrol-active-table-action-menu"
+                ref={actionMenuRef}
+                role="menu"
+                style={{ left: openActionMenu.left, top: openActionMenu.top }}
+              >
+                <Button disabled={started || saving} onClick={() => runCommand("start")} role="menuitem" variant="ghost">Начать обход</Button>
+                <Button disabled={saving} onClick={() => runCommand("complete")} role="menuitem" variant="ghost">Завершить обход</Button>
+                <Button className="danger-outline" disabled={saving} onClick={() => runCommand("cancel")} role="menuitem" variant="ghost">Отменить назначение</Button>
+              </div>,
+              document.body,
+            ) : null}
           </div>
         );
       },
-      width: "25%",
+      width: "44px",
     },
   ];
 

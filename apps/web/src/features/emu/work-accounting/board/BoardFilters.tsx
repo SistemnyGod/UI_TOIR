@@ -47,35 +47,6 @@ export function SectionQuickFilter({
   );
 }
 
-export function WorkPeriodFilter({
-  from,
-  onChangeFrom,
-  onChangeTo,
-  onClear,
-  to,
-}: {
-  from: string;
-  onChangeFrom: (value: string) => void;
-  onChangeTo: (value: string) => void;
-  onClear: () => void;
-  to: string;
-}) {
-  return (
-    <fieldset className="emu-work-period-filter">
-      <legend>Период</legend>
-      <label>
-        <span>С</span>
-        <input aria-label="Начало периода" type="date" value={from} onChange={(event) => onChangeFrom(event.target.value)} />
-      </label>
-      <label>
-        <span>По</span>
-        <input aria-label="Конец периода" type="date" value={to} onChange={(event) => onChangeTo(event.target.value)} />
-      </label>
-      {from || to ? <button aria-label="Сбросить период" className="emu-filter-clear" onClick={onClear} type="button">×</button> : null}
-    </fieldset>
-  );
-}
-
 export function WorkSearchFilter({ onChange, onClear, value }: { onChange: (value: string) => void; onClear: () => void; value: string }) {
   return (
     <label className="emu-work-search-filter">

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { SiteUserAccessPanel } from "./components/SiteUserAccessPanel";
 import { SiteUserFormPanel } from "./components/SiteUserFormPanel";
 import { SiteUsersTablePanel } from "./components/SiteUsersTablePanel";
@@ -33,6 +34,7 @@ export function SiteUsersScreen({
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
   const [editingUser, setEditingUser] = useState<SiteUser | undefined>();
   const [hasUnsavedAccessChanges, setHasUnsavedAccessChanges] = useState(false);
+  const formReturnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!selected && workspace.users.length > 0) onSelectUser(workspace.users[0].id);
@@ -44,6 +46,55 @@ export function SiteUsersScreen({
       setFormMode("create");
     }
   }, [canManage, createIntent]);
+
+  useEffect(() => {
+    if (!formMode || typeof document === "undefined") return;
+
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    formReturnFocusRef.current = previousFocus;
+    const dialog = document.querySelector<HTMLElement>(".site-user-modal.site-user-modal-wide");
+    if (!dialog) return;
+
+    const focusableSelector = [
+      "button:not([disabled])",
+      "input:not([disabled]):not([type=hidden])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "[href]",
+      "[tabindex]:not([tabindex='-1'])",
+    ].join(",");
+    const getFocusable = () => Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)).filter((element) => element.getClientRects().length > 0);
+    getFocusable()[0]?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeFormModal();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+      const focusable = getFocusable();
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      const returnTarget = formReturnFocusRef.current;
+      formReturnFocusRef.current = null;
+      if (returnTarget && document.contains(returnTarget)) returnTarget.focus();
+    };
+  }, [formMode]);
 
   function openCreateModal() {
     setEditingUser(undefined);
@@ -130,22 +181,25 @@ export function SiteUsersScreen({
         </div>
       </section>
 
-      {formMode ? (
-        <div className="site-user-modal-backdrop" onMouseDown={closeFormModal}>
-          <div className="site-user-modal site-user-modal-wide" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
-            <SiteUserFormPanel
-              canManage={canManage}
-              catalog={workspace.catalog}
-              initialUser={editingUser}
-              mode={formMode}
-              onClose={closeFormModal}
-              onCreateUser={createUser}
-              onNotify={onNotify}
-              onUpdateUser={updateUser}
-            />
-          </div>
-        </div>
-      ) : null}
+      {formMode && typeof document !== "undefined"
+        ? createPortal(
+            <div className="site-user-modal-backdrop" onMouseDown={closeFormModal}>
+              <div className="site-user-modal site-user-modal-wide" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="site-user-form-title">
+                <SiteUserFormPanel
+                  canManage={canManage}
+                  catalog={workspace.catalog}
+                  initialUser={editingUser}
+                  mode={formMode}
+                  onClose={closeFormModal}
+                  onCreateUser={createUser}
+                  onNotify={onNotify}
+                  onUpdateUser={updateUser}
+                />
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

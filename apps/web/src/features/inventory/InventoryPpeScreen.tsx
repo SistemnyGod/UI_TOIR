@@ -19,6 +19,7 @@ import { PpeIssueModal } from "./ppe/PpeIssueModal";
 import { PpeLineActionModal } from "./ppe/PpeLineActionModal";
 import { PpeModuleNav } from "./ppe/PpeModuleNav";
 import { PpeButton } from "./ppe/PpeUi";
+import { savePpeNormSettingsIntent } from "./ppe/ppeNormSettingsIntent";
 
 type WorkspaceMode = "norms" | "issued" | "print";
 
@@ -219,7 +220,14 @@ export function InventoryPpeScreen({
         <main className="ppe-v2-card-pane">
           {workspaceLoading ? <div className="ppe-v2-state ppe-v2-state-large">Загрузка карточки сотрудника…</div> : error ? <div className="ppe-v2-state ppe-v2-state-large"><AlertTriangle size={32} /><strong>Не удалось открыть СИЗ</strong><span>{error}</span><PpeButton icon={<RefreshCw size={16} />} onClick={retryLoad} variant="secondary">Повторить</PpeButton></div> : !workspace ? <div className="ppe-v2-state ppe-v2-state-large"><UserRound size={32} /><strong>Выберите сотрудника</strong><span>Справа откроются нормы, выдача и печать.</span></div> : (
             <>
-              <EmployeeHeader onCreateIssue={() => onNavigate("inventory-ppe-create")} workspace={workspace} />
+              <EmployeeHeader
+                onCreateIssue={() => onNavigate("inventory-ppe-create")}
+                onOpenNormSettings={() => {
+                  savePpeNormSettingsIntent(workspace.employee.position);
+                  onNavigate("inventory-settings");
+                }}
+                workspace={workspace}
+              />
               {!card ? (
                 <div className="ppe-v2-state ppe-v2-state-large"><FileText size={34} /><strong>У сотрудника нет карточки СИЗ</strong><span>Создайте карточку из действующих норм, предыдущей карточки или пустого шаблона.</span><PpeButton onClick={() => onNavigate("inventory-ppe-create")} variant="primary">Создать карточку</PpeButton></div>
               ) : (
@@ -263,7 +271,7 @@ export function InventoryPpeScreen({
   );
 }
 
-function EmployeeHeader({ onCreateIssue, workspace }: { onCreateIssue: () => void; workspace: InventoryPpeWorkspaceDto }) {
+function EmployeeHeader({ onCreateIssue, onOpenNormSettings, workspace }: { onCreateIssue: () => void; onOpenNormSettings: () => void; workspace: InventoryPpeWorkspaceDto }) {
   const { employee, card } = workspace;
   return (
     <section className="ppe-v2-employee-head">
@@ -275,6 +283,7 @@ function EmployeeHeader({ onCreateIssue, workspace }: { onCreateIssue: () => voi
       <div className={"ppe-v2-norm-context " + (workspace.activeNormSet ? "is-ready" : "is-missing")}>
         <ShieldCheck size={18} />
         <div><strong>{workspace.activeNormSet ? "Применяются нормы должности" : "Опубликованные нормы не найдены"}</strong><span>{workspace.activeNormSet ? workspace.activeNormSet.positionName + " · версия " + workspace.activeNormSet.versionName + " · " + workspace.activeNormSet.sourceName : "Должность: " + employee.position + ". Карточку можно вести вручную, но нормативный источник не подтверждён."}</span></div>
+        {!workspace.activeNormSet ? <PpeButton onClick={onOpenNormSettings} size="compact" variant="secondary">Найти и проверить норму</PpeButton> : null}
       </div>
       <div className="ppe-v2-kpis">
         <Kpi label="Нормы" value={workspace.normsTotal} />
@@ -291,21 +300,38 @@ function Kpi({ label, tone = "", value }: { label: string; tone?: string; value:
   return <span className={tone ? `is-${tone}` : ""}><small>{label}</small><strong>{value}</strong></span>;
 }
 
+type NormRowsFilter = "all" | "mapping" | "issue" | "attention";
+
 function NormRowsTable({ rows, onIssue, onMap }: { rows: InventoryPpeCardNormRowDto[]; onIssue: (row: InventoryPpeCardNormRowDto) => void; onMap: (row: InventoryPpeCardNormRowDto) => void }) {
+  const [filter, setFilter] = useState<NormRowsFilter>("all");
   const itemRows = rows.filter((row) => row.rowType !== "group");
   const mapped = itemRows.filter((row) => row.mappedItemId).length;
   const needMapping = itemRows.length - mapped;
+  const needIssue = itemRows.filter((row) => row.coverageStatus === "not_issued" || row.coverageStatus === "partial").length;
   const attention = itemRows.filter((row) => row.coverageStatus === "overdue" || row.coverageStatus === "partial").length;
+  const visibleRows = filter === "all"
+    ? rows
+    : rows.filter((row) => row.rowType !== "group" && (
+      filter === "mapping" ? !row.mappedItemId
+        : filter === "issue" ? row.coverageStatus === "not_issued" || row.coverageStatus === "partial"
+          : row.coverageStatus === "overdue" || row.coverageStatus === "partial"
+    ));
   if (!rows.length) return <div className="ppe-v2-state ppe-v2-state-large"><ShieldCheck size={34} /><strong>В карточке нет строк норм</strong><span>Добавьте нормы вручную или создайте карточку из опубликованного набора должности.</span></div>;
   return (
     <section className="ppe-v2-work-section">
       <header className="ppe-v2-work-section-head"><div><span className="ppe-v2-eyebrow">Нормативная часть</span><h3>Положено сотруднику по норме</h3><p>Конкретная номенклатура выбирается отдельно и не изменяет нормативное наименование.</p></div><div className="ppe-v2-section-counters"><span><strong>{itemRows.length}</strong><small>позиций</small></span><span className="is-ready"><strong>{mapped}</strong><small>сопоставлено</small></span><span className={needMapping ? "is-warning" : "is-ready"}><strong>{needMapping}</strong><small>требуют выбора</small></span><span className={attention ? "is-danger" : ""}><strong>{attention}</strong><small>требуют внимания</small></span></div></header>
+      <div aria-label="Быстрый фильтр норм" className="ppe-v2-norm-filters" role="tablist">
+        <button aria-selected={filter === "all"} className={filter === "all" ? "is-active" : ""} onClick={() => setFilter("all")} role="tab" type="button"><span>Все нормы</span><b>{itemRows.length}</b></button>
+        <button aria-selected={filter === "mapping"} className={filter === "mapping" ? "is-active" : ""} onClick={() => setFilter("mapping")} role="tab" type="button"><span>Нужно сопоставить</span><b>{needMapping}</b></button>
+        <button aria-selected={filter === "issue"} className={filter === "issue" ? "is-active" : ""} onClick={() => setFilter("issue")} role="tab" type="button"><span>Нужно выдать</span><b>{needIssue}</b></button>
+        <button aria-selected={filter === "attention"} className={filter === "attention" ? "is-active" : ""} onClick={() => setFilter("attention")} role="tab" type="button"><span>Требуют внимания</span><b>{attention}</b></button>
+      </div>
       <div className="ppe-v2-table-wrap">
-        <table className="ppe-v2-table ppe-v2-norm-table ppe-v2-responsive-table"><thead><tr><th>Наименование СИЗ</th><th>Пункт норм</th><th>Периодичность</th><th>Количество</th><th>Номенклатура</th><th>Покрытие</th><th aria-label="Действия" /></tr></thead>
-          <tbody>{rows.map((row) => row.rowType === "group" ? <tr className="ppe-v2-group-row" key={row.id}><th colSpan={7}>{row.normItemName}</th></tr> : (
+        {visibleRows.length ? <table className="ppe-v2-table ppe-v2-norm-table ppe-v2-responsive-table"><thead><tr><th>Наименование СИЗ</th><th>Пункт норм</th><th>Периодичность</th><th>Количество</th><th>Номенклатура</th><th>Покрытие</th><th aria-label="Действия" /></tr></thead>
+          <tbody>{visibleRows.map((row) => row.rowType === "group" ? <tr className="ppe-v2-group-row" key={row.id}><th colSpan={7}>{row.normItemName}</th></tr> : (
             <tr className={`is-${row.coverageStatus} ${row.mappedItemId ? "is-mapped" : "is-unmapped"}`} key={row.id}><td data-label="СИЗ"><strong>{row.normItemName}</strong></td><td data-label="Пункт норм">{row.normPoint || "—"}</td><td data-label="Периодичность">{row.issuePeriodText || "—"}</td><td data-label="Количество">{row.quantityText || row.quantity}</td><td data-label="Номенклатура"><button className={`ppe-v2-link-button ${row.mappedItemId ? "is-selected" : "is-required"}`} onClick={() => onMap(row)} type="button">{row.mappedItemName || "Выбрать номенклатуру"}</button>{row.mappings.length > 1 ? <small>Допустимых вариантов: {row.mappings.length}</small> : row.brandModelArticle ? <small>{row.brandModelArticle}</small> : <small>Связь с товаром ещё не задана</small>}</td><td data-label="Покрытие"><Coverage status={row.coverageStatus} /></td><td className="ppe-v2-actions-cell"><PpeButton className="ppe-v2-row-action" onClick={() => onIssue(row)} size="compact" variant={row.mappedItemId ? "primary" : "secondary"}>{row.mappedItemId ? "Выдать" : "Подобрать и выдать"}</PpeButton></td></tr>
           ))}</tbody>
-        </table>
+        </table> : <div className="ppe-v2-state ppe-v2-filter-empty"><strong>По этому фильтру норм нет</strong><span>Вернитесь к общему списку или выберите другой этап работы.</span><PpeButton onClick={() => setFilter("all")} size="compact" variant="secondary">Показать все нормы</PpeButton></div>}
       </div>
     </section>
   );

@@ -41,6 +41,7 @@ import type {
   InventoryPpeCardNormRowDto,
   InventoryPpeHistoryRowDto,
   InventoryPpeNormMappingDto,
+  InventoryPpeNormCandidateDto,
   InventoryPpeSummaryDto,
   InventoryReferenceOptionDto,
   InventoryReportDto,
@@ -80,6 +81,7 @@ type InventoryMockStore = {
   items: InventoryItemDto[];
   legacyRuns: InventoryLegacyImportRunDto[];
   ppeCards: InventoryPpeCardDetailDto[];
+  ppeIssueBatchKeys: Record<string, string>;
   ppeMappings: Record<string, InventoryPpeNormMappingDto[]>;
   settings: InventorySettingsDto;
   stock: InventoryStockBalanceDto[];
@@ -546,6 +548,9 @@ export function createMockInventoryRepository(): InventoryRepository {
       if (payload.expectedVersion != null && (card.version ?? 1) !== payload.expectedVersion) throw new Error("Карточка СИЗ была изменена другим пользователем");
       const normRow = required(card.normRows?.find((row) => row.id === payload.cardNormRowId), "Строка нормы не найдена");
       const item = required(store.items.find((row) => row.id === payload.itemId), "Номенклатура не найдена");
+      if (!normRow.sourceNormRowId) throw new Error("Позиция без нормы оформляется только через дополнительную batch-выдачу");
+      const alreadyIssued = store.ppeCards.filter((candidate) => candidate.employeeId === card.employeeId).flatMap((candidate) => candidate.lines).filter((line) => line.cardNormRowId === normRow.id && ["issued", "partial"].includes(line.status)).reduce((sum, line) => sum + line.quantity, 0);
+      if (payload.quantity > Math.max(0, normRow.quantity - alreadyIssued)) throw new Error(`Доступно ${Math.max(0, normRow.quantity - alreadyIssued)}, выбрано ${payload.quantity}`);
       const unitPriceMinor = payload.unitPriceMinor ?? item.defaultUnitPriceMinor ?? 0;
       const line: InventoryPpeCardLineDto = {
         amountMinor: unitPriceMinor * payload.quantity,
@@ -581,6 +586,7 @@ export function createMockInventoryRepository(): InventoryRepository {
     async createPpeIssueBatch(cardId, payload: CreateInventoryPpeIssueBatchDto) {
       const store = readStore();
       const card = required(store.ppeCards.find((row) => row.id === cardId), "Карточка СИЗ не найдена");
+      if (payload.idempotencyKey && store.ppeIssueBatchKeys[cardId] === payload.idempotencyKey) return card;
       if ((card.version ?? 1) !== payload.expectedVersion) throw new Error("Карточка СИЗ была изменена другим пользователем");
       if (!payload.lines.length) throw new Error("Добавьте хотя бы одну позицию СИЗ");
       const seen = new Set<string>();
@@ -590,6 +596,10 @@ export function createMockInventoryRepository(): InventoryRepository {
         const normRow = required(card.normRows?.find((row) => row.id === linePayload.cardNormRowId), "Строка нормы не найдена");
         const item = required(store.items.find((row) => row.id === linePayload.itemId && row.isActive), "Номенклатура не найдена");
         if (linePayload.quantity <= 0) throw new Error("Количество должно быть больше нуля");
+        if (normRow.sourceNormRowId && linePayload.isAdditional) throw new Error("Нормативную позицию нельзя оформить как дополнительную");
+        if (!normRow.sourceNormRowId && !linePayload.isAdditional) throw new Error("Позиция без нормы должна быть явно оформлена как дополнительная");
+        if (linePayload.isAdditional && !linePayload.comment?.trim()) throw new Error("Для дополнительной выдачи нужна причина");
+        if (normRow.sourceNormRowId && typeof normRow.availableQuantity === "number" && linePayload.quantity > normRow.availableQuantity) throw new Error(`Доступно ${normRow.availableQuantity}, выбрано ${linePayload.quantity}`);
         const unitPriceMinor = linePayload.unitPriceMinor ?? item.defaultUnitPriceMinor ?? 0;
         return { linePayload, normRow, item, unitPriceMinor };
       });
@@ -610,6 +620,7 @@ export function createMockInventoryRepository(): InventoryRepository {
       }
       card.status = "active";
       card.version = (card.version ?? 1) + 1;
+      if (payload.idempotencyKey) store.ppeIssueBatchKeys[cardId] = payload.idempotencyKey;
       writeStore(store);
       return card;
     },
@@ -742,6 +753,51 @@ export function createMockInventoryRepository(): InventoryRepository {
         return matchesQuery && matchesCategory;
       });
       return pageRows(rows, params);
+    },
+
+    async getPpeNormCandidates(itemId, params) {
+      const store = readStore();
+      const employee = required(store.employees.find((row) => row.id === params.employeeId), "Сотрудник не найден");
+      const item = required(store.items.find((row) => row.id === itemId && row.isActive), "Номенклатура не найдена");
+      const rows = buildMockPpeNormRows(store, employee.position, null).filter((row) => row.rowType === "item");
+      return rows.map((row): InventoryPpeNormCandidateDto => {
+        const mappings = store.ppeMappings[row.sourceNormRowId ?? row.id] ?? [];
+        const mapping = mappings.find((candidate) => candidate.itemId === item.id) ?? null;
+        const issued = store.ppeCards
+          .filter((card) => card.employeeId === employee.id)
+          .flatMap((card) => card.lines)
+          .filter((line) => line.cardNormRowId === row.id && line.status === "issued")
+          .reduce((sum, line) => sum + line.quantity, 0);
+        const available = Math.max(0, row.quantity - issued);
+        const suggested = [item.name, item.normItemName, item.protectionClass].join(" ").toLowerCase().includes(row.normItemName.toLowerCase().split(" ")[0]);
+        const status = available < (params.quantity ?? 1)
+          ? "limit_exhausted"
+          : mapping ? "confirmed_mapping" : suggested ? "candidate" : "incompatible";
+        return {
+          alreadyIssuedQuantity: issued,
+          availableQuantity: available,
+          issuePeriodText: row.issuePeriodText,
+          lifeMonths: row.lifeMonths,
+          mappingId: mapping?.id ?? null,
+          normItemName: row.normItemName,
+          normPoint: row.normPoint,
+          normRowId: row.id,
+          normSetId: "mock-active-norm-set",
+          normSetVersion: 1,
+          previouslyConfirmedCount: mapping ? 1 : 0,
+          quantity: row.quantity,
+          quantityText: row.quantityText,
+          reasons: [mapping ? "Сохранённое соответствие этой номенклатуры с нормой найдено" : suggested ? "Совпадает название или категория" : "Совместимость не подтверждена, доступно для ручного выбора"],
+          status,
+          warnings: [
+            ...(available < (params.quantity ?? 1) ? ["Доступный остаток нормы меньше выбранного количества"] : []),
+            ...(mapping ? [] : ["Соответствие ещё не подтверждено"]),
+          ],
+        };
+      }).sort((left, right) => {
+        const rank = (status: InventoryPpeNormCandidateDto["status"]) => ({ confirmed_mapping: 0, candidate: 1, incompatible: 2, limit_exhausted: 3, manual_control_required: 4 }[status] ?? 5);
+        return rank(left.status) - rank(right.status) || left.normItemName.localeCompare(right.normItemName);
+      });
     },
 
     async getPpeCardHistory() {
@@ -1369,6 +1425,7 @@ function readStore(): InventoryMockStore {
       card.version ??= 1;
       card.normRows ??= [];
     });
+    store.ppeIssueBatchKeys ??= {};
     return store;
   } catch {
     const seed = createSeedStore();
@@ -1477,6 +1534,7 @@ function createSeedStore(): InventoryMockStore {
     items,
     legacyRuns: [],
     ppeCards: [ppeCard],
+    ppeIssueBatchKeys: {},
     ppeMappings: {},
     settings: {
       categories,
@@ -2074,6 +2132,9 @@ function buildMockPpeNormRows(
               ? "partial"
               : "issued",
         defaultUnitPriceMinor: defaultMapping?.defaultUnitPriceMinor ?? row.defaultUnitPriceMinor,
+        alreadyIssuedQuantity: row.sourceNormRowId ? issuedQuantity : 0,
+        availableQuantity: row.sourceNormRowId ? Math.max(0, row.quantity - issuedQuantity) : Number.MAX_SAFE_INTEGER,
+        entitlementStatus: row.sourceNormRowId ? "resolved" : "not_applicable",
         issuedQuantity,
         mappedItemId: defaultMapping?.itemId ?? row.mappedItemId,
         mappedItemName: defaultMapping?.itemName ?? row.mappedItemName,

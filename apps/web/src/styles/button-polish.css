@@ -1,0 +1,646 @@
+/*
+ * Shared action control polish.
+ *
+ * The application still contains several generations of button class names.
+ * Keep those names as behavioural contracts and give them one visual language
+ * here. Selector groups intentionally contain only action controls; plain
+ * buttons used as tabs, table rows and segmented controls remain untouched.
+ */
+
+:root {
+  --action-blue-start: #2b7dff;
+  --action-blue-end: #145fe8;
+  --action-blue-hover: #0d55d1;
+  --action-border: #c7d8ee;
+  --action-text: #18345d;
+  --action-muted: #5e7391;
+  --action-surface: #ffffff;
+  --action-surface-hover: #f1f6ff;
+  --action-danger-bg: #fff1f0;
+  --action-danger-border: #f0c2bd;
+  --action-danger-text: #b42318;
+  --action-radius: 10px;
+  --action-height: 38px;
+  --action-height-sm: 32px;
+  --action-shadow: 0 8px 18px rgb(27 74 144 / 10%);
+  --action-primary-shadow: 0 9px 20px rgb(20 95 232 / 22%);
+}
+
+/* The workspace and portaled dialogs share the same button contract. */
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(
+    .ui-button,
+    .button,
+    .compact-button,
+    .action-button,
+    .primary-button,
+    .secondary-button,
+    .danger-button,
+    .primary-action,
+    .secondary-action,
+    .ghost-action,
+    .assign-am-mini-button,
+    .dashboard-am-panel-action,
+    .dashboard-am-card-link,
+    .link-button,
+    .perco-button,
+    .perco-link-button,
+    .perco-action-button,
+    .emu-primary-button,
+    .emu-secondary-button,
+    .emu-ghost-button,
+    .emu-danger-button,
+    .emu-command-button,
+    .emu-action-clear,
+    .emu-action-cancel,
+    .emu-danger-action,
+    .emu-now-button,
+    .emu-directory-reset,
+    .emu-directory-footer-reset,
+    .emu-history-reset-button,
+    .emu-refresh-button,
+    .emu-notification-settings-button,
+    .emu-favorites-add-button,
+    .emu-favorites-remove-button,
+    .emu-template-add-button,
+    .emu-reference-save,
+    .emu-reference-cancel,
+    .emu-reference-edit,
+    .emu-reference-toggle,
+    .site-user-primary,
+    .site-user-secondary,
+    .inventory-primary-button,
+    .perco-primary-button,
+    .ppe-issue-primary-button,
+    .ppe-issue-secondary-button
+  ) {
+  align-items: center;
+  appearance: none;
+  border: 1px solid var(--action-border);
+  border-radius: var(--action-radius);
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  gap: 8px;
+  justify-content: center;
+  letter-spacing: 0;
+  line-height: 1.15;
+  max-width: 100%;
+  min-height: var(--action-height);
+  padding: 0 14px;
+  text-align: center;
+  text-decoration: none;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 170ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(
+    .button,
+    .compact-button,
+    .action-button,
+    .secondary-button,
+    .secondary-action,
+    .ghost-action,
+    .assign-am-mini-button,
+    .dashboard-am-panel-action,
+    .dashboard-am-card-link,
+    .link-button,
+    .perco-button,
+    .perco-link-button,
+    .perco-action-button,
+    .emu-secondary-button,
+    .emu-ghost-button,
+    .emu-now-button,
+    .emu-directory-reset,
+    .emu-directory-footer-reset,
+    .emu-history-reset-button,
+    .emu-refresh-button,
+    .emu-notification-settings-button,
+    .emu-favorites-add-button,
+    .emu-reference-cancel,
+    .emu-reference-edit,
+    .emu-reference-toggle,
+    .site-user-secondary,
+    .ppe-issue-secondary-button
+  ) {
+  background: var(--action-surface);
+  border-color: var(--action-border);
+  color: var(--action-text);
+}
+
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(
+    .primary-button,
+    .primary-action,
+    .ui-button.is-primary,
+    .button.primary,
+    .button.is-primary,
+    .emu-primary-button,
+    .emu-command-button,
+    .emu-template-add-button,
+    .site-user-primary,
+    .inventory-primary-button,
+    .perco-primary-button,
+    .ppe-issue-primary-button
+  ) {
+  background: linear-gradient(180deg, var(--action-blue-start) 0%, var(--action-blue-end) 100%);
+  border-color: var(--action-blue-end);
+  box-shadow: var(--action-primary-shadow);
+  color: #fff;
+}
+
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(.danger-button, .button.danger, .button.ghost.danger, .ui-button.is-danger, .emu-danger-button, .emu-danger-action) {
+  background: var(--action-danger-bg);
+  border-color: var(--action-danger-border);
+  color: var(--action-danger-text);
+}
+
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(.ghost-action, .emu-ghost-button, .link-button, .perco-link-button) {
+  background: transparent;
+  border-color: transparent;
+  color: var(--action-muted);
+}
+
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(.compact-button, .assign-am-mini-button, .button.small, .ui-button.is-sm, .emu-now-button, .emu-directory-reset, .emu-directory-footer-reset, .emu-history-reset-button, .emu-favorites-add-button, .emu-favorites-remove-button, .emu-reference-save, .emu-reference-cancel, .emu-reference-edit, .emu-reference-toggle) {
+  min-height: var(--action-height-sm);
+  padding-inline: 10px;
+}
+
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(
+    .ui-button,
+    .button,
+    .compact-button,
+    .action-button,
+    .primary-button,
+    .secondary-button,
+    .danger-button,
+    .primary-action,
+    .secondary-action,
+    .ghost-action,
+    .assign-am-mini-button,
+    .dashboard-am-panel-action,
+    .dashboard-am-card-link,
+    .link-button,
+    .perco-button,
+    .perco-link-button,
+    .perco-action-button,
+    .emu-primary-button,
+    .emu-secondary-button,
+    .emu-ghost-button,
+    .emu-danger-button,
+    .emu-command-button,
+    .emu-action-clear,
+    .emu-action-cancel,
+    .emu-danger-action,
+    .emu-now-button,
+    .emu-directory-reset,
+    .emu-directory-footer-reset,
+    .emu-history-reset-button,
+    .emu-refresh-button,
+    .emu-notification-settings-button,
+    .emu-favorites-add-button,
+    .emu-favorites-remove-button,
+    .emu-template-add-button,
+    .emu-reference-save,
+    .emu-reference-cancel,
+    .emu-reference-edit,
+    .emu-reference-toggle,
+    .site-user-primary,
+    .site-user-secondary,
+    .inventory-primary-button,
+    .perco-primary-button,
+    .ppe-issue-primary-button,
+    .ppe-issue-secondary-button
+  ):not(:disabled):not([aria-disabled="true"]):hover {
+  box-shadow: var(--action-shadow);
+  transform: translateY(-1px);
+}
+
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(
+    .primary-button,
+    .primary-action,
+    .ui-button.is-primary,
+    .button.primary,
+    .button.is-primary,
+    .emu-primary-button,
+    .emu-command-button,
+    .emu-template-add-button,
+    .site-user-primary,
+    .inventory-primary-button,
+    .perco-primary-button,
+    .ppe-issue-primary-button
+  ):not(:disabled):not([aria-disabled="true"]):hover {
+  background: linear-gradient(180deg, #3485ff 0%, var(--action-blue-hover) 100%);
+  border-color: var(--action-blue-hover);
+  box-shadow: 0 11px 24px rgb(20 95 232 / 28%);
+}
+
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(
+    .secondary-button,
+    .secondary-action,
+    .compact-button,
+    .dashboard-am-panel-action,
+    .dashboard-am-card-link,
+    .perco-button,
+    .emu-secondary-button,
+    .emu-now-button,
+    .emu-directory-reset,
+    .emu-directory-footer-reset,
+    .emu-history-reset-button,
+    .emu-refresh-button,
+    .emu-notification-settings-button,
+    .emu-favorites-add-button,
+    .emu-reference-save,
+    .emu-reference-cancel,
+    .emu-reference-edit,
+    .emu-reference-toggle,
+    .site-user-secondary,
+    .ppe-issue-secondary-button
+  ):not(:disabled):not([aria-disabled="true"]):hover {
+  background: var(--action-surface-hover);
+  border-color: #96b9ec;
+  color: #0d55c8;
+}
+
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(.danger-button, .button.danger, .button.ghost.danger, .ui-button.is-danger, .emu-danger-button, .emu-danger-action):not(:disabled):not([aria-disabled="true"]):hover {
+  background: #ffe6e3;
+  border-color: #e8a49d;
+  color: #9f1d13;
+}
+
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(.ghost-action, .emu-ghost-button, .link-button, .perco-link-button):not(:disabled):not([aria-disabled="true"]):hover {
+  background: var(--action-surface-hover);
+  border-color: transparent;
+  color: #0d55c8;
+}
+
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(
+    .ui-button,
+    .button,
+    .compact-button,
+    .action-button,
+    .primary-button,
+    .secondary-button,
+    .danger-button,
+    .primary-action,
+    .secondary-action,
+    .ghost-action,
+    .assign-am-mini-button,
+    .dashboard-am-panel-action,
+    .dashboard-am-card-link,
+    .link-button,
+    .perco-button,
+    .perco-link-button,
+    .perco-action-button,
+    .emu-primary-button,
+    .emu-secondary-button,
+    .emu-ghost-button,
+    .emu-danger-button,
+    .emu-command-button,
+    .emu-action-clear,
+    .emu-action-cancel,
+    .emu-danger-action,
+    .emu-now-button,
+    .emu-directory-reset,
+    .emu-directory-footer-reset,
+    .emu-history-reset-button,
+    .emu-refresh-button,
+    .emu-notification-settings-button,
+    .emu-favorites-add-button,
+    .emu-favorites-remove-button,
+    .emu-template-add-button,
+    .emu-reference-save,
+    .emu-reference-cancel,
+    .emu-reference-edit,
+    .emu-reference-toggle,
+    .site-user-primary,
+    .site-user-secondary,
+    .inventory-primary-button,
+    .perco-primary-button,
+    .ppe-issue-primary-button,
+    .ppe-issue-secondary-button
+  ):focus-visible {
+  outline: 3px solid rgb(37 99 235 / 25%);
+  outline-offset: 2px;
+}
+
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(
+    .ui-button,
+    .button,
+    .compact-button,
+    .action-button,
+    .primary-button,
+    .secondary-button,
+    .danger-button,
+    .primary-action,
+    .secondary-action,
+    .ghost-action,
+    .assign-am-mini-button,
+    .dashboard-am-panel-action,
+    .dashboard-am-card-link,
+    .link-button,
+    .perco-button,
+    .perco-link-button,
+    .perco-action-button,
+    .emu-primary-button,
+    .emu-secondary-button,
+    .emu-ghost-button,
+    .emu-danger-button,
+    .emu-command-button,
+    .emu-action-clear,
+    .emu-action-cancel,
+    .emu-danger-action,
+    .emu-now-button,
+    .emu-directory-reset,
+    .emu-directory-footer-reset,
+    .emu-history-reset-button,
+    .emu-refresh-button,
+    .emu-notification-settings-button,
+    .emu-favorites-add-button,
+    .emu-favorites-remove-button,
+    .emu-template-add-button,
+    .emu-reference-save,
+    .emu-reference-cancel,
+    .emu-reference-edit,
+    .emu-reference-toggle,
+    .site-user-primary,
+    .site-user-secondary,
+    .inventory-primary-button,
+    .perco-primary-button,
+    .ppe-issue-primary-button,
+    .ppe-issue-secondary-button
+  ):disabled,
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(
+    .ui-button,
+    .button,
+    .compact-button,
+    .action-button,
+    .primary-button,
+    .secondary-button,
+    .danger-button,
+    .primary-action,
+    .secondary-action,
+    .ghost-action,
+    .assign-am-mini-button,
+    .dashboard-am-panel-action,
+    .dashboard-am-card-link,
+    .link-button,
+    .perco-button,
+    .perco-link-button,
+    .perco-action-button,
+    .emu-primary-button,
+    .emu-secondary-button,
+    .emu-ghost-button,
+    .emu-danger-button,
+    .emu-command-button,
+    .emu-action-clear,
+    .emu-action-cancel,
+    .emu-danger-action,
+    .emu-now-button,
+    .emu-directory-reset,
+    .emu-directory-footer-reset,
+    .emu-history-reset-button,
+    .emu-refresh-button,
+    .emu-notification-settings-button,
+    .emu-favorites-add-button,
+    .emu-favorites-remove-button,
+    .emu-template-add-button,
+    .emu-reference-save,
+    .emu-reference-cancel,
+    .emu-reference-edit,
+    .emu-reference-toggle,
+    .site-user-primary,
+    .site-user-secondary,
+    .inventory-primary-button,
+    .perco-primary-button,
+    .ppe-issue-primary-button,
+    .ppe-issue-secondary-button
+  )[aria-disabled="true"] {
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: .56;
+  transform: none;
+}
+
+/* Icon controls stay square and never inherit the wide action padding. */
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(
+    .ui-icon-button,
+    .icon-button,
+    .modal-shell-close,
+    .modal-close,
+    .assign-am-picker-close,
+    .inventory-custody-icon-button,
+    .inventory-ppe-icon-button,
+    .ppe-v2-icon-button,
+    .perco-icon-button,
+    .topbar-logout,
+    .notification-button,
+    .collapse-button,
+    .mini-icon
+  ) {
+  align-items: center;
+  background: var(--action-surface);
+  border: 1px solid var(--action-border);
+  border-radius: 10px;
+  box-shadow: none;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 36px;
+  padding: 0;
+  width: 36px;
+}
+
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(.ui-icon-button, .icon-button, .modal-shell-close, .modal-close, .assign-am-picker-close, .inventory-custody-icon-button, .inventory-ppe-icon-button, .ppe-v2-icon-button, .perco-icon-button, .topbar-logout, .notification-button, .collapse-button, .mini-icon):not(:disabled):hover {
+  background: var(--action-surface-hover);
+  border-color: #96b9ec;
+  color: #0d55c8;
+  box-shadow: var(--action-shadow);
+  transform: translateY(-1px);
+}
+
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(.ui-icon-button, .icon-button, .modal-shell-close, .modal-close, .assign-am-picker-close, .inventory-custody-icon-button, .inventory-ppe-icon-button, .ppe-v2-icon-button, .perco-icon-button, .topbar-logout, .notification-button, .collapse-button, .mini-icon):focus-visible {
+  outline: 3px solid rgb(37 99 235 / 25%);
+  outline-offset: 2px;
+}
+
+/* Clear/search controls are intentionally smaller than action buttons. */
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(.emu-filter-clear, .emu-directory-search-clear, .emu-employee-search-clear, .emu-search-control button, .search-control button) {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--action-muted);
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  min-height: 28px;
+  min-width: 28px;
+  padding: 0;
+  width: 28px;
+}
+
+:is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+  button:is(.emu-filter-clear, .emu-directory-search-clear, .emu-employee-search-clear, .emu-search-control button, .search-control button):hover {
+  background: var(--action-surface-hover);
+  color: #0d55c8;
+  transform: none;
+}
+
+@media (max-width: 680px) {
+  :is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+    button:is(.ui-button, .button, .primary-button, .secondary-button, .primary-action, .secondary-action, .emu-primary-button, .emu-secondary-button, .site-user-primary, .site-user-secondary, .ppe-issue-primary-button, .ppe-issue-secondary-button) {
+    min-height: 42px;
+  }
+
+  :is(.workspace, .screen-area, .modal-backdrop, .site-user-modal-backdrop)
+    button:is(.compact-button, .button.small, .ui-button.is-sm, .emu-now-button, .emu-directory-reset, .emu-directory-footer-reset, .emu-history-reset-button, .emu-reference-save, .emu-reference-cancel, .emu-reference-edit, .emu-reference-toggle) {
+    min-height: 36px;
+  }
+}
+
+/* PPE has its own component prefix, but it follows the same action language. */
+:is(.workspace, .screen-area) button.ppe-ui-button {
+  border-radius: var(--action-radius);
+  font-size: 13px;
+  font-weight: 800;
+  min-height: var(--action-height);
+  padding-inline: 14px;
+}
+
+:is(.workspace, .screen-area) button.ppe-ui-button.is-primary {
+  background: linear-gradient(180deg, var(--action-blue-start) 0%, var(--action-blue-end) 100%);
+  border-color: var(--action-blue-end);
+  box-shadow: var(--action-primary-shadow);
+}
+
+:is(.workspace, .screen-area) button.ppe-ui-button.is-secondary {
+  background: var(--action-surface);
+  border-color: var(--action-border);
+  color: var(--action-text);
+}
+
+:is(.workspace, .screen-area) button.ppe-ui-button.is-ghost,
+:is(.workspace, .screen-area) button.ppe-ui-button.is-link {
+  color: var(--action-muted);
+}
+
+:is(.workspace, .screen-area) button.ppe-ui-button.is-danger {
+  background: var(--action-danger-bg);
+  border-color: var(--action-danger-border);
+  color: var(--action-danger-text);
+}
+
+:is(.workspace, .screen-area) button.ppe-ui-button.is-compact {
+  min-height: var(--action-height-sm);
+  padding-inline: 10px;
+}
+
+:is(.workspace, .screen-area) button.ppe-ui-button.is-touch {
+  min-height: 44px;
+  padding-inline: 15px;
+}
+
+:is(.workspace, .screen-area) button.ppe-ui-button.is-icon {
+  border-radius: 10px;
+  height: 36px;
+  min-height: 36px;
+  min-width: 36px;
+  padding: 0;
+  width: 36px;
+}
+
+/* Portaled result filters do not carry an action class, so style their own
+   segmented-control contract instead of letting the browser render defaults. */
+.modal-shell.results-review-modal .results-review-tabs {
+  align-items: center;
+  background: #f4f8ff;
+  border: 1px solid #dce8f7;
+  border-radius: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+}
+
+.modal-shell.results-review-modal .results-review-tabs button {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--action-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 6px;
+  justify-content: center;
+  min-height: 32px;
+  padding: 5px 10px;
+  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 170ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.modal-shell.results-review-modal .results-review-tabs button:hover:not(:disabled) {
+  background: #fff;
+  border-color: #c4d8f0;
+  box-shadow: var(--action-shadow);
+  color: #0d55c8;
+  transform: translateY(-1px);
+}
+
+.modal-shell.results-review-modal .results-review-tabs button.active {
+  background: linear-gradient(180deg, var(--action-blue-start) 0%, var(--action-blue-end) 100%);
+  border-color: var(--action-blue-end);
+  box-shadow: var(--action-primary-shadow);
+  color: #fff;
+}
+
+.modal-shell.results-review-modal .results-review-tabs button span {
+  align-items: center;
+  background: rgb(37 99 235 / 10%);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 11px;
+  justify-content: center;
+  min-height: 20px;
+  min-width: 20px;
+  padding-inline: 4px;
+}
+
+.modal-shell.results-review-modal .results-review-tabs button.active span {
+  background: rgb(255 255 255 / 20%);
+  color: #fff;
+}
+
+@media (max-width: 700px) {
+  .modal-shell.results-review-modal .results-review-tabs button {
+    flex: 1 1 120px;
+  }
+}

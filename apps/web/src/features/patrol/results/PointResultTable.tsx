@@ -22,11 +22,9 @@ export function PointResultTable({ group, results, onOpenAttachment, onBeforeOpe
       <div className="results-review-point-list">
         <div className="results-review-point-table-head" aria-hidden="true">
           <span>№</span>
-          <span>Метка</span>
-          <span>Статус</span>
-          <span>Время фиксации</span>
-          <span>Комментарий</span>
-          <span>Итог по метке</span>
+          <span aria-hidden="true" />
+          <span>Точка</span>
+          <span>Фиксация</span>
           <span>Фото</span>
         </div>
         {results.map((result, index) => {

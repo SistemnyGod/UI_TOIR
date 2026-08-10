@@ -321,6 +321,9 @@ internal sealed partial class EfInventoryWorkflowService
                     .ThenInclude(row => row!.Mappings)
                         .ThenInclude(mapping => mapping.Item)
             .Include(card => card.NormRows)
+                .ThenInclude(row => row.SourceNormRow)
+                    .ThenInclude(row => row!.NormSet)
+            .Include(card => card.NormRows)
                 .ThenInclude(row => row.Issues)
                     .ThenInclude(issue => issue.Item)
                         .ThenInclude(item => item.Unit)
@@ -519,7 +522,7 @@ internal sealed partial class EfInventoryWorkflowService
                 .ToList(),
             card.Version,
             card.NormSetId,
-            card.NormRows.OrderBy(row => row.SortOrder).Select(MapCardNormRow).ToList(),
+            card.NormRows.OrderBy(row => row.SortOrder).Select(row => MapCardNormRow(row, DateOnly.FromDateTime(card.CreatedAt.UtcDateTime))).ToList(),
             string.IsNullOrWhiteSpace(card.IssueType) ? "planned" : card.IssueType,
             card.ResponsibleName,
             card.Basis);

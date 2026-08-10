@@ -1,4 +1,5 @@
 import type {
+  InventoryItemDto,
   InventoryItemSetDetailDto,
   InventoryPpeCardNormRowDto,
 } from "../../../api/contracts";
@@ -17,12 +18,26 @@ export type PpeIssueDraftLine = {
   comment: string;
 };
 
+export type PpeSelectedCatalogItem = {
+  localId: string;
+  item: InventoryItemDto;
+  quantity: number;
+  sizeText: string;
+  warehouseId: string | null;
+  unitPriceMinor: number | null;
+  comment: string;
+  normRowId: string | null;
+  mappingId: string | null;
+  normResolutionStatus: "unresolved" | "confirmed" | "additional";
+};
+
 export type PpeIssueWorkflowCache = {
   basis: string;
   draftId?: string;
   employeeId: string;
   issueDate: string;
   issueLines: PpeIssueDraftLine[];
+  selectedCatalogItems?: PpeSelectedCatalogItem[];
   issueType: "primary" | "planned" | "replacement" | "additional";
   responsibleName: string;
   source: "active_norms" | "previous_card" | "empty";
@@ -95,7 +110,13 @@ export function validateIssueDraftLine(
   if (line.unitPriceMinor === null || !Number.isFinite(line.unitPriceMinor) || line.unitPriceMinor <= 0) problems.push({ level: "error", text: "Не указана цена за единицу" });
   if (row && line.quantity > row.quantity && row.quantity > 0) problems.push({ level: "warning", text: "Количество превышает норму" });
   if (row && line.quantity < row.quantity && row.quantity > 0) problems.push({ level: "warning", text: "Количество ниже нормы" });
-  return problems;
+  if (row?.sourceNormRowId && row.entitlementStatus === "manual_control_required") {
+    problems.push({ level: "error", text: "Период нормы требует ручной проверки до выдачи" });
+  }
+  if (row?.sourceNormRowId && typeof row.availableQuantity === "number" && line.quantity > row.availableQuantity) {
+    problems.push({ level: "error", text: `Доступно по норме: ${row.availableQuantity}; выбрано: ${line.quantity}` });
+  }
+  return problems.filter((problem) => !(row && line.quantity < row.quantity && problem.level === "warning"));
 }
 
 export function applyItemSetToDraft(
@@ -224,10 +245,11 @@ function isPpeIssueWorkflowCache(value: unknown): value is PpeIssueWorkflowCache
     !issueTypes.includes(candidate.issueType ?? "") ||
     !sources.includes(candidate.source ?? "") ||
     !Number.isInteger(candidate.step) || candidate.step! < 1 || candidate.step! > 4 ||
-    !Array.isArray(candidate.issueLines)
+    !Array.isArray(candidate.issueLines) ||
+    (candidate.selectedCatalogItems !== undefined && !Array.isArray(candidate.selectedCatalogItems))
   ) return false;
 
-  return candidate.issueLines.every((line) => {
+  const validLines = candidate.issueLines.every((line) => {
     if (!line || typeof line !== "object") return false;
     const draftLine = line as Partial<PpeIssueDraftLine>;
     return (
@@ -242,6 +264,21 @@ function isPpeIssueWorkflowCache(value: unknown): value is PpeIssueWorkflowCache
       (draftLine.warehouseId === undefined || draftLine.warehouseId === null || typeof draftLine.warehouseId === "string") &&
       (draftLine.comment === undefined || typeof draftLine.comment === "string")
     );
+  });
+  if (!validLines) return false;
+  return (candidate.selectedCatalogItems ?? []).every((selected) => {
+    if (!selected || typeof selected !== "object") return false;
+    const row = selected as Partial<PpeSelectedCatalogItem>;
+    return typeof row.localId === "string" &&
+      row.item !== null && typeof row.item === "object" &&
+      typeof row.quantity === "number" && Number.isFinite(row.quantity) && row.quantity > 0 &&
+      typeof row.sizeText === "string" &&
+      (row.warehouseId === null || typeof row.warehouseId === "string") &&
+      (row.unitPriceMinor === undefined || row.unitPriceMinor === null || (typeof row.unitPriceMinor === "number" && Number.isFinite(row.unitPriceMinor) && row.unitPriceMinor >= 0)) &&
+      typeof row.comment === "string" &&
+      (row.normRowId === null || typeof row.normRowId === "string") &&
+      (row.mappingId === null || typeof row.mappingId === "string") &&
+      ["unresolved", "confirmed", "additional"].includes(row.normResolutionStatus ?? "");
   });
 }
 

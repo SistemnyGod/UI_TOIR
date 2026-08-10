@@ -21,6 +21,7 @@ import type {
 } from "../../api/contracts";
 import { useInventoryRepository } from "../../repositories/inventoryRepositoryContext";
 import { PpeNormSetsAdmin } from "./PpeNormSetsAdmin";
+import { clearPpeNormSettingsIntent, readPpeNormSettingsIntent } from "./ppe/ppeNormSettingsIntent";
 import "./inventoryWeb.css";
 
 type InventorySettingsScreenProps = {
@@ -70,7 +71,8 @@ export function InventorySettingsScreen({
   settings,
 }: InventorySettingsScreenProps) {
   const inventoryRepository = useInventoryRepository();
-  const [tab, setTab] = useState<SettingsTab>("references");
+  const [normSettingsIntent] = useState(() => readPpeNormSettingsIntent());
+  const [tab, setTab] = useState<SettingsTab>(() => normSettingsIntent ? "norms" : "references");
   const [referenceModal, setReferenceModal] = useState<ReferenceModalState>(null);
   const [normModal, setNormModal] = useState<NormModalState>(null);
   const [itemSetModal, setItemSetModal] = useState<ItemSetModalState>(null);
@@ -90,6 +92,7 @@ export function InventorySettingsScreen({
 
   useEffect(() => {
     mountedRef.current = true;
+    clearPpeNormSettingsIntent();
     return () => {
       mountedRef.current = false;
     };
@@ -293,7 +296,7 @@ export function InventorySettingsScreen({
             </section>
           ) : null}
 
-          {tab === "norms" ? <NormsPanel norms={effectiveSettings.positionNorms} onCreate={() => openNormModal({})} onEdit={(row) => openNormModal({ row })} onNotify={onNotify} /> : null}
+          {tab === "norms" ? <NormsPanel initialSearch={normSettingsIntent?.position ?? ""} norms={effectiveSettings.positionNorms} onCreate={() => openNormModal({})} onEdit={(row) => openNormModal({ row })} onNotify={onNotify} /> : null}
           {tab === "sets" ? <ItemSetsPanel itemSets={effectiveSettings.itemSets} onCreate={() => openItemSetModal({})} onEdit={(row) => openItemSetModal({ row })} onToggle={(row) => void toggleItemSet(row)} /> : null}
           {tab === "health" ? <HealthPanel health={health} loading={healthLoading} /> : null}
         </>
@@ -396,11 +399,13 @@ function ReferenceCard({
 }
 
 function NormsPanel({
+  initialSearch,
   norms,
   onCreate,
   onEdit,
   onNotify,
 }: {
+  initialSearch: string;
   norms: InventorySettingsDto["positionNorms"];
   onCreate: () => void;
   onEdit: (row: InventorySettingsDto["positionNorms"][number]) => void;
@@ -408,7 +413,7 @@ function NormsPanel({
 }) {
   return (
     <div className="inventory-ppe-norms-workspace">
-      <PpeNormSetsAdmin onNotify={onNotify} />
+      <PpeNormSetsAdmin initialSearch={initialSearch} onNotify={onNotify} />
       <section className="inventory-settings-table-card inventory-ppe-manual-rules">
       <div className="inventory-settings-panel-head">
         <div>

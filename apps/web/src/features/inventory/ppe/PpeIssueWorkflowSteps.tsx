@@ -27,13 +27,14 @@ import type {
 } from "../../../api/contracts";
 import { useInventoryRepository } from "../../../repositories/inventoryRepositoryContext";
 import type { PpeEmployeeCardDetails, PrintData, PrintMode } from "./ppeTypes";
-import type { PpeIssueDraftLine, PpeIssueLineProblem } from "./ppeIssueDraft";
+import type { PpeIssueDraftLine, PpeIssueLineProblem, PpeSelectedCatalogItem } from "./ppeIssueDraft";
 import { PpeButton, PpeModalShell } from "./PpeUi";
 import { validateIssueDraftLine } from "./ppeIssueDraft";
 import { PrintPaper } from "./ppePrint";
+import { ppeNormResolutionLabel } from "./ppeStatusCatalog";
 
 export type DraftSource = "active_norms" | "previous_card" | "empty";
-export type SelectionTab = "norms" | "catalog" | "sets";
+export type SelectionTab = "norms" | "catalog" | "selected" | "sets";
 export type IssueType = "primary" | "planned" | "replacement" | "additional";
 
 export function EmployeeDocumentStep({
@@ -142,10 +143,14 @@ export function SelectionStep({
   onAddCatalog,
   onApplySet,
   onOpenCatalog,
+  onOpenNormCandidates,
+  onReplaceSelected,
   onRemoveExtra,
+  onRemoveSelected,
   onSelectAll,
   onToggle,
   selectionTab,
+  selectedCatalogItems,
   setSelectionTab,
   settings,
   settingsError,
@@ -158,10 +163,14 @@ export function SelectionStep({
   onAddCatalog: () => void;
   onApplySet: (set: InventoryItemSetDetailDto) => Promise<void>;
   onOpenCatalog: (row: InventoryPpeCardNormRowDto) => void;
+  onOpenNormCandidates: (item: PpeSelectedCatalogItem) => void;
+  onReplaceSelected: (item: PpeSelectedCatalogItem) => void;
   onRemoveExtra: (rowId: string) => void;
+  onRemoveSelected: (localId: string) => void;
   onSelectAll: () => void;
   onToggle: (row: InventoryPpeCardNormRowDto) => void;
   selectionTab: SelectionTab;
+  selectedCatalogItems: PpeSelectedCatalogItem[];
   setSelectionTab: (tab: SelectionTab) => void;
   settings: InventorySettingsDto | null;
   settingsError: string;
@@ -175,17 +184,19 @@ export function SelectionStep({
   const extraCount = itemRows.filter((row) => !row.sourceNormRowId).length;
   return (
     <section className="ppe-issue-card ppe-issue-selection-card">
-      <CardHeading icon={<PackageSearch size={24} />} kicker="Шаг 2" title="Подбор СИЗ" text="Сначала сопоставьте норматив с конкретным изделием, затем добавьте готовые позиции в текущий документ." />
+      <CardHeading icon={<PackageSearch size={24} />} kicker="Шаг 2" title="Подбор СИЗ" text="Сначала выберите фактическую позицию из номенклатуры, затем вручную подтвердите подходящую норму АТОМ." />
       <div className="ppe-issue-selection-tabs" role="tablist" aria-label="Источники подбора СИЗ">
-        <Tab active={selectionTab === "norms"} disabled={loadingItems} icon={<ShieldCheck size={16} />} label="По норме сотрудника" onClick={() => setSelectionTab("norms")} />
         <Tab active={selectionTab === "catalog"} disabled={loadingItems} icon={<PackageSearch size={16} />} label="Из каталога" onClick={() => setSelectionTab("catalog")} />
+        <Tab active={selectionTab === "selected"} disabled={loadingItems} icon={<Check size={16} />} label={`Выбранные${selectedCatalogItems.length ? ` (${selectedCatalogItems.length})` : ""}`} onClick={() => setSelectionTab("selected")} />
+        <Tab active={selectionTab === "norms"} disabled={loadingItems} icon={<ShieldCheck size={16} />} label="По норме сотрудника" onClick={() => setSelectionTab("norms")} />
         <Tab active={selectionTab === "sets"} disabled={loadingItems} icon={<Layers3 size={16} />} label="Наборы" onClick={() => setSelectionTab("sets")} />
       </div>
       <div className="ppe-issue-toolbar">
-        <div><strong>{selectionTab === "norms" ? "Нормативные позиции" : selectionTab === "catalog" ? "Дополнительная выдача" : "Типовые наборы"}</strong><span>{selectionTab === "norms" ? "Выберите изделие для нормы и включите его в документ" : selectionTab === "catalog" ? "Добавляйте товары, которых нет в нормативном перечне" : "Проверьте состав набора перед применением"}</span></div>
-        <div className="ppe-issue-toolbar-actions"><PpeButton disabled={loadingItems} icon={<Plus size={16} />} onClick={onAddCatalog} variant="primary">Добавить из каталога</PpeButton>{selectionTab === "norms" ? <PpeButton disabled={!readyToAddCount || loadingItems} icon={<Check size={16} />} onClick={onSelectAll} variant="secondary">Добавить готовые{readyToAddCount ? ` (${readyToAddCount})` : ""}</PpeButton> : null}</div>
+        <div><strong>{selectionTab === "norms" ? "Нормативные позиции" : selectionTab === "catalog" ? "Номенклатура" : selectionTab === "selected" ? "Выбранные позиции" : "Типовые наборы"}</strong><span>{selectionTab === "norms" ? "Проверьте нормы сотрудника и при необходимости измените сопоставление" : selectionTab === "catalog" ? "Выберите фактически выдаваемую позицию, чтобы увидеть подходящие нормы АТОМ" : selectionTab === "selected" ? "Выбранные товары сохраняются в черновике до ручного подтверждения нормы" : "Проверьте состав набора перед применением"}</span></div>
+        <div className="ppe-issue-toolbar-actions"><PpeButton disabled={loadingItems} icon={<Plus size={16} />} onClick={onAddCatalog} variant="primary">Добавить из каталога</PpeButton>{selectionTab === "norms" ? <PpeButton disabled={!readyToAddCount || loadingItems} icon={<Check size={16} />} onClick={onSelectAll} variant="secondary">Добавить все доступные позиции{readyToAddCount ? ` (${readyToAddCount})` : ""}</PpeButton> : null}</div>
       </div>
       <SelectionSummary extra={extraCount} mapped={mappedCount} selected={issueLines.length} total={itemRows.length} unmapped={unmappedCount} />
+      {selectionTab === "selected" ? <SelectedCatalogRows busy={loadingItems} items={selectedCatalogItems} onOpenNormCandidates={onOpenNormCandidates} onRemove={onRemoveSelected} onReplace={onReplaceSelected} /> : null}
       {selectionTab === "norms" ? <div className="ppe-issue-norm-groups">{categories.map((category) => {
         const groupRows = itemRows.filter((row) => category.id === "base" ? !row.parentRowId : row.parentRowId === category.id);
         const groupMapped = groupRows.filter((row) => row.mappedItemId).length;
@@ -193,7 +204,7 @@ export function SelectionStep({
         const isCollapsed = collapsed.has(category.id);
         return <section className={`ppe-issue-norm-group ${groupRows.length > 0 && groupMapped === groupRows.length ? "is-complete" : ""}`} id={`ppe-norm-group-${category.id}`} key={category.id}><button aria-controls={`ppe-norm-group-${category.id}`} aria-expanded={!isCollapsed} className="ppe-issue-norm-group-toggle" disabled={loadingItems} onClick={() => setCollapsed((current) => { const next = new Set(current); next.has(category.id) ? next.delete(category.id) : next.add(category.id); return next; })} type="button"><div><strong>{category.normItemName}</strong><span>{groupRows.length} позиций · {groupMapped} сопоставлено · {groupSelected} в документе</span></div>{isCollapsed ? <ChevronRight size={17} /> : <ChevronDown size={17} />}</button>{!isCollapsed ? <NormRows rows={groupRows} selectedIds={selectedIds} busy={loadingItems} onOpenCatalog={onOpenCatalog} onRemoveExtra={onRemoveExtra} onToggle={onToggle} /> : null}</section>;
       })}</div> : null}
-      {selectionTab === "catalog" ? <div className="ppe-issue-catalog-start"><div className="ppe-issue-catalog-hero"><PackageSearch size={28} /><div><h3>Дополнительная выдача</h3><p>Выбранные товары сохраняются отдельно от нормы сотрудника и добавляются только в текущий документ.</p></div><PpeButton disabled={loadingItems} icon={<Plus size={16} />} onClick={onAddCatalog} variant="primary">Выбрать изделия</PpeButton></div><NormRows rows={itemRows.filter((row) => !row.sourceNormRowId)} selectedIds={selectedIds} busy={loadingItems} onOpenCatalog={onOpenCatalog} onRemoveExtra={onRemoveExtra} onToggle={onToggle} /></div> : null}
+      {selectionTab === "catalog" ? <div className="ppe-issue-catalog-start"><div className="ppe-issue-catalog-hero"><PackageSearch size={28} /><div><h3>Выбор из номенклатуры</h3><p>После выбора система покажет подходящие нормы АТОМ. Норма попадёт в документ только после подтверждения бухгалтера.</p></div><PpeButton disabled={loadingItems} icon={<Plus size={16} />} onClick={onAddCatalog} variant="primary">Выбрать изделие</PpeButton></div><NormRows rows={itemRows.filter((row) => !row.sourceNormRowId)} selectedIds={selectedIds} busy={loadingItems} onOpenCatalog={onOpenCatalog} onRemoveExtra={onRemoveExtra} onToggle={onToggle} /></div> : null}
       {selectionTab === "sets" ? <SetsStart onApply={onApplySet} onRetrySettings={onRetrySettings} settings={settings} settingsError={settingsError} /> : null}
     </section>
   );
@@ -206,6 +217,19 @@ function SelectionSummary({ extra, mapped, selected, total, unmapped }: { extra:
     <div className={unmapped ? "is-warning" : "is-ready"}><strong>{unmapped}</strong><span>Требуют выбора</span></div>
     <div className="is-selected"><strong>{selected}</strong><span>В документе</span></div>
     {extra ? <div className="is-extra"><strong>{extra}</strong><span>Дополнительно</span></div> : null}
+  </div>;
+}
+
+function SelectedCatalogRows({ busy, items, onOpenNormCandidates, onRemove, onReplace }: { busy: boolean; items: PpeSelectedCatalogItem[]; onOpenNormCandidates: (item: PpeSelectedCatalogItem) => void; onRemove: (localId: string) => void; onReplace: (item: PpeSelectedCatalogItem) => void }) {
+  if (!items.length) return <div className="ppe-issue-empty-inline"><PackageSearch size={18} />Номенклатура ещё не выбрана. Добавьте фактическую позицию из каталога.</div>;
+  return <div className="ppe-selected-catalog-list" aria-label="Выбранная номенклатура">
+    {items.map((selected) => {
+      const status = ppeNormResolutionLabel(selected.normResolutionStatus);
+      return <article className={`ppe-selected-catalog-card is-${selected.normResolutionStatus}`} key={selected.localId}>
+        <div className="ppe-selected-catalog-main"><strong>{selected.item.name}</strong><small>{[selected.item.brandName, selected.item.modelName, selected.item.article].filter(Boolean).join(" · ") || "Модель не указана"}</small><span>{selected.quantity} {selected.item.unit || "шт."} · {status}</span></div>
+        <div className="ppe-selected-catalog-actions"><PpeButton disabled={busy} onClick={() => onReplace(selected)} variant="secondary">Заменить товар</PpeButton>{selected.normResolutionStatus !== "additional" ? <PpeButton disabled={busy} onClick={() => onOpenNormCandidates(selected)} variant={selected.normResolutionStatus === "confirmed" ? "secondary" : "primary"}>{selected.normResolutionStatus === "confirmed" ? "Изменить норму" : "Подобрать норму"}</PpeButton> : null}<PpeButton disabled={busy} onClick={() => onRemove(selected.localId)} variant="ghost">Удалить выбор</PpeButton></div>
+      </article>;
+    })}
   </div>;
 }
 
@@ -226,15 +250,15 @@ function NormRows({ busy, rows, selectedIds, onOpenCatalog, onRemoveExtra, onTog
     })}</div>
   </>;
 }
-export function CompositionStep({ issueLines, onChange, onOpenCatalog, onRemove, rows, selectedEmployee, warehouses }: { issueLines: PpeIssueDraftLine[]; onChange: (id: string, patch: Partial<PpeIssueDraftLine>) => void; onOpenCatalog: (row: InventoryPpeCardNormRowDto) => void; onRemove: (id: string) => void; rows: InventoryPpeCardNormRowDto[]; selectedEmployee: InventoryEmployeeDto | null; warehouses: InventoryReferenceOptionDto[] }) {
+export function CompositionStep({ issueLines, onChange, onOpenCatalog, onRemove, rows, selectedCatalogItems, selectedEmployee, warehouses }: { issueLines: PpeIssueDraftLine[]; onChange: (id: string, patch: Partial<PpeIssueDraftLine>) => void; onOpenCatalog: (row: InventoryPpeCardNormRowDto) => void; onRemove: (id: string) => void; rows: InventoryPpeCardNormRowDto[]; selectedCatalogItems: PpeSelectedCatalogItem[]; selectedEmployee: InventoryEmployeeDto | null; warehouses: InventoryReferenceOptionDto[] }) {
   const rowsById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
-  const review = useMemo(() => summarizeComposition(issueLines, rowsById), [issueLines, rowsById]);
+  const review = useMemo(() => summarizeComposition(issueLines, rowsById, selectedCatalogItems), [issueLines, rowsById, selectedCatalogItems]);
   const [pendingRemove, setPendingRemove] = useState<PpeIssueDraftLine | null>(null);
   const requestRemove = (id: string) => setPendingRemove(issueLines.find((line) => line.cardNormRowId === id) ?? null);
   return <>
     <section className="ppe-issue-card ppe-issue-composition-card">
     <CardHeading icon={<FileCheck2 size={24} />} kicker="Шаг 3" title="Состав и проверка" text={`${selectedEmployee?.fullName ?? "Сотрудник"} · ${issueLines.length} позиций. Проверьте фактическое количество и способ выдачи.`} />
-    <CompositionSummary summary={review} />
+     <CompositionSummary summary={review} />
     <div className="ppe-issue-compliance-note"><ShieldCheck size={17} /><span>Норматив остаётся без изменений. Здесь редактируется только фактическая выдача: изделие, дата, количество и способ.</span></div>
     {issueLines.length ? <>
       <div className="ppe-issue-desktop-table ppe-issue-table-wrap">
@@ -275,8 +299,8 @@ function CompositionTableRow({ index, line, row, onChange, onOpenCatalog, onRemo
   const problems = validateIssueDraftLine(line, row);
   const tone = problemTone(problems);
   return <tr className={`ppe-issue-composition-row is-${tone}`}>
-    <td><span className="ppe-issue-table-index">{index + 1}</span></td>
-    <td><div className="ppe-issue-norm-cell"><strong>{row?.normItemName ?? "Позиция"}</strong><small>{row?.normPoint || "Дополнительная выдача"}</small>{row ? <span>Норма: {row.quantityText || row.quantity} · {row.issuePeriodText || "период не указан"}</span> : null}</div></td>
+    <td><span className="ppe-issue-table-index">{index + 1}</span>{row?.sourceNormRowId ? <small className="ppe-issue-entitlement-summary">Положено {row.quantity} · Выдано {row.alreadyIssuedQuantity ?? row.issuedQuantity} · Доступно {row.availableQuantity ?? "—"} · Выбрано {line.quantity}</small> : null}</td>
+    <td><div className="ppe-issue-norm-cell"><strong>{row?.normItemName ?? "Позиция"}</strong><small>{row?.normPoint || "Дополнительная выдача"}</small>{row ? <span>Норма: {row.quantityText || row.quantity} · {row.issuePeriodText || "период не указан"}</span> : null}<span className={`ppe-issue-resolution-badge ${row?.sourceNormRowId ? "is-confirmed" : "is-additional"}`}>{row?.sourceNormRowId ? "Норма подтверждена" : "Дополнительная выдача"}</span></div></td>
     <td><div className="ppe-issue-product-cell"><strong>{row?.mappedItemName || "Номенклатура не выбрана"}</strong><small>{line.brandModelArticle || "Модель и артикул не указаны"}</small></div></td>
     <td><input aria-label={`Дата выдачи ${row?.normItemName ?? "позиции"}`} onChange={(event) => onChange(line.cardNormRowId, { issuedAt: event.target.value })} type="date" value={line.issuedAt} /></td>
     <td><input aria-label={`Количество ${row?.normItemName ?? "позиции"}`} inputMode="decimal" min="0.01" onChange={(event) => onChange(line.cardNormRowId, { quantity: Number(event.target.value) })} step="0.01" type="number" value={line.quantity} /></td>
@@ -295,8 +319,9 @@ function CompositionMobileRow(props: CompositionRowProps) {
   const problems = validateIssueDraftLine(line, row);
   const tone = problemTone(problems);
   return <article className={`ppe-issue-mobile-row ppe-issue-composition-mobile is-${tone}`}>
-    <header><span className="ppe-issue-row-number">{index + 1}</span><div><span className="ppe-issue-mobile-label">Норма сотрудника</span><strong>{row?.normItemName ?? "Позиция"}</strong><small>{row?.normPoint || "Дополнительная выдача"}</small></div></header>
+    <header><span className="ppe-issue-row-number">{index + 1}</span><div><span className="ppe-issue-mobile-label">Норма сотрудника</span><strong>{row?.normItemName ?? "Позиция"}</strong><small>{row?.normPoint || "Дополнительная выдача"}</small><span className={`ppe-issue-resolution-badge ${row?.sourceNormRowId ? "is-confirmed" : "is-additional"}`}>{row?.sourceNormRowId ? "Норма подтверждена" : "Дополнительная выдача"}</span></div></header>
     <div className="ppe-issue-mobile-product"><span>Фактическое изделие</span><strong>{row?.mappedItemName || "Номенклатура не выбрана"}</strong><small>{line.brandModelArticle || "Модель и артикул не указаны"}</small></div>
+    {row?.sourceNormRowId ? <div className="ppe-issue-entitlement-summary">Положено {row.quantity} · Выдано {row.alreadyIssuedQuantity ?? row.issuedQuantity} · Доступно {row.availableQuantity ?? "—"} · Выбрано {line.quantity}</div> : null}
     <ProblemBadges problems={problems} />
     <div className="ppe-issue-mobile-fields">
       <label><span>Дата выдачи</span><input aria-label={`Дата выдачи ${row?.normItemName ?? "позиции"}`} onChange={(event) => onChange(line.cardNormRowId, { issuedAt: event.target.value })} type="date" value={line.issuedAt} /></label>
@@ -313,7 +338,7 @@ function CompositionMobileRow(props: CompositionRowProps) {
 }
 
 type CompositionRowProps = { index: number; line: PpeIssueDraftLine; row?: InventoryPpeCardNormRowDto; onChange: (id: string, patch: Partial<PpeIssueDraftLine>) => void; onOpenCatalog: (row: InventoryPpeCardNormRowDto) => void; onRemove: (id: string) => void; warehouses: InventoryReferenceOptionDto[] };
-type CompositionSummaryData = { total: number; ready: number; warnings: number; errors: number };
+type CompositionSummaryData = { total: number; ready: number; warnings: number; errors: number; confirmed: number; additional: number; unresolved: number };
 
 function CompositionSummary({ summary }: { summary: CompositionSummaryData }) {
   return <div aria-label="Итоги проверки состава" aria-live="polite" className="ppe-issue-review-summary">
@@ -321,18 +346,25 @@ function CompositionSummary({ summary }: { summary: CompositionSummaryData }) {
     <div className="is-ready"><CheckCircle2 size={18} /><span><strong>{summary.ready}</strong><small>Готово</small></span></div>
     <div className="is-warning"><AlertTriangle size={18} /><span><strong>{summary.warnings}</strong><small>Предупреждения</small></span></div>
     <div className="is-error"><AlertTriangle size={18} /><span><strong>{summary.errors}</strong><small>Ошибки</small></span></div>
+    <div className="ppe-issue-review-statuses" aria-label="Статусы сопоставления">
+      <span className="is-confirmed">Норма подтверждена: {summary.confirmed}</span>
+      <span className="is-additional">Дополнительная выдача: {summary.additional}</span>
+      {summary.unresolved ? <span className="is-unresolved">Норма не определена: {summary.unresolved}</span> : null}
+    </div>
   </div>;
 }
 
-function summarizeComposition(issueLines: PpeIssueDraftLine[], rowsById: Map<string, InventoryPpeCardNormRowDto>): CompositionSummaryData {
+function summarizeComposition(issueLines: PpeIssueDraftLine[], rowsById: Map<string, InventoryPpeCardNormRowDto>, selectedCatalogItems: PpeSelectedCatalogItem[]): CompositionSummaryData {
   return issueLines.reduce<CompositionSummaryData>((summary, line) => {
     const problems = validateIssueDraftLine(line, rowsById.get(line.cardNormRowId));
     summary.total += 1;
+    if (rowsById.get(line.cardNormRowId)?.sourceNormRowId) summary.confirmed += 1;
+    else summary.additional += 1;
     if (problems.some((problem) => problem.level === "error")) summary.errors += 1;
     else if (problems.some((problem) => problem.level === "warning")) summary.warnings += 1;
     else summary.ready += 1;
     return summary;
-  }, { total: 0, ready: 0, warnings: 0, errors: 0 });
+  }, { total: 0, ready: 0, warnings: 0, errors: 0, confirmed: 0, additional: 0, unresolved: selectedCatalogItems.filter((item) => item.normResolutionStatus === "unresolved").length });
 }
 
 function problemTone(problems: PpeIssueLineProblem[]) {

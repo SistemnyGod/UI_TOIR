@@ -561,6 +561,15 @@
 .ppe-issue-selection-summary .is-warning { background: var(--ppe-ui-warning-soft, #fff4df); border-color: #efd49f; }
 .ppe-issue-selection-summary .is-selected { background: var(--ppe-ui-primary-soft, #edf4ff); border-color: var(--ppe-ui-border-strong, #b7cdf0); }
 .ppe-issue-selection-summary .is-extra { background: var(--ppe-ui-surface, #fff); border-style: dashed; }
+.ppe-selected-catalog-list { display: grid; gap: 10px; }
+.ppe-selected-catalog-card { align-items: center; background: var(--ppe-ui-surface, #fff); border: 1px solid var(--ppe-ui-border, #d9e5f1); border-radius: 11px; display: flex; gap: 14px; justify-content: space-between; padding: 14px; }
+.ppe-selected-catalog-card.is-unresolved { border-color: #efd49f; background: var(--ppe-ui-warning-soft, #fff4df); }
+.ppe-selected-catalog-card.is-confirmed { border-color: #bfe4d1; background: var(--ppe-ui-success-soft, #e7f7ef); }
+.ppe-selected-catalog-main { display: grid; gap: 4px; min-width: 0; }
+.ppe-selected-catalog-main strong { overflow-wrap: anywhere; }
+.ppe-selected-catalog-main small,
+.ppe-selected-catalog-main span { color: var(--ppe-ui-muted, #647694); font-size: 11px; }
+.ppe-selected-catalog-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .ppe-issue-norm-group.is-complete { border-color: #bfe4d1; }
 .ppe-issue-norm-group.is-complete > .ppe-issue-norm-group-toggle { background: var(--ppe-ui-success-soft, #e7f7ef); }
 .ppe-issue-selection-table { min-width: 1080px; }
@@ -596,6 +605,8 @@
 @media (max-width: 380px) {
   .ppe-issue-selection-summary,
   .ppe-issue-selection-mobile footer { grid-template-columns: 1fr; }
+  .ppe-selected-catalog-card { align-items: stretch; flex-direction: column; }
+  .ppe-selected-catalog-actions { justify-content: flex-start; }
   .ppe-issue-selection-mobile footer .is-danger { grid-column: auto; }
 }
 /* employee and document step refinement */
@@ -833,7 +844,65 @@
 .ppe-issue-row-actions > .ppe-ui-button { max-width: 100%; }
 .ppe-issue-problems .is-warning { background: var(--ppe-ui-warning-soft, #fff4df); color: var(--ppe-ui-warning, #a96308); }
 .ppe-issue-problems .is-error { background: var(--ppe-ui-danger-soft, #fff0ef); color: var(--ppe-ui-danger, #dc2626); }
+.ppe-issue-entitlement-summary {
+  color: var(--ppe-ui-muted, #647694);
+  display: block;
+  font-size: 11px;
+  line-height: 1.35;
+  margin-top: 5px;
+}
+.ppe-issue-entitlement-summary strong { color: var(--ppe-ui-ink, #102c57); }
+.ppe-issue-review-statuses {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  grid-column: 1 / -1;
+}
+.ppe-issue-review-statuses span,
+.ppe-issue-resolution-badge {
+  border: 1px solid var(--ppe-ui-border, #d4e2f5);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 4px 8px;
+}
+.ppe-issue-review-statuses .is-confirmed,
+.ppe-issue-resolution-badge.is-confirmed { background: var(--ppe-ui-success-soft, #e7f7ef); border-color: #bfe4d1; color: var(--ppe-ui-success, #168759); }
+.ppe-issue-review-statuses .is-additional,
+.ppe-issue-resolution-badge.is-additional { background: #f0eaff; border-color: #d7c8ff; color: #6d45c7; }
+.ppe-issue-review-statuses .is-unresolved { background: var(--ppe-ui-warning-soft, #fff4df); border-color: #f2d39e; color: var(--ppe-ui-warning, #a96308); }
+.ppe-issue-resolution-badge { align-self: flex-start; margin-top: 4px; width: fit-content; }
+.ppe-issue-mobile-row .ppe-issue-resolution-badge { margin-top: 5px; }
 @media (max-width: 640px) {
   .ppe-issue-toolbar-actions > .ppe-ui-button { min-width: 0; }
   .ppe-issue-workflow-footer { box-shadow: 0 -6px 16px rgb(15 30 56 / 8%); }
+}
+
+.ppe-norm-additional-reason {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.ppe-norm-additional-reason span {
+  color: var(--ppe-ui-text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ppe-norm-additional-reason em {
+  color: var(--ppe-ui-danger);
+  font-style: normal;
+}
+
+.ppe-norm-additional-reason textarea {
+  border: 1px solid var(--ppe-ui-border);
+  border-radius: var(--ppe-ui-radius-control);
+  font: inherit;
+  min-height: 68px;
+  padding: 9px 10px;
+  resize: vertical;
 }

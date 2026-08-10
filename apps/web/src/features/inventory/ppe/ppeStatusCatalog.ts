@@ -88,6 +88,29 @@ export const PPE_ISSUE_STATUS_OPTIONS = [
   },
 ] as const;
 
+export const PPE_NORM_CANDIDATE_STATUS_LABELS: Record<string, string> = {
+  confirmed_mapping: "Точное подтверждённое соответствие",
+  candidate: "Возможное соответствие",
+  incompatible: "Нет соответствия",
+  limit_exhausted: "Лимит нормы исчерпан",
+  manual_control_required: "Требует проверки",
+};
+
+export function ppeNormCandidateStatusLabel(status?: string | null) {
+  return status ? PPE_NORM_CANDIDATE_STATUS_LABELS[status] ?? "Требует проверки" : "Требует проверки";
+}
+
+export function ppeNormResolutionLabel(status: "unresolved" | "confirmed" | "additional") {
+  switch (status) {
+    case "confirmed":
+      return "Норма подтверждена";
+    case "additional":
+      return "Дополнительная выдача";
+    default:
+      return "Норма не определена";
+  }
+}
+
 export function ppeIssueStatusLabel(status: string) {
   return INVENTORY_PPE_STATUS_LABELS[status] ?? status;
 }

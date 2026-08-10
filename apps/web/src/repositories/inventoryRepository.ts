@@ -41,6 +41,7 @@ import type {
   InventoryPpeHistoryRowDto,
   InventoryPpeNormImportResultDto,
   InventoryPpeNormMappingDto,
+  InventoryPpeNormCandidateDto,
   InventoryPpeNormSetDetailDto,
   InventoryPpeNormSetDto,
   InventoryPpeWorkspaceDto,
@@ -288,6 +289,15 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
 
     getPpeNormRowMappings(normRowId: string) {
       return client.get<InventoryListResponseDto<InventoryPpeNormMappingDto>>(`/api/v1/inventory/ppe/norm-rows/${normRowId}/mappings`);
+    },
+
+    getPpeNormCandidates(itemId: string, params: { employeeId: string; quantity?: number; issueDate?: string }) {
+      const search = new URLSearchParams({ employeeId: params.employeeId });
+      if (params.quantity !== undefined) search.set("quantity", String(params.quantity));
+      if (params.issueDate) search.set("issueDate", params.issueDate);
+      return client.get<InventoryPpeNormCandidateDto[]>(
+        `/api/v1/inventory/ppe/items/${itemId}/norm-candidates?${search.toString()}`,
+      );
     },
 
     upsertPpeNormRowMapping(normRowId: string, payload: UpsertInventoryPpeNormMappingDto) {

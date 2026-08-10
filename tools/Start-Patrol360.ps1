@@ -191,7 +191,10 @@ try {
   }
 
   Invoke-Step "Verify web entrypoint through proxy" {
-    $response = Invoke-WebRequest -Uri "http://127.0.0.1:5173/" -UseBasicParsing -TimeoutSec 20
+    # Port 5173 deliberately redirects localhost to the canonical LAN host.
+    # Verify the canonical endpoint directly so PowerShell 5 does not turn the
+    # expected 308 response into a failed deployment.
+    $response = Invoke-WebRequest -Uri "http://${LanHost}:5173/" -UseBasicParsing -TimeoutSec 20
     if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 300) {
       throw "Unexpected HTTP status from proxy: $($response.StatusCode)"
     }
@@ -202,7 +205,7 @@ try {
 
   Write-Host ""
   Write-Host "Patrol360 is running with fresh web assets." -ForegroundColor Green
-  Write-Host "Local: http://127.0.0.1:5173/"
+  Write-Host "Local redirect: http://127.0.0.1:5173/"
   Write-Host "LAN:   http://$LanHost`:5173/"
   Write-Host "If the browser still shows old UI, hard refresh the page once."
 }

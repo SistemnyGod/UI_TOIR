@@ -273,14 +273,14 @@ function PersonalCardLinesTable({
               </td>
               <td>
                 {line.isSectionTitle ? "" : (
-                  <EditablePrintValue
-                    ariaLabel="Периодичность"
-                    onChange={onPatchLine ? (value) => onPatchLine(index, { issuePeriodText: value }) : undefined}
-                    value={periodText(line)}
-                  />
-                )}
-              </td>
-              <td>{line.isSectionTitle ? "" : quantityText(line)}</td>
+                <EditablePrintValue
+                  ariaLabel="Периодичность"
+                  onChange={onPatchLine ? (value) => onPatchLine(index, { issuePeriodText: value }) : undefined}
+                  value={periodText(line)}
+                />
+              )}
+            </td>
+              <td>{line.isSectionTitle ? "" : normQuantityText(line)}</td>
             </tr>
           ))
         ) : (
@@ -336,7 +336,7 @@ function SignatureLinesTable({
         {rows.length ? (
           rows.map(({ line, sourceIndex }) => (
             <tr key={`${line.itemName}-${sourceIndex}`}>
-              <td>{printItemName(line)}</td>
+              <td>{catalogItemName(line)}</td>
               <td>
                 <EditablePrintValue
                   ariaLabel="Модель, марка, артикул"
@@ -383,7 +383,7 @@ function buildCardHtml(data: PrintData) {
         .map((line) =>
           line.isSectionTitle
             ? `<tr class="is-section-title"><td>${escapeHtml(printItemName(line))}</td><td></td><td></td><td></td></tr>`
-            : `<tr><td>${escapeHtml(printItemName(line))}</td><td>${escapeHtml(line.normPoint || "п. 1645")}</td><td>${escapeHtml(periodText(line))}</td><td>${escapeHtml(quantityText(line))}</td></tr>`,
+            : `<tr><td>${escapeHtml(printItemName(line))}</td><td>${escapeHtml(line.normPoint || "п. 1645")}</td><td>${escapeHtml(periodText(line))}</td><td>${escapeHtml(normQuantityText(line))}</td></tr>`,
         )
         .join("")
     : `<tr><td colspan="4">Позиции СИЗ не добавлены</td></tr>`;
@@ -440,7 +440,7 @@ function buildSheetHtml(data: PrintData) {
     ? signatureLines(data.lines)
         .map(
           (line) =>
-            `<tr><td>${escapeHtml(printItemName(line))}</td><td>${escapeHtml(brandModelArticle(line) || "-")}</td><td>${escapeHtml(formatSheetIssuedAt(line.issuedAt))}</td><td>${escapeHtml(signatureQuantity(line))}</td><td>${escapeHtml(issueMethodText(line))}</td><td></td><td>${escapeHtml(returnDateText(line))}</td><td>${escapeHtml(returnQuantityText(line))}</td><td></td><td>${escapeHtml(writeOffActText(line))}</td></tr>`,
+            `<tr><td>${escapeHtml(catalogItemName(line))}</td><td>${escapeHtml(brandModelArticle(line) || "-")}</td><td>${escapeHtml(formatSheetIssuedAt(line.issuedAt))}</td><td>${escapeHtml(signatureQuantity(line))}</td><td>${escapeHtml(issueMethodText(line))}</td><td></td><td>${escapeHtml(returnDateText(line))}</td><td>${escapeHtml(returnQuantityText(line))}</td><td></td><td>${escapeHtml(writeOffActText(line))}</td></tr>`,
         )
         .join("")
     : `<tr><td colspan="10">Нет строк со статусом &quot;Выдано&quot;. Переключите нужные строки в &quot;Выдано&quot;, чтобы они попали в лист подписи.</td></tr>`;
@@ -503,12 +503,16 @@ function signatureQuantity(line: PrintLine) {
   return `${formatQuantity(line.quantity)} ${line.unit || "шт."}`;
 }
 
-function quantityText(line: PrintLine) {
-  return line.quantityText?.trim() || signatureQuantity(line);
+function normQuantityText(line: PrintLine) {
+  return line.normQuantityText?.trim() || line.quantityText?.trim() || signatureQuantity(line);
 }
 
 function printItemName(line: PrintLine) {
   return line.printItemName?.trim() || line.itemName;
+}
+
+function catalogItemName(line: PrintLine) {
+  return line.catalogName?.trim() || line.itemName || printItemName(line);
 }
 
 function brandModelArticle(line: PrintLine) {
@@ -526,15 +530,19 @@ function isReturnLine(line: PrintLine) {
 }
 
 function returnDateText(line: PrintLine) {
-  return isReturnLine(line) ? formatSheetIssuedAt(line.dueAt) : "";
+  return isReturnLine(line) ? formatSheetIssuedAt(line.returnedAt || line.dueAt) : "";
 }
 
 function returnQuantityText(line: PrintLine) {
-  return isReturnLine(line) ? signatureQuantity(line) : "";
+  return isReturnLine(line) && line.returnedQuantity != null
+    ? `${formatQuantity(line.returnedQuantity)} ${line.unit || "шт."}`
+    : isReturnLine(line) ? signatureQuantity(line) : "";
 }
 
 function writeOffActText(line: PrintLine) {
-  return line.status === PPE_STATUS.writtenOff ? "Требуется акт" : "";
+  if (line.status !== PPE_STATUS.writtenOff) return "";
+  if (line.writeOffActDate || line.writeOffActNumber) return [formatSheetIssuedAt(line.writeOffActDate), line.writeOffActNumber].filter(Boolean).join(", ");
+  return "Требуется акт";
 }
 
 function formatSheetIssuedAt(value?: string | null) {

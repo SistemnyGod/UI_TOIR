@@ -19,10 +19,25 @@ internal sealed partial class EfInventoryWorkflowService
         var search = NormalizeQuery(query.Query);
         if (search.Length > 0)
         {
+            var footwearSearch = search.Contains("обув", StringComparison.Ordinal)
+                || search.Contains("ботин", StringComparison.Ordinal)
+                || search.Contains("сапог", StringComparison.Ordinal);
+            var winterSearch = search.Contains("зим", StringComparison.Ordinal)
+                || search.Contains("утепл", StringComparison.Ordinal)
+                || search.Contains("мех", StringComparison.Ordinal);
             rowsQuery = rowsQuery.Where(row =>
                 row.PositionName.ToLower().Contains(search) ||
                 row.VersionName.ToLower().Contains(search) ||
-                row.SourceName.ToLower().Contains(search));
+                row.SourceName.ToLower().Contains(search) ||
+                row.Rows.Any(normRow =>
+                    normRow.NormItemName.ToLower().Contains(search) ||
+                    normRow.NormPoint.ToLower().Contains(search) ||
+                    (footwearSearch && (normRow.NormItemName.ToLower().Contains("обув")
+                        || normRow.NormItemName.ToLower().Contains("ботин")
+                        || normRow.NormItemName.ToLower().Contains("сапог"))) ||
+                    (winterSearch && (normRow.NormItemName.ToLower().Contains("зим")
+                        || normRow.NormItemName.ToLower().Contains("утепл")
+                        || normRow.NormItemName.ToLower().Contains("мех")))));
         }
 
         var position = NormalizeOptional(query.Position).ToLowerInvariant();
@@ -295,6 +310,19 @@ internal sealed partial class EfInventoryWorkflowService
     {
         var kind = item.ItemKind.Trim();
         var category = item.Category?.Name?.Trim() ?? string.Empty;
+        var normalizedKind = NormalizeNormLookupText(kind);
+        var normalizedCategory = NormalizeNormLookupText(category);
+        if (item.IsActive && (normalizedKind.Contains("ppe", StringComparison.Ordinal)
+            || normalizedKind.Contains("siz", StringComparison.Ordinal)
+            || normalizedKind.Contains("сиз", StringComparison.Ordinal)
+            || normalizedKind.Contains("спец", StringComparison.Ordinal)
+            || normalizedCategory.Contains("ppe", StringComparison.Ordinal)
+            || normalizedCategory.Contains("siz", StringComparison.Ordinal)
+            || normalizedCategory.Contains("сиз", StringComparison.Ordinal)
+            || normalizedCategory.Contains("спец", StringComparison.Ordinal)))
+        {
+            return true;
+        }
         return item.IsActive && (kind.Contains("СИЗ", StringComparison.OrdinalIgnoreCase)
             || kind.Contains("спец", StringComparison.OrdinalIgnoreCase)
             || kind.Equals("ppe", StringComparison.OrdinalIgnoreCase)
@@ -341,8 +369,33 @@ internal sealed partial class EfInventoryWorkflowService
     private static string NormalizeNormLookupText(string? value)
     {
         var normalized = (value ?? string.Empty).Trim().ToLowerInvariant().Replace('ё', 'е');
-        normalized = Regex.Replace(normalized, @"[^0-9a-zа-я]+", " ");
+        normalized = Regex.Replace(normalized, @"[^\p{L}\p{Nd}]+", " ");
         return Regex.Replace(normalized, @"\s+", " ").Trim();
+    }
+
+    internal static bool PositionNamesMatch(string? employeePosition, string? normPosition)
+    {
+        var employeeTokens = NormalizePositionTokens(employeePosition);
+        var normTokens = NormalizePositionTokens(normPosition);
+        return employeeTokens.Length > 0
+            && employeeTokens.Length == normTokens.Length
+            && employeeTokens.All(token => normTokens.Contains(token, StringComparer.Ordinal));
+    }
+
+    private static string[] NormalizePositionTokens(string? value) => NormalizeNormLookupText(value)
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Where(token => token is not ("по" or "и"))
+        .Select(CanonicalizePositionToken)
+        .Distinct(StringComparer.Ordinal)
+        .OrderBy(token => token, StringComparer.Ordinal)
+        .ToArray();
+
+    private static string CanonicalizePositionToken(string token)
+    {
+        if (token is "зам" or "замест" || token.StartsWith("заместител", StringComparison.Ordinal)) return "заместитель";
+        if (token is "нач" or "начальн" || token.StartsWith("начальник", StringComparison.Ordinal)) return "начальник";
+        if (token is "электромонтёр" || token.StartsWith("электромонтер", StringComparison.Ordinal)) return "электромонтер";
+        return token;
     }
 
     private static void ValidatePpeNormTextLength(int rowNumber, string normItemName, string normPoint)
@@ -355,20 +408,32 @@ internal sealed partial class EfInventoryWorkflowService
 
     private static (decimal Quantity, string QuantityText) ReadNormQuantity(string value)
     {
-        var match = Regex.Match(value, @"(?<quantity>\d+(?:[.,]\d+)?)\s*(?<unit>шт\.?|пар(?:а|ы)?|комплект(?:а|ов)?|мл\.?|г\.?)", RegexOptions.IgnoreCase);
-        if (!match.Success) return (1m, value.Contains("износ", StringComparison.OrdinalIgnoreCase) ? "1 шт." : value);
+        var match = Regex.Match(value ?? string.Empty, @"(?<quantity>\d+(?:[.,]\d+)?)\s*(?<unit>\p{L}+)?", RegexOptions.IgnoreCase);
+        if (!match.Success) return (1m, NormalizeNormLookupText(value).Contains("износ", StringComparison.Ordinal) ? "1 шт." : value ?? string.Empty);
         var quantity = decimal.Parse(match.Groups["quantity"].Value.Replace(',', '.'), CultureInfo.InvariantCulture);
-        return (quantity, $"{match.Groups["quantity"].Value} {match.Groups["unit"].Value}");
+        var unit = match.Groups["unit"].Success ? match.Groups["unit"].Value : "шт.";
+        return (quantity, $"{match.Groups["quantity"].Value} {unit}");
     }
 
     private static int? ReadLifeMonths(string value)
     {
-        var match = Regex.Match(value, @"(?:на\s*)?(?<value>\d+(?:[.,]\d+)?)\s*(?<unit>год(?:а)?|лет|месяц(?:а|ев)?)", RegexOptions.IgnoreCase);
-        if (!match.Success) return null;
+        var normalized = (value ?? string.Empty).Trim().ToLowerInvariant().Replace('ё', 'е');
+        var matches = Regex.Matches(normalized, @"(?<value>\d+(?:[.,]\d+)?)\s*(?<unit>\p{L}+)", RegexOptions.IgnoreCase);
+        var match = matches.Cast<Match>().LastOrDefault(candidate =>
+            candidate.Groups["unit"].Value.StartsWith("месяц", StringComparison.Ordinal)
+            || candidate.Groups["unit"].Value.StartsWith("год", StringComparison.Ordinal)
+            || candidate.Groups["unit"].Value.StartsWith("лет", StringComparison.Ordinal));
+        if (match is null) return null;
         var amount = decimal.Parse(match.Groups["value"].Value.Replace(',', '.'), CultureInfo.InvariantCulture);
-        return match.Groups["unit"].Value.StartsWith("месяц", StringComparison.OrdinalIgnoreCase)
-            ? (int)Math.Round(amount, MidpointRounding.AwayFromZero)
-            : (int)Math.Round(amount * 12m, MidpointRounding.AwayFromZero);
+        var unit = match.Groups["unit"].Value;
+        if (unit.StartsWith("месяц", StringComparison.Ordinal))
+        {
+            return (int)Math.Round(amount, MidpointRounding.AwayFromZero);
+        }
+
+        return unit.StartsWith("год", StringComparison.Ordinal) || unit.StartsWith("лет", StringComparison.Ordinal)
+            ? (int)Math.Round(amount * 12m, MidpointRounding.AwayFromZero)
+            : null;
     }
 
     private static string ReadNormVersion(string fileName)

@@ -482,6 +482,24 @@ public sealed record InventoryPpeNormMappingDto(
     bool IsDefault,
     string Comment);
 
+public sealed record InventoryPpeNormCandidateDto(
+    Guid NormRowId,
+    Guid NormSetId,
+    long NormSetVersion,
+    string NormItemName,
+    string NormPoint,
+    decimal Quantity,
+    string QuantityText,
+    string IssuePeriodText,
+    int? LifeMonths,
+    decimal AlreadyIssuedQuantity,
+    decimal AvailableQuantity,
+    Guid? MappingId,
+    int PreviouslyConfirmedCount,
+    string Status,
+    IReadOnlyList<string> Reasons,
+    IReadOnlyList<string> Warnings);
+
 public sealed record InventoryPpeCardNormRowDto(
     Guid Id,
     Guid? SourceNormRowId,
@@ -508,7 +526,13 @@ public sealed record InventoryPpeCardNormRowDto(
     string DraftSizeText = "",
     Guid? DraftWarehouseId = null,
     string DraftComment = "",
-    string DraftBrandModelArticle = "");
+    string DraftBrandModelArticle = "",
+    decimal AlreadyIssuedQuantity = 0,
+    decimal AvailableQuantity = 0,
+    string EntitlementStatus = "manual_control_required",
+    DateOnly? EntitlementPeriodFrom = null,
+    DateOnly? EntitlementPeriodTo = null,
+    IReadOnlyList<string>? EntitlementWarnings = null);
 
 public sealed record InventoryPpeWorkspaceDto(
     InventoryEmployeeDto Employee,
@@ -594,7 +618,8 @@ public sealed record CreateInventoryPpeIssueBatchLineDto(
     string? SizeText = null,
     string? BrandModelArticle = null,
     string? Comment = null,
-    Guid? WarehouseId = null);
+    Guid? WarehouseId = null,
+    bool IsAdditional = false);
 
 public sealed record CreateInventoryPpeIssueBatchDto(
     long ExpectedVersion,

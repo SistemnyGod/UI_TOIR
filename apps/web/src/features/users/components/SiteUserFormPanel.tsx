@@ -100,7 +100,7 @@ export function SiteUserFormPanel({
       <header className="site-user-form-header">
         <div>
           <span className="eyebrow">Администрирование</span>
-          <h2>{isEdit ? "Редактирование пользователя" : "Новый пользователь"}</h2>
+          <h2 id="site-user-form-title">{isEdit ? "Редактирование пользователя" : "Новый пользователь"}</h2>
           <p>Создайте учётную запись и назначьте базовый доступ.</p>
         </div>
         <button className="icon-button" onClick={onClose} type="button" aria-label="Закрыть">×</button>

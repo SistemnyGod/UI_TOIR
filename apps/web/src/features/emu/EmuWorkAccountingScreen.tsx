@@ -35,7 +35,6 @@ import {
   WorkBoardSection,
   WorkCard,
   WorkFilterTabs,
-  WorkPeriodFilter,
   WorkSearchFilter,
 } from "./work-accounting/WorkAccountingBoard";
 import { ResolveDecisionModal, WorkSidePanel } from "./work-accounting/WorkSidePanel";
@@ -86,8 +85,6 @@ export function EmuWorkAccountingScreen({
   );
   const [workFilter, setWorkFilter] = useState<WorkCardFilter>(preferences.workFilter);
   const [sectionFilter, setSectionFilter] = useState(preferences.sectionFilter);
-  const [periodFrom, setPeriodFrom] = useState("");
-  const [periodTo, setPeriodTo] = useState("");
   const [workSearch, setWorkSearch] = useState("");
   const [density, setDensity] = useState<WorkDensity>(preferences.density);
   const [collapsedSections, setCollapsedSections] = useState<string[]>(preferences.collapsedSections);
@@ -109,9 +106,6 @@ export function EmuWorkAccountingScreen({
     const query = workSearch.trim().toLocaleLowerCase("ru-RU");
 
     return sectionFilteredBoardWork.filter((work) => {
-      const workDate = work.workDate.slice(0, 10);
-      if (periodFrom && workDate < periodFrom) return false;
-      if (periodTo && workDate > periodTo) return false;
       if (!query) return true;
 
       return [
@@ -126,7 +120,7 @@ export function EmuWorkAccountingScreen({
         .toLocaleLowerCase("ru-RU")
         .includes(query);
     });
-  }, [periodFrom, periodTo, sectionFilteredBoardWork, workSearch]);
+  }, [sectionFilteredBoardWork, workSearch]);
   const ongoingWork = filteredBoardWork;
   const visibleShiftRemarks = useMemo(
     () => workspace.shiftRemarks.rows.filter((remark) => !sectionFilter || remark.sectionId === sectionFilter),
@@ -137,7 +131,7 @@ export function EmuWorkAccountingScreen({
     () => filteredBoardWork.filter((work) => workFilter === "all" || resolveWorkCardState(work) === workFilter),
     [filteredBoardWork, workFilter],
   );
-  const hasActiveBoardFilters = Boolean(sectionFilter || periodFrom || periodTo || workSearch.trim() || workFilter !== "all");
+  const hasActiveBoardFilters = Boolean(sectionFilter || workSearch.trim() || workFilter !== "all");
   const carriedOverWork = useMemo(() => visibleWork.filter((work) => work.isCarriedOver && !work.completedAt), [visibleWork]);
   const regularVisibleWork = useMemo(() => visibleWork.filter((work) => !work.isCarriedOver), [visibleWork]);
   const boardSections = useMemo(() => groupEmuWorkBySection(regularVisibleWork), [regularVisibleWork]);
@@ -248,8 +242,6 @@ export function EmuWorkAccountingScreen({
 
   function clearBoardFilters() {
     setSectionFilter("");
-    setPeriodFrom("");
-    setPeriodTo("");
     setWorkSearch("");
     setWorkFilter("all");
   }
@@ -354,19 +346,6 @@ export function EmuWorkAccountingScreen({
         )}
       />
 
-      <div className="emu-kpi-row">
-        {workspace.dashboard.metrics.map((metric) => (
-          <article className={`emu-kpi emu-tone-${metric.tone}`} key={metric.label}>
-            <span className="emu-kpi-icon">{metric.icon === "pause" ? "Ⅱ" : metric.icon === "check" ? "✓" : metric.icon === "alert" ? "!" : "▷"}</span>
-            <div>
-              <small>{metric.label}</small>
-              <strong>{metric.value}</strong>
-              <span>{metric.delta}</span>
-            </div>
-          </article>
-        ))}
-      </div>
-
       {workspace.error ? <div className="emu-alert" role="alert">{workspace.error}</div> : null}
 
       <WorkAttentionSummary activeWork={ongoingWork} />
@@ -389,7 +368,6 @@ export function EmuWorkAccountingScreen({
             <div className="emu-work-board-toolbar-main">
               <span className="emu-work-board-toolbar-label">Фильтры доски</span>
               <SectionQuickFilter sections={activeSections(workspace)} value={sectionFilter} onChange={setSectionFilter} />
-              <WorkPeriodFilter from={periodFrom} onChangeFrom={setPeriodFrom} onChangeTo={setPeriodTo} onClear={() => { setPeriodFrom(""); setPeriodTo(""); }} to={periodTo} />
               <WorkSearchFilter onChange={setWorkSearch} onClear={() => setWorkSearch("")} value={workSearch} />
             </div>
             <div className="emu-work-board-toolbar-secondary">

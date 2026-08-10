@@ -354,7 +354,13 @@ internal sealed record PpePrintLine(
     string QuantityText,
     long? UnitPriceMinor,
     decimal AmountMinor,
-    bool IsSectionTitle);
+    bool IsSectionTitle,
+    string CatalogName = "",
+    string IssueMethod = "",
+    DateTimeOffset? ReturnedAt = null,
+    decimal? ReturnedQuantity = null,
+    DateTimeOffset? WriteOffActDate = null,
+    string WriteOffActNumber = "");
 
 internal sealed record PpeEmployeePrintDetails(
     string Gender,
@@ -676,16 +682,16 @@ internal static class WordDocumentBuilder
 
         rows.AddRange(lines.Select(line => new[]
         {
-            line.ItemName,
+            string.IsNullOrWhiteSpace(line.CatalogName) ? line.ItemName : line.CatalogName,
             string.IsNullOrWhiteSpace(line.Model) ? "-" : line.Model,
             string.IsNullOrWhiteSpace(line.IssuedAt) ? "-" : line.IssuedAt,
-            QuantityText(line),
-            IsConsumable(line) ? "Дозатор" : "-",
+            ActualQuantityText(line),
+            IssueMethodText(line),
             "",
+            ReturnDateText(line),
+            ReturnedQuantityText(line),
             "",
-            "",
-            "",
-            ""
+            WriteOffActText(line)
         }));
 
         return rows;
@@ -717,6 +723,38 @@ internal static class WordDocumentBuilder
         return string.IsNullOrWhiteSpace(line.QuantityText)
             ? $"{line.Quantity:0.###} {line.Unit}"
             : line.QuantityText;
+    }
+
+    private static string ActualQuantityText(PpePrintLine line) => $"{line.Quantity:0.###} {line.Unit}";
+
+    private static string ReturnDateText(PpePrintLine line) =>
+        line.ReturnedAt is not null ? line.ReturnedAt.Value.UtcDateTime.ToString("dd.MM.yyyy") : IsReturnStatus(line.Status) ? line.DueAt : "";
+
+    private static string ReturnedQuantityText(PpePrintLine line) =>
+        line.ReturnedQuantity is not null
+            ? $"{line.ReturnedQuantity.Value:0.###} {line.Unit}"
+            : IsReturnStatus(line.Status) ? ActualQuantityText(line) : "";
+
+    private static bool IsReturnStatus(string status) =>
+        string.Equals(status, "returned", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, "written_off", StringComparison.OrdinalIgnoreCase);
+
+    private static string IssueMethodText(PpePrintLine line) => line.IssueMethod.Trim().ToLowerInvariant() switch
+    {
+        "dispenser" => "Дозатор",
+        "personal" => "Лично",
+        _ => IsConsumable(line) ? "Дозатор" : "Лично"
+    };
+
+    private static string WriteOffActText(PpePrintLine line)
+    {
+        if (!string.Equals(line.Status, "written_off", StringComparison.OrdinalIgnoreCase))
+        {
+            return "";
+        }
+
+        var value = string.Join(", ", new[] { line.WriteOffActDate?.UtcDateTime.ToString("dd.MM.yyyy") ?? "", line.WriteOffActNumber }.Where(item => !string.IsNullOrWhiteSpace(item)));
+        return value.Length == 0 ? "Требуется акт" : value;
     }
 
     private static string FormatIssuePeriodText(int? lifeMonths) => lifeMonths switch
@@ -1028,16 +1066,16 @@ internal static class PpeTemplateDocumentBuilder
         {
             var row = (TableRow)templateRow.CloneNode(true);
             SetRowCells(row, [
-                line.ItemName,
+                string.IsNullOrWhiteSpace(line.CatalogName) ? line.ItemName : line.CatalogName,
                 string.IsNullOrWhiteSpace(line.Model) ? "-" : line.Model,
                 string.IsNullOrWhiteSpace(line.IssuedAt) ? "-" : line.IssuedAt,
-                QuantityText(line),
-                IsConsumable(line) ? "Дозатор" : "-",
+                ActualQuantityText(line),
+                IssueMethodText(line),
                 "",
+                ReturnDateText(line),
+                ReturnedQuantityText(line),
                 "",
-                "",
-                "",
-                ""
+                WriteOffActText(line)
             ]);
             table.Append(row);
         }
@@ -1064,6 +1102,38 @@ internal static class PpeTemplateDocumentBuilder
         {
             SetCellText(cells[index], values[index], bold);
         }
+    }
+
+    private static string ActualQuantityText(PpePrintLine line) => $"{line.Quantity:0.###} {line.Unit}";
+
+    private static string ReturnDateText(PpePrintLine line) =>
+        line.ReturnedAt is not null ? line.ReturnedAt.Value.UtcDateTime.ToString("dd.MM.yyyy") : IsReturnStatus(line.Status) ? line.DueAt : "";
+
+    private static string ReturnedQuantityText(PpePrintLine line) =>
+        line.ReturnedQuantity is not null
+            ? $"{line.ReturnedQuantity.Value:0.###} {line.Unit}"
+            : IsReturnStatus(line.Status) ? ActualQuantityText(line) : "";
+
+    private static string IssueMethodText(PpePrintLine line) => line.IssueMethod.Trim().ToLowerInvariant() switch
+    {
+        "dispenser" => "Дозатор",
+        "personal" => "Лично",
+        _ => line.LifeMonths is null or <= 0 && string.IsNullOrWhiteSpace(line.DueAt) ? "Дозатор" : "Лично"
+    };
+
+    private static bool IsReturnStatus(string status) =>
+        string.Equals(status, "returned", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, "written_off", StringComparison.OrdinalIgnoreCase);
+
+    private static string WriteOffActText(PpePrintLine line)
+    {
+        if (!string.Equals(line.Status, "written_off", StringComparison.OrdinalIgnoreCase))
+        {
+            return "";
+        }
+
+        var value = string.Join(", ", new[] { line.WriteOffActDate?.UtcDateTime.ToString("dd.MM.yyyy") ?? "", line.WriteOffActNumber }.Where(item => !string.IsNullOrWhiteSpace(item)));
+        return value.Length == 0 ? "Требуется акт" : value;
     }
 
     private static void SetCellText(TableCell cell, string value, bool bold = false)
