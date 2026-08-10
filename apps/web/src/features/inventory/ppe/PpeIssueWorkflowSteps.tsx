@@ -36,6 +36,11 @@ import { ppeNormResolutionLabel } from "./ppeStatusCatalog";
 export type DraftSource = "active_norms" | "previous_card" | "empty";
 export type SelectionTab = "norms" | "catalog" | "selected" | "sets";
 export type IssueType = "primary" | "planned" | "replacement" | "additional";
+export type PpeAutoMatchSummary = {
+  confirmed: number;
+  reviewRequired: number;
+  unmatched: number;
+};
 
 export function EmployeeDocumentStep({
   basis,
@@ -140,7 +145,10 @@ export function SelectionStep({
   issueLines,
   itemRows,
   loadingItems,
+  autoMatching,
+  autoMatchSummary,
   onAddCatalog,
+  onAutoMatch,
   onApplySet,
   onOpenCatalog,
   onOpenNormCandidates,
@@ -160,7 +168,10 @@ export function SelectionStep({
   issueLines: PpeIssueDraftLine[];
   itemRows: InventoryPpeCardNormRowDto[];
   loadingItems: boolean;
+  autoMatching: boolean;
+  autoMatchSummary: PpeAutoMatchSummary | null;
   onAddCatalog: () => void;
+  onAutoMatch: () => void;
   onApplySet: (set: InventoryItemSetDetailDto) => Promise<void>;
   onOpenCatalog: (row: InventoryPpeCardNormRowDto) => void;
   onOpenNormCandidates: (item: PpeSelectedCatalogItem) => void;
@@ -182,6 +193,7 @@ export function SelectionStep({
   const readyToAddCount = itemRows.filter((row) => row.mappedItemId && !selectedIds.has(row.id)).length;
   const unmappedCount = itemRows.length - mappedCount;
   const extraCount = itemRows.filter((row) => !row.sourceNormRowId).length;
+  const autoMatchCount = selectedCatalogItems.filter((item) => item.normResolutionStatus !== "confirmed" && item.normResolutionStatus !== "additional").length;
   return (
     <section className="ppe-issue-card ppe-issue-selection-card">
       <CardHeading icon={<PackageSearch size={24} />} kicker="Шаг 2" title="Подбор СИЗ" text="Сначала выберите фактическую позицию из номенклатуры, затем вручную подтвердите подходящую норму АТОМ." />
@@ -193,9 +205,10 @@ export function SelectionStep({
       </div>
       <div className="ppe-issue-toolbar">
         <div><strong>{selectionTab === "norms" ? "Нормативные позиции" : selectionTab === "catalog" ? "Номенклатура" : selectionTab === "selected" ? "Выбранные позиции" : "Типовые наборы"}</strong><span>{selectionTab === "norms" ? "Проверьте нормы сотрудника и при необходимости измените сопоставление" : selectionTab === "catalog" ? "Выберите фактически выдаваемую позицию, чтобы увидеть подходящие нормы АТОМ" : selectionTab === "selected" ? "Выбранные товары сохраняются в черновике до ручного подтверждения нормы" : "Проверьте состав набора перед применением"}</span></div>
-        <div className="ppe-issue-toolbar-actions"><PpeButton disabled={loadingItems} icon={<Plus size={16} />} onClick={onAddCatalog} variant="primary">Добавить из каталога</PpeButton>{selectionTab === "norms" ? <PpeButton disabled={!readyToAddCount || loadingItems} icon={<Check size={16} />} onClick={onSelectAll} variant="secondary">Добавить все доступные позиции{readyToAddCount ? ` (${readyToAddCount})` : ""}</PpeButton> : null}</div>
+        <div className="ppe-issue-toolbar-actions"><PpeButton disabled={loadingItems} icon={<Plus size={16} />} onClick={onAddCatalog} variant="primary">Добавить из каталога</PpeButton>{selectionTab === "selected" ? <PpeButton disabled={!autoMatchCount} icon={<RefreshCw size={16} />} loading={autoMatching} onClick={onAutoMatch} variant="secondary">Авто норма СИЗ{autoMatchCount ? ` (${autoMatchCount})` : ""}</PpeButton> : null}{selectionTab === "norms" ? <PpeButton disabled={!readyToAddCount || loadingItems} icon={<Check size={16} />} onClick={onSelectAll} variant="secondary">Добавить все доступные позиции{readyToAddCount ? ` (${readyToAddCount})` : ""}</PpeButton> : null}</div>
       </div>
       <SelectionSummary extra={extraCount} mapped={mappedCount} selected={issueLines.length} total={itemRows.length} unmapped={unmappedCount} />
+      {selectionTab === "selected" && autoMatchSummary ? <div className="ppe-issue-auto-match-summary" role="status"><span className="is-confirmed">Сопоставлено: {autoMatchSummary.confirmed}</span><span className="is-review">Требует проверки: {autoMatchSummary.reviewRequired}</span><span className="is-unmatched">Не определено: {autoMatchSummary.unmatched}</span></div> : null}
       {selectionTab === "selected" ? <SelectedCatalogRows busy={loadingItems} items={selectedCatalogItems} onOpenNormCandidates={onOpenNormCandidates} onRemove={onRemoveSelected} onReplace={onReplaceSelected} /> : null}
       {selectionTab === "norms" ? <div className="ppe-issue-norm-groups">{categories.map((category) => {
         const groupRows = itemRows.filter((row) => category.id === "base" ? !row.parentRowId : row.parentRowId === category.id);
@@ -225,8 +238,9 @@ function SelectedCatalogRows({ busy, items, onOpenNormCandidates, onRemove, onRe
   return <div className="ppe-selected-catalog-list" aria-label="Выбранная номенклатура">
     {items.map((selected) => {
       const status = ppeNormResolutionLabel(selected.normResolutionStatus);
+      const statusHint = selected.normResolutionStatus === "unresolved" ? "Шаг 2 · выберите норму АТОМ" : status;
       return <article className={`ppe-selected-catalog-card is-${selected.normResolutionStatus}`} key={selected.localId}>
-        <div className="ppe-selected-catalog-main"><strong>{selected.item.name}</strong><small>{[selected.item.brandName, selected.item.modelName, selected.item.article].filter(Boolean).join(" · ") || "Модель не указана"}</small><span>{selected.quantity} {selected.item.unit || "шт."} · {status}</span></div>
+        <div className="ppe-selected-catalog-main"><strong>{selected.item.name}</strong><small>{selected.brandModelArticle || [selected.item.brandName, selected.item.modelName, selected.item.article].filter(Boolean).join(" · ") || "Модель не указана"}</small><span>{selected.quantity} {selected.item.unit || "шт."} · {statusHint}</span>{selected.normReasons?.[0] ? <small className="ppe-selected-catalog-feedback">{selected.normReasons[0]}</small> : null}{selected.normWarnings?.[0] ? <small className="ppe-selected-catalog-feedback is-warning">{selected.normWarnings[0]}</small> : null}</div>
         <div className="ppe-selected-catalog-actions"><PpeButton disabled={busy} onClick={() => onReplace(selected)} variant="secondary">Заменить товар</PpeButton>{selected.normResolutionStatus !== "additional" ? <PpeButton disabled={busy} onClick={() => onOpenNormCandidates(selected)} variant={selected.normResolutionStatus === "confirmed" ? "secondary" : "primary"}>{selected.normResolutionStatus === "confirmed" ? "Изменить норму" : "Подобрать норму"}</PpeButton> : null}<PpeButton disabled={busy} onClick={() => onRemove(selected.localId)} variant="ghost">Удалить выбор</PpeButton></div>
       </article>;
     })}

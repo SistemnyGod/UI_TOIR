@@ -498,7 +498,31 @@ public sealed record InventoryPpeNormCandidateDto(
     int PreviouslyConfirmedCount,
     string Status,
     IReadOnlyList<string> Reasons,
+    IReadOnlyList<string> Warnings,
+    int SortOrder = 0);
+
+public sealed record InventoryPpeNormCandidateBatchLineDto(
+    string SelectionId,
+    Guid ItemId,
+    decimal Quantity);
+
+public sealed record InventoryPpeNormCandidateBatchRequestDto(
+    Guid EmployeeId,
+    DateOnly? IssueDate,
+    IReadOnlyList<InventoryPpeNormCandidateBatchLineDto> Items);
+
+public sealed record InventoryPpeNormCandidateBatchItemDto(
+    string SelectionId,
+    Guid ItemId,
+    string Resolution,
+    InventoryPpeNormCandidateDto? Candidate,
+    IReadOnlyList<InventoryPpeNormCandidateDto> Alternatives,
+    IReadOnlyList<string> Reasons,
     IReadOnlyList<string> Warnings);
+
+public sealed record InventoryPpeNormCandidateBatchResponseDto(
+    IReadOnlyList<InventoryPpeNormCandidateBatchItemDto> Items,
+    string? NormSetStatus = null);
 
 public sealed record InventoryPpeCardNormRowDto(
     Guid Id,
@@ -619,7 +643,9 @@ public sealed record CreateInventoryPpeIssueBatchLineDto(
     string? BrandModelArticle = null,
     string? Comment = null,
     Guid? WarehouseId = null,
-    bool IsAdditional = false);
+    bool IsAdditional = false,
+    bool SaveMappingOnSuccess = false,
+    bool MakeDefaultMapping = false);
 
 public sealed record CreateInventoryPpeIssueBatchDto(
     long ExpectedVersion,

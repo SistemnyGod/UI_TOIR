@@ -185,6 +185,17 @@ try {
       $states = Wait-ForContainers -Names $requiredContainers -TimeoutSeconds $HealthTimeoutSeconds
       $states | Format-Table Name, Status, Health, Ready -AutoSize | Out-String | Write-Host
     }
+
+    Invoke-Step "Refresh proxy after API health" {
+      # API is recreated during a deployment while the long-lived proxy may
+      # retain a stale Docker DNS resolution for the old API container. Recreate
+      # only the proxy after API health is confirmed so the first browser load
+      # cannot receive a transient 502 from `lookup api: i/o timeout`.
+      $proxyArgs = $composeArgs + @("up", "-d", "--no-deps", "--force-recreate", "proxy")
+      Invoke-Native docker @proxyArgs
+      $proxyStates = Wait-ForContainers -Names @("patrol360-proxy") -TimeoutSeconds $HealthTimeoutSeconds
+      $proxyStates | Format-Table Name, Status, Health, Ready -AutoSize | Out-String | Write-Host
+    }
   }
   else {
     Write-Host "Skipping container health wait by request." -ForegroundColor Yellow

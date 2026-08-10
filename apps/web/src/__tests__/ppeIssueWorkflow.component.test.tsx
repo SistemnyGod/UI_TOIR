@@ -58,15 +58,15 @@ describe("PPE issue workflow", () => {
     await waitFor(() => expect(dialog.querySelector<HTMLInputElement>("#ppe-catalog-picker-search")).toHaveFocus());
     const catalogItems = dialog.querySelectorAll<HTMLButtonElement>(".ppe-catalog-item-card");
     await user.click(catalogItems[0]);
-    expect(screen.getByLabelText("Параметры выбранной позиции")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Параметры /)).toBeInTheDocument();
     const nextCatalogPage = screen.getByRole("button", { name: "Следующая страница" });
     if (!nextCatalogPage.hasAttribute("disabled")) {
       await user.click(nextCatalogPage);
       await waitFor(() => expect(dialog.querySelector(".ppe-catalog-item-grid")).toHaveAttribute("aria-busy", "false"));
       expect(screen.getByLabelText("Параметры выбранной позиции")).toBeInTheDocument();
     }
-    await user.click(screen.getByRole("button", { name: "Сохранить выбор" }));
-    expect(screen.getByText(/Норма не определена/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Добавить выбранные/ }));
+    expect(screen.getByText(/Шаг 2 · выберите норму АТОМ/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Подобрать норму" }));
     const normDialog = await screen.findByRole("dialog", { name: "Подходящие нормы АТОМ" });
     await waitFor(() => expect(normDialog.querySelector<HTMLInputElement>("#ppe-norm-selection-search")).toHaveFocus());

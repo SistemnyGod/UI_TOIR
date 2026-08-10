@@ -42,6 +42,8 @@ import type {
   InventoryPpeNormImportResultDto,
   InventoryPpeNormMappingDto,
   InventoryPpeNormCandidateDto,
+  InventoryPpeNormCandidateBatchRequestDto,
+  InventoryPpeNormCandidateBatchResponseDto,
   InventoryPpeNormSetDetailDto,
   InventoryPpeNormSetDto,
   InventoryPpeWorkspaceDto,
@@ -297,6 +299,13 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
       if (params.issueDate) search.set("issueDate", params.issueDate);
       return client.get<InventoryPpeNormCandidateDto[]>(
         `/api/v1/inventory/ppe/items/${itemId}/norm-candidates?${search.toString()}`,
+      );
+    },
+
+    getPpeNormCandidatesBatch(payload: InventoryPpeNormCandidateBatchRequestDto) {
+      return client.post<InventoryPpeNormCandidateBatchResponseDto, InventoryPpeNormCandidateBatchRequestDto>(
+        "/api/v1/inventory/ppe/norm-candidates/batch",
+        payload,
       );
     },
 

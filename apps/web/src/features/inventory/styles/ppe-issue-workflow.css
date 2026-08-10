@@ -561,14 +561,23 @@
 .ppe-issue-selection-summary .is-warning { background: var(--ppe-ui-warning-soft, #fff4df); border-color: #efd49f; }
 .ppe-issue-selection-summary .is-selected { background: var(--ppe-ui-primary-soft, #edf4ff); border-color: var(--ppe-ui-border-strong, #b7cdf0); }
 .ppe-issue-selection-summary .is-extra { background: var(--ppe-ui-surface, #fff); border-style: dashed; }
+.ppe-issue-auto-match-summary { align-items: center; background: #f7faff; border: 1px solid #d6e4f2; border-radius: 10px; display: flex; flex-wrap: wrap; gap: 7px 14px; padding: 9px 11px; }
+.ppe-issue-auto-match-summary span { font-size: 10px; font-weight: 900; }
+.ppe-issue-auto-match-summary .is-confirmed { color: #168660; }
+.ppe-issue-auto-match-summary .is-review { color: #9b6900; }
+.ppe-issue-auto-match-summary .is-unmatched { color: #b44b37; }
 .ppe-selected-catalog-list { display: grid; gap: 10px; }
 .ppe-selected-catalog-card { align-items: center; background: var(--ppe-ui-surface, #fff); border: 1px solid var(--ppe-ui-border, #d9e5f1); border-radius: 11px; display: flex; gap: 14px; justify-content: space-between; padding: 14px; }
 .ppe-selected-catalog-card.is-unresolved { border-color: #efd49f; background: var(--ppe-ui-warning-soft, #fff4df); }
 .ppe-selected-catalog-card.is-confirmed { border-color: #bfe4d1; background: var(--ppe-ui-success-soft, #e7f7ef); }
+.ppe-selected-catalog-card.is-review_required { border-color: #efd49f; background: #fff9ed; }
+.ppe-selected-catalog-card.is-additional_pending { border-color: #efc3b6; background: #fff5f2; }
 .ppe-selected-catalog-main { display: grid; gap: 4px; min-width: 0; }
 .ppe-selected-catalog-main strong { overflow-wrap: anywhere; }
 .ppe-selected-catalog-main small,
 .ppe-selected-catalog-main span { color: var(--ppe-ui-muted, #647694); font-size: 11px; }
+.ppe-selected-catalog-main .ppe-selected-catalog-feedback { color: #5d7796; font-size: 10px; line-height: 1.35; }
+.ppe-selected-catalog-main .ppe-selected-catalog-feedback.is-warning { color: #9b6900; }
 .ppe-selected-catalog-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .ppe-issue-norm-group.is-complete { border-color: #bfe4d1; }
 .ppe-issue-norm-group.is-complete > .ppe-issue-norm-group-toggle { background: var(--ppe-ui-success-soft, #e7f7ef); }

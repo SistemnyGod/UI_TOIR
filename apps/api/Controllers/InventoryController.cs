@@ -324,6 +324,17 @@ public sealed class InventoryController(
         return Ok(inventoryWorkflowService.GetPpeNormCandidates(itemId, employeeId, quantity, issueDate));
     }
 
+    [HttpPost("ppe/norm-candidates/batch")]
+    public ActionResult<InventoryPpeNormCandidateBatchResponseDto> PpeNormCandidatesBatch(InventoryPpeNormCandidateBatchRequestDto request)
+    {
+        if (request.Items.Count == 0) return BadRequest("At least one PPE item is required");
+        if (request.EmployeeId == Guid.Empty || request.Items.Any(row => string.IsNullOrWhiteSpace(row.SelectionId) || row.ItemId == Guid.Empty || row.Quantity <= 0))
+        {
+            return BadRequest("Each PPE item requires a selection id and a positive quantity");
+        }
+        return Ok(inventoryWorkflowService.GetPpeNormCandidatesBatch(request));
+    }
+
     [HttpPost("ppe/cards")]
     [RequirePermission("inventory.ppe.manage")]
     public ActionResult<InventoryPpeCardDetailDto> CreatePpeCard(CreateInventoryPpeCardDto request) =>

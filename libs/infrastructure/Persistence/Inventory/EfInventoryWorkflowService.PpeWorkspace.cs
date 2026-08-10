@@ -68,8 +68,9 @@ internal sealed partial class EfInventoryWorkflowService
                 && line.CardNormRow.SourceNormRowId == sourceNormRowId
                 && (line.Status == "issued" || line.Status == "partial")
                 && line.IssuedAt != null
-                && line.IssuedAt >= periodStart
-                && line.IssuedAt < periodEndExclusive)
+                && line.IssuedAt.HasValue
+                && line.IssuedAt.Value >= periodStart
+                && line.IssuedAt.Value < periodEndExclusive)
             .Sum(line => (decimal?)line.Quantity) ?? 0m;
 
         return CalculatePpeEntitlement(normQuantity, alreadyIssued, periodFrom, periodTo);
@@ -205,6 +206,20 @@ internal sealed partial class EfInventoryWorkflowService
             .FirstOrDefault();
         if (normSet is null) return [];
 
+        return BuildPpeNormCandidates(employeeId, item, normSet, effectiveDate, quantity);
+    }
+
+    private IReadOnlyList<InventoryPpeNormCandidateDto> BuildPpeNormCandidates(
+        Guid employeeId,
+        InventoryItemEntity item,
+        InventoryPpeNormSetEntity normSet,
+        DateOnly effectiveDate,
+        decimal quantity,
+        IReadOnlyDictionary<Guid, PpeEntitlementResolution>? precomputedEntitlements = null,
+        IReadOnlyDictionary<Guid, int>? precomputedPreviousConfirmedCounts = null)
+    {
+        var itemId = item.Id;
+
         var itemText = string.Join(" ", item.Name, item.NormItemName, item.ActualItemName, item.ItemKind,
             item.Category?.Name, item.Unit?.Name, item.BrandName, item.ModelName, item.Article, item.ProtectionClass);
         var normRowsById = normSet.Rows.ToDictionary(row => row.Id);
@@ -216,8 +231,11 @@ internal sealed partial class EfInventoryWorkflowService
                 ? parentRow.NormItemName
                 : string.Empty;
             var compatibility = EvaluatePpeNormTextCompatibility(itemText, string.Join(" ", parentText, normRow.NormItemName));
+            var itemKinds = DetectPpeKinds(NormalizeNormLookupText(itemText));
             var textSuggested = compatibility.IsCompatible;
-            var entitlement = ResolvePpeEntitlement(employeeId, normRow.Id, normRow.Quantity, normRow.IssuePeriodText, normRow.LifeMonths, effectiveDate);
+            var entitlement = precomputedEntitlements is not null && precomputedEntitlements.TryGetValue(normRow.Id, out var precomputedEntitlement)
+                ? precomputedEntitlement
+                : ResolvePpeEntitlement(employeeId, normRow.Id, normRow.Quantity, normRow.IssuePeriodText, normRow.LifeMonths, effectiveDate);
             var alreadyIssued = entitlement.AlreadyIssuedQuantity;
             var available = entitlement.AvailableQuantity;
             int? resolvedLifeMonths = normRow.LifeMonths;
@@ -227,12 +245,14 @@ internal sealed partial class EfInventoryWorkflowService
             {
                 resolvedLifeMonths = (periodTo.Year - periodFrom.Year) * 12 + periodTo.Month - periodFrom.Month;
             }
-            var previousConfirmedCount = dbContext.InventoryPpeCardLines
-                .Count(line => line.Card.EmployeeId == employeeId
-                    && line.CardNormRow != null
-                    && line.CardNormRow.SourceNormRowId == normRow.Id
-                    && line.ItemId == itemId
-                    && (line.Status == "issued" || line.Status == "partial"));
+            var previousConfirmedCount = precomputedPreviousConfirmedCounts is not null
+                ? precomputedPreviousConfirmedCounts.GetValueOrDefault(normRow.Id)
+                : dbContext.InventoryPpeCardLines
+                    .Count(line => line.Card.EmployeeId == employeeId
+                        && line.CardNormRow != null
+                        && line.CardNormRow.SourceNormRowId == normRow.Id
+                        && line.ItemId == itemId
+                        && (line.Status == "issued" || line.Status == "partial"));
             var status = ResolvePpeNormCandidateStatus(
                 mapping is not null,
                 textSuggested,
@@ -247,6 +267,15 @@ internal sealed partial class EfInventoryWorkflowService
             var warnings = new List<string>(entitlement.Warnings);
             if (available < quantity) warnings.Add("Доступный остаток нормы меньше выбранного количества");
             if (mapping is null) warnings.Add("Соответствие ещё не подтверждено");
+            var itemUnit = NormalizePpeUnit(string.Join(" ", item.Unit?.Name, item.Unit?.Symbol));
+            var normUnit = NormalizePpeUnit(normRow.QuantityText);
+            if (itemKinds.Contains("обувь", StringComparer.Ordinal)
+                && itemUnit.Length > 0
+                && normUnit.Length > 0
+                && itemUnit != normUnit)
+            {
+                warnings.Add($"Единица номенклатуры «{itemUnit}» отличается от единицы нормы «{normUnit}» — проверьте количество");
+            }
             if (previousConfirmedCount > 0) reasons = [.. reasons, $"Ранее использовалось в выдачах: {previousConfirmedCount}"];
             candidates.Add(new InventoryPpeNormCandidateDto(
                 normRow.Id,
@@ -264,11 +293,170 @@ internal sealed partial class EfInventoryWorkflowService
                 previousConfirmedCount,
                 status,
                 reasons,
-                warnings));
+                warnings,
+                normRow.SortOrder));
         }
 
         return OrderPpeNormCandidates(candidates);
     }
+
+    public InventoryPpeNormCandidateBatchResponseDto GetPpeNormCandidatesBatch(InventoryPpeNormCandidateBatchRequestDto request)
+    {
+        var distinctItems = request.Items
+            .GroupBy(row => row.SelectionId, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToList();
+        var employee = dbContext.Employees.AsNoTracking().FirstOrDefault(row => row.Id == request.EmployeeId);
+        if (employee is null)
+        {
+            return new(distinctItems.Select(row => UnmatchedBatchItem(row, "Сотрудник не найден")).ToList(), "employee_missing");
+        }
+
+        var effectiveDate = request.IssueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var normSet = dbContext.InventoryPpeNormSets
+            .AsNoTracking()
+            .Include(row => row.Rows).ThenInclude(row => row.Mappings)
+            .Where(row => row.Status == "active" && row.ArchivedAt == null)
+            .ToList()
+            .Where(row => PositionNamesMatch(employee.Position, row.PositionName))
+            .Where(row => (!row.EffectiveFrom.HasValue || row.EffectiveFrom.Value <= effectiveDate)
+                && (!row.EffectiveTo.HasValue || row.EffectiveTo.Value >= effectiveDate))
+            .OrderByDescending(row => row.EffectiveFrom)
+            .ThenByDescending(row => row.UpdatedAt)
+            .FirstOrDefault();
+
+        if (normSet is null)
+        {
+            return new(distinctItems.Select(row => UnmatchedBatchItem(row, "Для должности сотрудника не найден опубликованный набор норм АТОМ")).ToList(), "norm_set_missing");
+        }
+
+        if (normSet.RequiresReview)
+        {
+            return new(
+                distinctItems.Select(row => UnmatchedBatchItem(row, "Опубликованный набор норм АТОМ требует проверки и не может использоваться для выдачи")).ToList(),
+                "norm_set_requires_review");
+        }
+
+        var itemIds = distinctItems.Select(row => row.ItemId).Distinct().ToList();
+        var items = dbContext.InventoryItems
+            .AsNoTracking()
+            .Include(row => row.Category)
+            .Include(row => row.Unit)
+            .Where(row => itemIds.Contains(row.Id) && row.IsActive)
+            .ToDictionary(row => row.Id);
+        var normRowIds = normSet.Rows.Where(row => row.RowType == "item").Select(row => row.Id).ToHashSet();
+        var entitlementByNormRow = BuildPpeBatchEntitlements(request.EmployeeId, normSet.Rows, effectiveDate);
+        var previousConfirmedCounts = dbContext.InventoryPpeCardLines
+            .AsNoTracking()
+            .Where(line => line.Card.EmployeeId == request.EmployeeId
+                && line.CardNormRow != null
+                && line.CardNormRow.SourceNormRowId != null
+                && normRowIds.Contains(line.CardNormRow.SourceNormRowId.Value)
+                && itemIds.Contains(line.ItemId)
+                && (line.Status == "issued" || line.Status == "partial"))
+            .GroupBy(line => new { NormRowId = line.CardNormRow!.SourceNormRowId!.Value, line.ItemId })
+            .ToDictionary(group => (group.Key.NormRowId, group.Key.ItemId), group => group.Count());
+
+        var response = new List<InventoryPpeNormCandidateBatchItemDto>(distinctItems.Count);
+        foreach (var itemRequest in distinctItems)
+        {
+            if (!items.TryGetValue(itemRequest.ItemId, out var item))
+            {
+                response.Add(UnmatchedBatchItem(itemRequest, "Позиция номенклатуры не найдена или неактивна"));
+                continue;
+            }
+
+            var itemPreviousCounts = previousConfirmedCounts
+                .Where(entry => entry.Key.Item2 == itemRequest.ItemId)
+                .ToDictionary(entry => entry.Key.Item1, entry => entry.Value);
+            var candidates = BuildPpeNormCandidates(
+                request.EmployeeId,
+                item,
+                normSet,
+                effectiveDate,
+                itemRequest.Quantity,
+                entitlementByNormRow,
+                itemPreviousCounts);
+            var compatible = candidates
+                .Where(candidate => candidate.Status is "confirmed_mapping" or "candidate")
+                .Where(candidate => candidate.AvailableQuantity >= itemRequest.Quantity)
+                .OrderBy(candidate => candidate.Status == "confirmed_mapping" ? 0 : 1)
+                .ThenBy(candidate => candidate.PreviouslyConfirmedCount > 0 ? 0 : 1)
+                .ThenBy(candidate => candidate.SortOrder)
+                .ThenBy(candidate => candidate.NormItemName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (compatible.Count == 0)
+            {
+                var unmatchedWarnings = candidates.SelectMany(candidate => candidate.Warnings).Distinct(StringComparer.Ordinal).ToList();
+                var unmatchedReasons = candidates.SelectMany(candidate => candidate.Reasons).Distinct(StringComparer.Ordinal).ToList();
+                if (unmatchedReasons.Count == 0) unmatchedReasons.Add("Подходящая норма для выбранной позиции не найдена");
+                response.Add(new(itemRequest.SelectionId, itemRequest.ItemId, "unmatched", null, [], unmatchedReasons, unmatchedWarnings));
+                continue;
+            }
+
+            var selected = compatible[0];
+            var isSaved = selected.Status == "confirmed_mapping";
+            var isUnique = compatible.Count == 1;
+            var resolution = isSaved || isUnique ? "confirmed" : "review_required";
+            var alternatives = compatible.Skip(1).Take(5).ToList();
+            var warnings = selected.Warnings.Concat(alternatives.SelectMany(candidate => candidate.Warnings)).Distinct(StringComparer.Ordinal).ToList();
+            var reasons = selected.Reasons.Concat(alternatives.SelectMany(candidate => candidate.Reasons)).Distinct(StringComparer.Ordinal).ToList();
+            if (!isSaved && !isUnique) reasons.Insert(0, "Найдено несколько подходящих норм — подтвердите выбор бухгалтера");
+            response.Add(new(itemRequest.SelectionId, itemRequest.ItemId, resolution, selected, alternatives, reasons, warnings));
+        }
+
+        return new(response, normSet.RequiresReview ? "norm_set_requires_review" : null);
+    }
+
+    private Dictionary<Guid, PpeEntitlementResolution> BuildPpeBatchEntitlements(
+        Guid employeeId,
+        IEnumerable<InventoryPpeNormRowEntity> normRows,
+        DateOnly effectiveDate)
+    {
+        var rows = normRows.Where(row => row.RowType == "item").ToList();
+        var rowIds = rows.Select(row => row.Id).ToHashSet();
+        var issuedLines = dbContext.InventoryPpeCardLines
+            .AsNoTracking()
+            .Where(line => line.Card.EmployeeId == employeeId
+                && line.CardNormRow != null
+                && line.CardNormRow.SourceNormRowId != null
+                && rowIds.Contains(line.CardNormRow.SourceNormRowId.Value)
+                && (line.Status == "issued" || line.Status == "partial")
+                && line.IssuedAt != null)
+            .Select(line => new
+            {
+                NormRowId = line.CardNormRow!.SourceNormRowId!.Value,
+                line.IssuedAt,
+                line.Quantity
+            })
+            .ToList();
+
+        var result = new Dictionary<Guid, PpeEntitlementResolution>();
+        foreach (var row in rows)
+        {
+            if (!TryResolvePpePeriod(row.IssuePeriodText, row.LifeMonths, effectiveDate, out var periodFrom, out var periodTo, out var periodWarning))
+            {
+                result[row.Id] = CalculatePpeEntitlement(row.Quantity, 0, null, null, "manual_control_required", [periodWarning]);
+                continue;
+            }
+
+            var periodStart = new DateTimeOffset(periodFrom.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            var periodEndExclusive = new DateTimeOffset(periodTo.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            var alreadyIssued = issuedLines
+                .Where(line => line.NormRowId == row.Id
+                    && line.IssuedAt.HasValue
+                    && line.IssuedAt.Value >= periodStart
+                    && line.IssuedAt.Value < periodEndExclusive)
+                .Sum(line => line.Quantity);
+            result[row.Id] = CalculatePpeEntitlement(row.Quantity, alreadyIssued, periodFrom, periodTo);
+        }
+
+        return result;
+    }
+
+    private static InventoryPpeNormCandidateBatchItemDto UnmatchedBatchItem(InventoryPpeNormCandidateBatchLineDto item, string reason) =>
+        new(item.SelectionId, item.ItemId, "unmatched", null, [], [reason], []);
 
     internal static string ResolvePpeNormCandidateStatus(
         bool hasMapping,
@@ -341,6 +529,14 @@ internal sealed partial class EfInventoryWorkflowService
         return string.Empty;
     }
 
+    private static string NormalizePpeUnit(string? text)
+    {
+        var normalized = NormalizeNormLookupText(text);
+        if (ContainsAny(normalized, "пар", "пара", "пары")) return "пар";
+        if (ContainsAny(normalized, "шт", "штук", "штука", "единиц")) return "шт";
+        return string.Empty;
+    }
+
     private static bool ContainsAny(string text, params string[] values) => values.Any(value => text.Contains(value, StringComparison.Ordinal));
 
     private static readonly HashSet<string> PpeNormGenericTokens = new(StringComparer.Ordinal)
@@ -361,6 +557,7 @@ internal sealed partial class EfInventoryWorkflowService
                 "manual_control_required" => 4,
                 _ => 4
             })
+            .ThenBy(candidate => candidate.PreviouslyConfirmedCount > 0 ? 0 : 1)
             .ThenBy(candidate => candidate.NormItemName)
             .ToList();
 
@@ -835,6 +1032,7 @@ internal sealed partial class EfInventoryWorkflowService
             var requested = preparedLine.Request;
             var normRow = preparedLine.NormRow;
             var item = preparedLine.Item;
+            var isAdditional = requested.IsAdditional;
             var line = new InventoryPpeCardLineEntity
             {
                 Id = Guid.NewGuid(), CardId = card.Id, CardNormRowId = normRow.Id, ItemId = item.Id,
@@ -851,6 +1049,24 @@ internal sealed partial class EfInventoryWorkflowService
             dbContext.InventoryPpeCardLines.Add(line);
             AddPpeStockMoveIfNeeded(line, string.Empty, line.Status, now);
             normRow.MappedItemId ??= item.Id;
+            if (requested.SaveMappingOnSuccess && !isAdditional && normRow.SourceNormRow is not null)
+            {
+                if (requested.MakeDefaultMapping)
+                {
+                    foreach (var other in dbContext.InventoryPpeNormCatalogMappings.Where(row => row.NormRowId == normRow.SourceNormRow.Id && row.ArchivedAt == null)) other.IsDefault = false;
+                }
+                var mapping = dbContext.InventoryPpeNormCatalogMappings.FirstOrDefault(row => row.NormRowId == normRow.SourceNormRow.Id && row.ItemId == item.Id);
+                if (mapping is null)
+                {
+                    mapping = new InventoryPpeNormCatalogMappingEntity { Id = Guid.NewGuid(), NormRowId = normRow.SourceNormRow.Id, ItemId = item.Id, CreatedAt = now };
+                    dbContext.InventoryPpeNormCatalogMappings.Add(mapping);
+                }
+                mapping.BrandModelArticle = NormalizeOptional(requested.BrandModelArticle);
+                mapping.DefaultUnitPriceMinor = requested.UnitPriceMinor ?? item.DefaultUnitPriceMinor;
+                mapping.IsDefault = requested.MakeDefaultMapping;
+                mapping.UpdatedAt = now;
+                mapping.ArchivedAt = null;
+            }
             AddPpeEvent(line.Id, "issued", string.Empty, "issued", line.Comment, now);
             AddPpeLineSystemLog(line, "issued", "PPE issue fact created in batch", now);
         }

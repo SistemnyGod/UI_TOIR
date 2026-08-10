@@ -100,12 +100,16 @@ export function ppeNormCandidateStatusLabel(status?: string | null) {
   return status ? PPE_NORM_CANDIDATE_STATUS_LABELS[status] ?? "Требует проверки" : "Требует проверки";
 }
 
-export function ppeNormResolutionLabel(status: "unresolved" | "confirmed" | "additional") {
+export function ppeNormResolutionLabel(status: "unresolved" | "confirmed" | "review_required" | "additional_pending" | "additional") {
   switch (status) {
     case "confirmed":
       return "Норма подтверждена";
     case "additional":
       return "Дополнительная выдача";
+    case "review_required":
+      return "Требует проверки нормы";
+    case "additional_pending":
+      return "Дополнение: нужно основание";
     default:
       return "Норма не определена";
   }

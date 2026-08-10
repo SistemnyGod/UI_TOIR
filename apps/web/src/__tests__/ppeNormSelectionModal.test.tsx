@@ -42,4 +42,18 @@ describe("PPE norm selection modal", () => {
     expect(screen.getByRole("textbox", { name: /Основание дополнительной выдачи/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Подтвердить дополнительную выдачу" })).toBeDisabled();
   });
+
+  it("explains the empty norm state and does not show mapping settings before a norm is selected", async () => {
+    const user = userEvent.setup();
+    const openSettings = vi.fn();
+    render(<PpeNormSelectionModal candidates={[]} error="" item={item} loading={false} onAddAdditional={vi.fn()} onClose={vi.fn()} onConfirm={vi.fn()} onOpenNormSettings={openSettings} quantity={1} sizeText="42" />);
+
+    expect(screen.getByText("Подходящая норма не найдена")).toBeInTheDocument();
+    expect(screen.getByText(/Товар выбран, но для должности сотрудника/)).toBeInTheDocument();
+    expect(screen.queryByText("После выбора нормы")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Открыть настройки норм" }));
+
+    expect(openSettings).toHaveBeenCalledOnce();
+  });
 });

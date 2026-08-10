@@ -34,6 +34,7 @@ import {
   EmployeeDocumentStep,
   PrintStep,
   SelectionStep,
+  type PpeAutoMatchSummary,
   type DraftSource,
   type IssueType,
   type SelectionTab,
@@ -41,6 +42,7 @@ import {
 import { PrintPreviewModal, printDocument } from "./ppePrint";
 import type { PpeEmployeeCardDetails, PpeWizardLine, PpeWizardState, PrintData, PrintMode } from "./ppeTypes";
 import { toItemFromNorm } from "./ppePrintMapping";
+import { savePpeNormSettingsIntent } from "./ppeNormSettingsIntent";
 import "../styles/ppe-issue-workflow.css";
 import "../styles/ppe-ui-system.css";
 
@@ -91,6 +93,8 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify, currentUserId = "
   const [normCandidates, setNormCandidates] = useState<InventoryPpeNormCandidateDto[]>([]);
   const [candidateLoading, setCandidateLoading] = useState(false);
   const [candidateError, setCandidateError] = useState("");
+  const [autoMatching, setAutoMatching] = useState(false);
+  const [autoMatchSummary, setAutoMatchSummary] = useState<PpeAutoMatchSummary | null>(null);
   const [printMode, setPrintMode] = useState<PrintMode>("sheet");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -335,8 +339,10 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify, currentUserId = "
     }
   }
 
-  function selectCatalogItem(selection: PpeCatalogSelection) {
+  function selectCatalogItems(selections: PpeCatalogSelection[]) {
     if (!draft) return;
+    const selection = selections[0];
+    if (!selection) return;
     if (replacementSelectionId) {
       const previous = selectedCatalogItems.find((row) => row.localId === replacementSelectionId);
       if (previous) {
@@ -346,9 +352,14 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify, currentUserId = "
           : current);
         setSelectedCatalogItems((current) => current.map((row) => row.localId === replacementSelectionId ? {
           ...row,
+          brandModelArticle: selection.brandModelArticle,
           comment: selection.comment,
           item: selection.item,
           mappingId: null,
+          saveMappingOnSuccess: false,
+          makeDefaultMapping: false,
+          normReasons: [],
+          normWarnings: [],
           normResolutionStatus: "unresolved",
           normRowId: null,
           quantity: selection.quantity,
@@ -364,22 +375,34 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify, currentUserId = "
       }
       setReplacementSelectionId(null);
     }
-    const selected: PpeSelectedCatalogItem = {
-      comment: selection.comment,
-      item: selection.item,
-      localId: createClientUuid(),
-      mappingId: null,
-      normResolutionStatus: "unresolved",
-      normRowId: null,
-      quantity: selection.quantity,
-      sizeText: selection.sizeText,
-      unitPriceMinor: selection.unitPriceMinor,
-      warehouseId: selection.warehouseId,
-    };
-    setSelectedCatalogItems((current) => [...current, selected]);
+    const existingItemIds = new Set(selectedCatalogItems.map((row) => row.item.id));
+    const additions = selections
+      .filter((candidate) => !existingItemIds.has(candidate.item.id))
+      .map((candidate): PpeSelectedCatalogItem => ({
+        brandModelArticle: candidate.brandModelArticle,
+        comment: candidate.comment,
+        item: candidate.item,
+        localId: createClientUuid(),
+        mappingId: null,
+        saveMappingOnSuccess: false,
+        makeDefaultMapping: false,
+        normReasons: [],
+        normWarnings: [],
+        normResolutionStatus: "unresolved",
+        normRowId: null,
+        quantity: candidate.quantity,
+        sizeText: candidate.sizeText,
+        unitPriceMinor: candidate.unitPriceMinor,
+        warehouseId: candidate.warehouseId,
+      }));
+    setSelectedCatalogItems((current) => [...current, ...additions]);
     setCatalogPickerOpen(false);
     setSelectionTab("selected");
-    onNotify("Позиция сохранена в выбранных. Норма пока не определена");
+    onNotify(additions.length > 1
+      ? `Добавлено позиций: ${additions.length}. Теперь подберите нормы АТОМ для нужных строк.`
+      : additions.length === 1
+        ? "Позиция сохранена. Теперь подберите и вручную подтвердите норму АТОМ"
+        : "Выбранные позиции уже есть в документе");
   }
 
   function replaceSelectedCatalogItem(item: PpeSelectedCatalogItem) {
@@ -403,21 +426,137 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify, currentUserId = "
     }
   }
 
+  async function autoMatchSelectedCatalogItems() {
+    const pending = selectedCatalogItems.filter((item) => item.normResolutionStatus !== "confirmed" && item.normResolutionStatus !== "additional");
+    if (!draft || !employeeId || !pending.length || autoMatching) return;
+    setAutoMatching(true);
+    setError("");
+    try {
+      const result = await repository.getPpeNormCandidatesBatch({
+        employeeId,
+        issueDate,
+        items: pending.map((item) => ({ selectionId: item.localId, itemId: item.item.id, quantity: item.quantity })),
+      });
+      const resultBySelection = new Map(result.items.map((item) => [item.selectionId, item]));
+      const confirmed = result.items.filter((item) => item.resolution === "confirmed" && item.candidate);
+      let nextRows = [...rows];
+      const issueLinesToAdd: PpeIssueDraftLine[] = [];
+      const savedRowIdsByNormId = new Map<string, string>();
+      for (const match of confirmed) {
+        const selected = pending.find((item) => item.localId === match.selectionId);
+        const candidate = match.candidate;
+        if (!selected || !candidate) continue;
+        const existing = nextRows.find((row) => row.id === candidate.normRowId || row.sourceNormRowId === candidate.normRowId);
+        const source = existing ?? {
+          brandModelArticle: "",
+          coverageStatus: "not_issued" as const,
+          defaultUnitPriceMinor: selected.unitPriceMinor ?? selected.item.defaultUnitPriceMinor ?? null,
+          id: createClientUuid(),
+          issuePeriodText: candidate.issuePeriodText,
+          issuedQuantity: candidate.alreadyIssuedQuantity,
+          lifeMonths: candidate.lifeMonths,
+          mappedItemId: null,
+          mappedItemName: "",
+          mappings: [],
+          normItemName: candidate.normItemName,
+          normPoint: candidate.normPoint,
+          parentRowId: null,
+          quantity: candidate.quantity,
+          quantityText: candidate.quantityText,
+          rowType: "item" as const,
+          sortOrder: candidate.sortOrder ?? rows.length,
+          sourceNormRowId: candidate.normRowId,
+        };
+        const mappedRow: InventoryPpeCardNormRowDto = {
+          ...source,
+          brandModelArticle: selected.brandModelArticle?.trim() || [selected.item.brandName, selected.item.modelName, selected.item.article, selected.item.protectionClass].filter(Boolean).join(" · "),
+          defaultUnitPriceMinor: selected.unitPriceMinor ?? selected.item.defaultUnitPriceMinor ?? source.defaultUnitPriceMinor,
+          mappedItemId: selected.item.id,
+          mappedItemName: selected.item.name,
+          quantity: candidate.quantity,
+          quantityText: candidate.quantityText || `${candidate.quantity} ${selected.item.unit || "шт."}`,
+          sortOrder: candidate.sortOrder ?? rows.length,
+        };
+        nextRows = existing
+          ? nextRows.map((row) => row.id === existing.id ? mappedRow : row)
+          : [...nextRows, mappedRow];
+      }
+
+      if (confirmed.length) {
+        nextRows = nextRows
+          .map((row, index) => ({ ...row, sortOrder: row.sourceNormRowId ? (result.items.find((item) => item.candidate?.normRowId === row.sourceNormRowId)?.candidate?.sortOrder ?? row.sortOrder) : index }))
+          .sort((left, right) => left.sortOrder - right.sortOrder || left.normItemName.localeCompare(right.normItemName, "ru"))
+          .map((row, index) => ({ ...row, sortOrder: index }));
+        const saved = await repository.updatePpeCardNormRows(draft.id, { expectedVersion: draft.version ?? 0, rows: nextRows.map(toNormPayload) });
+        const savedRows = [...(saved.normRows ?? nextRows)].sort((left, right) => left.sortOrder - right.sortOrder);
+        for (const match of confirmed) {
+          const selected = pending.find((item) => item.localId === match.selectionId);
+          const candidate = match.candidate;
+          const savedRow = selected && candidate ? savedRows.find((row) => row.sourceNormRowId === candidate.normRowId) : null;
+          if (!selected || !candidate || !savedRow) continue;
+          savedRowIdsByNormId.set(candidate.normRowId, savedRow.id);
+          const created = createIssueDraftLine(savedRow, issueDate, selected.quantity);
+          if (created) issueLinesToAdd.push({ ...created, comment: selected.comment, sizeText: selected.sizeText, unitPriceMinor: selected.unitPriceMinor ?? created.unitPriceMinor, warehouseId: selected.warehouseId });
+        }
+        setDraft(saved);
+        setRows(savedRows);
+      }
+      if (issueLinesToAdd.length) setIssueLines((current) => issueLinesToAdd.reduce((next, line) => next.some((item) => item.cardNormRowId === line.cardNormRowId) ? next : [...next, line], current));
+      setSelectedCatalogItems((current) => current.map((item) => {
+        const match = resultBySelection.get(item.localId);
+        if (!match) return item;
+        if (match.resolution === "confirmed" && match.candidate) return {
+          ...item,
+          mappingId: match.candidate.mappingId,
+          makeDefaultMapping: false,
+          normReasons: match.reasons,
+          normWarnings: match.warnings,
+          normResolutionStatus: "confirmed",
+          normRowId: savedRowIdsByNormId.get(match.candidate.normRowId) ?? match.candidate.normRowId,
+          saveMappingOnSuccess: !match.candidate.mappingId,
+        };
+        if (match.resolution === "review_required") return { ...item, normReasons: match.reasons, normWarnings: match.warnings, normResolutionStatus: "review_required" };
+        return { ...item, normReasons: match.reasons, normWarnings: match.warnings, normResolutionStatus: "additional_pending" };
+      }));
+      const summary = {
+        confirmed: result.items.filter((item) => item.resolution === "confirmed").length,
+        reviewRequired: result.items.filter((item) => item.resolution === "review_required").length,
+        unmatched: result.items.filter((item) => item.resolution === "unmatched").length,
+      } satisfies PpeAutoMatchSummary;
+      setAutoMatchSummary(summary);
+      const normSetMessage = result.normSetStatus === "norm_set_requires_review"
+        ? "Опубликованный набор норм требует проверки"
+        : result.normSetStatus === "norm_set_missing"
+          ? "Для должности не найден опубликованный набор норм"
+          : "";
+      onNotify(`Автоподбор завершён: сопоставлено ${summary.confirmed}, требуют проверки ${summary.reviewRequired}, не определено ${summary.unmatched}${normSetMessage ? `. ${normSetMessage}` : ""}`);
+    } catch (reason) {
+      setError(messageOf(reason, "Не удалось выполнить пакетный подбор норм АТОМ"));
+    } finally {
+      setAutoMatching(false);
+    }
+  }
+
+  function openNormSettingsForSelectedEmployee() {
+    const position = selectedEmployee?.position?.trim();
+    if (!position) {
+      onNotify("У выбранного сотрудника не указана должность — открыть нормы по должности невозможно");
+      return;
+    }
+    savePpeNormSettingsIntent(position);
+    setCandidateItem(null);
+    setCandidateSelectionId(null);
+    setNormCandidates([]);
+    onNavigate("inventory-settings");
+  }
+
   async function confirmCatalogCandidate(candidate: InventoryPpeNormCandidateDto, options: PpeNormConfirmationOptions) {
     const selectedCatalog = selectedCatalogItems.find((row) => row.localId === candidateSelectionId);
     if (!draft || !candidateItem || !selectedCatalog) return;
     if (!beginSaving()) return;
     setError("");
     try {
-      const model = [candidateItem.brandName, candidateItem.modelName, candidateItem.article, candidateItem.protectionClass].filter(Boolean).join(" · ");
-      const savedMapping = options.saveMapping
-        ? await repository.upsertPpeNormRowMapping(candidate.normRowId, {
-            brandModelArticle: model,
-            defaultUnitPriceMinor: selectedCatalog.unitPriceMinor ?? candidateItem.defaultUnitPriceMinor ?? null,
-            isDefault: options.makeDefault,
-            itemId: candidateItem.id,
-          })
-        : null;
+      const model = selectedCatalog.brandModelArticle?.trim() || [candidateItem.brandName, candidateItem.modelName, candidateItem.article, candidateItem.protectionClass].filter(Boolean).join(" · ");
       const existing = rows.find((row) => row.id === candidate.normRowId || row.sourceNormRowId === candidate.normRowId);
       const source = existing ?? {
         brandModelArticle: "",
@@ -464,11 +603,20 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify, currentUserId = "
       setDraft(saved);
       setRows(savedRows);
       if (created) setIssueLines((current) => current.some((line) => line.cardNormRowId === savedRow.id) ? current : [...current, created]);
-      setSelectedCatalogItems((current) => current.map((row) => row.localId === selectedCatalog.localId ? { ...row, mappingId: savedMapping?.id ?? candidate.mappingId, normResolutionStatus: "confirmed", normRowId: savedRow.id } : row));
+      setSelectedCatalogItems((current) => current.map((row) => row.localId === selectedCatalog.localId ? {
+        ...row,
+        mappingId: candidate.mappingId,
+        makeDefaultMapping: options.saveMapping ? options.makeDefault : false,
+        normResolutionStatus: "confirmed",
+        normRowId: savedRow.id,
+        saveMappingOnSuccess: options.saveMapping,
+        normReasons: candidate.reasons,
+        normWarnings: candidate.warnings,
+      } : row));
       setCandidateItem(null);
       setCandidateSelectionId(null);
       setNormCandidates([]);
-      onNotify(options.saveMapping ? "Позиция сопоставлена, правило сохранено в справочнике" : "Позиция сопоставлена с нормой только для этой выдачи");
+      onNotify(options.saveMapping ? "Позиция сопоставлена. Правило будет сохранено после успешной выдачи" : "Позиция сопоставлена с нормой только для этой выдачи");
     } catch (reason) {
       setError(messageOf(reason, "Не удалось подтвердить норму АТОМ"));
     } finally {
@@ -497,7 +645,7 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify, currentUserId = "
       const group = existingGroup ?? createExtraGroup(rows.length);
       const row = {
         ...createExtraRow(group.id, rows.length + (existingGroup ? 0 : 1)),
-        brandModelArticle: [candidateItem.brandName, candidateItem.modelName, candidateItem.article].filter(Boolean).join(" · "),
+        brandModelArticle: selectedCatalog.brandModelArticle?.trim() || [candidateItem.brandName, candidateItem.modelName, candidateItem.article].filter(Boolean).join(" · "),
         defaultUnitPriceMinor: selectedCatalog.unitPriceMinor ?? candidateItem.defaultUnitPriceMinor ?? null,
         mappedItemId: candidateItem.id,
         mappedItemName: candidateItem.name,
@@ -555,7 +703,7 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify, currentUserId = "
       await removeExtraRow(selected.normRowId);
     } else {
       setIssueLines((current) => selected.normRowId ? current.filter((line) => line.cardNormRowId !== selected.normRowId) : current);
-      onNotify("Позиция убрана из документа, сопоставление сохранено в справочнике");
+      onNotify("Позиция убрана из документа");
     }
     setSelectedCatalogItems((current) => current.filter((row) => row.localId !== localId));
   }
@@ -592,7 +740,11 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify, currentUserId = "
 
   function patchIssueLine(id: string, patch: Partial<PpeIssueDraftLine>) { setIssueLines((current) => current.map((line) => line.cardNormRowId === id ? { ...line, ...patch } : line)); }
   function removeIssueLine(id: string) { setIssueLines((current) => current.filter((line) => line.cardNormRowId !== id)); }
-  function goToComposition() { if (!issueLines.length) return setError("Выберите хотя бы одну сопоставленную позицию"); setError(""); setStep(3); }
+  function goToComposition() {
+    if (!issueLines.length) return setError("Выберите хотя бы одну сопоставленную позицию");
+    if (selectedCatalogItems.some((item) => item.normResolutionStatus === "unresolved" || item.normResolutionStatus === "review_required" || item.normResolutionStatus === "additional_pending")) return setError("Завершите проверку норм или подтвердите дополнительную выдачу");
+    setError(""); setStep(3);
+  }
   function goToPrint() { if (!issueLines.length) return setError("В документе нет выбранных позиций"); setError(""); setStep(4); }
 
   async function commitIssue() {
@@ -602,7 +754,25 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify, currentUserId = "
       const saved = await repository.createPpeIssueBatch(draft.id, {
         expectedVersion: draft.version ?? 0,
         idempotencyKey: issueBatchKey.current,
-        lines: issueLines.map((line) => ({ brandModelArticle: line.brandModelArticle, cardNormRowId: line.cardNormRowId, issueMethod: line.issueMethod, issuedAt: toApiDate(line.issuedAt), itemId: line.itemId, quantity: line.quantity, unitPriceMinor: line.unitPriceMinor, sizeText: line.sizeText, comment: line.comment, warehouseId: line.warehouseId, isAdditional: rows.find((row) => row.id === line.cardNormRowId)?.sourceNormRowId == null })),
+        lines: issueLines.map((line) => {
+          const row = rows.find((candidate) => candidate.id === line.cardNormRowId);
+          const selected = selectedCatalogItems.find((candidate) => candidate.normRowId === line.cardNormRowId || candidate.item.id === line.itemId);
+          return {
+            brandModelArticle: line.brandModelArticle,
+            cardNormRowId: line.cardNormRowId,
+            issueMethod: line.issueMethod,
+            issuedAt: toApiDate(line.issuedAt),
+            itemId: line.itemId,
+            quantity: line.quantity,
+            unitPriceMinor: line.unitPriceMinor,
+            sizeText: line.sizeText,
+            comment: line.comment,
+            warehouseId: line.warehouseId,
+            isAdditional: row?.sourceNormRowId == null,
+            saveMappingOnSuccess: selected?.saveMappingOnSuccess ?? false,
+            makeDefaultMapping: selected?.makeDefaultMapping ?? false,
+          };
+        }),
       });
       setDraft(saved); setCommitted(true); clearPpeIssueWorkflowCache(currentUserId);
       onNotify(`Документ выдачи сохранён: ${issueLines.length} позиций`);
@@ -637,13 +807,13 @@ export function PpeIssueWorkflowScreen({ onNavigate, onNotify, currentUserId = "
     <ol aria-label="Этапы оформления выдачи" className="ppe-issue-stepper">{[[1, "Сотрудник", "Документ и владелец"], [2, "Подбор СИЗ", "Норма и каталог"], [3, "Состав", "Проверка строк"], [4, "Печать", "Лист выдачи"]].map(([value, title, description]) => { const numeric = value as WorkflowStep; return <li className={`${step === numeric ? "is-current" : ""} ${step > numeric ? "is-complete" : ""}`} key={numeric}><button disabled={saving || Boolean(downloadFormat) || printing || numeric > step || (!draft && numeric > 1)} onClick={() => setStep(numeric)} type="button"><span>{step > numeric ? <Check size={15} /> : numeric}</span><strong>{title}</strong><small>{description}</small></button></li>; })}</ol>
     {error ? <div className="ppe-issue-error" role="alert"><X size={17} />{error}</div> : null}
     {step === 1 ? <EmployeeDocumentStep basis={basis} details={employeeDetails} draftExists={Boolean(draft)} employee={selectedEmployee} employees={employees} employeeId={employeeId} issueDate={issueDate} issueType={issueType} loading={loadingEmployees || loadingWorkspace} onBasisChange={setBasis} onDetailsChange={patchEmployeeDetails} onEmployeeChange={setEmployeeId} onIssueDateChange={setIssueDate} onIssueTypeChange={setIssueType} onQueryChange={setQuery} query={query} responsible={responsible} onResponsibleChange={setResponsible} source={source} sourceReady={Boolean(workspace?.activeNormSet)} onSourceChange={setSource} onContinue={() => void saveDocumentDraft()} saving={saving} /> : null}
-    {step === 2 ? <SelectionStep categories={categories} issueLines={issueLines} itemRows={itemRows} loadingItems={saving} onAddCatalog={() => { setReplacementSelectionId(null); setCatalogPickerOpen(true); }} onApplySet={applySet} onOpenCatalog={setMappingRow} onOpenNormCandidates={(item) => void openNormCandidatesForSelection(item)} onRemoveExtra={(id) => void removeExtraRow(id)} onRemoveSelected={(id) => void removeSelectedCatalogItem(id)} onReplaceSelected={replaceSelectedCatalogItem} onSelectAll={selectAllMapped} onToggle={toggleRow} selectionTab={selectionTab} selectedCatalogItems={selectedCatalogItems} setSelectionTab={setSelectionTab} settings={settings} settingsError={settingsError} onRetrySettings={() => setSettingsReloadToken((value) => value + 1)} /> : null}
+    {step === 2 ? <SelectionStep autoMatchSummary={autoMatchSummary} autoMatching={autoMatching} categories={categories} issueLines={issueLines} itemRows={itemRows} loadingItems={saving || autoMatching} onAddCatalog={() => { setReplacementSelectionId(null); setCatalogPickerOpen(true); }} onAutoMatch={() => void autoMatchSelectedCatalogItems()} onApplySet={applySet} onOpenCatalog={setMappingRow} onOpenNormCandidates={(item) => void openNormCandidatesForSelection(item)} onRemoveExtra={(id) => void removeExtraRow(id)} onRemoveSelected={(id) => void removeSelectedCatalogItem(id)} onReplaceSelected={replaceSelectedCatalogItem} onSelectAll={selectAllMapped} onToggle={toggleRow} selectionTab={selectionTab} selectedCatalogItems={selectedCatalogItems} setSelectionTab={setSelectionTab} settings={settings} settingsError={settingsError} onRetrySettings={() => setSettingsReloadToken((value) => value + 1)} /> : null}
     {step === 3 ? <CompositionStep issueLines={issueLines} onChange={patchIssueLine} onOpenCatalog={setMappingRow} onRemove={removeIssueLine} rows={rows} selectedCatalogItems={selectedCatalogItems} selectedEmployee={selectedEmployee} warehouses={settings?.warehouses ?? []} /> : null}
     {step === 4 ? <PrintStep committed={committed} data={printData} errors={blockingErrors} mode={printMode} downloadFormat={downloadFormat} onDownload={(format) => void download(format)} onModeChange={setPrintMode} onPreview={() => setPreviewOpen(true)} onPrint={() => handlePrint(printData, printMode)} printBusy={printing} onSave={() => void commitIssue()} saving={saving} /> : null}
     <footer className="ppe-issue-workflow-footer"><PpeButton disabled={step === 1 || saving || Boolean(downloadFormat) || printing} icon={<ArrowLeft size={16} />} onClick={() => setStep((current) => Math.max(1, current - 1) as WorkflowStep)} variant="secondary">Назад</PpeButton><span>{step} из 4</span>{step === 2 ? <PpeButton disabled={saving || Boolean(downloadFormat) || printing} icon={<ArrowRight size={16} />} onClick={goToComposition} variant="primary">К составу</PpeButton> : null}{step === 3 ? <PpeButton disabled={saving || Boolean(downloadFormat) || printing} icon={<ArrowRight size={16} />} onClick={goToPrint} variant="primary">Предпросмотр печати</PpeButton> : null}{step === 4 && committed ? <PpeButton icon={<ArrowRight size={16} />} onClick={() => onNavigate("inventory-ppe")} variant="primary">Открыть карточку</PpeButton> : null}</footer>
     {mappingRow ? <PpeCatalogModal allowMultiple={!mappingRow.sourceNormRowId} normRow={mappingRow} onClose={() => setMappingRow(null)} onConfirm={saveMapping} /> : null}
-    {catalogPickerOpen ? <PpeCatalogPicker onClose={() => { setCatalogPickerOpen(false); setReplacementSelectionId(null); }} onConfirm={selectCatalogItem} warehouses={settings?.warehouses ?? []} /> : null}
-    {candidateItem ? <PpeNormSelectionModal additionalReason={selectedCatalogItems.find((row) => row.localId === candidateSelectionId)?.comment ?? ""} candidates={normCandidates} error={candidateError} item={candidateItem} loading={candidateLoading} onAddAdditional={(reason) => void addCatalogItemAsAdditional(reason)} onClose={() => { setCandidateItem(null); setCandidateSelectionId(null); setNormCandidates([]); }} onConfirm={(candidate, options) => void confirmCatalogCandidate(candidate, options)} quantity={selectedCatalogItems.find((row) => row.localId === candidateSelectionId)?.quantity ?? 1} sizeText={selectedCatalogItems.find((row) => row.localId === candidateSelectionId)?.sizeText ?? ""} /> : null}
+    {catalogPickerOpen ? <PpeCatalogPicker onClose={() => { setCatalogPickerOpen(false); setReplacementSelectionId(null); }} onConfirm={selectCatalogItems} singleSelection={Boolean(replacementSelectionId)} warehouses={settings?.warehouses ?? []} /> : null}
+    {candidateItem ? <PpeNormSelectionModal additionalReason={selectedCatalogItems.find((row) => row.localId === candidateSelectionId)?.comment ?? ""} candidates={normCandidates} error={candidateError} item={candidateItem} loading={candidateLoading} onAddAdditional={(reason) => void addCatalogItemAsAdditional(reason)} onClose={() => { setCandidateItem(null); setCandidateSelectionId(null); setNormCandidates([]); }} onConfirm={(candidate, options) => void confirmCatalogCandidate(candidate, options)} onOpenNormSettings={openNormSettingsForSelectedEmployee} quantity={selectedCatalogItems.find((row) => row.localId === candidateSelectionId)?.quantity ?? 1} sizeText={selectedCatalogItems.find((row) => row.localId === candidateSelectionId)?.sizeText ?? ""} /> : null}
     {previewOpen ? <PrintPreviewModal data={printData} mode={printMode} onClose={() => setPreviewOpen(false)} onModeChange={setPrintMode} onPrint={handlePrint} printing={printing} /> : null}
   </section>;
 }
@@ -654,8 +824,8 @@ function collectBlockingErrors({ basis, issueDate, issueLines, responsible, rows
   if (!basis.trim()) errors.push("Не указано основание выдачи");
   if (!issueDate) errors.push("Не указана дата выдачи");
   if (!issueLines.length) errors.push("Не выбраны позиции выдачи");
-  for (const selected of selectedCatalogItems.filter((item) => item.normResolutionStatus === "unresolved")) {
-    errors.push(`${selected.item.name}: подтвердите норму АТОМ на шаге «Подбор СИЗ»`);
+  for (const selected of selectedCatalogItems.filter((item) => ["unresolved", "review_required", "additional_pending"].includes(item.normResolutionStatus))) {
+    errors.push(`${selected.item.name}: завершите проверку нормы или подтвердите дополнительную выдачу`);
   }
   const rowsById = new Map(rows.map((row) => [row.id, row]));
   for (const line of issueLines) for (const problem of validateIssueDraftLine(line, rowsById.get(line.cardNormRowId))) if (problem.level === "error") errors.push(`${rowsById.get(line.cardNormRowId)?.normItemName ?? "Позиция"}: ${problem.text}`);

@@ -21,6 +21,7 @@ export type PpeIssueDraftLine = {
 export type PpeSelectedCatalogItem = {
   localId: string;
   item: InventoryItemDto;
+  brandModelArticle?: string;
   quantity: number;
   sizeText: string;
   warehouseId: string | null;
@@ -28,7 +29,11 @@ export type PpeSelectedCatalogItem = {
   comment: string;
   normRowId: string | null;
   mappingId: string | null;
-  normResolutionStatus: "unresolved" | "confirmed" | "additional";
+  saveMappingOnSuccess?: boolean;
+  makeDefaultMapping?: boolean;
+  normReasons?: string[];
+  normWarnings?: string[];
+  normResolutionStatus: "unresolved" | "confirmed" | "review_required" | "additional_pending" | "additional";
 };
 
 export type PpeIssueWorkflowCache = {
@@ -271,6 +276,7 @@ function isPpeIssueWorkflowCache(value: unknown): value is PpeIssueWorkflowCache
     const row = selected as Partial<PpeSelectedCatalogItem>;
     return typeof row.localId === "string" &&
       row.item !== null && typeof row.item === "object" &&
+      (row.brandModelArticle === undefined || typeof row.brandModelArticle === "string") &&
       typeof row.quantity === "number" && Number.isFinite(row.quantity) && row.quantity > 0 &&
       typeof row.sizeText === "string" &&
       (row.warehouseId === null || typeof row.warehouseId === "string") &&
@@ -278,7 +284,9 @@ function isPpeIssueWorkflowCache(value: unknown): value is PpeIssueWorkflowCache
       typeof row.comment === "string" &&
       (row.normRowId === null || typeof row.normRowId === "string") &&
       (row.mappingId === null || typeof row.mappingId === "string") &&
-      ["unresolved", "confirmed", "additional"].includes(row.normResolutionStatus ?? "");
+      (row.normReasons === undefined || (Array.isArray(row.normReasons) && row.normReasons.every((reason) => typeof reason === "string"))) &&
+      (row.normWarnings === undefined || (Array.isArray(row.normWarnings) && row.normWarnings.every((warning) => typeof warning === "string"))) &&
+      ["unresolved", "confirmed", "review_required", "additional_pending", "additional"].includes(row.normResolutionStatus ?? "");
   });
 }
 

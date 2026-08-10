@@ -142,6 +142,20 @@ public sealed class InventoryControllerTests
     }
 
     [Fact]
+    public void PpeNormCandidatesBatchRejectsNonPositiveQuantity()
+    {
+        var controller = CreateController();
+        var request = new InventoryPpeNormCandidateBatchRequestDto(
+            Guid.NewGuid(),
+            new DateOnly(2026, 8, 10),
+            [new InventoryPpeNormCandidateBatchLineDto("selection-1", Guid.NewGuid(), 0)]);
+
+        var result = controller.PpeNormCandidatesBatch(request);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
     public void TransferCustodyRecordForwardsRequestToWorkflow()
     {
         var recordId = Guid.NewGuid();
@@ -414,6 +428,7 @@ public sealed class InventoryControllerTests
         public InventoryListResponseDto<InventoryPpeNormMappingDto> GetPpeNormRowMappings(Guid normRowId, InventoryListQuery query) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryPpeNormMappingDto> UpsertPpeNormRowMapping(Guid normRowId, UpsertInventoryPpeNormMappingDto request) => throw new NotImplementedException();
         public IReadOnlyList<InventoryPpeNormCandidateDto> GetPpeNormCandidates(Guid itemId, Guid employeeId, decimal quantity, DateOnly? issueDate) => throw new NotImplementedException();
+        public InventoryPpeNormCandidateBatchResponseDto GetPpeNormCandidatesBatch(InventoryPpeNormCandidateBatchRequestDto request) => throw new NotImplementedException();
         public InventoryListResponseDto<InventoryPpeNormSetDto> GetPpeNormSets(InventoryListQuery query) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryPpeNormSetDetailDto> GetPpeNormSet(Guid normSetId) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryPpeNormImportResultDto> ImportPpeNormSetsDraft(Stream source, string fileName) => throw new NotImplementedException();

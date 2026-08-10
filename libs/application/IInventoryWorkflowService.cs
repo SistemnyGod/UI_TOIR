@@ -76,6 +76,8 @@ public interface IInventoryWorkflowService
 
     IReadOnlyList<InventoryPpeNormCandidateDto> GetPpeNormCandidates(Guid itemId, Guid employeeId, decimal quantity, DateOnly? issueDate);
 
+    InventoryPpeNormCandidateBatchResponseDto GetPpeNormCandidatesBatch(InventoryPpeNormCandidateBatchRequestDto request);
+
     InventoryListResponseDto<InventoryPpeNormSetDto> GetPpeNormSets(InventoryListQuery query);
 
     InventoryCommandResult<InventoryPpeNormSetDetailDto> GetPpeNormSet(Guid normSetId);

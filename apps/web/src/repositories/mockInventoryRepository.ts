@@ -42,6 +42,9 @@ import type {
   InventoryPpeHistoryRowDto,
   InventoryPpeNormMappingDto,
   InventoryPpeNormCandidateDto,
+  InventoryPpeNormCandidateBatchItemDto,
+  InventoryPpeNormCandidateBatchRequestDto,
+  InventoryPpeNormCandidateBatchResponseDto,
   InventoryPpeSummaryDto,
   InventoryReferenceOptionDto,
   InventoryReportDto,
@@ -789,6 +792,7 @@ export function createMockInventoryRepository(): InventoryRepository {
           quantityText: row.quantityText,
           reasons: [mapping ? "Сохранённое соответствие этой номенклатуры с нормой найдено" : suggested ? "Совпадает название или категория" : "Совместимость не подтверждена, доступно для ручного выбора"],
           status,
+          sortOrder: row.sortOrder,
           warnings: [
             ...(available < (params.quantity ?? 1) ? ["Доступный остаток нормы меньше выбранного количества"] : []),
             ...(mapping ? [] : ["Соответствие ещё не подтверждено"]),
@@ -798,6 +802,41 @@ export function createMockInventoryRepository(): InventoryRepository {
         const rank = (status: InventoryPpeNormCandidateDto["status"]) => ({ confirmed_mapping: 0, candidate: 1, incompatible: 2, limit_exhausted: 3, manual_control_required: 4 }[status] ?? 5);
         return rank(left.status) - rank(right.status) || left.normItemName.localeCompare(right.normItemName);
       });
+    },
+
+    async getPpeNormCandidatesBatch(payload: InventoryPpeNormCandidateBatchRequestDto): Promise<InventoryPpeNormCandidateBatchResponseDto> {
+      const items = await Promise.all(payload.items.map(async (request) => {
+        const candidates = await this.getPpeNormCandidates(request.itemId, {
+          employeeId: payload.employeeId,
+          issueDate: payload.issueDate,
+          quantity: request.quantity,
+        });
+        const compatible = candidates
+          .filter((candidate) =>
+            (candidate.status === "confirmed_mapping" || candidate.status === "candidate")
+            && candidate.availableQuantity >= request.quantity)
+          .sort((left, right) =>
+            (left.status === "confirmed_mapping" ? 0 : 1) - (right.status === "confirmed_mapping" ? 0 : 1)
+            || (left.previouslyConfirmedCount > 0 ? 0 : 1) - (right.previouslyConfirmedCount > 0 ? 0 : 1)
+            || (left.sortOrder ?? 0) - (right.sortOrder ?? 0)
+            || left.normItemName.localeCompare(right.normItemName, "ru"));
+        const candidate = compatible[0] ?? null;
+        const resolution: InventoryPpeNormCandidateBatchItemDto["resolution"] = !candidate
+          ? "unmatched"
+          : candidate.status === "confirmed_mapping" || compatible.length === 1
+            ? "confirmed"
+            : "review_required";
+        return {
+          selectionId: request.selectionId,
+          itemId: request.itemId,
+          resolution,
+          candidate,
+          alternatives: compatible.slice(1, 6),
+          reasons: (candidate?.reasons ?? ["Подходящая норма для выбранной позиции не найдена"]),
+          warnings: candidate?.warnings ?? [],
+        };
+      }));
+      return { items };
     },
 
     async getPpeCardHistory() {

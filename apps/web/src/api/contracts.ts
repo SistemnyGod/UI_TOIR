@@ -981,6 +981,34 @@ export interface InventoryPpeNormCandidateDto {
   status: "confirmed_mapping" | "candidate" | "incompatible" | "limit_exhausted" | "manual_control_required";
   reasons: string[];
   warnings: string[];
+  sortOrder?: number;
+}
+
+export interface InventoryPpeNormCandidateBatchLineDto {
+  selectionId: string;
+  itemId: string;
+  quantity: number;
+}
+
+export interface InventoryPpeNormCandidateBatchRequestDto {
+  employeeId: string;
+  issueDate?: string;
+  items: InventoryPpeNormCandidateBatchLineDto[];
+}
+
+export interface InventoryPpeNormCandidateBatchItemDto {
+  selectionId: string;
+  itemId: string;
+  resolution: "confirmed" | "review_required" | "unmatched";
+  candidate: InventoryPpeNormCandidateDto | null;
+  alternatives: InventoryPpeNormCandidateDto[];
+  reasons: string[];
+  warnings: string[];
+}
+
+export interface InventoryPpeNormCandidateBatchResponseDto {
+  items: InventoryPpeNormCandidateBatchItemDto[];
+  normSetStatus?: string | null;
 }
 
 export interface InventoryPpeCardNormRowDto {
@@ -1110,6 +1138,8 @@ export interface CreateInventoryPpeIssueBatchLineDto {
   comment?: string | null;
   warehouseId?: string | null;
   isAdditional?: boolean;
+  saveMappingOnSuccess?: boolean;
+  makeDefaultMapping?: boolean;
 }
 
 export interface CreateInventoryPpeIssueBatchDto {
