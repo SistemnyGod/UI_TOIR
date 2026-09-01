@@ -61,11 +61,11 @@ internal sealed partial class EfPatrolStore
 
         if (!string.IsNullOrWhiteSpace(filter?.Query))
         {
-            var search = filter.Query.Trim().ToLower();
+            var search = ToLikeContainsPattern(filter.Query);
             query = query.Where(assignment =>
-                assignment.Employee!.FullName.ToLower().Contains(search)
-                || assignment.Route!.Name.ToLower().Contains(search)
-                || assignment.PatrolRequest!.Number.ToLower().Contains(search));
+                (assignment.Employee != null && EF.Functions.ILike(assignment.Employee.FullName, search, "\\"))
+                || (assignment.Route != null && EF.Functions.ILike(assignment.Route.Name, search, "\\"))
+                || (assignment.PatrolRequest != null && EF.Functions.ILike(assignment.PatrolRequest.SearchText, search, "\\")));
         }
 
         var assignments = query
@@ -290,7 +290,10 @@ internal sealed partial class EfPatrolStore
         return new AssignmentCommandResult(MapAssignment(assignment), true, "Назначение запущено.");
     }
 
-    public AssignmentCommandResult? Cancel(Guid id)
+    public AssignmentCommandResult? Cancel(Guid id) =>
+        Cancel(id, new CancelAssignmentDto("legacy_unknown", null), null, "system");
+
+    public AssignmentCommandResult? Cancel(Guid id, CancelAssignmentDto request, Guid? actorUserId, string? actorUserName)
     {
         var assignment = FindAssignment(id);
         if (assignment is null)
@@ -303,10 +306,37 @@ internal sealed partial class EfPatrolStore
             return new AssignmentCommandResult(MapAssignment(assignment), false, "Назначение уже закрыто.");
         }
 
+        var reasonCode = NormalizeOptionalText(request.ReasonCode);
+        var reasonText = NormalizeOptionalText(request.ReasonText);
+        var validationErrors = ValidateCancellation(reasonCode, reasonText, request.ExpectedVersion, assignment.LockVersion);
+        if (validationErrors.Count > 0)
+        {
+            return new AssignmentCommandResult(MapAssignment(assignment), false, "Cancellation was not saved.", validationErrors);
+        }
+
+        var previousStatus = assignment.Status;
+        var cancelledAt = DateTimeOffset.UtcNow;
         assignment.Status = AssignmentStatusValues.Cancelled;
         if (assignment.PatrolRequest is not null)
         {
             assignment.PatrolRequest.Status = AssignmentStatusValues.Cancelled;
+            assignment.PatrolRequest.CancellationReasonCode = reasonCode;
+            assignment.PatrolRequest.CancellationReasonText = string.IsNullOrWhiteSpace(reasonText) ? null : reasonText;
+            assignment.PatrolRequest.CancelledAt = cancelledAt;
+            assignment.PatrolRequest.CancelledByUserId = actorUserId;
+            assignment.PatrolRequest.CancelledByUserName = NormalizeOptionalText(actorUserName, "system");
+            dbContext.PatrolRequestHistoryEvents.Add(new PatrolRequestHistoryEventEntity
+            {
+                Id = Guid.NewGuid(),
+                PatrolRequestId = assignment.PatrolRequest.Id,
+                EventType = "cancelled",
+                FromStatus = previousStatus,
+                ToStatus = AssignmentStatusValues.Cancelled,
+                Details = string.IsNullOrWhiteSpace(reasonText) ? reasonCode : $"{reasonCode}: {reasonText}",
+                ActorUserId = actorUserId,
+                ActorName = NormalizeOptionalText(actorUserName, "system"),
+                CreatedAt = cancelledAt
+            });
         }
 
         AddMobileNotificationForEmployee(
@@ -324,6 +354,28 @@ internal sealed partial class EfPatrolStore
         SaveChangesAndInvalidateDashboardSummary();
 
         return new AssignmentCommandResult(MapAssignment(assignment), true, "Назначение отменено.");
+    }
+
+    private static Dictionary<string, string[]> ValidateCancellation(string reasonCode, string reasonText, long? expectedVersion, long currentVersion)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var supportedReasons = new[] { "urgent_work", "ppr", "employee_absent", "route_unavailable", "duplicate", "created_by_error", "other", "legacy_unknown" };
+        if (!supportedReasons.Contains(reasonCode, StringComparer.OrdinalIgnoreCase))
+        {
+            errors["reasonCode"] = ["Choose a cancellation reason."];
+        }
+
+        if (string.Equals(reasonCode, "other", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(reasonText))
+        {
+            errors["reasonText"] = ["Add a note when using Other."];
+        }
+
+        if (expectedVersion is not null && expectedVersion.Value != currentVersion)
+        {
+            errors["version"] = ["The assignment changed. Refresh the list and try again."];
+        }
+
+        return errors;
     }
 
     public AssignmentCommandResult? Complete(Guid id, CompleteAssignmentDto? request = null)

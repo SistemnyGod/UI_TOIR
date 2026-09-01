@@ -13,7 +13,7 @@ internal sealed partial class EfEmuService
     public EmuWorkHistoryReportDto GetWorkHistoryReport(EmuWorkSessionQueryDto query)
     {
         var generatedAt = DateTimeOffset.UtcNow;
-        var rows = BuildWorkSessionQuery(query).ToList();
+        var rows = BuildWorkSessionDetailQuery(query).ToList();
         RecalculateSessions(rows, generatedAt, save: false);
 
         var problemRows = rows.Where(IsProblemWorkSession).ToList();

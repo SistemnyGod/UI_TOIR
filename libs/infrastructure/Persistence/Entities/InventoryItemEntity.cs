@@ -54,6 +54,8 @@ internal sealed class InventoryItemEntity
 
     public string Comment { get; set; } = string.Empty;
 
+    public string SearchText { get; private set; } = string.Empty;
+
     public bool IsActive { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

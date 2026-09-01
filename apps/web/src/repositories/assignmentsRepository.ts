@@ -4,6 +4,7 @@ import type {
   AssignmentCommandResultDto,
   AssignmentDto,
   AssignmentSettingsDto,
+  CancelAssignmentDto,
   CompleteAssignmentDto,
   CreateAssignmentDto,
   EmployeeDto,
@@ -82,8 +83,8 @@ export function createApiAssignmentsRepository({
       return mapAssignmentCommandResult(result);
     },
 
-    async cancelAssignment(id: string) {
-      const result = await client.post<AssignmentCommandResultDto>(`/api/v1/assignments/${id}/cancel`);
+    async cancelAssignment(id: string, payload: CancelAssignmentDto = { reasonCode: "legacy_unknown" }) {
+      const result = await client.post<AssignmentCommandResultDto, CancelAssignmentDto>(`/api/v1/assignments/${id}/cancel`, payload);
       return mapAssignmentCommandResult(result);
     },
 

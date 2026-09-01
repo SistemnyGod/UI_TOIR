@@ -114,6 +114,7 @@ function mapPatrolRequest(request: PatrolRequestDto): ServiceRequest {
     status: mapPatrolRequestStatus(request.status),
     priority: "Средний" as ServiceRequest["priority"],
     sourceResultId: request.sourceResultId ?? "",
+    resultId: request.resultId ?? undefined,
     source: "API",
     employeeId: request.employeeId ?? undefined,
     routeId: request.routeId ?? undefined,
@@ -129,6 +130,11 @@ function mapPatrolRequest(request: PatrolRequestDto): ServiceRequest {
     responsible: request.employeeName,
     description: request.description,
     timeline: [`${request.number}: ${request.status}`],
+    cancellationReasonCode: request.cancellationReasonCode ?? undefined,
+    cancellationReasonText: request.cancellationReasonText ?? undefined,
+    cancelledAt: request.cancelledAt ?? undefined,
+    cancelledByUserName: request.cancelledByUserName ?? undefined,
+    isCancelled: isCancelledPatrolRequestStatus(request.status),
   };
 }
 
@@ -145,6 +151,9 @@ function buildPatrolRequestQuery(filters: PatrolRequestFilterOptions, page: numb
 
 function mapPatrolRequestStatus(status: string): ServiceRequest["status"] {
   const normalized = status.trim().toLowerCase();
+  if (normalized.includes("cancel") || normalized.includes("отмен")) {
+    return "Отменена";
+  }
   if (isTerminalPatrolRequestStatus(status)) {
     return "Закрыта";
   }
@@ -158,4 +167,9 @@ function mapPatrolRequestStatus(status: string): ServiceRequest["status"] {
   }
 
   return "Новая";
+}
+
+function isCancelledPatrolRequestStatus(status: string) {
+  const normalized = status.trim().toLowerCase();
+  return normalized.includes("cancel") || normalized.includes("отмен");
 }

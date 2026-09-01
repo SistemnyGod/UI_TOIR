@@ -308,6 +308,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.HasIndex("EmployeeGroup")
                         .HasDatabaseName("ix_employees_employee_group");
 
+                    b.HasIndex("FullName")
+                        .HasDatabaseName("ix_employees_full_name_trgm");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("FullName"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("FullName"), new[] { "gin_trgm_ops" });
+
                     b.HasIndex("PersonnelNo")
                         .IsUnique()
                         .HasDatabaseName("ux_employees_personnel_no");
@@ -2224,6 +2230,13 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(80)")
                         .HasColumnName("respirator_size");
 
+                    b.Property<string>("SearchText")
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("text")
+                        .HasColumnName("search_text")
+                        .HasComputedColumnSql("lower(name || ' ' || sku || ' ' || article || ' ' || item_kind || ' ' || norm_item_name || ' ' || actual_item_name || ' ' || brand_name || ' ' || model_name || ' ' || protection_class || ' ' || comment)", true);
+
                     b.Property<string>("ShoeSize")
                         .IsRequired()
                         .HasMaxLength(80)
@@ -2264,6 +2277,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.HasIndex("Name")
                         .IsUnique()
                         .HasDatabaseName("ux_inventory_items_name");
+
+                    b.HasIndex("SearchText")
+                        .HasDatabaseName("ix_inventory_items_search_text_trgm");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchText"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("SearchText"), new[] { "gin_trgm_ops" });
 
                     b.HasIndex("Sku")
                         .HasDatabaseName("ix_inventory_items_sku");
@@ -4367,6 +4386,29 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("CancellationReasonCode")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("cancellation_reason_code");
+
+                    b.Property<string>("CancellationReasonText")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("cancellation_reason_text");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancelled_at");
+
+                    b.Property<Guid?>("CancelledByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cancelled_by_user_id");
+
+                    b.Property<string>("CancelledByUserName")
+                        .HasMaxLength(220)
+                        .HasColumnType("character varying(220)")
+                        .HasColumnName("cancelled_by_user_name");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -4421,6 +4463,13 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("time without time zone")
                         .HasColumnName("scheduled_time");
 
+                    b.Property<string>("SearchText")
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("text")
+                        .HasColumnName("search_text")
+                        .HasComputedColumnSql("lower(number || ' ' || employee_name || ' ' || route_name || ' ' || description)", true);
+
                     b.Property<Guid?>("SourceResultId")
                         .HasColumnType("uuid")
                         .HasColumnName("source_result_id");
@@ -4449,6 +4498,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.HasIndex("ScheduledDate")
                         .HasDatabaseName("ix_patrol_requests_scheduled_date");
 
+                    b.HasIndex("SearchText")
+                        .HasDatabaseName("ix_patrol_requests_search_text_trgm");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchText"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("SearchText"), new[] { "gin_trgm_ops" });
+
                     b.HasIndex("SourceResultId")
                         .HasDatabaseName("ix_patrol_requests_source_result_id");
 
@@ -4462,6 +4517,63 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_patrol_requests_scheduled_date_status_code");
 
                     b.ToTable("patrol_requests", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolRequestHistoryEventEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActorName")
+                        .IsRequired()
+                        .HasMaxLength(220)
+                        .HasColumnType("character varying(220)")
+                        .HasColumnName("actor_name");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Details")
+                        .IsRequired()
+                        .HasMaxLength(1500)
+                        .HasColumnType("character varying(1500)")
+                        .HasColumnName("details");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("FromStatus")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("from_status");
+
+                    b.Property<Guid>("PatrolRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patrol_request_id");
+
+                    b.Property<string>("ToStatus")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("to_status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PatrolRequestId", "CreatedAt")
+                        .HasDatabaseName("ix_patrol_request_history_events_request_created");
+
+                    b.ToTable("patrol_request_history_events", (string)null);
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolResultAttachmentEntity", b =>
@@ -5098,11 +5210,31 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("category");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(160)
                         .HasColumnType("character varying(160)")
                         .HasColumnName("code");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("display_order");
+
+                    b.Property<bool>("IsViewDefault")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_view_default");
+
+                    b.Property<string>("ModuleKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("module_key");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -5250,7 +5382,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_routes_archived");
 
                     b.HasIndex("Name")
-                        .HasDatabaseName("ix_routes_name");
+                        .HasDatabaseName("ix_routes_name_trgm");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Name"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Name"), new[] { "gin_trgm_ops" });
 
                     b.ToTable("routes", (string)null);
                 });
@@ -5531,6 +5666,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("site_user_id");
 
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ModuleKey", "ScopeType", "ScopeId")
@@ -5541,6 +5680,76 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ux_site_user_access_scopes_user_scope");
 
                     b.ToTable("site_user_access_scopes", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.SiteUserAuditEventEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActorName")
+                        .HasMaxLength(220)
+                        .HasColumnType("character varying(220)")
+                        .HasColumnName("actor_name");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<string>("AfterJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("after_json");
+
+                    b.Property<string>("BeforeJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("before_json");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Details")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("details");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("ip_address");
+
+                    b.Property<string>("ModuleKey")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("module_key");
+
+                    b.Property<Guid>("SiteUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_user_id");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("user_agent");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventType", "CreatedAt")
+                        .HasDatabaseName("ix_site_user_audit_type_created");
+
+                    b.HasIndex("SiteUserId", "CreatedAt")
+                        .HasDatabaseName("ix_site_user_audit_user_created");
+
+                    b.ToTable("site_user_audit_events", (string)null);
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", b =>
@@ -5582,6 +5791,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("password_hash");
 
+                    b.Property<bool>("RequirePasswordChange")
+                        .HasColumnType("boolean")
+                        .HasColumnName("require_password_change");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(60)
@@ -5612,6 +5825,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("PermissionId")
                         .HasColumnType("uuid")
                         .HasColumnName("permission_id");
+
+                    b.Property<string>("Effect")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("effect");
 
                     b.HasKey("SiteUserId", "PermissionId");
 
@@ -5653,6 +5872,15 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("ip_address");
+
+                    b.Property<DateTimeOffset?>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
                     b.Property<DateTimeOffset?>("RevokedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
@@ -5666,6 +5894,11 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("token_hash");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("user_agent");
 
                     b.HasKey("Id");
 
@@ -6570,6 +6803,17 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Navigation("SourceResult");
                 });
 
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolRequestHistoryEventEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.PatrolRequestEntity", "PatrolRequest")
+                        .WithMany()
+                        .HasForeignKey("PatrolRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PatrolRequest");
+                });
+
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolResultAttachmentEntity", b =>
                 {
                     b.HasOne("Patrol360.Infrastructure.Persistence.Entities.PatrolResultEntity", "PatrolResult")
@@ -6716,6 +6960,17 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                 {
                     b.HasOne("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", "SiteUser")
                         .WithMany("AccessScopes")
+                        .HasForeignKey("SiteUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SiteUser");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.SiteUserAuditEventEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.SiteUserEntity", "SiteUser")
+                        .WithMany()
                         .HasForeignKey("SiteUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
+  CancelAssignmentPayload,
   CompleteAssignmentPayload,
   CreateServiceRequestPayload,
   DataSourceMode,
@@ -68,7 +69,7 @@ export function App() {
     session.user !== null &&
     session.user.id !== "mock-session-user";
   const dataAccessMode = dataSourceMode === "api" && !hasApiSession ? "mock" : dataSourceMode;
-  const requestsEnabled = requestModal !== null || screen === "dashboard" || screen === "assign" || screen === "schedule";
+  const requestsEnabled = requestModal !== null || screen === "dashboard" || screen === "assign" || screen === "schedule" || screen === "results";
   const scheduleResultsEnabled = screen === "schedule";
   const mobileAccountsEnabled = screen === "accounts";
   const patrolDataAccess = useMemo(() => ({
@@ -124,6 +125,7 @@ export function App() {
     updateRoutePoint,
   } = usePatrolWorkspaceData({
     dataSourceMode: dataAccessMode,
+    includeRequestHistory: screen === "results",
     patrolSnapshot: patrolData.snapshot,
     requestsEnabled,
     requestModal,
@@ -306,7 +308,7 @@ export function App() {
   async function runScheduleAssignmentCommand(
     assignmentId: string,
     command: "start" | "cancel" | "complete",
-    payload?: CompleteAssignmentPayload,
+    payload?: CompleteAssignmentPayload | CancelAssignmentPayload,
   ) {
     if (!assignmentId) {
       showToast("Назначение для этой ячейки не найдено");
@@ -322,8 +324,14 @@ export function App() {
       command === "start"
         ? await scheduleAssignmentsApi.startAssignment(assignmentId)
         : command === "cancel"
-          ? await scheduleAssignmentsApi.cancelAssignment(assignmentId)
-          : await scheduleAssignmentsApi.completeAssignment(assignmentId, payload);
+          ? await scheduleAssignmentsApi.cancelAssignment(
+            assignmentId,
+            payload && "reasonCode" in payload ? payload : undefined,
+          )
+          : await scheduleAssignmentsApi.completeAssignment(
+            assignmentId,
+            payload && "reasonCode" in payload ? undefined : payload,
+          );
 
     await patrolData.refresh({ silent: true });
     await refreshRequests();

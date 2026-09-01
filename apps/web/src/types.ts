@@ -150,7 +150,7 @@ export interface ServiceRequest {
   assignmentId?: string;
   requestKind: "patrol-assignment";
   title: string;
-  status: "Новая" | "В работе" | "Назначена" | "Закрыта";
+  status: "Новая" | "В работе" | "Назначена" | "Закрыта" | "Отменена";
   priority: "Низкий" | "Средний" | "Высокий" | "Критический";
   sourceResultId: string;
   source: string;
@@ -169,6 +169,12 @@ export interface ServiceRequest {
   responsible: string;
   description: string;
   timeline: string[];
+  resultId?: string;
+  cancellationReasonCode?: string;
+  cancellationReasonText?: string;
+  cancelledAt?: string;
+  cancelledByUserName?: string;
+  isCancelled?: boolean;
 }
 
 export interface CreateServiceRequestPayload {
@@ -211,6 +217,21 @@ export interface CompleteAssignmentPayload {
   photos?: number;
   pointResults?: CompleteAssignmentPointPayload[];
   photoAttachments?: PatrolCompletionPhotoPayload[];
+}
+
+export type AssignmentCancellationReasonCode =
+  | "urgent_work"
+  | "ppr"
+  | "employee_absent"
+  | "route_unavailable"
+  | "duplicate"
+  | "created_by_error"
+  | "other";
+
+export interface CancelAssignmentPayload {
+  reasonCode: AssignmentCancellationReasonCode;
+  reasonText?: string;
+  expectedVersion?: number;
 }
 
 export interface CompleteAssignmentPointPayload {

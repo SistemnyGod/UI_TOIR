@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import type {
   AccountMode,
   ActivePatrol,
+  CancelAssignmentPayload,
   CompleteAssignmentPayload,
   CreateMobileAccountPayload,
   CreateServiceRequestPayload,
@@ -220,7 +221,11 @@ export function ScreenRouter({
   onRetryRequests: () => MaybePromise<void>;
   onResultModeChange: (mode: ResultMode) => void;
   onRouteModeChange: (mode: RouteMode) => void;
-  onRunScheduleAssignmentCommand: (assignmentId: string, command: "start" | "cancel" | "complete", payload?: CompleteAssignmentPayload) => MaybePromise<void>;
+  onRunScheduleAssignmentCommand: (
+    assignmentId: string,
+    command: "start" | "cancel" | "complete",
+    payload?: CompleteAssignmentPayload | CancelAssignmentPayload,
+  ) => MaybePromise<void>;
   onScheduleModeChange: (mode: ScheduleMode) => void;
   onSelectAccount: (id: string) => void;
   onSelectDirectoryEmployee: (id: string) => void;
@@ -280,8 +285,8 @@ export function ScreenRouter({
             onCreateRequest={onCreateRequest}
             onNavigate={onNavigate}
             onOpenRequestById={onOpenRequestById}
-            onNotify={onNotify}
             onOpenResult={onOpenResult}
+            onNotify={onNotify}
             onSelectResult={onSelectResult}
             routeDirectory={routeDirectory}
             requests={requests}
@@ -304,8 +309,14 @@ export function ScreenRouter({
             onSelectResult={onSelectResult}
             onCreateRequest={onCreateRequest}
             onOpenRequest={onOpenRequest}
+            onOpenRequestById={onOpenRequestById}
+            onOpenResult={onOpenResult}
             onNavigate={onNavigate}
             onNotify={onNotify}
+            requests={requests}
+            requestListErrorMessage={requestListErrorMessage}
+            requestListStatus={requestListStatus}
+            onRetryRequests={onRetryRequests}
             routeDirectory={routeDirectory}
           />
         ) : null}

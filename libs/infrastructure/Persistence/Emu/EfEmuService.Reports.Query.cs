@@ -13,10 +13,19 @@ internal sealed partial class EfEmuService
     private static EmuWorkSessionQueryDto SanitizeAppliedQuery(EmuWorkSessionQueryDto query) =>
         query with { AllowedSectionIds = null, CreatedByUserId = null };
 
-    private IQueryable<EmuWorkSessionEntity> BuildWorkSessionQuery(EmuWorkSessionQueryDto query)
-    {
-        var rowsQuery = ApplyOwnerScope(ApplySectionScope(LoadSessions().AsQueryable(), query.AllowedSectionIds), query.CreatedByUserId);
+    private IQueryable<EmuWorkSessionEntity> BuildWorkSessionQuery(EmuWorkSessionQueryDto query) =>
+        ApplyWorkSessionFilters(BuildWorkSessionBaseQuery(query), query);
 
+    private IQueryable<EmuWorkSessionEntity> BuildWorkSessionDetailQuery(EmuWorkSessionQueryDto query) =>
+        ApplyWorkSessionFilters(LoadSessions(asNoTracking: true), query);
+
+    private IQueryable<EmuWorkSessionEntity> BuildWorkSessionBaseQuery(EmuWorkSessionQueryDto query) =>
+        ApplyOwnerScope(ApplySectionScope(dbContext.EmuWorkSessions.AsNoTracking(), query.AllowedSectionIds), query.CreatedByUserId);
+
+    private IQueryable<EmuWorkSessionEntity> ApplyWorkSessionFilters(
+        IQueryable<EmuWorkSessionEntity> rowsQuery,
+        EmuWorkSessionQueryDto query)
+    {
         if (!query.IncludeDeleted)
         {
             rowsQuery = rowsQuery.Where(row => row.DeletedAt == null);

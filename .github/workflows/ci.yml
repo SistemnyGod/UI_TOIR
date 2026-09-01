@@ -51,6 +51,9 @@ jobs:
           --no-restore
           --logger "trx;LogFileName=db-integration.trx"
           --results-directory ./TestResults/db-integration
+          --blame-hang-timeout 5m
+          --blame-hang-dump-type mini
+          --diag ./TestResults/db-integration/diagnostic.log
 
       - name: Ensure no DB tests were skipped
         shell: pwsh
@@ -78,6 +81,7 @@ jobs:
 
   verify:
     runs-on: windows-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -123,7 +127,21 @@ jobs:
         run: dotnet run --project .\tests\Patrol360.Structure.Tests\Patrol360.Structure.Tests.csproj --no-restore
 
       - name: Test .NET
-        run: dotnet test .\Patrol360.slnx --no-build --logger trx --results-directory .\TestResults\dotnet
+        shell: pwsh
+        run: |
+          Remove-Item Env:\PATROL360_RUN_DB_INTEGRATION -ErrorAction SilentlyContinue
+          Remove-Item Env:\PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING -ErrorAction SilentlyContinue
+          $projects = @(
+            @{ Path = '.\tests\Patrol360.Domain.Tests\Patrol360.Domain.Tests.csproj'; Name = 'Patrol360.Domain.Tests' },
+            @{ Path = '.\tests\Patrol360.Application.Tests\Patrol360.Application.Tests.csproj'; Name = 'Patrol360.Application.Tests' },
+            @{ Path = '.\tests\Patrol360.Api.Tests\Patrol360.Api.Tests.csproj'; Name = 'Patrol360.Api.Tests' },
+            @{ Path = '.\tests\Patrol360.Worker.Tests\Patrol360.Worker.Tests.csproj'; Name = 'Patrol360.Worker.Tests' },
+            @{ Path = '.\tests\Patrol360.Infrastructure.Tests\Patrol360.Infrastructure.Tests.csproj'; Name = 'Patrol360.Infrastructure.Tests' }
+          )
+          foreach ($project in $projects) {
+            dotnet test $project.Path --no-build --logger "trx;LogFileName=$($project.Name).trx" --results-directory .\TestResults\dotnet --blame-hang-timeout 5m --blame-hang-dump-type mini --diag ".\TestResults\dotnet\$($project.Name).diagnostic.log"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
       - name: Encoding check
         run: .\tools\Verify-TextEncoding.ps1
@@ -132,9 +150,21 @@ jobs:
         working-directory: apps/web
         run: npm ci
 
+      - name: Verify frontend compiler installation
+        shell: pwsh
+        working-directory: apps/web
+        run: |
+          if (-not (Test-Path .\node_modules\.bin\tsc.cmd)) {
+            throw 'npm ci completed without node_modules/.bin/tsc.cmd'
+          }
+
       - name: Verify frontend
         working-directory: apps/web
-        run: npm run verify
+        run: npm run typecheck
+
+      - name: Build frontend
+        working-directory: apps/web
+        run: npm run build
 
       - name: Install mobile dependencies
         working-directory: mobiel proekt

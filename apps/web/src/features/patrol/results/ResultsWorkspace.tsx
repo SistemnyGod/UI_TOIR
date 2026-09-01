@@ -21,10 +21,11 @@ import {
 import type { ApiFileResponse } from "../../../api/client";
 import { createApiResultsRepository, downloadResultAttachment, isBackendResultId, type ResultFilterOptions } from "../../../repositories/resultsRepository";
 import { useResultsWorkspace } from "../../../hooks/useResultsWorkspace";
-import type { DataSourceMode, PatrolResult, PatrolResultAttachment, ResultMode, RouteDirectoryItem, ScreenId } from "../../../types";
+import type { DataSourceMode, PatrolResult, PatrolResultAttachment, ResultMode, RouteDirectoryItem, ScreenId, ServiceRequest, DataSourceStatus } from "../../../types";
 import { PatrolResultDetails } from "./PatrolResultDetails";
 import { ResultMediaViewer, type ResultMediaPreviewState } from "./ResultMediaViewer";
 import { FoundRemarksView } from "./FoundRemarksView";
+import { PatrolRequestHistory } from "./PatrolRequestHistory";
 import type { DurationSummary, ResultGroup } from "./resultTypes";
 import { Button, CompactTable, PageHeader, SectionTabs, type CompactTableColumn } from "../../../shared/ui";
 import "./resultsWorkspace.css";
@@ -44,6 +45,12 @@ export interface ResultsScreenProps {
   onNavigate?: (screen: ScreenId) => void;
   onNotify?: (message: string) => void;
   routeDirectory?: RouteDirectoryItem[];
+  requests?: ServiceRequest[];
+  requestListStatus?: DataSourceStatus;
+  requestListErrorMessage?: string;
+  onRetryRequests?: () => Promise<void> | void;
+  onOpenRequestById?: (requestId: string) => void;
+  onOpenResult?: (resultId: string) => void;
   addToast?: (message: string, kind?: "success" | "error" | "info") => void;
 }
 
@@ -85,6 +92,12 @@ export function ResultsWorkspace({
   onOpenRequest,
   onNotify,
   routeDirectory = [],
+  requests = [],
+  requestListStatus = "idle",
+  requestListErrorMessage,
+  onRetryRequests,
+  onOpenRequestById,
+  onOpenResult,
   addToast,
 }: ResultsScreenProps) {
   const [activeMode, setActiveMode] = useState<ResultMode>(mode);
@@ -101,7 +114,7 @@ export function ResultsWorkspace({
   const [photoLoadingResultId, setPhotoLoadingResultId] = useState<string | null>(null);
   const [mediaPreview, setMediaPreview] = useState<ResultMediaPreviewState | null>(null);
   const mediaTriggerRef = useRef<HTMLElement | null>(null);
-  const [activeView, setActiveView] = useState<"results" | "remarks">("results");
+  const [activeView, setActiveView] = useState<"results" | "remarks" | "requests">("results");
   const [exportInProgress, setExportInProgress] = useState(false);
   const [mutatingGroupId, setMutatingGroupId] = useState<string | null>(null);
   const apiResultsRepository = useMemo(() => createApiResultsRepository(), []);
@@ -510,10 +523,23 @@ export function ResultsWorkspace({
           <AlertTriangle size={16} />
           {"\u041d\u0430\u0439\u0434\u0435\u043d\u043d\u044b\u0435 \u0437\u0430\u043c\u0435\u0447\u0430\u043d\u0438\u044f"}
         </button>
+        <button className={activeView === "requests" ? "is-active" : ""} onClick={() => setActiveView("requests")} type="button">
+          <FileText size={16} />
+          История заявок
+        </button>
       </nav>
 
       {activeView === "remarks" ? (
         <FoundRemarksView dataSourceMode={dataSourceMode} onNotify={onNotify} />
+      ) : activeView === "requests" ? (
+        <PatrolRequestHistory
+          errorMessage={requestListErrorMessage}
+          onOpenRequest={onOpenRequestById ?? onOpenRequest}
+          onOpenResult={onOpenResult}
+          onRetry={onRetryRequests}
+          requests={requests}
+          status={requestListStatus}
+        />
       ) : (
         <>
 

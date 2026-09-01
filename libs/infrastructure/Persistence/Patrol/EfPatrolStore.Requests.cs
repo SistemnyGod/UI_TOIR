@@ -55,21 +55,29 @@ internal sealed partial class EfPatrolStore
 
         if (!string.IsNullOrWhiteSpace(filter?.Query))
         {
-            var search = filter.Query.Trim().ToLower();
-            query = query.Where(request =>
-                request.Number.ToLower().Contains(search)
-                || request.EmployeeName.ToLower().Contains(search)
-                || request.RouteName.ToLower().Contains(search)
-                || request.Description.ToLower().Contains(search));
+            var search = ToLikeContainsPattern(filter.Query);
+            query = query.Where(request => EF.Functions.ILike(request.SearchText, search, "\\"));
         }
 
-        return query
+        var requestRows = query
             .OrderByDescending(request => request.CreatedAt)
             .ThenByDescending(request => request.Id)
             .Skip((paging.Page - 1) * paging.PageSize)
             .Take(paging.PageSize)
-            .ToList()
-            .Select(request => MapPatrolRequest(request))
+            .ToList();
+        var assignmentIds = requestRows
+            .Where(request => request.Assignment is not null)
+            .Select(request => request.Assignment!.Id)
+            .ToArray();
+        var resultIds = dbContext.PatrolResults
+            .AsNoTracking()
+            .Where(result => result.AssignmentId.HasValue && assignmentIds.Contains(result.AssignmentId.Value))
+            .GroupBy(result => result.AssignmentId!.Value)
+            .Select(group => new { AssignmentId = group.Key, ResultId = group.Select(result => result.Id).First() })
+            .ToDictionary(item => item.AssignmentId, item => item.ResultId);
+
+        return requestRows
+            .Select(request => MapPatrolRequest(request, request.Assignment is not null && resultIds.TryGetValue(request.Assignment.Id, out var resultId) ? resultId : null))
             .ToList();
     }
 
@@ -269,7 +277,7 @@ internal sealed partial class EfPatrolStore
         return CombinePlannedAt(request.ScheduledDate, request.ScheduledTime);
     }
 
-    private static PatrolRequestDto MapPatrolRequest(PatrolRequestEntity request) =>
+    private static PatrolRequestDto MapPatrolRequest(PatrolRequestEntity request, Guid? resultId = null) =>
         new(
             request.Id,
             request.Number,
@@ -285,7 +293,13 @@ internal sealed partial class EfPatrolStore
             request.Status,
             request.CreatedAt,
             request.Description,
-            request.Assignment?.Id);
+            request.Assignment?.Id,
+            request.CancellationReasonCode,
+            request.CancellationReasonText,
+            request.CancelledAt,
+            request.CancelledByUserId,
+            request.CancelledByUserName,
+            resultId);
 
     private static PatrolRequestPaging NormalizePatrolRequestPaging(int page, int pageSize)
     {

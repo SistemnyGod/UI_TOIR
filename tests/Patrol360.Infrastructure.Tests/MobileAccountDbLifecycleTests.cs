@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Patrol360.Application;
 using Patrol360.Contracts;
@@ -7,6 +8,7 @@ using Patrol360.Infrastructure.Persistence;
 
 namespace Patrol360.Infrastructure.Tests;
 
+[Collection("Postgres integration")]
 public sealed class MobileAccountDbLifecycleTests
 {
     [DbIntegrationFact]
@@ -167,6 +169,14 @@ internal sealed class TemporaryPostgresDatabase : IAsyncDisposable
 
     private readonly string adminConnectionString;
     private readonly string databaseName;
+    private static readonly SemaphoreSlim TemplateGate = new(1, 1);
+    private static string? templateDatabaseName;
+    private static string? templateAdminConnectionString;
+
+    static TemporaryPostgresDatabase()
+    {
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => DropTemplateDatabase();
+    }
 
     private TemporaryPostgresDatabase(string adminConnectionString, string databaseName, string connectionString)
     {
@@ -182,6 +192,7 @@ internal sealed class TemporaryPostgresDatabase : IAsyncDisposable
         var adminConnectionString =
             Environment.GetEnvironmentVariable("PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING")
             ?? DefaultAdminConnectionString;
+        var templateName = await EnsureTemplateDatabaseAsync(adminConnectionString);
         var databaseName = $"patrol360_dbtests_{Guid.NewGuid():N}";
         var testConnectionBuilder = new NpgsqlConnectionStringBuilder(adminConnectionString)
         {
@@ -191,10 +202,85 @@ internal sealed class TemporaryPostgresDatabase : IAsyncDisposable
         await using var connection = new NpgsqlConnection(adminConnectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = $"CREATE DATABASE {QuoteIdentifier(databaseName)}";
+        command.CommandText = $"CREATE DATABASE {QuoteIdentifier(databaseName)} TEMPLATE {QuoteIdentifier(templateName)}";
         await command.ExecuteNonQueryAsync();
 
         return new TemporaryPostgresDatabase(adminConnectionString, databaseName, testConnectionBuilder.ConnectionString);
+    }
+
+    private static async Task<string> EnsureTemplateDatabaseAsync(string adminConnectionString)
+    {
+        await TemplateGate.WaitAsync();
+        try
+        {
+            if (templateDatabaseName is not null)
+            {
+                return templateDatabaseName;
+            }
+
+            var templateName = $"patrol360_dbtests_template_{Guid.NewGuid():N}";
+            var templateConnectionBuilder = new NpgsqlConnectionStringBuilder(adminConnectionString)
+            {
+                Database = templateName,
+            };
+
+            await using (var connection = new NpgsqlConnection(adminConnectionString))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = $"CREATE DATABASE {QuoteIdentifier(templateName)}";
+                await command.ExecuteNonQueryAsync();
+            }
+
+            var options = new DbContextOptionsBuilder<Patrol360DbContext>()
+                .UseNpgsql(templateConnectionBuilder.ConnectionString)
+                .Options;
+            await using (var context = new Patrol360DbContext(options))
+            {
+                await context.Database.MigrateAsync();
+            }
+
+            // Npgsql keeps disposed connections in its pool. PostgreSQL refuses
+            // CREATE DATABASE ... TEMPLATE while even an idle pooled connection
+            // still points at the template database.
+            NpgsqlConnection.ClearAllPools();
+
+            templateAdminConnectionString = adminConnectionString;
+            templateDatabaseName = templateName;
+            return templateName;
+        }
+        finally
+        {
+            TemplateGate.Release();
+        }
+    }
+
+    private static void DropTemplateDatabase()
+    {
+        var databaseName = templateDatabaseName;
+        var adminConnectionString = templateAdminConnectionString;
+        if (databaseName is null || adminConnectionString is null)
+        {
+            return;
+        }
+
+        try
+        {
+            using var connection = new NpgsqlConnection(adminConnectionString);
+            connection.Open();
+            using var terminateCommand = connection.CreateCommand();
+            terminateCommand.CommandText =
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = @database_name AND pid <> pg_backend_pid();";
+            terminateCommand.Parameters.AddWithValue("database_name", databaseName);
+            terminateCommand.ExecuteNonQuery();
+            using var dropCommand = connection.CreateCommand();
+            dropCommand.CommandText = $"DROP DATABASE IF EXISTS {QuoteIdentifier(databaseName)}";
+            dropCommand.ExecuteNonQuery();
+        }
+        catch
+        {
+            // ProcessExit must not prevent the test runner from shutting down.
+        }
     }
 
     public async ValueTask DisposeAsync()

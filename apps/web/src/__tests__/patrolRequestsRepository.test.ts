@@ -66,14 +66,22 @@ describe("patrol requests repository", () => {
             status: "Отменено",
             createdAt: "2026-05-18T08:00:00Z",
       description: "",
-      assignmentId: null,
+            assignmentId: "assignment-2",
+            cancellationReasonCode: "ppr",
+            cancelledAt: "2026-05-18T08:15:00Z",
+            cancelledByUserName: "Dispatcher",
           },
         ]),
     });
 
     const requests = await repository.getPatrolRequests();
 
-    expect(requests[0].status).toBe("Закрыта");
+    expect(requests[0]).toMatchObject({
+      status: "Отменена",
+      isCancelled: true,
+      cancellationReasonCode: "ppr",
+      cancelledByUserName: "Dispatcher",
+    });
   });
 
   it("loads all patrol request pages", async () => {

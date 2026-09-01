@@ -66,7 +66,22 @@ public sealed class AssignmentsController(IAssignmentService assignmentService) 
 
     [HttpPost("{id:guid}/cancel")]
     [RequirePermission("assignments.write")]
-    public ActionResult<AssignmentCommandResultDto> Cancel(Guid id) => ExecuteCommand(() => assignmentService.Cancel(id));
+    public ActionResult<AssignmentCommandResultDto> Cancel(Guid id, CancelAssignmentDto? request = null)
+    {
+        if (request is null)
+        {
+            return AssignmentCommandValidationProblem(new Dictionary<string, string[]>
+            {
+                ["reasonCode"] = ["Укажите причину отмены заявки."]
+            });
+        }
+
+        var user = HttpContext.User;
+        var actorUserId = Guid.TryParse(user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var parsedUserId)
+            ? parsedUserId
+            : (Guid?)null;
+        return ExecuteCommand(() => assignmentService.Cancel(id, request, actorUserId, user.Identity?.Name));
+    }
 
     [HttpPost("{id:guid}/complete")]
     [RequirePermission("assignments.write")]

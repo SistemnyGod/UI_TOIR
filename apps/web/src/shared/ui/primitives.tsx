@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import type { Tone } from "../../types";
 
 const toneByValue: Record<string, Tone> = {
@@ -91,16 +91,10 @@ export function Button({
   );
 }
 
-export function IconButton({
-  children,
-  className = "",
-  isLoading = false,
-  label,
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
+export const IconButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & {
   isLoading?: boolean;
   label: string;
-}) {
+}>(({ children, className = "", isLoading = false, label, ...props }, ref) => {
   const disabled = props.disabled || isLoading;
 
   return (
@@ -110,13 +104,15 @@ export function IconButton({
       aria-label={label}
       className={`ui-icon-button ${className}`.trim()}
       disabled={disabled}
+      ref={ref}
       title={props.title ?? label}
       type={props.type ?? "button"}
     >
       {isLoading ? <span className="ui-button-spinner" aria-hidden="true" /> : children}
     </button>
   );
-}
+});
+IconButton.displayName = "IconButton";
 
 export function StatusBadge({
   children,

@@ -10,6 +10,70 @@
   box-shadow: var(--ui-shadow-card);
 }
 
+.screen-area .assign-am-cancel-modal {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.screen-area .patrol-cancel-modal-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-surface-muted);
+}
+
+.screen-area .patrol-cancel-modal-summary > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.screen-area .patrol-cancel-modal-summary span {
+  color: var(--ui-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.screen-area .patrol-cancel-modal-summary strong {
+  overflow: hidden;
+  color: var(--ui-text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen-area .patrol-cancel-modal-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.screen-area .patrol-cancel-modal-field > span {
+  color: var(--ui-text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.screen-area .patrol-cancel-modal-warning {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--ui-warning) 35%, var(--ui-border));
+  border-radius: var(--ui-radius-control);
+  background: color-mix(in srgb, var(--ui-warning) 8%, var(--ui-surface));
+  color: var(--ui-text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 560px) {
+  .screen-area .patrol-cancel-modal-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
 .screen-area .assign-am-screen .assign-am-selection-bar.has-conflict {
   border-color: color-mix(in srgb, var(--ui-warning) 45%, var(--ui-border));
 }
@@ -229,7 +293,9 @@
   width: 32px;
 }
 
-.screen-area .assign-am-screen .patrol-active-table-action-menu {
+/* This menu is portaled to document.body, so it must not depend on the table's
+   .screen-area/.assign-am-screen ancestry. */
+.patrol-active-table-action-menu {
   background: var(--ui-surface);
   border: 1px solid var(--ui-border);
   border-radius: 10px;
@@ -242,14 +308,14 @@
   z-index: 1400;
 }
 
-.screen-area .assign-am-screen .patrol-active-table-action-menu .ui-button {
+.patrol-active-table-action-menu .ui-button {
   justify-content: flex-start;
   min-height: 32px;
   padding: 0 10px;
   width: 100%;
 }
 
-.screen-area .assign-am-screen .patrol-active-table-action-menu .ui-button.danger-outline {
+.patrol-active-table-action-menu .ui-button.danger-outline {
   color: var(--action-danger-text, #b42318);
 }
 

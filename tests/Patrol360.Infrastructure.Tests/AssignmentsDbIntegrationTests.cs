@@ -7,6 +7,7 @@ using Npgsql;
 
 namespace Patrol360.Infrastructure.Tests;
 
+[Collection("Postgres integration")]
 public sealed class AssignmentsDbIntegrationTests
 {
     private static readonly Guid FreePatrolRequestId = Guid.Parse("99999999-0000-0000-0000-000000000003");
@@ -312,6 +313,49 @@ public sealed class AssignmentsDbIntegrationTests
         Assert.Equal("Маршрут отменен", notification.Title);
         Assert.Equal("assignment", notification.EntityType);
         Assert.Equal(created.Assignment.Id.ToString(), notification.EntityId);
+    }
+
+    [DbIntegrationFact]
+    public async Task CancelAssignmentRequiresReasonAndPersistsRequestHistory()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+
+        await provider.InitializePatrolDatabaseAsync();
+
+        var created = UseAssignments(provider, assignments => assignments.Create(new CreateAssignmentDto(
+            FreePatrolRequestId,
+            SidorovEmployeeId,
+            FuelDepotRouteId,
+            DateTimeOffset.UtcNow.AddDays(1),
+            "Day")));
+        Assert.True(created.Succeeded);
+        Assert.NotNull(created.Assignment);
+
+        var missingOtherReason = UseAssignments(provider, assignments => assignments.Cancel(
+            created.Assignment!.Id,
+            new CancelAssignmentDto("other", null),
+            null,
+            "dispatcher"));
+        Assert.NotNull(missingOtherReason);
+        Assert.False(missingOtherReason!.Changed);
+        Assert.Contains("reasonText", missingOtherReason.Errors!.Keys);
+
+        var cancelled = UseAssignments(provider, assignments => assignments.Cancel(
+            created.Assignment!.Id,
+            new CancelAssignmentDto("ppr", null),
+            Guid.NewGuid(),
+            "dispatcher"));
+        Assert.NotNull(cancelled);
+        Assert.True(cancelled!.Changed);
+
+        var request = UseRequests(provider, requests => requests.GetRequests()
+            .Single(item => item.Id == FreePatrolRequestId));
+        Assert.Equal("ppr", request.CancellationReasonCode);
+        Assert.Null(request.CancellationReasonText);
+        Assert.NotNull(request.CancelledAt);
+        Assert.Equal("dispatcher", request.CancelledByUserName);
+        Assert.Equal(1, await CountPatrolRequestHistoryEventsAsync(database.ConnectionString, FreePatrolRequestId));
     }
 
     [DbIntegrationFact]
@@ -836,6 +880,16 @@ public sealed class AssignmentsDbIntegrationTests
         await using var command = connection.CreateCommand();
         command.CommandText = "select count(*) from patrol_results where assignment_id = @assignment_id;";
         command.Parameters.AddWithValue("assignment_id", assignmentId);
+        return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task<int> CountPatrolRequestHistoryEventsAsync(string connectionString, Guid requestId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "select count(*) from patrol_request_history_events where patrol_request_id = @request_id and event_type = 'cancelled';";
+        command.Parameters.AddWithValue("request_id", requestId);
         return Convert.ToInt32(await command.ExecuteScalarAsync());
     }
 

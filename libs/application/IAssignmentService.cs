@@ -16,6 +16,8 @@ public interface IAssignmentService
 
     AssignmentCommandResult? Cancel(Guid id);
 
+    AssignmentCommandResult? Cancel(Guid id, CancelAssignmentDto request, Guid? actorUserId, string? actorUserName) => Cancel(id);
+
     AssignmentCommandResult? Complete(Guid id, CompleteAssignmentDto? request = null);
 }
 

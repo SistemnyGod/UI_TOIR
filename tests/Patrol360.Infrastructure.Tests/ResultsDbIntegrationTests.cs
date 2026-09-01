@@ -8,6 +8,7 @@ using Patrol360.Infrastructure.Persistence;
 
 namespace Patrol360.Infrastructure.Tests;
 
+[Collection("Postgres integration")]
 public sealed class ResultsDbIntegrationTests
 {
     private const int MaxExportRows = 5000;

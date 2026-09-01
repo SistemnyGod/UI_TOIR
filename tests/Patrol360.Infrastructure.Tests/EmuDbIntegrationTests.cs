@@ -8,6 +8,7 @@ using Patrol360.Infrastructure.Persistence.Entities;
 
 namespace Patrol360.Infrastructure.Tests;
 
+[Collection("Postgres integration")]
 public sealed class EmuDbIntegrationTests
 {
     private static readonly Guid IvanovEmployeeId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111");

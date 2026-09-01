@@ -71,6 +71,7 @@ import {
 } from "../../repositories/assignmentsRepository";
 import type {
   ActivePatrol,
+  CancelAssignmentPayload,
   CompleteAssignmentPayload,
   CreateServiceRequestPayload,
   DataSourceMode,
@@ -199,6 +200,8 @@ export function AssignmentScreen({
   const [isCreatingRequest, setIsCreatingRequest] = useState(false);
   const [completionTarget, setCompletionTarget] = useState<ActivePatrol | null>(null);
   const [completionErrors, setCompletionErrors] = useState<Record<string, string>>({});
+  const [cancelTarget, setCancelTarget] = useState<ActivePatrol | null>(null);
+  const [cancelErrors, setCancelErrors] = useState<Record<string, string>>({});
   const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
   const [favoriteEmployeeIds, setFavoriteEmployeeIds] = useState<string[]>(() => loadAssignmentFavoriteEmployeeIds());
   const [requestModalOpen, setRequestModalOpen] = useState(false);
@@ -543,14 +546,25 @@ export function AssignmentScreen({
     setCompletionErrors({});
   }
 
-  async function handleCancelAssignment(assignmentId: string) {
+  function handleCancelAssignment(assignmentId: string) {
     const target = screenAssignments.find((assignment) => assignment.id === assignmentId);
-    const routeName = target?.route || "выбранный маршрут";
-    const employeeName = target?.employee || "сотрудника";
-    const confirmed = window.confirm(`Отменить маршрут "${routeName}" для ${employeeName}? Сотруднику будет отправлено уведомление об отмене.`);
-    if (!confirmed) return;
+    if (!target) return;
+    setCancelErrors({});
+    setCancelTarget(target);
+    return;
+  }
 
-    await assignments.runCommand(assignmentId, "cancel");
+  async function handleConfirmCancel(payload: CancelAssignmentPayload) {
+    if (!cancelTarget) return;
+
+    const commandResult = await assignments.runCommand(cancelTarget.id, "cancel", undefined, payload);
+    if (!commandResult.succeeded) {
+      setCancelErrors(flattenServerFieldErrors(commandResult.errors));
+      return;
+    }
+
+    setCancelTarget(null);
+    setCancelErrors({});
     await onRefreshRequests();
   }
 
@@ -702,6 +716,18 @@ export function AssignmentScreen({
             onSubmit={handleCompleteAssignment}
             route={routeDirectory.find((route) => route.id === completionTarget.routeId || route.name === completionTarget.route)}
             saving={assignments.savingAssignmentId === completionTarget.id}
+          />
+        ) : null}
+        {cancelTarget ? (
+          <CancelAssignmentModal
+            assignment={cancelTarget}
+            errors={cancelErrors}
+            onClose={() => {
+              setCancelTarget(null);
+              setCancelErrors({});
+            }}
+            onSubmit={handleConfirmCancel}
+            saving={assignments.savingAssignmentId === cancelTarget.id}
           />
         ) : null}
         <DraftsCard drafts={drafts} onDelete={deleteDraft} onOpen={openDraft} />
@@ -1619,6 +1645,7 @@ function ActiveAssignmentsCard({
 }) {
   const [openActionMenu, setOpenActionMenu] = useState<{ assignmentId: string; left: number; top: number } | null>(null);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
+  const actionTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const currentAssignments = assignments.filter(isAssignmentCurrent);
   const waitingCount = currentAssignments.filter((assignment) => assignmentStatusText(assignment.status) === "Ожидает начала").length;
   const inProgressCount = currentAssignments.filter((assignment) => assignmentStatusText(assignment.status) === "Выполняется").length;
@@ -1631,7 +1658,10 @@ function ActiveAssignmentsCard({
       setOpenActionMenu(null);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpenActionMenu(null);
+      if (event.key === "Escape") {
+        actionTriggerRefs.current[openActionMenu.assignmentId]?.focus({ preventScroll: true });
+        setOpenActionMenu(null);
+      }
     };
     const handleViewportChange = () => setOpenActionMenu(null);
 
@@ -1721,6 +1751,7 @@ function ActiveAssignmentsCard({
               disabled={!canManage || saving}
               label={`Действия по маршруту: ${assignment.route}`}
               onClick={toggleMenu}
+              ref={(element) => { actionTriggerRefs.current[assignment.id] = element; }}
             >
               <MoreVertical size={18} />
             </IconButton>
@@ -2008,6 +2039,78 @@ function CompleteAssignmentModal({
             {saving ? "Сохранение..." : "Завершить обход"}
           </Button>
         </footer>
+    </ModalShell>
+  );
+}
+
+function CancelAssignmentModal({
+  assignment,
+  errors,
+  onClose,
+  onSubmit,
+  saving = false,
+}: {
+  assignment: ActivePatrol;
+  errors: Record<string, string>;
+  onClose: () => void;
+  onSubmit: (payload: CancelAssignmentPayload) => void | Promise<void>;
+  saving?: boolean;
+}) {
+  const [reasonCode, setReasonCode] = useState<CancelAssignmentPayload["reasonCode"]>("urgent_work");
+  const [reasonText, setReasonText] = useState("");
+  const requiresText = reasonCode === "other";
+  const reasonOptions: Array<{ value: CancelAssignmentPayload["reasonCode"]; label: string }> = [
+    { value: "urgent_work", label: "Ушел на другую срочную работу" },
+    { value: "ppr", label: "ППР" },
+    { value: "employee_absent", label: "Сотрудник отсутствует" },
+    { value: "route_unavailable", label: "Маршрут временно недоступен" },
+    { value: "duplicate", label: "Заявка создана повторно" },
+    { value: "created_by_error", label: "Ошибка при создании" },
+    { value: "other", label: "Прочее" },
+  ];
+
+  async function submit() {
+    if (requiresText && !reasonText.trim()) return;
+    await onSubmit({ reasonCode, reasonText: reasonText.trim() || undefined });
+  }
+
+  return (
+    <ModalShell
+      actions={(
+        <>
+          <Button onClick={onClose} variant="ghost">Не отменять</Button>
+          <Button className="danger-outline" disabled={saving || (requiresText && !reasonText.trim())} onClick={() => void submit()} variant="danger">
+            {saving ? "Сохранение..." : "Отменить заявку"}
+          </Button>
+        </>
+      )}
+      className="assign-am-cancel-modal"
+      onClose={onClose}
+      subtitle="Заявка останется в истории с причиной и временем отмены."
+      title="Отмена заявки на обход"
+    >
+      <div className="patrol-cancel-modal-summary">
+        <div><span>Сотрудник</span><strong>{assignment.employee}</strong></div>
+        <div><span>Маршрут</span><strong>{assignment.route}</strong></div>
+        <div><span>Плановый старт</span><strong>{assignment.plannedAt || "Не указан"}</strong></div>
+        <div><span>Текущий статус</span><strong>{assignment.status}</strong></div>
+      </div>
+      <label className="assign-am-field patrol-cancel-modal-field">
+        <span>Причина отмены</span>
+        <select aria-label="Причина отмены" onChange={(event) => setReasonCode(event.currentTarget.value as CancelAssignmentPayload["reasonCode"])} value={reasonCode}>
+          {reasonOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        {errors.reasonCode ? <small className="field-error">{errors.reasonCode}</small> : null}
+      </label>
+      <label className="assign-am-field patrol-cancel-modal-field">
+        <span>{requiresText ? "Комментарий (обязательно)" : "Комментарий"}</span>
+        <textarea onChange={(event) => setReasonText(event.currentTarget.value)} placeholder="При необходимости добавьте пояснение" rows={3} value={reasonText} />
+        {errors.reasonText ? <small className="field-error">{errors.reasonText}</small> : null}
+      </label>
+      <div className="patrol-cancel-modal-warning" role="status">
+        Уведомление сотруднику об отмене будет отправлено автоматически.
+      </div>
+      {errors.form ? <p className="field-error assign-am-modal-error">{errors.form}</p> : null}
     </ModalShell>
   );
 }

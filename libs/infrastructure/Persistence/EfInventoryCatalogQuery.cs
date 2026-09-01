@@ -30,25 +30,32 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
 
     public InventoryOverviewDto GetOverview()
     {
-        var stockByItem = GetStockByItem();
-        var items = dbContext.InventoryItems.AsNoTracking().ToList();
-        var criticalStockItems = items.Count(item =>
-            item.IsActive &&
-            item.MinStockQty is not null &&
-            stockByItem.GetValueOrDefault(item.Id, StockTotals.Empty).Available < item.MinStockQty.Value);
+        var criticalStockQuery = BuildCriticalStockQuery();
+        var attention = criticalStockQuery
+            .OrderBy(item => item.Available)
+            .ThenBy(item => item.Name)
+            .Take(5)
+            .ToList()
+            .Select(item => new InventoryAttentionDto(
+                item.Id.ToString(),
+                item.Name,
+                $"Available stock {item.Available:0.###} is below minimum {item.MinStockQty:0.###}",
+                "warning",
+                "inventory-items"))
+            .ToList();
 
         return new InventoryOverviewDto(
             EmployeesTotal: dbContext.Employees.Count(),
-            ItemsTotal: items.Count,
+            ItemsTotal: dbContext.InventoryItems.Count(),
             CategoriesTotal: dbContext.InventoryCategories.Count(category => !category.IsArchived),
             UnitsTotal: dbContext.InventoryUnits.Count(),
             WarehousesTotal: dbContext.InventoryWarehouses.Count(warehouse => !warehouse.IsArchived),
-            CriticalStockItems: criticalStockItems,
+            CriticalStockItems: criticalStockQuery.Count(),
             ActiveIssues: 0,
             ActiveCustodyRecords: dbContext.InventoryCustodyRecords.Count(record => record.ArchivedAt == null && record.Status == "in_use"),
             PpeCardsTotal: dbContext.InventoryPpeCards.Count(card => card.ArchivedAt == null),
             ReportsReady: 5,
-            Attention: BuildAttention(items, stockByItem));
+            Attention: attention);
     }
 
     public InventoryListResponseDto<InventoryItemDto> GetItems(InventoryListQuery query)
@@ -63,17 +70,8 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
         var search = NormalizeQuery(query.Query);
         if (search.Length > 0)
         {
-            itemsQuery = itemsQuery.Where(item =>
-                item.Name.ToLower().Contains(search) ||
-                item.Sku.ToLower().Contains(search) ||
-                item.Article.ToLower().Contains(search) ||
-                item.ItemKind.ToLower().Contains(search) ||
-                item.NormItemName.ToLower().Contains(search) ||
-                item.ActualItemName.ToLower().Contains(search) ||
-                item.BrandName.ToLower().Contains(search) ||
-                item.ModelName.ToLower().Contains(search) ||
-                item.ProtectionClass.ToLower().Contains(search) ||
-                item.Comment.ToLower().Contains(search));
+            var pattern = ToLikeContainsPattern(search);
+            itemsQuery = itemsQuery.Where(item => EF.Functions.ILike(item.SearchText, pattern, "\\"));
         }
 
         if (query.Status is not null)
@@ -123,49 +121,52 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
 
     public InventoryItemFacetsDto GetItemFacets()
     {
-        var items = dbContext.InventoryItems
-            .AsNoTracking()
-            .Include(item => item.Category)
-            .Include(item => item.Unit)
+        var items = dbContext.InventoryItems.AsNoTracking();
+        var categoryFacets = (
+            from item in items
+            join category in dbContext.InventoryCategories.AsNoTracking()
+                on item.CategoryId equals category.Id
+            where category.Name != string.Empty
+            group item by new { category.Id, category.Name }
+            into grouped
+            orderby grouped.Key.Name
+            select new InventoryFacetDto(
+                grouped.Key.Id.ToString(),
+                grouped.Key.Name,
+                grouped.Count())).ToList();
+        var unitFacets = (
+            from item in items
+            join unit in dbContext.InventoryUnits.AsNoTracking()
+                on item.UnitId equals unit.Id
+            let displayName = unit.Symbol != string.Empty ? unit.Symbol : unit.Name
+            where displayName != string.Empty
+            group item by new { unit.Id, Name = displayName }
+            into grouped
+            orderby grouped.Key.Name
+            select new InventoryFacetDto(
+                grouped.Key.Id.ToString(),
+                grouped.Key.Name,
+                grouped.Count())).ToList();
+        var trackingTypeFacets = items
+            .GroupBy(item => item.TrackingType == string.Empty ? "quantity" : item.TrackingType)
+            .OrderBy(group => group.Key)
+            .Select(group => new InventoryFacetDto(group.Key, group.Key, group.Count()))
+            .ToList();
+        var itemKindFacets = items
+            .Where(item => item.ItemKind != string.Empty)
+            .GroupBy(item => item.ItemKind)
+            .OrderBy(group => group.Key)
+            .Select(group => new InventoryFacetDto(group.Key, group.Key, group.Count()))
             .ToList();
 
         return new InventoryItemFacetsDto(
-            Total: items.Count,
+            Total: items.Count(),
             Active: items.Count(item => item.IsActive),
             Inactive: items.Count(item => !item.IsActive),
-            Categories: items
-                .Where(item => item.CategoryId is not null)
-                .GroupBy(item => new
-                {
-                    Id = item.CategoryId!.Value.ToString(),
-                    Name = item.Category?.Name ?? string.Empty
-                })
-                .Where(group => group.Key.Name.Length > 0)
-                .OrderBy(group => group.Key.Name)
-                .Select(group => new InventoryFacetDto(group.Key.Id, group.Key.Name, group.Count()))
-                .ToList(),
-            Units: items
-                .Where(item => item.UnitId is not null)
-                .GroupBy(item => new
-                {
-                    Id = item.UnitId!.Value.ToString(),
-                    Name = item.Unit?.Symbol ?? item.Unit?.Name ?? string.Empty
-                })
-                .Where(group => group.Key.Name.Length > 0)
-                .OrderBy(group => group.Key.Name)
-                .Select(group => new InventoryFacetDto(group.Key.Id, group.Key.Name, group.Count()))
-                .ToList(),
-            TrackingTypes: items
-                .GroupBy(item => string.IsNullOrWhiteSpace(item.TrackingType) ? "quantity" : item.TrackingType)
-                .OrderBy(group => group.Key)
-                .Select(group => new InventoryFacetDto(group.Key, group.Key, group.Count()))
-                .ToList(),
-            ItemKinds: items
-                .Where(item => !string.IsNullOrWhiteSpace(item.ItemKind))
-                .GroupBy(item => item.ItemKind)
-                .OrderBy(group => group.Key)
-                .Select(group => new InventoryFacetDto(group.Key, group.Key, group.Count()))
-                .ToList());
+            Categories: categoryFacets,
+            Units: unitFacets,
+            TrackingTypes: trackingTypeFacets,
+            ItemKinds: itemKindFacets);
     }
 
     public InventoryListResponseDto<InventoryStockBalanceDto> GetStock(InventoryListQuery query)
@@ -177,6 +178,7 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
             {
                 move.ItemId,
                 ItemName = move.Item.Name,
+                ItemSearchText = move.Item.SearchText,
                 Unit = move.Item.Unit == null ? string.Empty : move.Item.Unit.Symbol,
                 move.WarehouseId,
                 WarehouseName = move.Warehouse.Name,
@@ -187,9 +189,10 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
         var search = NormalizeQuery(query.Query);
         if (search.Length > 0)
         {
+            var pattern = ToLikeContainsPattern(search);
             stockMoveQuery = stockMoveQuery.Where(move =>
-                move.ItemName.ToLower().Contains(search) ||
-                move.WarehouseName.ToLower().Contains(search));
+                EF.Functions.ILike(move.ItemSearchText, pattern, "\\") ||
+                EF.Functions.ILike(move.WarehouseName, pattern, "\\"));
         }
 
         if (query.ItemId is not null)
@@ -264,11 +267,12 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
         var search = NormalizeQuery(query.Query);
         if (search.Length > 0)
         {
+            var pattern = ToLikeContainsPattern(search);
             stockMoveQuery = stockMoveQuery.Where(move =>
-                move.Item.Name.ToLower().Contains(search) ||
-                move.Warehouse.Name.ToLower().Contains(search) ||
-                (move.Employee != null && move.Employee.FullName.ToLower().Contains(search)) ||
-                move.MoveType.ToLower().Contains(search));
+                EF.Functions.ILike(move.Item.SearchText, pattern, "\\") ||
+                EF.Functions.ILike(move.Warehouse.Name, pattern, "\\") ||
+                (move.Employee != null && EF.Functions.ILike(move.Employee.FullName, pattern, "\\")) ||
+                EF.Functions.ILike(move.MoveType, pattern, "\\"));
         }
 
         if (query.Status is not null)
@@ -635,26 +639,33 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
         return new InventoryItemSetDetailDto(itemSet.Id, itemSet.Name, !itemSet.IsArchived, items);
     }
 
-    private static IReadOnlyList<InventoryAttentionDto> BuildAttention(
-        IReadOnlyList<InventoryItemEntity> items,
-        IReadOnlyDictionary<Guid, StockTotals> stockByItem) =>
-        items
-            .Where(item => item.IsActive && item.MinStockQty is not null)
-            .Select(item => new
-            {
-                Item = item,
-                Stock = stockByItem.GetValueOrDefault(item.Id, StockTotals.Empty)
-            })
-            .Where(item => item.Stock.Available < item.Item.MinStockQty)
-            .OrderBy(item => item.Stock.Available)
-            .Take(5)
-            .Select(item => new InventoryAttentionDto(
-                item.Item.Id.ToString(),
-                item.Item.Name,
-                $"Available stock {item.Stock.Available:0.###} is below minimum {item.Item.MinStockQty:0.###}",
-                "warning",
-                "inventory-items"))
-            .ToList();
+    private IQueryable<CriticalStockRow> BuildCriticalStockQuery()
+    {
+        var reservationMoveTypes = ReservationMoveTypes.ToArray();
+        var accountingOnlyMoveTypes = AccountingOnlyMoveTypes.ToArray();
+        return dbContext.InventoryItems
+            .AsNoTracking()
+            .Where(item => item.IsActive && item.MinStockQty != null)
+            .Select(item => new CriticalStockRow(
+                item.Id,
+                item.Name,
+                item.MinStockQty!.Value,
+                dbContext.InventoryStockMoves
+                    .Where(move => move.ItemId == item.Id
+                        && !reservationMoveTypes.Contains(move.MoveType)
+                        && !accountingOnlyMoveTypes.Contains(move.MoveType))
+                    .Select(move => (decimal?)move.QuantityDelta)
+                    .Sum() ?? 0m,
+                dbContext.InventoryStockMoves
+                    .Where(move => move.ItemId == item.Id && reservationMoveTypes.Contains(move.MoveType))
+                    .GroupBy(move => move.MoveType)
+                    .Select(group => group.Sum(move => move.QuantityDelta))
+                    .Select(quantity => (decimal?)(quantity < 0m ? -quantity : quantity))
+                    .Sum() ?? 0m))
+            .Where(item => (item.Physical - item.Reserved > 0m
+                ? item.Physical - item.Reserved
+                : 0m) < item.MinStockQty);
+    }
 
     private Dictionary<Guid, StockTotals> GetStockByItem(IEnumerable<Guid>? itemIds = null)
     {
@@ -665,7 +676,7 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
             stockMoves = stockMoves.Where(move => ids.Contains(move.ItemId));
         }
 
-        return stockMoves
+        var groupedMoves = stockMoves
             .GroupBy(move => new { move.ItemId, move.MoveType })
             .Select(group => new
             {
@@ -673,11 +684,14 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
                 group.Key.MoveType,
                 Quantity = group.Sum(move => move.QuantityDelta)
             })
-            .ToList()
+            .ToList();
+
+        return groupedMoves
             .GroupBy(move => move.ItemId)
             .ToDictionary(
                 group => group.Key,
                 group => BuildStockTotals(group.Select(move => (move.MoveType, move.Quantity))));
+
     }
 
     private static StockTotals BuildStockTotals(IEnumerable<(string MoveType, decimal Quantity)> rows)
@@ -724,12 +738,33 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
 
     private static string NormalizeQuery(string? query) => query?.Trim().ToLowerInvariant() ?? string.Empty;
 
+    private static string ToLikeContainsPattern(string value) =>
+        $"%{value.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal)}%";
+
     private static InventoryCommandResult<T> Success<T>(T value) => new(value, EmptyErrors);
 
     private static InventoryCommandResult<T> Failure<T>(string key, string message) =>
         new(default, new Dictionary<string, string[]> { [key] = [message] });
 
     private sealed record InventoryPaging(int Page, int PageSize);
+
+    private sealed record CriticalStockRow(
+        Guid Id,
+        string Name,
+        decimal MinStockQty,
+        decimal Physical,
+        decimal Reserved)
+    {
+        public decimal Available => Math.Max(0m, Physical - Reserved);
+    }
+
+    private sealed record StockAggregateRow(
+        Guid ItemId,
+        decimal Physical,
+        decimal Reserved,
+        bool IsTracked);
 
     private sealed record StockTotals(decimal Physical, decimal Reserved, bool IsTracked)
     {

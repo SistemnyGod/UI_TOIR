@@ -10,6 +10,7 @@ import {
 } from "../repositories/assignmentsRepository";
 import type {
   ActivePatrol,
+  CancelAssignmentPayload,
   CompleteAssignmentPayload,
   CreateAssignmentPayload,
   DataSourceMode,
@@ -206,6 +207,7 @@ export function useAssignmentsWorkspace({
     id: string,
     command: "start" | "cancel" | "complete",
     completePayload?: CompleteAssignmentPayload,
+    cancelPayload?: CancelAssignmentPayload,
   ): Promise<AssignmentCommandResult> {
     if (dataSourceMode !== "api") {
       setAssignments((current) =>
@@ -227,7 +229,7 @@ export function useAssignmentsWorkspace({
         command === "start"
           ? await apiAssignments.startAssignment(id)
           : command === "cancel"
-            ? await apiAssignments.cancelAssignment(id)
+            ? await apiAssignments.cancelAssignment(id, cancelPayload ?? { reasonCode: "legacy_unknown" })
             : await apiAssignments.completeAssignment(id, completePayload);
 
       setAssignments((current) => current.map((item) => (item.id === result.assignment.id ? result.assignment : item)));

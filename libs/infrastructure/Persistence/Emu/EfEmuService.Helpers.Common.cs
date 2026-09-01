@@ -47,6 +47,12 @@ internal sealed partial class EfEmuService
     private static DateOnly GetBusinessDate(DateTimeOffset value) =>
         DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(value, BusinessTimeZone).DateTime);
 
+    private static DateTimeOffset ToBusinessDateTimeOffset(DateOnly date)
+    {
+        var localDateTime = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        return new DateTimeOffset(localDateTime, BusinessTimeZone.GetUtcOffset(localDateTime)).ToUniversalTime();
+    }
+
     private static TimeZoneInfo ResolveBusinessTimeZone()
     {
         foreach (var id in new[] { "Asia/Yekaterinburg", "Ekaterinburg Standard Time" })

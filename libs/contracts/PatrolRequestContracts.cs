@@ -29,7 +29,18 @@ public sealed record PatrolRequestDto(
     string Status,
     DateTimeOffset CreatedAt,
     string Description,
-    Guid? AssignmentId = null);
+    Guid? AssignmentId = null,
+    string? CancellationReasonCode = null,
+    string? CancellationReasonText = null,
+    DateTimeOffset? CancelledAt = null,
+    Guid? CancelledByUserId = null,
+    string? CancelledByUserName = null,
+    Guid? ResultId = null);
+
+public sealed record CancelAssignmentDto(
+    string? ReasonCode,
+    string? ReasonText,
+    long? ExpectedVersion = null);
 
 public sealed record PatrolRequestFilterDto(
     Guid? EmployeeId = null,

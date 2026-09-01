@@ -20,7 +20,7 @@ internal sealed partial class EfEmuService
 
         var generatedAt = DateTimeOffset.UtcNow;
         var scopedQuery = query with { EmployeeId = employeeId };
-        var allRows = BuildWorkSessionQuery(scopedQuery).ToList();
+        var allRows = BuildWorkSessionDetailQuery(scopedQuery).ToList();
         RecalculateSessions(allRows, generatedAt, save: false);
 
         var participants = allRows
@@ -63,7 +63,7 @@ internal sealed partial class EfEmuService
             .ToList();
 
         var paging = NormalizePaging(query.Page, query.PageSize);
-        var pageRows = ApplyWorkSessionSort(BuildWorkSessionQuery(scopedQuery), query.SortBy)
+        var pageRows = ApplyWorkSessionSort(BuildWorkSessionDetailQuery(scopedQuery), query.SortBy)
             .Skip((paging.Page - 1) * paging.PageSize)
             .Take(paging.PageSize)
             .ToList();

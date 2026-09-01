@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Bell, CalendarDays, ChevronDown, Clock3, MapPin, Moon, UserRound } from "lucide-react";
 import { Button, Chip, Field, ModalShell } from "../../../../shared/ui";
 import type {
+  CancelAssignmentPayload,
   CreateServiceRequestPayload,
   CompleteAssignmentPayload,
   EmployeeDirectoryItem,
@@ -25,7 +26,11 @@ interface ScheduleEditPanelProps {
   onCreateScheduledRequest: (payload: CreateServiceRequestPayload) => MaybePromise<ServiceRequest>;
   onNotify: (message: string) => void;
   onOpenRequestById: (requestId: string) => void;
-  onRunAssignmentCommand: (assignmentId: string, command: AssignmentCommand, payload?: CompleteAssignmentPayload) => MaybePromise<void>;
+  onRunAssignmentCommand: (
+    assignmentId: string,
+    command: AssignmentCommand,
+    payload?: CompleteAssignmentPayload | CancelAssignmentPayload,
+  ) => MaybePromise<void>;
 }
 
 export function ScheduleEditPanel({
@@ -51,6 +56,8 @@ export function ScheduleEditPanel({
   const [saving, setSaving] = useState(false);
   const [commandSaving, setCommandSaving] = useState<AssignmentCommand | null>(null);
   const [showQuickCompleteConfirm, setShowQuickCompleteConfirm] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cancelErrors, setCancelErrors] = useState<Record<string, string>>({});
   const [selectedResultId, setSelectedResultId] = useState("");
 
   const selectedEmployee = useMemo(
@@ -70,6 +77,8 @@ export function ScheduleEditPanel({
   useEffect(() => {
     if (!selected) return;
     setShowQuickCompleteConfirm(false);
+    setShowCancelConfirm(false);
+    setCancelErrors({});
     resetFormFromSelected(selected, employees, routes);
   }, [employees, routes, selected]);
 
@@ -156,7 +165,7 @@ export function ScheduleEditPanel({
     }
   }
 
-  async function runCommand(command: AssignmentCommand) {
+  async function runCommand(command: AssignmentCommand, payload?: CompleteAssignmentPayload | CancelAssignmentPayload) {
     const assignmentId = selected?.assignmentId;
     if (!assignmentId) {
       onNotify("Для этой ячейки нет связанного назначения");
@@ -173,10 +182,28 @@ export function ScheduleEditPanel({
       return;
     }
 
+    if (command === "cancel" && !payload) {
+      setCancelErrors({});
+      setShowCancelConfirm(true);
+      return;
+    }
+
     setShowQuickCompleteConfirm(false);
     setCommandSaving(command);
     try {
-      await onRunAssignmentCommand(assignmentId, command, command === "complete" ? createScheduleCompletionPayload(selected) : undefined);
+      await onRunAssignmentCommand(
+        assignmentId,
+        command,
+        command === "complete"
+          ? createScheduleCompletionPayload(selected)
+          : command === "cancel" && payload && "reasonCode" in payload
+            ? payload
+            : undefined,
+      );
+      if (command === "cancel") {
+        setShowCancelConfirm(false);
+        setCancelErrors({});
+      }
     } catch (error) {
       onNotify(error instanceof Error ? error.message : "Не удалось обновить назначение");
     } finally {
@@ -185,7 +212,8 @@ export function ScheduleEditPanel({
   }
 
   return (
-    <ModalShell
+    <>
+      <ModalShell
       className="schedule-plan-modal"
       onClose={onClose}
       subtitle={`${selected.day} · ${selected.shift}`}
@@ -361,6 +389,105 @@ export function ScheduleEditPanel({
           {saving ? "Сохранение..." : isExisting ? "Создать еще обход" : "Сохранить заявку"}
         </Button>
       </div>
+      </ModalShell>
+      {showCancelConfirm ? (
+        <ScheduleCancelAssignmentModal
+          errors={cancelErrors}
+          saving={commandSaving === "cancel"}
+          selected={selected}
+          onClose={() => {
+            setShowCancelConfirm(false);
+            setCancelErrors({});
+          }}
+          onSubmit={(payload) => void runCommand("cancel", payload)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function ScheduleCancelAssignmentModal({
+  errors,
+  onClose,
+  onSubmit,
+  saving = false,
+  selected,
+}: {
+  errors: Record<string, string>;
+  onClose: () => void;
+  onSubmit: (payload: CancelAssignmentPayload) => void | Promise<void>;
+  saving?: boolean;
+  selected: ScheduleCell;
+}) {
+  const [reasonCode, setReasonCode] = useState<CancelAssignmentPayload["reasonCode"]>("urgent_work");
+  const [reasonText, setReasonText] = useState("");
+  const requiresText = reasonCode === "other";
+  const reasonOptions: Array<{ value: CancelAssignmentPayload["reasonCode"]; label: string }> = [
+    { value: "urgent_work", label: "Ушел на другую срочную работу" },
+    { value: "ppr", label: "ППР" },
+    { value: "employee_absent", label: "Сотрудник отсутствует" },
+    { value: "route_unavailable", label: "Маршрут временно недоступен" },
+    { value: "duplicate", label: "Заявка создана повторно" },
+    { value: "created_by_error", label: "Ошибка при создании" },
+    { value: "other", label: "Прочее" },
+  ];
+
+  async function submit() {
+    if (requiresText && !reasonText.trim()) return;
+    await onSubmit({ reasonCode, reasonText: reasonText.trim() || undefined });
+  }
+
+  return (
+    <ModalShell
+      actions={(
+        <>
+          <Button disabled={saving} onClick={onClose} variant="ghost">Не отменять</Button>
+          <Button
+            className="danger-outline"
+            disabled={saving || (requiresText && !reasonText.trim())}
+            onClick={() => void submit()}
+            variant="danger"
+          >
+            {saving ? "Сохранение..." : "Отменить заявку"}
+          </Button>
+        </>
+      )}
+      className="assign-am-cancel-modal schedule-cancel-modal"
+      onClose={onClose}
+      subtitle="Заявка останется в истории с причиной и временем отмены."
+      title="Отмена заявки на обход"
+    >
+      <div className="patrol-cancel-modal-summary">
+        <div><span>Сотрудник</span><strong>{selected.employee || "Не указан"}</strong></div>
+        <div><span>Маршрут</span><strong>{selected.route || "Не указан"}</strong></div>
+        <div><span>Плановый старт</span><strong>{formatScheduleStart(selected)}</strong></div>
+        <div><span>Текущий статус</span><strong>{getSelectedChipLabel(selected)}</strong></div>
+      </div>
+      <label className="assign-am-field patrol-cancel-modal-field">
+        <span>Причина отмены</span>
+        <select
+          aria-label="Причина отмены"
+          onChange={(event) => setReasonCode(event.currentTarget.value as CancelAssignmentPayload["reasonCode"])}
+          value={reasonCode}
+        >
+          {reasonOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        {errors.reasonCode ? <small className="field-error">{errors.reasonCode}</small> : null}
+      </label>
+      <label className="assign-am-field patrol-cancel-modal-field">
+        <span>{requiresText ? "Комментарий (обязательно)" : "Комментарий"}</span>
+        <textarea
+          onChange={(event) => setReasonText(event.currentTarget.value)}
+          placeholder="При необходимости добавьте пояснение"
+          rows={3}
+          value={reasonText}
+        />
+        {errors.reasonText ? <small className="field-error">{errors.reasonText}</small> : null}
+      </label>
+      <div className="patrol-cancel-modal-warning" role="status">
+        Сотрудник будет уведомлен об отмене автоматически.
+      </div>
+      {errors.form ? <p className="field-error assign-am-modal-error">{errors.form}</p> : null}
     </ModalShell>
   );
 }
@@ -508,6 +635,11 @@ function formatDate(value: string) {
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("ru-RU").format(date);
+}
+
+function formatScheduleStart(selected: ScheduleCell) {
+  const date = selected.date ? formatDate(selected.date) : "Дата не указана";
+  return `${date}${selected.scheduledTime ? `, ${selected.scheduledTime}` : ""}`;
 }
 
 function createScheduleCompletionPayload(selected: ScheduleCell): CompleteAssignmentPayload {

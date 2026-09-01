@@ -31,6 +31,8 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
 
     internal DbSet<PatrolRequestEntity> PatrolRequests => Set<PatrolRequestEntity>();
 
+    internal DbSet<PatrolRequestHistoryEventEntity> PatrolRequestHistoryEvents => Set<PatrolRequestHistoryEventEntity>();
+
     internal DbSet<PatrolResultEntity> PatrolResults => Set<PatrolResultEntity>();
 
     internal DbSet<PatrolResultIssueEntity> PatrolResultIssues => Set<PatrolResultIssueEntity>();
@@ -280,7 +282,10 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
             entity.Property(route => route.IsArchived).HasColumnName("is_archived");
             entity.Property(route => route.CreatedAt).HasColumnName("created_at");
 
-            entity.HasIndex(route => route.Name).HasDatabaseName("ix_routes_name");
+            entity.HasIndex(route => route.Name)
+                .HasDatabaseName("ix_routes_name_trgm")
+                .HasMethod("gin")
+                .HasOperators("gin_trgm_ops");
             entity.HasIndex(route => route.IsArchived).HasDatabaseName("ix_routes_archived");
         });
     }
@@ -407,6 +412,10 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
             entity.HasIndex(employee => employee.Status).HasDatabaseName("ix_employees_status");
             entity.HasIndex(employee => employee.Department).HasDatabaseName("ix_employees_department");
             entity.HasIndex(employee => employee.EmployeeGroup).HasDatabaseName("ix_employees_employee_group");
+            entity.HasIndex(employee => employee.FullName)
+                .HasDatabaseName("ix_employees_full_name_trgm")
+                .HasMethod("gin")
+                .HasOperators("gin_trgm_ops");
         });
     }
 
@@ -452,7 +461,18 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
             entity.Property(request => request.Status).HasColumnName("status").HasMaxLength(60).IsRequired();
             entity.Property(request => request.StatusCode).HasColumnName("status_code").HasMaxLength(40);
             entity.Property(request => request.CreatedAt).HasColumnName("created_at");
+            entity.Property(request => request.CancellationReasonCode).HasColumnName("cancellation_reason_code").HasMaxLength(60);
+            entity.Property(request => request.CancellationReasonText).HasColumnName("cancellation_reason_text").HasMaxLength(1000);
+            entity.Property(request => request.CancelledAt).HasColumnName("cancelled_at");
+            entity.Property(request => request.CancelledByUserId).HasColumnName("cancelled_by_user_id");
+            entity.Property(request => request.CancelledByUserName).HasColumnName("cancelled_by_user_name").HasMaxLength(220);
             entity.Property(request => request.Description).HasColumnName("description").HasMaxLength(1200).IsRequired();
+            entity.Property(request => request.SearchText)
+                .HasColumnName("search_text")
+                .HasColumnType("text")
+                .HasComputedColumnSql(
+                    "lower(number || ' ' || employee_name || ' ' || route_name || ' ' || description)",
+                    stored: true);
 
             entity.HasOne(request => request.Employee)
                 .WithMany(employee => employee.PatrolRequests)
@@ -479,6 +499,31 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
                 .HasDatabaseName("ix_patrol_requests_scheduled_date_status_code");
             entity.HasIndex(request => request.ScheduledDate).HasDatabaseName("ix_patrol_requests_scheduled_date");
             entity.HasIndex(request => request.SourceResultId).HasDatabaseName("ix_patrol_requests_source_result_id");
+            entity.HasIndex(request => request.SearchText)
+                .HasDatabaseName("ix_patrol_requests_search_text_trgm")
+                .HasMethod("gin")
+                .HasOperators("gin_trgm_ops");
+        });
+
+        modelBuilder.Entity<PatrolRequestHistoryEventEntity>(entity =>
+        {
+            entity.ToTable("patrol_request_history_events");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Id).HasColumnName("id");
+            entity.Property(item => item.PatrolRequestId).HasColumnName("patrol_request_id");
+            entity.Property(item => item.EventType).HasColumnName("event_type").HasMaxLength(80).IsRequired();
+            entity.Property(item => item.FromStatus).HasColumnName("from_status").HasMaxLength(60).IsRequired();
+            entity.Property(item => item.ToStatus).HasColumnName("to_status").HasMaxLength(60).IsRequired();
+            entity.Property(item => item.Details).HasColumnName("details").HasMaxLength(1500).IsRequired();
+            entity.Property(item => item.ActorUserId).HasColumnName("actor_user_id");
+            entity.Property(item => item.ActorName).HasColumnName("actor_name").HasMaxLength(220).IsRequired();
+            entity.Property(item => item.CreatedAt).HasColumnName("created_at");
+            entity.HasOne(item => item.PatrolRequest)
+                .WithMany()
+                .HasForeignKey(item => item.PatrolRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(item => new { item.PatrolRequestId, item.CreatedAt })
+                .HasDatabaseName("ix_patrol_request_history_events_request_created");
         });
     }
 
@@ -1391,6 +1436,12 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
             entity.Property(item => item.TrackLife).HasColumnName("track_life");
             entity.Property(item => item.TrackingType).HasColumnName("tracking_type").HasMaxLength(40).IsRequired();
             entity.Property(item => item.Comment).HasColumnName("comment").HasMaxLength(1200).IsRequired();
+            entity.Property(item => item.SearchText)
+                .HasColumnName("search_text")
+                .HasColumnType("text")
+                .HasComputedColumnSql(
+                    "lower(name || ' ' || sku || ' ' || article || ' ' || item_kind || ' ' || norm_item_name || ' ' || actual_item_name || ' ' || brand_name || ' ' || model_name || ' ' || protection_class || ' ' || comment)",
+                    stored: true);
             entity.Property(item => item.IsActive).HasColumnName("is_active");
             entity.Property(item => item.CreatedAt).HasColumnName("created_at");
 
@@ -1412,6 +1463,10 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
             entity.HasIndex(item => item.CategoryId).HasDatabaseName("ix_inventory_items_category_id");
             entity.HasIndex(item => item.LegacyId).HasDatabaseName("ix_inventory_items_legacy_id");
             entity.HasIndex(item => item.IsActive).HasDatabaseName("ix_inventory_items_is_active");
+            entity.HasIndex(item => item.SearchText)
+                .HasDatabaseName("ix_inventory_items_search_text_trgm")
+                .HasMethod("gin")
+                .HasOperators("gin_trgm_ops");
         });
     }
 

@@ -13,16 +13,26 @@ internal sealed partial class EfEmuService
     public EmuDashboardDto GetDashboard(IReadOnlyList<Guid>? allowedSectionIds = null, Guid? createdByUserId = null)
     {
         var today = GetBusinessDate(DateTimeOffset.UtcNow);
-        var active = ApplyOwnerScope(ApplySectionScope(LoadSessions(), allowedSectionIds), createdByUserId)
+        var activeQuery = ApplyOwnerScope(ApplySectionScope(dbContext.EmuWorkSessions.AsNoTracking(), allowedSectionIds), createdByUserId)
             .Where(row => row.DeletedAt == null && row.CompletedAt == null)
             .OrderBy(row => row.CreatedAt)
             .Take(20)
+            .Select(row => row.Id)
             .ToList();
+        var activeOrder = activeQuery
+            .Select((id, index) => new { id, index })
+            .ToDictionary(row => row.id, row => row.index);
+        var active = LoadSessions(asNoTracking: true)
+            .Where(row => activeQuery.Contains(row.Id))
+            .ToList()
+            .OrderBy(row => activeOrder[row.Id])
+            .ToList();
+        var businessDayStart = ToBusinessDateTimeOffset(today);
+        var nextBusinessDayStart = ToBusinessDateTimeOffset(today.AddDays(1));
         var completedToday = ApplyOwnerScope(ApplySectionScope(dbContext.EmuWorkSessions.AsNoTracking(), allowedSectionIds), createdByUserId)
-            .AsNoTracking()
             .Where(row => row.DeletedAt == null && row.CompletedAt != null)
-            .AsEnumerable()
-            .Count(row => GetBusinessDate(row.CompletedAt!.Value) == today);
+            .Where(row => row.CompletedAt >= businessDayStart && row.CompletedAt < nextBusinessDayStart)
+            .Count();
         var waiting = active.Count(row => row.Employees.Any(employee => employee.Status == EmployeeWaiting || employee.Status == EmployeeOtherWork));
         var forgotten = active.Where(row => row.IsCarriedOver || row.WorkDate < today).ToList();
         var recentEventsQuery = dbContext.EmuWorkAuditEvents.AsNoTracking()

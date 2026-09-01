@@ -31,6 +31,43 @@ function Invoke-Native {
   }
 }
 
+function Invoke-DotnetTestProject {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$ProjectPath,
+
+    [Parameter(Mandatory = $true)]
+    [string]$ProjectName,
+
+    [Parameter(Mandatory = $true)]
+    [string]$ResultsPath,
+
+    [switch]$CollectCoverage
+  )
+
+  $arguments = @(
+    "test",
+    $ProjectPath,
+    "--no-build",
+    "--logger",
+    "trx;LogFileName=$ProjectName.trx",
+    "--results-directory",
+    $ResultsPath,
+    "--blame-hang-timeout",
+    "5m",
+    "--blame-hang-dump-type",
+    "mini",
+    "--diag",
+    (Join-Path $ResultsPath "$ProjectName.diagnostic.log")
+  )
+
+  if ($CollectCoverage) {
+    $arguments += @("--collect", "XPlat Code Coverage")
+  }
+
+  Invoke-Native dotnet @arguments
+}
+
 Push-Location $repoRoot
 try {
   $dotnetResults = Join-Path $resultsRoot "dotnet"
@@ -41,30 +78,38 @@ try {
   Invoke-Native dotnet build .\Patrol360.slnx --no-restore
   Invoke-Native dotnet format .\Patrol360.slnx --verify-no-changes --no-restore
 
-  $dotnetTestArgs = @(
-    "test",
-    ".\Patrol360.slnx",
-    "--no-build",
-    "--logger",
-    "trx",
-    "--results-directory",
-    $dotnetResults
-  )
-
-  if ($CollectCoverage) {
-    $dotnetTestArgs += @("--collect", "XPlat Code Coverage")
-  }
-
   $previousDbIntegration = $env:PATROL360_RUN_DB_INTEGRATION
   $previousDbAdminConnectionString = $env:PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING
-  if ($IncludeDbIntegration) {
-    $env:PATROL360_RUN_DB_INTEGRATION = "true"
-    if ([string]::IsNullOrWhiteSpace($env:PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING)) {
-      $env:PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING = "Host=localhost;Port=5432;Database=postgres;Username=patrol360;Password=patrol360_dev"
-    }
-  }
   try {
-    Invoke-Native dotnet @dotnetTestArgs
+    # The ordinary suite must never inherit a DB switch from the calling shell.
+    Remove-Item Env:\PATROL360_RUN_DB_INTEGRATION -ErrorAction SilentlyContinue
+    Remove-Item Env:\PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING -ErrorAction SilentlyContinue
+
+    $dotnetProjects = @(
+      @{ Path = ".\tests\Patrol360.Domain.Tests\Patrol360.Domain.Tests.csproj"; Name = "Patrol360.Domain.Tests" },
+      @{ Path = ".\tests\Patrol360.Application.Tests\Patrol360.Application.Tests.csproj"; Name = "Patrol360.Application.Tests" },
+      @{ Path = ".\tests\Patrol360.Api.Tests\Patrol360.Api.Tests.csproj"; Name = "Patrol360.Api.Tests" },
+      @{ Path = ".\tests\Patrol360.Worker.Tests\Patrol360.Worker.Tests.csproj"; Name = "Patrol360.Worker.Tests" },
+      @{ Path = ".\tests\Patrol360.Infrastructure.Tests\Patrol360.Infrastructure.Tests.csproj"; Name = "Patrol360.Infrastructure.Tests" }
+    )
+
+    foreach ($project in $dotnetProjects) {
+      Invoke-DotnetTestProject -ProjectPath $project.Path -ProjectName $project.Name -ResultsPath $dotnetResults -CollectCoverage:$CollectCoverage
+    }
+
+    if ($IncludeDbIntegration) {
+      $env:PATROL360_RUN_DB_INTEGRATION = "true"
+      if ([string]::IsNullOrWhiteSpace($env:PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING)) {
+        $env:PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING = "Host=localhost;Port=5432;Database=postgres;Username=patrol360;Password=patrol360_dev"
+      }
+
+      $dbResults = Join-Path $dotnetResults "db"
+      New-Item -ItemType Directory -Force -Path $dbResults | Out-Null
+      Invoke-DotnetTestProject `
+        -ProjectPath ".\tests\Patrol360.Infrastructure.Tests\Patrol360.Infrastructure.Tests.csproj" `
+        -ProjectName "Patrol360.Infrastructure.Tests.DbIntegration" `
+        -ResultsPath $dbResults
+    }
   }
   finally {
     if ($null -eq $previousDbIntegration) {
@@ -86,12 +131,23 @@ try {
 
   Push-Location .\apps\web
   try {
-    if (-not $SkipFrontendInstall) {
-      Invoke-Native npm ci
+    # npm ci is intentionally unconditional: a missing compiler is a preparation failure.
+    Invoke-Native npm ci
+    if (-not (Test-Path ".\node_modules\.bin\tsc.cmd")) {
+      throw "Frontend preparation failed: npm ci completed without node_modules/.bin/tsc.cmd."
     }
 
-    Invoke-Native npm run verify
-    Invoke-Native npm run test:ci
+    try {
+      Invoke-Native npm run typecheck
+      Invoke-Native npm run build
+      Invoke-Native npm run test:ci
+    }
+    catch {
+      if ($_.Exception.Message -match "spawn EPERM") {
+        throw "Frontend checks reached the installed dependency tree, but Windows denied the Vite child process (spawn EPERM). Inspect the runner policy or process limits."
+      }
+      throw
+    }
 
     if ($IncludeE2E) {
       $previousCi = $env:CI

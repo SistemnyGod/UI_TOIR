@@ -10,6 +10,7 @@ import { useSchedulePlanning } from "../../hooks/useSchedulePlanning";
 import { useEffect, useMemo, useState } from "react";
 import type {
   ActivePatrol,
+  CancelAssignmentPayload,
   CompleteAssignmentPayload,
   CreateServiceRequestPayload,
   DataSourceMode,
@@ -49,7 +50,11 @@ export function ScheduleScreen({
   onNotify: (message: string) => void;
   onCreateScheduledRequest: (payload: CreateServiceRequestPayload) => MaybePromise<ServiceRequest>;
   onOpenRequestById: (requestId: string) => void;
-  onRunAssignmentCommand: (assignmentId: string, command: "start" | "cancel" | "complete", payload?: CompleteAssignmentPayload) => MaybePromise<void>;
+  onRunAssignmentCommand: (
+    assignmentId: string,
+    command: "start" | "cancel" | "complete",
+    payload?: CompleteAssignmentPayload | CancelAssignmentPayload,
+  ) => MaybePromise<void>;
   patrolResults?: PatrolResult[];
   requests: ServiceRequest[];
   routeDirectory: RouteDirectoryItem[];

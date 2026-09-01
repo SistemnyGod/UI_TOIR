@@ -511,6 +511,12 @@ export interface PatrolRequestDto {
   createdAt: string;
   description: string;
   assignmentId: string | null;
+  resultId?: string | null;
+  cancellationReasonCode?: string | null;
+  cancellationReasonText?: string | null;
+  cancelledAt?: string | null;
+  cancelledByUserId?: string | null;
+  cancelledByUserName?: string | null;
 }
 
 export interface CreatePatrolRequestDto {
@@ -962,6 +968,12 @@ export interface InventoryPpeNormMappingDto {
   defaultUnitPriceMinor: number | null;
   isDefault: boolean;
   comment: string;
+}
+
+export interface CancelAssignmentDto {
+  reasonCode: string;
+  reasonText?: string;
+  expectedVersion?: number;
 }
 
 export interface InventoryPpeNormCandidateDto {

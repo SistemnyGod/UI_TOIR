@@ -61,6 +61,8 @@ interface UsePatrolWorkspaceDataOptions {
   dataSourceMode: DataSourceMode;
   /** Requests are fetched only by screens that render or edit them. */
   requestsEnabled?: boolean;
+  /** Results also exposes older cancelled and completed requests. */
+  includeRequestHistory?: boolean;
   patrolSnapshot: PatrolDataSnapshot;
   requestModal: RequestModalState;
   refreshPatrolData: () => Promise<void>;
@@ -74,6 +76,7 @@ interface UsePatrolWorkspaceDataOptions {
 
 export function usePatrolWorkspaceData({
   dataSourceMode,
+  includeRequestHistory = false,
   requestsEnabled = true,
   patrolSnapshot,
   requestModal,
@@ -163,7 +166,10 @@ export function usePatrolWorkspaceData({
       setRequestListErrorMessage(undefined);
 
       try {
-        const nextRequests = await apiRequestsRepository.getPatrolRequests(buildOperationalPatrolDateRange(), { signal });
+        const nextRequests = await apiRequestsRepository.getPatrolRequests(
+          includeRequestHistory ? {} : buildOperationalPatrolDateRange(),
+          { signal },
+        );
         setApiRequests(nextRequests);
         setRequestListStatus("ready");
       } catch (error) {
@@ -180,7 +186,7 @@ export function usePatrolWorkspaceData({
         }
       }
     },
-    [apiRequestsRepository, dataSourceMode, showToast],
+    [apiRequestsRepository, dataSourceMode, includeRequestHistory, showToast],
   );
 
   useEffect(() => {

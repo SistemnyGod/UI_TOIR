@@ -10,7 +10,9 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfEmuService
 {
-    private IQueryable<EmuWorkSessionEntity> LoadSessions(bool includeParticipationIntervals = true)
+    private IQueryable<EmuWorkSessionEntity> LoadSessions(
+        bool includeParticipationIntervals = true,
+        bool asNoTracking = false)
     {
         var query = dbContext.EmuWorkSessions
             .Include(row => row.Section)
@@ -18,11 +20,19 @@ internal sealed partial class EfEmuService
             .Include(row => row.AuditEvents)
             .AsQueryable();
 
+        if (asNoTracking)
+        {
+            query = query.AsNoTracking();
+        }
+
         query = includeParticipationIntervals
             ? query.Include(row => row.Employees).ThenInclude(row => row.ParticipationIntervals)
             : query.Include(row => row.Employees);
 
-        return query.Include(row => row.Pauses).ThenInclude(row => row.Employees);
+        return query
+            .Include(row => row.Pauses)
+            .ThenInclude(row => row.Employees)
+            .AsSplitQuery();
     }
 
     private EmuWorkSessionEntity? LoadSession(Guid id) =>

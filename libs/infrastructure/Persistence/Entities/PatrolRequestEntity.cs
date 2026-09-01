@@ -30,7 +30,19 @@ internal sealed class PatrolRequestEntity
 
     public DateTimeOffset CreatedAt { get; set; }
 
+    public string? CancellationReasonCode { get; set; }
+
+    public string? CancellationReasonText { get; set; }
+
+    public DateTimeOffset? CancelledAt { get; set; }
+
+    public Guid? CancelledByUserId { get; set; }
+
+    public string? CancelledByUserName { get; set; }
+
     public string Description { get; set; } = string.Empty;
+
+    public string SearchText { get; private set; } = string.Empty;
 
     public EmployeeEntity? Employee { get; set; }
 

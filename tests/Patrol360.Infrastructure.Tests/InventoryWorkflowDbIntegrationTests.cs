@@ -6,6 +6,7 @@ using Patrol360.Infrastructure.Persistence;
 
 namespace Patrol360.Infrastructure.Tests;
 
+[Collection("Postgres integration")]
 public sealed class InventoryWorkflowDbIntegrationTests
 {
     [DbIntegrationFact]
