@@ -297,7 +297,8 @@ function EmployeeHeader({ onCreateIssue, onOpenNormSettings, workspace }: { onCr
   );
 }
 function Kpi({ label, tone = "", value }: { label: string; tone?: string; value: number }) {
-  return <span className={tone ? `is-${tone}` : ""}><small>{label}</small><strong>{value}</strong></span>;
+  const visibleTone = tone === "danger" && value === 0 ? "muted" : tone;
+  return <span className={visibleTone ? `is-${visibleTone}` : ""}><small>{label}</small><strong>{value}</strong></span>;
 }
 
 type NormRowsFilter = "all" | "mapping" | "issue" | "attention";

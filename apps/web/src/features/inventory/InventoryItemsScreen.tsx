@@ -476,7 +476,7 @@ export function InventoryItemsScreen({
                           </span>
                           <span>
                             <strong>{item.name}</strong>
-                            <small>{item.comment || item.normItemName || "Карточка номенклатуры"}</small>
+                            <small>{item.comment || item.normItemName || "Без примечания"}</small>
                           </span>
                         </td>
                         <td data-label="Артикул">{item.article || item.sku || "-"}</td>

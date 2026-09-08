@@ -394,9 +394,9 @@
   }
 }
 
-@media (min-width: 1450px) {
+@media (min-width: 1600px) {
   .inventory-items-screen .inventory-items-workspace {
-    grid-template-columns: 200px minmax(0, 1fr) 284px;
+    grid-template-columns: 200px minmax(0, 1fr) 320px;
   }
 
   .inventory-items-screen .inventory-items-rail {
@@ -412,6 +412,12 @@
   .inventory-items-screen .inventory-item-inspector {
     grid-column: 3;
   }
+}
+
+@media (min-width: 1100px) and (max-width: 1599px) {
+  .inventory-items-screen .inventory-items-workspace { grid-template-columns: minmax(0, 1fr); }
+  .inventory-items-screen .inventory-item-inspector { display: none; }
+  .inventory-items-screen .inventory-items-table-card { grid-column: 1; }
 }
 
 @media (max-width: 1099px) {
