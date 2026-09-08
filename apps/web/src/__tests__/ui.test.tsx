@@ -1078,7 +1078,7 @@ describe("shared UI primitives", () => {
     expect(screen.getByLabelText("Маршрут")).toBeInTheDocument();
   });
 
-  it("does not keep header actions bound to a result hidden by the current filter", async () => {
+  it("keeps the compact header action unavailable when the current filter has no result", async () => {
     const { container } = render(
       <ResultsWorkspace
         dataSourceMode="mock"
@@ -1089,12 +1089,13 @@ describe("shared UI primitives", () => {
     );
 
     await waitFor(() => expect(container.querySelectorAll(".results-review-compact-table tbody > tr").length).toBeGreaterThan(0));
-    expect(screen.getByRole("button", { name: "Открыть заявку" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Открыть заявку" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Создать заявку" })).toBeEnabled();
 
     fireEvent.change(screen.getByLabelText("Поиск по результатам обходов"), { target: { value: "результат-которого-нет" } });
 
     await waitFor(() => expect(container.querySelectorAll(".results-review-compact-table tbody > tr")).toHaveLength(0));
-    expect(screen.getByRole("button", { name: "Открыть заявку" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Открыть заявку" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Создать заявку" })).toBeDisabled();
   });
   it("debounces API result search and labels metrics as a loaded sample", async () => {

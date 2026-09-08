@@ -7,7 +7,6 @@ import {
   Camera,
   CheckCircle2,
   Download,
-  ExternalLink,
   FileText,
   MapPinned,
   MoreVertical,
@@ -475,6 +474,7 @@ export function ResultsWorkspace({
           </div>
         </div>
       ),
+      sticky: "right",
       width: "260px",
     },
   ];
@@ -499,10 +499,6 @@ export function ResultsWorkspace({
       <PageHeader
         actions={(
           <div className="results-review-actions">
-            <Button variant="secondary" className="secondary-action" disabled={!selectedGroup} onClick={() => onOpenRequest?.(selectedGroup?.results[0]?.id)}>
-              <ExternalLink size={17} />
-              Открыть заявку
-            </Button>
             {canCreateRequest ? (
               <Button variant="primary" className="primary-action" disabled={!selectedGroup} onClick={() => void createRequest()}>
                 <PlusCircle size={17} />

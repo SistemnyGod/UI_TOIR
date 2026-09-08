@@ -413,3 +413,69 @@
     flex-direction: column;
   }
 }
+
+/* A single compact summary strip replaces five competing cards. */
+.screen-area .results-review-screen .results-review-metrics {
+  align-items: stretch;
+  background: var(--ui-surface, #fff);
+  border: 1px solid var(--ui-border, #d8e4f2);
+  border-radius: 12px;
+  box-shadow: none;
+  gap: 0;
+  padding: 4px;
+}
+
+.screen-area .results-review-screen .results-review-metric {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  box-shadow: none;
+  min-height: 64px;
+}
+
+.screen-area .results-review-screen .results-review-compact-table td.compact-table-cell-sticky-right {
+  background: var(--ui-surface, #fff);
+  box-shadow: -8px 0 12px rgba(15, 49, 92, 0.05);
+}
+
+.screen-area .results-review-screen .results-review-compact-table tbody tr.selected td.compact-table-cell-sticky-right { background: #eef5ff; }
+
+@media (max-width: 767px) {
+  .screen-area .results-review-screen .results-review-hero .ui-page-header__description { display: none; }
+  .screen-area .results-review-screen .results-review-actions { width: 100%; }
+  .screen-area .results-review-screen .results-review-actions .ui-button { flex: 1; min-height: 44px; }
+  .screen-area .results-review-screen .results-review-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .screen-area .results-review-screen .results-review-metric:last-child { grid-column: span 2; }
+  .screen-area .results-review-screen .results-review-filter-tabs { padding-bottom: 4px; }
+  .screen-area .results-review-screen .results-review-filter-tabs .section-tab { min-height: 40px; }
+  .screen-area .results-review-screen .results-review-compact-table { overflow: visible; }
+  .screen-area .results-review-screen .results-review-compact-table .compact-table { min-width: 0; }
+  .screen-area .results-review-screen .results-review-compact-table thead { display: none; }
+  .screen-area .results-review-screen .results-review-compact-table tbody { display: grid; gap: 10px; }
+  .screen-area .results-review-screen .results-review-compact-table tbody tr {
+    border: 1px solid var(--ui-border, #d8e4f2);
+    border-radius: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    overflow: hidden;
+    padding: 12px;
+  }
+  .screen-area .results-review-screen .results-review-compact-table tbody td { border: 0; display: none; padding: 0; }
+  .screen-area .results-review-screen .results-review-compact-table tbody td:nth-child(1),
+  .screen-area .results-review-screen .results-review-compact-table tbody td:nth-child(2),
+  .screen-area .results-review-screen .results-review-compact-table tbody td:nth-child(3),
+  .screen-area .results-review-screen .results-review-compact-table tbody td:nth-child(4),
+  .screen-area .results-review-screen .results-review-compact-table tbody td:nth-child(5),
+  .screen-area .results-review-screen .results-review-compact-table tbody td:nth-child(6),
+  .screen-area .results-review-screen .results-review-compact-table tbody td:nth-child(7) { display: block; }
+  .screen-area .results-review-screen .results-review-compact-table tbody td:nth-child(1) { grid-column: 2; grid-row: 1; }
+  .screen-area .results-review-screen .results-review-compact-table tbody td:nth-child(2) { grid-column: 1; grid-row: 1; }
+  .screen-area .results-review-screen .results-review-compact-table tbody td:nth-child(3),
+  .screen-area .results-review-screen .results-review-compact-table tbody td:nth-child(4),
+  .screen-area .results-review-screen .results-review-compact-table tbody td:nth-child(5),
+  .screen-area .results-review-screen .results-review-compact-table tbody td:nth-child(6) { color: var(--ui-muted); font-size: 12px; grid-column: 1 / -1; margin-top: 6px; text-align: left !important; }
+  .screen-area .results-review-screen .results-review-compact-table tbody td:nth-child(7) { grid-column: 1 / -1; margin-top: 12px; }
+  .screen-area .results-review-screen .results-review-compact-table td.compact-table-cell-sticky-right { background: transparent; box-shadow: none; position: static; }
+  .screen-area .results-review-screen .results-review-table-actions { justify-content: stretch; }
+  .screen-area .results-review-screen .results-review-table-actions .ui-button { flex: 1; min-height: 44px; }
+}
