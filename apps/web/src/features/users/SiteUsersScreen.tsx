@@ -34,6 +34,7 @@ export function SiteUsersScreen({
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
   const [editingUser, setEditingUser] = useState<SiteUser | undefined>();
   const [hasUnsavedAccessChanges, setHasUnsavedAccessChanges] = useState(false);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const formReturnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -131,15 +132,16 @@ export function SiteUsersScreen({
   }
 
   function handleSelectUser(id: string) {
-    if (id === selected?.id) return;
+    if (id === selected?.id) { setMobileDetailOpen(true); return; }
     if (hasUnsavedAccessChanges && !window.confirm("\u0415\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f. \u041f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0438\u0442\u044c\u0441\u044f \u0431\u0435\u0437 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f?")) return;
     setHasUnsavedAccessChanges(false);
     onSelectUser(id);
+    setMobileDetailOpen(true);
   }
   return (
     <>
       <section className="user-admin-screen">
-        <div className="user-admin-layout">
+        <div className={`user-admin-layout ${mobileDetailOpen ? "is-mobile-detail-open" : ""}`}>
           <div className="users-main-column user-admin-main">
             <SiteUsersTablePanel
               canManage={canManage}
@@ -161,23 +163,26 @@ export function SiteUsersScreen({
             ) : null}
           </div>
 
-          <SiteUserAccessPanel
-            canManage={canManage}
-            catalog={workspace.catalog}
-            emuSections={workspace.emuSections}
-            loadAccess={workspace.loadUserAccess}
-            loadAudit={workspace.loadAudit}
-            loadSessions={workspace.loadSessions}
-            onChangeRole={updateUserRole}
-            onDirtyChange={setHasUnsavedAccessChanges}
-            onEditProfile={(target) => { setEditingUser(target); setFormMode("edit"); }}
-            onNotify={onNotify}
-            onExportAudit={workspace.exportAudit}
-            onSavePermissions={workspace.saveUserPermissions}
-            onSaveScopes={workspace.saveUserScopes}
-            onToggleBlock={workspace.toggleBlockUser}
-            user={selected}
-          />
+          <div className="site-user-detail-pane">
+            <button className="site-user-mobile-back" onClick={() => setMobileDetailOpen(false)} type="button">← К списку пользователей</button>
+            <SiteUserAccessPanel
+              canManage={canManage}
+              catalog={workspace.catalog}
+              emuSections={workspace.emuSections}
+              loadAccess={workspace.loadUserAccess}
+              loadAudit={workspace.loadAudit}
+              loadSessions={workspace.loadSessions}
+              onChangeRole={updateUserRole}
+              onDirtyChange={setHasUnsavedAccessChanges}
+              onEditProfile={(target) => { setEditingUser(target); setFormMode("edit"); }}
+              onNotify={onNotify}
+              onExportAudit={workspace.exportAudit}
+              onSavePermissions={workspace.saveUserPermissions}
+              onSaveScopes={workspace.saveUserScopes}
+              onToggleBlock={workspace.toggleBlockUser}
+              user={selected}
+            />
+          </div>
         </div>
       </section>
 
