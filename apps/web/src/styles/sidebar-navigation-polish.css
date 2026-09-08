@@ -14,3 +14,76 @@
     margin-top: 8px;
   }
 }
+
+/* The sidebar is a dense desktop tool. On narrower windows it becomes an
+   overlay, leaving the full workspace available for the current task. */
+.topbar-navigation-toggle,
+.sidebar-mobile-backdrop { display: none; }
+
+/* Working data should sit on a quiet surface, without decorative grid or wave
+   layers competing with table text. */
+.workspace,
+.screen-area {
+  background: #f6f8fb !important;
+  background-image: none !important;
+}
+
+.workspace::before,
+.workspace::after,
+.screen-area::before,
+.screen-area::after {
+  background: none !important;
+  content: none !important;
+}
+
+@media (min-width: 1200px) {
+  body .app-shell:not(.sidebar-collapsed) { grid-template-columns: 232px minmax(0, 1fr); }
+  body .app-shell:not(.sidebar-collapsed) .sidebar { width: 232px; }
+}
+
+@media (max-width: 1199px) {
+  body .app-shell,
+  body .app-shell:not(.sidebar-collapsed) { grid-template-columns: minmax(0, 1fr); }
+
+  .topbar-navigation-toggle {
+    align-items: center;
+    background: var(--ui-surface, #fff);
+    border: 1px solid var(--ui-border, #d8e4f2);
+    border-radius: 8px;
+    color: var(--ui-text, #1e3656);
+    display: inline-flex;
+    flex: 0 0 44px;
+    height: 44px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .sidebar-mobile-backdrop {
+    background: rgba(15, 36, 71, 0.38);
+    border: 0;
+    display: block;
+    inset: 0;
+    position: fixed;
+    width: 100%;
+    z-index: 5099;
+  }
+
+  body .app-shell .sidebar {
+    bottom: 0;
+    box-shadow: var(--shadow-modal);
+    left: 0;
+    max-width: calc(100vw - 44px);
+    overflow-y: auto;
+    position: fixed;
+    top: 0;
+    transform: translateX(-110%);
+    transition: transform var(--ui-motion-normal, 180ms ease);
+    width: min(320px, calc(100vw - 44px));
+    z-index: 5100;
+  }
+
+  body .app-shell .sidebar.is-mobile-open { transform: translateX(0); }
+  body .app-shell .sidebar .sidebar-footer { display: none; }
+  body .app-shell .sidebar .sidebar-submenu { max-height: none; overflow: visible; }
+  body .app-shell .sidebar :is(.nav-link, .sidebar-submenu button, .module-nav-trigger) { overflow-wrap: normal; word-break: normal; }
+}

@@ -103,6 +103,7 @@ export function App() {
     showToast,
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const systemNotifications = useSystemNotifications({
     dataSourceMode,
@@ -452,13 +453,18 @@ export function App() {
   }
 
   return (
-    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${mobileNavigationOpen ? "mobile-navigation-open" : ""}`}>
       <Sidebar
         currentUser={session.user}
         screen={screen}
         screens={screenRegistry}
         sidebarCollapsed={sidebarCollapsed}
-        onNavigate={navigate}
+        mobileOpen={mobileNavigationOpen}
+        onCloseMobile={() => setMobileNavigationOpen(false)}
+        onNavigate={(nextScreen) => {
+          navigate(nextScreen);
+          setMobileNavigationOpen(false);
+        }}
         onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
       />
 
@@ -468,6 +474,7 @@ export function App() {
           notifications={topbarNotifications}
           searchQuery={searchQuery}
           onLogout={() => void handleLogout()}
+          onOpenNavigation={() => setMobileNavigationOpen(true)}
           onRunSearch={runSearch}
           onSearchQueryChange={setSearchQuery}
           onNotify={showToast}

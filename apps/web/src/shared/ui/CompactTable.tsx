@@ -6,6 +6,8 @@ export type CompactTableColumn<T> = {
   render: (row: T) => ReactNode;
   align?: "left" | "center" | "right";
   width?: string;
+  /** Keeps a utility column visible while the table itself scrolls horizontally. */
+  sticky?: "left" | "right";
 };
 
 export function CompactTable<T>({
@@ -39,7 +41,7 @@ export function CompactTable<T>({
         <thead>
           <tr>
             {columns.map((column) => (
-              <th key={column.key} style={{ textAlign: column.align, width: column.width }}>
+              <th className={column.sticky ? `compact-table-cell-sticky-${column.sticky}` : undefined} key={column.key} style={{ textAlign: column.align, width: column.width }}>
                 {column.header}
               </th>
             ))}
@@ -84,7 +86,7 @@ export function CompactTable<T>({
                 tabIndex={onRowClick ? 0 : undefined}
               >
                 {columns.map((column) => (
-                  <td key={column.key} style={{ textAlign: column.align }}>
+                  <td className={column.sticky ? `compact-table-cell-sticky-${column.sticky}` : undefined} key={column.key} style={{ textAlign: column.align }}>
                     {column.render(row)}
                   </td>
                 ))}

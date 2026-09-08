@@ -26,6 +26,7 @@
   --shadow-panel: 0 10px 28px rgba(15, 49, 92, 0.07), 0 1px 2px rgba(15, 23, 42, 0.04);
   --shadow-panel-hover: 0 14px 34px rgba(15, 49, 92, 0.11), 0 1px 2px rgba(15, 23, 42, 0.05);
   --shadow-control: 0 8px 18px rgba(23, 105, 255, 0.14);
+  --shadow-modal: 0 24px 64px rgba(15, 36, 71, 0.22);
 
   --space-1: 4px;
   --space-2: 8px;
@@ -61,11 +62,25 @@
   --ui-shadow-control: var(--shadow-control);
   --ui-motion-fast: var(--motion-fast);
   --ui-motion-normal: var(--motion-normal);
-  --ui-control-height: 38px;
+  --ui-control-height: 40px;
   --ui-control-height-sm: 32px;
   --ui-control-radius: var(--radius-control);
   --ui-control-border: #bfd3ee;
   --ui-control-bg: var(--color-surface);
   --ui-control-muted-bg: #f6f9fe;
   --ui-control-text: var(--color-text-default);
+
+  /* Compatibility names kept while feature CSS migrates to the shared scale. */
+  --blue: var(--color-brand-500);
+  --blue-soft: var(--color-brand-soft);
+  --green: var(--color-success-600);
+  --green-soft: var(--color-success-soft);
+  --red: var(--color-danger-600);
+  --red-soft: var(--color-danger-soft);
+  --orange: var(--color-warning-600);
+  --orange-soft: var(--color-warning-soft);
+  --text: var(--color-text-default);
+  --muted: var(--color-text-muted);
+  --line: var(--color-border);
+  --surface: var(--color-surface);
 }

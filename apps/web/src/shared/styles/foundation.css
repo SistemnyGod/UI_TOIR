@@ -14,7 +14,7 @@
   color: var(--ui-blue);
   display: block;
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: 0.06em;
   line-height: 1.2;
   margin-bottom: var(--space-1);
@@ -23,8 +23,8 @@
 
 .ui-page-header__title {
   color: var(--color-text-strong);
-  font-size: clamp(22px, 2vw, 28px);
-  font-weight: 900;
+  font-size: clamp(22px, 2vw, 26px);
+  font-weight: 700;
   letter-spacing: 0;
   line-height: 1.12;
   margin: 0;
@@ -32,7 +32,7 @@
 
 .ui-page-header__description {
   color: var(--ui-muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.45;
   margin: var(--space-2) 0 0;
   max-width: 760px;
@@ -104,7 +104,7 @@
   background: var(--ui-surface-muted, #f6f9fd);
   color: var(--ui-muted, #5d718f);
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -112,8 +112,20 @@
 
 .compact-table td {
   color: var(--color-text, #1c3151);
-  font-size: 13px;
+  font-size: 14px;
 }
+
+.compact-table-cell-sticky-left,
+.compact-table-cell-sticky-right {
+  position: sticky;
+  z-index: 2;
+}
+
+.compact-table-cell-sticky-left { left: 0; }
+.compact-table-cell-sticky-right { right: 0; }
+
+.compact-table thead .compact-table-cell-sticky-left,
+.compact-table thead .compact-table-cell-sticky-right { z-index: 4; }
 
 .compact-table tbody tr[tabindex="0"] {
   cursor: pointer;
@@ -221,8 +233,8 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 13px;
-  font-weight: 850;
+  font-size: 14px;
+  font-weight: 600;
   gap: 8px;
   justify-content: center;
   line-height: 1.15;
@@ -233,9 +245,9 @@
 }
 
 :is(.modal-backdrop, .site-user-modal-backdrop) :where(.ui-button.is-primary, .button.primary, .button.is-primary) {
-  background: linear-gradient(180deg, #2476ff 0%, var(--ui-blue, #1769ff) 100%);
+  background: var(--ui-blue, #1769ff);
   border-color: var(--ui-blue, #1769ff);
-  box-shadow: 0 10px 22px rgba(23, 105, 255, 0.2);
+  box-shadow: none;
   color: #ffffff;
 }
 

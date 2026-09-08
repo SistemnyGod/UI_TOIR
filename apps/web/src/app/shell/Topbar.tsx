@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionUserDto } from "../../api/contracts";
+import { Menu } from "lucide-react";
 import { ChromeIcon } from "./ChromeIcon";
 
 export interface TopbarNotification {
@@ -19,6 +20,7 @@ export function Topbar({
   onRunSearch,
   onSearchQueryChange,
   onNotify,
+  onOpenNavigation,
 }: {
   currentUser: SessionUserDto | null;
   notifications?: TopbarNotification[];
@@ -27,6 +29,7 @@ export function Topbar({
   onRunSearch: (query: string) => void;
   onSearchQueryChange: (query: string) => void;
   onNotify: (message: string) => void;
+  onOpenNavigation?: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [readIds, setReadIds] = useState<Set<string>>(() => readNotificationIds());
@@ -75,6 +78,11 @@ export function Topbar({
 
   return (
     <header className="topbar">
+      {onOpenNavigation ? (
+        <button aria-label="Открыть навигацию" className="topbar-navigation-toggle" onClick={onOpenNavigation} type="button">
+          <Menu aria-hidden="true" size={20} />
+        </button>
+      ) : null}
       <label className="topbar-search" aria-label="Поиск">
         <ChromeIcon name="search" />
         <input

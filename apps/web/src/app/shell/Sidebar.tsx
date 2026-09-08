@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionUserDto } from "../../api/contracts";
 import { hasPermission, type PermissionCode } from "../../security/permissions";
 import type { ScreenConfig, ScreenId } from "../../types";
@@ -35,17 +35,22 @@ export function Sidebar({
   screens,
   currentUser,
   sidebarCollapsed,
+  mobileOpen = false,
   onNavigate,
   onToggleCollapsed,
+  onCloseMobile,
 }: {
   screen: ScreenId;
   screens: ScreenConfig[];
   currentUser: SessionUserDto | null;
   sidebarCollapsed: boolean;
+  mobileOpen?: boolean;
   onNavigate: (screen: ScreenId) => void;
   onToggleCollapsed: () => void;
+  onCloseMobile?: () => void;
 }) {
   const [openModule, setOpenModule] = useState<NavigationModuleId | null>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   const patrolScreens = useMemo(() => {
     const byId = new Map(screens.map((item) => [item.id, item]));
     return patrolScreenIds.map((id) => byId.get(id)).filter((item): item is ScreenConfig => Boolean(item));
@@ -82,8 +87,9 @@ export function Sidebar({
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && mobileOpen) {
         setOpenModule(null);
+        onCloseMobile?.();
       }
     }
 
@@ -92,7 +98,28 @@ export function Sidebar({
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [mobileOpen, onCloseMobile]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const focusable = () => Array.from(sidebarRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), a[href]") ?? []);
+    const firstControl = focusable()[0];
+    firstControl?.focus();
+    function trapFocus(event: KeyboardEvent) {
+      if (event.key !== "Tab") return;
+      const controls = focusable();
+      if (!controls.length) return;
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    document.addEventListener("keydown", trapFocus);
+    return () => {
+      document.removeEventListener("keydown", trapFocus);
+      document.querySelector<HTMLElement>(".topbar-navigation-toggle")?.focus();
+    };
+  }, [mobileOpen]);
 
   function toggleModule(moduleId: NavigationModuleId) {
     setOpenModule((current) => (current === moduleId ? null : moduleId));
@@ -100,6 +127,7 @@ export function Sidebar({
 
   function navigateFromModule(nextScreen: ScreenId) {
     onNavigate(nextScreen);
+    onCloseMobile?.();
   }
 
   function renderSubmenuItem(item: ScreenConfig, moduleId: NavigationModuleId, isModuleOpen = true) {
@@ -164,7 +192,9 @@ export function Sidebar({
   }
 
   return (
-    <aside className="sidebar">
+    <>
+      {mobileOpen ? <button aria-label="Закрыть навигацию" className="sidebar-mobile-backdrop" onClick={onCloseMobile} type="button" /> : null}
+      <aside className={`sidebar ${mobileOpen ? "is-mobile-open" : ""}`} ref={sidebarRef}>
       <div className="brand">
         <div className="brand-mark brand-mark-am" aria-hidden="true">
           AM
@@ -201,6 +231,7 @@ export function Sidebar({
               onClick={() => {
                 onNavigate(usersScreen.id);
                 setOpenModule(null);
+                onCloseMobile?.();
               }}
               title={getScreenLabel(usersScreen)}
               type="button"
@@ -216,6 +247,7 @@ export function Sidebar({
                 onClick={() => {
                   onNavigate(percoScreen.id);
                   setOpenModule(null);
+                  onCloseMobile?.();
                 }}
                 title={getScreenLabel(percoScreen)}
                 type="button"
@@ -235,7 +267,8 @@ export function Sidebar({
           {sidebarCollapsed ? "› Развернуть меню" : "‹ Свернуть меню"}
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 
