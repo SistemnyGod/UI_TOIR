@@ -42,18 +42,11 @@ internal sealed partial class EfPercoIntegrationService
                 .GroupBy(link => NormalizeName(link.FullName))
                 .Where(group => !string.IsNullOrWhiteSpace(group.Key) && group.Count() == 1)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-            var existingEventIds = await dbContext.PercoAccessEvents
-                .AsNoTracking()
-                .Select(row => row.PercoEventId)
-                .ToListAsync(cancellationToken);
-            var existingSet = existingEventIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var existingNaturalKeys = (await dbContext.PercoAccessEvents
-                    .AsNoTracking()
-                    .Where(row => row.Direction == "IN" || row.Direction == "OUT")
-                    .Select(row => new { row.Direction, row.EventAt, row.PercoEmployeeId, row.EmployeeId })
-                    .ToListAsync(cancellationToken))
-                .Select(row => BuildAccessEventNaturalKey(row.Direction, row.EventAt, row.PercoEmployeeId, row.EmployeeId))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            // Deduplication intentionally looks up only the current PERCo page.
+            // Loading every historical event ID/natural key was the dominant cost
+            // of a normal sync on long-lived installations.
+            var seenEventIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenNaturalKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             var loaded = 0;
             var inserted = 0;
@@ -75,6 +68,7 @@ internal sealed partial class EfPercoIntegrationService
                     break;
                 }
 
+                var candidates = new List<PendingPercoAccessEvent>();
                 foreach (var row in rows
                     .OrderBy(row => IsTechnicalIndicationEvent(row) ? 1 : 0)
                     .ThenBy(row => row.Id))
@@ -105,7 +99,7 @@ internal sealed partial class EfPercoIntegrationService
                         maxCursor = Math.Max(maxCursor, row.Id);
                     }
 
-                    if ((!isReportEndpoint && row.Id <= lastCursor) || existingSet.Contains(percoEventId))
+                    if (!isReportEndpoint && row.Id <= lastCursor)
                     {
                         duplicates++;
                         continue;
@@ -128,29 +122,75 @@ internal sealed partial class EfPercoIntegrationService
                     }
 
                     var naturalKey = BuildAccessEventNaturalKey(direction, eventAt, percoEmployeeId, employeeId);
-                    if (existingNaturalKeys.Contains(naturalKey))
+                    candidates.Add(new PendingPercoAccessEvent(row, direction, eventAt, percoEmployeeId, percoEventId, employeeId, naturalKey));
+                }
+
+                var candidateEventIds = candidates
+                    .Select(candidate => candidate.PercoEventId)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                var existingPageEventIds = candidateEventIds.Length == 0
+                    ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    : (await dbContext.PercoAccessEvents
+                        .AsNoTracking()
+                        .Where(eventRow => candidateEventIds.Contains(eventRow.PercoEventId))
+                        .Select(eventRow => eventRow.PercoEventId)
+                        .ToListAsync(cancellationToken))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var nonEmptyPercoEmployeeIds = candidates
+                    .Where(candidate => !string.IsNullOrWhiteSpace(candidate.PercoEmployeeId))
+                    .Select(candidate => candidate.PercoEmployeeId)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                var fallbackEmployeeIds = candidates
+                    .Where(candidate => string.IsNullOrWhiteSpace(candidate.PercoEmployeeId) && candidate.EmployeeId is not null)
+                    .Select(candidate => candidate.EmployeeId ?? Guid.Empty)
+                    .Distinct()
+                    .ToArray();
+                var candidateStart = candidates.Count == 0 ? now : candidates.Min(candidate => candidate.EventAt);
+                var candidateEnd = candidates.Count == 0 ? now : candidates.Max(candidate => candidate.EventAt);
+                var existingPageNaturalKeys = candidates.Count == 0
+                    ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    : (await dbContext.PercoAccessEvents
+                        .AsNoTracking()
+                        .Where(eventRow =>
+                            (eventRow.Direction == "IN" || eventRow.Direction == "OUT") &&
+                            eventRow.EventAt >= candidateStart && eventRow.EventAt <= candidateEnd &&
+                            (nonEmptyPercoEmployeeIds.Contains(eventRow.PercoEmployeeId) ||
+                             (string.IsNullOrEmpty(eventRow.PercoEmployeeId) && eventRow.EmployeeId != null && fallbackEmployeeIds.Contains(eventRow.EmployeeId.Value))))
+                        .Select(eventRow => new { eventRow.Direction, eventRow.EventAt, eventRow.PercoEmployeeId, eventRow.EmployeeId })
+                        .ToListAsync(cancellationToken))
+                    .Select(eventRow => BuildAccessEventNaturalKey(eventRow.Direction, eventRow.EventAt, eventRow.PercoEmployeeId, eventRow.EmployeeId))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var candidate in candidates)
+                {
+                    if (existingPageEventIds.Contains(candidate.PercoEventId) || !seenEventIds.Add(candidate.PercoEventId))
                     {
                         duplicates++;
-                        existingSet.Add(percoEventId);
+                        continue;
+                    }
+
+                    if (existingPageNaturalKeys.Contains(candidate.NaturalKey) || !seenNaturalKeys.Add(candidate.NaturalKey))
+                    {
+                        duplicates++;
                         continue;
                     }
 
                     var entity = new PercoAccessEventEntity
                     {
                         Id = Guid.NewGuid(),
-                        PercoEventId = percoEventId,
-                        PercoEmployeeId = percoEmployeeId,
-                        EmployeeId = employeeId,
-                        DeviceId = BuildPercoDeviceId(row),
-                        DeviceName = BuildPercoDeviceName(row),
-                        Direction = direction,
-                        EventAt = eventAt,
-                        RawPayload = JsonSerializer.Serialize(row, JsonOptions),
+                        PercoEventId = candidate.PercoEventId,
+                        PercoEmployeeId = candidate.PercoEmployeeId,
+                        EmployeeId = candidate.EmployeeId,
+                        DeviceId = BuildPercoDeviceId(candidate.Row),
+                        DeviceName = BuildPercoDeviceName(candidate.Row),
+                        Direction = candidate.Direction,
+                        EventAt = candidate.EventAt,
+                        RawPayload = JsonSerializer.Serialize(candidate.Row, JsonOptions),
                         CreatedAt = now
                     };
                     dbContext.PercoAccessEvents.Add(entity);
-                    existingSet.Add(percoEventId);
-                    existingNaturalKeys.Add(naturalKey);
                     inserted++;
                 }
 
@@ -160,9 +200,21 @@ internal sealed partial class EfPercoIntegrationService
                 }
             }
 
-            await dbContext.SaveChangesAsync(cancellationToken);
-            var backfilledEvents = await BackfillAccessEventEmployeesAsync(cancellationToken);
-            await RebuildPresenceIntervalsForNewEventsAsync(cancellationToken);
+            var queuedEmployeeIds = dbContext.ChangeTracker.Entries<PercoAccessEventEntity>()
+                .Where(entry => entry.State == EntityState.Added && entry.Entity.EmployeeId is not null)
+                .Select(entry => entry.Entity.EmployeeId!.Value)
+                .ToHashSet();
+            await using (var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken))
+            {
+                await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT pg_advisory_xact_lock({PresenceMutationLockKey})",
+                    cancellationToken);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                await EnqueuePresenceRebuildAsync(queuedEmployeeIds, cancellationToken);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
+            var rebuilt = await RebuildQueuedPresenceIntervalsAsync(cancellationToken);
 
             var finishedAt = DateTimeOffset.UtcNow;
             await UpsertSyncStateAsync(EventsSyncType, finishedAt, maxCursor.ToString(CultureInfo.InvariantCulture), string.Empty, cancellationToken);
@@ -170,7 +222,7 @@ internal sealed partial class EfPercoIntegrationService
                 "SYNC_EVENTS",
                 "SUCCESS",
                 $"Синхронизация проходов PERCo завершена: добавлено {inserted}.",
-                $"endpoint={settings.EventsEndpoint}; mode={(isReportEndpoint ? "accessReports" : "cursor")}; loaded={loaded}; duplicates={duplicates}; skippedNotFactory={skippedNotFactory}; skippedInvalidTimestamp={skippedInvalidTimestamp}; unmatched={unmatched}; backfilledEvents={backfilledEvents}",
+                $"endpoint={settings.EventsEndpoint}; mode={(isReportEndpoint ? "accessReports" : "cursor")}; loaded={loaded}; duplicates={duplicates}; skippedNotFactory={skippedNotFactory}; skippedInvalidTimestamp={skippedInvalidTimestamp}; unmatched={unmatched}; rebuiltEmployees={rebuilt.Employees}; rebuiltIntervals={rebuilt.Intervals}",
                 actorUserId,
                 startedAt,
                 finishedAt,
@@ -196,6 +248,10 @@ internal sealed partial class EfPercoIntegrationService
         var settings = await GetOrCreateSettingsAsync(cancellationToken);
         if (!settings.IsEnabled)
         {
+            if ((await GetPresenceQueueDiagnosticsAsync(cancellationToken)).PendingEmployees > 0)
+            {
+                await RebuildQueuedPresenceIntervalsAsync(cancellationToken);
+            }
             return 0;
         }
 
@@ -237,56 +293,97 @@ internal sealed partial class EfPercoIntegrationService
             }
         }
 
+        // A process can stop after event/link staging but before its presence
+        // rebuild commits. Retry that durable work on every worker cycle instead
+        // of waiting for the next remote PERCo synchronization interval.
+        var pendingPresence = await GetPresenceQueueDiagnosticsAsync(cancellationToken);
+        if (pendingPresence.PendingEmployees > 0)
+        {
+            await RebuildQueuedPresenceIntervalsAsync(cancellationToken);
+        }
+
         return started;
     }
 
-    private async Task<int> BackfillAccessEventEmployeesAsync(CancellationToken cancellationToken)
+    private async Task<HashSet<Guid>> ReassignAccessEventEmployeesAsync(
+        IReadOnlyCollection<PercoEmployeeLinkEntity> changedLinks,
+        CancellationToken cancellationToken)
     {
-        var activeProjectEmployeeIds = (await dbContext.Employees.AsNoTracking().ToListAsync(cancellationToken))
-            .Where(IsActiveProjectEmployee)
-            .Select(employee => employee.Id)
-            .ToHashSet();
-        var links = await dbContext.PercoEmployeeLinks
-            .AsNoTracking()
-            .Where(row => row.EmployeeId != null && (row.MatchStatus == "MATCHED" || row.MatchStatus == "AUTO_MATCHED"))
-            .Select(row => new { row.PercoEmployeeId, row.EmployeeId })
-            .ToListAsync(cancellationToken);
-        var employeeByPercoId = links
-            .Where(row => !string.IsNullOrWhiteSpace(row.PercoEmployeeId) && row.EmployeeId is not null && activeProjectEmployeeIds.Contains(row.EmployeeId.Value))
-            .GroupBy(row => row.PercoEmployeeId, StringComparer.OrdinalIgnoreCase)
-            .Where(group => group.Count() == 1)
-            .ToDictionary(group => group.Key, group => group.First().EmployeeId, StringComparer.OrdinalIgnoreCase);
-
-        if (employeeByPercoId.Count == 0)
+        var normalizedLinks = changedLinks
+            .Where(link => !string.IsNullOrWhiteSpace(link.PercoEmployeeId))
+            .GroupBy(link => link.PercoEmployeeId, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Last())
+            .ToList();
+        if (normalizedLinks.Count == 0)
         {
-            return 0;
+            return [];
         }
 
+        var activeEmployeeIds = await dbContext.Employees.AsNoTracking()
+            .Where(employee => normalizedLinks.Select(link => link.EmployeeId).Contains(employee.Id))
+            .Select(employee => employee.Id)
+            .ToHashSetAsync(cancellationToken);
+        var employeeByPercoId = normalizedLinks.ToDictionary(
+            link => link.PercoEmployeeId,
+            link => link.EmployeeId is not null &&
+                link.MatchStatus is "MATCHED" or "AUTO_MATCHED" &&
+                activeEmployeeIds.Contains(link.EmployeeId.Value)
+                ? link.EmployeeId
+                : null,
+            StringComparer.OrdinalIgnoreCase);
+        var percoEmployeeIds = employeeByPercoId.Keys.ToArray();
         var events = await dbContext.PercoAccessEvents
-            .Where(row => row.PercoEmployeeId != string.Empty && (row.Direction == "IN" || row.Direction == "OUT"))
+            .Where(row => percoEmployeeIds.Contains(row.PercoEmployeeId) &&
+                (row.Direction == "IN" || row.Direction == "OUT"))
             .ToListAsync(cancellationToken);
-        var updated = 0;
+        var affectedEmployeeIds = new HashSet<Guid>();
 
         foreach (var accessEvent in events)
         {
-            if (!employeeByPercoId.TryGetValue(accessEvent.PercoEmployeeId, out var employeeId) || employeeId is null)
+            if (!employeeByPercoId.TryGetValue(accessEvent.PercoEmployeeId, out var employeeId))
             {
                 continue;
             }
 
             if (accessEvent.EmployeeId != employeeId)
             {
+                if (accessEvent.EmployeeId is not null)
+                {
+                    affectedEmployeeIds.Add(accessEvent.EmployeeId.Value);
+                }
+                if (employeeId is not null)
+                {
+                    affectedEmployeeIds.Add(employeeId.Value);
+                }
                 accessEvent.EmployeeId = employeeId;
-                updated++;
             }
         }
 
-        if (updated > 0)
+        return affectedEmployeeIds;
+    }
+
+    private async Task EnqueuePresenceRebuildAsync(
+        IEnumerable<Guid> employeeIds,
+        CancellationToken cancellationToken)
+    {
+        var distinctEmployeeIds = employeeIds.Distinct().ToArray();
+        if (distinctEmployeeIds.Length == 0)
         {
-            await dbContext.SaveChangesAsync(cancellationToken);
+            return;
         }
 
-        return updated;
+        var alreadyQueued = await dbContext.PercoPresenceRebuildQueue
+            .Where(row => distinctEmployeeIds.Contains(row.EmployeeId))
+            .Select(row => row.EmployeeId)
+            .ToHashSetAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        dbContext.PercoPresenceRebuildQueue.AddRange(distinctEmployeeIds
+            .Where(employeeId => !alreadyQueued.Contains(employeeId))
+            .Select(employeeId => new PercoPresenceRebuildQueueEntity
+            {
+                EmployeeId = employeeId,
+                EnqueuedAt = now
+            }));
     }
 
     private async Task<PercoSyncStateEntity> GetOrCreateSyncStateAsync(string syncType, CancellationToken cancellationToken)
@@ -349,6 +446,15 @@ internal sealed partial class EfPercoIntegrationService
             : employeeId?.ToString("D") ?? string.Empty;
         return $"{NormalizePercoDirection(direction)}|{eventAt.ToUnixTimeSeconds()}|{personKey}";
     }
+
+    private sealed record PendingPercoAccessEvent(
+        PercoEventRow Row,
+        string Direction,
+        DateTimeOffset EventAt,
+        string PercoEmployeeId,
+        string PercoEventId,
+        Guid? EmployeeId,
+        string NaturalKey);
 
     private static string BuildPercoEventId(
         PercoEventRow row,

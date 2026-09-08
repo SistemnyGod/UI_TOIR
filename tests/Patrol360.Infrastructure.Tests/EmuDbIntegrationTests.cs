@@ -19,6 +19,37 @@ public sealed class EmuDbIntegrationTests
     private static readonly Guid SidorovEmployeeId = Guid.Parse("aaaaaaaa-3333-3333-3333-333333333333");
 
     [DbIntegrationFact]
+    public async Task WorkSessionListLoadsAttachmentsWithOneBatchedQuery()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var section = UseCatalog(provider, catalog => catalog.GetSettings()).Sections.First();
+        foreach (var employeeId in new[] { IvanovEmployeeId, PetrovEmployeeId })
+        {
+            var created = UseWork(provider, work => work.CreateWorkSession(
+                new EmuCreateWorkSessionDto(DateOnly.FromDateTime(DateTime.UtcNow), section.Id, DateTimeOffset.UtcNow, [employeeId], "Пакетная загрузка вложений"),
+                null,
+                "integration"));
+            Assert.True(created.Succeeded);
+        }
+
+        var counter = new MobileUploadQueryCounter();
+        var options = new DbContextOptionsBuilder<Patrol360DbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(counter)
+            .Options;
+        await using var context = new Patrol360DbContext(options);
+        var service = new EfEmuService(context);
+
+        var result = service.GetWorkSessions(new EmuWorkSessionQueryDto(Page: 1, PageSize: 100));
+
+        Assert.True(result.Rows.Count >= 2);
+        Assert.Equal(1, counter.Reads);
+    }
+
+    [DbIntegrationFact]
     public async Task ConcurrentWorkCreationAllowsOnlyOneActiveSessionPerEmployee()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
@@ -763,6 +794,84 @@ public sealed class EmuDbIntegrationTests
         var afterRebuild = ReadPresenceIntervals(database.ConnectionString, IvanovEmployeeId).Single();
         Assert.Equal(manualExitAt.ToUnixTimeMilliseconds(), afterRebuild.EndedAt?.ToUnixTimeMilliseconds());
         Assert.Equal("PERCO_MANUAL", afterRebuild.Source);
+    }
+
+    [DbIntegrationFact]
+    public async Task QueuedPresenceRebuildChangesOnlyAffectedEmployeeAndDrainsQueue()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var enteredAt = DateTimeOffset.UtcNow.AddHours(-2);
+        InsertPercoAccessEvent(provider, IvanovEmployeeId, "IN", enteredAt);
+        InsertPercoAccessEvent(provider, PetrovEmployeeId, "IN", enteredAt);
+        InvokePresenceRebuild(provider);
+        var petrovBefore = Assert.Single(ReadPresenceIntervals(database.ConnectionString, PetrovEmployeeId));
+
+        InsertPercoAccessEvent(provider, IvanovEmployeeId, "OUT", enteredAt.AddHours(1));
+        EnqueuePresenceRebuild(provider, IvanovEmployeeId);
+        var queuedDiagnostics = await UsePercoAsync(provider, perco => perco.GetDiagnosticsAsync());
+        Assert.Equal(1, queuedDiagnostics.PresenceQueue?.PendingEmployees);
+        await InvokeQueuedPresenceRebuildAsync(provider, CancellationToken.None);
+
+        var ivanov = Assert.Single(ReadPresenceIntervals(database.ConnectionString, IvanovEmployeeId));
+        Assert.Equal(enteredAt.AddHours(1).ToUnixTimeMilliseconds(), ivanov.EndedAt?.ToUnixTimeMilliseconds());
+        Assert.Equal(petrovBefore, Assert.Single(ReadPresenceIntervals(database.ConnectionString, PetrovEmployeeId)));
+        Assert.Equal(0, GetPresenceQueueCount(database.ConnectionString));
+    }
+
+    [DbIntegrationFact]
+    public async Task QueuedPresenceRebuildRetainsWorkAfterFailureThenRetries()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var enteredAt = DateTimeOffset.UtcNow.AddHours(-2);
+        InsertPercoAccessEvent(provider, IvanovEmployeeId, "IN", enteredAt);
+        InvokePresenceRebuild(provider);
+        InsertPercoAccessEvent(provider, IvanovEmployeeId, "OUT", enteredAt.AddHours(1));
+        EnqueuePresenceRebuild(provider, IvanovEmployeeId);
+
+        var options = new DbContextOptionsBuilder<Patrol360DbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(new FailPresenceInsertInterceptor(cancel: false))
+            .Options;
+        await using (var context = new Patrol360DbContext(options))
+        {
+            var service = new EfPercoIntegrationService(context, provider.GetRequiredService<IDataProtectionProvider>());
+            await Assert.ThrowsAsync<DbUpdateException>(() => InvokeQueuedPresenceRebuildAsync(service, CancellationToken.None));
+        }
+
+        Assert.Equal(1, GetPresenceQueueCount(database.ConnectionString));
+        var started = await UsePercoAsync(provider, perco => perco.RunAutomaticSyncIfDueAsync(DateTimeOffset.UtcNow));
+        Assert.Equal(0, started);
+        Assert.Equal(0, GetPresenceQueueCount(database.ConnectionString));
+        Assert.Equal(enteredAt.AddHours(1).ToUnixTimeMilliseconds(), Assert.Single(ReadPresenceIntervals(database.ConnectionString, IvanovEmployeeId)).EndedAt?.ToUnixTimeMilliseconds());
+    }
+
+    [DbIntegrationFact]
+    public async Task MatchingPercoEmployeeRebuildsPreviousAndNewEmployeeHistories()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        const string percoEmployeeId = "test-link-reassignment";
+        InsertPercoEmployeeLink(provider, percoEmployeeId, IvanovEmployeeId);
+        var enteredAt = DateTimeOffset.UtcNow.AddHours(-2);
+        InsertPercoAccessEvent(provider, IvanovEmployeeId, "IN", enteredAt, percoEmployeeId);
+        InvokePresenceRebuild(provider);
+
+        var matched = await UsePercoAsync(provider, perco => perco.MatchEmployeeAsync(
+            new MatchPercoEmployeeDto(percoEmployeeId, PetrovEmployeeId, "match"),
+            null));
+
+        Assert.True(matched.Success);
+        Assert.Empty(ReadPresenceIntervals(database.ConnectionString, IvanovEmployeeId));
+        Assert.Equal(enteredAt.ToUnixTimeMilliseconds(), Assert.Single(ReadPresenceIntervals(database.ConnectionString, PetrovEmployeeId)).StartedAt.ToUnixTimeMilliseconds());
+        Assert.Equal(0, GetPresenceQueueCount(database.ConnectionString));
     }
 
     [DbIntegrationFact]
@@ -2145,10 +2254,33 @@ public sealed class EmuDbIntegrationTests
         await task;
     }
 
+    private static async Task InvokeQueuedPresenceRebuildAsync(ServiceProvider provider, CancellationToken cancellationToken)
+    {
+        using var scope = provider.CreateScope();
+        await InvokeQueuedPresenceRebuildAsync(scope.ServiceProvider.GetRequiredService<IPercoIntegrationService>(), cancellationToken);
+    }
+
+    private static async Task InvokeQueuedPresenceRebuildAsync(IPercoIntegrationService service, CancellationToken cancellationToken)
+    {
+        var method = service.GetType().GetMethod(
+            "RebuildQueuedPresenceIntervalsAsync",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Queued PERCo presence rebuild method was not found.");
+        var task = (Task?)method.Invoke(service, [cancellationToken])
+            ?? throw new InvalidOperationException("Queued PERCo presence rebuild method did not return a task.");
+        await task;
+    }
+
     private static T UsePerco<T>(ServiceProvider provider, Func<IPercoIntegrationService, T> action)
     {
         using var scope = provider.CreateScope();
         return action(scope.ServiceProvider.GetRequiredService<IPercoIntegrationService>());
+    }
+
+    private static async Task<T> UsePercoAsync<T>(ServiceProvider provider, Func<IPercoIntegrationService, Task<T>> action)
+    {
+        using var scope = provider.CreateScope();
+        return await action(scope.ServiceProvider.GetRequiredService<IPercoIntegrationService>());
     }
 
     private static List<PresenceIntervalProbe> ReadPresenceIntervals(string connectionString, Guid employeeId)
@@ -2178,7 +2310,7 @@ public sealed class EmuDbIntegrationTests
         return rows;
     }
 
-    private static void InsertPercoAccessEvent(ServiceProvider provider, Guid employeeId, string direction, DateTimeOffset eventAt)
+    private static void InsertPercoAccessEvent(ServiceProvider provider, Guid employeeId, string direction, DateTimeOffset eventAt, string? percoEmployeeId = null)
     {
         using var scope = provider.CreateScope();
         var infrastructureAssembly = typeof(Patrol360.Infrastructure.DependencyInjection).Assembly;
@@ -2217,13 +2349,50 @@ public sealed class EmuDbIntegrationTests
             """,
             Guid.NewGuid(),
             $"test-{Guid.NewGuid():N}",
-            employeeId.ToString("N"),
+            percoEmployeeId ?? employeeId.ToString("N"),
             employeeId,
             "test-turnstile",
             "Тестовый турникет",
             direction,
             eventAt,
             "{}",
+            DateTimeOffset.UtcNow);
+    }
+
+    private static void EnqueuePresenceRebuild(ServiceProvider provider, Guid employeeId)
+    {
+        using var scope = provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<Patrol360DbContext>();
+        context.Database.ExecuteSqlRaw(
+            "INSERT INTO perco_presence_rebuild_queue (employee_id, enqueued_at) VALUES ({0}, {1}) ON CONFLICT (employee_id) DO NOTHING",
+            employeeId,
+            DateTimeOffset.UtcNow);
+    }
+
+    private static int GetPresenceQueueCount(string connectionString)
+    {
+        using var connection = new Npgsql.NpgsqlConnection(connectionString);
+        connection.Open();
+        using var command = new Npgsql.NpgsqlCommand("SELECT COUNT(*) FROM perco_presence_rebuild_queue", connection);
+        return Convert.ToInt32(command.ExecuteScalar());
+    }
+
+    private static void InsertPercoEmployeeLink(ServiceProvider provider, string percoEmployeeId, Guid employeeId)
+    {
+        using var scope = provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<Patrol360DbContext>();
+        context.Database.ExecuteSqlRaw(
+            """
+            INSERT INTO perco_employee_links (
+                id, perco_employee_id, employee_id, full_name, personnel_no, card_number, department,
+                match_status, created_at, updated_at)
+            VALUES ({0}, {1}, {2}, {3}, {4}, '', '', 'MATCHED', {5}, {5})
+            """,
+            Guid.NewGuid(),
+            percoEmployeeId,
+            employeeId,
+            "Тестовый сотрудник PERCo",
+            "TEST",
             DateTimeOffset.UtcNow);
     }
 
@@ -2325,6 +2494,24 @@ public sealed class EmuDbIntegrationTests
         {
             ThrowIfReplacementInsert(command);
             return ValueTask.FromResult(result);
+        }
+    }
+
+    private sealed class MobileUploadQueryCounter : DbCommandInterceptor
+    {
+        public int Reads { get; private set; }
+
+        public override InterceptionResult<DbDataReader> ReaderExecuting(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result)
+        {
+            if (command.CommandText.Contains("mobile_uploaded_files", StringComparison.OrdinalIgnoreCase))
+            {
+                Reads++;
+            }
+
+            return result;
         }
     }
 }

@@ -11,32 +11,17 @@ namespace Patrol360.Api.Controllers;
 [RequirePermission("dashboard.read")]
 public sealed class SystemNotificationsController(
     ISystemNotificationService systemNotificationService,
-    IAuthSessionService authSessionService) : ControllerBase
+    IAuthenticatedSiteUserContext authenticatedUserContext) : ControllerBase
 {
     [HttpGet]
     public ActionResult<IReadOnlyList<SystemNotificationDto>> List([FromQuery] int limit = 20)
     {
-        var token = ReadBearerToken(Request);
-        var user = token is null ? null : authSessionService.GetCurrentUser(token);
+        var user = authenticatedUserContext.User;
         if (user is null)
         {
             return Unauthorized();
         }
 
         return Ok(systemNotificationService.GetNotifications(user, limit));
-    }
-
-    private static string? ReadBearerToken(HttpRequest request)
-    {
-        if (!request.Headers.TryGetValue(HeaderNames.Authorization, out var values))
-        {
-            return null;
-        }
-
-        var value = values.ToString();
-        const string bearerPrefix = "Bearer ";
-        return value.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase)
-            ? value[bearerPrefix.Length..].Trim()
-            : null;
     }
 }

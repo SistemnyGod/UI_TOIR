@@ -15,6 +15,37 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfPercoIntegrationService
 {
+    public async Task<PercoPresenceQueueDiagnosticsDto> GetPresenceQueueDiagnosticsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var pendingEmployees = await dbContext.PercoPresenceRebuildQueue
+            .AsNoTracking()
+            .CountAsync(cancellationToken);
+        var oldestEnqueuedAt = pendingEmployees == 0
+            ? null
+            : await dbContext.PercoPresenceRebuildQueue
+                .AsNoTracking()
+                .OrderBy(row => row.EnqueuedAt)
+                .Select(row => (DateTimeOffset?)row.EnqueuedAt)
+                .FirstAsync(cancellationToken);
+        return new PercoPresenceQueueDiagnosticsDto(pendingEmployees, oldestEnqueuedAt);
+    }
+
+    public async Task<PercoPresenceRebuildDiagnosticsDto> GetPresenceRebuildDiagnosticsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var queue = await GetPresenceQueueDiagnosticsAsync(cancellationToken);
+        var last = lastQueuedPresenceRebuild ?? PresenceRebuildResult.Empty;
+        return new PercoPresenceRebuildDiagnosticsDto(
+            queue.PendingEmployees,
+            queue.OldestEnqueuedAt,
+            last.Employees,
+            last.Events,
+            last.Intervals,
+            (long)last.Duration.TotalMilliseconds,
+            (long)last.LockWait.TotalMilliseconds);
+    }
+
     public async Task<PercoDiagnosticsDto> GetDiagnosticsAsync(
         int take = 100,
         CancellationToken cancellationToken = default)
@@ -115,6 +146,7 @@ internal sealed partial class EfPercoIntegrationService
             .Distinct()
             .CountAsync(cancellationToken);
 
+        var queue = await GetPresenceQueueDiagnosticsAsync(cancellationToken);
         return new PercoDiagnosticsDto(
             now,
             windowStart,
@@ -125,7 +157,8 @@ internal sealed partial class EfPercoIntegrationService
             oldOpenPresenceCount,
             unmatchedEventsCount,
             recentEvents.Select(row => ToAccessEventDiagnosticsDto(row, settings.Timezone)).ToList(),
-            presenceIntervals.Select(row => ToPresenceDiagnosticsDto(row, now, settings.Timezone, presenceIntervals)).ToList());
+            presenceIntervals.Select(row => ToPresenceDiagnosticsDto(row, now, settings.Timezone, presenceIntervals)).ToList(),
+            queue);
     }
 
     private static (DateTimeOffset Start, DateTimeOffset End) GetDiagnosticsWindow(DateTimeOffset nowUtc, string timezone)

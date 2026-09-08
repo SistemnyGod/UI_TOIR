@@ -152,6 +152,75 @@ SELECT
 FROM generate_series(1, 100000) AS numbers(n)
 ON CONFLICT (id) DO NOTHING;
 
+-- The PERCo part deliberately uses 1,000 employees and 1,000 events per employee.
+-- It exercises targeted recalculation without using any production identifiers.
+INSERT INTO employees (
+  id, full_name, personnel_no, position, department, employee_group,
+  emu_shift_report_category, hired_at, birth_date, status, shift,
+  has_mobile_account, last_seen_at)
+SELECT
+  md5('perf-perco-employee-' || n)::uuid,
+  'PERF PERCo employee ' || lpad(n::text, 4, '0'),
+  'PERF-PERCO-' || lpad(n::text, 4, '0'),
+  'Оператор', 'PERF', 'PERF', NULL,
+  current_date - interval '2 years', NULL, 'Активен', 'День', false, now()
+FROM generate_series(1, 1000) AS numbers(n)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO perco_employee_links (
+  id, perco_employee_id, employee_id, full_name, personnel_no, card_number,
+  department, matched_by_user_id, matched_at, match_status, created_at, updated_at)
+SELECT
+  md5('perf-perco-link-' || n)::uuid,
+  'perf-perco-' || lpad(n::text, 4, '0'),
+  md5('perf-perco-employee-' || n)::uuid,
+  'PERF PERCo employee ' || lpad(n::text, 4, '0'),
+  'PERF-PERCO-' || lpad(n::text, 4, '0'),
+  'PERF-CARD-' || lpad(n::text, 4, '0'),
+  'PERF', NULL, now(), 'MATCHED', now(), now()
+FROM generate_series(1, 1000) AS numbers(n)
+ON CONFLICT (perco_employee_id) DO NOTHING;
+
+INSERT INTO perco_access_events (
+  id, perco_event_id, perco_employee_id, employee_id, device_id, device_name,
+  direction, event_at, raw_payload, created_at)
+SELECT
+  md5('perf-perco-event-' || n)::uuid,
+  'perf-perco-event-' || n,
+  'perf-perco-' || lpad((((n - 1) % 1000) + 1)::text, 4, '0'),
+  md5('perf-perco-employee-' || (((n - 1) % 1000) + 1))::uuid,
+  'perf-gate-01', 'PERF проходная',
+  CASE WHEN n % 2 = 0 THEN 'OUT' ELSE 'IN' END,
+  now() - ((1000000 - n) * interval '30 seconds'),
+  jsonb_build_object('performance', true, 'event', n),
+  now()
+FROM generate_series(1, 1000000) AS numbers(n)
+ON CONFLICT (perco_event_id) DO NOTHING;
+
+-- The files are metadata-only: their bytes are supplied by the isolated k6
+-- recovery scenario. They exercise list/index plans without putting blobs in SQL.
+WITH accounts AS (
+  SELECT id, row_number() OVER (ORDER BY id) AS sequence_no
+  FROM mobile_accounts
+), account_count AS (
+  SELECT greatest(count(*), 1) AS value FROM accounts
+)
+INSERT INTO mobile_uploaded_files (
+  id, mobile_account_id, client_file_id, assignment_id, point_id, remark_id,
+  work_task_id, linked_at, storage_file_name, original_file_name, content_type,
+  sha256, size_bytes, captured_at_local, uploaded_at)
+SELECT
+  md5('perf-emu-attachment-' || n)::uuid,
+  account.id,
+  'perf-emu-file-' || n,
+  NULL, NULL, NULL, md5('perf-emu-session-' || (((n - 1) % 100000) + 1))::uuid,
+  now(), 'perf-emu-file-' || n || '.jpg', 'perf-photo.jpg', 'image/jpeg',
+  repeat('0', 64), 1048576, now(), now()
+FROM generate_series(1, 20000) AS numbers(n)
+CROSS JOIN account_count
+JOIN accounts AS account ON account.sequence_no = (((n - 1) % account_count.value) + 1)
+ON CONFLICT (mobile_account_id, client_file_id) DO NOTHING;
+
 ANALYZE inventory.items;
 ANALYZE inventory.stock_moves;
 ANALYZE patrol_requests;
@@ -161,3 +230,7 @@ ANALYZE emu_work_sessions;
 ANALYZE emu_work_session_employees;
 ANALYZE emu_work_pauses;
 ANALYZE emu_work_audit_events;
+ANALYZE employees;
+ANALYZE perco_employee_links;
+ANALYZE perco_access_events;
+ANALYZE mobile_uploaded_files;

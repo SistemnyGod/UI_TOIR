@@ -105,7 +105,21 @@ public sealed record PercoDiagnosticsDto(
     int OldOpenPresenceCount,
     int UnmatchedEventsCount,
     IReadOnlyList<PercoAccessEventDiagnosticsDto> RecentEvents,
-    IReadOnlyList<PercoPresenceIntervalDiagnosticsDto> PresenceIntervals);
+    IReadOnlyList<PercoPresenceIntervalDiagnosticsDto> PresenceIntervals,
+    PercoPresenceQueueDiagnosticsDto? PresenceQueue = null);
+
+public sealed record PercoPresenceQueueDiagnosticsDto(
+    int PendingEmployees,
+    DateTimeOffset? OldestEnqueuedAt);
+
+public sealed record PercoPresenceRebuildDiagnosticsDto(
+    int PendingEmployees,
+    DateTimeOffset? OldestEnqueuedAt,
+    int RebuiltEmployees,
+    int ReadEvents,
+    int RebuiltIntervals,
+    long DurationMilliseconds,
+    long LockWaitMilliseconds);
 
 public sealed record ClosePercoPresenceIntervalDto(
     DateTimeOffset EndedAt,

@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
-import { ApiClient } from "../api/client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiClient, clearApiGetCache } from "../api/client";
+
+afterEach(() => clearApiGetCache());
 
 describe("ApiClient", () => {
   it("uses configured base url, credentials, headers, and auth token", async () => {
@@ -107,6 +109,30 @@ describe("ApiClient", () => {
     } finally {
       vi.stubGlobal("fetch", originalFetch);
     }
+  });
+
+  it("deduplicates concurrent session GET requests", async () => {
+    let resolveResponse: ((response: Response) => void) | undefined;
+    const fetcher = vi.fn<typeof fetch>(() => new Promise<Response>((resolve) => { resolveResponse = resolve; }));
+    const client = new ApiClient({ fetcher });
+
+    const first = client.get<{ value: number }>("/api/v1/routes", { cacheMode: "default" });
+    const second = client.get<{ value: number }>("/api/v1/routes", { cacheMode: "default" });
+
+    expect(fetcher).toHaveBeenCalledOnce();
+    resolveResponse?.(jsonResponse({ value: 1 }));
+    await expect(Promise.all([first, second])).resolves.toEqual([{ value: 1 }, { value: 1 }]);
+  });
+
+  it("invalidates cached GET responses after a successful command", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({ ok: true }));
+    const client = new ApiClient({ fetcher });
+
+    await client.get("/api/v1/routes", { cacheMode: "default" });
+    await client.post("/api/v1/routes", { name: "North" });
+    await client.get("/api/v1/routes", { cacheMode: "default" });
+
+    expect(fetcher).toHaveBeenCalledTimes(3);
   });
 
   it("maps ProblemDetails errors and request id into ApiError", async () => {

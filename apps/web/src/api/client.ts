@@ -21,6 +21,8 @@ export interface ApiClientOptions {
 }
 
 export interface ApiRequestOptions {
+  /** Opt-in session cache for stable directory GET requests. */
+  cacheMode?: "default" | "no-store" | "reload";
   headers?: HeadersInit;
   signal?: AbortSignal;
   timeoutMs?: number;
@@ -72,6 +74,27 @@ export class ApiError extends Error {
   }
 }
 
+const GET_CACHE_TTL_MS = 60_000;
+const getResponseCache = new Map<string, CachedGetResponse>();
+const fetcherIds = new WeakMap<object, number>();
+let nextFetcherId = 1;
+
+interface CachedGetResponse {
+  expiresAt: number;
+  inFlight: boolean;
+  isReload: boolean;
+  promise: Promise<unknown>;
+}
+
+/** Clears session-memory GET data after a write, logout, or access change. */
+export function clearApiGetCache() {
+  getResponseCache.clear();
+}
+
+function defaultBrowserFetcher(input: RequestInfo | URL, init?: RequestInit) {
+  return globalThis.fetch(input, init);
+}
+
 export class ApiClient {
   private readonly baseUrl: string;
   private readonly credentials?: RequestCredentials;
@@ -93,14 +116,39 @@ export class ApiClient {
     this.baseUrl = normalizeBaseUrl(baseUrl ?? getDefaultApiBaseUrl());
     this.credentials = credentials;
     this.defaultHeaders = defaultHeaders;
-    this.fetcher = fetcher ?? globalThis.fetch.bind(globalThis);
+    this.fetcher = fetcher ?? defaultBrowserFetcher;
     this.getAuthToken = getAuthToken;
     this.onUnauthorized = onUnauthorized;
     this.timeoutMs = timeoutMs;
   }
 
   async get<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-    return this.request<T>(path, { method: "GET" }, options);
+    if (options.cacheMode !== "default" && options.cacheMode !== "reload") {
+      return this.request<T>(path, { method: "GET" }, options);
+    }
+
+    const headers = this.buildHeaders();
+    const key = buildGetCacheKey({
+      baseUrl: this.baseUrl,
+      credentials: this.credentials,
+      fetcher: this.fetcher,
+      headers,
+      path,
+      timeoutMs: options.timeoutMs ?? this.timeoutMs,
+    });
+
+    const now = Date.now();
+    const cached = getResponseCache.get(key);
+    if (options.cacheMode === "reload" && !(cached?.isReload && cached.inFlight)) {
+      getResponseCache.delete(key);
+    }
+
+    const active = getResponseCache.get(key);
+    const promise = active && active.expiresAt > now
+      ? active.promise as Promise<T>
+      : this.createCachedGet<T>(key, path, options);
+
+    return awaitWithCallerAbort(promise, options.signal, path);
   }
 
   async post<TResponse, TBody = unknown>(
@@ -228,7 +276,9 @@ export class ApiClient {
         throw error;
       }
 
-      return await readResponseBody<TResponse>(response, path);
+      const result = await readResponseBody<TResponse>(response, path);
+      clearApiGetCache();
+      return result;
     } catch (error) {
       if (error instanceof ApiError) throw error;
       if (timedOut()) throw new ApiError(`API ${path} timed out`, 0, { kind: "timeout", path });
@@ -265,7 +315,11 @@ export class ApiClient {
         throw error;
       }
 
-      return await readResponseBody<T>(response, path);
+      const result = await readResponseBody<T>(response, path);
+      if (init.method !== "GET") {
+        clearApiGetCache();
+      }
+      return result;
     } catch (error) {
       if (error instanceof ApiError) {
         throw error;
@@ -286,6 +340,32 @@ export class ApiClient {
     } finally {
       cleanup();
     }
+  }
+
+  private createCachedGet<T>(key: string, path: string, options: ApiRequestOptions) {
+    // A component unmount must not abort a request another screen is awaiting.
+    // The shared request keeps its own timeout; callers race it with their signal.
+    const sharedOptions: ApiRequestOptions = {
+      ...options,
+      signal: undefined,
+    };
+    const promise = this.request<T>(path, { method: "GET" }, sharedOptions);
+    const entry: CachedGetResponse = {
+      expiresAt: Date.now() + GET_CACHE_TTL_MS,
+      inFlight: true,
+      isReload: options.cacheMode === "reload",
+      promise,
+    };
+    getResponseCache.set(key, entry);
+    void promise.then(
+      () => { entry.inFlight = false; },
+      () => {
+        if (getResponseCache.get(key) === entry) {
+          getResponseCache.delete(key);
+        }
+      },
+    );
+    return promise;
   }
 
   private buildHeaders(...headers: Array<HeadersInit | undefined>): HeaderMap {
@@ -336,6 +416,56 @@ export class ApiClient {
 
     return Object.fromEntries(nextHeaders.entries());
   }
+}
+
+function buildGetCacheKey({
+  baseUrl,
+  credentials,
+  fetcher,
+  headers,
+  path,
+  timeoutMs,
+}: {
+  baseUrl: string;
+  credentials: RequestCredentials | undefined;
+  fetcher: typeof fetch;
+  headers: HeaderMap;
+  path: string;
+  timeoutMs: number;
+}) {
+  let fetcherId = fetcherIds.get(fetcher);
+  if (!fetcherId) {
+    fetcherId = nextFetcherId++;
+    fetcherIds.set(fetcher, fetcherId);
+  }
+
+  const headerKey = Object.entries(headers)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, value]) => `${name}:${value}`)
+    .join("|");
+  return [fetcherId, baseUrl, credentials ?? "", path, timeoutMs, headerKey].join("\u001f");
+}
+
+function awaitWithCallerAbort<T>(promise: Promise<T>, signal: AbortSignal | undefined, path: string): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) {
+    return Promise.reject(new ApiError(`API ${path} was aborted`, 0, { kind: "abort", path }));
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(new ApiError(`API ${path} was aborted`, 0, { kind: "abort", path }));
+    signal.addEventListener("abort", abort, { once: true });
+    void promise.then(
+      (value) => {
+        signal.removeEventListener("abort", abort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+  });
 }
 
 export function buildApiUrl(path: string, baseUrl?: string) {

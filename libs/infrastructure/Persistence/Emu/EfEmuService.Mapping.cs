@@ -17,6 +17,39 @@ internal sealed partial class EfEmuService
     }
 
     private EmuWorkSessionDto MapWorkSession(EmuWorkSessionEntity row) =>
+        MapWorkSessions([row]).Single();
+
+    private IReadOnlyList<EmuWorkSessionDto> MapWorkSessions(IReadOnlyCollection<EmuWorkSessionEntity> rows)
+    {
+        if (rows.Count == 0)
+        {
+            return [];
+        }
+
+        var workIds = rows.Select(row => row.Id).Distinct().ToArray();
+        var attachmentsByWorkId = dbContext.MobileUploadedFiles
+            .AsNoTracking()
+            .Where(file => file.LinkedAt != null && file.WorkTaskId != null && workIds.Contains(file.WorkTaskId.Value))
+            .OrderBy(file => file.UploadedAt)
+            .Select(file => new
+            {
+                WorkId = file.WorkTaskId!.Value,
+                Attachment = new EmuWorkAttachmentDto(
+                    file.Id,
+                    file.OriginalFileName,
+                    file.ContentType,
+                    file.SizeBytes,
+                    file.UploadedAt,
+                    $"/api/v1/emu/work-sessions/{file.WorkTaskId}/attachments/{file.Id}")
+            })
+            .ToList()
+            .GroupBy(file => file.WorkId)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<EmuWorkAttachmentDto>)group.Select(file => file.Attachment).ToList());
+
+        return rows.Select(row => MapWorkSession(row, attachmentsByWorkId.GetValueOrDefault(row.Id, []))).ToList();
+    }
+
+    private static EmuWorkSessionDto MapWorkSession(EmuWorkSessionEntity row, IReadOnlyList<EmuWorkAttachmentDto> attachments) =>
         new(
             row.Id,
             row.WorkNumber,
@@ -45,18 +78,7 @@ internal sealed partial class EfEmuService
             row.Source,
             row.Employees.OrderBy(employee => employee.FullNameSnapshot).Select(MapParticipant).ToList())
         {
-            Attachments = dbContext.MobileUploadedFiles
-                .AsNoTracking()
-                .Where(file => file.LinkedAt != null && file.WorkTaskId == row.Id)
-                .OrderBy(file => file.UploadedAt)
-                .Select(file => new EmuWorkAttachmentDto(
-                    file.Id,
-                    file.OriginalFileName,
-                    file.ContentType,
-                    file.SizeBytes,
-                    file.UploadedAt,
-                    $"/api/v1/emu/work-sessions/{row.Id}/attachments/{file.Id}"))
-                .ToList()
+            Attachments = attachments
         };
 
     private static EmuWorkSessionEmployeeDto MapParticipant(EmuWorkSessionEmployeeEntity row)

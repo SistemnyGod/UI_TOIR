@@ -33,6 +33,7 @@ internal sealed partial class EfPercoIntegrationService
                 .Where(value => !string.IsNullOrWhiteSpace(value))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var existingLinks = await dbContext.PercoEmployeeLinks.ToListAsync(cancellationToken);
+            var originalEmployeeIds = existingLinks.ToDictionary(link => link.PercoEmployeeId, link => link.EmployeeId, StringComparer.OrdinalIgnoreCase);
             var linksByPercoId = existingLinks.ToDictionary(link => link.PercoEmployeeId, StringComparer.OrdinalIgnoreCase);
             var projectEmployees = (await dbContext.Employees.AsNoTracking().ToListAsync(cancellationToken))
                 .Where(IsActiveProjectEmployee)
@@ -123,19 +124,29 @@ internal sealed partial class EfPercoIntegrationService
                 }
             }
 
-            await dbContext.SaveChangesAsync(cancellationToken);
-            var backfilledEvents = await BackfillAccessEventEmployeesAsync(cancellationToken);
-            if (backfilledEvents > 0)
+            var changedLinks = linksByPercoId.Values
+                .Where(link => !originalEmployeeIds.TryGetValue(link.PercoEmployeeId, out var employeeId) || employeeId != link.EmployeeId)
+                .ToList();
+            HashSet<Guid> affectedEmployeeIds;
+            await using (var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken))
             {
-                await RebuildPresenceIntervalsForNewEventsAsync(cancellationToken);
+                await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT pg_advisory_xact_lock({PresenceMutationLockKey})",
+                    cancellationToken);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                affectedEmployeeIds = await ReassignAccessEventEmployeesAsync(changedLinks, cancellationToken);
+                await EnqueuePresenceRebuildAsync(affectedEmployeeIds, cancellationToken);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
             }
+            var rebuilt = await RebuildQueuedPresenceIntervalsAsync(cancellationToken);
 
             await UpsertSyncStateAsync(EmployeesSyncType, now, employees.Count.ToString(CultureInfo.InvariantCulture), string.Empty, cancellationToken);
             await AddLogAsync(
                 "SYNC_EMPLOYEES",
                 "SUCCESS",
                 $"Синхронизация сотрудников PERCo завершена: загружено {employees.Count}.",
-                $"endpoint={settings.EmployeesEndpoint}; loadedRaw={rawEmployees.Count}; active={employees.Count}; skippedInactive={rawEmployees.Count - employees.Count}; created={created}; updated={updated}; unmatched={unmatched}; backfilledEvents={backfilledEvents}",
+                $"endpoint={settings.EmployeesEndpoint}; loadedRaw={rawEmployees.Count}; active={employees.Count}; skippedInactive={rawEmployees.Count - employees.Count}; created={created}; updated={updated}; unmatched={unmatched}; requeuedEmployees={affectedEmployeeIds.Count}; rebuiltEmployees={rebuilt.Employees}; rebuiltIntervals={rebuilt.Intervals}",
                 actorUserId,
                 startedAt,
                 now,
@@ -196,6 +207,10 @@ internal sealed partial class EfPercoIntegrationService
         CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock({PresenceMutationLockKey})",
+            cancellationToken);
         var link = await dbContext.PercoEmployeeLinks
             .FirstOrDefaultAsync(row => row.PercoEmployeeId == request.PercoEmployeeId, cancellationToken);
         if (link is null)
@@ -244,6 +259,12 @@ internal sealed partial class EfPercoIntegrationService
             now,
             cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+        var affectedEmployeeIds = await ReassignAccessEventEmployeesAsync([link], cancellationToken);
+        await EnqueuePresenceRebuildAsync(affectedEmployeeIds, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        await RebuildQueuedPresenceIntervalsAsync(cancellationToken);
 
         return new PercoSyncResultDto(true, "success", "Сопоставление сотрудника PERCo сохранено.", 0, 0, 1, 0, 0, 0, 0, now);
     }

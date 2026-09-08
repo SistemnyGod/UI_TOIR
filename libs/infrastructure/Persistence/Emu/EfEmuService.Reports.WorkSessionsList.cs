@@ -30,6 +30,6 @@ internal sealed partial class EfEmuService
             .ToList();
         RecalculateSessions(rows, DateTimeOffset.UtcNow, save: false);
 
-        return ToList(rows.Select(MapWorkSession).ToList(), total, paging);
+        return ToList(MapWorkSessions(rows), total, paging);
     }
 }

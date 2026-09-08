@@ -31,6 +31,12 @@ public interface IPercoIntegrationService
         DateTimeOffset now,
         CancellationToken cancellationToken = default);
 
+    Task<PercoPresenceQueueDiagnosticsDto> GetPresenceQueueDiagnosticsAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<PercoPresenceRebuildDiagnosticsDto> GetPresenceRebuildDiagnosticsAsync(
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<PercoUnmatchedEmployeeDto>> GetUnmatchedEmployeesAsync(CancellationToken cancellationToken = default);
 
     Task<PercoSyncResultDto> MatchEmployeeAsync(

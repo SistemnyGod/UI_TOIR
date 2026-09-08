@@ -89,6 +89,15 @@ internal sealed class PercoAccessEventEntity
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+// One row per employee is intentionally enough: rebuilding an employee's
+// presence always uses the complete event history for that employee.
+internal sealed class PercoPresenceRebuildQueueEntity
+{
+    public Guid EmployeeId { get; set; }
+    public EmployeeEntity Employee { get; set; } = null!;
+    public DateTimeOffset EnqueuedAt { get; set; }
+}
+
 internal sealed class EmployeePresenceIntervalEntity
 {
     public Guid Id { get; set; }

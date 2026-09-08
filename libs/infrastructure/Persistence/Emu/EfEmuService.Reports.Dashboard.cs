@@ -73,6 +73,8 @@ internal sealed partial class EfEmuService
             .Select(MapPlanTask)
             .ToList();
 
+        var dashboardWorks = MapWorkSessions(active);
+        var worksById = dashboardWorks.ToDictionary(work => work.Id);
         return new EmuDashboardDto(
             [
                 new("Активные работы", active.Count.ToString(), "сейчас", "blue", "play"),
@@ -80,8 +82,8 @@ internal sealed partial class EfEmuService
                 new("Завершено сегодня", completedToday.ToString(), "за день", "green", "check"),
                 new("Забытые работы", forgotten.Count.ToString(), "перенос", "red", "alert")
             ],
-            active.Select(MapWorkSession).ToList(),
-            forgotten.Select(MapWorkSession).ToList(),
+            dashboardWorks,
+            forgotten.Select(row => worksById[row.Id]).ToList(),
             recentEvents,
             weekPlan);
     }

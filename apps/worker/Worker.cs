@@ -71,8 +71,15 @@ public sealed class Worker(ILogger<Worker> logger, IServiceScopeFactory scopeFac
     private static async Task<string> RunPushAsync(IServiceProvider services, CancellationToken token) =>
         $"sent={await services.GetRequiredService<IMobilePushDeliveryService>().SendQueuedAsync(token)}";
 
-    private static async Task<string> RunPercoAsync(IServiceProvider services, CancellationToken token) =>
-        $"started={await services.GetRequiredService<IPercoIntegrationService>().RunAutomaticSyncIfDueAsync(DateTimeOffset.UtcNow, token)}";
+    private static async Task<string> RunPercoAsync(IServiceProvider services, CancellationToken token)
+    {
+        var perco = services.GetRequiredService<IPercoIntegrationService>();
+        var started = await perco.RunAutomaticSyncIfDueAsync(DateTimeOffset.UtcNow, token);
+        var diagnostics = await perco.GetPresenceRebuildDiagnosticsAsync(token);
+        return $"started={started}; presenceQueue={diagnostics.PendingEmployees}; oldestPresenceQueueAt={diagnostics.OldestEnqueuedAt:O}; " +
+            $"rebuiltEmployees={diagnostics.RebuiltEmployees}; readEvents={diagnostics.ReadEvents}; rebuiltIntervals={diagnostics.RebuiltIntervals}; " +
+            $"rebuildDurationMs={diagnostics.DurationMilliseconds}; rebuildLockWaitMs={diagnostics.LockWaitMilliseconds}";
+    }
 
     private void RecordDiagnostic(Action update, string direction)
     {

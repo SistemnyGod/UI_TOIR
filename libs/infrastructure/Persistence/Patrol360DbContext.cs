@@ -193,6 +193,8 @@ public sealed partial class Patrol360DbContext(DbContextOptions<Patrol360DbConte
 
     internal DbSet<PercoAccessEventEntity> PercoAccessEvents => Set<PercoAccessEventEntity>();
 
+    internal DbSet<PercoPresenceRebuildQueueEntity> PercoPresenceRebuildQueue => Set<PercoPresenceRebuildQueueEntity>();
+
     internal DbSet<EmployeePresenceIntervalEntity> EmployeePresenceIntervals => Set<EmployeePresenceIntervalEntity>();
 
     private void SynchronizePatrolStatusCodes()
@@ -2118,6 +2120,18 @@ public sealed partial class Patrol360DbContext(DbContextOptions<Patrol360DbConte
             entity.HasIndex(row => row.PercoEventId).IsUnique().HasDatabaseName("ux_perco_access_events_perco_event_id");
             entity.HasIndex(row => row.EventAt).HasDatabaseName("ix_perco_access_events_event_at");
             entity.HasIndex(row => row.EmployeeId).HasDatabaseName("ix_perco_access_events_employee");
+            entity.HasIndex(row => new { row.EmployeeId, row.EventAt, row.Direction, row.Id })
+                .HasDatabaseName("ix_perco_access_events_employee_timeline");
+        });
+
+        modelBuilder.Entity<PercoPresenceRebuildQueueEntity>(entity =>
+        {
+            entity.ToTable("perco_presence_rebuild_queue");
+            entity.HasKey(row => row.EmployeeId);
+            entity.Property(row => row.EmployeeId).HasColumnName("employee_id");
+            entity.Property(row => row.EnqueuedAt).HasColumnName("enqueued_at");
+            entity.HasOne(row => row.Employee).WithMany().HasForeignKey(row => row.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(row => row.EnqueuedAt).HasDatabaseName("ix_perco_presence_rebuild_queue_enqueued");
         });
 
         modelBuilder.Entity<EmployeePresenceIntervalEntity>(entity =>

@@ -1,0 +1,16 @@
+{
+  "apiBaseUrl": "http://127.0.0.1:55440",
+  "contourId": "patrol360-perf-isolated",
+  "photoPath": "C:\\path\\to\\isolated-1MiB-photo.jpg",
+  "webTokens": ["supply 50 distinct isolated site-account access tokens"],
+  "mobileActors": [{
+    "token": "supply a distinct isolated mobile-account access token; repeat to 50 actors",
+    "fileTarget": {
+      "workTaskId": "supply a work task assigned to this account",
+      "clientFileIds": ["two stable client IDs also referenced by the outbox commands"],
+      "sha256": "sha256 of photoPath",
+      "sizeBytes": 1048576
+    },
+    "outboxCommands": ["supply exactly 20 valid idempotent commands for this account"]
+  }]
+}

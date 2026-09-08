@@ -33,9 +33,10 @@ public sealed partial class MobileAttachmentSecurityTests
         db.ChangeTracker.Clear();
 
         var applied = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
-        Assert.Equal("20260908090000_ConfirmMobileAttachmentLinks", applied[^1]);
+        var attachmentMigration = Array.IndexOf(applied, "20260908090000_ConfirmMobileAttachmentLinks");
+        Assert.True(attachmentMigration > 0);
         var migrator = db.GetService<IMigrator>();
-        await migrator.MigrateAsync(applied[^2]);
+        await migrator.MigrateAsync(applied[attachmentMigration - 1]);
         await migrator.MigrateAsync();
 
         var validFile = await db.MobileUploadedFiles.SingleAsync(file => file.Id == valid!.ServerFileId);

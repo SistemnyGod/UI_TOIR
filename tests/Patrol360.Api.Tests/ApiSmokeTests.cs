@@ -35,8 +35,9 @@ public class ApiSmokeTests
     {
         var user = new SessionUserDto(Guid.NewGuid(), "admin", "Administrator", ["admin"], ["mobile_accounts.write"]);
         var session = new AuthSessionDto(user, "token-1", DateTimeOffset.UtcNow.AddHours(8));
-        var controller = new AuthController(new FakeAuthSessionService(
-            loginResult: new AuthLoginResult(session, false, new Dictionary<string, string[]>())));
+        var controller = new AuthController(
+            new FakeAuthSessionService(loginResult: new AuthLoginResult(session, false, new Dictionary<string, string[]>())),
+            new AuthenticatedSiteUserContext());
 
         var result = controller.Login(new LoginRequestDto("admin", "Patrol360!"));
 
@@ -47,8 +48,9 @@ public class ApiSmokeTests
     [Fact]
     public void AuthControllerLoginReturnsUnauthorizedWhenServiceRejectsCredentials()
     {
-        var controller = new AuthController(new FakeAuthSessionService(
-            loginResult: new AuthLoginResult(null, true, new Dictionary<string, string[]>())));
+        var controller = new AuthController(
+            new FakeAuthSessionService(loginResult: new AuthLoginResult(null, true, new Dictionary<string, string[]>())),
+            new AuthenticatedSiteUserContext());
 
         var result = controller.Login(new LoginRequestDto("admin", "wrong"));
 
@@ -132,9 +134,11 @@ public class ApiSmokeTests
     public async Task SiteBearerAuthenticationBuildsPrincipalFromActiveSession()
     {
         var user = new SessionUserDto(Guid.NewGuid(), "operator", "Operator", ["operator"], ["dashboard.read"]);
+        var authSessionService = new FakeAuthSessionService(currentUser: user);
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IAuthSessionService>(new FakeAuthSessionService(currentUser: user));
+        services.AddSingleton<IAuthSessionService>(authSessionService);
+        services.AddScoped<IAuthenticatedSiteUserContext, AuthenticatedSiteUserContext>();
         services
             .AddAuthentication(SiteBearerAuthenticationHandler.SchemeName)
             .AddScheme<AuthenticationSchemeOptions, SiteBearerAuthenticationHandler>(
@@ -150,6 +154,56 @@ public class ApiSmokeTests
         Assert.True(result.Succeeded);
         Assert.Equal(user.Id.ToString(), result.Principal!.FindFirstValue(ClaimTypes.NameIdentifier));
         Assert.True(result.Principal.HasClaim("permission", "dashboard.read"));
+        Assert.Equal(1, authSessionService.GetCurrentUserCalls);
+        Assert.Same(user, provider.GetRequiredService<IAuthenticatedSiteUserContext>().User);
+    }
+
+    [Fact]
+    public void AuthMeUsesUserValidatedByBearerHandlerWithoutReloadingSession()
+    {
+        var user = new SessionUserDto(Guid.NewGuid(), "operator", "Operator", ["operator"], ["dashboard.read"]);
+        var authSessionService = new FakeAuthSessionService();
+        var controller = new AuthController(authSessionService, new AuthenticatedSiteUserContext { User = user });
+
+        var result = controller.Me();
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(user, ok.Value);
+        Assert.Equal(0, authSessionService.GetCurrentUserCalls);
+    }
+
+    [Fact]
+    public async Task SiteBearerAuthenticationRechecksRevokedSessionOnNextRequest()
+    {
+        var user = new SessionUserDto(Guid.NewGuid(), "operator", "Operator", ["operator"], ["dashboard.read"]);
+        var authSessionService = new FakeAuthSessionService(currentUser: user);
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IAuthSessionService>(authSessionService);
+        services.AddScoped<IAuthenticatedSiteUserContext, AuthenticatedSiteUserContext>();
+        services.AddAuthentication(SiteBearerAuthenticationHandler.SchemeName)
+            .AddScheme<AuthenticationSchemeOptions, SiteBearerAuthenticationHandler>(
+                SiteBearerAuthenticationHandler.SchemeName,
+                _ => { });
+        await using var provider = services.BuildServiceProvider();
+
+        using (var requestScope = provider.CreateScope())
+        {
+            var context = new DefaultHttpContext { RequestServices = requestScope.ServiceProvider };
+            context.Request.Headers.Authorization = "Bearer token-1";
+            Assert.True((await context.AuthenticateAsync(SiteBearerAuthenticationHandler.SchemeName)).Succeeded);
+            Assert.Same(user, requestScope.ServiceProvider.GetRequiredService<IAuthenticatedSiteUserContext>().User);
+        }
+
+        authSessionService.CurrentUser = null;
+        using var revokedRequestScope = provider.CreateScope();
+        var revokedContext = new DefaultHttpContext { RequestServices = revokedRequestScope.ServiceProvider };
+        revokedContext.Request.Headers.Authorization = "Bearer token-1";
+        var revoked = await revokedContext.AuthenticateAsync(SiteBearerAuthenticationHandler.SchemeName);
+
+        Assert.False(revoked.Succeeded);
+        Assert.Null(revokedRequestScope.ServiceProvider.GetRequiredService<IAuthenticatedSiteUserContext>().User);
+        Assert.Equal(2, authSessionService.GetCurrentUserCalls);
     }
 
     [Fact]
@@ -1094,7 +1148,7 @@ public class ApiSmokeTests
             workService,
             new FakeEmuShiftService(),
             new FakeEmuPlanService(),
-            new FakeAuthSessionService(currentUser: user),
+            new AuthenticatedSiteUserContext { User = user },
             new FakeSiteUserAdminService());
         controller.ControllerContext = new ControllerContext
         {
@@ -1424,10 +1478,16 @@ public class ApiSmokeTests
 
     private sealed class FakeAuthSessionService(AuthLoginResult? loginResult = null, SessionUserDto? currentUser = null) : IAuthSessionService
     {
+        public int GetCurrentUserCalls { get; private set; }
+        public SessionUserDto? CurrentUser { get; set; } = currentUser;
         public AuthLoginResult Login(LoginRequestDto request) =>
             loginResult ?? new AuthLoginResult(null, true, new Dictionary<string, string[]>());
 
-        public SessionUserDto? GetCurrentUser(string accessToken) => currentUser;
+        public SessionUserDto? GetCurrentUser(string accessToken)
+        {
+            GetCurrentUserCalls++;
+            return CurrentUser;
+        }
 
         public bool Logout(string accessToken) => true;
     }

@@ -68,7 +68,7 @@ internal sealed partial class EfEmuService
             .Take(paging.PageSize)
             .ToList();
         RecalculateSessions(pageRows, generatedAt, save: false);
-        var works = ToList(pageRows.Select(MapWorkSession).ToList(), allRows.Count, paging);
+        var works = ToList(MapWorkSessions(pageRows), allRows.Count, paging);
 
         return Success(new EmuEmployeeWorkHistoryReportDto(
             SanitizeAppliedQuery(scopedQuery),

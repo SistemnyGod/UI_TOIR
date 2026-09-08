@@ -10,7 +10,7 @@ namespace Patrol360.Api.Controllers;
 [Route("api/v1/emu/shift-reports")]
 public sealed class EmuShiftReportsController(
     IEmuShiftReportService service,
-    IAuthSessionService authSessionService,
+    IAuthenticatedSiteUserContext authenticatedUserContext,
     ISiteUserAdminService siteUserAdminService) : ControllerBase
 {
     [HttpGet("options")]
@@ -106,8 +106,7 @@ public sealed class EmuShiftReportsController(
 
     private Actor ReadCurrentUser()
     {
-        var token = ReadBearerToken();
-        var user = token is null ? null : authSessionService.GetCurrentUser(token);
+        var user = authenticatedUserContext.User;
         return user is null ? new Actor(null, "system", [], []) : new Actor(user.Id, user.DisplayName, user.Permissions, user.Roles);
     }
 
@@ -122,13 +121,6 @@ public sealed class EmuShiftReportsController(
             .Select(scope => scope.ScopeId).Distinct().ToArray() ?? [];
     }
 
-    private string? ReadBearerToken()
-    {
-        if (!Request.Headers.TryGetValue(HeaderNames.Authorization, out var values)) return null;
-        const string prefix = "Bearer ";
-        var value = values.ToString();
-        return value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? value[prefix.Length..].Trim() : null;
-    }
 
     private sealed record Actor(Guid? UserId, string DisplayName, IReadOnlyList<string> Permissions, IReadOnlyList<string> Roles);
 }

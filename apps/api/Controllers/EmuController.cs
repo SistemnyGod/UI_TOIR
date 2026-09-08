@@ -14,7 +14,7 @@ public sealed class EmuController(
     IEmuWorkService workService,
     IEmuShiftService shiftService,
     IEmuPlanService planService,
-    IAuthSessionService authSessionService,
+    IAuthenticatedSiteUserContext authenticatedUserContext,
     ISiteUserAdminService siteUserAdminService) : ControllerBase
 {
     [HttpGet("dashboard")]
@@ -809,8 +809,7 @@ public sealed class EmuController(
 
     private (Guid? UserId, string DisplayName, bool CanOverridePlanApproval, IReadOnlyList<string> Permissions, IReadOnlyList<string> Roles) ReadCurrentUser()
     {
-        var token = ReadBearerToken();
-        var user = token is null ? null : authSessionService.GetCurrentUser(token);
+        var user = authenticatedUserContext.User;
         return user is null
             ? (null, "system", false, [], [])
             : (user.Id, user.DisplayName, user.Permissions.Contains("emu.plan.override-approval", StringComparer.OrdinalIgnoreCase), user.Permissions, user.Roles);
@@ -938,20 +937,6 @@ public sealed class EmuController(
 
         monthStart = new DateOnly(year, month, 1);
         return true;
-    }
-
-    private string? ReadBearerToken()
-    {
-        if (!Request.Headers.TryGetValue(HeaderNames.Authorization, out var values))
-        {
-            return null;
-        }
-
-        const string bearerPrefix = "Bearer ";
-        var value = values.ToString();
-        return value.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase)
-            ? value[bearerPrefix.Length..].Trim()
-            : null;
     }
 
     private ActionResult<T> ToActionResult<T>(EmuCommandResult<T> result)

@@ -1,5 +1,5 @@
 import { activePatrols, dashboardMetrics, routeDirectory } from "../data";
-import { ApiClient } from "../api/client";
+import { ApiClient, type ApiRequestOptions } from "../api/client";
 import type { AssignmentDto, DashboardSummaryDto, EmployeeDto, RouteDto } from "../api/contracts";
 import type { ActivePatrol, EmployeeDirectoryItem, Metric, RouteDirectoryItem, RoutePoint } from "../types";
 import { mapAssignment as mapApiAssignment } from "./assignmentsRepository";
@@ -7,18 +7,31 @@ import { mapAssignment as mapApiAssignment } from "./assignmentsRepository";
 export interface PatrolDataSnapshot {
   activePatrols: ActivePatrol[];
   dashboardMetrics: Metric[];
+  /** Internal source used to refresh the route-count metric when routes arrive later. */
+  dashboardSummary?: DashboardSummaryDto;
   employees: EmployeeDirectoryItem[];
   routeDirectory: RouteDirectoryItem[];
 }
 
 export interface PatrolDataRepository {
-  getSnapshot: () => Promise<PatrolDataSnapshot>;
+  getSnapshot: (demand?: PatrolDataDemand, options?: PatrolDataLoadOptions) => Promise<PatrolDataSnapshot>;
 }
 
 export interface PatrolDataAccess {
   dashboard: boolean;
   employees: boolean;
   routes: boolean;
+}
+
+/** Data required by the currently open workspace. */
+export interface PatrolDataDemand {
+  dashboard?: boolean;
+  employees?: boolean;
+  routes?: boolean;
+}
+
+export interface PatrolDataLoadOptions {
+  reload?: boolean;
 }
 
 const fullPatrolDataAccess: PatrolDataAccess = {
@@ -54,19 +67,24 @@ export function createApiPatrolDataRepository({
   const client = new ApiClient({ baseUrl, fetcher });
 
   return {
-    async getSnapshot() {
+    async getSnapshot(demand = fullPatrolDataAccess, options: PatrolDataLoadOptions = {}) {
+      const dashboard = access.dashboard && Boolean(demand.dashboard);
+      const employeesRequested = access.employees && Boolean(demand.employees);
+      const routesRequested = access.routes && Boolean(demand.routes);
+      const requestOptions: ApiRequestOptions = { cacheMode: options.reload ? "reload" : "default" };
       const [summary, assignments, routes, employees] = await Promise.all([
-        access.dashboard ? client.get<DashboardSummaryDto>("/api/v1/dashboards/summary") : Promise.resolve(null),
-        access.dashboard ? client.get<AssignmentDto[]>("/api/v1/dashboards/active-patrols") : Promise.resolve([]),
-        access.routes ? client.get<RouteDto[]>("/api/v1/routes?includeArchived=true") : Promise.resolve([]),
-        access.employees ? client.get<EmployeeDto[]>("/api/v1/employees") : Promise.resolve([]),
+        dashboard ? client.get<DashboardSummaryDto>("/api/v1/dashboards/summary", requestOptions) : Promise.resolve(null),
+        dashboard ? client.get<AssignmentDto[]>("/api/v1/dashboards/active-patrols", requestOptions) : Promise.resolve([]),
+        routesRequested ? client.get<RouteDto[]>("/api/v1/routes?includeArchived=true", requestOptions) : Promise.resolve([]),
+        employeesRequested ? client.get<EmployeeDto[]>("/api/v1/employees", requestOptions) : Promise.resolve([]),
       ]);
 
       return {
         activePatrols: assignments.map(mapApiAssignment),
         dashboardMetrics: summary
-          ? mapDashboardMetrics(summary, routes.filter((route) => route.status !== "Архив").length)
+          ? mapDashboardMetrics(summary, routesRequested ? routes.filter((route) => route.status !== "Архив").length : undefined)
           : [],
+        dashboardSummary: summary ?? undefined,
         employees: employees.map(mapEmployee),
         routeDirectory: routes.map(mapRoute),
       };
@@ -83,7 +101,7 @@ export function emptyPatrolDataSnapshot(): PatrolDataSnapshot {
   };
 }
 
-function mapDashboardMetrics(summary: DashboardSummaryDto, routeCount: number): Metric[] {
+export function mapDashboardMetrics(summary: DashboardSummaryDto, routeCount?: number): Metric[] {
   return [
     {
       label: "Активные обходы сейчас",
@@ -115,7 +133,7 @@ function mapDashboardMetrics(summary: DashboardSummaryDto, routeCount: number): 
     },
     {
       label: "Маршрутов в справочнике",
-      value: String(routeCount),
+      value: routeCount === undefined ? "—" : String(routeCount),
       delta: `${summary.shiftCoveragePercent}% покрытия смен`,
       tone: "violet",
       icon: "map",

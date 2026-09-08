@@ -4858,6 +4858,9 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.HasIndex("EmployeeId")
                         .HasDatabaseName("ix_perco_access_events_employee");
 
+                    b.HasIndex("EmployeeId", "EventAt", "Direction", "Id")
+                        .HasDatabaseName("ix_perco_access_events_employee_timeline");
+
                     b.HasIndex("EventAt")
                         .HasDatabaseName("ix_perco_access_events_event_at");
 
@@ -4866,6 +4869,24 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ux_perco_access_events_perco_event_id");
 
                     b.ToTable("perco_access_events", (string)null);
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PercoPresenceRebuildQueueEntity", b =>
+                {
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<DateTimeOffset>("EnqueuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("enqueued_at");
+
+                    b.HasKey("EmployeeId");
+
+                    b.HasIndex("EnqueuedAt")
+                        .HasDatabaseName("ix_perco_presence_rebuild_queue_enqueued");
+
+                    b.ToTable("perco_presence_rebuild_queue", (string)null);
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PercoEmployeeLinkEntity", b =>
@@ -6877,6 +6898,17 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("EmployeeId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Employee");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PercoPresenceRebuildQueueEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Employee");
                 });

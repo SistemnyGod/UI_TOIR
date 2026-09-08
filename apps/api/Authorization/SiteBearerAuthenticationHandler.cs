@@ -11,7 +11,8 @@ public sealed class SiteBearerAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
     UrlEncoder encoder,
-    IAuthSessionService authSessionService)
+    IAuthSessionService authSessionService,
+    IAuthenticatedSiteUserContext authenticatedUserContext)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     public const string SchemeName = "SiteBearer";
@@ -39,6 +40,8 @@ public sealed class SiteBearerAuthenticationHandler(
         {
             return Task.FromResult(AuthenticateResult.Fail("Password change is required."));
         }
+
+        authenticatedUserContext.User = user;
 
         var claims = new List<Claim>
         {

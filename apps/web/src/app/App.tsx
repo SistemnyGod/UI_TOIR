@@ -77,7 +77,16 @@ export function App() {
     employees: dataAccessMode !== "api" || hasPermission(session.user, "employees.read"),
     routes: dataAccessMode !== "api" || hasPermission(session.user, "routes.read"),
   }), [dataAccessMode, session.user]);
-  const patrolData = usePatrolDataSource(dataAccessMode, patrolDataAccess);
+  const patrolDataDemand = useMemo(() => ({
+    dashboard: screen === "dashboard" || screen === "assign" || screen === "schedule",
+    employees: screen === "employees" || screen === "accounts" || screen === "perco-integration" || screen.startsWith("emu") || requestModal !== null,
+    routes: screen === "dashboard" || screen === "results" || screen === "routes" || requestModal !== null,
+  }), [requestModal, screen]);
+  const patrolDataCacheScope = useMemo(
+    () => [dataAccessMode, session.user?.id ?? "anonymous", ...(session.user?.permissions ?? []).slice().sort()].join(":"),
+    [dataAccessMode, session.user?.id, session.user?.permissions],
+  );
+  const patrolData = usePatrolDataSource(dataAccessMode, patrolDataAccess, patrolDataDemand, patrolDataCacheScope);
   const scheduleResultHistory = useResultsWorkspace({
     dataSourceMode: dataAccessMode,
     enabled: scheduleResultsEnabled,
@@ -204,7 +213,7 @@ export function App() {
       });
     });
 
-    if (activePatrols.length === 0) {
+    if (patrolDataDemand.dashboard && activePatrols.length === 0) {
       next.push({
         id: "active-patrols-empty",
         title: "Активных обходов нет",
@@ -215,7 +224,7 @@ export function App() {
       });
     }
 
-    if (requests.length === 0) {
+    if (requestsEnabled && requests.length === 0) {
       next.push({
         id: "requests-empty",
         title: "Заявок на обход нет",
@@ -226,7 +235,7 @@ export function App() {
       });
     }
 
-    if (routeDirectory.length === 0) {
+    if (patrolDataDemand.routes && routeDirectory.length === 0) {
       next.push({
         id: "routes-empty",
         title: "Маршруты не заполнены",
@@ -243,10 +252,13 @@ export function App() {
     mobileAccountsEnabled,
     mobileAccounts.mobileAccountSecurityEvents,
     navigate,
+    patrolDataDemand.dashboard,
+    patrolDataDemand.routes,
     refreshRequests,
     requestListErrorMessage,
     requestListStatus,
     requests,
+    requestsEnabled,
     routeDirectory.length,
     systemNotifications.items,
   ]);

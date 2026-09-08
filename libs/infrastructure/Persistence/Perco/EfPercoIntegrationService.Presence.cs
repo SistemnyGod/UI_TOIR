@@ -24,9 +24,8 @@ internal sealed partial class EfPercoIntegrationService
         CancellationToken cancellationToken = default)
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        await dbContext.Database.ExecuteSqlRawAsync(
-            "SELECT pg_advisory_xact_lock({0})",
-            [PresenceMutationLockKey],
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock({PresenceMutationLockKey})",
             cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
@@ -85,17 +84,63 @@ internal sealed partial class EfPercoIntegrationService
         return new PercoSyncResultDto(true, "success", "Интервал присутствия закрыт вручную.", 0, 0, 1, 0, 0, 0, 0, now);
     }
 
-    private async Task RebuildPresenceIntervalsForNewEventsAsync(CancellationToken cancellationToken)
-    {
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        await dbContext.Database.ExecuteSqlRawAsync(
-            "SELECT pg_advisory_xact_lock({0})",
-            [PresenceMutationLockKey],
-            cancellationToken);
+    // Explicit recovery keeps the previous full-rebuild behaviour. Automatic
+    // synchronization calls RebuildQueuedPresenceIntervalsAsync instead.
+    private Task RebuildPresenceIntervalsForNewEventsAsync(CancellationToken cancellationToken) =>
+        RebuildPresenceIntervalsAsync(null, false, cancellationToken);
 
+    private async Task<PresenceRebuildResult> RebuildQueuedPresenceIntervalsAsync(CancellationToken cancellationToken)
+    {
+        var startedAt = DateTimeOffset.UtcNow;
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var lockWaitStartedAt = DateTimeOffset.UtcNow;
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock({PresenceMutationLockKey})",
+            cancellationToken);
+        var lockWait = DateTimeOffset.UtcNow - lockWaitStartedAt;
+        var employeeIds = await dbContext.PercoPresenceRebuildQueue
+            .OrderBy(row => row.EnqueuedAt)
+            .Select(row => row.EmployeeId)
+            .Take(500)
+            .ToListAsync(cancellationToken);
+        if (employeeIds.Count == 0)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return lastQueuedPresenceRebuild = new PresenceRebuildResult(0, 0, 0, DateTimeOffset.UtcNow - startedAt, lockWait);
+        }
+
+        var result = await RebuildPresenceIntervalsAsync(employeeIds, true, cancellationToken, transaction);
+        await transaction.CommitAsync(cancellationToken);
+        return lastQueuedPresenceRebuild = result with
+        {
+            Duration = DateTimeOffset.UtcNow - startedAt,
+            LockWait = lockWait
+        };
+    }
+
+    private async Task<PresenceRebuildResult> RebuildPresenceIntervalsAsync(
+        IReadOnlyCollection<Guid>? requestedEmployeeIds,
+        bool dequeueOnSuccess,
+        CancellationToken cancellationToken,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? existingTransaction = null)
+    {
+        var ownsTransaction = existingTransaction is null;
+        await using var ownedTransaction = ownsTransaction
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        var transaction = existingTransaction ?? ownedTransaction!;
+        if (ownsTransaction)
+        {
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock({PresenceMutationLockKey})",
+                cancellationToken);
+        }
+
+        var employeeIds = requestedEmployeeIds?.Distinct().ToArray();
         var events = (await dbContext.PercoAccessEvents
             .AsNoTracking()
-            .Where(row => row.EmployeeId != null && (row.Direction == "IN" || row.Direction == "OUT"))
+            .Where(row => row.EmployeeId != null && (row.Direction == "IN" || row.Direction == "OUT") &&
+                (employeeIds == null || employeeIds.Contains(row.EmployeeId.Value)))
             .OrderBy(row => row.EmployeeId)
             .ThenBy(row => row.EventAt)
             .ThenBy(row => row.Direction == "OUT")
@@ -109,13 +154,18 @@ internal sealed partial class EfPercoIntegrationService
         var rebuilt = new List<EmployeePresenceIntervalEntity>();
         var manuallyClosedOpenedEventIds = await dbContext.EmployeePresenceIntervals
             .AsNoTracking()
-            .Where(row => row.Source == "PERCO_MANUAL" && row.OpenedByEventId != null)
+            .Where(row => row.Source == "PERCO_MANUAL" && row.OpenedByEventId != null &&
+                (employeeIds == null || employeeIds.Contains(row.EmployeeId)))
             .Select(row => row.OpenedByEventId!.Value)
             .ToHashSetAsync(cancellationToken);
 
-        await dbContext.EmployeePresenceIntervals
-            .Where(row => row.Source == "PERCO" || row.Source == "PERCO_REVIEW")
-            .ExecuteDeleteAsync(cancellationToken);
+        var automatedIntervals = dbContext.EmployeePresenceIntervals
+            .Where(row => row.Source == "PERCO" || row.Source == "PERCO_REVIEW");
+        if (employeeIds is not null)
+        {
+            automatedIntervals = automatedIntervals.Where(row => employeeIds.Contains(row.EmployeeId));
+        }
+        await automatedIntervals.ExecuteDeleteAsync(cancellationToken);
 
         foreach (var group in events.GroupBy(row => row.EmployeeId!.Value))
         {
@@ -177,7 +227,34 @@ internal sealed partial class EfPercoIntegrationService
 
         dbContext.EmployeePresenceIntervals.AddRange(rebuilt);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+        if (dequeueOnSuccess && employeeIds is not null)
+        {
+            await dbContext.PercoPresenceRebuildQueue
+                .Where(row => employeeIds.Contains(row.EmployeeId))
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+
+        if (ownsTransaction)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        return new PresenceRebuildResult(
+            employeeIds?.Length ?? events.Select(row => row.EmployeeId!.Value).Distinct().Count(),
+            events.Count,
+            rebuilt.Count,
+            TimeSpan.Zero,
+            TimeSpan.Zero);
+    }
+
+    private sealed record PresenceRebuildResult(
+        int Employees,
+        int Events,
+        int Intervals,
+        TimeSpan Duration,
+        TimeSpan LockWait)
+    {
+        public static readonly PresenceRebuildResult Empty = new(0, 0, 0, TimeSpan.Zero, TimeSpan.Zero);
     }
 
     private static string FormatDirectionLabel(string direction) =>

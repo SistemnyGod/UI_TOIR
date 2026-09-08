@@ -10,7 +10,7 @@ namespace Patrol360.Api.Controllers;
 [Route("api/v1/integrations/perco")]
 public sealed class PercoIntegrationController(
     IPercoIntegrationService percoIntegrationService,
-    IAuthSessionService authSessionService) : ControllerBase
+    IAuthenticatedSiteUserContext authenticatedUserContext) : ControllerBase
 {
     [HttpGet("settings")]
     [RequirePermission("integrations.perco.view")]
@@ -98,24 +98,7 @@ public sealed class PercoIntegrationController(
 
     private (Guid? UserId, string DisplayName) ReadCurrentUser()
     {
-        var token = ReadBearerToken();
-        var user = token is null ? null : authSessionService.GetCurrentUser(token);
+        var user = authenticatedUserContext.User;
         return user is null ? (null, "system") : (user.Id, user.DisplayName);
-    }
-
-    private string? ReadBearerToken()
-    {
-        if (!Request.Headers.TryGetValue(HeaderNames.Authorization, out var values))
-        {
-            return null;
-        }
-
-        var header = values.FirstOrDefault();
-        if (header is null || !header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        return header["Bearer ".Length..].Trim();
     }
 }

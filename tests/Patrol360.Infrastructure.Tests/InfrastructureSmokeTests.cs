@@ -99,6 +99,7 @@ public class InfrastructureSmokeTests
         AssertMigrationId<PercoIntegrationStage2>("20260602133000_PercoIntegrationStage2");
         AssertMigrationId<PercoIntegrationSchemaRepair>("20260603012000_PercoIntegrationSchemaRepair");
         AssertMigrationId<PercoAuthModeAndSecretChecks>("20260603150000_PercoAuthModeAndSecretChecks");
+        AssertMigrationId<IncrementalPercoPresenceRebuild>("20260908103000_IncrementalPercoPresenceRebuild");
     }
 
     [Fact]

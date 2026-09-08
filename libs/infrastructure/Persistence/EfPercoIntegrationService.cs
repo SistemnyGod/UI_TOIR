@@ -32,4 +32,5 @@ internal sealed partial class EfPercoIntegrationService(
         PropertyNameCaseInsensitive = true
     };
     private readonly IDataProtector secretProtector = dataProtectionProvider.CreateProtector("Patrol360.Integrations.Perco.Secrets.v1");
+    private PresenceRebuildResult? lastQueuedPresenceRebuild;
 }

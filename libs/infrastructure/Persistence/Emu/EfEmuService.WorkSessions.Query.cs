@@ -28,7 +28,7 @@ internal sealed partial class EfEmuService
 
         return new EmuWorkSessionChangesDto(
             now,
-            changedRows.Select(MapWorkSession).ToList(),
+            MapWorkSessions(changedRows),
             deletedIds);
     }
 
@@ -76,7 +76,7 @@ internal sealed partial class EfEmuService
             .Take(paging.PageSize)
             .ToList();
 
-        return ToList(rows.Select(MapShiftRemark).ToList(), total, paging);
+        return ToList(MapShiftRemarks(rows), total, paging);
     }
 
     public EmuCommandResult<EmuShiftRemarkDto> GetShiftRemark(Guid id)
@@ -135,20 +135,48 @@ internal sealed partial class EfEmuService
         return ToList(rows, total, paging);
     }
 
-    private EmuShiftRemarkDto MapShiftRemark(MobileShiftRemarkEntity row)
-    {
-        var remarkId = row.Id.ToString();
-        var declaredClientFileIds = ReadShiftRemarkMediaIds(row.MediaClientFileIdsJson);
-        var attachmentsQuery = dbContext.MobileUploadedFiles
-            .AsNoTracking()
-            .Where(file => file.LinkedAt != null && file.MobileAccountId == row.MobileAccountId && file.RemarkId == remarkId);
+    private EmuShiftRemarkDto MapShiftRemark(MobileShiftRemarkEntity row) =>
+        MapShiftRemarks([row]).Single();
 
-        if (declaredClientFileIds.Count > 0)
+    private IReadOnlyList<EmuShiftRemarkDto> MapShiftRemarks(IReadOnlyCollection<MobileShiftRemarkEntity> rows)
+    {
+        if (rows.Count == 0)
         {
-            attachmentsQuery = attachmentsQuery.Where(file => declaredClientFileIds.Contains(file.ClientFileId));
+            return [];
         }
 
-        return new EmuShiftRemarkDto(
+        var remarksById = rows.ToDictionary(row => row.Id.ToString(), StringComparer.OrdinalIgnoreCase);
+        var declaredClientFileIdsByRemarkId = rows.ToDictionary(
+            row => row.Id.ToString(),
+            row => ReadShiftRemarkMediaIds(row.MediaClientFileIdsJson).ToHashSet(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+        var remarkIds = remarksById.Keys.ToArray();
+        var filesByRemarkId = dbContext.MobileUploadedFiles
+            .AsNoTracking()
+            .Where(file => file.LinkedAt != null && file.RemarkId != null && remarkIds.Contains(file.RemarkId))
+            .OrderBy(file => file.UploadedAt)
+            .Select(file => new
+            {
+                file.RemarkId,
+                file.MobileAccountId,
+                file.ClientFileId,
+                Attachment = new EmuWorkAttachmentDto(
+                    file.Id,
+                    file.OriginalFileName,
+                    file.ContentType,
+                    file.SizeBytes,
+                    file.UploadedAt,
+                    $"/api/v1/emu/shift-remarks/{file.RemarkId}/attachments/{file.Id}")
+            })
+            .ToList()
+            .Where(file => file.RemarkId is not null && remarksById.TryGetValue(file.RemarkId, out var remark)
+                && file.MobileAccountId == remark.MobileAccountId
+                && (declaredClientFileIdsByRemarkId[file.RemarkId].Count == 0
+                    || declaredClientFileIdsByRemarkId[file.RemarkId].Contains(file.ClientFileId)))
+            .GroupBy(file => file.RemarkId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<EmuWorkAttachmentDto>)group.Select(file => file.Attachment).ToList(), StringComparer.OrdinalIgnoreCase);
+
+        return rows.Select(row => new EmuShiftRemarkDto(
             row.Id,
             row.EmployeeId,
             row.Employee?.FullName ?? "Сотрудник не найден",
@@ -160,16 +188,7 @@ internal sealed partial class EfEmuService
             row.CreatedAtLocal,
             row.CreatedAtServer,
             "mobile",
-            attachmentsQuery
-                .OrderBy(file => file.UploadedAt)
-                .Select(file => new EmuWorkAttachmentDto(
-                    file.Id,
-                    file.OriginalFileName,
-                    file.ContentType,
-                    file.SizeBytes,
-                    file.UploadedAt,
-                    $"/api/v1/emu/shift-remarks/{row.Id}/attachments/{file.Id}"))
-                .ToList());
+            filesByRemarkId.GetValueOrDefault(row.Id.ToString(), []))).ToList();
     }
 
     private static IReadOnlyList<string> ReadShiftRemarkMediaIds(string value)

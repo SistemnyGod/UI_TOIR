@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Patrol360.Api.Controllers;
+using Patrol360.Api.Authorization;
 using Patrol360.Application;
 using Patrol360.Contracts;
 
@@ -188,7 +189,7 @@ public sealed class InventoryControllerTests
             workflowService ?? new ThrowingInventoryWorkflowService(),
             new ThrowingInventoryExportService(),
             new ThrowingInventoryLegacyImportService(),
-            new ThrowingAuthSessionService());
+            new AuthenticatedSiteUserContext());
 
     private static IFormFile CreateFormFile(string fileName, byte[] content) =>
         new FormFile(new MemoryStream(content), 0, content.Length, "file", fileName);

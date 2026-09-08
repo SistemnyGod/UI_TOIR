@@ -17,7 +17,7 @@ public sealed class InventoryController(
     IInventoryWorkflowService inventoryWorkflowService,
     IInventoryExportService inventoryExportService,
     IInventoryLegacyImportService inventoryLegacyImportService,
-    IAuthSessionService authSessionService) : ControllerBase
+    IAuthenticatedSiteUserContext authenticatedUserContext) : ControllerBase
 {
     private const long EmployeeImportMaxFileSizeBytes = 10 * 1024 * 1024;
     private const string EmployeeImportPreviewTokenSecret = "patrol360.inventory.employee-import-preview.v1";
@@ -860,23 +860,8 @@ public sealed class InventoryController(
 
     private bool CurrentUserHasPermission(string permission)
     {
-        var token = ReadBearerToken();
-        var user = token is null ? null : authSessionService.GetCurrentUser(token);
+        var user = authenticatedUserContext.User;
         return user?.Permissions.Contains(permission, StringComparer.OrdinalIgnoreCase) == true;
-    }
-
-    private string? ReadBearerToken()
-    {
-        if (!Request.Headers.TryGetValue(HeaderNames.Authorization, out var values))
-        {
-            return null;
-        }
-
-        const string bearerPrefix = "Bearer ";
-        var value = values.ToString();
-        return value.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase)
-            ? value[bearerPrefix.Length..].Trim()
-            : null;
     }
 
     private static IReadOnlyList<T> LoadAllPages<T>(Func<int, InventoryListResponseDto<T>> loader)

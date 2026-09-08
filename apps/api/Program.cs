@@ -26,6 +26,7 @@ builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogL
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddScoped<IApplicationReadinessProbe, ApplicationReadinessProbe>();
+builder.Services.AddScoped<IAuthenticatedSiteUserContext, AuthenticatedSiteUserContext>();
 builder.Services
     .AddAuthentication(options =>
     {
