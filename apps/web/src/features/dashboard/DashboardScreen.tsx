@@ -278,8 +278,6 @@ function OperationalSummary({
   resultListErrorMessage?: string;
   resultListStatus: DataSourceStatus;
 }) {
-  const ringOffset = 100 - progress;
-
   return (
     <article className="dashboard-am-panel dashboard-am-summary">
       <PanelHeader title="Оперативная сводка" />
@@ -287,34 +285,12 @@ function OperationalSummary({
         <div className="dashboard-am-progress-block">
           <h3>План смены</h3>
           <div className="dashboard-am-progress-row">
-            <div className={`dashboard-am-ring ${progress === 0 ? "empty" : ""}`} aria-label={`Выполнено ${progress}%`}>
-              <svg viewBox="0 0 160 160" role="img" aria-hidden="true">
-                <defs>
-                  <linearGradient id="dashboardProgressGradient" x1="28" y1="132" x2="132" y2="28" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#0B63F6" />
-                    <stop offset="0.55" stopColor="#1687FF" />
-                    <stop offset="1" stopColor="#32C5FF" />
-                  </linearGradient>
-                  <filter id="dashboardProgressGlow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feDropShadow dx="0" dy="8" stdDeviation="8" floodColor="#0B63F6" floodOpacity="0.18" />
-                  </filter>
-                </defs>
-                <circle className="dashboard-am-ring-surface" cx="80" cy="80" r="66" />
-                <circle className="dashboard-am-ring-track" cx="80" cy="80" r="58" pathLength="100" />
-                <circle
-                  className="dashboard-am-ring-value"
-                  cx="80"
-                  cy="80"
-                  r="58"
-                  pathLength="100"
-                  strokeDasharray="100"
-                  strokeDashoffset={ringOffset}
-                />
-              </svg>
+            <div className="dashboard-am-progress-summary" aria-label={`Выполнено ${completed} из ${plan}`}>
               <div>
-                <strong>{progress}%</strong>
-                <span>закрыто</span>
+                <strong>Выполнено {completed} из {plan}</strong>
+                <span>{progress}% закрыто</span>
               </div>
+              <div aria-hidden="true" className="dashboard-am-progress-bar"><span style={{ width: `${progress}%` }} /></div>
             </div>
 
             <dl className="dashboard-am-metrics">

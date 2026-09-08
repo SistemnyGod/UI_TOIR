@@ -27955,3 +27955,70 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
   outline: 2px solid var(--primary, #2563eb);
   outline-offset: 3px;
 }
+
+/* Compact dashboard plan: the same values stay visible without a decorative ring. */
+.dashboard-am-progress-summary {
+  display: grid;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.dashboard-am-progress-summary > div:first-child {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.dashboard-am-progress-summary strong { color: #172b52; font-size: 16px; font-weight: 700; }
+.dashboard-am-progress-summary span { color: #5c7192; font-size: 13px; }
+.dashboard-am-progress-bar { background: #dfe9f6; border-radius: 999px; height: 8px; overflow: hidden; }
+.dashboard-am-progress-bar span { background: var(--am-blue); border-radius: inherit; display: block; height: 100%; min-width: 0; transition: width 180ms ease; }
+
+.site-user-mobile-back { display: none; }
+.user-access-primary > .access-summary {
+  align-items: start;
+  background: #f8fbff;
+  border: 1px solid #d8e4f2;
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(180px, 0.8fr) minmax(260px, 1.4fr) minmax(230px, 1.2fr);
+  margin: 12px 0;
+  padding: 12px 14px;
+}
+.user-access-primary > .access-summary h3,
+.user-access-primary > .access-summary h4 { font-size: 14px; margin: 0; }
+.user-access-primary > .access-summary h3 { align-items: center; display: flex; gap: 7px; }
+.user-access-primary > .access-summary .access-total { display: grid; gap: 2px; }
+.user-access-primary > .access-summary .access-total span,
+.user-access-primary > .access-summary .access-total small { color: #61748d; font-size: 12px; }
+.user-access-primary > .access-summary .access-total strong { font-size: 16px; }
+.access-module-counts { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.access-module-counts span { color: #526986; display: inline-flex; font-size: 12px; gap: 4px; }
+.access-module-counts b { color: #213d63; font-variant-numeric: tabular-nums; font-weight: 600; }
+.user-access-primary > .access-summary .access-tip { border: 0; margin: 0; padding: 0; }
+
+@media (min-width: 1200px) {
+  .user-admin-layout { grid-template-columns: 280px minmax(0, 1fr) !important; }
+}
+
+@media (max-width: 1199px) {
+  .dashboard-am-summary-grid { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-am-latest { text-align: left; }
+}
+
+@media (max-width: 767px) {
+  .dashboard-am-progress-row { align-items: stretch; flex-direction: column; }
+  .dashboard-am-progress-summary { min-width: 0; }
+  .dashboard-am-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dashboard-am-metrics dd { font-size: 18px; }
+}
+
+@media (max-width: 1199px) {
+  .user-admin-layout { grid-template-columns: minmax(0, 1fr) !important; }
+  .site-user-mobile-back { align-items: center; background: transparent; border: 0; color: var(--am-blue); display: inline-flex; font: inherit; font-weight: 600; margin: 0 0 10px; min-height: 44px; padding: 0 4px; }
+  .user-admin-layout:not(.is-mobile-detail-open) .site-user-detail-pane { display: none; }
+  .user-admin-layout.is-mobile-detail-open .user-admin-main { display: none; }
+  .user-access-primary > .access-summary { grid-template-columns: 1fr; }
+}
