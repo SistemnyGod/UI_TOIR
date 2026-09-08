@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 ARG DOTNET_VERSION=10.0
 
 FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
@@ -9,11 +11,13 @@ COPY libs/application/Patrol360.Application.csproj libs/application/
 COPY libs/contracts/Patrol360.Contracts.csproj libs/contracts/
 COPY libs/domain/Patrol360.Domain.csproj libs/domain/
 COPY libs/infrastructure/Patrol360.Infrastructure.csproj libs/infrastructure/
-RUN dotnet restore apps/worker/Patrol360.Worker.csproj
+RUN --mount=type=cache,id=patrol360-nuget,target=/root/.nuget/packages \
+    dotnet restore apps/worker/Patrol360.Worker.csproj --disable-parallel
 
 COPY apps/worker apps/worker
 COPY libs libs
-RUN dotnet publish apps/worker/Patrol360.Worker.csproj --configuration Release --no-restore --output /app/publish
+RUN --mount=type=cache,id=patrol360-nuget,target=/root/.nuget/packages \
+    dotnet publish apps/worker/Patrol360.Worker.csproj --configuration Release --no-restore --output /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
 WORKDIR /app

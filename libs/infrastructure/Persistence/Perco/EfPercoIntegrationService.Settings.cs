@@ -76,7 +76,9 @@ internal sealed partial class EfPercoIntegrationService
 
     private async Task<PercoIntegrationSettingsEntity> GetOrCreateSettingsAsync(CancellationToken cancellationToken)
     {
-        var settings = await dbContext.PercoIntegrationSettings.FirstOrDefaultAsync(cancellationToken);
+        var settings = await dbContext.PercoIntegrationSettings
+            .OrderBy(row => row.Id)
+            .FirstOrDefaultAsync(cancellationToken);
         if (settings is not null)
         {
             var changed = false;

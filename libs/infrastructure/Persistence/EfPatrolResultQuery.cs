@@ -103,6 +103,7 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
             .Include(item => item.Issues)
             .Include(item => item.Attachments)
             .Include(item => item.Assignment)
+            .AsSplitQuery()
             .FirstOrDefault(item => item.Id == id && item.ArchivedAt == null);
 
         return result is null ? null : MapDetail(result);

@@ -327,6 +327,7 @@ internal sealed partial class EfInventoryWorkflowService
                 .ThenInclude(row => row.Issues)
                     .ThenInclude(issue => issue.Item)
                         .ThenInclude(item => item.Unit)
+            .AsSplitQuery()
             .FirstOrDefault(card => card.Id == id && card.ArchivedAt == null);
 
     private InventoryPpeCardLineEntity? LoadPpeLine(Guid id) =>

@@ -195,6 +195,7 @@ internal sealed class EfAuthSessionService(Patrol360DbContext dbContext) : IAuth
                         .ThenInclude(rolePermission => rolePermission.Permission)
             .Include(siteUser => siteUser.Permissions)
                 .ThenInclude(userPermission => userPermission.Permission)
+            .AsSplitQuery()
             .FirstOrDefault(siteUser => siteUser.NormalizedLogin == normalizedLogin);
 
     private SiteUserSessionEntity? LoadSession(string tokenHash, bool includeUser = true)
@@ -211,6 +212,7 @@ internal sealed class EfAuthSessionService(Patrol360DbContext dbContext) : IAuth
                 .Include(item => item.SiteUser)
                     .ThenInclude(siteUser => siteUser.Permissions)
                         .ThenInclude(userPermission => userPermission.Permission);
+            query = query.AsSplitQuery();
         }
         else
         {

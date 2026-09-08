@@ -42,7 +42,12 @@ internal sealed partial class EfEmuService
         LoadSessions(includeParticipationIntervals: false).FirstOrDefault(row => row.Id == id);
 
     private EmuWorkPlanTaskEntity? LoadPlanTask(Guid id) =>
-        dbContext.EmuWorkPlanTasks.AsNoTracking().Include(row => row.Section).Include(row => row.Employees).FirstOrDefault(row => row.Id == id);
+        dbContext.EmuWorkPlanTasks
+            .AsNoTracking()
+            .Include(row => row.Section)
+            .Include(row => row.Employees)
+            .AsSplitQuery()
+            .FirstOrDefault(row => row.Id == id);
 
     private int UpsertNotification(
         string notificationType,

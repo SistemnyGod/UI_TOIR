@@ -366,6 +366,8 @@ internal sealed partial class EfEmuService
             .GroupBy(row => row.WorkSessionId!.Value)
             .Select(group => new { WorkSessionId = group.Key, Count = group.Count() })
             .Where(row => row.Count >= 3)
+            .OrderByDescending(row => row.Count)
+            .ThenBy(row => row.WorkSessionId)
             .Take(20)
             .ToList();
 

@@ -291,7 +291,10 @@ internal sealed partial class EfPercoIntegrationService
 
     private async Task<PercoSyncStateEntity> GetOrCreateSyncStateAsync(string syncType, CancellationToken cancellationToken)
     {
-        var state = await dbContext.PercoSyncStates.FirstOrDefaultAsync(row => row.SyncType == syncType, cancellationToken);
+        var state = await dbContext.PercoSyncStates
+            .Where(row => row.SyncType == syncType)
+            .OrderBy(row => row.Id)
+            .FirstOrDefaultAsync(cancellationToken);
         if (state is not null)
         {
             return state;
