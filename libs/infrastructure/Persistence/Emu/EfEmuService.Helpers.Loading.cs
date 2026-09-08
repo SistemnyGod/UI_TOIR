@@ -10,6 +10,25 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfEmuService
 {
+    private const long ActiveParticipationLockKey = 0x454D554143544956;
+
+    private ActiveParticipationMutation BeginActiveParticipationMutation()
+    {
+        var transaction = dbContext.Database.CurrentTransaction is null
+            ? dbContext.Database.BeginTransaction()
+            : null;
+        dbContext.Database.ExecuteSqlRaw("SELECT pg_advisory_xact_lock({0})", ActiveParticipationLockKey);
+        return new ActiveParticipationMutation(transaction);
+    }
+
+    private sealed class ActiveParticipationMutation(
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction) : IDisposable
+    {
+        public void Commit() => transaction?.Commit();
+
+        public void Dispose() => transaction?.Dispose();
+    }
+
     private IQueryable<EmuWorkSessionEntity> LoadSessions(
         bool includeParticipationIntervals = true,
         bool asNoTracking = false)

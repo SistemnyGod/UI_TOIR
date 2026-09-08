@@ -9,6 +9,8 @@ param(
 
   [string]$BuildRoot = "",
 
+  [string]$OutputDirectory = "",
+
   [string]$AndroidSdk = $env:ANDROID_HOME,
 
   [string]$JavaHome = "",
@@ -128,7 +130,26 @@ function Set-GradleProperty {
 }
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$OutputDir = Join-Path $ProjectRoot "build-output"
+$OutputDir = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+  Join-Path $ProjectRoot "build-output"
+}
+elseif ([IO.Path]::IsPathRooted($OutputDirectory)) {
+  $OutputDirectory
+}
+else {
+  Join-Path $ProjectRoot $OutputDirectory
+}
+
+$sourceRevision = (& git -C $ProjectRoot rev-parse HEAD 2>$null | Select-Object -First 1).Trim()
+if ($LASTEXITCODE -ne 0 -or $sourceRevision -notmatch '^[0-9a-fA-F]{40}$') {
+  throw "Cannot resolve source revision for Android build."
+}
+$sourceStatus = & git -C $ProjectRoot status --porcelain --untracked-files=normal 2>$null
+if ($LASTEXITCODE -ne 0) {
+  throw "Cannot resolve source dirty state for Android build."
+}
+$env:PATROL360_SOURCE_COMMIT = $sourceRevision
+$env:PATROL360_SOURCE_DIRTY = if ($sourceStatus) { "true" } else { "false" }
 
 if ([string]::IsNullOrWhiteSpace($BuildRoot)) {
   # Expo's package-refactor glob can fail on Windows paths containing Cyrillic

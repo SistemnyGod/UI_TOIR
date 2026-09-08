@@ -67,6 +67,13 @@ async function initializeDatabaseOnce() {
       applied_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS auth_transition (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      target_owner_user_id TEXT NOT NULL,
+      contour_id TEXT NOT NULL,
+      started_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS mobile_logout_queue (
       id TEXT PRIMARY KEY,
       owner_user_id TEXT,

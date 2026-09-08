@@ -7,6 +7,7 @@ using Patrol360.Worker;
 var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
 builder.Services.AddPatrolInfrastructure(builder.Configuration);
+builder.Services.AddSingleton<WorkerDiagnostics>();
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();

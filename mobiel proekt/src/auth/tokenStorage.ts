@@ -11,6 +11,8 @@ const offlineSessionKey = "patrol360.offlineSession";
 const refreshOperationIdKey = "patrol360.refreshOperationId";
 const accessTokenExpiresAtKey = "patrol360.accessTokenExpiresAt";
 const refreshTokenExpiresAtKey = "patrol360.refreshTokenExpiresAt";
+const sessionEnvelopeKey = "patrol360.session.v1";
+const sessionEnvelopeVersion = 1 as const;
 
 export type StoredTokenMetadata = {
   accessExpiresAt?: string | null;
@@ -27,38 +29,69 @@ export type StoredSessionSnapshot = {
   refreshOperationId: string | null;
 };
 
+type StoredSessionEnvelope = StoredSessionSnapshot & { version: typeof sessionEnvelopeVersion };
+type SessionEnvelopeRead =
+  | { state: "missing" | "invalid"; value: null }
+  | { state: "valid"; value: StoredSessionEnvelope };
+let envelopeMutationQueue: Promise<void> = Promise.resolve();
+
+async function readSessionEnvelope(): Promise<SessionEnvelopeRead> {
+  const raw = await SecureStore.getItemAsync(sessionEnvelopeKey);
+  if (!raw) return { state: "missing", value: null };
+  try {
+    const value = JSON.parse(raw) as Partial<StoredSessionEnvelope>;
+    if (value.version !== sessionEnvelopeVersion) return { state: "invalid", value: null };
+    return { state: "valid", value: {
+      version: sessionEnvelopeVersion,
+      accessToken: value.accessToken ?? null,
+      refreshToken: value.refreshToken ?? null,
+      accessExpiresAt: value.accessExpiresAt ?? null,
+      refreshExpiresAt: value.refreshExpiresAt ?? null,
+      ownerUserId: value.ownerUserId ?? null,
+      offlineSession: value.offlineSession ?? null,
+      refreshOperationId: value.refreshOperationId ?? null
+    } };
+  } catch {
+    return { state: "invalid", value: null };
+  }
+}
+
+export async function storeSessionEnvelope(snapshot: StoredSessionSnapshot) {
+  const envelope: StoredSessionEnvelope = { version: sessionEnvelopeVersion, ...snapshot };
+  await SecureStore.setItemAsync(sessionEnvelopeKey, JSON.stringify(envelope));
+}
+
+async function updateSessionEnvelope(update: (current: StoredSessionSnapshot) => StoredSessionSnapshot) {
+  const mutation = envelopeMutationQueue.then(async () => {
+    await storeSessionEnvelope(update(await getStoredSessionSnapshot()));
+  });
+  envelopeMutationQueue = mutation.catch(() => undefined);
+  await mutation;
+}
+
 export async function setTokens(
   accessToken: string,
   refreshToken: string,
   metadata: StoredTokenMetadata = {}
 ) {
-  await Promise.all([
-    SecureStore.setItemAsync(accessTokenKey, accessToken),
-    SecureStore.setItemAsync(refreshTokenKey, refreshToken),
-    setOptionalSecureValue(accessTokenExpiresAtKey, metadata.accessExpiresAt),
-    setOptionalSecureValue(refreshTokenExpiresAtKey, metadata.refreshExpiresAt),
-    clearRefreshOperationId()
-  ]);
-}
-
-async function setOptionalSecureValue(key: string, value: string | null | undefined) {
-  if (value) {
-    await SecureStore.setItemAsync(key, value);
-    return;
-  }
-
-  await SecureStore.deleteItemAsync(key);
+  await updateSessionEnvelope((current) => ({
+    ...current, accessToken, refreshToken,
+    accessExpiresAt: metadata.accessExpiresAt ?? null,
+    refreshExpiresAt: metadata.refreshExpiresAt ?? null,
+    refreshOperationId: null
+  }));
 }
 
 export function setOfflineSession(session: OfflineSessionState) {
-  return SecureStore.setItemAsync(offlineSessionKey, JSON.stringify(session));
+  return updateSessionEnvelope((current) => ({ ...current, offlineSession: session }));
 }
 
 export async function getOfflineSession(): Promise<OfflineSessionState | null> {
-  const raw = await SecureStore.getItemAsync(offlineSessionKey);
-  if (!raw) {
-    return null;
-  }
+  const envelope = await readSessionEnvelope();
+  const raw = envelope.state === "valid"
+    ? JSON.stringify(envelope.value.offlineSession)
+    : envelope.state === "missing" ? await SecureStore.getItemAsync(offlineSessionKey) : null;
+  if (!raw || raw === "null") return null;
 
   try {
     const parsed = JSON.parse(raw) as Partial<OfflineSessionState>;
@@ -91,45 +124,62 @@ export async function getOfflineSession(): Promise<OfflineSessionState | null> {
 }
 
 export function getAccessToken() {
-  return SecureStore.getItemAsync(accessTokenKey);
+  return readEnvelopeValue("accessToken", accessTokenKey);
 }
 
 export function getRefreshToken() {
-  return SecureStore.getItemAsync(refreshTokenKey);
+  return readEnvelopeValue("refreshToken", refreshTokenKey);
 }
 
 export function getAccessTokenExpiresAt() {
-  return SecureStore.getItemAsync(accessTokenExpiresAtKey);
+  return readEnvelopeValue("accessExpiresAt", accessTokenExpiresAtKey);
 }
 
 export function getRefreshTokenExpiresAt() {
-  return SecureStore.getItemAsync(refreshTokenExpiresAtKey);
+  return readEnvelopeValue("refreshExpiresAt", refreshTokenExpiresAtKey);
+}
+
+async function readEnvelopeValue(key: keyof StoredSessionSnapshot, legacyKey: string) {
+  const envelope = await readSessionEnvelope();
+  if (envelope.state === "valid") {
+    const value = envelope.value[key];
+    return typeof value === "string" ? value : null;
+  }
+  return envelope.state === "missing" ? SecureStore.getItemAsync(legacyKey) : null;
 }
 
 export async function getOrCreateRefreshOperationId() {
-  const existing = await SecureStore.getItemAsync(refreshOperationIdKey);
+  const existing = await readEnvelopeValue("refreshOperationId", refreshOperationIdKey);
   if (existing) {
     return existing;
   }
 
   const operationId = Crypto.randomUUID();
-  await SecureStore.setItemAsync(refreshOperationIdKey, operationId);
+  await updateSessionEnvelope((current) => ({ ...current, refreshOperationId: operationId }));
   return operationId;
 }
 
 export function clearRefreshOperationId() {
-  return SecureStore.deleteItemAsync(refreshOperationIdKey);
+  return updateSessionEnvelope((current) => ({ ...current, refreshOperationId: null }));
 }
 
 export function setStoredOwnerUserId(ownerUserId: string) {
-  return SecureStore.setItemAsync(ownerUserIdKey, ownerUserId);
+  return updateSessionEnvelope((current) => ({ ...current, ownerUserId }));
 }
 
 export function getStoredOwnerUserId() {
-  return SecureStore.getItemAsync(ownerUserIdKey);
+  return readEnvelopeValue("ownerUserId", ownerUserIdKey);
 }
 
 export async function getStoredSessionSnapshot(): Promise<StoredSessionSnapshot> {
+  const envelope = await readSessionEnvelope();
+  if (envelope.state === "valid") {
+    const { version: _version, ...snapshot } = envelope.value;
+    return snapshot;
+  }
+  if (envelope.state === "invalid") {
+    return { accessToken: null, refreshToken: null, accessExpiresAt: null, refreshExpiresAt: null, ownerUserId: null, offlineSession: null, refreshOperationId: null };
+  }
   const [accessToken, refreshToken, accessExpiresAt, refreshExpiresAt, ownerUserId, offlineSession, refreshOperationId] = await Promise.all([
     getAccessToken(),
     getRefreshToken(),
@@ -144,29 +194,17 @@ export async function getStoredSessionSnapshot(): Promise<StoredSessionSnapshot>
 }
 
 export async function restoreStoredSessionSnapshot(snapshot: StoredSessionSnapshot) {
-  await clearTokens();
-
-  if (snapshot.accessToken && snapshot.refreshToken) {
-    await setTokens(snapshot.accessToken, snapshot.refreshToken, {
-      accessExpiresAt: snapshot.accessExpiresAt,
-      refreshExpiresAt: snapshot.refreshExpiresAt
-    });
-  }
-
-  if (snapshot.ownerUserId) {
-    await setStoredOwnerUserId(snapshot.ownerUserId);
-  }
-
-  if (snapshot.offlineSession) {
-    await setOfflineSession(snapshot.offlineSession);
-  }
-
-  if (snapshot.refreshOperationId) {
-    await SecureStore.setItemAsync(refreshOperationIdKey, snapshot.refreshOperationId);
-  }
+  await storeSessionEnvelope(snapshot);
 }
 
 export async function clearVolatileTokens() {
+  await updateSessionEnvelope((current) => ({
+    ...current,
+    accessToken: null,
+    refreshToken: null,
+    accessExpiresAt: null,
+    refreshExpiresAt: null
+  }));
   await Promise.all([
     SecureStore.deleteItemAsync(accessTokenKey),
     SecureStore.deleteItemAsync(refreshTokenKey),
@@ -175,6 +213,14 @@ export async function clearVolatileTokens() {
   ]);
 }
 export async function clearAuthTokens() {
+  await updateSessionEnvelope((current) => ({
+    ...current,
+    accessToken: null,
+    refreshToken: null,
+    accessExpiresAt: null,
+    refreshExpiresAt: null,
+    refreshOperationId: null
+  }));
   await Promise.all([
     SecureStore.deleteItemAsync(accessTokenKey),
     SecureStore.deleteItemAsync(refreshTokenKey),
@@ -186,6 +232,14 @@ export async function clearAuthTokens() {
 }
 
 export async function clearLocalSessionKeepingRefreshToken() {
+  await updateSessionEnvelope((current) => ({
+    ...current,
+    accessToken: null,
+    accessExpiresAt: null,
+    ownerUserId: null,
+    offlineSession: null,
+    refreshOperationId: null
+  }));
   await Promise.all([
     SecureStore.deleteItemAsync(accessTokenKey),
     SecureStore.deleteItemAsync(accessTokenExpiresAtKey)
@@ -234,9 +288,15 @@ export async function revokeStoredSession(reason: string) {
 }
 
 export async function clearTokens() {
-  await clearAuthTokens();
   await Promise.all([
+    SecureStore.deleteItemAsync(sessionEnvelopeKey),
+    SecureStore.deleteItemAsync(accessTokenKey),
+    SecureStore.deleteItemAsync(refreshTokenKey),
+    SecureStore.deleteItemAsync(accessTokenExpiresAtKey),
+    SecureStore.deleteItemAsync(refreshTokenExpiresAtKey),
+    SecureStore.deleteItemAsync(refreshOperationIdKey),
     SecureStore.deleteItemAsync(ownerUserIdKey),
     SecureStore.deleteItemAsync(offlineSessionKey)
   ]);
+  lockSession();
 }

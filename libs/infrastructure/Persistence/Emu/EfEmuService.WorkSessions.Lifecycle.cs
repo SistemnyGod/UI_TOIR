@@ -12,6 +12,7 @@ internal sealed partial class EfEmuService
 {
     public EmuCommandResult<EmuWorkSessionDto> CreateWorkSession(EmuCreateWorkSessionDto request, Guid? actorUserId, string actorName, bool canOverridePlanApproval = false)
     {
+        using var transaction = BeginActiveParticipationMutation();
         var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         if (request.SectionId == Guid.Empty || !dbContext.EmuWorkSections.Any(row => row.Id == request.SectionId && row.IsActive))
         {
@@ -72,7 +73,6 @@ internal sealed partial class EfEmuService
             return new EmuCommandResult<EmuWorkSessionDto>(null, errors);
         }
 
-        using var transaction = dbContext.Database.BeginTransaction();
         dbContext.Database.ExecuteSqlRaw("SELECT pg_advisory_xact_lock({0})", WorkNumberLockKey);
 
         var now = DateTimeOffset.UtcNow;
@@ -126,6 +126,7 @@ internal sealed partial class EfEmuService
 
     public EmuCommandResult<EmuWorkSessionDto> UpdateWorkSession(Guid id, EmuUpdateWorkSessionDto request, Guid? actorUserId, string actorName)
     {
+        using var transaction = BeginActiveParticipationMutation();
         var entity = LoadSessionForUpdate(id);
         if (entity is null || entity.DeletedAt is not null)
         {
@@ -269,6 +270,7 @@ internal sealed partial class EfEmuService
             InsertParticipationInterval(entity.Id, participant.Id, participant.EmployeeId, EmployeeWorking, entity.ArrivedAt, comment, actorUserId, actorName, now);
         }
 
+        transaction.Commit();
         return Success(MapWorkSession(LoadSession(entity.Id)!));
     }
 }

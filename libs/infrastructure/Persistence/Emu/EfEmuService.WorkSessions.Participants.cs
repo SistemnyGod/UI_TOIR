@@ -12,6 +12,7 @@ internal sealed partial class EfEmuService
 {
     public EmuCommandResult<EmuWorkSessionDto> AddWorkSessionEmployee(Guid id, EmuAddWorkSessionEmployeeDto request, Guid? actorUserId, string actorName)
     {
+        using var transaction = BeginActiveParticipationMutation();
         var entity = LoadSessionForUpdate(id);
         if (entity is null || entity.DeletedAt is not null)
         {
@@ -82,6 +83,7 @@ internal sealed partial class EfEmuService
         dbContext.SaveChanges();
         InsertParticipationInterval(entity.Id, participant.Id, participant.EmployeeId, EmployeeWorking, startedAt, comment, actorUserId, actorName, now);
 
+        transaction.Commit();
         return Success(MapWorkSession(LoadSession(entity.Id)!));
     }
 

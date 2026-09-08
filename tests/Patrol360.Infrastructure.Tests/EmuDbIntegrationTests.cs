@@ -1,6 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.AspNetCore.DataProtection;
+using System.Data.Common;
 using Patrol360.Application;
 using Patrol360.Contracts;
 using Patrol360.Infrastructure.Persistence;
@@ -14,6 +17,166 @@ public sealed class EmuDbIntegrationTests
     private static readonly Guid IvanovEmployeeId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111");
     private static readonly Guid PetrovEmployeeId = Guid.Parse("aaaaaaaa-2222-2222-2222-222222222222");
     private static readonly Guid SidorovEmployeeId = Guid.Parse("aaaaaaaa-3333-3333-3333-333333333333");
+
+    [DbIntegrationFact]
+    public async Task ConcurrentWorkCreationAllowsOnlyOneActiveSessionPerEmployee()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var section = UseCatalog(provider, catalog => catalog.GetSettings()).Sections.Single(row => row.Name == "Прочее");
+        using var start = new ManualResetEventSlim(false);
+        EmuCommandResult<EmuWorkSessionDto> Create(string task) => UseWork(provider, work => work.CreateWorkSession(
+            new EmuCreateWorkSessionDto(
+                DateOnly.FromDateTime(DateTime.UtcNow.Date),
+                section.Id,
+                DateTimeOffset.UtcNow,
+                [IvanovEmployeeId],
+                task),
+            null,
+            "concurrency-test"));
+
+        var attempts = new[] { "Параллельная работа 1", "Параллельная работа 2" }
+            .Select(task => Task.Run(() => { start.Wait(); return Create(task); }))
+            .ToArray();
+        start.Set();
+        var results = await Task.WhenAll(attempts);
+
+        Assert.Single(results, row => row.Succeeded);
+        var rejected = Assert.Single(results, row => !row.Succeeded);
+        Assert.Contains("employeeIds", rejected.Errors.Keys);
+        Assert.Single(
+            UseWork(provider, work => work.GetWorkSessions(new EmuWorkSessionQueryDto())).Rows,
+            row => row.Employees.Any(employee => employee.EmployeeId == IvanovEmployeeId));
+    }
+
+    [DbIntegrationFact]
+    public async Task ConcurrentWorkCreationAllowsOnlyOneSessionPerPlanTask()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var workDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        var section = UseCatalog(provider, catalog => catalog.GetSettings()).Sections.Single(row => row.Name == "Прочее");
+        var plan = UsePlan(provider, service => service.CreatePlanTask(
+            new EmuUpsertPlanTaskDto("Параллельный запуск", "", workDate, section.Id, [IvanovEmployeeId], "Обычный", false, ""),
+            null,
+            "manager"));
+        Assert.True(plan.Succeeded);
+        var planId = plan.Value!.Id;
+        var approved = UsePlan(provider, service => service.ApprovePlanTask(
+            planId,
+            new EmuApprovePlanTaskDto(true, "Согласовано", plan.Value.RowVersion),
+            null,
+            "manager"));
+        Assert.True(approved.Succeeded);
+
+        using var start = new ManualResetEventSlim(false);
+        var employeeIds = new[] { IvanovEmployeeId, PetrovEmployeeId };
+        var attempts = employeeIds.Select((employeeId, index) => Task.Run(() =>
+        {
+            start.Wait();
+            return UseWork(provider, work => work.CreateWorkSession(
+                new EmuCreateWorkSessionDto(workDate, section.Id, DateTimeOffset.UtcNow, [employeeId], $"Запуск {index}", planId),
+                null,
+                "concurrency-test"));
+        })).ToArray();
+        start.Set();
+        var results = await Task.WhenAll(attempts);
+
+        Assert.Single(results, row => row.Succeeded);
+        var rejected = Assert.Single(results, row => !row.Succeeded);
+        Assert.Contains("planTaskId", rejected.Errors.Keys);
+        Assert.Single(
+            UseWork(provider, work => work.GetWorkSessions(new EmuWorkSessionQueryDto())).Rows,
+            row => row.PlanTaskId == planId);
+    }
+
+    [DbIntegrationFact]
+    public async Task ConcurrentEmployeeJoinAllowsOnlyOneActiveParticipation()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var section = UseCatalog(provider, catalog => catalog.GetSettings()).Sections.Single(row => row.Name == "Прочее");
+        var date = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        var first = UseWork(provider, work => work.CreateWorkSession(
+            new EmuCreateWorkSessionDto(date, section.Id, DateTimeOffset.UtcNow, [IvanovEmployeeId], "Основная работа"), null, "operator"));
+        var second = UseWork(provider, work => work.CreateWorkSession(
+            new EmuCreateWorkSessionDto(date, section.Id, DateTimeOffset.UtcNow, [PetrovEmployeeId], "Вторая работа"), null, "operator"));
+        Assert.True(first.Succeeded);
+        Assert.True(second.Succeeded);
+
+        using var start = new ManualResetEventSlim(false);
+        var sessions = new[] { first.Value!, second.Value! };
+        var attempts = sessions.Select(session => Task.Run(() =>
+        {
+            start.Wait();
+            return UseWork(provider, work => work.AddWorkSessionEmployee(
+                session.Id,
+                new EmuAddWorkSessionEmployeeDto(SidorovEmployeeId, DateTimeOffset.UtcNow, "Параллельное присоединение", session.RowVersion),
+                null,
+                "concurrency-test"));
+        })).ToArray();
+        start.Set();
+        var results = await Task.WhenAll(attempts);
+
+        Assert.Single(results, row => row.Succeeded);
+        var rejected = Assert.Single(results, row => !row.Succeeded);
+        Assert.Contains("employeeId", rejected.Errors.Keys);
+        Assert.Single(
+            UseWork(provider, work => work.GetWorkSessions(new EmuWorkSessionQueryDto())).Rows,
+            row => row.Employees.Any(employee => employee.EmployeeId == SidorovEmployeeId && employee.FinishedAt is null));
+    }
+
+    [DbIntegrationFact]
+    public async Task ConcurrentResumeAndCreateAllowOnlyOneActiveParticipation()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+        var settings = UseCatalog(provider, catalog => catalog.GetSettings());
+        var section = settings.Sections.Single(row => row.Name == "Прочее");
+        var arrivedAt = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var first = UseWork(provider, work => work.CreateWorkSession(
+            new EmuCreateWorkSessionDto(DateOnly.FromDateTime(DateTime.UtcNow.Date), section.Id, arrivedAt, [SidorovEmployeeId], "Работа до паузы"), null, "operator"));
+        Assert.True(first.Succeeded);
+        var firstId = first.Value!.Id;
+        var paused = UseWork(provider, work => work.PauseWorkSession(
+            firstId,
+            new EmuPauseWorkSessionDto([SidorovEmployeeId], settings.WaitReasons.First().Id, arrivedAt.AddMinutes(2), "Пауза", false, first.Value.RowVersion),
+            null,
+            "operator"));
+        Assert.True(paused.Succeeded);
+
+        using var start = new ManualResetEventSlim(false);
+        var resume = Task.Run(() =>
+        {
+            start.Wait(); return UseWork(provider, work => work.ResumeWorkSession(
+            firstId,
+            new EmuResumeWorkSessionDto([SidorovEmployeeId], DateTimeOffset.UtcNow, "Возврат", paused.Value!.RowVersion),
+            null,
+            "concurrency-test"));
+        });
+        var create = Task.Run(() =>
+        {
+            start.Wait(); return UseWork(provider, work => work.CreateWorkSession(
+            new EmuCreateWorkSessionDto(DateOnly.FromDateTime(DateTime.UtcNow.Date), section.Id, DateTimeOffset.UtcNow, [SidorovEmployeeId], "Конкурирующая работа"),
+            null,
+            "concurrency-test"));
+        });
+        start.Set();
+        var results = await Task.WhenAll(resume, create);
+
+        Assert.Single(results, row => row.Succeeded);
+        Assert.Single(results, row => !row.Succeeded);
+        Assert.Single(
+            UseWork(provider, work => work.GetWorkSessions(new EmuWorkSessionQueryDto())).Rows,
+            row => row.Employees.Any(employee => employee.EmployeeId == SidorovEmployeeId && employee.Status == "Работает" && employee.FinishedAt is null));
+    }
 
     [DbIntegrationFact]
     public async Task WorkLifecycleDetectsConflictsAndKeepsAudit()
@@ -600,6 +763,68 @@ public sealed class EmuDbIntegrationTests
         var afterRebuild = ReadPresenceIntervals(database.ConnectionString, IvanovEmployeeId).Single();
         Assert.Equal(manualExitAt.ToUnixTimeMilliseconds(), afterRebuild.EndedAt?.ToUnixTimeMilliseconds());
         Assert.Equal("PERCO_MANUAL", afterRebuild.Source);
+    }
+
+    [DbIntegrationFact]
+    public async Task ParallelPercoPresenceRebuildsAreSerializedWithoutDuplicateIntervals()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var enteredAt = DateTimeOffset.UtcNow.AddHours(-2);
+        var exitedAt = enteredAt.AddHours(1);
+        InsertPercoAccessEvent(provider, IvanovEmployeeId, "IN", enteredAt);
+        InsertPercoAccessEvent(provider, IvanovEmployeeId, "OUT", exitedAt);
+
+        await Task.WhenAll(
+            InvokePresenceRebuildAsync(provider, CancellationToken.None),
+            InvokePresenceRebuildAsync(provider, CancellationToken.None));
+
+        var interval = Assert.Single(ReadPresenceIntervals(database.ConnectionString, IvanovEmployeeId));
+        Assert.Equal(enteredAt.ToUnixTimeMilliseconds(), interval.StartedAt.ToUnixTimeMilliseconds());
+        Assert.Equal(exitedAt.ToUnixTimeMilliseconds(), interval.EndedAt?.ToUnixTimeMilliseconds());
+    }
+
+    [DbIntegrationFact]
+    public async Task PercoPresenceRebuildRollsBackDeleteWhenReplacementInsertFails()
+        => await AssertPresenceRebuildRollbackAsync(cancel: false);
+
+    [DbIntegrationFact]
+    public async Task PercoPresenceRebuildRollsBackDeleteWhenReplacementInsertIsCancelled()
+        => await AssertPresenceRebuildRollbackAsync(cancel: true);
+
+    private static async Task AssertPresenceRebuildRollbackAsync(bool cancel)
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+        var oldStart = DateTimeOffset.UtcNow.AddDays(-1);
+        InsertPresenceInterval(provider, IvanovEmployeeId, oldStart, oldStart.AddHours(1));
+        var original = Assert.Single(ReadPresenceIntervals(database.ConnectionString, IvanovEmployeeId));
+        InsertPercoAccessEvent(provider, IvanovEmployeeId, "IN", DateTimeOffset.UtcNow.AddHours(-2));
+
+        var options = new DbContextOptionsBuilder<Patrol360DbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(new FailPresenceInsertInterceptor(cancel))
+            .Options;
+        await using var context = new Patrol360DbContext(options);
+        var service = new EfPercoIntegrationService(context, provider.GetRequiredService<IDataProtectionProvider>());
+
+        if (cancel)
+        {
+            await Assert.ThrowsAsync<OperationCanceledException>(() => InvokePresenceRebuildAsync(service, CancellationToken.None));
+        }
+        else
+        {
+            var exception = await Assert.ThrowsAsync<DbUpdateException>(() => InvokePresenceRebuildAsync(service, CancellationToken.None));
+            Assert.IsType<InvalidOperationException>(exception.InnerException);
+        }
+
+        var retained = Assert.Single(ReadPresenceIntervals(database.ConnectionString, IvanovEmployeeId));
+        Assert.Equal(original.Id, retained.Id);
+        Assert.Equal(original.StartedAt, retained.StartedAt);
+        Assert.Equal(original.EndedAt, retained.EndedAt);
     }
 
     [DbIntegrationFact]
@@ -1794,6 +2019,7 @@ public sealed class EmuDbIntegrationTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Patrol360"] = connectionString,
+                ["Patrol360:BootstrapAdminPassword"] = "Patrol360!",
                 ["Patrol360:SeedDemoData"] = "true",
             })
             .Build();
@@ -1899,16 +2125,24 @@ public sealed class EmuDbIntegrationTests
     }
 
     private static void InvokePresenceRebuild(ServiceProvider provider)
+        => InvokePresenceRebuildAsync(provider, CancellationToken.None).GetAwaiter().GetResult();
+
+    private static async Task InvokePresenceRebuildAsync(ServiceProvider provider, CancellationToken cancellationToken)
     {
         using var scope = provider.CreateScope();
         var service = scope.ServiceProvider.GetRequiredService<IPercoIntegrationService>();
+        await InvokePresenceRebuildAsync(service, cancellationToken);
+    }
+
+    private static async Task InvokePresenceRebuildAsync(IPercoIntegrationService service, CancellationToken cancellationToken)
+    {
         var method = service.GetType().GetMethod(
             "RebuildPresenceIntervalsForNewEventsAsync",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("PERCo presence rebuild method was not found.");
-        var task = (Task?)method.Invoke(service, [CancellationToken.None])
+        var task = (Task?)method.Invoke(service, [cancellationToken])
             ?? throw new InvalidOperationException("PERCo presence rebuild method did not return a task.");
-        task.GetAwaiter().GetResult();
+        await task;
     }
 
     private static T UsePerco<T>(ServiceProvider provider, Func<IPercoIntegrationService, T> action)
@@ -2055,4 +2289,42 @@ public sealed class EmuDbIntegrationTests
     }
 
     private sealed record PresenceIntervalProbe(Guid Id, DateTimeOffset StartedAt, DateTimeOffset? EndedAt, string Source);
+
+    private sealed class FailPresenceInsertInterceptor(bool cancel) : DbCommandInterceptor
+    {
+        private void ThrowIfReplacementInsert(DbCommand command)
+        {
+            if (!command.CommandText.Contains("INSERT INTO employee_presence_intervals", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (cancel)
+            {
+                throw new OperationCanceledException("Injected cancellation after presence delete.");
+            }
+
+            throw new InvalidOperationException("Injected failure after presence delete.");
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            ThrowIfReplacementInsert(command);
+            return ValueTask.FromResult(result);
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            ThrowIfReplacementInsert(command);
+            return ValueTask.FromResult(result);
+        }
+    }
 }

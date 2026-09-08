@@ -379,13 +379,52 @@ export async function replaceLocalUserDataWithBootstrap(bootstrap: BootstrapDto)
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
       await clearLocalUserTablesInTransaction(tx);
       await saveBootstrapInTransaction(tx, bootstrap);
+      await tx.runAsync(
+        `INSERT OR REPLACE INTO auth_transition (id, target_owner_user_id, contour_id, started_at)
+         VALUES (1, ?, ?, ?)`,
+        [bootstrap.user.serverUserId, currentContourId, new Date().toISOString()]
+      );
     })
   );
+}
 
+export type PendingAuthTransition = {
+  targetOwnerUserId: string;
+  contourId: string;
+  startedAt: string;
+};
+
+export async function getPendingAuthTransition(): Promise<PendingAuthTransition | null> {
+  const db = await getDatabase();
+  return db.getFirstAsync<PendingAuthTransition>(
+    `SELECT target_owner_user_id AS targetOwnerUserId,
+            contour_id AS contourId,
+            started_at AS startedAt
+       FROM auth_transition WHERE id = 1`
+  );
+}
+
+export async function completePendingAuthTransition(targetOwnerUserId: string) {
+  const db = await getDatabase();
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const transition = await tx.getFirstAsync<{ targetOwnerUserId: string }>(
+        "SELECT target_owner_user_id AS targetOwnerUserId FROM auth_transition WHERE id = 1"
+      );
+      if (transition && transition.targetOwnerUserId !== targetOwnerUserId) {
+        throw new Error("Нельзя завершить переход для другого пользователя.");
+      }
+      await tx.runAsync("DELETE FROM auth_transition WHERE id = 1");
+    })
+  );
+}
+
+export async function cleanupPreviousUserPhotos() {
   await deletePatrolPhotoDirectory();
 }
 
 async function clearLocalUserTablesInTransaction(executor: SqlExecutor) {
+  await executor.runAsync("DELETE FROM auth_transition");
   await executor.runAsync("DELETE FROM sync_conflicts");
   await executor.runAsync("DELETE FROM outbox_commands");
   await executor.runAsync("DELETE FROM files");

@@ -1,8 +1,10 @@
 # syntax=docker/dockerfile:1.7
 
 ARG DOTNET_VERSION=10.0
+ARG SOURCE_REVISION=unknown
 
 FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
+ARG SOURCE_REVISION
 WORKDIR /src
 
 COPY global.json Directory.Build.props ./
@@ -17,9 +19,11 @@ RUN --mount=type=cache,id=patrol360-nuget,target=/root/.nuget/packages \
 COPY apps/worker apps/worker
 COPY libs libs
 RUN --mount=type=cache,id=patrol360-nuget,target=/root/.nuget/packages \
-    dotnet publish apps/worker/Patrol360.Worker.csproj --configuration Release --no-restore --output /app/publish
+    dotnet publish apps/worker/Patrol360.Worker.csproj --configuration Release --no-restore --output /app/publish -p:SourceRevisionId=${SOURCE_REVISION}
 
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 WORKDIR /app
 
 RUN apt-get update \

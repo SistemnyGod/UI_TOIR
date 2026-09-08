@@ -55,6 +55,13 @@ internal sealed class EfMobilePushDeliveryService(
                 notification.PushLastError = string.Empty;
                 sentCount += 1;
             }
+            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                notification.PushLastError = "Provider timeout: " + Truncate(ex.Message, 1180);
+                notification.PushStatus = notification.PushAttemptCount >= MaxAttempts ? "failed" : "queued";
+                notification.PushClaimedAt = null;
+                logger.LogWarning(ex, "Mobile push provider timed out for notification {NotificationId}.", notification.Id);
+            }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 notification.PushLastError = Truncate(ex.Message, 1200);

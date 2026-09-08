@@ -36,3 +36,5 @@ apps/mobile/secrets/
 *firebase-adminsdk*.json
 firebase-service-account*.json
 google-services.json
+.codex-tmp/gradle-home/
+.codex-tmp/patrol360-release-20260908-01a07f74/

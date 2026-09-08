@@ -15,3 +15,13 @@ coverage
 .env
 .env.*
 !.env.example
+.codex-tmp
+.tmp
+artifacts
+mobiel proekt
+infra/docker/certs
+**/secrets
+**/*.pfx
+**/*.p12
+**/*.jks
+**/*.keystore

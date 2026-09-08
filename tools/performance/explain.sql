@@ -14,7 +14,7 @@ ORDER BY created_at DESC
 LIMIT 100;
 
 EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
-SELECT id, employee_id, route_id, planned_at
+SELECT a.id, a.employee_id, a.route_id, a.planned_at
 FROM assignments a
 LEFT JOIN employees e ON e.id = a.employee_id
 LEFT JOIN routes r ON r.id = a.route_id

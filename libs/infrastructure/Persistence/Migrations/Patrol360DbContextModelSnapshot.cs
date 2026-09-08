@@ -4291,6 +4291,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.MobileUploadedFileEntity", b =>
                 {
+                    b.Property<DateTimeOffset?>("LinkedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("linked_at");
+
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")

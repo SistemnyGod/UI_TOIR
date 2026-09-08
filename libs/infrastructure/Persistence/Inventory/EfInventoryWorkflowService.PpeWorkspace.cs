@@ -1035,16 +1035,26 @@ internal sealed partial class EfInventoryWorkflowService
             var isAdditional = requested.IsAdditional;
             var line = new InventoryPpeCardLineEntity
             {
-                Id = Guid.NewGuid(), CardId = card.Id, CardNormRowId = normRow.Id, ItemId = item.Id,
-                WarehouseId = requested.WarehouseId, Quantity = requested.Quantity,
+                Id = Guid.NewGuid(),
+                CardId = card.Id,
+                CardNormRowId = normRow.Id,
+                ItemId = item.Id,
+                WarehouseId = requested.WarehouseId,
+                Quantity = requested.Quantity,
                 UnitPriceMinor = requested.UnitPriceMinor ?? normRow.DefaultUnitPriceMinor ?? item.DefaultUnitPriceMinor,
-                Status = "issued", IssuedAt = requested.IssuedAt.ToUniversalTime(),
+                Status = "issued",
+                IssuedAt = requested.IssuedAt.ToUniversalTime(),
                 DueAt = normRow.LifeMonths is null ? null : requested.IssuedAt.ToUniversalTime().AddMonths(normRow.LifeMonths.Value),
-                Comment = NormalizeOptional(requested.Comment), PrintItemName = normRow.NormItemName,
-                NormPoint = normRow.NormPoint, IssuePeriodText = normRow.IssuePeriodText,
-                QuantityText = normRow.QuantityText, IsSectionTitle = false,
+                Comment = NormalizeOptional(requested.Comment),
+                PrintItemName = normRow.NormItemName,
+                NormPoint = normRow.NormPoint,
+                IssuePeriodText = normRow.IssuePeriodText,
+                QuantityText = normRow.QuantityText,
+                IsSectionTitle = false,
                 BrandModelArticle = NormalizePrintField(requested.BrandModelArticle, normRow.BrandModelArticle, 600),
-                IssueMethod = preparedLine.Method, SizeText = NormalizeOptional(requested.SizeText), WriteOffActNumber = string.Empty
+                IssueMethod = preparedLine.Method,
+                SizeText = NormalizeOptional(requested.SizeText),
+                WriteOffActNumber = string.Empty
             };
             dbContext.InventoryPpeCardLines.Add(line);
             AddPpeStockMoveIfNeeded(line, string.Empty, line.Status, now);
@@ -1163,12 +1173,21 @@ internal sealed partial class EfInventoryWorkflowService
             var mapping = source.Mappings.Where(row => row.ArchivedAt == null).OrderByDescending(row => row.IsDefault).FirstOrDefault();
             dbContext.InventoryPpeCardNormRows.Add(new InventoryPpeCardNormRowEntity
             {
-                Id = idMap[source.Id], CardId = cardId, SourceNormRowId = source.Id,
+                Id = idMap[source.Id],
+                CardId = cardId,
+                SourceNormRowId = source.Id,
                 ParentRowId = source.ParentRowId is null ? null : idMap[source.ParentRowId.Value],
-                RowType = source.RowType, SortOrder = source.SortOrder, NormItemName = source.NormItemName,
-                NormPoint = source.NormPoint, IssuePeriodText = source.IssuePeriodText, Quantity = source.Quantity,
-                QuantityText = source.QuantityText, LifeMonths = source.LifeMonths, MappedItemId = mapping?.ItemId,
-                BrandModelArticle = mapping?.BrandModelArticle ?? string.Empty, DefaultUnitPriceMinor = mapping?.DefaultUnitPriceMinor
+                RowType = source.RowType,
+                SortOrder = source.SortOrder,
+                NormItemName = source.NormItemName,
+                NormPoint = source.NormPoint,
+                IssuePeriodText = source.IssuePeriodText,
+                Quantity = source.Quantity,
+                QuantityText = source.QuantityText,
+                LifeMonths = source.LifeMonths,
+                MappedItemId = mapping?.ItemId,
+                BrandModelArticle = mapping?.BrandModelArticle ?? string.Empty,
+                DefaultUnitPriceMinor = mapping?.DefaultUnitPriceMinor
             });
         }
     }
@@ -1180,11 +1199,20 @@ internal sealed partial class EfInventoryWorkflowService
         {
             dbContext.InventoryPpeCardNormRows.Add(new InventoryPpeCardNormRowEntity
             {
-                Id = idMap[source.Id], CardId = cardId, SourceNormRowId = source.SourceNormRowId,
-                ParentRowId = source.ParentRowId is null ? null : idMap[source.ParentRowId.Value], RowType = source.RowType,
-                SortOrder = source.SortOrder, NormItemName = source.NormItemName, NormPoint = source.NormPoint,
-                IssuePeriodText = source.IssuePeriodText, Quantity = source.Quantity, QuantityText = source.QuantityText,
-                LifeMonths = source.LifeMonths, MappedItemId = source.MappedItemId, BrandModelArticle = source.BrandModelArticle,
+                Id = idMap[source.Id],
+                CardId = cardId,
+                SourceNormRowId = source.SourceNormRowId,
+                ParentRowId = source.ParentRowId is null ? null : idMap[source.ParentRowId.Value],
+                RowType = source.RowType,
+                SortOrder = source.SortOrder,
+                NormItemName = source.NormItemName,
+                NormPoint = source.NormPoint,
+                IssuePeriodText = source.IssuePeriodText,
+                Quantity = source.Quantity,
+                QuantityText = source.QuantityText,
+                LifeMonths = source.LifeMonths,
+                MappedItemId = source.MappedItemId,
+                BrandModelArticle = source.BrandModelArticle,
                 DefaultUnitPriceMinor = source.DefaultUnitPriceMinor
             });
         }
@@ -1198,10 +1226,17 @@ internal sealed partial class EfInventoryWorkflowService
             var line = lines[index];
             dbContext.InventoryPpeCardNormRows.Add(new InventoryPpeCardNormRowEntity
             {
-                Id = Guid.NewGuid(), CardId = cardId, RowType = line.IsSectionTitle ? "group" : "item", SortOrder = index,
-                NormItemName = line.PrintItemName, NormPoint = line.NormPoint, IssuePeriodText = line.IssuePeriodText,
-                Quantity = line.IsSectionTitle ? 0 : line.Quantity, QuantityText = line.QuantityText ?? string.Empty,
-                MappedItemId = line.IsSectionTitle ? null : line.ItemId, BrandModelArticle = line.BrandModelArticle,
+                Id = Guid.NewGuid(),
+                CardId = cardId,
+                RowType = line.IsSectionTitle ? "group" : "item",
+                SortOrder = index,
+                NormItemName = line.PrintItemName,
+                NormPoint = line.NormPoint,
+                IssuePeriodText = line.IssuePeriodText,
+                Quantity = line.IsSectionTitle ? 0 : line.Quantity,
+                QuantityText = line.QuantityText ?? string.Empty,
+                MappedItemId = line.IsSectionTitle ? null : line.ItemId,
+                BrandModelArticle = line.BrandModelArticle,
                 DefaultUnitPriceMinor = line.UnitPriceMinor
             });
         }

@@ -179,13 +179,16 @@ export function ResultsWorkspace({
 
   useEffect(() => {
     if (dataSourceMode === "api") {
-      setArchivedGroupIds([]);
-      setDeletedGroupIds([]);
+      setArchivedGroupIds((current) => current.length === 0 ? current : []);
+      setDeletedGroupIds((current) => current.length === 0 ? current : []);
       writeResultVisibilityState(emptyResultVisibilityState);
-      return;
     }
+  }, [dataSourceMode]);
 
-    writeResultVisibilityState({ archived: archivedGroupIds, deleted: deletedGroupIds });
+  useEffect(() => {
+    if (dataSourceMode !== "api") {
+      writeResultVisibilityState({ archived: archivedGroupIds, deleted: deletedGroupIds });
+    }
   }, [archivedGroupIds, dataSourceMode, deletedGroupIds]);
 
   const changeFilter = (nextMode: ResultMode) => {

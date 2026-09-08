@@ -14,9 +14,11 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      WebCors__AllowedOrigins__0: ${WEB_CORS_ALLOWED_ORIGIN:-https://192.168.2.194:5173}
       ConnectionStrings__Patrol360: Host=postgres;Port=5432;Database=${POSTGRES_DB:-patrol360};Username=${POSTGRES_USER:-patrol360};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       DataProtection__KeyRingPath: /var/lib/patrol360/data-protection-keys
+      Patrol360__BootstrapAdminPassword: ${PATROL360_BOOTSTRAP_ADMIN_PASSWORD:-}
     volumes:
       - ./secrets/data-protection-keys:/var/lib/patrol360/data-protection-keys
     logging: *default-logging
@@ -28,17 +30,19 @@ services:
     build:
       context: ../..
       dockerfile: apps/api/Dockerfile
+      args:
+        SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
     container_name: patrol360-api
     restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ConnectionStrings__Patrol360: Host=postgres;Port=5432;Database=${POSTGRES_DB:-patrol360};Username=${POSTGRES_USER:-patrol360};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       DataProtection__KeyRingPath: /var/lib/patrol360/data-protection-keys
       MobileDiagnostics__StoragePath: /app/mobile-diagnostics
-      WebCors__AllowedOrigins__0: ${WEB_CORS_ALLOWED_ORIGIN:-}
+      WebCors__AllowedOrigins__0: ${WEB_CORS_ALLOWED_ORIGIN:-https://192.168.2.194:5173}
       # Must match the proxy address below; all other X-Forwarded-* senders are ignored.
       ForwardedHeaders__KnownProxies__0: ${PATROL360_PROXY_IP:-172.30.0.10}
     volumes:
@@ -80,6 +84,8 @@ services:
     build:
       context: ../..
       dockerfile: apps/worker/Dockerfile
+      args:
+        SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
     container_name: patrol360-worker
     restart: unless-stopped
     depends_on:
@@ -88,7 +94,7 @@ services:
       api:
         condition: service_healthy
     environment:
-      DOTNET_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      DOTNET_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ConnectionStrings__Patrol360: Host=postgres;Port=5432;Database=${POSTGRES_DB:-patrol360};Username=${POSTGRES_USER:-patrol360};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       DataProtection__KeyRingPath: /var/lib/patrol360/data-protection-keys
       Firebase__ServiceAccountPath: /run/secrets/firebase-service-account.json
@@ -96,7 +102,7 @@ services:
       - ./secrets/data-protection-keys:/var/lib/patrol360/data-protection-keys
       - ./secrets/firebase-service-account.json:/run/secrets/firebase-service-account.json:ro
     healthcheck:
-      test: ["CMD-SHELL", "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'Patrol360.Worker.dll' && test -s /run/secrets/firebase-service-account.json"]
+      test: ["CMD-SHELL", "test -s /tmp/patrol360-worker-heartbeat.json && find /tmp/patrol360-worker-heartbeat.json -mmin -3 | grep -q ."]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -117,7 +123,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "5173:80"
+      - "5173:443"
     networks:
       default:
         # Keep this synchronized with ForwardedHeaders__KnownProxies__0 on api.
@@ -127,7 +133,7 @@ services:
       - ./certs/patrol360.local.crt:/etc/caddy/certs/patrol360.local.crt:ro
       - ./certs/patrol360.local.key:/etc/caddy/certs/patrol360.local.key:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/health/ready"]
+      test: ["CMD-SHELL", "wget -S --spider --max-redirect=0 http://127.0.0.1/health/ready 2>&1 | grep -q '308'"]
       interval: 10s
       timeout: 5s
       retries: 12

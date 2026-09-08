@@ -22,6 +22,8 @@ internal sealed class MobileUploadedFileEntity
 
     public Guid? WorkTaskId { get; set; }
 
+    public DateTimeOffset? LinkedAt { get; set; }
+
     public string StorageFileName { get; set; } = string.Empty;
 
     public string OriginalFileName { get; set; } = string.Empty;

@@ -11,15 +11,16 @@ import {
   getStoredOwnerUserId,
   getStoredSessionSnapshot,
   restoreStoredSessionSnapshot,
-  setOfflineSession,
-  setStoredOwnerUserId,
-  setTokens
+  storeSessionEnvelope,
 } from "@/auth/tokenStorage";
 import {
   clearLocalUserData,
+  cleanupPreviousUserPhotos,
+  completePendingAuthTransition,
   countBlockingLocalUserData,
   hasLocalUserData,
   hasUnscopedLocalData,
+  getPendingAuthTransition,
   replaceLocalUserDataWithBootstrap,
   saveBootstrap
 } from "@/db/repositories/bootstrapRepository";
@@ -89,7 +90,15 @@ export async function signIn(loginName: string, password: string) {
     throw new Error(`Сервер вернул сессию другого контура (${result.contourId}). Вход остановлен.`);
   }
 
+  const pendingTransition = await getPendingAuthTransition();
+  if (pendingTransition && pendingTransition.targetOwnerUserId !== result.user.serverUserId) {
+    await logout(result.accessToken).catch(() => undefined);
+    throw new Error("На телефоне не завершён переход к другому аккаунту. Войдите в целевой аккаунт для восстановления.");
+  }
+
   let bootstrap: Awaited<ReturnType<typeof getBootstrap>>;
+  let replacementCommitted = Boolean(pendingTransition);
+  let sessionPublished = false;
   try {
     bootstrap = await getBootstrap(result.accessToken);
     if (bootstrap.contourId !== currentContourId) {
@@ -103,31 +112,41 @@ export async function signIn(loginName: string, password: string) {
     if (shouldClearLocalData) {
       await assertNoPendingLocalChanges("Нельзя сменить пользователя: на телефоне есть неотправленные отчеты или действия. Сначала выполните синхронизацию.");
       await replaceLocalUserDataWithBootstrap(bootstrap);
+      replacementCommitted = true;
     } else {
       await saveBootstrap(bootstrap);
     }
 
-    await setTokens(result.accessToken, result.refreshToken, {
+    await storeSessionEnvelope({
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
       accessExpiresAt: result.expiresAt,
-      refreshExpiresAt: result.refreshExpiresAt
+      refreshExpiresAt: result.refreshExpiresAt,
+      ownerUserId: result.user.serverUserId,
+      refreshOperationId: null,
+      offlineSession: {
+        userId: result.user.serverUserId,
+        contourId: currentContourId,
+        fullName: result.user.fullName,
+        lastOnlineLoginAt: new Date().toISOString(),
+        expiresAt: result.refreshExpiresAt,
+        offlineExpiresAt: result.refreshExpiresAt,
+        deviceTrusted: result.device.trusted,
+        userBlockedAt: (result.user as typeof result.user & { blockedAt?: string | null }).blockedAt ?? null,
+        deviceBlockedAt: result.device.blockedAt
+      }
     });
-    await setStoredOwnerUserId(result.user.serverUserId);
-    await setOfflineSession({
-      userId: result.user.serverUserId,
-      contourId: currentContourId,
-      fullName: result.user.fullName,
-      lastOnlineLoginAt: new Date().toISOString(),
-      expiresAt: result.refreshExpiresAt,
-      offlineExpiresAt: result.refreshExpiresAt,
-      deviceTrusted: result.device.trusted,
-      userBlockedAt: (result.user as typeof result.user & { blockedAt?: string | null }).blockedAt ?? null,
-      deviceBlockedAt: result.device.blockedAt
-    });
+    sessionPublished = true;
+    if (replacementCommitted) await completePendingAuthTransition(result.user.serverUserId);
   } catch (error) {
-    await logout(result.accessToken).catch(() => undefined);
-    await restoreStoredSessionSnapshot(previousSession);
-    void scheduleNextOutboxRetry(previousOwnerUserId);
+    if (!sessionPublished) await logout(result.accessToken).catch(() => undefined);
+    if (!replacementCommitted) await restoreStoredSessionSnapshot(previousSession);
+    if (!replacementCommitted) void scheduleNextOutboxRetry(previousOwnerUserId);
     throw error;
+  }
+
+  if (replacementCommitted) {
+    await cleanupPreviousUserPhotos().catch(() => undefined);
   }
 
   await syncWorkItems().catch(() => []);
@@ -160,17 +179,41 @@ export async function restoreSessionWithRefreshToken() {
   if (bootstrap.contourId !== currentContourId) {
     throw new Error(`Bootstrap относится к другому контуру (${bootstrap.contourId}). Локальные данные не изменены.`);
   }
+  const pendingTransition = await getPendingAuthTransition();
+  if (pendingTransition && pendingTransition.targetOwnerUserId !== bootstrap.user.serverUserId) {
+    throw new Error("Незавершённый переход принадлежит другому аккаунту. Требуется целевой вход с паролем.");
+  }
   const shouldClearLocalData = contourMismatch || await hasUnscopedLocalData() || (previousOwnerUserId
     ? previousOwnerUserId !== bootstrap.user.serverUserId
     : await hasLocalUserData());
 
+  let replacementCommitted = Boolean(pendingTransition);
   if (shouldClearLocalData) {
     await assertNoPendingLocalChanges("Нельзя восстановить другую сессию: на телефоне есть неотправленные отчеты или действия.");
     await replaceLocalUserDataWithBootstrap(bootstrap);
+    replacementCommitted = true;
   } else {
     await saveBootstrap(bootstrap);
   }
-  await setStoredOwnerUserId(bootstrap.user.serverUserId);
+  const refreshedSession = await getStoredSessionSnapshot();
+  const previousOfflineSession = refreshedSession.offlineSession;
+  if (!refreshedSession.refreshToken || !previousOfflineSession?.expiresAt || !previousOfflineSession.offlineExpiresAt) {
+    throw new Error("Сессия восстановления неполна. Выполните целевой вход с паролем.");
+  }
+  await storeSessionEnvelope({
+    ...refreshedSession,
+    ownerUserId: bootstrap.user.serverUserId,
+    offlineSession: {
+      ...previousOfflineSession,
+      userId: bootstrap.user.serverUserId,
+      contourId: currentContourId,
+      fullName: bootstrap.user.fullName
+    }
+  });
+  if (replacementCommitted) {
+    await completePendingAuthTransition(bootstrap.user.serverUserId);
+    await cleanupPreviousUserPhotos().catch(() => undefined);
+  }
 
   await syncWorkItems().catch(() => []);
   await registerPushNotifications().catch(() => null);

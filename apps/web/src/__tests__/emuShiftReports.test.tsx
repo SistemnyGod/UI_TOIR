@@ -160,7 +160,7 @@ describe("EmuShiftReportsScreen", () => {
     const search = within(dialog).getByRole("combobox", { name: "Поиск сотрудника" });
     await user.type(search, "петров электромонтер");
     expect(within(dialog).getByText("Петров Пётр")).toBeInTheDocument();
-    expect(within(dialog).getByText(/1 из 4 сотрудников/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/1–1 из 1 сотрудников/)).toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("button", { name: "Очистить поиск" }));
     await user.selectOptions(within(dialog).getByLabelText("Подразделение"), "Цех обжига");
@@ -286,14 +286,14 @@ describe("EmuShiftReportsScreen", () => {
     await waitFor(() => expect(document.querySelector("[data-selected-employee-id='employee-3']")).toBeInTheDocument());
     expect(screen.getByRole("tab", { name: "Слесари" })).toHaveAttribute("aria-selected", "true");
   });
-  it("keeps the history layout stable during the initial load and removes the eyebrow", async () => {
+  it("keeps the history layout stable during the initial load and identifies the module", async () => {
     let resolveList: ((value: { rows: []; total: number; page: number; pageSize: number; pageCount: number }) => void) | undefined;
     mocks.getList.mockImplementation(() => new Promise((resolve) => { resolveList = resolve; }));
 
     render(<EmuShiftReportsScreen currentUser={currentUser} onNotify={vi.fn()} screen="emu-shift-report-history" />);
     await waitFor(() => expect(mocks.getList).toHaveBeenCalledTimes(1), { timeout: 1200 });
     expect(mocks.getList.mock.calls[0][0]).toEqual(expect.objectContaining({ pageSize: 24 }));
-    expect(document.querySelector('.emu-shift-header > div > span')).not.toBeInTheDocument();
+    expect(document.querySelector('.emu-shift-header > div > span')).toHaveTextContent('ЭМУ · СМЕННЫЕ ОТЧЁТЫ');
     expect(document.querySelectorAll('.emu-history-loading')).toHaveLength(4);
     expect(document.querySelectorAll('.emu-history-empty')).toHaveLength(0);
 

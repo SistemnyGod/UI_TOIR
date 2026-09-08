@@ -1,6 +1,7 @@
 param(
   [string]$SecretPath = '',
   [string]$BuildRoot = '',
+  [string]$OutputDirectory = '',
   [string]$JavaHome = $env:JAVA_HOME,
   [switch]$ValidateOnly,
 
@@ -190,6 +191,9 @@ try {
     }
     if (-not [string]::IsNullOrWhiteSpace($BuildRoot)) {
       $arguments.BuildRoot = $BuildRoot
+    }
+    if (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
+      $arguments.OutputDirectory = $OutputDirectory
     }
     & (Join-Path $PSScriptRoot 'build-apk.ps1') @arguments
     $nestedExitCode = $LASTEXITCODE

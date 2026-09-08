@@ -15,19 +15,30 @@ public partial class ImmutableRouteRevisions : Migration
             name: "route_revisions",
             columns: table => new
             {
-                id = table.Column<Guid>(type: "uuid", nullable: false), route_id = table.Column<Guid>(type: "uuid", nullable: false),
-                version_no = table.Column<int>(type: "integer", nullable: false), name = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
-                territory = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false), created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                id = table.Column<Guid>(type: "uuid", nullable: false),
+                route_id = table.Column<Guid>(type: "uuid", nullable: false),
+                version_no = table.Column<int>(type: "integer", nullable: false),
+                name = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                territory = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
             },
             constraints: table => { table.PrimaryKey("PK_route_revisions", x => x.id); table.ForeignKey("FK_route_revisions_routes_route_id", x => x.route_id, "routes", "id", onDelete: ReferentialAction.Restrict); });
         migrationBuilder.CreateTable(
             name: "route_revision_points",
             columns: table => new
             {
-                id = table.Column<Guid>(type: "uuid", nullable: false), route_revision_id = table.Column<Guid>(type: "uuid", nullable: false), source_route_point_id = table.Column<Guid>(type: "uuid", nullable: false),
-                seq_no = table.Column<int>(type: "integer", nullable: false), name = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false), zone = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
-                point_type = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false), tag = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false), nfc_code = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: true),
-                is_required = table.Column<bool>(type: "boolean", nullable: false), requires_photo = table.Column<bool>(type: "boolean", nullable: false), status = table.Column<string>(type: "character varying(60)", maxLength: 60, nullable: false)
+                id = table.Column<Guid>(type: "uuid", nullable: false),
+                route_revision_id = table.Column<Guid>(type: "uuid", nullable: false),
+                source_route_point_id = table.Column<Guid>(type: "uuid", nullable: false),
+                seq_no = table.Column<int>(type: "integer", nullable: false),
+                name = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                zone = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                point_type = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false),
+                tag = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false),
+                nfc_code = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: true),
+                is_required = table.Column<bool>(type: "boolean", nullable: false),
+                requires_photo = table.Column<bool>(type: "boolean", nullable: false),
+                status = table.Column<string>(type: "character varying(60)", maxLength: 60, nullable: false)
             },
             constraints: table => { table.PrimaryKey("PK_route_revision_points", x => x.id); table.ForeignKey("FK_route_revision_points_route_revisions_route_revision_id", x => x.route_revision_id, "route_revisions", "id", onDelete: ReferentialAction.Cascade); });
         migrationBuilder.AddColumn<Guid>("route_revision_id", "assignments", type: "uuid", nullable: true);

@@ -250,7 +250,7 @@ internal sealed partial class EfMobileAppService
 
         var attachments = dbContext.MobileUploadedFiles
             .AsNoTracking()
-            .Where(file => file.MobileAccountId == mobileAccountId && file.WorkTaskId == taskId)
+            .Where(file => file.LinkedAt != null && file.MobileAccountId == mobileAccountId && file.WorkTaskId == taskId)
             .OrderBy(file => file.UploadedAt)
             .ToArray();
         return MapMobileWorkSessionItem(session, boundEmployeeIds, attachments);
@@ -422,7 +422,7 @@ internal sealed partial class EfMobileAppService
             ? new Dictionary<Guid, IReadOnlyList<MobileUploadedFileEntity>>()
             : dbContext.MobileUploadedFiles
                 .AsNoTracking()
-                .Where(file => file.MobileAccountId == session.MobileAccountId
+                .Where(file => file.LinkedAt != null && file.MobileAccountId == session.MobileAccountId
                     && file.WorkTaskId != null
                     && sessionIds.Contains(file.WorkTaskId.Value))
                 .AsEnumerable()

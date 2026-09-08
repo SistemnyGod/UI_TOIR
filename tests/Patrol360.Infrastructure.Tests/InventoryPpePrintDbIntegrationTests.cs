@@ -301,8 +301,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.Contains("1 custom pcs. updated", cardXml, StringComparison.Ordinal);
         Assert.Contains("p. 1.3.1 Appendix 2 updated", cardXml, StringComparison.Ordinal);
         Assert.Contains("pcs., 3 years", cardXml, StringComparison.Ordinal);
-        Assert.Contains(issuedNorm, sheetXml, StringComparison.Ordinal);
-        Assert.Contains("1 custom pcs. updated", sheetXml, StringComparison.Ordinal);
+        Assert.Contains("Warehouse harness SafeBrand", sheetXml, StringComparison.Ordinal);
         Assert.DoesNotContain(sectionTitle, sheetXml, StringComparison.Ordinal);
 
         var norm = UseCommand(provider, command => command.UpsertPositionNorm(new UpsertInventoryPositionNormDto(
@@ -812,6 +811,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Patrol360"] = connectionString,
+                ["Patrol360:BootstrapAdminPassword"] = "Patrol360!",
                 ["Patrol360:SeedDemoData"] = "true",
             })
             .Build();

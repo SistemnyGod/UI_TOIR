@@ -30,8 +30,8 @@ internal static class PermissionAuthorization
         {
             context.Result = new UnauthorizedObjectResult(new ProblemDetails
             {
-                Title = "РўСЂРµР±СѓРµС‚СЃСЏ Р°РІС‚РѕСЂРёР·Р°С†РёСЏ",
-                Detail = "РџРµСЂРµРґР°Р№С‚Рµ Bearer token Р°РєС‚РёРІРЅРѕР№ СЃРµСЃСЃРёРё.",
+                Title = "Требуется авторизация",
+                Detail = "Передайте Bearer token активной сессии.",
                 Status = StatusCodes.Status401Unauthorized
             });
             return;
@@ -59,8 +59,8 @@ internal static class PermissionAuthorization
             var permissionList = string.Join(", ", permissions);
             context.Result = new ObjectResult(new ProblemDetails
             {
-                Title = "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ",
-                Detail = $"Р”Р»СЏ РґРµР№СЃС‚РІРёСЏ С‚СЂРµР±СѓРµС‚СЃСЏ РѕРґРЅРѕ РёР· РїСЂР°РІ: {permissionList}.",
+                Title = "Недостаточно прав",
+                Detail = $"Для действия требуется одно из прав: {permissionList}.",
                 Status = StatusCodes.Status403Forbidden
             })
             {

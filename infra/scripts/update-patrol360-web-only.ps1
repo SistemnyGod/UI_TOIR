@@ -1,10 +1,11 @@
 [CmdletBinding()]
 param(
-    [string]$CanonicalUrl = "http://192.168.2.194:5173/",
+    [string]$CanonicalUrl = "https://192.168.2.194:5173/",
     [switch]$SkipNpmBuild
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "ReleaseNative.ps1")
 
 function Get-ContainerId {
     param([Parameter(Mandatory = $true)][string]$Name)
@@ -134,24 +135,21 @@ $apiBefore = Get-ContainerId -Name "patrol360-api"
 $postgresBefore = Get-ContainerId -Name "patrol360-postgres"
 
 $webConfig = docker compose @composeArgs config web
+if ($LASTEXITCODE -ne 0) {
+    throw "Docker Compose web configuration validation failed."
+}
 if ($webConfig -match "depends_on:") {
     throw "web-prebuilt config still contains depends_on. Refusing web-only update."
 }
 
 if (-not $SkipNpmBuild) {
-    npm run build --prefix apps\web
+    Invoke-ReleaseNative npm run build --prefix apps\web
 }
 
 Merge-PreviousWebAssets -ContainerName "patrol360-web" -DistPath (Join-Path $repoRoot "apps\web\dist")
 
-docker compose @composeArgs build web
-if ($LASTEXITCODE -ne 0) {
-    throw "Web image build failed."
-}
-docker compose @composeArgs up -d --no-deps web
-if ($LASTEXITCODE -ne 0) {
-    throw "Web container update failed."
-}
+Invoke-ReleaseNative docker compose @composeArgs build web
+Invoke-ReleaseNative docker compose @composeArgs up -d --no-deps web
 
 Wait-Healthy -Name "patrol360-web"
 
@@ -172,6 +170,15 @@ if ($response.StatusCode -ne 200) {
 }
 
 $webImage = docker inspect docker-web:latest --format "{{.Id}} {{.Created}}"
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not inspect the newly built web image."
+}
+
+$manifestScript = Join-Path $repoRoot "tools\New-BuildManifest.ps1"
+& $manifestScript -OutputPath "artifacts\build-manifest-web.json" -ArtifactPaths @("apps\web\dist")
+if (-not $?) {
+    throw "Build manifest generation failed."
+}
 
 Write-Host "Patrol360 web-only update completed."
 Write-Host "Canonical URL: $CanonicalUrl"

@@ -47,7 +47,7 @@ internal sealed partial class EfEmuService
         {
             Attachments = dbContext.MobileUploadedFiles
                 .AsNoTracking()
-                .Where(file => file.WorkTaskId == row.Id)
+                .Where(file => file.LinkedAt != null && file.WorkTaskId == row.Id)
                 .OrderBy(file => file.UploadedAt)
                 .Select(file => new EmuWorkAttachmentDto(
                     file.Id,

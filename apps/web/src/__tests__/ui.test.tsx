@@ -276,10 +276,10 @@ describe("shared UI primitives", () => {
 
     render(<SiteUserFormPanel onCreateUser={onCreateUser} onNotify={onNotify} />);
 
-    await user.type(screen.getByLabelText("Логин"), "operator");
-    await user.type(screen.getByLabelText("ФИО"), "Оператор");
-    await user.type(screen.getByLabelText("Временный пароль"), "Password1");
-    await user.type(screen.getByLabelText("Подтвердите пароль"), "Password2");
+    await user.type(screen.getByLabelText(/Логин/), "operator");
+    await user.type(screen.getByLabelText(/ФИО/), "Оператор");
+    await user.type(screen.getByLabelText(/Временный пароль/), "Password1");
+    await user.type(screen.getByLabelText(/Подтвердите пароль/), "Password2");
 
     expect(screen.getByRole("button", { name: "Создать пользователя" })).toBeDisabled();
     expect(onCreateUser).not.toHaveBeenCalled();
@@ -292,10 +292,10 @@ describe("shared UI primitives", () => {
 
     render(<SiteUserFormPanel onCreateUser={onCreateUser} onNotify={vi.fn()} />);
 
-    await user.type(screen.getByLabelText("Логин"), "operator");
-    await user.type(screen.getByLabelText("ФИО"), "Оператор");
-    await user.type(screen.getByLabelText("Временный пароль"), "Password1");
-    await user.type(screen.getByLabelText("Подтвердите пароль"), "Password1");
+    await user.type(screen.getByLabelText(/Логин/), "operator");
+    await user.type(screen.getByLabelText(/ФИО/), "Оператор");
+    await user.type(screen.getByLabelText(/Временный пароль/), "Password1");
+    await user.type(screen.getByLabelText(/Подтвердите пароль/), "Password1");
     await user.click(screen.getByRole("button", { name: "Создать пользователя" }));
 
     expect(onCreateUser).toHaveBeenCalledWith(expect.objectContaining({
@@ -387,6 +387,7 @@ describe("shared UI primitives", () => {
     render(
       <SiteUserAccessPanel
         canManage
+        emuSections={[{ id: "section-1", name: "Цех 1", isActive: true, sortOrder: 0 }]}
         loadAccess={loadAccess}
         onNotify={vi.fn()}
         onOpenProfile={vi.fn()}
@@ -396,14 +397,14 @@ describe("shared UI primitives", () => {
       />,
     );
 
-    await user.click(screen.getByRole("tab", { name: "Участки" }));
+    await user.click(screen.getByRole("button", { name: "Участки ЭМУ" }));
     await waitFor(() => expect(loadAccess).toHaveBeenCalledWith("user-1"));
     await user.click(screen.getByRole("button", { name: "Выбрать все" }));
-    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+    await user.click(screen.getByRole("button", { name: "Сохранить участки" }));
 
     expect(onSaveScopes).toHaveBeenCalledWith("user-1", [
-      { moduleKey: "emu", scopeType: "emu_section", scopeId: "section-1" },
-    ]);
+      { moduleKey: "emu", scopeType: "emu_section", scopeId: "section-1", sortOrder: 0 },
+    ], "selected");
   });
 
   it("opens PPE as an employee-centered card with tabs and issue action", async () => {
@@ -1027,11 +1028,11 @@ describe("shared UI primitives", () => {
       />,
     );
 
-    await waitFor(() => expect(container.querySelectorAll("article.results-review-row").length).toBeGreaterThan(0));
-    const openTarget = screen.getAllByRole("button", { name: /Открыть результат обхода/ })[0];
+    await waitFor(() => expect(container.querySelectorAll(".results-review-compact-table tbody > tr").length).toBeGreaterThan(0));
+    const openTarget = container.querySelector<HTMLElement>(".results-review-compact-table tbody > tr");
     expect(openTarget).toBeInTheDocument();
 
-    await user.dblClick(openTarget);
+    await user.dblClick(openTarget!);
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(onSelectResult).toHaveBeenCalled();
@@ -1072,7 +1073,7 @@ describe("shared UI primitives", () => {
       />,
     );
 
-    await waitFor(() => expect(container.querySelectorAll("article.results-review-row").length).toBeGreaterThan(0));
+    await waitFor(() => expect(container.querySelectorAll(".results-review-compact-table tbody > tr").length).toBeGreaterThan(0));
 
     expect(screen.getByLabelText("Маршрут")).toBeInTheDocument();
   });
@@ -1087,12 +1088,12 @@ describe("shared UI primitives", () => {
       />,
     );
 
-    await waitFor(() => expect(container.querySelectorAll("article.results-review-row").length).toBeGreaterThan(0));
+    await waitFor(() => expect(container.querySelectorAll(".results-review-compact-table tbody > tr").length).toBeGreaterThan(0));
     expect(screen.getByRole("button", { name: "Открыть заявку" })).toBeEnabled();
 
     fireEvent.change(screen.getByLabelText("Поиск по результатам обходов"), { target: { value: "результат-которого-нет" } });
 
-    await waitFor(() => expect(container.querySelectorAll("article.results-review-row")).toHaveLength(0));
+    await waitFor(() => expect(container.querySelectorAll(".results-review-compact-table tbody > tr")).toHaveLength(0));
     expect(screen.getByRole("button", { name: "Открыть заявку" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Создать заявку" })).toBeDisabled();
   });
@@ -1138,9 +1139,9 @@ describe("shared UI primitives", () => {
       />,
     );
 
-    await waitFor(() => expect(container.querySelectorAll("article.results-review-row").length).toBeGreaterThan(0));
-    const initialRows = container.querySelectorAll("article.results-review-row").length;
-    const row = container.querySelector<HTMLElement>("article.results-review-row");
+    await waitFor(() => expect(container.querySelectorAll(".results-review-compact-table tbody > tr").length).toBeGreaterThan(0));
+    const initialRows = container.querySelectorAll(".results-review-compact-table tbody > tr").length;
+    const row = container.querySelector<HTMLElement>(".results-review-compact-table tbody > tr");
     expect(row).not.toBeNull();
 
     fireEvent.contextMenu(row!, { clientX: 320, clientY: 240 });
@@ -1151,7 +1152,7 @@ describe("shared UI primitives", () => {
     expect(archiveButton).not.toBeNull();
     await user.click(archiveButton!);
 
-    await waitFor(() => expect(container.querySelectorAll("article.results-review-row")).toHaveLength(initialRows - 1));
+    await waitFor(() => expect(container.querySelectorAll(".results-review-compact-table tbody > tr")).toHaveLength(initialRows - 1));
     expect(addToast).toHaveBeenCalledWith(expect.any(String), "info");
 
     unmount();
@@ -1165,7 +1166,7 @@ describe("shared UI primitives", () => {
       />,
     );
 
-    await waitFor(() => expect(persisted.container.querySelectorAll("article.results-review-row")).toHaveLength(initialRows - 1));
+    await waitFor(() => expect(persisted.container.querySelectorAll(".results-review-compact-table tbody > tr")).toHaveLength(initialRows - 1));
   });
 
   it("opens patrol result row menu from the three-dot button and hides the row on this device", async () => {
@@ -1182,8 +1183,8 @@ describe("shared UI primitives", () => {
       />,
     );
 
-    await waitFor(() => expect(container.querySelectorAll("article.results-review-row").length).toBeGreaterThan(0));
-    const initialRows = container.querySelectorAll("article.results-review-row").length;
+    await waitFor(() => expect(container.querySelectorAll(".results-review-compact-table tbody > tr").length).toBeGreaterThan(0));
+    const initialRows = container.querySelectorAll(".results-review-compact-table tbody > tr").length;
     const menuButton = container.querySelector<HTMLButtonElement>(".results-review-row-more");
     expect(menuButton).not.toBeNull();
 
@@ -1195,7 +1196,7 @@ describe("shared UI primitives", () => {
     expect(deleteButton).not.toBeNull();
     await user.click(deleteButton!);
 
-    await waitFor(() => expect(container.querySelectorAll("article.results-review-row")).toHaveLength(initialRows - 1));
+    await waitFor(() => expect(container.querySelectorAll(".results-review-compact-table tbody > tr")).toHaveLength(initialRows - 1));
     expect(addToast).toHaveBeenCalledWith(expect.any(String), "success");
 
     unmount();
@@ -1209,7 +1210,7 @@ describe("shared UI primitives", () => {
       />,
     );
 
-    await waitFor(() => expect(persisted.container.querySelectorAll("article.results-review-row")).toHaveLength(initialRows - 1));
+    await waitFor(() => expect(persisted.container.querySelectorAll(".results-review-compact-table tbody > tr")).toHaveLength(initialRows - 1));
   });
 
   it("renders issue point status under marker name with a dedicated comment block", () => {
@@ -1418,7 +1419,7 @@ describe("shared UI primitives", () => {
     expect(screen.queryByText("Уведомить сотрудника")).not.toBeInTheDocument();
     expect(screen.getByText("Отправка заявки")).toBeInTheDocument();
 
-    const timeInput = container.querySelector<HTMLInputElement>('input[name="scheduledTime"]');
+    const timeInput = document.querySelector<HTMLInputElement>('input[name="scheduledTime"]');
     expect(timeInput).not.toBeNull();
     fireEvent.change(timeInput!, { target: { value: "09:15" } });
     await user.click(screen.getByRole("button", { name: "Создать заявку" }));
@@ -1567,7 +1568,7 @@ describe("shared UI primitives", () => {
       />,
     );
 
-    expect(screen.getAllByText("Сейчас онлайн")).toHaveLength(2);
+    expect(screen.getAllByText("Сейчас онлайн")).toHaveLength(1);
     expect(screen.getByText("Xiaomi")).toBeInTheDocument();
     expect(screen.getByText("Android · 2.3.0 · 127.0.0.1")).toBeInTheDocument();
     expect(screen.getByText("Вход в приложение")).toBeInTheDocument();

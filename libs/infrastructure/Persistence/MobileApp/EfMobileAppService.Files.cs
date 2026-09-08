@@ -62,15 +62,23 @@ internal sealed partial class EfMobileAppService
                 && file.ClientFileId == clientFileId, cancellationToken);
         if (existing is not null)
         {
-            return new MobileFileUploadResponseDto(existing.ClientFileId, existing.Id, "duplicate", existing.UploadedAt);
+            return MatchesUploadTarget(existing, command)
+                ? new MobileFileUploadResponseDto(existing.ClientFileId, existing.Id, "duplicate", existing.UploadedAt)
+                : null;
         }
 
-        var remarkId = NormalizeOptionalText(command.RemarkId);
+        var remarkId = NormalizeRemarkFileId(command.RemarkId);
         var workTaskId = command.WorkTaskId;
         var isPatrolPointFile = command.AssignmentId is not null && command.PointId is not null;
         var isRemarkFile = !string.IsNullOrWhiteSpace(remarkId);
         var isWorkTaskFile = workTaskId is not null;
-        if (!isPatrolPointFile && !isRemarkFile && !isWorkTaskFile)
+        if (isRemarkFile && !Guid.TryParse(remarkId, out _))
+        {
+            return null;
+        }
+        if ((isPatrolPointFile ? 1 : 0) + (isRemarkFile ? 1 : 0) + (isWorkTaskFile ? 1 : 0) != 1
+            || (isPatrolPointFile && (isRemarkFile || isWorkTaskFile))
+            || (!isPatrolPointFile && (command.AssignmentId is not null || command.PointId is not null)))
         {
             return null;
         }
@@ -131,6 +139,7 @@ internal sealed partial class EfMobileAppService
             PointId = command.PointId,
             RemarkId = isRemarkFile ? remarkId : null,
             WorkTaskId = workTaskId,
+            LinkedAt = isPatrolPointFile ? uploadedAt : null,
             StorageFileName = storageFileName,
             OriginalFileName = NormalizeOptionalText(command.FileName, $"{clientFileId}.{extension}"),
             ContentType = normalizedContentType,
@@ -154,6 +163,11 @@ internal sealed partial class EfMobileAppService
                     && file.ClientFileId == clientFileId, cancellationToken);
             if (racedUpload is not null)
             {
+                if (!MatchesUploadTarget(racedUpload, command))
+                {
+                    return null;
+                }
+
                 return new MobileFileUploadResponseDto(
                     racedUpload.ClientFileId,
                     racedUpload.Id,
@@ -216,6 +230,14 @@ internal sealed partial class EfMobileAppService
 
     private static bool IsUniqueFileConstraintViolation(DbUpdateException exception) =>
         exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
+
+    private static bool MatchesUploadTarget(MobileUploadedFileEntity file, MobileFileUploadCommand command) =>
+        file.AssignmentId == command.AssignmentId && file.PointId == command.PointId
+        && file.WorkTaskId == command.WorkTaskId
+        && string.Equals(file.RemarkId ?? string.Empty, NormalizeRemarkFileId(command.RemarkId), StringComparison.Ordinal);
+
+    private static string NormalizeRemarkFileId(string? value) =>
+        Guid.TryParse(value, out var id) ? id.ToString() : NormalizeOptionalText(value);
 
     private sealed record MobileUploadedFileWriteResult(long SizeBytes, string Sha256);
 }

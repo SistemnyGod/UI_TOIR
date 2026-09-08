@@ -54,7 +54,7 @@ internal sealed partial class EfEmuService
             .Include(row => row.Section)
             .AsQueryable();
 
-        if (allowedSectionIds is { Count: > 0 })
+        if (allowedSectionIds is not null)
         {
             rowsQuery = rowsQuery.Where(row => allowedSectionIds.Contains(row.SectionId));
         }
@@ -96,7 +96,7 @@ internal sealed partial class EfEmuService
     {
         var file = dbContext.MobileUploadedFiles
             .AsNoTracking()
-            .FirstOrDefault(row => row.Id == attachmentId && row.RemarkId == remarkId.ToString());
+            .FirstOrDefault(row => row.LinkedAt != null && row.Id == attachmentId && row.RemarkId == remarkId.ToString());
         if (file is null)
         {
             return null;
@@ -112,7 +112,7 @@ internal sealed partial class EfEmuService
     {
         var file = dbContext.MobileUploadedFiles
             .AsNoTracking()
-            .FirstOrDefault(row => row.Id == attachmentId && row.WorkTaskId == workSessionId);
+            .FirstOrDefault(row => row.LinkedAt != null && row.Id == attachmentId && row.WorkTaskId == workSessionId);
         if (file is null)
         {
             return null;
@@ -141,7 +141,7 @@ internal sealed partial class EfEmuService
         var declaredClientFileIds = ReadShiftRemarkMediaIds(row.MediaClientFileIdsJson);
         var attachmentsQuery = dbContext.MobileUploadedFiles
             .AsNoTracking()
-            .Where(file => file.RemarkId == remarkId);
+            .Where(file => file.LinkedAt != null && file.MobileAccountId == row.MobileAccountId && file.RemarkId == remarkId);
 
         if (declaredClientFileIds.Count > 0)
         {

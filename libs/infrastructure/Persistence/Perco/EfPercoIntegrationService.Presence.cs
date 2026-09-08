@@ -15,12 +15,20 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfPercoIntegrationService
 {
+    private const long PresenceMutationLockKey = 0x504552434F505245;
+
     public async Task<PercoSyncResultDto> ClosePresenceIntervalAsync(
         Guid intervalId,
         ClosePercoPresenceIntervalDto request,
         Guid? actorUserId,
         CancellationToken cancellationToken = default)
     {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "SELECT pg_advisory_xact_lock({0})",
+            [PresenceMutationLockKey],
+            cancellationToken);
+
         var now = DateTimeOffset.UtcNow;
         var comment = (request.Comment ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(comment))
@@ -72,12 +80,19 @@ internal sealed partial class EfPercoIntegrationService
             cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return new PercoSyncResultDto(true, "success", "Интервал присутствия закрыт вручную.", 0, 0, 1, 0, 0, 0, 0, now);
     }
 
     private async Task RebuildPresenceIntervalsForNewEventsAsync(CancellationToken cancellationToken)
     {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "SELECT pg_advisory_xact_lock({0})",
+            [PresenceMutationLockKey],
+            cancellationToken);
+
         var events = (await dbContext.PercoAccessEvents
             .AsNoTracking()
             .Where(row => row.EmployeeId != null && (row.Direction == "IN" || row.Direction == "OUT"))
@@ -162,6 +177,7 @@ internal sealed partial class EfPercoIntegrationService
 
         dbContext.EmployeePresenceIntervals.AddRange(rebuilt);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     private static string FormatDirectionLabel(string direction) =>

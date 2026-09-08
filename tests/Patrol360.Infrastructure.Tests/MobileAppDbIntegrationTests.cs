@@ -83,7 +83,7 @@ public sealed class MobileAppDbIntegrationTests
         var clientAssignmentId = Guid.NewGuid().ToString();
         var command = new MobileOutboxCommandDto(
             "op-test-1",
-            "takePatrolRequest",
+            "acceptPatrolRequest",
             "patrolRequest",
             clientAssignmentId,
             boardItem.RequestId.ToString(),
@@ -92,7 +92,6 @@ public sealed class MobileAppDbIntegrationTests
                 ["requestId"] = boardItem.RequestId,
                 ["routeId"] = boardItem.RouteId,
                 ["requestRevision"] = boardItem.Revision,
-                ["takenAtLocal"] = DateTimeOffset.UtcNow,
             },
             DateTimeOffset.UtcNow,
             0,
@@ -111,6 +110,22 @@ public sealed class MobileAppDbIntegrationTests
         Assert.Equal("duplicate", repeatedOutbox[0].Status);
 
         var assignmentId = Guid.Parse(firstOutbox[0].ServerEntityId!);
+        var startOutbox = UseMobileApp(provider, mobile => mobile.SaveOutbox(
+            login.Session.AccessToken,
+            new MobileOutboxBatchDto([
+                new MobileOutboxCommandDto(
+                    "op-test-start",
+                    "startPatrolAssignment",
+                    "patrolAssignment",
+                    assignmentId.ToString(),
+                    assignmentId.ToString(),
+                    new Dictionary<string, object?> { ["assignmentId"] = assignmentId },
+                    DateTimeOffset.UtcNow,
+                    0,
+                    "pending")
+            ])));
+        Assert.Single(startOutbox);
+        Assert.Equal("accepted", startOutbox[0].Status);
         var routePoint = bootstrap.Points.First(point =>
             point.RouteId == boardItem.RouteId && !string.IsNullOrWhiteSpace(point.NfcUidHash));
         var manualPoint = bootstrap.Points.First(point =>
@@ -381,7 +396,7 @@ public sealed class MobileAppDbIntegrationTests
                 ["assignmentId"] = assignmentId,
                 ["requestId"] = boardItem.RequestId,
                 ["completedAtLocal"] = DateTimeOffset.UtcNow,
-                ["baseRevision"] = firstOutbox[0].ServerRevision,
+                ["baseRevision"] = startOutbox[0].ServerRevision,
                 ["summary"] = new Dictionary<string, object?>
                 {
                     ["totalPoints"] = allPointResults.Length,
@@ -492,7 +507,7 @@ public sealed class MobileAppDbIntegrationTests
             new MobileOutboxBatchDto([completeCommand])));
 
         Assert.Single(completeAccepted);
-        Assert.Equal("accepted", completeAccepted[0].Status);
+        Assert.True(completeAccepted[0].Status == "accepted", completeAccepted[0].Message);
         var skippedReport = ReadSkippedPatrolResult(database.ConnectionString, assignmentId);
         Assert.Equal("skipped", skippedReport.Status);
         Assert.Equal("Метка недоступна", skippedReport.IssueType);
@@ -627,7 +642,7 @@ public sealed class MobileAppDbIntegrationTests
         var cancelledClientAssignmentId = Guid.NewGuid().ToString();
         var cancelledTakeCommand = new MobileOutboxCommandDto(
             "op-cancelled-complete-take",
-            "takePatrolRequest",
+            "acceptPatrolRequest",
             "patrolRequest",
             cancelledClientAssignmentId,
             cancelledBoardItem.RequestId.ToString(),
@@ -1074,8 +1089,9 @@ public sealed class MobileAppDbIntegrationTests
                     })
             ])));
         Assert.Single(blockedTake);
-        Assert.Equal("conflict", blockedTake[0].Status);
-        Assert.Equal("activePatrolExists", blockedTake[0].ReasonCode);
+        Assert.Equal("rejected", blockedTake[0].Status);
+        Assert.Contains("Legacy takePatrolRequest is disabled", blockedTake[0].Message, StringComparison.Ordinal);
+        Assert.Null(blockedTake[0].ReasonCode);
         Assert.Null(ReadAssignmentStatus(database.ConnectionString, blockedTakeAssignmentId));
 
         var secondAssignmentId = Guid.NewGuid();
@@ -1287,6 +1303,7 @@ public sealed class MobileAppDbIntegrationTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Patrol360"] = connectionString,
+                ["Patrol360:BootstrapAdminPassword"] = "Patrol360!",
                 ["Patrol360:SeedDemoData"] = "true",
             })
             .Build();

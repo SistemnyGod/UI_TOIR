@@ -11,7 +11,7 @@ export function RequestViewModal({
   onClose: () => void;
   onCreateRelated: () => void;
 }) {
-  const timeLabel = request.scheduledTime || "РќРµ СѓРєР°Р·Р°РЅРѕ";
+  const timeLabel = request.scheduledTime || "Не указано";
   const hasPoint = Boolean(request.point.trim());
   const hasDescription = Boolean(request.description.trim());
   const hasNotification = request.notifyEmployee && Boolean(request.notificationText.trim());
@@ -24,71 +24,71 @@ export function RequestViewModal({
       actions={
         <>
           <Button onClick={onCreateRelated} variant="ghost">
-            РџРѕРІС‚РѕСЂРёС‚СЊ Р·Р°СЏРІРєСѓ
+            Повторить заявку
           </Button>
           <Button onClick={onClose} variant="primary">
-            Р—Р°РєСЂС‹С‚СЊ
+            Закрыть
           </Button>
         </>
       }
       className="request-view-modal"
       onClose={onClose}
-      subtitle={`Р—Р°СЏРІРєР° РЅР° РѕР±С…РѕРґ В· ${request.id}`}
-      title={request.title || "Р—Р°СЏРІРєР° РЅР° РѕР±С…РѕРґ"}
+      subtitle={`Заявка на обход · ${request.id}`}
+      title={request.title || "Заявка на обход"}
     >
 
       <div className="request-state-grid">
         <div>
-          <span>РЎС‚Р°С‚СѓСЃ</span>
+          <span>Статус</span>
           <Chip>{request.status}</Chip>
         </div>
         <div>
-          <span>Р”Р°С‚Р° РѕР±С…РѕРґР°</span>
+          <span>Дата обхода</span>
           <strong>{request.dueAt}</strong>
         </div>
         <div>
-          <span>Р’СЂРµРјСЏ</span>
+          <span>Время</span>
           <strong>{timeLabel}</strong>
         </div>
         <div>
-          <span>РЈРІРµРґРѕРјР»РµРЅРёРµ</span>
-          <Chip>{request.notifyEmployee ? "Р’РєР»СЋС‡РµРЅРѕ" : "РћС‚РєР»СЋС‡РµРЅРѕ"}</Chip>
+          <span>Уведомление</span>
+          <Chip>{request.notifyEmployee ? "Включено" : "Отключено"}</Chip>
         </div>
       </div>
 
       <div className="request-modal-body">
         <dl className="meta-list request-meta-list">
-          <Field label="РЎРѕС‚СЂСѓРґРЅРёРє" value={request.employee || "РќРµ РЅР°Р·РЅР°С‡РµРЅ"} />
-          <Field label="РњР°СЂС€СЂСѓС‚" value={request.route || "РќРµ РІС‹Р±СЂР°РЅ"} />
-          {hasPoint ? <Field label="РўРѕС‡РєР° / РѕСЃРЅРѕРІР°РЅРёРµ" value={request.point} /> : null}
+          <Field label="Сотрудник" value={request.employee || "Не назначен"} />
+          <Field label="Маршрут" value={request.route || "Не выбран"} />
+          {hasPoint ? <Field label="Точка / основание" value={request.point} /> : null}
         </dl>
 
         {isCancelled ? (
           <div className="request-description danger-soft">
-            <h3>Р—Р°СЏРІРєР° РѕС‚РјРµРЅРµРЅР°</h3>
-            <p><strong>РџСЂРёС‡РёРЅР°:</strong> {cancellationReasonLabel(request.cancellationReasonCode, request.cancellationReasonText)}</p>
-            {request.cancelledAt ? <p><strong>Р”Р°С‚Р° РѕС‚РјРµРЅС‹:</strong> {request.cancelledAt}</p> : null}
-            {request.cancelledByUserName ? <p><strong>РћС‚РјРµРЅРёР»:</strong> {request.cancelledByUserName}</p> : null}
+            <h3>Заявка отменена</h3>
+            <p><strong>Причина:</strong> {cancellationReasonLabel(request.cancellationReasonCode, request.cancellationReasonText)}</p>
+            {request.cancelledAt ? <p><strong>Дата отмены:</strong> {request.cancelledAt}</p> : null}
+            {request.cancelledByUserName ? <p><strong>Отменил:</strong> {request.cancelledByUserName}</p> : null}
           </div>
         ) : null}
 
         {hasDescription ? (
           <div className="request-description">
-            <h3>РћРїРёСЃР°РЅРёРµ</h3>
+            <h3>Описание</h3>
             <p>{request.description}</p>
           </div>
         ) : null}
 
         {hasNotification ? (
           <div className="request-description info-soft">
-            <h3>РўРµРєСЃС‚ СѓРІРµРґРѕРјР»РµРЅРёСЏ</h3>
+            <h3>Текст уведомления</h3>
             <p>{request.notificationText}</p>
           </div>
         ) : null}
 
         {timeline.length > 0 ? (
           <div className="request-timeline-block">
-            <h3>РҐРѕРґ РѕР±СЂР°Р±РѕС‚РєРё</h3>
+            <h3>Ход обработки</h3>
             <ol className="request-timeline">
               {timeline.map((item) => (
                 <li key={item}>{item}</li>

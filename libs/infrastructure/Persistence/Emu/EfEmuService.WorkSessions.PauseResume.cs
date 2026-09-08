@@ -107,6 +107,7 @@ internal sealed partial class EfEmuService
 
     public EmuCommandResult<EmuWorkSessionDto> ResumeWorkSession(Guid id, EmuResumeWorkSessionDto request, Guid? actorUserId, string actorName)
     {
+        using var transaction = BeginActiveParticipationMutation();
         var entity = LoadSessionForUpdate(id);
         if (entity is null || entity.DeletedAt is not null)
         {
@@ -196,6 +197,7 @@ internal sealed partial class EfEmuService
             InsertParticipationInterval(entity.Id, participant.Id, participant.EmployeeId, EmployeeWorking, resumedAt, request.Comment, actorUserId, actorName, now);
         }
 
+        transaction.Commit();
         return Success(MapWorkSession(RecalculateSession(LoadSession(entity.Id)!, now)));
     }
 }

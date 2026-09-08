@@ -1,4 +1,4 @@
-﻿using Patrol360.Contracts;
+using Patrol360.Contracts;
 
 namespace Patrol360.Application;
 

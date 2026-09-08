@@ -352,7 +352,7 @@ internal sealed partial class EfMobileAppService
 
         var title = NormalizeOptionalText(ReadString(command.Payload, "title"));
         var comment = NormalizeOptionalText(ReadString(command.Payload, "comment"));
-        var remarkId = NormalizeOptionalText(ReadString(command.Payload, "remarkId"), NormalizeOptionalText(command.EntityLocalId));
+        var remarkId = NormalizeRemarkFileId(NormalizeOptionalText(ReadString(command.Payload, "remarkId"), NormalizeOptionalText(command.EntityLocalId)));
         var sectionId = ReadGuid(command.Payload, "sectionId");
         var employeeId = ReadGuid(command.Payload, "employeeId");
         var createdAtLocal = ReadDateTimeOffset(command.Payload, "createdAtLocal") ?? DateTimeOffset.UtcNow;
@@ -384,7 +384,15 @@ internal sealed partial class EfMobileAppService
             }
         }
 
-        var parsedRemarkId = Guid.TryParse(remarkId, out var parsed) ? parsed : Guid.NewGuid();
+        if (!Guid.TryParse(remarkId, out var parsedRemarkId))
+        {
+            return Rejected(command.ClientOperationId, "remarkId must be a UUID.");
+        }
+        if (dbContext.MobileShiftRemarks.Any(item => item.Id == parsedRemarkId && item.MobileAccountId != account.Id))
+        {
+            return Conflict(command.ClientOperationId, "Shift remark belongs to another mobile account.");
+        }
+
         if (!dbContext.MobileShiftRemarks.Any(item => item.Id == parsedRemarkId))
         {
             dbContext.MobileShiftRemarks.Add(new MobileShiftRemarkEntity
@@ -419,7 +427,7 @@ internal sealed partial class EfMobileAppService
             return Rejected(command.ClientOperationId, "Mobile account has no linked employees.");
         }
 
-        var remarkId = NormalizeOptionalText(ReadString(command.Payload, "remarkId"), NormalizeOptionalText(command.EntityLocalId));
+        var remarkId = NormalizeRemarkFileId(NormalizeOptionalText(ReadString(command.Payload, "remarkId"), NormalizeOptionalText(command.EntityLocalId)));
         var mediaClientFileIds = ReadStringList(command.Payload, "mediaClientFileIds");
         if (string.IsNullOrWhiteSpace(remarkId) || mediaClientFileIds.Count == 0)
         {

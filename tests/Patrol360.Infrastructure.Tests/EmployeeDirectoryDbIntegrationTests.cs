@@ -48,6 +48,7 @@ public sealed class EmployeeDirectoryDbIntegrationTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Patrol360"] = connectionString,
+                ["Patrol360:BootstrapAdminPassword"] = "Patrol360!",
             })
             .Build();
 

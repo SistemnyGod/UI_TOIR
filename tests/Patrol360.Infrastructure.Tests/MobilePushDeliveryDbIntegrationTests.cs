@@ -115,6 +115,7 @@ public sealed class MobilePushDeliveryDbIntegrationTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Patrol360"] = connectionString,
+                ["Patrol360:BootstrapAdminPassword"] = "Patrol360!",
                 ["Patrol360:SeedDemoData"] = "false",
             })
             .Build();

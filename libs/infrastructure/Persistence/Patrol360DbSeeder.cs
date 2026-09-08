@@ -49,6 +49,14 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
+        var needsAdmin = !await dbContext.SiteUsers.AnyAsync(cancellationToken);
+        var bootstrapPassword = configuration["Patrol360:BootstrapAdminPassword"];
+        if (needsAdmin && (string.IsNullOrWhiteSpace(bootstrapPassword) || bootstrapPassword.Length < 8))
+        {
+            throw new InvalidOperationException(
+                "A fresh database requires Patrol360__BootstrapAdminPassword with at least 8 characters.");
+        }
+
         var seedDemoData = string.Equals(
             configuration["Patrol360:SeedDemoData"],
             "true",
@@ -78,9 +86,9 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
             await RemoveLegacyDemoOperationalDataAsync(cancellationToken);
         }
 
-        if (!await dbContext.SiteUsers.AnyAsync(cancellationToken))
+        if (needsAdmin)
         {
-            SeedAuth(now);
+            SeedAuth(now, bootstrapPassword!);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -726,7 +734,7 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
             : null;
     }
 
-    private void SeedAuth(DateTimeOffset now)
+    private void SeedAuth(DateTimeOffset now, string bootstrapPassword)
     {
         var permissions = CreatePermissions();
         var adminRole = new RoleEntity
@@ -816,9 +824,10 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
             NormalizedLogin = EfAuthSessionService.NormalizeLogin("admin"),
             DisplayName = "Администратор",
             Status = "active",
+            RequirePasswordChange = true,
             CreatedAt = now
         };
-        adminUser.PasswordHash = new PasswordHasher<SiteUserEntity>().HashPassword(adminUser, "Patrol360!");
+        adminUser.PasswordHash = new PasswordHasher<SiteUserEntity>().HashPassword(adminUser, bootstrapPassword);
         adminUser.Roles.Add(new SiteUserRoleEntity
         {
             SiteUserId = adminUser.Id,

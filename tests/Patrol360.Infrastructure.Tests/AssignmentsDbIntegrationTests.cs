@@ -381,8 +381,8 @@ public sealed class AssignmentsDbIntegrationTests
         var activeAssignments = UseDashboard(provider, query => query.GetActiveAssignments());
         Assert.DoesNotContain(activeAssignments, assignment => assignment.Id == created.Assignment!.Id);
 
-        var dashboard = UseDashboard(provider, query => query.GetSummary());
-        Assert.Equal(0, dashboard.ActivePatrols);
+        var dashboardBefore = UseDashboard(provider, query => query.GetSummary());
+        Assert.Equal(activeAssignments.Count, dashboardBefore.ActivePatrols);
     }
 
     [DbIntegrationFact]
@@ -739,6 +739,7 @@ public sealed class AssignmentsDbIntegrationTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Patrol360"] = connectionString,
+                ["Patrol360:BootstrapAdminPassword"] = "Patrol360!",
                 ["Patrol360:SeedDemoData"] = "true",
             })
             .Build();

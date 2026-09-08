@@ -93,61 +93,73 @@ internal sealed partial class EfMobileAppService
             }
         }
 
+        transaction.CreateSavepoint("before_command");
         var response = command.CommandType.ToLowerInvariant() switch
-            {
-                var type when type.Equals("takePatrolRequest", StringComparison.OrdinalIgnoreCase) =>
-                    RejectLegacyTakePatrolRequest(command),
-                var type when type.Equals("acceptPatrolRequest", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessAcceptPatrolRequest(account, command),
-                var type when type.Equals("releasePatrolRequest", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessReleasePatrolRequest(account, command),
-                var type when type.Equals("startPatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessStartPatrolAssignment(account, command),
-                var type when type.Equals("pausePatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessPausePatrolAssignment(account, command),
-                var type when type.Equals("resumePatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessResumePatrolAssignment(account, command),
-                var type when type.Equals("handoffPatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessHandoffPatrolAssignment(account, command),
-                var type when type.Equals("scanPatrolPointNfc", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessScanPatrolPointNfc(account, command),
-                var type when type.Equals("scanPatrolPointQr", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessScanPatrolPointQr(account, command),
-                var type when type.Equals("markPatrolPointOk", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessMarkPatrolPoint(account, command, isIssue: false),
-                var type when type.Equals("markPatrolPointIssue", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessMarkPatrolPoint(account, command, isIssue: true),
-                var type when type.Equals("completePatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessCompletePatrolAssignment(account, command),
-                var type when type.Equals("createWorkTask", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessCreateWorkTask(account, command),
-                var type when type.Equals("updateWorkTask", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessUpdateWorkTask(account, command),
-                var type when type.Equals("pauseWorkTask", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessPauseWorkTask(account, command),
-                var type when type.Equals("resumeWorkTask", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessResumeWorkTask(account, command),
-                var type when type.Equals("completeWorkTask", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessCompleteWorkTask(account, command),
-                var type when type.Equals("startPlannedWork", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessStartPlannedWork(account, command),
-                var type when type.Equals("joinWorkTask", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessJoinWorkTask(account, command),
-                var type when type.Equals("replaceWorkTaskParticipant", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessReplaceWorkTaskParticipant(account, command),
-                var type when type.Equals("createShiftRemark", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessCreateShiftRemark(account, command),
-                var type when type.Equals("attachShiftRemarkMedia", StringComparison.OrdinalIgnoreCase) =>
-                    ProcessAttachShiftRemarkMedia(account, command),
-                _ => new MobileOutboxResponseDto(
-                    command.ClientOperationId,
-                    "rejected",
-                    command.EntityServerId,
-                    null,
-                    $"Unsupported mobile outbox command type: {command.CommandType}.",
-                    null,
-                    null)
-            };
+        {
+            var type when type.Equals("takePatrolRequest", StringComparison.OrdinalIgnoreCase) =>
+                RejectLegacyTakePatrolRequest(command),
+            var type when type.Equals("acceptPatrolRequest", StringComparison.OrdinalIgnoreCase) =>
+                ProcessAcceptPatrolRequest(account, command),
+            var type when type.Equals("releasePatrolRequest", StringComparison.OrdinalIgnoreCase) =>
+                ProcessReleasePatrolRequest(account, command),
+            var type when type.Equals("startPatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
+                ProcessStartPatrolAssignment(account, command),
+            var type when type.Equals("pausePatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
+                ProcessPausePatrolAssignment(account, command),
+            var type when type.Equals("resumePatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
+                ProcessResumePatrolAssignment(account, command),
+            var type when type.Equals("handoffPatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
+                ProcessHandoffPatrolAssignment(account, command),
+            var type when type.Equals("scanPatrolPointNfc", StringComparison.OrdinalIgnoreCase) =>
+                ProcessScanPatrolPointNfc(account, command),
+            var type when type.Equals("scanPatrolPointQr", StringComparison.OrdinalIgnoreCase) =>
+                ProcessScanPatrolPointQr(account, command),
+            var type when type.Equals("markPatrolPointOk", StringComparison.OrdinalIgnoreCase) =>
+                ProcessMarkPatrolPoint(account, command, isIssue: false),
+            var type when type.Equals("markPatrolPointIssue", StringComparison.OrdinalIgnoreCase) =>
+                ProcessMarkPatrolPoint(account, command, isIssue: true),
+            var type when type.Equals("completePatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
+                ProcessCompletePatrolAssignment(account, command),
+            var type when type.Equals("createWorkTask", StringComparison.OrdinalIgnoreCase) =>
+                ProcessCreateWorkTask(account, command),
+            var type when type.Equals("updateWorkTask", StringComparison.OrdinalIgnoreCase) =>
+                ProcessUpdateWorkTask(account, command),
+            var type when type.Equals("pauseWorkTask", StringComparison.OrdinalIgnoreCase) =>
+                ProcessPauseWorkTask(account, command),
+            var type when type.Equals("resumeWorkTask", StringComparison.OrdinalIgnoreCase) =>
+                ProcessResumeWorkTask(account, command),
+            var type when type.Equals("completeWorkTask", StringComparison.OrdinalIgnoreCase) =>
+                ProcessCompleteWorkTask(account, command),
+            var type when type.Equals("startPlannedWork", StringComparison.OrdinalIgnoreCase) =>
+                ProcessStartPlannedWork(account, command),
+            var type when type.Equals("joinWorkTask", StringComparison.OrdinalIgnoreCase) =>
+                ProcessJoinWorkTask(account, command),
+            var type when type.Equals("replaceWorkTaskParticipant", StringComparison.OrdinalIgnoreCase) =>
+                ProcessReplaceWorkTaskParticipant(account, command),
+            var type when type.Equals("createShiftRemark", StringComparison.OrdinalIgnoreCase) =>
+                ProcessCreateShiftRemark(account, command),
+            var type when type.Equals("attachShiftRemarkMedia", StringComparison.OrdinalIgnoreCase) =>
+                ProcessAttachShiftRemarkMedia(account, command),
+            _ => new MobileOutboxResponseDto(
+                command.ClientOperationId,
+                "rejected",
+                command.EntityServerId,
+                null,
+                $"Unsupported mobile outbox command type: {command.CommandType}.",
+                null,
+                null)
+        };
+
+        if (response.Status == "accepted")
+        {
+            dbContext.SaveChanges();
+            ConfirmOutboxAttachments(account, command, response);
+        }
+        else
+        {
+            transaction.RollbackToSavepoint("before_command");
+            dbContext.ChangeTracker.Clear();
+        }
 
         dbContext.MobileOutboxOperations.Add(new MobileOutboxOperationEntity
         {

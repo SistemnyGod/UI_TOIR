@@ -1,107 +1,150 @@
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
 using Patrol360.Application;
 
 namespace Patrol360.Worker;
 
-public class Worker(ILogger<Worker> logger, IServiceProvider serviceProvider) : BackgroundService
+public sealed class Worker(ILogger<Worker> logger, IServiceScopeFactory scopeFactory, WorkerDiagnostics diagnostics) : BackgroundService
 {
-    private static readonly TimeZoneInfo EmuBusinessTimeZone = ResolveEmuBusinessTimeZone();
-    private static readonly TimeSpan EmuCarryOverStart = TimeSpan.FromMinutes(5);
-    private static readonly TimeSpan MobilePushInterval = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan MaintenanceInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeZoneInfo BusinessTimeZone = ResolveBusinessTimeZone();
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.WhenAll(
+        RunCycleAsync("push", TimeSpan.FromSeconds(5), RunPushAsync, stoppingToken),
+        RunCycleAsync("perco", TimeSpan.FromMinutes(1), RunPercoAsync, stoppingToken),
+        RunEmuAsync(stoppingToken));
+
+    private async Task RunCycleAsync(string direction, TimeSpan interval,
+        Func<IServiceProvider, CancellationToken, Task<string>> operation, CancellationToken stoppingToken)
     {
-        DateOnly? lastCarryOverDate = null;
-        var nextMaintenanceAt = DateTimeOffset.MinValue;
-        var nextMobilePushAt = DateTimeOffset.MinValue;
-
         while (!stoppingToken.IsCancellationRequested)
         {
-            var now = DateTimeOffset.UtcNow;
-            var businessNow = TimeZoneInfo.ConvertTime(now, EmuBusinessTimeZone);
-            var today = DateOnly.FromDateTime(businessNow.DateTime);
-
-            if (now >= nextMaintenanceAt)
+            await WorkerAttempt.RunAsync(async token =>
             {
-                nextMaintenanceAt = now.Add(MaintenanceInterval);
-
-                if (businessNow.TimeOfDay >= EmuCarryOverStart && lastCarryOverDate != today)
-                {
-                    using var scope = serviceProvider.CreateScope();
-                    var maintenance = scope.ServiceProvider.GetRequiredService<IEmuMaintenanceService>();
-                    var count = maintenance.CarryOverForgottenWork(businessNow);
-                    lastCarryOverDate = today;
-                    logger.LogInformation("EMU carry-over checked at {Time}. Moved {Count} unfinished work sessions.", businessNow, count);
-                }
-
-                using (var scope = serviceProvider.CreateScope())
-                {
-                    var maintenance = scope.ServiceProvider.GetRequiredService<IEmuMaintenanceService>();
-                    var count = maintenance.RefreshNotifications(businessNow);
-                    if (count > 0)
-                    {
-                        logger.LogInformation("EMU notifications refreshed at {Time}. Changed {Count} notifications.", businessNow, count);
-                    }
-                }
-
-                using (var scope = serviceProvider.CreateScope())
-                {
-                    try
-                    {
-                        var percoIntegration = scope.ServiceProvider.GetRequiredService<IPercoIntegrationService>();
-                        var startedCount = await percoIntegration.RunAutomaticSyncIfDueAsync(now, stoppingToken);
-                        if (startedCount > 0)
-                        {
-                            logger.LogInformation("PERCo automatic sync started {Count} operation(s).", startedCount);
-                        }
-                    }
-                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                    {
-                        throw;
-                    }
-                    catch (Exception exception)
-                    {
-                        logger.LogError(exception, "PERCO automatic sync cycle failed; worker loop will continue.");
-                    }
-                }
-            }
-
-            if (now >= nextMobilePushAt)
+                using var scope = scopeFactory.CreateScope();
+                var detail = await operation(scope.ServiceProvider, token);
+                RecordDiagnostic(() => diagnostics.RecordSuccess(direction, detail), direction);
+            }, exception =>
             {
-                nextMobilePushAt = now.Add(MobilePushInterval);
-
-                using var scope = serviceProvider.CreateScope();
-                var mobilePush = scope.ServiceProvider.GetRequiredService<IMobilePushDeliveryService>();
-                var sentCount = await mobilePush.SendQueuedAsync(stoppingToken);
-                if (sentCount > 0)
-                {
-                    logger.LogInformation("Sent {Count} mobile push notifications.", sentCount);
-                }
-            }
-
-            await Task.Delay(MobilePushInterval, stoppingToken);
+                RecordDiagnostic(() => diagnostics.RecordFailure(direction, exception), direction);
+                logger.LogError(exception, "{Direction} cycle failed; its next attempt remains scheduled.", direction);
+            }, stoppingToken);
+            await Task.Delay(interval, stoppingToken);
         }
     }
 
-    private static TimeZoneInfo ResolveEmuBusinessTimeZone()
+    private async Task RunEmuAsync(CancellationToken stoppingToken)
     {
-        foreach (var id in new[] { "Asia/Yekaterinburg", "Ekaterinburg Standard Time" })
+        DateOnly? lastCarryOverDate = null;
+        while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                return TimeZoneInfo.FindSystemTimeZoneById(id);
+                var businessNow = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, BusinessTimeZone);
+                var today = DateOnly.FromDateTime(businessNow.DateTime);
+                var moved = 0;
+                using (var scope = scopeFactory.CreateScope())
+                {
+                    var service = scope.ServiceProvider.GetRequiredService<IEmuMaintenanceService>();
+                    if (businessNow.TimeOfDay >= TimeSpan.FromMinutes(5) && lastCarryOverDate != today)
+                    {
+                        moved = service.CarryOverForgottenWork(businessNow);
+                        lastCarryOverDate = today;
+                    }
+                }
+                int refreshed;
+                using (var scope = scopeFactory.CreateScope())
+                    refreshed = scope.ServiceProvider.GetRequiredService<IEmuMaintenanceService>().RefreshNotifications(businessNow);
+                RecordDiagnostic(() => diagnostics.RecordSuccess("emu", $"moved={moved}; refreshed={refreshed}"), "emu");
             }
-            catch (TimeZoneNotFoundException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
+            catch (Exception exception)
             {
+                RecordDiagnostic(() => diagnostics.RecordFailure("emu", exception), "emu");
+                logger.LogError(exception, "EMU cycle failed; its next attempt remains scheduled.");
             }
-            catch (InvalidTimeZoneException)
-            {
-            }
+            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
         }
+    }
 
+    private static async Task<string> RunPushAsync(IServiceProvider services, CancellationToken token) =>
+        $"sent={await services.GetRequiredService<IMobilePushDeliveryService>().SendQueuedAsync(token)}";
+
+    private static async Task<string> RunPercoAsync(IServiceProvider services, CancellationToken token) =>
+        $"started={await services.GetRequiredService<IPercoIntegrationService>().RunAutomaticSyncIfDueAsync(DateTimeOffset.UtcNow, token)}";
+
+    private void RecordDiagnostic(Action update, string direction)
+    {
+        WorkerAttempt.RunDiagnostic(update,
+            exception => logger.LogWarning(exception, "Could not persist {Direction} worker diagnostics.", direction));
+    }
+
+    private static TimeZoneInfo ResolveBusinessTimeZone()
+    {
+        foreach (var id in new[] { "Asia/Yekaterinburg", "Ekaterinburg Standard Time" })
+            try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
+            catch (TimeZoneNotFoundException) { }
+            catch (InvalidTimeZoneException) { }
         return TimeZoneInfo.Local;
     }
+}
+
+public static class WorkerAttempt
+{
+    public static void RunDiagnostic(Action update, Action<Exception> failure)
+    {
+        try { update(); }
+        catch (Exception exception) { failure(exception); }
+    }
+
+    public static async Task<bool> RunAsync(
+        Func<CancellationToken, Task> operation,
+        Action<Exception> failure,
+        CancellationToken stoppingToken)
+    {
+        try
+        {
+            await operation(stoppingToken);
+            return true;
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
+        catch (Exception exception)
+        {
+            failure(exception);
+            return false;
+        }
+    }
+}
+
+public sealed class WorkerDiagnostics
+{
+    private readonly object sync = new();
+    private readonly string path;
+    private readonly Dictionary<string, DirectionStatus> directions = new(StringComparer.OrdinalIgnoreCase);
+
+    public WorkerDiagnostics() : this(Environment.GetEnvironmentVariable("PATROL360_WORKER_HEARTBEAT_PATH") ??
+        Path.Combine(Path.GetTempPath(), "patrol360-worker-heartbeat.json"))
+    { }
+    public WorkerDiagnostics(string path) => this.path = path;
+    public void RecordSuccess(string direction, string detail) => Update(direction, detail, null);
+    public void RecordFailure(string direction, Exception exception) => Update(direction, null, exception.Message);
+
+    private void Update(string direction, string? detail, string? error)
+    {
+        lock (sync)
+        {
+            var now = DateTimeOffset.UtcNow;
+            directions.TryGetValue(direction, out var previous);
+            directions[direction] = new(now, error is null ? now : previous?.LastSuccessAt,
+                error is null ? previous?.LastErrorAt : now, error ?? previous?.LastError, detail ?? previous?.LastSuccessDetail);
+            var temporary = path + ".tmp";
+            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
+            File.WriteAllText(temporary, JsonSerializer.Serialize(new { updatedAt = now, directions }));
+            File.Move(temporary, path, true);
+        }
+    }
+
+    private sealed record DirectionStatus(DateTimeOffset LastAttemptAt, DateTimeOffset? LastSuccessAt,
+        DateTimeOffset? LastErrorAt, string? LastError, string? LastSuccessDetail);
 }

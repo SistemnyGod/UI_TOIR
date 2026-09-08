@@ -142,18 +142,34 @@ internal sealed class EfEmuShiftReportService(Patrol360DbContext dbContext) : IE
         var now = DateTimeOffset.UtcNow;
         var report = new EmuShiftReportEntity
         {
-            Id = Guid.NewGuid(), ReportDate = request.ReportDate, ShiftType = request.ShiftType, WorkerCategory = request.WorkerCategory,
-            EmployeeId = employee.Id, EmployeeNameSnapshot = employee.FullName.Trim(), PersonnelNoSnapshot = employee.PersonnelNo.Trim(),
-            PositionSnapshot = employee.Position.Trim(), DepartmentSnapshot = employee.Department.Trim(), Status = "submitted",
-            CreatedByUserId = actorUserId, CreatedByName = string.IsNullOrWhiteSpace(actorName) ? "Система" : actorName.Trim(),
-            CreatedAt = now, UpdatedAt = now, SubmittedAt = now, RowVersion = 1
+            Id = Guid.NewGuid(),
+            ReportDate = request.ReportDate,
+            ShiftType = request.ShiftType,
+            WorkerCategory = request.WorkerCategory,
+            EmployeeId = employee.Id,
+            EmployeeNameSnapshot = employee.FullName.Trim(),
+            PersonnelNoSnapshot = employee.PersonnelNo.Trim(),
+            PositionSnapshot = employee.Position.Trim(),
+            DepartmentSnapshot = employee.Department.Trim(),
+            Status = "submitted",
+            CreatedByUserId = actorUserId,
+            CreatedByName = string.IsNullOrWhiteSpace(actorName) ? "Система" : actorName.Trim(),
+            CreatedAt = now,
+            UpdatedAt = now,
+            SubmittedAt = now,
+            RowVersion = 1
         };
         report.Lines = request.Lines.Select((line, index) => new EmuShiftReportLineEntity
         {
-            Id = Guid.NewGuid(), ReportId = report.Id, SequenceNo = index + 1, WorkDescription = line.WorkDescription.Trim(),
-            DurationMinutes = line.DurationMinutes, SectionId = line.SectionId,
+            Id = Guid.NewGuid(),
+            ReportId = report.Id,
+            SequenceNo = index + 1,
+            WorkDescription = line.WorkDescription.Trim(),
+            DurationMinutes = line.DurationMinutes,
+            SectionId = line.SectionId,
             SectionNameSnapshot = line.SectionId is Guid sectionId ? sections[sectionId].Name : string.Empty,
-            Note = line.Note?.Trim() ?? string.Empty, CreatedAt = now
+            Note = line.Note?.Trim() ?? string.Empty,
+            CreatedAt = now
         }).ToList();
         var draft = dbContext.EmuShiftReportDrafts.SingleOrDefault(row => row.EmployeeId == request.EmployeeId && row.ReportDate == request.ReportDate && row.ShiftType == request.ShiftType);
         if (draft is not null) dbContext.EmuShiftReportDrafts.Remove(draft);

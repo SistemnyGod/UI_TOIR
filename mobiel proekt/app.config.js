@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 const {
   AndroidConfig,
   withAndroidManifest,
@@ -7,6 +8,8 @@ const {
   withProjectBuildGradle
 } = require("expo/config-plugins");
 const packageVersion = require("./package.json").version;
+const sourceRevision = resolveSourceRevision();
+const sourceDirty = resolveSourceDirty();
 
 const googleServicesFile = "./secrets/google-services.json";
 const appIconFile = "./assets/app-icon.png";
@@ -54,7 +57,7 @@ const localCleartextHosts = allowLocalCleartext
 
 const androidConfig = {
   package: "ru.patrol360.mobile",
-  versionCode: 30,
+  versionCode: 31,
   usesCleartextTraffic: false,
   adaptiveIcon: {
     foregroundImage: appIconFile,
@@ -243,6 +246,8 @@ module.exports = {
       typedRoutes: true
     },
     extra: {
+      sourceRevision,
+      sourceDirty,
       syncProtocolVersion: "1.0",
       defaultEnvironment: configuredDefaultEnvironment,
       productionApiBaseUrl: configuredProductionApiBaseUrl,
@@ -279,4 +284,23 @@ function normalizeConfiguredApiBaseUrl(name, value) {
 
 function uniqueValues(values) {
   return [...new Set(values.filter(Boolean))];
+}
+
+function gitOutput(args) {
+  try {
+    return execFileSync("git", args, { cwd: __dirname, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return "";
+  }
+}
+
+function resolveSourceRevision() {
+  return process.env.PATROL360_SOURCE_COMMIT?.trim() || gitOutput(["rev-parse", "HEAD"]) || "unknown";
+}
+
+function resolveSourceDirty() {
+  const configured = process.env.PATROL360_SOURCE_DIRTY?.trim().toLowerCase();
+  if (configured === "true" || configured === "1") return true;
+  if (configured === "false" || configured === "0") return false;
+  return Boolean(gitOutput(["status", "--porcelain", "--untracked-files=normal"]));
 }
