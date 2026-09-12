@@ -123,7 +123,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "5173:443"
+      - "5173:80"
     networks:
       default:
         # Keep this synchronized with ForwardedHeaders__KnownProxies__0 on api.
@@ -133,7 +133,7 @@ services:
       - ./certs/patrol360.local.crt:/etc/caddy/certs/patrol360.local.crt:ro
       - ./certs/patrol360.local.key:/etc/caddy/certs/patrol360.local.key:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -S --spider --max-redirect=0 http://127.0.0.1/health/ready 2>&1 | grep -q '308'"]
+      test: ["CMD-SHELL", "wget -q --spider --max-redirect=0 http://127.0.0.1/health/ready"]
       interval: 10s
       timeout: 5s
       retries: 12

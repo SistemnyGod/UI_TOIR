@@ -1,3 +1,7 @@
+{
+	auto_https disable_redirects
+}
+
 (patrol360_routes) {
 	encode zstd gzip
 
@@ -29,7 +33,8 @@
 		format json
 	}
 
-	redir https://{host}{uri} 308
+	# Temporary HTTP compatibility for installed Android clients.
+	import patrol360_routes
 }
 
 :443 {
