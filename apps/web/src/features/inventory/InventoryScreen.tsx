@@ -37,6 +37,7 @@ import { InventoryReportsScreen } from "./InventoryReportsScreen";
 import { InventorySettingsScreen } from "./InventorySettingsScreen";
 import { InventorySystemLogScreen } from "./InventorySystemLogScreen";
 import { InventoryUsersScreen } from "./InventoryUsersScreen";
+import { hasPermission } from "../../security/permissions";
 import "./inventoryWeb.css";
 
 type InventorySectionKind =
@@ -188,6 +189,7 @@ export function InventoryScreen({
           <InventoryItemsScreen initialSettings={state.settings} onNavigate={onNavigate} onNotify={onNotify} />
         ) : current.id === "inventory-settings" ? (
           <InventorySettingsScreen
+            canManagePpeNorms={hasPermission(currentUser, "inventory.ppe.norms.manage")}
             error={state.error}
             loading={state.loading}
             onNotify={onNotify}
@@ -245,7 +247,13 @@ export function InventoryScreen({
         ) : current.id === "inventory-ppe-history" ? (
           <InventoryPpeHistoryScreen onNavigate={onNavigate} />
         ) : current.id === "inventory-ppe-create" ? (
-          <InventoryPpeCreateScreen currentUserId={currentUser?.id} onNavigate={onNavigate} onNotify={onNotify} />
+          <InventoryPpeCreateScreen
+            canExport={hasPermission(currentUser, "inventory.reports.export")}
+            canManage={hasPermission(currentUser, "inventory.ppe.manage")}
+            currentUserId={currentUser?.id}
+            onNavigate={onNavigate}
+            onNotify={onNotify}
+          />
         ) : current.id === "inventory-custody" ? (
           <InventoryCustodyScreen
             documents={state.custodyDocuments}

@@ -53,7 +53,7 @@ internal sealed partial class EfInventoryExportService
         return BuildPrintFile($"custody-{document.Number}", "Акт под подпись", paragraphs, normalizedFormat, "custody_document", document.Id);
     }
 
-    public InventoryCommandResult<InventoryGeneratedFileDto> PrintPpeCard(Guid cardId, string type, string format)
+    public InventoryCommandResult<InventoryGeneratedFileDto> BuildPpeCardDocx(Guid cardId, string type)
     {
         var card = dbContext.InventoryPpeCards
             .AsNoTracking()
@@ -76,11 +76,7 @@ internal sealed partial class EfInventoryExportService
         {
             return Failure<InventoryGeneratedFileDto>("cardStatus", "Сначала сохраните и завершите выдачу СИЗ");
         }
-        var normalizedFormat = Normalize(format);
-        if (normalizedFormat.Length == 0)
-        {
-            normalizedFormat = "pdf";
-        }
+        const string normalizedFormat = "docx";
 
         var normalizedType = Normalize(type);
         var isSheet = normalizedType == "sheet";
@@ -105,7 +101,7 @@ internal sealed partial class EfInventoryExportService
                 FormatDate(line.IssuedAt),
                 FormatDate(line.DueAt),
                 line.Item.DefaultLifeMonths,
-                (line.IsSectionTitle || IsSectionTitle(line.PrintItemName)) ? string.Empty : string.IsNullOrWhiteSpace(line.NormPoint) ? "п. 1645 Приложения № 1" : line.NormPoint,
+                (line.IsSectionTitle || IsSectionTitle(line.PrintItemName)) ? string.Empty : line.NormPoint ?? string.Empty,
                 (line.IsSectionTitle || IsSectionTitle(line.PrintItemName)) ? string.Empty : line.IssuePeriodText,
                 (line.IsSectionTitle || IsSectionTitle(line.PrintItemName)) ? string.Empty : (line.QuantityText ?? string.Empty),
                 PpeUnitPriceMinor(line),
@@ -136,21 +132,17 @@ internal sealed partial class EfInventoryExportService
             card.RespiratorSize,
             card.HandProtectionSize);
 
-        var paragraphs = BuildPpePrintParagraphs(title, isSheet, card, printLines);
+
         var fileBaseName = isSheet
             ? $"ppe-signature-sheet-{card.Employee.PersonnelNo}-{card.Id:N}"
             : $"ppe-personal-card-{card.Employee.PersonnelNo}-{card.Id:N}";
 
-        if (normalizedFormat == "docx")
-        {
+
             var content = isSheet
                 ? PpeTemplateDocumentBuilder.BuildSignatureSheet(card.Employee.FullName, card.Employee.PersonnelNo, card.Position, card.CreatedAt, printLines)
                 : PpeTemplateDocumentBuilder.BuildPersonalCard(card.Id, card.Employee.FullName, card.Employee.PersonnelNo, card.Employee.Department, card.Position, card.CreatedAt, employeeDetails, printLines);
 
             return BuildGeneratedFile(fileBaseName, normalizedFormat, content, "ppe_card", card.Id);
-        }
-
-        return BuildPrintFile(fileBaseName, title, paragraphs, normalizedFormat, "ppe_card", card.Id);
     }
 
     private static List<string> BuildPpePrintParagraphs(

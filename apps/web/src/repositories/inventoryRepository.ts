@@ -46,6 +46,7 @@ import type {
   InventoryPpeNormCandidateBatchResponseDto,
   InventoryPpeNormSetDetailDto,
   InventoryPpeNormSetDto,
+  InventoryPpeNormRowDto,
   InventoryPpeWorkspaceDto,
   InventoryPpeModuleOptionsDto,
   InventoryPpeCardsResponseDto,
@@ -72,6 +73,14 @@ import type {
   UpsertInventoryPpeNormMappingDto,
   UpsertInventoryPositionNormDto,
   UpsertInventoryItemDto,
+  PpeIssueDocumentCapabilitiesDto,
+  PpeIssueDocumentDto,
+  PpeIssueDocumentSummaryDto,
+  SavePpeIssueDocumentDto,
+  PpeNormApprovalDto,
+  PpeNormRowRulesDto,
+  PpeMappingApprovalDto,
+  PpeLegacyDraftMigrationDto,
 } from "../api/contracts";
 
 export type InventoryListParams = {
@@ -80,6 +89,7 @@ export type InventoryListParams = {
   categoryId?: string;
   dateFrom?: string;
   dateTo?: string;
+  date?: string;
   department?: string;
   employeeId?: string;
   employeeGroup?: string;
@@ -122,6 +132,10 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
 
     getItemFacets() {
       return client.get<InventoryItemFacetsDto>("/api/v1/inventory/items/facets");
+    },
+
+    getItem(id: string) {
+      return client.get<InventoryItemDto>(`/api/v1/inventory/items/${encodeURIComponent(id)}`);
     },
 
     getStock(params: InventoryListParams = {}) {
@@ -235,6 +249,62 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
       return client.get<InventoryPpeCardsResponseDto>(
         `/api/v1/inventory/ppe/cards${toQueryString(params)}`,
       );
+    },
+
+    getPpeIssueDocumentCapabilities() {
+      return client.get<PpeIssueDocumentCapabilitiesDto>("/api/v1/inventory/ppe/issue-documents/capabilities");
+    },
+
+    getPpeIssueDocuments(employeeId?: string) {
+      return client.get<PpeIssueDocumentSummaryDto[]>(`/api/v1/inventory/ppe/issue-documents${toQueryString({ employeeId })}`);
+    },
+
+    getPpeIssueDocument(id: string) {
+      return client.get<PpeIssueDocumentDto>(`/api/v1/inventory/ppe/issue-documents/${id}`);
+    },
+
+    createPpeIssueDocument(payload: SavePpeIssueDocumentDto) {
+      return client.post<PpeIssueDocumentDto, SavePpeIssueDocumentDto>("/api/v1/inventory/ppe/issue-documents", payload);
+    },
+
+    updatePpeIssueDocument(id: string, payload: SavePpeIssueDocumentDto) {
+      return client.put<PpeIssueDocumentDto, SavePpeIssueDocumentDto>(`/api/v1/inventory/ppe/issue-documents/${id}`, payload);
+    },
+
+    validatePpeIssueDocument(id: string) {
+      return client.post<PpeIssueDocumentDto>(`/api/v1/inventory/ppe/issue-documents/${id}/validate`);
+    },
+
+    confirmPpeIssueDocument(id: string, expectedVersion: number, idempotencyKey: string) {
+      return client.post<PpeIssueDocumentDto, { expectedVersion: number; idempotencyKey: string }>(`/api/v1/inventory/ppe/issue-documents/${id}/confirm`, { expectedVersion, idempotencyKey });
+    },
+
+    cancelPpeIssueDocument(id: string, expectedVersion: number) {
+      return client.post<PpeIssueDocumentDto, { expectedVersion: number }>(`/api/v1/inventory/ppe/issue-documents/${id}/cancel`, { expectedVersion });
+    },
+
+    migratePpeLegacyDraft(cardId: string) {
+      return client.post<PpeLegacyDraftMigrationDto>(`/api/v1/inventory/ppe/issue-documents/legacy-drafts/${cardId}/migrate`);
+    },
+
+    printPpeIssueDocument(id: string, type: "norms" | "signature", format: "docx" | "pdf") {
+      return client.download(`/api/v1/inventory/ppe/issue-documents/${id}/print${toQueryString({ type, format })}`);
+    },
+
+    getPpeIssueDocumentNorms(employeeId: string, date: string) {
+      return client.get<InventoryPpeNormSetDto[]>(`/api/v1/inventory/ppe/issue-documents/norms${toQueryString({ employeeId, date })}`);
+    },
+
+    updatePpeNormSetScope(id: string, payload: PpeNormApprovalDto) {
+      return client.put<InventoryPpeNormSetDto, PpeNormApprovalDto>(`/api/v1/inventory/ppe/issue-documents/norm-sets/${id}/scope`, payload);
+    },
+
+    updatePpeNormRowRules(id: string, payload: PpeNormRowRulesDto) {
+      return client.put<InventoryPpeNormRowDto, PpeNormRowRulesDto>(`/api/v1/inventory/ppe/issue-documents/norm-rows/${id}/rules`, payload);
+    },
+
+    approvePpeNormMapping(id: string, payload: PpeMappingApprovalDto) {
+      return client.put<InventoryPpeNormMappingDto, PpeMappingApprovalDto>(`/api/v1/inventory/ppe/issue-documents/norm-rows/${id}/approval`, payload);
     },
 
     getPpeWorkspace(employeeId: string) {

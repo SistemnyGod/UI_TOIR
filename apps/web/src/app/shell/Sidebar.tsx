@@ -1,15 +1,17 @@
+import { ChevronDown, ChevronsLeft, ChevronsRight, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionUserDto } from "../../api/contracts";
 import { hasPermission, type PermissionCode } from "../../security/permissions";
 import type { ScreenConfig, ScreenId } from "../../types";
 import { NavIcon } from "./NavIcon";
+import { usePhoneLayout } from "../../hooks/usePhoneLayout";
 
 type NavigationModuleId = "patrol" | "accounting" | "emu";
 
 const accountingFlyoutGroups = [
-  { title: "Рабочие места", ids: ["inventory-overview", "inventory-employees", "inventory-items", "inventory-issue", "inventory-operations"] },
-  { title: "Ответственность", ids: ["inventory-custody", "inventory-ppe", "inventory-history"] },
-  { title: "Администрирование", ids: ["inventory-reports", "inventory-users", "inventory-settings", "inventory-system-log"] },
+  { title: "Справочники", ids: ["inventory-overview", "inventory-employees", "inventory-items"] },
+  { title: "Операции", ids: ["inventory-issue", "inventory-operations", "inventory-custody", "inventory-ppe"] },
+  { title: "Контроль", ids: ["inventory-history", "inventory-reports", "inventory-users", "inventory-settings", "inventory-system-log"] },
 ] satisfies Array<{ title: string; ids: string[] }>;
 
 const emuFlyoutIds = ["emu-dashboard", "emu-work-accounting", "emu-completed-work-history", "emu-shift-report-entry", "emu-shift-report-history"];
@@ -51,6 +53,7 @@ export function Sidebar({
 }) {
   const [openModule, setOpenModule] = useState<NavigationModuleId | null>(null);
   const sidebarRef = useRef<HTMLElement>(null);
+  const phoneLayout = usePhoneLayout();
   const patrolScreens = useMemo(() => {
     const byId = new Map(screens.map((item) => [item.id, item]));
     return patrolScreenIds.map((id) => byId.get(id)).filter((item): item is ScreenConfig => Boolean(item));
@@ -88,7 +91,6 @@ export function Sidebar({
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape" && mobileOpen) {
-        setOpenModule(null);
         onCloseMobile?.();
       }
     }
@@ -102,7 +104,7 @@ export function Sidebar({
 
   useEffect(() => {
     if (!mobileOpen) return;
-    const focusable = () => Array.from(sidebarRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), a[href]") ?? []);
+    const focusable = () => Array.from(sidebarRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), a[href]") ?? []).filter((element) => element.getClientRects().length > 0);
     const firstControl = focusable()[0];
     firstControl?.focus();
     function trapFocus(event: KeyboardEvent) {
@@ -122,6 +124,11 @@ export function Sidebar({
   }, [mobileOpen]);
 
   function toggleModule(moduleId: NavigationModuleId) {
+    if (sidebarCollapsed && !phoneLayout) {
+      onToggleCollapsed();
+      setOpenModule(moduleId);
+      return;
+    }
     setOpenModule((current) => (current === moduleId ? null : moduleId));
   }
 
@@ -133,6 +140,7 @@ export function Sidebar({
   function renderSubmenuItem(item: ScreenConfig, moduleId: NavigationModuleId, isModuleOpen = true) {
     return (
       <button
+        aria-current={screen === item.id ? "page" : undefined}
         className={`sidebar-submenu-item ${screen === item.id ? "active" : ""}`}
         key={item.id}
         onClick={() => navigateFromModule(item.id)}
@@ -172,7 +180,7 @@ export function Sidebar({
             <span className="nav-item-label">{copy.title}</span>
           </span>
           <span className="nav-chevron" aria-hidden="true">
-            ⌄
+            <ChevronDown size={16} />
           </span>
         </button>
 
@@ -183,7 +191,10 @@ export function Sidebar({
               <span>{copy.description}</span>
             </header>
             <div className="sidebar-submenu-list">
-              {items.length > 0 ? items.map((item) => renderSubmenuItem(item, moduleId)) : <EmptySubmenu title={copy.title} />}
+              {moduleId === "accounting" ? accountingFlyoutGroups.map((group) => {
+                const children = items.filter((item) => group.ids.includes(item.id));
+                return children.length ? <div className="sidebar-nav-group" key={group.title}><div className="sidebar-group-title">{group.title}</div>{children.map((item) => renderSubmenuItem(item, moduleId))}</div> : null;
+              }) : items.length > 0 ? items.map((item) => renderSubmenuItem(item, moduleId)) : <EmptySubmenu title={copy.title} />}
             </div>
           </section>
         ) : null}
@@ -194,7 +205,8 @@ export function Sidebar({
   return (
     <>
       {mobileOpen ? <button aria-label="Закрыть навигацию" className="sidebar-mobile-backdrop" onClick={onCloseMobile} type="button" /> : null}
-      <aside className={`sidebar ${mobileOpen ? "is-mobile-open" : ""}`} ref={sidebarRef}>
+      <aside className={`sidebar sidebar-reference ${mobileOpen ? "is-mobile-open" : ""}`} ref={sidebarRef} inert={phoneLayout && !mobileOpen} role={phoneLayout && mobileOpen ? "dialog" : undefined} aria-modal={phoneLayout && mobileOpen ? true : undefined} aria-label="Навигация по приложению">
+      <button className="sidebar-mobile-close" onClick={onCloseMobile} type="button" aria-label="Закрыть меню"><X size={22} /></button>
       <div className="brand">
         <div className="brand-mark brand-mark-am" aria-hidden="true">
           AM
@@ -263,8 +275,9 @@ export function Sidebar({
       </nav>
 
       <div className="sidebar-footer">
-        <button className="collapse-button" onClick={onToggleCollapsed} type="button">
-          {sidebarCollapsed ? "› Развернуть меню" : "‹ Свернуть меню"}
+        <div className="sidebar-profile"><span className="sidebar-profile-avatar">{(currentUser?.displayName ?? currentUser?.login ?? "П").split(/\s+/).slice(0, 2).map((part) => part[0]).join("")}</span><span className="sidebar-profile-copy"><strong>{currentUser?.displayName ?? "Пользователь панели"}</strong><small>{currentUser?.roles.includes("admin") ? "Администратор" : "Патруль 360"}</small></span></div>
+        <button className="collapse-button" aria-label={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"} title={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"} onClick={onToggleCollapsed} type="button">
+          {sidebarCollapsed ? <ChevronsRight size={20} /> : <ChevronsLeft size={20} />}
         </button>
       </div>
       </aside>

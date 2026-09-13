@@ -92,6 +92,10 @@ internal sealed class InventoryPpeCardLineEntity
     public Guid Id { get; set; }
     public int? LegacyId { get; set; }
     public Guid CardId { get; set; }
+    public Guid? IssueDocumentId { get; set; }
+    public DateOnly? IssueDate { get; set; }
+    public Guid? RequirementKey { get; set; }
+    public decimal NormUnitsPerItem { get; set; } = 1;
     public Guid? CardNormRowId { get; set; }
     public Guid ItemId { get; set; }
     public Guid? WarehouseId { get; set; }
@@ -125,6 +129,9 @@ internal sealed class InventoryPpeNormSetEntity
 {
     public Guid Id { get; set; }
     public string PositionName { get; set; } = string.Empty;
+    public string DepartmentName { get; set; } = string.Empty;
+    public string PositionAliasesJson { get; set; } = "[]";
+    public bool ScopeConfirmed { get; set; }
     public string VersionName { get; set; } = string.Empty;
     public DateOnly? EffectiveFrom { get; set; }
     public DateOnly? EffectiveTo { get; set; }
@@ -151,6 +158,10 @@ internal sealed class InventoryPpeNormRowEntity
     public decimal Quantity { get; set; }
     public string QuantityText { get; set; } = string.Empty;
     public int? LifeMonths { get; set; }
+    public int? PeriodMonths { get; set; }
+    public string UnitSymbol { get; set; } = string.Empty;
+    public Guid RequirementKey { get; set; }
+    public string AlternativeGroup { get; set; } = string.Empty;
     public InventoryPpeNormSetEntity NormSet { get; set; } = null!;
     public InventoryPpeNormRowEntity? ParentRow { get; set; }
     public List<InventoryPpeNormRowEntity> Children { get; set; } = [];
@@ -166,6 +177,10 @@ internal sealed class InventoryPpeNormCatalogMappingEntity
     public long? DefaultUnitPriceMinor { get; set; }
     public bool IsDefault { get; set; }
     public string Comment { get; set; } = string.Empty;
+    public bool IsApproved { get; set; }
+    public decimal NormUnitsPerItem { get; set; } = 1;
+    public string ApprovedBy { get; set; } = string.Empty;
+    public string ApprovalEvidence { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? ArchivedAt { get; set; }

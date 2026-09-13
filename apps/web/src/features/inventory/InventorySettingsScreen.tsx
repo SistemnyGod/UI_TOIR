@@ -25,6 +25,7 @@ import { clearPpeNormSettingsIntent, readPpeNormSettingsIntent } from "./ppe/ppe
 import "./inventoryWeb.css";
 
 type InventorySettingsScreenProps = {
+  canManagePpeNorms?: boolean;
   error?: string;
   items?: InventoryItemDto[];
   loading?: boolean;
@@ -63,6 +64,7 @@ const referenceLabels: Record<ReferenceKind, string> = {
 };
 
 export function InventorySettingsScreen({
+  canManagePpeNorms = false,
   error,
   items = [],
   loading = false,
@@ -296,7 +298,7 @@ export function InventorySettingsScreen({
             </section>
           ) : null}
 
-          {tab === "norms" ? <NormsPanel initialSearch={normSettingsIntent?.position ?? ""} norms={effectiveSettings.positionNorms} onCreate={() => openNormModal({})} onEdit={(row) => openNormModal({ row })} onNotify={onNotify} /> : null}
+          {tab === "norms" ? <NormsPanel canManagePpeNorms={canManagePpeNorms} initialSearch={normSettingsIntent?.position ?? ""} norms={effectiveSettings.positionNorms} onCreate={() => openNormModal({})} onEdit={(row) => openNormModal({ row })} onNotify={onNotify} /> : null}
           {tab === "sets" ? <ItemSetsPanel itemSets={effectiveSettings.itemSets} onCreate={() => openItemSetModal({})} onEdit={(row) => openItemSetModal({ row })} onToggle={(row) => void toggleItemSet(row)} /> : null}
           {tab === "health" ? <HealthPanel health={health} loading={healthLoading} /> : null}
         </>
@@ -399,12 +401,14 @@ function ReferenceCard({
 }
 
 function NormsPanel({
+  canManagePpeNorms,
   initialSearch,
   norms,
   onCreate,
   onEdit,
   onNotify,
 }: {
+  canManagePpeNorms: boolean;
   initialSearch: string;
   norms: InventorySettingsDto["positionNorms"];
   onCreate: () => void;
@@ -413,7 +417,7 @@ function NormsPanel({
 }) {
   return (
     <div className="inventory-ppe-norms-workspace">
-      <PpeNormSetsAdmin initialSearch={initialSearch} onNotify={onNotify} />
+      <PpeNormSetsAdmin canManage={canManagePpeNorms} initialSearch={initialSearch} onNotify={onNotify} />
       <section className="inventory-settings-table-card inventory-ppe-manual-rules">
       <div className="inventory-settings-panel-head">
         <div>

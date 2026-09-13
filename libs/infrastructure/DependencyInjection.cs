@@ -9,6 +9,7 @@ using Patrol360.Infrastructure.Attachments;
 using Patrol360.Infrastructure.MobilePush;
 using Patrol360.Infrastructure.MobileDiagnostics;
 using Patrol360.Infrastructure.Persistence;
+using Patrol360.Infrastructure.Persistence.Inventory;
 
 namespace Patrol360.Infrastructure;
 
@@ -58,6 +59,8 @@ public static class DependencyInjection
         services.AddScoped<IInventoryCatalogQuery, EfInventoryCatalogQuery>();
         services.AddScoped<IInventoryCatalogCommandService, EfInventoryCatalogCommandService>();
         services.AddScoped<IInventoryWorkflowService, EfInventoryWorkflowService>();
+        services.AddScoped<IPpeIssueDocumentService, EfInventoryWorkflowService>();
+        services.AddPpeIssueDocumentPrinting();
         services.AddScoped<IInventoryExportService, EfInventoryExportService>();
         services.AddScoped<IInventoryLegacyImportService, EfInventoryLegacyImportService>();
         services.AddScoped<EfEmuService>();

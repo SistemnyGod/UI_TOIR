@@ -56,6 +56,13 @@ public sealed class InventoryController(
     public ActionResult<InventoryItemFacetsDto> ItemFacets() =>
         Ok(inventoryCatalogQuery.GetItemFacets());
 
+    [HttpGet("items/{id:guid}")]
+    public ActionResult<InventoryItemDto> Item(Guid id)
+    {
+        var item = inventoryCatalogQuery.GetItems(new InventoryListQuery(PageSize: 1, ItemId: id)).Rows.FirstOrDefault();
+        return item is null ? NotFound() : Ok(item);
+    }
+
     [HttpGet("stock")]
     [RequirePermission("inventory.stock.view")]
     public ActionResult<InventoryListResponseDto<InventoryStockBalanceDto>> Stock(
@@ -362,8 +369,16 @@ public sealed class InventoryController(
 
     [HttpPost("ppe/cards/{id:guid}/issues/batch")]
     [RequirePermission("inventory.ppe.manage")]
-    public ActionResult<InventoryPpeCardDetailDto> CreatePpeIssueBatch(Guid id, CreateInventoryPpeIssueBatchDto request) =>
-        ToActionResult(inventoryWorkflowService.CreatePpeIssueBatch(id, request));
+    public ActionResult<InventoryPpeCardDetailDto> CreatePpeIssueBatch(Guid id, CreateInventoryPpeIssueBatchDto request)
+    {
+        if (request.Lines.Any(line => line.SaveMappingOnSuccess || line.MakeDefaultMapping)
+            && !CurrentUserHasPermission("inventory.ppe.norms.manage"))
+        {
+            return ForbidReport("inventory.ppe.norms.manage");
+        }
+
+        return ToActionResult(inventoryWorkflowService.CreatePpeIssueBatch(id, request));
+    }
 
     [HttpGet("ppe/norm-rows/{normRowId:guid}/mappings")]
     public ActionResult<InventoryListResponseDto<InventoryPpeNormMappingDto>> PpeNormRowMappings(
@@ -373,7 +388,7 @@ public sealed class InventoryController(
         Ok(inventoryWorkflowService.GetPpeNormRowMappings(normRowId, new InventoryListQuery(page, pageSize)));
 
     [HttpPut("ppe/norm-rows/{normRowId:guid}/mappings")]
-    [RequirePermission("inventory.ppe.manage")]
+    [RequirePermission("inventory.ppe.norms.manage")]
     public ActionResult<InventoryPpeNormMappingDto> UpsertPpeNormRowMapping(Guid normRowId, UpsertInventoryPpeNormMappingDto request) =>
         ToActionResult(inventoryWorkflowService.UpsertPpeNormRowMapping(normRowId, request));
 
@@ -396,7 +411,7 @@ public sealed class InventoryController(
         ToActionResult(inventoryWorkflowService.GetPpeNormSet(normSetId));
 
     [HttpPost("ppe/norm-sets/import-draft")]
-    [RequirePermission("inventory.ppe.manage")]
+    [RequirePermission("inventory.ppe.norms.manage")]
     [RequestSizeLimit(EmployeeImportMaxFileSizeBytes)]
     public ActionResult<InventoryPpeNormImportResultDto> ImportPpeNormSetsDraft([FromForm] IFormFile? file)
     {
@@ -418,7 +433,7 @@ public sealed class InventoryController(
     }
 
     [HttpPost("ppe/norm-sets/{normSetId:guid}/publish")]
-    [RequirePermission("inventory.ppe.manage")]
+    [RequirePermission("inventory.ppe.norms.manage")]
     public ActionResult<InventoryPpeNormSetDto> PublishPpeNormSet(Guid normSetId, PublishInventoryPpeNormSetDto request) =>
         ToActionResult(inventoryWorkflowService.PublishPpeNormSet(normSetId, request));
 
@@ -567,8 +582,15 @@ public sealed class InventoryController(
 
     [HttpGet("ppe/cards/{id:guid}/print")]
     [RequirePermission("inventory.reports.export")]
-    public ActionResult PrintPpeCard(Guid id, [FromQuery] string type = "card", [FromQuery] string format = "pdf") =>
-        ToFileResult(inventoryExportService.PrintPpeCard(id, type, format));
+    public async Task<ActionResult> PrintPpeCard(Guid id, [FromServices] IPpeDocxPdfConverter converter, [FromQuery] string type = "card", [FromQuery] string format = "pdf", CancellationToken cancellationToken = default)
+    {
+        format = format.Trim().ToLowerInvariant();
+        if (format is not ("pdf" or "docx")) return BadRequest("Поддерживаются форматы docx и pdf.");
+        if (type is not ("card" or "sheet")) return BadRequest("Поддерживаются варианты card и sheet.");
+        var docx = inventoryExportService.BuildPpeCardDocx(id, type);
+        if (!docx.Succeeded || format == "docx") return ToFileResult(docx);
+        return ToFileResult(await converter.ConvertAsync(docx.Value!, cancellationToken));
+    }
 
     [HttpGet("custody/documents/{id:guid}/print")]
     [RequirePermission("inventory.reports.export")]

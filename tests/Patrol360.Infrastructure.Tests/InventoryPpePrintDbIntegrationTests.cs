@@ -13,6 +13,20 @@ namespace Patrol360.Infrastructure.Tests;
 public sealed class InventoryPpePrintDbIntegrationTests
 {
     [DbIntegrationFact]
+    public async Task CatalogIdentityLookupIgnoresSearchPageAndDoesNotReturnAnUnrelatedItem()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+        for (var index = 0; index < 35; index++) CreatePpeItem(provider, $"А Каска {index:D2}", "Тест");
+        var target = CreatePpeItem(provider, "Я Каска выбранная", "Тест");
+        var found = UseQuery(provider, query => query.GetItems(new InventoryListQuery(PageSize: 1, ItemId: target.Id)));
+        Assert.Equal(target.Id, Assert.Single(found.Rows).Id);
+        Assert.Equal(1, found.Total);
+        Assert.Empty(UseQuery(provider, query => query.GetItems(new InventoryListQuery(ItemId: Guid.NewGuid()))).Rows);
+    }
+
+    [DbIntegrationFact]
     public async Task PpePrintCanonKeepsNormCatalogModelAndSectionRowsSeparated()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
@@ -140,8 +154,8 @@ public sealed class InventoryPpePrintDbIntegrationTests
                 BrandModelArticle: "Prosafe")));
         Assert.True(notIssued.Succeeded);
 
-        var personalCard = UseExport(provider, export => export.PrintPpeCard(cardId, "card", "docx"));
-        var signatureSheet = UseExport(provider, export => export.PrintPpeCard(cardId, "sheet", "docx"));
+        var personalCard = UseExport(provider, export => export.BuildPpeCardDocx(cardId, "card"));
+        var signatureSheet = UseExport(provider, export => export.BuildPpeCardDocx(cardId, "sheet"));
 
         Assert.True(personalCard.Succeeded);
         Assert.True(signatureSheet.Succeeded);
@@ -285,8 +299,8 @@ public sealed class InventoryPpePrintDbIntegrationTests
         Assert.True(persistedSection.IsSectionTitle);
         Assert.Equal(string.Empty, persistedSection.QuantityText);
 
-        var personalCard = UseExport(provider, export => export.PrintPpeCard(cardId, "card", "docx"));
-        var signatureSheet = UseExport(provider, export => export.PrintPpeCard(cardId, "sheet", "docx"));
+        var personalCard = UseExport(provider, export => export.BuildPpeCardDocx(cardId, "card"));
+        var signatureSheet = UseExport(provider, export => export.BuildPpeCardDocx(cardId, "sheet"));
 
         Assert.True(personalCard.Succeeded);
         Assert.True(signatureSheet.Succeeded);
@@ -424,8 +438,8 @@ public sealed class InventoryPpePrintDbIntegrationTests
             new UpdateInventoryStatusDto("returned", "Returned line must not be printed as new issue")));
         Assert.True(closed.Succeeded);
 
-        var personalCard = UseExport(provider, export => export.PrintPpeCard(cardId, "card", "docx"));
-        var signatureSheet = UseExport(provider, export => export.PrintPpeCard(cardId, "sheet", "docx"));
+        var personalCard = UseExport(provider, export => export.BuildPpeCardDocx(cardId, "card"));
+        var signatureSheet = UseExport(provider, export => export.BuildPpeCardDocx(cardId, "sheet"));
 
         Assert.True(personalCard.Succeeded);
         Assert.True(signatureSheet.Succeeded);
@@ -523,7 +537,7 @@ public sealed class InventoryPpePrintDbIntegrationTests
                 IssuedAt: DateTimeOffset.UtcNow.AddDays(-2))));
         Assert.True(line.Succeeded);
 
-        var print = UseExport(provider, export => export.PrintPpeCard(card.Value!.Id, "card", "docx"));
+        var print = UseExport(provider, export => export.BuildPpeCardDocx(card.Value!.Id, "card"));
 
         Assert.False(print.Succeeded);
         Assert.True(print.Errors.ContainsKey("ppePrint"));
@@ -565,8 +579,8 @@ public sealed class InventoryPpePrintDbIntegrationTests
                 BrandModelArticle: "SafeBrand R1")));
         Assert.True(line.Succeeded);
 
-        var personalCard = UseExport(provider, export => export.PrintPpeCard(card.Value!.Id, "card", "docx"));
-        var signatureSheet = UseExport(provider, export => export.PrintPpeCard(card.Value!.Id, "sheet", "docx"));
+        var personalCard = UseExport(provider, export => export.BuildPpeCardDocx(card.Value!.Id, "card"));
+        var signatureSheet = UseExport(provider, export => export.BuildPpeCardDocx(card.Value!.Id, "sheet"));
 
         Assert.True(personalCard.Succeeded);
         Assert.True(signatureSheet.Succeeded);

@@ -2705,6 +2705,14 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_section_title");
 
+                    b.Property<DateOnly?>("IssueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("issue_date");
+
+                    b.Property<Guid?>("IssueDocumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("issue_document_id");
+
                     b.Property<string>("IssueMethod")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -2735,6 +2743,11 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(4000)")
                         .HasColumnName("norm_point");
 
+                    b.Property<decimal>("NormUnitsPerItem")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("norm_units_per_item");
+
                     b.Property<string>("PrintItemName")
                         .IsRequired()
                         .HasMaxLength(4000)
@@ -2749,6 +2762,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Property<string>("QuantityText")
                         .HasColumnType("text")
                         .HasColumnName("quantity_text");
+
+                    b.Property<Guid?>("RequirementKey")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requirement_key");
 
                     b.Property<DateTimeOffset?>("ReturnedAt")
                         .HasColumnType("timestamp with time zone")
@@ -2794,6 +2811,8 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.HasIndex("CardNormRowId")
                         .HasDatabaseName("ix_inventory_ppe_lines_card_norm_row");
 
+                    b.HasIndex("IssueDocumentId");
+
                     b.HasIndex("ItemId");
 
                     b.HasIndex("LegacyId")
@@ -2803,6 +2822,8 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CardId", "Status")
                         .HasDatabaseName("ix_inventory_ppe_lines_card_status");
+
+                    b.HasIndex("RequirementKey", "IssueDate");
 
                     b.ToTable("ppe_card_lines", "inventory");
                 });
@@ -3040,6 +3061,18 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("ApprovalEvidence")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("approval_evidence");
+
+                    b.Property<string>("ApprovedBy")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)")
+                        .HasColumnName("approved_by");
+
                     b.Property<DateTimeOffset?>("ArchivedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("archived_at");
@@ -3064,6 +3097,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("default_unit_price_minor");
 
+                    b.Property<bool>("IsApproved")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_approved");
+
                     b.Property<bool>("IsDefault")
                         .HasColumnType("boolean")
                         .HasColumnName("is_default");
@@ -3075,6 +3112,11 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("NormRowId")
                         .HasColumnType("uuid")
                         .HasColumnName("norm_row_id");
+
+                    b.Property<decimal>("NormUnitsPerItem")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("norm_units_per_item");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -3101,6 +3143,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("AlternativeGroup")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("alternative_group");
 
                     b.Property<string>("IssuePeriodText")
                         .IsRequired()
@@ -3132,6 +3180,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("parent_row_id");
 
+                    b.Property<int?>("PeriodMonths")
+                        .HasColumnType("integer")
+                        .HasColumnName("period_months");
+
                     b.Property<decimal>("Quantity")
                         .HasPrecision(12, 3)
                         .HasColumnType("numeric(12,3)")
@@ -3143,6 +3195,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(120)")
                         .HasColumnName("quantity_text");
 
+                    b.Property<Guid>("RequirementKey")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requirement_key");
+
                     b.Property<string>("RowType")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -3152,6 +3208,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer")
                         .HasColumnName("sort_order");
+
+                    b.Property<string>("UnitSymbol")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("unit_symbol");
 
                     b.HasKey("Id");
 
@@ -3180,6 +3242,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("DepartmentName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("department_name");
+
                     b.Property<DateOnly?>("EffectiveFrom")
                         .HasColumnType("date")
                         .HasColumnName("effective_from");
@@ -3188,15 +3256,24 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasColumnType("date")
                         .HasColumnName("effective_to");
 
+                    b.Property<string>("PositionAliasesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("position_aliases_json");
+
                     b.Property<string>("PositionName")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
                         .HasColumnName("position_name");
 
                     b.Property<bool>("RequiresReview")
                         .HasColumnType("boolean")
                         .HasColumnName("requires_review");
+
+                    b.Property<bool>("ScopeConfirmed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("scope_confirmed");
 
                     b.Property<string>("SourceName")
                         .IsRequired()
@@ -3230,9 +3307,9 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.HasIndex("PositionName", "Status")
                         .HasDatabaseName("ix_inventory_ppe_norm_sets_position_status");
 
-                    b.HasIndex("PositionName", "VersionName")
+                    b.HasIndex("DepartmentName", "PositionName", "VersionName")
                         .IsUnique()
-                        .HasDatabaseName("ux_inventory_ppe_norm_sets_position_version");
+                        .HasDatabaseName("ux_inventory_ppe_norm_sets_scope_version");
 
                     b.ToTable("ppe_norm_sets", "inventory");
                 });
@@ -5276,6 +5353,82 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.ToTable("permissions", (string)null);
                 });
 
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PpeIssueDocumentEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmed_at");
+
+                    b.Property<string>("ContentJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("content_json");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<Guid?>("LegacyCardId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legacy_card_id");
+
+                    b.Property<Guid>("NormSetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("norm_set_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("ValidationJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("validation_json");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("idempotency_key IS NOT NULL");
+
+                    b.HasIndex("LegacyCardId")
+                        .IsUnique()
+                        .HasFilter("legacy_card_id IS NOT NULL");
+
+                    b.HasIndex("NormSetId");
+
+                    b.HasIndex("EmployeeId", "CreatedAt");
+
+                    b.ToTable("ppe_issue_documents", "inventory");
+                });
+
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.RoleEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6516,6 +6669,11 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .HasForeignKey("CardNormRowId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.PpeIssueDocumentEntity", null)
+                        .WithMany()
+                        .HasForeignKey("IssueDocumentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryItemEntity", "Item")
                         .WithMany()
                         .HasForeignKey("ItemId")
@@ -6938,6 +7096,21 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("CreatedByUser");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PpeIssueDocumentEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", null)
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeNormSetEntity", null)
+                        .WithMany()
+                        .HasForeignKey("NormSetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.RolePermissionEntity", b =>

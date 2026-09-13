@@ -110,6 +110,14 @@ npm run dev
 docker compose --profile app up -d --build
 ```
 
+Пилотная печать документов выдачи СИЗ требует отдельного конвертера Gotenberg. Он не запускается в обычном профиле `app`; включайте его только при явной проверке печати:
+
+```powershell
+docker compose --profile app --profile ppe-printing up -d --build
+```
+
+Конвертер не публикует порт на хост и доступен API только через внутреннюю Docker-сеть. Лимиты по умолчанию: 1 GiB RAM и 2 CPU; при необходимости они задаются через `GOTENBERG_MEM_LIMIT` и `GOTENBERG_CPUS` в `infra/docker/.env`.
+
 - Web HTTPS: `https://localhost`
 - Web HTTPS LAN: `https://192.168.2.194`
 - Web HTTPS LAN legacy-port: `https://192.168.2.194:5173`

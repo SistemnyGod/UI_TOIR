@@ -153,6 +153,12 @@ export function createMockInventoryRepository(): InventoryRepository {
       return buildFacets(store);
     },
 
+    async getItem(id) {
+      const item = readStore().items.find((row) => row.id === id);
+      if (!item) throw new Error("Номенклатура не найдена. Проверьте связь с нормой.");
+      return item;
+    },
+
     async getStock(params = {}) {
       const store = readStore();
       let rows = store.stock;
@@ -692,6 +698,21 @@ export function createMockInventoryRepository(): InventoryRepository {
     async getPpeNormSets() {
       return pageRows([], {});
     },
+
+    async getPpeIssueDocumentCapabilities() { return { enabled: false }; },
+    async getPpeIssueDocuments() { return []; },
+    async getPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async createPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async updatePpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async validatePpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async confirmPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async cancelPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async migratePpeLegacyDraft() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async printPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async getPpeIssueDocumentNorms() { return []; },
+    async updatePpeNormSetScope() { throw new Error("Редактирование норм недоступно в демонстрационном режиме"); },
+    async updatePpeNormRowRules() { throw new Error("Редактирование норм недоступно в демонстрационном режиме"); },
+    async approvePpeNormMapping() { throw new Error("Редактирование норм недоступно в демонстрационном режиме"); },
 
     async getPpeNormSet() {
       throw new Error("В демонстрационном режиме детали нормативных наборов недоступны");

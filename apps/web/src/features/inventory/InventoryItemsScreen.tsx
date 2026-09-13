@@ -31,6 +31,7 @@ import { useInventoryRepository } from "../../repositories/inventoryRepositoryCo
 import type { ScreenId } from "../../types";
 import { PpeMovementHistoryPanel } from "./PpeMovementHistoryPanel";
 import { PpeButton, PpeModalShell } from "./ppe/PpeUi";
+import { PhoneDisclosure } from "../../shared/ui/PhoneDisclosure";
 
 const emptyFacets: InventoryItemFacetsDto = {
   total: 0,
@@ -313,6 +314,7 @@ export function InventoryItemsScreen({
         </div>
       </header>
 
+      <PhoneDisclosure title="Сводка номенклатуры">
       <div className="inventory-items-kpis" aria-label="Сводка номенклатуры">
         <ItemKpi icon={Boxes} label="Всего позиций" value={facets.total} hint="в справочнике" />
         <ItemKpi icon={Package} label="Активные" value={facets.active} hint="доступны для выдачи" tone="green" />
@@ -320,6 +322,7 @@ export function InventoryItemsScreen({
         <ItemKpi icon={SlidersHorizontal} label="В фильтре" value={items.total} hint="по текущим условиям" tone="blue" />
       </div>
 
+      </PhoneDisclosure>
       <section className="inventory-items-filters" aria-label="Фильтры номенклатуры">
         <label className="inventory-search-field">
           <Search size={18} aria-hidden="true" />
@@ -329,7 +332,8 @@ export function InventoryItemsScreen({
             placeholder="Поиск по названию, артикулу, категории, описанию"
           />
         </label>
-        <select value={filters.categoryId} onChange={(event) => updateFilters({ categoryId: event.target.value })}>
+        <PhoneDisclosure title={`Фильтры · ${[filters.categoryId, filters.trackingType, filters.unitId, filters.status, filters.itemKind].filter(Boolean).length}`}>
+        <select aria-label="Категория" value={filters.categoryId} onChange={(event) => updateFilters({ categoryId: event.target.value })}>
           <option value="">Все категории</option>
           {(settings?.categories ?? []).map((category) => (
             <option key={category.id} value={category.id}>
@@ -337,13 +341,13 @@ export function InventoryItemsScreen({
             </option>
           ))}
         </select>
-        <select value={filters.trackingType} onChange={(event) => updateFilters({ trackingType: event.target.value })}>
+        <select aria-label="Тип учёта" value={filters.trackingType} onChange={(event) => updateFilters({ trackingType: event.target.value })}>
           <option value="">Все типы учета</option>
           <option value="quantity">Количественный</option>
           <option value="identifier">Инвентарный</option>
           <option value="custody">Под запись</option>
         </select>
-        <select value={filters.unitId} onChange={(event) => updateFilters({ unitId: event.target.value })}>
+        <select aria-label="Единица измерения" value={filters.unitId} onChange={(event) => updateFilters({ unitId: event.target.value })}>
           <option value="">Все единицы</option>
           {(settings?.units ?? []).map((unit) => (
             <option key={unit.id} value={unit.id}>
@@ -351,7 +355,7 @@ export function InventoryItemsScreen({
             </option>
           ))}
         </select>
-        <select value={filters.status} onChange={(event) => updateFilters({ status: event.target.value })}>
+        <select aria-label="Статус позиции" value={filters.status} onChange={(event) => updateFilters({ status: event.target.value })}>
           <option value="active">Активные</option>
           <option value="">Все статусы</option>
           <option value="inactive">Скрытые</option>
@@ -360,6 +364,7 @@ export function InventoryItemsScreen({
           <RefreshCw size={16} aria-hidden="true" />
           Сбросить
         </button>
+        </PhoneDisclosure>
       </section>
 
       {error ? (
@@ -370,6 +375,7 @@ export function InventoryItemsScreen({
       ) : null}
 
       <div className="inventory-items-workspace">
+        <PhoneDisclosure title="Категории и виды учёта">
         <aside className="inventory-items-rail" aria-label="Разделы номенклатуры">
           <RailButton
             active={!filters.categoryId && filters.status === ""}
@@ -413,6 +419,7 @@ export function InventoryItemsScreen({
             />
           ))}
         </aside>
+        </PhoneDisclosure>
 
         <section className="inventory-items-table-card">
           <div className="inventory-table-head">

@@ -19,6 +19,7 @@ import { createPercoRepository } from "../../repositories/percoRepository";
 import { hasPermission } from "../../security/permissions";
 import type { EmployeeDirectoryItem } from "../../types";
 import "./perco.css";
+import { PhoneDisclosure } from "../../shared/ui/PhoneDisclosure";
 
 import { PercoTab, LoadStatus, PercoIntegrationScreenProps, SettingsForm, PresenceEmployeeSummary, PercoHourlyFlowPoint, PercoDurationBucket, defaultSettings, percoTabs, percoTabOrder, pageSizeOptions, PercoPageSize, defaultListPageSize, diagnosticsListPageSize, getPercoTabLabel, SettingsStatus, ConnectionResult, SyncSummary, ConfirmIgnoreEmployeeModal, ClosePresenceModal, PercoFlowChart, PresenceRatio, DurationBars, getChartBarHeight, PresenceTimeline, MetricCard, Field, SecretField, StatusPill, usePercoPagination, ListPagination, EmptyBlock, buildHourlyFlow, buildDurationBuckets, buildPercoQuality, buildPresenceAnalytics, toForm, buildSuggestedMatches, getMatchSuggestionReason, isStaleInterval, isOldOpenInterval, isLunchBreakInterval, isClosedShiftInterval, normalizeSearch, normalizeStatusTone, formatStatus, formatSecretStatus, formatOperation, formatLogStatus, formatLogSource, formatLogDetails, formatLogDetailKey, formatLogDetailValue, formatDateTime, formatDuration, toDateTimeLocalValue, minIso, maxIso, isBusyStatus, getErrorMessage } from "./percoScreenSupport";
 const repository = createPercoRepository();
@@ -388,6 +389,7 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
 
   return (
     <div className="perco-shell" aria-busy={status === "loading" || status === "saving"}>
+      <PhoneDisclosure title="Состояние интеграции и обновление">
       <section className="perco-toolbar" aria-labelledby="perco-screen-title">
         <div className="perco-toolbar-main">
           <span className="perco-eyebrow">PERCo-Web</span>
@@ -412,6 +414,7 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
         </div>
       </section>
 
+      </PhoneDisclosure>
       <nav className="perco-tabs" aria-label="Разделы PERCo-Web" role="tablist">
         {percoTabs.map((tab) => (
           <button
@@ -1074,6 +1077,7 @@ function PercoDashboardTab({
         </button>
       </div>
 
+      <PhoneDisclosure title="Графики и качество данных">
       <div className="perco-live-analytics-grid">
         <section className="perco-analytics-panel perco-flow-panel">
           <div className="perco-analytics-head">
@@ -1124,6 +1128,7 @@ function PercoDashboardTab({
         </section>
       </div>
 
+      </PhoneDisclosure>
       <div className="perco-dashboard-main-grid">
         <section className="perco-card perco-card-flat">
           <header>

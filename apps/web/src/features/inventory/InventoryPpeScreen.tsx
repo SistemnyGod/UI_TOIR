@@ -1,4 +1,4 @@
-﻿import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, FileText, MoreVertical, Printer, RefreshCw, Search, ShieldCheck, UserRound, X } from "lucide-react";
 import type {
   InventoryEmployeeDto,
@@ -20,6 +20,8 @@ import { PpeLineActionModal } from "./ppe/PpeLineActionModal";
 import { PpeModuleNav } from "./ppe/PpeModuleNav";
 import { PpeButton } from "./ppe/PpeUi";
 import { savePpeNormSettingsIntent } from "./ppe/ppeNormSettingsIntent";
+import { usePhoneLayout } from "../../hooks/usePhoneLayout";
+import { PhoneDisclosure } from "../../shared/ui/PhoneDisclosure";
 
 type WorkspaceMode = "norms" | "issued" | "print";
 
@@ -35,7 +37,8 @@ export function InventoryPpeScreen({
 }) {
   const repository = useInventoryRepository();
   const [query, setQuery] = useState("");
-  const [employeePaneCollapsed, setEmployeePaneCollapsed] = useState(false);
+  const phoneLayout = usePhoneLayout("(max-width: 767px)");
+  const [employeePaneCollapsed, setEmployeePaneCollapsed] = useState(phoneLayout);
   const deferredQuery = useDeferredValue(query);
   const [employees, setEmployees] = useState<InventoryEmployeeDto[]>([]);
   const [employeesLoading, setEmployeesLoading] = useState(true);
@@ -53,6 +56,8 @@ export function InventoryPpeScreen({
   const [previewMode, setPreviewMode] = useState<PrintMode | null>(null);
   const [downloadAction, setDownloadAction] = useState<string | null>(null);
   const downloadActionRef = useRef<string | null>(null);
+  const issueRequestRef = useRef(0);
+  useEffect(() => () => { issueRequestRef.current += 1; }, [selectedEmployeeId, repository]);
   const [lineAction, setLineAction] = useState<{ action: ApplyInventoryPpeLineActionDto["action"]; line: InventoryPpeCardLineDto } | null>(null);
 
   useEffect(() => {
@@ -114,10 +119,12 @@ export function InventoryPpeScreen({
   }
 
   async function openIssue(row: InventoryPpeCardNormRowDto) {
+    const request = ++issueRequestRef.current;
+    try {
     let item = row.mappedItemId ? selectedItems[row.mappedItemId] ?? null : null;
     if (!item && row.mappedItemId) {
-      const result = await repository.getPpeItems({ pageSize: 30, query: row.mappedItemName });
-      item = result.rows.find((candidate) => candidate.id === row.mappedItemId) ?? null;
+      item = await repository.getItem(row.mappedItemId);
+      if (request !== issueRequestRef.current) return;
       if (item) setSelectedItems((current) => ({ ...current, [item!.id]: item! }));
     }
     setIssueItem(item);
@@ -133,6 +140,9 @@ export function InventoryPpeScreen({
       quantity: row.quantity || 1,
     } : null);
     setIssueRow(row);
+    } catch (reason) {
+      if (request === issueRequestRef.current) onNotify(reason instanceof Error ? reason.message : "Не удалось загрузить связанную номенклатуру. Повторите открытие выдачи.");
+    }
   }
 
   async function saveMapping(selections: PpeCatalogSelection[]) {
@@ -208,7 +218,11 @@ export function InventoryPpeScreen({
           <label className="ppe-v2-search ppe-v2-employee-search"><Search size={17} /><input aria-label="Поиск сотрудников" onChange={(event) => setQuery(event.target.value)} placeholder="ФИО или табельный номер" value={query} />{query ? <button aria-label="Очистить поиск" onClick={() => setQuery("")} type="button"><X size={15} /></button> : null}</label>
           <div className="ppe-v2-employee-list">
             {employeesLoading ? <div className="ppe-v2-state">Загрузка сотрудников…</div> : employees.length === 0 ? <div className="ppe-v2-state"><UserRound size={28} /><strong>Сотрудники не найдены</strong></div> : employees.map((employee) => (
-              <button className={selectedEmployeeId === employee.id ? "is-selected" : ""} key={employee.id} onClick={() => selectEmployee(employee.id)} type="button">
+              <button className={selectedEmployeeId === employee.id ? "is-selected" : ""} key={employee.id} onClick={(event) => {
+                const toggle = event.currentTarget.closest("aside")?.querySelector<HTMLButtonElement>(".ppe-v2-pane-toggle");
+                selectEmployee(employee.id);
+                if (phoneLayout) toggle?.focus();
+              }} type="button">
                 <span className="ppe-v2-avatar">{initials(employee.fullName)}</span>
                 <span><strong>{employee.fullName}</strong><small>{employee.personnelNo} · {employee.position}</small></span>
                 <ChevronRight size={17} />
@@ -285,6 +299,7 @@ function EmployeeHeader({ onCreateIssue, onOpenNormSettings, workspace }: { onCr
         <div><strong>{workspace.activeNormSet ? "Применяются нормы должности" : "Опубликованные нормы не найдены"}</strong><span>{workspace.activeNormSet ? workspace.activeNormSet.positionName + " · версия " + workspace.activeNormSet.versionName + " · " + workspace.activeNormSet.sourceName : "Должность: " + employee.position + ". Карточку можно вести вручную, но нормативный источник не подтверждён."}</span></div>
         {!workspace.activeNormSet ? <PpeButton onClick={onOpenNormSettings} size="compact" variant="secondary">Найти и проверить норму</PpeButton> : null}
       </div>
+      <PhoneDisclosure title={`Сводка СИЗ · выдано ${workspace.issued}`}>
       <div className="ppe-v2-kpis">
         <Kpi label="Нормы" value={workspace.normsTotal} />
         <Kpi label="Выдано" tone="good" value={workspace.issued} />
@@ -293,6 +308,7 @@ function EmployeeHeader({ onCreateIssue, onOpenNormSettings, workspace }: { onCr
         <Kpi label="Просрочено" tone="danger" value={workspace.overdue} />
         <Kpi label="Ошибки" tone="danger" value={workspace.errors} />
       </div>
+      </PhoneDisclosure>
     </section>
   );
 }
@@ -330,7 +346,7 @@ function NormRowsTable({ rows, onIssue, onMap }: { rows: InventoryPpeCardNormRow
       <div className="ppe-v2-table-wrap">
         {visibleRows.length ? <table className="ppe-v2-table ppe-v2-norm-table ppe-v2-responsive-table"><thead><tr><th>Наименование СИЗ</th><th>Пункт норм</th><th>Периодичность</th><th>Количество</th><th>Номенклатура</th><th>Покрытие</th><th aria-label="Действия" /></tr></thead>
           <tbody>{visibleRows.map((row) => row.rowType === "group" ? <tr className="ppe-v2-group-row" key={row.id}><th colSpan={7}>{row.normItemName}</th></tr> : (
-            <tr className={`is-${row.coverageStatus} ${row.mappedItemId ? "is-mapped" : "is-unmapped"}`} key={row.id}><td data-label="СИЗ"><strong>{row.normItemName}</strong></td><td data-label="Пункт норм">{row.normPoint || "—"}</td><td data-label="Периодичность">{row.issuePeriodText || "—"}</td><td data-label="Количество">{row.quantityText || row.quantity}</td><td data-label="Номенклатура"><button className={`ppe-v2-link-button ${row.mappedItemId ? "is-selected" : "is-required"}`} onClick={() => onMap(row)} type="button">{row.mappedItemName || "Выбрать номенклатуру"}</button>{row.mappings.length > 1 ? <small>Допустимых вариантов: {row.mappings.length}</small> : row.brandModelArticle ? <small>{row.brandModelArticle}</small> : <small>Связь с товаром ещё не задана</small>}</td><td data-label="Покрытие"><Coverage status={row.coverageStatus} /></td><td className="ppe-v2-actions-cell"><PpeButton className="ppe-v2-row-action" onClick={() => onIssue(row)} size="compact" variant={row.mappedItemId ? "primary" : "secondary"}>{row.mappedItemId ? "Выдать" : "Подобрать и выдать"}</PpeButton></td></tr>
+            <tr className={`is-${row.coverageStatus} ${row.mappedItemId ? "is-mapped" : "is-unmapped"}`} key={row.id}><td data-label="СИЗ"><strong>{row.normItemName}</strong></td><td data-label="Пункт норм">{row.normPoint || "—"}</td><td data-label="Периодичность">{row.issuePeriodText || "—"}</td><td data-label="Количество">{row.quantityText || row.quantity}</td><td data-label="Номенклатура"><button className={`ppe-v2-link-button ${row.mappedItemId ? "is-selected" : "is-required"}`} onClick={() => onMap(row)} type="button">{row.mappedItemName || "Выбрать номенклатуру"}</button>{row.mappings.length > 1 ? <small>Допустимых вариантов: {row.mappings.length}</small> : row.brandModelArticle ? <small>{row.brandModelArticle}</small> : <small>{row.mappedItemId ? "Номенклатура связана" : "Связь с товаром ещё не задана"}</small>}</td><td data-label="Покрытие"><Coverage status={row.coverageStatus} /></td><td className="ppe-v2-actions-cell"><PpeButton className="ppe-v2-row-action" onClick={() => onIssue(row)} size="compact" variant={row.mappedItemId ? "primary" : "secondary"}>{row.mappedItemId ? "Выдать" : "Подобрать и выдать"}</PpeButton></td></tr>
           ))}</tbody>
         </table> : <div className="ppe-v2-state ppe-v2-filter-empty"><strong>По этому фильтру норм нет</strong><span>Вернитесь к общему списку или выберите другой этап работы.</span><PpeButton onClick={() => setFilter("all")} size="compact" variant="secondary">Показать все нормы</PpeButton></div>}
       </div>

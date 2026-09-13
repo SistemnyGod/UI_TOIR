@@ -6,6 +6,20 @@
   min-width: 0;
 }
 
+.phone-disclosure { min-width: 0; }
+.phone-disclosure-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 44px; padding: 10px 12px; background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: 8px; color: var(--ui-text); font-size: 14px; }
+.phone-disclosure > [hidden] { display: none; }
+
+@media (max-width: 767px) {
+  .modal-shell { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
+  .modal-shell-header, .modal-shell-body, .modal-shell-actions { padding: 12px; }
+  .modal-shell-actions { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .modal-shell-actions > button { flex: 1 1 auto; min-height: 44px; }
+  .modal-shell-close { min-width: 44px; min-height: 44px; }
+  .workspace :is(input:not([type=checkbox]):not([type=radio]), select, textarea), .modal-shell :is(input, select, textarea) { font-size: 16px; }
+  .workspace :is(button, .ui-button) { min-height: 44px; }
+}
+
 .ui-page-header__copy {
   min-width: 0;
 }

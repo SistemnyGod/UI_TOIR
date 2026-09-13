@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { EmptyState, Panel } from "../../../shared/ui";
 import type { DataSourceStatus, SiteUser } from "../../../types";
 import { SITE_USER_ROLES, SITE_USER_STATUSES } from "../../../repositories/siteUsersRepository";
+import { usePhoneLayout } from "../../../hooks/usePhoneLayout";
 
 interface SiteUsersTablePanelProps {
   users: SiteUser[];
@@ -33,6 +34,8 @@ export function SiteUsersTablePanel({
   onSelectUser,
 }: SiteUsersTablePanelProps) {
   const [query, setQuery] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const phoneLayout = usePhoneLayout("(max-width: 767px)");
   const [role, setRole] = useState<(typeof allRoles)[number]>("all");
   const [userStatus, setUserStatus] = useState<(typeof allStatuses)[number]>("all");
   const [page, setPage] = useState(1);
@@ -78,9 +81,9 @@ export function SiteUsersTablePanel({
         <label className="site-users-search-field">
           <Search aria-hidden="true" size={16} />
           <input aria-label="Поиск пользователей" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск пользователя..." />
-          <button aria-label="Фильтры пользователей" title="Фильтры пользователей" type="button"><SlidersHorizontal size={15} /></button>
+          {phoneLayout ? <button aria-label="Фильтры пользователей" aria-expanded={filtersOpen} aria-controls="site-users-filters" onClick={() => setFiltersOpen((open) => !open)} title="Фильтры пользователей" type="button"><SlidersHorizontal size={15} /></button> : null}
         </label>
-        <div className="site-users-filter-row">
+        <div className="site-users-filter-row" id="site-users-filters" hidden={phoneLayout && !filtersOpen}>
           <select aria-label="Роль" value={role} onChange={(event) => setRole(event.target.value as (typeof allRoles)[number])}>
             {allRoles.map((item) => <option key={item} value={item}>{item === "all" ? "Все роли" : item}</option>)}
           </select>
@@ -90,6 +93,12 @@ export function SiteUsersTablePanel({
         </div>
       </div>
 
+      {(role !== "all" || userStatus !== "all") ? (
+        <div className="site-users-active-filters">
+          <span role="status">Фильтры: {[role !== "all" ? role : "", userStatus !== "all" ? userStatus : ""].filter(Boolean).join(" · ")}</span>
+          <button className="button ghost small" onClick={() => { setRole("all"); setUserStatus("all"); }} type="button">Сбросить фильтры</button>
+        </div>
+      ) : null}
       <div className="site-users-directory-list">
         {status === "loading" ? <div className="site-users-loading">Загрузка пользователей...</div> : null}
         {status === "error" ? (

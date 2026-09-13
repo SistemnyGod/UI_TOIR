@@ -28,6 +28,15 @@ internal sealed partial class EfInventoryWorkflowService
             return Failure<InventoryPpeCardLineDto>("status", "Unsupported PPE status");
         }
 
+        if (line.IssueDocumentId.HasValue
+            && IsPpeSignatureLineStatus(nextStatus)
+            && !PpeIssueStatusCatalog.IsClosedStatus(nextStatus))
+        {
+            return Failure<InventoryPpeCardLineDto>(
+                "status",
+                "Строка СИЗ из подтверждённого документа выдачи не может быть переоткрыта.");
+        }
+
         var oldStatus = line.Status;
         if (oldStatus == nextStatus)
         {
@@ -53,11 +62,13 @@ internal sealed partial class EfInventoryWorkflowService
         }
 
         var now = DateTimeOffset.UtcNow;
-        if (IsPpeSignatureLineStatus(nextStatus) && !IsPpeSignatureLineStatus(oldStatus))
+        if (line.IssueDocumentId is null
+            && IsPpeSignatureLineStatus(nextStatus)
+            && !IsPpeSignatureLineStatus(oldStatus))
         {
             line.IssuedAt ??= now;
         }
-        else if (PpeIssueStatusCatalog.IsClosedStatus(nextStatus))
+        else if (line.IssueDocumentId is null && PpeIssueStatusCatalog.IsClosedStatus(nextStatus))
         {
             // A closed PPE line must not keep a stale active issued date in reports.
             line.IssuedAt ??= now;
@@ -139,6 +150,13 @@ internal sealed partial class EfInventoryWorkflowService
         if (line is null)
         {
             return Failure<InventoryPpeCardLineDto>("lineId", "PPE card line not found");
+        }
+
+        if (line.IssueDocumentId.HasValue)
+        {
+            return Failure<InventoryPpeCardLineDto>(
+                "lineId",
+                "Строка СИЗ из подтверждённого документа выдачи защищена от архивирования.");
         }
 
         if (line.Status == PpeIssueStatusCatalog.Issued)

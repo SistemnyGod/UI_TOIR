@@ -1,0 +1,23 @@
+.ppe-document-lines article {
+  grid-template-columns: minmax(160px, 2fr) repeat(4, minmax(85px, 1fr)) minmax(120px, 1.4fr) 80px 36px;
+}
+
+.ppe-document-manual {
+  align-self: end;
+  display: flex !important;
+  gap: 6px;
+  min-height: 38px;
+  align-items: center;
+}
+
+.ppe-document-manual input {
+  height: 16px;
+  min-height: 16px;
+  width: 16px;
+}
+
+@media (max-width: 900px) {
+  .ppe-document-lines article {
+    grid-template-columns: 1fr 1fr;
+  }
+}

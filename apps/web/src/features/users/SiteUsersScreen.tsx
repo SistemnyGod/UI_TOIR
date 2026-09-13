@@ -7,6 +7,7 @@ import { EmptyState } from "../../shared/ui";
 import { useSiteUsersWorkspace, type TemporarySiteUserPasswordNotice } from "../../hooks/useSiteUsersWorkspace";
 import { findSiteUser } from "../../repositories/siteUsersRepository";
 import type { DataSourceMode, SiteUser } from "../../types";
+import { usePhoneLayout } from "../../hooks/usePhoneLayout";
 
 export function SiteUsersScreen({
   canManage = true,
@@ -35,6 +36,14 @@ export function SiteUsersScreen({
   const [editingUser, setEditingUser] = useState<SiteUser | undefined>();
   const [hasUnsavedAccessChanges, setHasUnsavedAccessChanges] = useState(false);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const phoneLayout = usePhoneLayout();
+  const detailBackRef = useRef<HTMLButtonElement>(null);
+  const selectedRowRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!phoneLayout) return;
+    if (mobileDetailOpen) detailBackRef.current?.focus();
+    else if (selectedRowRef.current?.isConnected) selectedRowRef.current.focus();
+  }, [mobileDetailOpen, phoneLayout]);
   const formReturnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -132,6 +141,7 @@ export function SiteUsersScreen({
   }
 
   function handleSelectUser(id: string) {
+    if (document.activeElement instanceof HTMLElement) selectedRowRef.current = document.activeElement;
     if (id === selected?.id) { setMobileDetailOpen(true); return; }
     if (hasUnsavedAccessChanges && !window.confirm("\u0415\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f. \u041f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0438\u0442\u044c\u0441\u044f \u0431\u0435\u0437 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f?")) return;
     setHasUnsavedAccessChanges(false);
@@ -164,7 +174,7 @@ export function SiteUsersScreen({
           </div>
 
           <div className="site-user-detail-pane">
-            <button className="site-user-mobile-back" onClick={() => setMobileDetailOpen(false)} type="button">← К списку пользователей</button>
+            <button ref={detailBackRef} className="site-user-mobile-back" onClick={() => setMobileDetailOpen(false)} type="button">← К списку пользователей</button>
             <SiteUserAccessPanel
               canManage={canManage}
               catalog={workspace.catalog}

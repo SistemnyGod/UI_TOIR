@@ -541,7 +541,10 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
         var allPermissionCodes = await dbContext.Permissions
             .Select(permission => permission.Code)
             .ToListAsync(cancellationToken);
-        var inventoryAll = CreateInventoryPermissions().Select(permission => permission.Code).ToArray();
+        var inventoryAll = CreateInventoryPermissions()
+            .Select(permission => permission.Code)
+            .Where(code => !string.Equals(code, "inventory.ppe.norms.manage", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
 
         await EnsureRolePermissionsAsync(AdminRoleId, allPermissionCodes, cancellationToken);
         await EnsureRolePermissionsAsync(ManagerRoleId, inventoryAll, cancellationToken);
@@ -936,6 +939,7 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
         CreatePermission("11111111-9999-9999-9999-999999999952", "inventory.issue.manage", "Inventory: выдача, возврат и списание"),
         CreatePermission("11111111-9999-9999-9999-999999999953", "inventory.custody.manage", "Inventory: под запись"),
         CreatePermission("11111111-9999-9999-9999-999999999954", "inventory.ppe.manage", "Inventory: СИЗ"),
+        CreatePermission("11111111-9999-9999-9999-999999999962", "inventory.ppe.norms.manage", "Inventory: управление нормами СИЗ"),
         CreatePermission("11111111-9999-9999-9999-999999999955", "inventory.reports.view", "Inventory: просмотр отчетов"),
         CreatePermission("11111111-9999-9999-9999-999999999956", "inventory.reports.export", "Inventory: экспорт отчетов и печатных форм"),
         CreatePermission("11111111-9999-9999-9999-999999999957", "inventory.settings.manage", "Inventory: настройки и справочники"),

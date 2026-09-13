@@ -9,7 +9,7 @@ using Patrol360.Infrastructure.Persistence.Entities;
 
 namespace Patrol360.Infrastructure.Persistence;
 
-internal sealed partial class EfInventoryWorkflowService(Patrol360DbContext dbContext) : IInventoryWorkflowService
+internal sealed partial class EfInventoryWorkflowService(Patrol360DbContext dbContext, IPatrolTimeZone? ppeTimeZone = null) : IInventoryWorkflowService
 {
     private const string Actor = "system";
     private const string DefaultPpeNormPoint = "п. 1645 Приложения № 1";

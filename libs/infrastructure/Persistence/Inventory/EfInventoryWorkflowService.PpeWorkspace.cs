@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Patrol360.Application;
 using Patrol360.Contracts;
@@ -1074,6 +1075,9 @@ internal sealed partial class EfInventoryWorkflowService
                 mapping.BrandModelArticle = NormalizeOptional(requested.BrandModelArticle);
                 mapping.DefaultUnitPriceMinor = requested.UnitPriceMinor ?? item.DefaultUnitPriceMinor;
                 mapping.IsDefault = requested.MakeDefaultMapping;
+                mapping.IsApproved = false;
+                mapping.ApprovedBy = string.Empty;
+                mapping.ApprovalEvidence = string.Empty;
                 mapping.UpdatedAt = now;
                 mapping.ArchivedAt = null;
             }
@@ -1140,6 +1144,9 @@ internal sealed partial class EfInventoryWorkflowService
         mapping.DefaultUnitPriceMinor = request.DefaultUnitPriceMinor;
         mapping.IsDefault = request.IsDefault;
         mapping.Comment = NormalizeOptional(request.Comment);
+        mapping.IsApproved = false;
+        mapping.ApprovedBy = string.Empty;
+        mapping.ApprovalEvidence = string.Empty;
         mapping.UpdatedAt = now;
         mapping.ArchivedAt = null;
         dbContext.SaveChanges();
@@ -1274,15 +1281,34 @@ internal sealed partial class EfInventoryWorkflowService
     }
 
     private static InventoryPpeNormSetDto MapNormSet(InventoryPpeNormSetEntity row) =>
-        new(row.Id, row.PositionName, row.VersionName, row.EffectiveFrom, row.EffectiveTo, row.SourceName, row.Status, row.RequiresReview, row.Version, row.Rows.Count);
+        new(row.Id, row.PositionName, row.VersionName, row.EffectiveFrom, row.EffectiveTo, row.SourceName, row.Status, row.RequiresReview, row.Version, row.Rows.Count,
+            row.DepartmentName, ReadPositionAliases(row.PositionAliasesJson), row.ScopeConfirmed);
+
+    private static IReadOnlyList<string> ReadPositionAliases(string? value)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(value ?? "[]")?
+                .Where(alias => !string.IsNullOrWhiteSpace(alias))
+                .Select(alias => alias.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList() ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
 
     private static InventoryPpeNormRowDto MapNormRow(InventoryPpeNormRowEntity row) =>
         new(row.Id, row.ParentRowId, row.RowType, row.SortOrder, row.NormItemName, row.NormPoint, row.IssuePeriodText,
             row.Quantity, row.QuantityText, row.LifeMonths,
-            row.Mappings.Where(mapping => mapping.ArchivedAt == null).OrderByDescending(mapping => mapping.IsDefault).Select(MapNormMapping).ToList());
+            row.Mappings.Where(mapping => mapping.ArchivedAt == null).OrderByDescending(mapping => mapping.IsDefault).Select(MapNormMapping).ToList(),
+            row.UnitSymbol, row.PeriodMonths, row.RequirementKey, row.AlternativeGroup);
 
     private static InventoryPpeNormMappingDto MapNormMapping(InventoryPpeNormCatalogMappingEntity row) =>
-        new(row.Id, row.NormRowId, row.ItemId, row.Item.Name, row.Item.Sku, row.BrandModelArticle, row.DefaultUnitPriceMinor, row.IsDefault, row.Comment);
+        new(row.Id, row.NormRowId, row.ItemId, row.Item.Name, row.Item.Sku, row.BrandModelArticle, row.DefaultUnitPriceMinor, row.IsDefault, row.Comment,
+            row.IsApproved, row.NormUnitsPerItem, row.ApprovedBy, row.ApprovalEvidence);
 
     private static InventoryPpeHistoryRowDto MapPpeHistoryRow(InventoryPpeCardLineEventEntity row)
     {

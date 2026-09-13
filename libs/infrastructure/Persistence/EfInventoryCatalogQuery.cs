@@ -68,6 +68,10 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
             .AsQueryable();
 
         var search = NormalizeQuery(query.Query);
+        if (query.ItemId is not null)
+        {
+            itemsQuery = itemsQuery.Where(item => item.Id == query.ItemId.Value);
+        }
         if (search.Length > 0)
         {
             var pattern = ToLikeContainsPattern(search);

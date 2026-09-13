@@ -10,6 +10,15 @@ namespace Patrol360.Api.Tests;
 public sealed class InventoryControllerTests
 {
     [Fact]
+    public void ItemLookupUsesIdentityBeyondFirstSearchPageAndReturnsNotFoundForMissingItem()
+    {
+        var items = Enumerable.Range(0, 60).Select(_ => CreateItem("Каска с одинаковым названием", "ppe", "СИЗ", Guid.NewGuid())).ToArray();
+        var controller = CreateController(catalogQuery: new InventoryCatalogQueryFake(items));
+        Assert.Equal(items[59].Id, AssertOk<InventoryItemDto>(controller.Item(items[59].Id).Result).Id);
+        Assert.IsType<NotFoundResult>(controller.Item(Guid.NewGuid()).Result);
+    }
+
+    [Fact]
     public void PreviewEmployeesImportRejectsMissingFile()
     {
         var controller = CreateController();
@@ -256,6 +265,7 @@ public sealed class InventoryControllerTests
         public InventoryListResponseDto<InventoryItemDto> GetItems(InventoryListQuery query)
         {
             var rows = items
+                .Where(item => query.ItemId is null || item.Id == query.ItemId)
                 .Where(item => query.Status is null || item.Status.Equals(query.Status, StringComparison.OrdinalIgnoreCase))
                 .Where(item => query.CategoryId is null || item.CategoryId == query.CategoryId)
                 .Where(item =>
@@ -451,7 +461,7 @@ public sealed class InventoryControllerTests
     {
         public InventoryCommandResult<InventoryGeneratedFileDto> ExportReport(string reportId, string format) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryGeneratedFileDto> PrintCustodyDocument(Guid documentId, string format) => throw new NotImplementedException();
-        public InventoryCommandResult<InventoryGeneratedFileDto> PrintPpeCard(Guid cardId, string type, string format) => throw new NotImplementedException();
+        public InventoryCommandResult<InventoryGeneratedFileDto> BuildPpeCardDocx(Guid cardId, string type) => throw new NotImplementedException();
     }
 
     private sealed class ThrowingInventoryLegacyImportService : IInventoryLegacyImportService

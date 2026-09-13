@@ -36,6 +36,16 @@ docker compose -f .\infra\docker\compose.yaml --profile app up --build
 
 Наружу публикуется proxy на портах `80`, `443` и `5173`. API и web containers доступны только внутри Docker network. Proxy направляет `/api/*` и `/health/*` во внутренний API.
 
+## Пилот печати СИЗ
+
+Gotenberg для PDF-печати отключен по умолчанию и не входит в профиль `app`. Для пилотной проверки запускайте его явно вместе с приложением:
+
+```powershell
+docker compose -f .\infra\docker\compose.yaml --profile app --profile ppe-printing up -d --build
+```
+
+У Gotenberg нет опубликованного порта: API подключается к нему через internal-сеть `printing`. Значения по умолчанию `GOTENBERG_MEM_LIMIT=1g` и `GOTENBERG_CPUS=2` можно переопределить в `infra/docker/.env`.
+
 Остановить:
 
 ```powershell

@@ -1,0 +1,1026 @@
+diff --git a/apps/web/src/app/App.tsx b/apps/web/src/app/App.tsx
+index def7902..9bd0340 100644
+--- a/apps/web/src/app/App.tsx
++++ b/apps/web/src/app/App.tsx
+@@ -31,6 +31,7 @@ import { usePatrolWorkspaceData } from "../hooks/usePatrolWorkspaceData";
+ import { useResultsWorkspace } from "../hooks/useResultsWorkspace";
+ import { useSession } from "../hooks/useSession";
+ import { useStoredState } from "../hooks/useStoredState";
++import { usePhoneLayout } from "../hooks/usePhoneLayout";
+ import { useSystemNotifications } from "../hooks/useSystemNotifications";
+ import { useToast } from "../hooks/useToast";
+ import { getPermissionDeniedMessage, getPrimaryActionPermission, hasPermission } from "../security/permissions";
+@@ -104,6 +105,16 @@ export function App() {
+   });
+   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
++  const phoneLayout = usePhoneLayout();
++  useEffect(() => {
++    if (!phoneLayout) setMobileNavigationOpen(false);
++  }, [phoneLayout]);
++  useEffect(() => {
++    if (!mobileNavigationOpen) return;
++    const previousOverflow = document.body.style.overflow;
++    document.body.style.overflow = "hidden";
++    return () => { document.body.style.overflow = previousOverflow; };
++  }, [mobileNavigationOpen]);
+   const [searchQuery, setSearchQuery] = useState("");
+   const systemNotifications = useSystemNotifications({
+     dataSourceMode,
+@@ -468,7 +479,7 @@ export function App() {
+         onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
+       />
+ 
+-      <main className="workspace">
++      <main className="workspace" inert={phoneLayout && mobileNavigationOpen}>
+         <Topbar
+           currentUser={session.user}
+           notifications={topbarNotifications}
+diff --git a/apps/web/src/app/shell/Sidebar.tsx b/apps/web/src/app/shell/Sidebar.tsx
+index 710bc64..62845ce 100644
+--- a/apps/web/src/app/shell/Sidebar.tsx
++++ b/apps/web/src/app/shell/Sidebar.tsx
+@@ -1,15 +1,17 @@
++import { ChevronDown, ChevronsLeft, ChevronsRight, X } from "lucide-react";
+ import { useEffect, useMemo, useRef, useState } from "react";
+ import type { SessionUserDto } from "../../api/contracts";
+ import { hasPermission, type PermissionCode } from "../../security/permissions";
+ import type { ScreenConfig, ScreenId } from "../../types";
+ import { NavIcon } from "./NavIcon";
++import { usePhoneLayout } from "../../hooks/usePhoneLayout";
+ 
+ type NavigationModuleId = "patrol" | "accounting" | "emu";
+ 
+ const accountingFlyoutGroups = [
+-  { title: "Рабочие места", ids: ["inventory-overview", "inventory-employees", "inventory-items", "inventory-issue", "inventory-operations"] },
+-  { title: "Ответственность", ids: ["inventory-custody", "inventory-ppe", "inventory-history"] },
+-  { title: "Администрирование", ids: ["inventory-reports", "inventory-users", "inventory-settings", "inventory-system-log"] },
++  { title: "Справочники", ids: ["inventory-overview", "inventory-employees", "inventory-items"] },
++  { title: "Операции", ids: ["inventory-issue", "inventory-operations", "inventory-custody", "inventory-ppe"] },
++  { title: "Контроль", ids: ["inventory-history", "inventory-reports", "inventory-users", "inventory-settings", "inventory-system-log"] },
+ ] satisfies Array<{ title: string; ids: string[] }>;
+ 
+ const emuFlyoutIds = ["emu-dashboard", "emu-work-accounting", "emu-completed-work-history", "emu-shift-report-entry", "emu-shift-report-history"];
+@@ -51,6 +53,7 @@ export function Sidebar({
+ }) {
+   const [openModule, setOpenModule] = useState<NavigationModuleId | null>(null);
+   const sidebarRef = useRef<HTMLElement>(null);
++  const phoneLayout = usePhoneLayout();
+   const patrolScreens = useMemo(() => {
+     const byId = new Map(screens.map((item) => [item.id, item]));
+     return patrolScreenIds.map((id) => byId.get(id)).filter((item): item is ScreenConfig => Boolean(item));
+@@ -88,7 +91,6 @@ export function Sidebar({
+   useEffect(() => {
+     function handleKeyDown(event: KeyboardEvent) {
+       if (event.key === "Escape" && mobileOpen) {
+-        setOpenModule(null);
+         onCloseMobile?.();
+       }
+     }
+@@ -102,7 +104,7 @@ export function Sidebar({
+ 
+   useEffect(() => {
+     if (!mobileOpen) return;
+-    const focusable = () => Array.from(sidebarRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), a[href]") ?? []);
++    const focusable = () => Array.from(sidebarRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), a[href]") ?? []).filter((element) => element.getClientRects().length > 0);
+     const firstControl = focusable()[0];
+     firstControl?.focus();
+     function trapFocus(event: KeyboardEvent) {
+@@ -122,6 +124,11 @@ export function Sidebar({
+   }, [mobileOpen]);
+ 
+   function toggleModule(moduleId: NavigationModuleId) {
++    if (sidebarCollapsed && !phoneLayout) {
++      onToggleCollapsed();
++      setOpenModule(moduleId);
++      return;
++    }
+     setOpenModule((current) => (current === moduleId ? null : moduleId));
+   }
+ 
+@@ -133,6 +140,7 @@ export function Sidebar({
+   function renderSubmenuItem(item: ScreenConfig, moduleId: NavigationModuleId, isModuleOpen = true) {
+     return (
+       <button
++        aria-current={screen === item.id ? "page" : undefined}
+         className={`sidebar-submenu-item ${screen === item.id ? "active" : ""}`}
+         key={item.id}
+         onClick={() => navigateFromModule(item.id)}
+@@ -172,7 +180,7 @@ export function Sidebar({
+             <span className="nav-item-label">{copy.title}</span>
+           </span>
+           <span className="nav-chevron" aria-hidden="true">
+-            ⌄
++            <ChevronDown size={16} />
+           </span>
+         </button>
+ 
+@@ -183,7 +191,10 @@ export function Sidebar({
+               <span>{copy.description}</span>
+             </header>
+             <div className="sidebar-submenu-list">
+-              {items.length > 0 ? items.map((item) => renderSubmenuItem(item, moduleId)) : <EmptySubmenu title={copy.title} />}
++              {moduleId === "accounting" ? accountingFlyoutGroups.map((group) => {
++                const children = items.filter((item) => group.ids.includes(item.id));
++                return children.length ? <div className="sidebar-nav-group" key={group.title}><div className="sidebar-group-title">{group.title}</div>{children.map((item) => renderSubmenuItem(item, moduleId))}</div> : null;
++              }) : items.length > 0 ? items.map((item) => renderSubmenuItem(item, moduleId)) : <EmptySubmenu title={copy.title} />}
+             </div>
+           </section>
+         ) : null}
+@@ -194,7 +205,8 @@ export function Sidebar({
+   return (
+     <>
+       {mobileOpen ? <button aria-label="Закрыть навигацию" className="sidebar-mobile-backdrop" onClick={onCloseMobile} type="button" /> : null}
+-      <aside className={`sidebar ${mobileOpen ? "is-mobile-open" : ""}`} ref={sidebarRef}>
++      <aside className={`sidebar sidebar-reference ${mobileOpen ? "is-mobile-open" : ""}`} ref={sidebarRef} inert={phoneLayout && !mobileOpen} role={phoneLayout && mobileOpen ? "dialog" : undefined} aria-modal={phoneLayout && mobileOpen ? true : undefined} aria-label="Навигация по приложению">
++      <button className="sidebar-mobile-close" onClick={onCloseMobile} type="button" aria-label="Закрыть меню"><X size={22} /></button>
+       <div className="brand">
+         <div className="brand-mark brand-mark-am" aria-hidden="true">
+           AM
+@@ -263,8 +275,9 @@ export function Sidebar({
+       </nav>
+ 
+       <div className="sidebar-footer">
+-        <button className="collapse-button" onClick={onToggleCollapsed} type="button">
+-          {sidebarCollapsed ? "› Развернуть меню" : "‹ Свернуть меню"}
++        <div className="sidebar-profile"><span className="sidebar-profile-avatar">{(currentUser?.displayName ?? currentUser?.login ?? "П").split(/\s+/).slice(0, 2).map((part) => part[0]).join("")}</span><span className="sidebar-profile-copy"><strong>{currentUser?.displayName ?? "Пользователь панели"}</strong><small>{currentUser?.roles.includes("admin") ? "Администратор" : "Патруль 360"}</small></span></div>
++        <button className="collapse-button" aria-label={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"} title={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"} onClick={onToggleCollapsed} type="button">
++          {sidebarCollapsed ? <ChevronsRight size={20} /> : <ChevronsLeft size={20} />}
+         </button>
+       </div>
+       </aside>
+diff --git a/apps/web/src/app/shell/Topbar.tsx b/apps/web/src/app/shell/Topbar.tsx
+index c2003b0..7e03af7 100644
+--- a/apps/web/src/app/shell/Topbar.tsx
++++ b/apps/web/src/app/shell/Topbar.tsx
+@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
+ import type { SessionUserDto } from "../../api/contracts";
+ import { Menu } from "lucide-react";
+ import { ChromeIcon } from "./ChromeIcon";
++import { MobileSearch } from "./MobileSearch";
+ 
+ export interface TopbarNotification {
+   id: string;
+@@ -99,6 +100,8 @@ export function Topbar({
+         <kbd>⌘ K</kbd>
+       </label>
+ 
++      <MobileSearch query={searchQuery} onChange={onSearchQueryChange} onSearch={onRunSearch} />
++
+       <div className="topbar-alerts" ref={panelRef}>
+         <button
+           aria-expanded={isOpen}
+diff --git a/apps/web/src/assignment-request-overrides.css b/apps/web/src/assignment-request-overrides.css
+index c043f42..7b0e0cb 100644
+--- a/apps/web/src/assignment-request-overrides.css
++++ b/apps/web/src/assignment-request-overrides.css
+@@ -1641,6 +1641,14 @@
+ .site-users-search-field{height:38px;display:grid;grid-template-columns:18px 1fr 30px;align-items:center;gap:7px;padding:0 6px 0 11px;border:1px solid #d7e2f0;border-radius:6px;background:#fff;color:#7b8da8}
+ .site-users-search-field input,.site-users-search-field button{border:0;background:transparent;min-width:0}
+ .site-users-filter-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
++.site-users-filter-row[hidden]{display:none}
++.site-users-active-filters{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px}
++.site-users-active-filters button{min-height:44px}
++@media(max-width:767px){
++  .site-users-search-field{height:auto;min-height:44px;grid-template-columns:18px minmax(0,1fr) 44px}
++  .site-users-search-field button{min-height:44px;min-width:44px}
++  .site-users-filter-row select{min-height:44px;min-width:0;font-size:16px}
++}
+ .site-users-filter-row select{height:36px}
+ .site-users-directory-list{display:grid;gap:2px;margin:10px -6px;overflow:auto;max-height:560px}
+ .site-user-directory-row{width:100%;display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border:1px solid transparent;border-radius:6px;background:#fff;text-align:left;color:#172d52;cursor:pointer}
+diff --git a/apps/web/src/features/inventory/InventoryItemsScreen.tsx b/apps/web/src/features/inventory/InventoryItemsScreen.tsx
+index cf96c10..9040bf1 100644
+--- a/apps/web/src/features/inventory/InventoryItemsScreen.tsx
++++ b/apps/web/src/features/inventory/InventoryItemsScreen.tsx
+@@ -31,6 +31,7 @@ import { useInventoryRepository } from "../../repositories/inventoryRepositoryCo
+ import type { ScreenId } from "../../types";
+ import { PpeMovementHistoryPanel } from "./PpeMovementHistoryPanel";
+ import { PpeButton, PpeModalShell } from "./ppe/PpeUi";
++import { PhoneDisclosure } from "../../shared/ui/PhoneDisclosure";
+ 
+ const emptyFacets: InventoryItemFacetsDto = {
+   total: 0,
+@@ -313,6 +314,7 @@ export function InventoryItemsScreen({
+         </div>
+       </header>
+ 
++      <PhoneDisclosure title="Сводка номенклатуры">
+       <div className="inventory-items-kpis" aria-label="Сводка номенклатуры">
+         <ItemKpi icon={Boxes} label="Всего позиций" value={facets.total} hint="в справочнике" />
+         <ItemKpi icon={Package} label="Активные" value={facets.active} hint="доступны для выдачи" tone="green" />
+@@ -320,6 +322,7 @@ export function InventoryItemsScreen({
+         <ItemKpi icon={SlidersHorizontal} label="В фильтре" value={items.total} hint="по текущим условиям" tone="blue" />
+       </div>
+ 
++      </PhoneDisclosure>
+       <section className="inventory-items-filters" aria-label="Фильтры номенклатуры">
+         <label className="inventory-search-field">
+           <Search size={18} aria-hidden="true" />
+@@ -329,7 +332,8 @@ export function InventoryItemsScreen({
+             placeholder="Поиск по названию, артикулу, категории, описанию"
+           />
+         </label>
+-        <select value={filters.categoryId} onChange={(event) => updateFilters({ categoryId: event.target.value })}>
++        <PhoneDisclosure title={`Фильтры · ${[filters.categoryId, filters.trackingType, filters.unitId, filters.status, filters.itemKind].filter(Boolean).length}`}>
++        <select aria-label="Категория" value={filters.categoryId} onChange={(event) => updateFilters({ categoryId: event.target.value })}>
+           <option value="">Все категории</option>
+           {(settings?.categories ?? []).map((category) => (
+             <option key={category.id} value={category.id}>
+@@ -337,13 +341,13 @@ export function InventoryItemsScreen({
+             </option>
+           ))}
+         </select>
+-        <select value={filters.trackingType} onChange={(event) => updateFilters({ trackingType: event.target.value })}>
++        <select aria-label="Тип учёта" value={filters.trackingType} onChange={(event) => updateFilters({ trackingType: event.target.value })}>
+           <option value="">Все типы учета</option>
+           <option value="quantity">Количественный</option>
+           <option value="identifier">Инвентарный</option>
+           <option value="custody">Под запись</option>
+         </select>
+-        <select value={filters.unitId} onChange={(event) => updateFilters({ unitId: event.target.value })}>
++        <select aria-label="Единица измерения" value={filters.unitId} onChange={(event) => updateFilters({ unitId: event.target.value })}>
+           <option value="">Все единицы</option>
+           {(settings?.units ?? []).map((unit) => (
+             <option key={unit.id} value={unit.id}>
+@@ -351,7 +355,7 @@ export function InventoryItemsScreen({
+             </option>
+           ))}
+         </select>
+-        <select value={filters.status} onChange={(event) => updateFilters({ status: event.target.value })}>
++        <select aria-label="Статус позиции" value={filters.status} onChange={(event) => updateFilters({ status: event.target.value })}>
+           <option value="active">Активные</option>
+           <option value="">Все статусы</option>
+           <option value="inactive">Скрытые</option>
+@@ -360,6 +364,7 @@ export function InventoryItemsScreen({
+           <RefreshCw size={16} aria-hidden="true" />
+           Сбросить
+         </button>
++        </PhoneDisclosure>
+       </section>
+ 
+       {error ? (
+@@ -370,6 +375,7 @@ export function InventoryItemsScreen({
+       ) : null}
+ 
+       <div className="inventory-items-workspace">
++        <PhoneDisclosure title="Категории и виды учёта">
+         <aside className="inventory-items-rail" aria-label="Разделы номенклатуры">
+           <RailButton
+             active={!filters.categoryId && filters.status === ""}
+@@ -413,6 +419,7 @@ export function InventoryItemsScreen({
+             />
+           ))}
+         </aside>
++        </PhoneDisclosure>
+ 
+         <section className="inventory-items-table-card">
+           <div className="inventory-table-head">
+diff --git a/apps/web/src/features/inventory/InventoryPpeScreen.tsx b/apps/web/src/features/inventory/InventoryPpeScreen.tsx
+index 2243002..579fcc3 100644
+--- a/apps/web/src/features/inventory/InventoryPpeScreen.tsx
++++ b/apps/web/src/features/inventory/InventoryPpeScreen.tsx
+@@ -20,6 +20,8 @@ import { PpeLineActionModal } from "./ppe/PpeLineActionModal";
+ import { PpeModuleNav } from "./ppe/PpeModuleNav";
+ import { PpeButton } from "./ppe/PpeUi";
+ import { savePpeNormSettingsIntent } from "./ppe/ppeNormSettingsIntent";
++import { usePhoneLayout } from "../../hooks/usePhoneLayout";
++import { PhoneDisclosure } from "../../shared/ui/PhoneDisclosure";
+ 
+ type WorkspaceMode = "norms" | "issued" | "print";
+ 
+@@ -35,7 +37,8 @@ export function InventoryPpeScreen({
+ }) {
+   const repository = useInventoryRepository();
+   const [query, setQuery] = useState("");
+-  const [employeePaneCollapsed, setEmployeePaneCollapsed] = useState(false);
++  const phoneLayout = usePhoneLayout("(max-width: 767px)");
++  const [employeePaneCollapsed, setEmployeePaneCollapsed] = useState(phoneLayout);
+   const deferredQuery = useDeferredValue(query);
+   const [employees, setEmployees] = useState<InventoryEmployeeDto[]>([]);
+   const [employeesLoading, setEmployeesLoading] = useState(true);
+@@ -208,7 +211,11 @@ export function InventoryPpeScreen({
+           <label className="ppe-v2-search ppe-v2-employee-search"><Search size={17} /><input aria-label="Поиск сотрудников" onChange={(event) => setQuery(event.target.value)} placeholder="ФИО или табельный номер" value={query} />{query ? <button aria-label="Очистить поиск" onClick={() => setQuery("")} type="button"><X size={15} /></button> : null}</label>
+           <div className="ppe-v2-employee-list">
+             {employeesLoading ? <div className="ppe-v2-state">Загрузка сотрудников…</div> : employees.length === 0 ? <div className="ppe-v2-state"><UserRound size={28} /><strong>Сотрудники не найдены</strong></div> : employees.map((employee) => (
+-              <button className={selectedEmployeeId === employee.id ? "is-selected" : ""} key={employee.id} onClick={() => selectEmployee(employee.id)} type="button">
++              <button className={selectedEmployeeId === employee.id ? "is-selected" : ""} key={employee.id} onClick={(event) => {
++                const toggle = event.currentTarget.closest("aside")?.querySelector<HTMLButtonElement>(".ppe-v2-pane-toggle");
++                selectEmployee(employee.id);
++                if (phoneLayout) toggle?.focus();
++              }} type="button">
+                 <span className="ppe-v2-avatar">{initials(employee.fullName)}</span>
+                 <span><strong>{employee.fullName}</strong><small>{employee.personnelNo} · {employee.position}</small></span>
+                 <ChevronRight size={17} />
+@@ -285,6 +292,7 @@ function EmployeeHeader({ onCreateIssue, onOpenNormSettings, workspace }: { onCr
+         <div><strong>{workspace.activeNormSet ? "Применяются нормы должности" : "Опубликованные нормы не найдены"}</strong><span>{workspace.activeNormSet ? workspace.activeNormSet.positionName + " · версия " + workspace.activeNormSet.versionName + " · " + workspace.activeNormSet.sourceName : "Должность: " + employee.position + ". Карточку можно вести вручную, но нормативный источник не подтверждён."}</span></div>
+         {!workspace.activeNormSet ? <PpeButton onClick={onOpenNormSettings} size="compact" variant="secondary">Найти и проверить норму</PpeButton> : null}
+       </div>
++      <PhoneDisclosure title={`Сводка СИЗ · выдано ${workspace.issued}`}>
+       <div className="ppe-v2-kpis">
+         <Kpi label="Нормы" value={workspace.normsTotal} />
+         <Kpi label="Выдано" tone="good" value={workspace.issued} />
+@@ -293,6 +301,7 @@ function EmployeeHeader({ onCreateIssue, onOpenNormSettings, workspace }: { onCr
+         <Kpi label="Просрочено" tone="danger" value={workspace.overdue} />
+         <Kpi label="Ошибки" tone="danger" value={workspace.errors} />
+       </div>
++      </PhoneDisclosure>
+     </section>
+   );
+ }
+diff --git a/apps/web/src/features/inventory/styles/inventory-items-polish.css b/apps/web/src/features/inventory/styles/inventory-items-polish.css
+index f3e4529..6d06cb9 100644
+--- a/apps/web/src/features/inventory/styles/inventory-items-polish.css
++++ b/apps/web/src/features/inventory/styles/inventory-items-polish.css
+@@ -217,7 +217,13 @@
+ }
+ 
+ .inventory-items-screen .inventory-items-table {
+-  min-width: 760px;
++  min-width: 0;
++}
++
++@media (min-width: 641px) {
++  .inventory-items-screen .inventory-items-table { min-width: 760px; }
++  .inventory-items-screen td.inventory-table-main-cell { display: table-cell; }
++  .inventory-items-screen .inventory-table-main-cell > .inventory-item-thumb { display: none; }
+ }
+ 
+ .inventory-items-screen .inventory-items-table th {
+@@ -247,8 +253,12 @@
+ 
+ .inventory-items-screen .inventory-table-main-cell {
+   gap: 8px;
++  min-width: 0;
+ }
+ 
++.inventory-items-screen .inventory-table-main-cell > span:last-child { min-width: 0; }
++.inventory-items-screen .inventory-table-main-cell :is(strong, small) { white-space: normal; overflow-wrap: anywhere; }
++
+ .inventory-items-screen .inventory-table-main-cell strong {
+   color: #17345f;
+   font-size: 12px;
+diff --git a/apps/web/src/features/inventory/styles/inventory-responsive.css b/apps/web/src/features/inventory/styles/inventory-responsive.css
+index 095a9be..bef7257 100644
+--- a/apps/web/src/features/inventory/styles/inventory-responsive.css
++++ b/apps/web/src/features/inventory/styles/inventory-responsive.css
+@@ -805,8 +805,9 @@
+ 
+ /* Nomenclature rows become compact cards on phone-sized screens. */
+ @media (max-width: 640px) {
+-  .inventory-items-table-wrap { overflow: visible; }
+-  .inventory-items-table { min-width: 0; table-layout: auto; }
++  .inventory-items-screen .inventory-items-table-wrap { overflow: visible; }
++  .inventory-items-screen .inventory-items-table { min-width: 0; width: 100%; table-layout: auto; }
++  .inventory-items-screen .inventory-items-table tbody tr { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+   .inventory-items-table thead { display: none; }
+   .inventory-items-table tbody { display: grid; gap: 8px; }
+   .inventory-items-table tbody tr {
+@@ -843,9 +844,18 @@
+   .inventory-items-table tbody tr > td:nth-child(5),
+   .inventory-items-table tbody tr > td:nth-child(7) { display: none; }
+   .inventory-items-table .inventory-row-actions { display: grid; grid-template-columns: repeat(3, minmax(44px, 1fr)); width: 100%; }
+-  .inventory-items-table .inventory-row-actions .inventory-icon-btn { min-height: 44px; width: 100%; }
++  .inventory-items-screen .inventory-items-table .inventory-row-actions .inventory-icon-btn { min-height: 44px; height: auto; width: 100%; }
++  .inventory-items-screen .inventory-items-table td[data-label="Действия"] { display: block; }
++  .inventory-items-screen .inventory-items-table td[data-label="Действия"]::before { display: none; }
+   .inventory-items-table td[colspan] { display: block; padding: 0; }
+   .inventory-items-table td[colspan]::before { display: none; }
+   .inventory-items-table-card .inventory-table-head { align-items: stretch; gap: 8px; }
+   .inventory-items-table-card .inventory-table-head select { min-height: 44px; }
+-}
+\ No newline at end of file
++}
++.inventory-items-filters > .phone-disclosure,
++.inventory-items-filters > .phone-disclosure > div:not([hidden]) { display: contents; }
++@media (max-width: 767px) {
++  .inventory-items-filters > .phone-disclosure { display: block; }
++  .inventory-items-filters > .phone-disclosure > div:not([hidden]) { display: grid; gap: 8px; padding-top: 8px; }
++  .inventory-items-filters > .phone-disclosure > div[hidden] { display: none; }
++}
+diff --git a/apps/web/src/features/inventory/styles/ppeWorkspaceV2.css b/apps/web/src/features/inventory/styles/ppeWorkspaceV2.css
+index 4848986..7e8cfed 100644
+--- a/apps/web/src/features/inventory/styles/ppeWorkspaceV2.css
++++ b/apps/web/src/features/inventory/styles/ppeWorkspaceV2.css
+@@ -38,6 +38,7 @@
+ @media (min-width: 761px) and (max-width: 1599px) {
+   .ppe-v2-workspace { grid-template-columns: minmax(0, 1fr); }
+   .ppe-v2-employee-pane { position: static; }
++  .ppe-v2-employee-pane .ppe-v2-pane-toggle { display: inline-flex; min-height: 44px; }
+   .ppe-v2-employee-pane.is-collapsed > .ppe-v2-employee-search,
+   .ppe-v2-employee-pane.is-collapsed > .ppe-v2-employee-list { display: none; }
+   .ppe-v2-employee-pane.is-collapsed .ppe-v2-pane-title { border-bottom: 0; }
+@@ -178,8 +179,10 @@
+ @media (max-width: 760px) {
+   .ppe-v2-employee-main { align-items: stretch; flex-direction: column; }
+   .ppe-v2-employee-main > .ppe-ui-button { justify-content: center; width: 100%; }
+-  .ppe-v2-mode-tabs { align-items: stretch; display: grid; grid-template-columns: 1fr; overflow: visible; }
+-  .ppe-v2-mode-tabs button { min-height: 58px; width: 100%; }
++  .ppe-v2-mode-tabs { align-items: stretch; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; }
++  .ppe-v2-mode-tabs button { justify-content: center; min-height: 44px; min-width: 0; padding: 8px 4px; white-space: normal; width: 100%; }
++  .ppe-v2-mode-tabs button .ppe-v2-mode-tab-copy { text-align: center; }
++  .ppe-v2-mode-tab-copy small { display: none; }
+   .ppe-v2-section-counters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+   .ppe-v2-work-section .ppe-v2-table-wrap { overflow: visible; padding: 8px; }
+   .ppe-v2-work-section .ppe-v2-responsive-table tbody tr:not(.ppe-v2-group-row) { border-radius: var(--ppe-ui-radius-panel, 10px); }
+@@ -359,11 +362,16 @@
+ 
+ @media (max-width: 720px) {
+   .ppe-v2-norm-context {
+-    flex-wrap: wrap;
++    display: grid;
++    grid-template-columns: 18px minmax(0, 1fr);
+   }
+ 
+   .ppe-v2-norm-context > .ppe-ui-button {
+-    margin-left: 27px;
++    grid-column: 1 / -1;
++    margin-left: 0;
++    min-height: 44px;
++    white-space: normal;
++    width: 100%;
+   }
+ 
+   .inventory-ppe-norm-mappings > span {
+@@ -395,12 +403,16 @@
+    presenting a horizontal scrollbar inside the page header. */
+ @media (max-width: 1280px) {
+   .ppe-v2-page-head { gap: 10px; }
+-  .ppe-v2-module-nav { flex: 0 1 540px; min-width: 0; }
++  .ppe-v2-module-nav { min-width: 0; }
+   .ppe-v2-module-nav button { font-size: 11px; gap: 5px; padding: 6px 8px; }
+   .ppe-v2-nav-label { font-size: 0; }
+   .ppe-v2-nav-label::after { content: attr(data-short); font-size: 11px; }
+ }
+ 
++@media (min-width: 761px) and (max-width: 1280px) {
++  .ppe-v2-module-nav { flex: 0 1 540px; }
++}
++
+ /* PPE history journal refinement */
+ .ppe-v2-history-toolbar {
+   align-items: flex-start;
+diff --git a/apps/web/src/features/patrol/results/ResultsWorkspace.tsx b/apps/web/src/features/patrol/results/ResultsWorkspace.tsx
+index 4c059ce..953118f 100644
+--- a/apps/web/src/features/patrol/results/ResultsWorkspace.tsx
++++ b/apps/web/src/features/patrol/results/ResultsWorkspace.tsx
+@@ -28,6 +28,7 @@ import { PatrolRequestHistory } from "./PatrolRequestHistory";
+ import type { DurationSummary, ResultGroup } from "./resultTypes";
+ import { Button, CompactTable, PageHeader, SectionTabs, type CompactTableColumn } from "../../../shared/ui";
+ import "./resultsWorkspace.css";
++import { PhoneDisclosure } from "../../../shared/ui/PhoneDisclosure";
+ 
+ export interface ResultsScreenProps {
+   canCreateRequest?: boolean;
+@@ -542,6 +543,7 @@ export function ResultsWorkspace({
+       ) : (
+         <>
+ 
++      <PhoneDisclosure title={`Сводка · ${metrics.total} обходов`}>
+       <section className="results-review-metrics" aria-label="Сводка результатов обходов">
+         <MetricCard icon={FileText} title="Всего обходов" value={metrics.total} caption={loadedSampleCaption} />
+         <MetricCard icon={AlertTriangle} title="С замечаниями" value={metrics.issues} caption={loadedSampleCaption} tone="orange" />
+@@ -549,6 +551,7 @@ export function ResultsWorkspace({
+         <MetricCard icon={Timer} title="Среднее время" value={metrics.averageDuration} caption={metrics.durationQualityLabel} />
+         <MetricCard icon={CheckCircle2} title="Без замечаний" value={metrics.clean} caption="Точки закрыты без проблем" tone="green" />
+       </section>
++      </PhoneDisclosure>
+ 
+       <section className="results-review-layout">
+         <div className="results-review-main">
+diff --git a/apps/web/src/features/patrol/results/resultsWorkspace.css b/apps/web/src/features/patrol/results/resultsWorkspace.css
+index f446d92..c2edab8 100644
+--- a/apps/web/src/features/patrol/results/resultsWorkspace.css
++++ b/apps/web/src/features/patrol/results/resultsWorkspace.css
+@@ -441,6 +441,8 @@
+ .screen-area .results-review-screen .results-review-compact-table tbody tr.selected td.compact-table-cell-sticky-right { background: #eef5ff; }
+ 
+ @media (max-width: 767px) {
++  .screen-area .results-review-screen .results-review-view-tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; max-width: 100%; }
++  .screen-area .results-review-screen .results-review-view-tabs > button { flex: 0 0 auto; width: auto; white-space: nowrap; }
+   .screen-area .results-review-screen .results-review-hero .ui-page-header__description { display: none; }
+   .screen-area .results-review-screen .results-review-actions { width: 100%; }
+   .screen-area .results-review-screen .results-review-actions .ui-button { flex: 1; min-height: 44px; }
+diff --git a/apps/web/src/features/perco/PercoIntegrationScreen.tsx b/apps/web/src/features/perco/PercoIntegrationScreen.tsx
+index dfe165c..22cc8cb 100644
+--- a/apps/web/src/features/perco/PercoIntegrationScreen.tsx
++++ b/apps/web/src/features/perco/PercoIntegrationScreen.tsx
+@@ -19,6 +19,7 @@ import { createPercoRepository } from "../../repositories/percoRepository";
+ import { hasPermission } from "../../security/permissions";
+ import type { EmployeeDirectoryItem } from "../../types";
+ import "./perco.css";
++import { PhoneDisclosure } from "../../shared/ui/PhoneDisclosure";
+ 
+ import { PercoTab, LoadStatus, PercoIntegrationScreenProps, SettingsForm, PresenceEmployeeSummary, PercoHourlyFlowPoint, PercoDurationBucket, defaultSettings, percoTabs, percoTabOrder, pageSizeOptions, PercoPageSize, defaultListPageSize, diagnosticsListPageSize, getPercoTabLabel, SettingsStatus, ConnectionResult, SyncSummary, ConfirmIgnoreEmployeeModal, ClosePresenceModal, PercoFlowChart, PresenceRatio, DurationBars, getChartBarHeight, PresenceTimeline, MetricCard, Field, SecretField, StatusPill, usePercoPagination, ListPagination, EmptyBlock, buildHourlyFlow, buildDurationBuckets, buildPercoQuality, buildPresenceAnalytics, toForm, buildSuggestedMatches, getMatchSuggestionReason, isStaleInterval, isOldOpenInterval, isLunchBreakInterval, isClosedShiftInterval, normalizeSearch, normalizeStatusTone, formatStatus, formatSecretStatus, formatOperation, formatLogStatus, formatLogSource, formatLogDetails, formatLogDetailKey, formatLogDetailValue, formatDateTime, formatDuration, toDateTimeLocalValue, minIso, maxIso, isBusyStatus, getErrorMessage } from "./percoScreenSupport";
+ const repository = createPercoRepository();
+@@ -388,6 +389,7 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
+ 
+   return (
+     <div className="perco-shell" aria-busy={status === "loading" || status === "saving"}>
++      <PhoneDisclosure title="Состояние интеграции и обновление">
+       <section className="perco-toolbar" aria-labelledby="perco-screen-title">
+         <div className="perco-toolbar-main">
+           <span className="perco-eyebrow">PERCo-Web</span>
+@@ -412,6 +414,7 @@ export function PercoIntegrationScreen({ currentUser, employeeDirectory, onNotif
+         </div>
+       </section>
+ 
++      </PhoneDisclosure>
+       <nav className="perco-tabs" aria-label="Разделы PERCo-Web" role="tablist">
+         {percoTabs.map((tab) => (
+           <button
+@@ -1074,6 +1077,7 @@ function PercoDashboardTab({
+         </button>
+       </div>
+ 
++      <PhoneDisclosure title="Графики и качество данных">
+       <div className="perco-live-analytics-grid">
+         <section className="perco-analytics-panel perco-flow-panel">
+           <div className="perco-analytics-head">
+@@ -1124,6 +1128,7 @@ function PercoDashboardTab({
+         </section>
+       </div>
+ 
++      </PhoneDisclosure>
+       <div className="perco-dashboard-main-grid">
+         <section className="perco-card perco-card-flat">
+           <header>
+diff --git a/apps/web/src/features/users/SiteUsersScreen.tsx b/apps/web/src/features/users/SiteUsersScreen.tsx
+index fa7b4e1..01fb1af 100644
+--- a/apps/web/src/features/users/SiteUsersScreen.tsx
++++ b/apps/web/src/features/users/SiteUsersScreen.tsx
+@@ -7,6 +7,7 @@ import { EmptyState } from "../../shared/ui";
+ import { useSiteUsersWorkspace, type TemporarySiteUserPasswordNotice } from "../../hooks/useSiteUsersWorkspace";
+ import { findSiteUser } from "../../repositories/siteUsersRepository";
+ import type { DataSourceMode, SiteUser } from "../../types";
++import { usePhoneLayout } from "../../hooks/usePhoneLayout";
+ 
+ export function SiteUsersScreen({
+   canManage = true,
+@@ -35,6 +36,14 @@ export function SiteUsersScreen({
+   const [editingUser, setEditingUser] = useState<SiteUser | undefined>();
+   const [hasUnsavedAccessChanges, setHasUnsavedAccessChanges] = useState(false);
+   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
++  const phoneLayout = usePhoneLayout();
++  const detailBackRef = useRef<HTMLButtonElement>(null);
++  const selectedRowRef = useRef<HTMLElement | null>(null);
++  useEffect(() => {
++    if (!phoneLayout) return;
++    if (mobileDetailOpen) detailBackRef.current?.focus();
++    else if (selectedRowRef.current?.isConnected) selectedRowRef.current.focus();
++  }, [mobileDetailOpen, phoneLayout]);
+   const formReturnFocusRef = useRef<HTMLElement | null>(null);
+ 
+   useEffect(() => {
+@@ -132,6 +141,7 @@ export function SiteUsersScreen({
+   }
+ 
+   function handleSelectUser(id: string) {
++    if (document.activeElement instanceof HTMLElement) selectedRowRef.current = document.activeElement;
+     if (id === selected?.id) { setMobileDetailOpen(true); return; }
+     if (hasUnsavedAccessChanges && !window.confirm("\u0415\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f. \u041f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0438\u0442\u044c\u0441\u044f \u0431\u0435\u0437 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f?")) return;
+     setHasUnsavedAccessChanges(false);
+@@ -164,7 +174,7 @@ export function SiteUsersScreen({
+           </div>
+ 
+           <div className="site-user-detail-pane">
+-            <button className="site-user-mobile-back" onClick={() => setMobileDetailOpen(false)} type="button">← К списку пользователей</button>
++            <button ref={detailBackRef} className="site-user-mobile-back" onClick={() => setMobileDetailOpen(false)} type="button">← К списку пользователей</button>
+             <SiteUserAccessPanel
+               canManage={canManage}
+               catalog={workspace.catalog}
+diff --git a/apps/web/src/features/users/components/SiteUsersTablePanel.tsx b/apps/web/src/features/users/components/SiteUsersTablePanel.tsx
+index 161bf8a..5ba28c8 100644
+--- a/apps/web/src/features/users/components/SiteUsersTablePanel.tsx
++++ b/apps/web/src/features/users/components/SiteUsersTablePanel.tsx
+@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
+ import { EmptyState, Panel } from "../../../shared/ui";
+ import type { DataSourceStatus, SiteUser } from "../../../types";
+ import { SITE_USER_ROLES, SITE_USER_STATUSES } from "../../../repositories/siteUsersRepository";
++import { usePhoneLayout } from "../../../hooks/usePhoneLayout";
+ 
+ interface SiteUsersTablePanelProps {
+   users: SiteUser[];
+@@ -33,6 +34,8 @@ export function SiteUsersTablePanel({
+   onSelectUser,
+ }: SiteUsersTablePanelProps) {
+   const [query, setQuery] = useState("");
++  const [filtersOpen, setFiltersOpen] = useState(false);
++  const phoneLayout = usePhoneLayout("(max-width: 767px)");
+   const [role, setRole] = useState<(typeof allRoles)[number]>("all");
+   const [userStatus, setUserStatus] = useState<(typeof allStatuses)[number]>("all");
+   const [page, setPage] = useState(1);
+@@ -78,9 +81,9 @@ export function SiteUsersTablePanel({
+         <label className="site-users-search-field">
+           <Search aria-hidden="true" size={16} />
+           <input aria-label="Поиск пользователей" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск пользователя..." />
+-          <button aria-label="Фильтры пользователей" title="Фильтры пользователей" type="button"><SlidersHorizontal size={15} /></button>
++          {phoneLayout ? <button aria-label="Фильтры пользователей" aria-expanded={filtersOpen} aria-controls="site-users-filters" onClick={() => setFiltersOpen((open) => !open)} title="Фильтры пользователей" type="button"><SlidersHorizontal size={15} /></button> : null}
+         </label>
+-        <div className="site-users-filter-row">
++        <div className="site-users-filter-row" id="site-users-filters" hidden={phoneLayout && !filtersOpen}>
+           <select aria-label="Роль" value={role} onChange={(event) => setRole(event.target.value as (typeof allRoles)[number])}>
+             {allRoles.map((item) => <option key={item} value={item}>{item === "all" ? "Все роли" : item}</option>)}
+           </select>
+@@ -90,6 +93,12 @@ export function SiteUsersTablePanel({
+         </div>
+       </div>
+ 
++      {(role !== "all" || userStatus !== "all") ? (
++        <div className="site-users-active-filters">
++          <span role="status">Фильтры: {[role !== "all" ? role : "", userStatus !== "all" ? userStatus : ""].filter(Boolean).join(" · ")}</span>
++          <button className="button ghost small" onClick={() => { setRole("all"); setUserStatus("all"); }} type="button">Сбросить фильтры</button>
++        </div>
++      ) : null}
+       <div className="site-users-directory-list">
+         {status === "loading" ? <div className="site-users-loading">Загрузка пользователей...</div> : null}
+         {status === "error" ? (
+@@ -142,4 +151,4 @@ export function SiteUsersTablePanel({
+ function getInitials(value: string) {
+   const parts = value.trim().split(/\s+/).filter(Boolean);
+   return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "П";
+-}
+\ No newline at end of file
++}
+diff --git a/apps/web/src/shared/styles/foundation.css b/apps/web/src/shared/styles/foundation.css
+index eaf23e3..ac1525d 100644
+--- a/apps/web/src/shared/styles/foundation.css
++++ b/apps/web/src/shared/styles/foundation.css
+@@ -6,6 +6,20 @@
+   min-width: 0;
+ }
+ 
++.phone-disclosure { min-width: 0; }
++.phone-disclosure-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 44px; padding: 10px 12px; background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: 8px; color: var(--ui-text); font-size: 14px; }
++.phone-disclosure > [hidden] { display: none; }
++
++@media (max-width: 767px) {
++  .modal-shell { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
++  .modal-shell-header, .modal-shell-body, .modal-shell-actions { padding: 12px; }
++  .modal-shell-actions { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
++  .modal-shell-actions > button { flex: 1 1 auto; min-height: 44px; }
++  .modal-shell-close { min-width: 44px; min-height: 44px; }
++  .workspace :is(input:not([type=checkbox]):not([type=radio]), select, textarea), .modal-shell :is(input, select, textarea) { font-size: 16px; }
++  .workspace :is(button, .ui-button) { min-height: 44px; }
++}
++
+ .ui-page-header__copy {
+   min-width: 0;
+ }
+diff --git a/apps/web/src/shared/ui/CompactTable.tsx b/apps/web/src/shared/ui/CompactTable.tsx
+index ec6d3e1..a56d3e1 100644
+--- a/apps/web/src/shared/ui/CompactTable.tsx
++++ b/apps/web/src/shared/ui/CompactTable.tsx
+@@ -76,13 +76,17 @@ export function CompactTable<T>({
+                   onRowClick(row);
+                 } : undefined}
+                 onKeyDown={onRowClick ? (event) => {
++                  if (event.target !== event.currentTarget) return;
+                   if (event.key === "Enter" || event.key === " ") {
+                     event.preventDefault();
+                     onRowClick(row);
+                   }
+                 } : undefined}
+                 onContextMenu={onRowContextMenu ? (event) => onRowContextMenu(event, row) : undefined}
+-                onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
++                onDoubleClick={onRowDoubleClick ? (event) => {
++                  if (event.target instanceof Element && event.target.closest("button, a, input, select, textarea")) return;
++                  onRowDoubleClick(row);
++                } : undefined}
+                 tabIndex={onRowClick ? 0 : undefined}
+               >
+                 {columns.map((column) => (
+diff --git a/apps/web/src/styles.css b/apps/web/src/styles.css
+index 449c676..e95e405 100644
+--- a/apps/web/src/styles.css
++++ b/apps/web/src/styles.css
+@@ -26914,49 +26914,6 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
+ }
+ 
+ @media (max-width: 640px) {
+-  body .app-shell,
+-  body .app-shell:not(.sidebar-collapsed),
+-  body .app-shell.sidebar-collapsed {
+-    grid-template-columns: 72px minmax(0, 1fr) !important;
+-  }
+-
+-  body .app-shell .sidebar {
+-    width: 72px !important;
+-    min-width: 72px;
+-    overflow-x: hidden;
+-    padding: 12px 8px;
+-  }
+-
+-  body .app-shell .brand {
+-    justify-content: center;
+-    padding: 0 0 14px;
+-  }
+-
+-  body .app-shell .brand strong,
+-  body .app-shell .brand span,
+-  body .app-shell .nav-item-label,
+-  body .app-shell .nav-chevron,
+-  body .app-shell .sidebar-section-label,
+-  body .app-shell .sidebar-submenu-item small,
+-  body .app-shell .sidebar-footer .collapse-button span {
+-    display: none !important;
+-  }
+-
+-  body .app-shell .module-trigger,
+-  body .app-shell .nav-list > .nav-item,
+-  body .app-shell .sidebar-submenu-item {
+-    width: 48px !important;
+-    min-width: 48px;
+-    justify-content: center;
+-    padding: 0 !important;
+-  }
+-
+-  body .app-shell .sidebar-submenu {
+-    margin-left: 0 !important;
+-    border-left: 0 !important;
+-    padding-left: 0 !important;
+-  }
+-
+   .screen-area {
+     padding-inline: 12px;
+   }
+diff --git a/apps/web/src/styles/interface-polish.css b/apps/web/src/styles/interface-polish.css
+index 85fced9..f69faa7 100644
+--- a/apps/web/src/styles/interface-polish.css
++++ b/apps/web/src/styles/interface-polish.css
+@@ -256,117 +256,8 @@
+   }
+ }
+ 
+-/* Mobile shell hardening: keep navigation labels reachable and overlays inside the viewport. */
++/* Phone notifications stay inside the viewport. Shell rules live in sidebar-navigation-polish.css. */
+ @media (max-width: 640px) {
+-  body .app-shell,
+-  body .app-shell:not(.sidebar-collapsed),
+-  body .app-shell.sidebar-collapsed {
+-    grid-template-columns: minmax(0, 1fr) !important;
+-  }
+-
+-  body .app-shell .sidebar {
+-    width: 100% !important;
+-    min-width: 0 !important;
+-    max-width: 100vw;
+-    overflow: visible;
+-    padding: 8px 10px 6px;
+-  }
+-
+-  body .app-shell .brand {
+-    justify-content: flex-start;
+-    margin: 0 2px 6px;
+-    padding: 0 4px 8px;
+-  }
+-
+-  body .app-shell .brand strong,
+-  body .app-shell .brand span,
+-  body .app-shell .brand > div:last-child {
+-    display: block !important;
+-  }
+-
+-  body .app-shell .nav-list {
+-    display: flex !important;
+-    flex-direction: row !important;
+-    gap: 6px;
+-    max-width: 100%;
+-    overflow-x: auto !important;
+-    overflow-y: visible !important;
+-    padding: 0 0 4px;
+-    scrollbar-gutter: auto;
+-  }
+-
+-  body .app-shell .module-nav {
+-    flex: 0 0 118px !important;
+-    min-width: 118px;
+-  }
+-
+-  body .app-shell .module-nav.is-open {
+-    flex-basis: min(184px, 78vw) !important;
+-    min-width: min(184px, 78vw);
+-  }
+-
+-  body .app-shell .module-trigger,
+-  body .app-shell .nav-list > .nav-item {
+-    width: 100% !important;
+-    min-width: 118px !important;
+-    min-height: 42px;
+-    padding: 0 8px !important;
+-  }
+-
+-  body .app-shell .nav-item-main {
+-    gap: 7px;
+-  }
+-
+-  body .app-shell .nav-item-label,
+-  body .app-shell .nav-chevron {
+-    display: inline !important;
+-  }
+-
+-  body .app-shell .nav-item-label {
+-    overflow: hidden;
+-    text-overflow: ellipsis;
+-    white-space: nowrap;
+-  }
+-
+-  body .app-shell .sidebar-submenu {
+-    width: 100%;
+-    max-height: 164px;
+-    margin: 4px 0 6px !important;
+-    overflow-y: auto;
+-    padding: 4px !important;
+-    border: 1px solid var(--ui-line, #dbe7f7);
+-    border-radius: 10px;
+-    background: rgba(255, 255, 255, 0.94);
+-  }
+-
+-  body .app-shell .sidebar-submenu-item {
+-    width: 100% !important;
+-    min-width: 0 !important;
+-    grid-template-columns: 28px minmax(0, 1fr) !important;
+-    justify-content: stretch;
+-    padding: 5px 6px !important;
+-  }
+-
+-  body .app-shell .sidebar-submenu-item strong,
+-  body .app-shell .sidebar-submenu-item small {
+-    display: block !important;
+-    min-width: 0;
+-    overflow: hidden;
+-    text-overflow: ellipsis;
+-    white-space: nowrap;
+-  }
+-
+-  body .app-shell .sidebar-section-label {
+-    display: block !important;
+-    align-self: center;
+-    margin: 0 4px 4px;
+-    white-space: nowrap;
+-  }
+-
+-  body .app-shell .sidebar-footer {
+-    display: none !important;
+-  }
+-
+   body .topbar-alerts {
+     position: static;
+   }
+diff --git a/apps/web/src/styles/non-ppe-ui.css b/apps/web/src/styles/non-ppe-ui.css
+index 9bbe9a9..82bf259 100644
+--- a/apps/web/src/styles/non-ppe-ui.css
++++ b/apps/web/src/styles/non-ppe-ui.css
+@@ -1447,3 +1447,12 @@ body .modal-backdrop .modal-shell.employee-form-modal .modal-actions .ui-button
+     flex: 1 1 120px;
+   }
+ }
++@media (max-width: 767px) {
++  .screen-area .dashboard-am .dashboard-am-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
++  .screen-area .dashboard-am .dashboard-am-kpi { min-height: 88px; padding: 12px; display: block; }
++  .screen-area .dashboard-am .dashboard-am-kpi .dashboard-am-icon { display: none; }
++  .screen-area .dashboard-am .dashboard-am-kpi:last-child { grid-column: 1 / -1; }
++  .screen-area .dashboard-am .dashboard-am-kpi p { font-size: 12px; }
++  .screen-area .dashboard-am .dashboard-am-kpi strong { font-size: 24px; }
++  .screen-area .dashboard-am .dashboard-am-hero .ui-page-header__description { display: none; }
++}
+diff --git a/apps/web/src/styles/sidebar-navigation-polish.css b/apps/web/src/styles/sidebar-navigation-polish.css
+index d80360e..fae82a9 100644
+--- a/apps/web/src/styles/sidebar-navigation-polish.css
++++ b/apps/web/src/styles/sidebar-navigation-polish.css
+@@ -18,6 +18,8 @@
+ /* The sidebar is a dense desktop tool. On narrower windows it becomes an
+    overlay, leaving the full workspace available for the current task. */
+ .topbar-navigation-toggle,
++.sidebar-mobile-close,
++.topbar-mobile-search,
+ .sidebar-mobile-backdrop { display: none; }
+ 
+ /* Working data should sit on a quiet surface, without decorative grid or wave
+@@ -39,6 +41,11 @@
+ @media (min-width: 1200px) {
+   body .app-shell:not(.sidebar-collapsed) { grid-template-columns: 232px minmax(0, 1fr); }
+   body .app-shell:not(.sidebar-collapsed) .sidebar { width: 232px; }
++  body .app-shell:not(.sidebar-collapsed) .sidebar-submenu { width: auto; margin: 4px 0 8px; padding: 0; }
++  body .app-shell:not(.sidebar-collapsed) .sidebar-submenu-list { padding: 0; width: 100%; }
++  body .app-shell:not(.sidebar-collapsed) .sidebar-submenu-item { width: 100%; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; padding: 8px; }
++  body .app-shell:not(.sidebar-collapsed) .sidebar-submenu-item strong { font-size: 14px; font-weight: 600; white-space: normal; word-break: normal; overflow-wrap: normal; }
++  body .app-shell:not(.sidebar-collapsed) .sidebar-submenu-item small { display: none; }
+ }
+ 
+ @media (max-width: 1199px) {
+@@ -68,7 +75,8 @@
+     z-index: 5099;
+   }
+ 
+-  body .app-shell .sidebar {
++  body .app-shell .sidebar,
++  body .app-shell:not(.sidebar-collapsed) .sidebar {
+     bottom: 0;
+     box-shadow: var(--shadow-modal);
+     left: 0;
+@@ -80,10 +88,104 @@
+     transition: transform var(--ui-motion-normal, 180ms ease);
+     width: min(320px, calc(100vw - 44px));
+     z-index: 5100;
++    height: 100dvh;
++    max-height: 100dvh;
++    min-height: 0;
++    display: flex;
++    flex-direction: column;
++    padding: 12px;
++    background: var(--ui-surface);
+   }
+ 
++  body .app-shell .sidebar .nav-list { display: flex; flex-direction: column; overflow: auto; min-height: 0; width: 100%; flex: 1; }
++  body .app-shell .sidebar .module-nav { min-width: 0; width: 100%; flex: 0 0 auto; }
++  body .app-shell .sidebar .nav-item,
++  body .app-shell .sidebar .sidebar-submenu-item { width: 100%; min-width: 0; min-height: 44px; padding: 10px; justify-content: flex-start; }
++  body .app-shell .sidebar .sidebar-submenu-item { grid-template-columns: 28px minmax(0, 1fr); }
++  body .app-shell .sidebar .nav-item-label,
++  body .app-shell .sidebar .sidebar-submenu-item strong { white-space: normal; word-break: normal; overflow-wrap: normal; font-size: 14px; }
++  body .app-shell .sidebar .nav-item-label,
++  body .app-shell .sidebar .nav-chevron { display: inline; }
++  body .app-shell .sidebar .sidebar-submenu { position: static; width: auto; margin: 4px 0 8px 12px; padding: 0; }
++  body .app-shell .sidebar .sidebar-submenu header,
++  body .app-shell .sidebar .sidebar-submenu-item small { display: none; }
++  body .app-shell .sidebar .sidebar-section-label { display: block; }
++  body .app-shell .sidebar .brand { display: flex; }
++  body .app-shell .sidebar .brand > div:last-child,
++  body .app-shell .sidebar .brand strong,
++  body .app-shell .sidebar .brand span { display: block; }
++  .sidebar-mobile-close { display: block; align-self: flex-end; min-height: 44px; border: 0; background: transparent; color: var(--ui-text); padding: 8px 12px; }
++
+   body .app-shell .sidebar.is-mobile-open { transform: translateX(0); }
+   body .app-shell .sidebar .sidebar-footer { display: none; }
+   body .app-shell .sidebar .sidebar-submenu { max-height: none; overflow: visible; }
+   body .app-shell .sidebar :is(.nav-link, .sidebar-submenu button, .module-nav-trigger) { overflow-wrap: normal; word-break: normal; }
+ }
++
++@media (max-width: 767px) {
++  body .workspace > .topbar { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; min-height: 60px; padding: max(8px, env(safe-area-inset-top)) 12px 8px; }
++  .topbar > .topbar-search { display: none; }
++  .topbar-mobile-search { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; flex: 1; border: 1px solid var(--ui-border); border-radius: 8px; background: white; color: var(--ui-text); gap: 8px; }
++  body .topbar .user-pill { width: auto; margin: 0; padding: 0; }
++  body .topbar .user-copy,
++  body .topbar .avatar { display: none; }
++  body .topbar :is(.notification-button, .topbar-logout) { min-width: 44px; min-height: 44px; }
++  .mobile-search-form { display: grid; gap: 12px; }
++  .mobile-search-form input { width: 100%; min-width: 0; min-height: 44px; font-size: 16px; }
++}
++/* Approved navigation reference: desktop and phone share one hierarchy. */
++body .app-shell .sidebar-reference { background:#fff; border-right:1px solid #e2e8f0; box-shadow:none; }
++body .app-shell .sidebar-reference .nav-icon { background:transparent; border:0; box-shadow:none; color:#536982; padding:0; width:22px; height:22px; border-radius:0; }
++body .app-shell .sidebar-reference .nav-item { background:transparent; box-shadow:none; border:0; border-radius:8px; min-height:44px; font-size:14px; font-weight:500; color:#243650; }
++body .app-shell .sidebar-reference .nav-item.active { background:#f3f8ff; color:#0065d9; box-shadow:none; }
++body .app-shell .sidebar-reference .nav-item.active .nav-icon { color:#0065d9; }
++body .app-shell .sidebar-reference .sidebar-submenu header,
++body .app-shell .sidebar-reference .sidebar-submenu-item .nav-icon,
++body .app-shell .sidebar-reference .sidebar-submenu-item small { display:none; }
++body .app-shell .sidebar-reference .sidebar-submenu-item { display:flex; align-items:center; padding:8px 12px 8px 32px; min-height:40px; border:0; border-radius:6px; background:transparent; box-shadow:none; width:100%; position:relative; }
++body .app-shell .sidebar-reference .sidebar-submenu-item strong { font:inherit; font-size:14px; line-height:1.4; font-weight:400; color:#243650; overflow-wrap:normal; word-break:normal; }
++body .app-shell .sidebar-reference .sidebar-submenu-item.active { background:#eaf3ff; box-shadow:inset 3px 0 #0877f9; }
++body .app-shell .sidebar-reference .sidebar-submenu-item.active strong { color:#0065d9; font-weight:500; }
++body .app-shell .sidebar-reference .sidebar-submenu-item:hover { background:#f1f5f9; }
++body .app-shell .sidebar-reference button:focus-visible { outline:2px solid #0065d9; outline-offset:-2px; }
++.sidebar-reference .sidebar-group-title { color:#61738c; font-size:12px; font-weight:500; text-transform:uppercase; padding:16px 12px 6px 24px; }
++body .app-shell .sidebar-reference .sidebar-section-label { border-top:1px solid #e2e8f0; margin:16px 0 6px; padding:18px 12px 6px; font-size:12px; color:#61738c; }
++body .app-shell .sidebar-reference .sidebar-footer { display:flex; gap:8px; align-items:center; border-top:1px solid #e2e8f0; padding:16px 0 4px; flex-shrink:0; }
++.sidebar-profile { display:flex; align-items:center; gap:10px; min-width:0; flex:1; }
++.sidebar-profile-avatar { display:grid; place-items:center; width:36px; height:36px; flex:0 0 36px; border-radius:50%; background:#e2efff; color:#0065d9; font-size:14px; }
++.sidebar-profile-copy { display:grid; gap:3px; min-width:0; }
++.sidebar-profile-copy strong { font-size:13px; font-weight:500; overflow-wrap:anywhere; }
++.sidebar-profile-copy small { font-size:12px; color:#61738c; }
++body .app-shell .sidebar-reference .collapse-button { display:grid; place-items:center; width:36px; height:44px; padding:0; background:transparent; border:0; box-shadow:none; flex:0 0 36px; }
++@media(min-width:1200px) {
++  body .app-shell:not(.sidebar-collapsed) { grid-template-columns:248px minmax(0,1fr); }
++  body .app-shell:not(.sidebar-collapsed) .sidebar-reference { width:248px; }
++  body .app-shell.sidebar-collapsed .sidebar-profile { display:none; }
++  body .app-shell.sidebar-collapsed .sidebar-reference .sidebar-footer { justify-content:center; }
++  body .app-shell.sidebar-collapsed .sidebar-reference .sidebar-submenu { width:272px; }
++}
++@media(max-width:1199px) {
++  body .app-shell .sidebar-reference .brand { padding-right:40px; min-height:62px; }
++  body .app-shell .sidebar-reference .sidebar-mobile-close { position:absolute; right:12px; top:20px; width:44px; height:44px; display:grid; place-items:center; }
++  body .app-shell .sidebar-reference .sidebar-submenu { margin-left:0; }
++  body .app-shell .sidebar-reference .sidebar-submenu-item { min-height:44px; }
++  body .app-shell .sidebar-reference .sidebar-footer .collapse-button { display:none; }
++}
++body .app-shell .sidebar-reference { background:#fff !important; background-image:none !important; }
++body .app-shell .sidebar-reference .nav-item { background:transparent !important; box-shadow:none !important; border:0 !important; }
++body .app-shell .sidebar-reference .nav-item.active { background:#f3f8ff !important; }
++body .app-shell .sidebar-reference .nav-icon { background:transparent !important; border:0 !important; box-shadow:none !important; }
++body .app-shell .sidebar-reference .nav-item-label { font-size:14px; font-weight:500 !important; }
++body .app-shell .sidebar-reference .nav-chevron::before,
++body .app-shell .sidebar-reference .nav-chevron::after { content:none !important; }
++body .app-shell .sidebar-reference .nav-chevron { display:flex; align-items:center; }
++body .app-shell .sidebar-reference .sidebar-footer { background:#fff; }
++body .app-shell .sidebar-reference .collapse-button::before,
++body .app-shell .sidebar-reference .collapse-button::after,
++body .app-shell .sidebar-reference .module-trigger::before,
++body .app-shell .sidebar-reference .module-trigger::after { content:none !important; }
++body .app-shell .sidebar-reference::before,
++body .app-shell .sidebar-reference::after { content:none !important; }
++body .app-shell .sidebar-reference .sidebar-submenu { border:0; background:#fff; box-shadow:none; }
++body .app-shell .sidebar-reference .sidebar-submenu-list { gap:0; }
++.sidebar-reference .sidebar-nav-group { display:block; }

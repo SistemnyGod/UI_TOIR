@@ -267,7 +267,7 @@ function PersonalCardLinesTable({
                   <EditablePrintValue
                     ariaLabel="Пункт норм"
                     onChange={onPatchLine ? (value) => onPatchLine(index, { normPoint: value }) : undefined}
-                    value={line.normPoint || "п. 1645"}
+                    value={line.normPoint || ""}
                   />
                 )}
               </td>
@@ -383,7 +383,7 @@ function buildCardHtml(data: PrintData) {
         .map((line) =>
           line.isSectionTitle
             ? `<tr class="is-section-title"><td>${escapeHtml(printItemName(line))}</td><td></td><td></td><td></td></tr>`
-            : `<tr><td>${escapeHtml(printItemName(line))}</td><td>${escapeHtml(line.normPoint || "п. 1645")}</td><td>${escapeHtml(periodText(line))}</td><td>${escapeHtml(normQuantityText(line))}</td></tr>`,
+            : `<tr><td>${escapeHtml(printItemName(line))}</td><td>${escapeHtml(line.normPoint || "")}</td><td>${escapeHtml(periodText(line))}</td><td>${escapeHtml(normQuantityText(line))}</td></tr>`,
         )
         .join("")
     : `<tr><td colspan="4">Позиции СИЗ не добавлены</td></tr>`;

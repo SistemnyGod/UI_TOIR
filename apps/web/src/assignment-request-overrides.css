@@ -1641,6 +1641,14 @@
 .site-users-search-field{height:38px;display:grid;grid-template-columns:18px 1fr 30px;align-items:center;gap:7px;padding:0 6px 0 11px;border:1px solid #d7e2f0;border-radius:6px;background:#fff;color:#7b8da8}
 .site-users-search-field input,.site-users-search-field button{border:0;background:transparent;min-width:0}
 .site-users-filter-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.site-users-filter-row[hidden]{display:none}
+.site-users-active-filters{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px}
+.site-users-active-filters button{min-height:44px}
+@media(max-width:767px){
+  .site-users-search-field{height:auto;min-height:44px;grid-template-columns:18px minmax(0,1fr) 44px}
+  .site-users-search-field button{min-height:44px;min-width:44px}
+  .site-users-filter-row select{min-height:44px;min-width:0;font-size:16px}
+}
 .site-users-filter-row select{height:36px}
 .site-users-directory-list{display:grid;gap:2px;margin:10px -6px;overflow:auto;max-height:560px}
 .site-user-directory-row{width:100%;display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border:1px solid transparent;border-radius:6px;background:#fff;text-align:left;color:#172d52;cursor:pointer}

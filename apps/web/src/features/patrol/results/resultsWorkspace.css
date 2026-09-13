@@ -441,6 +441,8 @@
 .screen-area .results-review-screen .results-review-compact-table tbody tr.selected td.compact-table-cell-sticky-right { background: #eef5ff; }
 
 @media (max-width: 767px) {
+  .screen-area .results-review-screen .results-review-view-tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; max-width: 100%; }
+  .screen-area .results-review-screen .results-review-view-tabs > button { flex: 0 0 auto; width: auto; white-space: nowrap; }
   .screen-area .results-review-screen .results-review-hero .ui-page-header__description { display: none; }
   .screen-area .results-review-screen .results-review-actions { width: 100%; }
   .screen-area .results-review-screen .results-review-actions .ui-button { flex: 1; min-height: 44px; }

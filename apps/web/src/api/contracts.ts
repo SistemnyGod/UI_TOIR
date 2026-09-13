@@ -920,6 +920,9 @@ export interface InventoryPpeNormSetDto {
   requiresReview: boolean;
   version: number;
   rowsCount: number;
+  departmentName?: string;
+  positionAliases?: string[];
+  scopeConfirmed?: boolean;
 }
 
 export interface InventoryPpeNormSetDetailDto {
@@ -941,6 +944,11 @@ export interface InventoryPpeNormRowDto {
   quantity: number;
   quantityText: string;
   lifeMonths: number | null;
+  unitSymbol?: string;
+  periodMonths?: number | null;
+  requirementKey?: string;
+  alternativeGroup?: string;
+  previousRequirementRowId?: string | null;
   mappings: InventoryPpeNormMappingDto[];
 }
 
@@ -968,7 +976,55 @@ export interface InventoryPpeNormMappingDto {
   defaultUnitPriceMinor: number | null;
   isDefault: boolean;
   comment: string;
+  isApproved?: boolean;
+  normUnitsPerItem?: number;
+  approvedBy?: string;
+  approvalEvidence?: string;
 }
+
+export interface PpeIssueDocumentCapabilitiesDto { enabled: boolean; }
+
+export interface PpeIssueDocumentLineInputDto {
+  id: string;
+  normRowId: string;
+  itemId: string;
+  issueDate: string;
+  quantity: number;
+  unitPriceMinor: number | null;
+  sizeText?: string;
+  exceptionReason?: string;
+  manualControlConfirmed?: boolean;
+}
+
+export interface SavePpeIssueDocumentDto {
+  employeeId: string;
+  normSetId: string;
+  documentDate: string;
+  responsibleName: string;
+  basis: string;
+  employeeDetails?: InventoryPpeEmployeeDetailsDto | null;
+  lines: PpeIssueDocumentLineInputDto[];
+  expectedVersion?: number | null;
+  acceptNormChange?: boolean;
+}
+
+export interface PpeDocumentProblemDto { lineId: string | null; code: string; message: string; }
+export interface PpeDocumentEntitlementDto { lineId: string; alreadyIssuedQuantity: number | null; availableQuantity: number | null; periodFromExclusive: string | null; periodTo: string | null; status: string; }
+export interface PpeDocumentValidationDto { errors: PpeDocumentProblemDto[]; warnings: PpeDocumentProblemDto[]; entitlements: PpeDocumentEntitlementDto[]; totalMinor: number | null; }
+export interface PpeDocumentLineDto extends PpeIssueDocumentLineInputDto { itemName: string; unitSymbol: string; brandModelArticle: string; normUnitsPerItem: number; totalMinor: number | null; }
+export interface PpeDocumentContentDto {
+  employee: { id: string; fullName: string; personnelNo: string; department: string; position: string; details: InventoryPpeEmployeeDetailsDto };
+  normSetId: string; normSetVersion: number; normVersionName: string; normSourceName: string;
+  documentDate: string; responsibleName: string; basis: string;
+  normRows: Array<InventoryPpeNormRowDto & { unitSymbol: string; periodMonths: number | null; requirementKey: string; alternativeGroup: string }>;
+  lines: PpeDocumentLineDto[];
+}
+export interface PpeIssueDocumentDto { id: string; version: number; status: string; createdAt: string; confirmedAt: string | null; content: PpeDocumentContentDto; validation: PpeDocumentValidationDto; }
+export interface PpeIssueDocumentSummaryDto { id: string; version: number; status: string; employeeId: string; employeeName: string; documentDate: string; linesCount: number; totalMinor: number | null; }
+export interface PpeNormApprovalDto { expectedVersion: number; departmentName: string; positionAliases: string[]; }
+export interface PpeNormRowRulesDto { expectedVersion: number; unitSymbol: string; periodMonths: number | null; lifeMonths: number | null; previousRequirementRowId: string | null; alternativeGroup: string; }
+export interface PpeMappingApprovalDto { expectedNormVersion: number; itemId: string; normUnitsPerItem: number; evidence: string; brandModelArticle?: string; defaultUnitPriceMinor?: number | null; }
+export interface PpeLegacyDraftMigrationDto { documentId: string | null; warnings: string[]; }
 
 export interface CancelAssignmentDto {
   reasonCode: string;

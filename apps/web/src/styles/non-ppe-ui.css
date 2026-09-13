@@ -1447,3 +1447,12 @@ body .modal-backdrop .modal-shell.employee-form-modal .modal-actions .ui-button 
     flex: 1 1 120px;
   }
 }
+@media (max-width: 767px) {
+  .screen-area .dashboard-am .dashboard-am-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .screen-area .dashboard-am .dashboard-am-kpi { min-height: 88px; padding: 12px; display: block; }
+  .screen-area .dashboard-am .dashboard-am-kpi .dashboard-am-icon { display: none; }
+  .screen-area .dashboard-am .dashboard-am-kpi:last-child { grid-column: 1 / -1; }
+  .screen-area .dashboard-am .dashboard-am-kpi p { font-size: 12px; }
+  .screen-area .dashboard-am .dashboard-am-kpi strong { font-size: 24px; }
+  .screen-area .dashboard-am .dashboard-am-hero .ui-page-header__description { display: none; }
+}

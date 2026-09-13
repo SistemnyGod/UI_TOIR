@@ -76,13 +76,17 @@ export function CompactTable<T>({
                   onRowClick(row);
                 } : undefined}
                 onKeyDown={onRowClick ? (event) => {
+                  if (event.target !== event.currentTarget) return;
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
                     onRowClick(row);
                   }
                 } : undefined}
                 onContextMenu={onRowContextMenu ? (event) => onRowContextMenu(event, row) : undefined}
-                onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
+                onDoubleClick={onRowDoubleClick ? (event) => {
+                  if (event.target instanceof Element && event.target.closest("button, a, input, select, textarea")) return;
+                  onRowDoubleClick(row);
+                } : undefined}
                 tabIndex={onRowClick ? 0 : undefined}
               >
                 {columns.map((column) => (

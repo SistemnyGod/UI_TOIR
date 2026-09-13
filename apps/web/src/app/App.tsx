@@ -31,6 +31,7 @@ import { usePatrolWorkspaceData } from "../hooks/usePatrolWorkspaceData";
 import { useResultsWorkspace } from "../hooks/useResultsWorkspace";
 import { useSession } from "../hooks/useSession";
 import { useStoredState } from "../hooks/useStoredState";
+import { usePhoneLayout } from "../hooks/usePhoneLayout";
 import { useSystemNotifications } from "../hooks/useSystemNotifications";
 import { useToast } from "../hooks/useToast";
 import { getPermissionDeniedMessage, getPrimaryActionPermission, hasPermission } from "../security/permissions";
@@ -104,6 +105,16 @@ export function App() {
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const phoneLayout = usePhoneLayout();
+  useEffect(() => {
+    if (!phoneLayout) setMobileNavigationOpen(false);
+  }, [phoneLayout]);
+  useEffect(() => {
+    if (!mobileNavigationOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [mobileNavigationOpen]);
   const [searchQuery, setSearchQuery] = useState("");
   const systemNotifications = useSystemNotifications({
     dataSourceMode,
@@ -468,7 +479,7 @@ export function App() {
         onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
       />
 
-      <main className="workspace">
+      <main className="workspace" inert={phoneLayout && mobileNavigationOpen}>
         <Topbar
           currentUser={session.user}
           notifications={topbarNotifications}

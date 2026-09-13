@@ -26914,49 +26914,6 @@ body .app-shell:not(.sidebar-collapsed) .collapse-button {
 }
 
 @media (max-width: 640px) {
-  body .app-shell,
-  body .app-shell:not(.sidebar-collapsed),
-  body .app-shell.sidebar-collapsed {
-    grid-template-columns: 72px minmax(0, 1fr) !important;
-  }
-
-  body .app-shell .sidebar {
-    width: 72px !important;
-    min-width: 72px;
-    overflow-x: hidden;
-    padding: 12px 8px;
-  }
-
-  body .app-shell .brand {
-    justify-content: center;
-    padding: 0 0 14px;
-  }
-
-  body .app-shell .brand strong,
-  body .app-shell .brand span,
-  body .app-shell .nav-item-label,
-  body .app-shell .nav-chevron,
-  body .app-shell .sidebar-section-label,
-  body .app-shell .sidebar-submenu-item small,
-  body .app-shell .sidebar-footer .collapse-button span {
-    display: none !important;
-  }
-
-  body .app-shell .module-trigger,
-  body .app-shell .nav-list > .nav-item,
-  body .app-shell .sidebar-submenu-item {
-    width: 48px !important;
-    min-width: 48px;
-    justify-content: center;
-    padding: 0 !important;
-  }
-
-  body .app-shell .sidebar-submenu {
-    margin-left: 0 !important;
-    border-left: 0 !important;
-    padding-left: 0 !important;
-  }
-
   .screen-area {
     padding-inline: 12px;
   }

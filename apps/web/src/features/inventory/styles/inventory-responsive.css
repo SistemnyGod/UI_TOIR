@@ -805,8 +805,9 @@
 
 /* Nomenclature rows become compact cards on phone-sized screens. */
 @media (max-width: 640px) {
-  .inventory-items-table-wrap { overflow: visible; }
-  .inventory-items-table { min-width: 0; table-layout: auto; }
+  .inventory-items-screen .inventory-items-table-wrap { overflow: visible; }
+  .inventory-items-screen .inventory-items-table { min-width: 0; width: 100%; table-layout: auto; }
+  .inventory-items-screen .inventory-items-table tbody tr { grid-template-columns: minmax(0, 1fr); min-width: 0; }
   .inventory-items-table thead { display: none; }
   .inventory-items-table tbody { display: grid; gap: 8px; }
   .inventory-items-table tbody tr {
@@ -843,9 +844,18 @@
   .inventory-items-table tbody tr > td:nth-child(5),
   .inventory-items-table tbody tr > td:nth-child(7) { display: none; }
   .inventory-items-table .inventory-row-actions { display: grid; grid-template-columns: repeat(3, minmax(44px, 1fr)); width: 100%; }
-  .inventory-items-table .inventory-row-actions .inventory-icon-btn { min-height: 44px; width: 100%; }
+  .inventory-items-screen .inventory-items-table .inventory-row-actions .inventory-icon-btn { min-height: 44px; height: auto; width: 100%; }
+  .inventory-items-screen .inventory-items-table td[data-label="Действия"] { display: block; }
+  .inventory-items-screen .inventory-items-table td[data-label="Действия"]::before { display: none; }
   .inventory-items-table td[colspan] { display: block; padding: 0; }
   .inventory-items-table td[colspan]::before { display: none; }
   .inventory-items-table-card .inventory-table-head { align-items: stretch; gap: 8px; }
   .inventory-items-table-card .inventory-table-head select { min-height: 44px; }
+}
+.inventory-items-filters > .phone-disclosure,
+.inventory-items-filters > .phone-disclosure > div:not([hidden]) { display: contents; }
+@media (max-width: 767px) {
+  .inventory-items-filters > .phone-disclosure { display: block; }
+  .inventory-items-filters > .phone-disclosure > div:not([hidden]) { display: grid; gap: 8px; padding-top: 8px; }
+  .inventory-items-filters > .phone-disclosure > div[hidden] { display: none; }
 }

@@ -93,7 +93,7 @@ export function createPpeWizardActions({
           issuedAt: status === "issued" ? new Date().toISOString().slice(0, 10) : "",
           isSectionTitle: line.isSectionTitle,
           item: line.item,
-          normPoint: line.normPoint ?? "п. 1645 Приложения № 1",
+          normPoint: line.normPoint ?? "",
           priceText: line.priceText ?? moneyMinorToInput(line.item.defaultUnitPriceMinor),
           printItemName: line.printItemName ?? line.item.normItemName ?? line.item.name,
           quantityText: line.quantityText ?? "1",

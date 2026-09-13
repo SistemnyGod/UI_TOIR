@@ -8,5 +8,5 @@ public interface IInventoryExportService
 
     InventoryCommandResult<InventoryGeneratedFileDto> PrintCustodyDocument(Guid documentId, string format);
 
-    InventoryCommandResult<InventoryGeneratedFileDto> PrintPpeCard(Guid cardId, string type, string format);
+    InventoryCommandResult<InventoryGeneratedFileDto> BuildPpeCardDocx(Guid cardId, string type);
 }

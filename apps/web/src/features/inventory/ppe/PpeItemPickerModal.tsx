@@ -252,7 +252,7 @@ export function PpeItemPickerModal({
         dueAt: selectedDrafts[item.id]?.dueAt ?? getDefaultDueDate(item.defaultLifeMonths),
         issuePeriodText: selectedDrafts[item.id]?.issuePeriodText ?? getDefaultIssuePeriodText(item.defaultLifeMonths),
         item,
-        normPoint: "п. 1645 Приложения № 1",
+        normPoint: "",
         priceText: selectedDrafts[item.id]?.priceText ?? moneyMinorToInput(item.defaultUnitPriceMinor),
         printItemName: selectedDrafts[item.id]?.printItemName ?? item.normItemName ?? item.name,
         quantityText: "1",

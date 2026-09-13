@@ -233,6 +233,13 @@ internal sealed partial class EfInventoryWorkflowService
             return Failure<InventoryPpeCardLineDto>("lineId", "PPE card line not found");
         }
 
+        if (line.IssueDocumentId.HasValue)
+        {
+            return Failure<InventoryPpeCardLineDto>(
+                "status",
+                "Строка СИЗ из подтверждённого документа выдачи защищена от редактирования.");
+        }
+
         var validation = ValidatePpeLine(request);
         if (validation is not null)
         {

@@ -28,6 +28,7 @@ import { PatrolRequestHistory } from "./PatrolRequestHistory";
 import type { DurationSummary, ResultGroup } from "./resultTypes";
 import { Button, CompactTable, PageHeader, SectionTabs, type CompactTableColumn } from "../../../shared/ui";
 import "./resultsWorkspace.css";
+import { PhoneDisclosure } from "../../../shared/ui/PhoneDisclosure";
 
 export interface ResultsScreenProps {
   canCreateRequest?: boolean;
@@ -542,6 +543,7 @@ export function ResultsWorkspace({
       ) : (
         <>
 
+      <PhoneDisclosure title={`Сводка · ${metrics.total} обходов`}>
       <section className="results-review-metrics" aria-label="Сводка результатов обходов">
         <MetricCard icon={FileText} title="Всего обходов" value={metrics.total} caption={loadedSampleCaption} />
         <MetricCard icon={AlertTriangle} title="С замечаниями" value={metrics.issues} caption={loadedSampleCaption} tone="orange" />
@@ -549,6 +551,7 @@ export function ResultsWorkspace({
         <MetricCard icon={Timer} title="Среднее время" value={metrics.averageDuration} caption={metrics.durationQualityLabel} />
         <MetricCard icon={CheckCircle2} title="Без замечаний" value={metrics.clean} caption="Точки закрыты без проблем" tone="green" />
       </section>
+      </PhoneDisclosure>
 
       <section className="results-review-layout">
         <div className="results-review-main">

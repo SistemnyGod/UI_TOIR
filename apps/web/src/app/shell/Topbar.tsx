@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionUserDto } from "../../api/contracts";
 import { Menu } from "lucide-react";
 import { ChromeIcon } from "./ChromeIcon";
+import { MobileSearch } from "./MobileSearch";
 
 export interface TopbarNotification {
   id: string;
@@ -98,6 +99,8 @@ export function Topbar({
         />
         <kbd>⌘ K</kbd>
       </label>
+
+      <MobileSearch query={searchQuery} onChange={onSearchQueryChange} onSearch={onRunSearch} />
 
       <div className="topbar-alerts" ref={panelRef}>
         <button

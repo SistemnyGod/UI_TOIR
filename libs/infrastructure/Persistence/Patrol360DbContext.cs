@@ -220,6 +220,8 @@ public sealed partial class Patrol360DbContext(DbContextOptions<Patrol360DbConte
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.ApplyConfiguration(new PpeIssueDocumentConfiguration());
+        modelBuilder.ApplyConfiguration(new PpeIssueFactConfiguration());
         ConfigureRoutes(modelBuilder);
         ConfigureRoutePoints(modelBuilder);
         ConfigureRouteRevisions(modelBuilder);
@@ -1302,10 +1304,13 @@ public sealed partial class Patrol360DbContext(DbContextOptions<Patrol360DbConte
 
         modelBuilder.Entity<InventoryPpeNormSetEntity>(entity =>
         {
+            entity.Property(row => row.DepartmentName).HasColumnName("department_name").HasMaxLength(500);
+            entity.Property(row => row.PositionAliasesJson).HasColumnName("position_aliases_json").HasColumnType("jsonb");
+            entity.Property(row => row.ScopeConfirmed).HasColumnName("scope_confirmed");
             entity.ToTable("ppe_norm_sets", "inventory");
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id");
-            entity.Property(row => row.PositionName).HasColumnName("position_name").HasMaxLength(200).IsRequired();
+            entity.Property(row => row.PositionName).HasColumnName("position_name").HasMaxLength(4000).IsRequired();
             entity.Property(row => row.VersionName).HasColumnName("version_name").HasMaxLength(120).IsRequired();
             entity.Property(row => row.EffectiveFrom).HasColumnName("effective_from");
             entity.Property(row => row.EffectiveTo).HasColumnName("effective_to");
@@ -1317,11 +1322,15 @@ public sealed partial class Patrol360DbContext(DbContextOptions<Patrol360DbConte
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.Property(row => row.ArchivedAt).HasColumnName("archived_at");
             entity.HasIndex(row => new { row.PositionName, row.Status }).HasDatabaseName("ix_inventory_ppe_norm_sets_position_status");
-            entity.HasIndex(row => new { row.PositionName, row.VersionName }).IsUnique().HasDatabaseName("ux_inventory_ppe_norm_sets_position_version");
+            entity.HasIndex(row => new { row.DepartmentName, row.PositionName, row.VersionName }).IsUnique().HasDatabaseName("ux_inventory_ppe_norm_sets_scope_version");
         });
 
         modelBuilder.Entity<InventoryPpeNormRowEntity>(entity =>
         {
+            entity.Property(row => row.PeriodMonths).HasColumnName("period_months");
+            entity.Property(row => row.UnitSymbol).HasColumnName("unit_symbol").HasMaxLength(40);
+            entity.Property(row => row.RequirementKey).HasColumnName("requirement_key");
+            entity.Property(row => row.AlternativeGroup).HasColumnName("alternative_group").HasMaxLength(120);
             entity.ToTable("ppe_norm_rows", "inventory");
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id");
@@ -1343,6 +1352,10 @@ public sealed partial class Patrol360DbContext(DbContextOptions<Patrol360DbConte
 
         modelBuilder.Entity<InventoryPpeNormCatalogMappingEntity>(entity =>
         {
+            entity.Property(row => row.IsApproved).HasColumnName("is_approved");
+            entity.Property(row => row.NormUnitsPerItem).HasColumnName("norm_units_per_item").HasPrecision(18, 6);
+            entity.Property(row => row.ApprovedBy).HasColumnName("approved_by").HasMaxLength(240);
+            entity.Property(row => row.ApprovalEvidence).HasColumnName("approval_evidence").HasMaxLength(2000);
             entity.ToTable("ppe_norm_catalog_mappings", "inventory");
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id");

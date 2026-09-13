@@ -97,18 +97,12 @@ internal sealed partial class EfInventoryWorkflowService
             return Failure<InventoryPpeNormImportResultDto>("file", exception.Message);
         }
 
-        if (document.Positions.Count == 0)
+        if (document.Scopes.Count == 0)
         {
             return Failure<InventoryPpeNormImportResultDto>("file", "The workbook does not contain PPE norm rows with a position and item name");
         }
 
         var baseVersion = ReadNormVersion(fileName);
-        var versionName = baseVersion;
-        if (document.Positions.Any(position => dbContext.InventoryPpeNormSets.Any(set =>
-            set.PositionName.ToLower() == position.PositionName.ToLower() && set.VersionName == versionName)))
-        {
-            versionName = $"{baseVersion}-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}";
-        }
 
         var now = DateTimeOffset.UtcNow;
         var effectiveFrom = ReadNormEffectiveDate(fileName);
@@ -119,14 +113,33 @@ internal sealed partial class EfInventoryWorkflowService
             .ToList()
             .Where(IsPpeCatalogItem)
             .ToList();
+        var versionNamesByScope = dbContext.InventoryPpeNormSets.AsNoTracking()
+            .Select(set => new { set.DepartmentName, set.PositionName, set.VersionName })
+            .ToList()
+            .GroupBy(set => NormScopeKey(set.DepartmentName, set.PositionName), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => new HashSet<string>(group.Select(set => set.VersionName), StringComparer.OrdinalIgnoreCase),
+                StringComparer.OrdinalIgnoreCase);
         var createdSets = new List<InventoryPpeNormSetEntity>();
         var mappingWarnings = new List<string>();
-        foreach (var position in document.Positions)
+        foreach (var scope in document.Scopes)
         {
+            var scopeKey = NormScopeKey(scope.DepartmentName, scope.PositionName);
+            if (!versionNamesByScope.TryGetValue(scopeKey, out var versionNames))
+            {
+                versionNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                versionNamesByScope.Add(scopeKey, versionNames);
+            }
+            var versionName = NextNormVersion(baseVersion, versionNames);
+            versionNames.Add(versionName);
             var normSet = new InventoryPpeNormSetEntity
             {
                 Id = Guid.NewGuid(),
-                PositionName = position.PositionName,
+                DepartmentName = scope.DepartmentName,
+                PositionName = scope.PositionName,
+                PositionAliasesJson = "[]",
+                ScopeConfirmed = false,
                 VersionName = versionName,
                 EffectiveFrom = effectiveFrom,
                 SourceName = Path.GetFileName(fileName),
@@ -138,7 +151,7 @@ internal sealed partial class EfInventoryWorkflowService
             };
             var mappedCount = 0;
             var itemCount = 0;
-            foreach (var sourceRow in position.Rows.OrderBy(row => row.SortOrder))
+            foreach (var sourceRow in scope.Rows.OrderBy(row => row.SortOrder))
             {
                 var normRow = new InventoryPpeNormRowEntity
                 {
@@ -152,7 +165,11 @@ internal sealed partial class EfInventoryWorkflowService
                     IssuePeriodText = sourceRow.IssuePeriodText,
                     Quantity = sourceRow.Quantity,
                     QuantityText = sourceRow.QuantityText,
-                    LifeMonths = sourceRow.LifeMonths
+                    LifeMonths = null,
+                    PeriodMonths = sourceRow.PeriodMonths,
+                    UnitSymbol = sourceRow.UnitSymbol,
+                    RequirementKey = sourceRow.Id,
+                    AlternativeGroup = sourceRow.AlternativeGroup
                 };
                 if (normRow.RowType == "item")
                 {
@@ -169,6 +186,8 @@ internal sealed partial class EfInventoryWorkflowService
                                 .Where(value => !string.IsNullOrWhiteSpace(value))),
                             DefaultUnitPriceMinor = catalogItem.DefaultUnitPriceMinor,
                             IsDefault = true,
+                            IsApproved = false,
+                            NormUnitsPerItem = 1m,
                             CreatedAt = now,
                             UpdatedAt = now
                         });
@@ -179,10 +198,10 @@ internal sealed partial class EfInventoryWorkflowService
             }
             createdSets.Add(normSet);
             dbContext.InventoryPpeNormSets.Add(normSet);
-            AddSystemLog("ppe_norm_set", normSet.Id, "draft_imported", $"{position.PositionName}; {fileName}; rows={position.Rows.Count}", now);
+            AddSystemLog("ppe_norm_set", normSet.Id, "draft_imported", $"{scope.DepartmentName}; {scope.PositionName}; {fileName}; rows={scope.Rows.Count}", now);
             if (itemCount > mappedCount)
             {
-                mappingWarnings.Add($"{position.PositionName}: сопоставлено {mappedCount} из {itemCount}; вручную сопоставьте оставшиеся строки по категориям СИЗ.");
+                mappingWarnings.Add($"{scope.DepartmentName} / {scope.PositionName}: сопоставлено {mappedCount} из {itemCount}; вручную сопоставьте оставшиеся строки по категориям СИЗ.");
             }
         }
 
@@ -204,6 +223,7 @@ internal sealed partial class EfInventoryWorkflowService
             return Failure<InventoryPpeNormSetDto>("confirmReviewed", "Manual review must be confirmed before publishing PPE norms");
         }
 
+        using var publication = dbContext.Database.BeginTransaction(System.Data.IsolationLevel.Serializable);
         var normSet = dbContext.InventoryPpeNormSets.Include(row => row.Rows)
             .FirstOrDefault(row => row.Id == normSetId && row.Status == "draft" && row.ArchivedAt == null);
         if (normSet is null) return Failure<InventoryPpeNormSetDto>("normSetId", "Draft PPE norm set not found");
@@ -214,8 +234,17 @@ internal sealed partial class EfInventoryWorkflowService
         }
 
         var now = DateTimeOffset.UtcNow;
+        if (!normSet.ScopeConfirmed)
+        {
+            return Failure<InventoryPpeNormSetDto>("scopeConfirmed", "PPE norm scope must be confirmed before publishing");
+        }
+
         foreach (var active in dbContext.InventoryPpeNormSets.Where(row =>
-            row.Id != normSet.Id && row.PositionName == normSet.PositionName && row.Status == "active" && row.ArchivedAt == null))
+            row.Id != normSet.Id
+            && row.DepartmentName == normSet.DepartmentName
+            && row.PositionName == normSet.PositionName
+            && row.Status == "active"
+            && row.ArchivedAt == null))
         {
             active.Status = "archived";
             active.ArchivedAt = now;
@@ -231,22 +260,26 @@ internal sealed partial class EfInventoryWorkflowService
         try
         {
             dbContext.SaveChanges();
+            publication.Commit();
         }
-        catch (DbUpdateConcurrencyException)
+        catch (Exception exception) when (IsDocumentWriteConflict(exception))
         {
+            publication.Dispose();
+            dbContext.ChangeTracker.Clear();
             return Failure<InventoryPpeNormSetDto>("conflict", "PPE norm set was changed by another user");
         }
         return Success(MapNormSet(normSet));
     }
 
-    private static PpeNormImportDocument ReadPpeNormWorkbook(Stream source)
+    internal static PpeNormImportDocument ReadPpeNormWorkbook(Stream source)
     {
         using var workbook = new XLWorkbook(source);
         var worksheet = workbook.Worksheets.FirstOrDefault()
             ?? throw new InvalidDataException("The workbook does not contain worksheets");
-        var positions = new Dictionary<string, PpeNormImportPosition>(StringComparer.OrdinalIgnoreCase);
+        var scopes = new Dictionary<string, PpeNormImportScope>(StringComparer.OrdinalIgnoreCase);
         var warnings = new List<string>();
-        PpeNormImportPosition? currentPosition = null;
+        PpeNormImportScope? currentScope = null;
+        var currentDepartmentName = string.Empty;
         string currentGroupName = string.Empty;
         Guid? currentGroupId = null;
         var sourceRows = 0;
@@ -256,27 +289,49 @@ internal sealed partial class EfInventoryWorkflowService
 
         foreach (var row in worksheet.RowsUsed().Where(row => row.RowNumber() > 9))
         {
+            var departmentName = NormalizeWorkbookText(row.Cell(1).GetFormattedString());
             var positionName = NormalizeWorkbookText(row.Cell(2).GetFormattedString());
             var groupName = NormalizeWorkbookText(row.Cell(3).GetFormattedString());
             var normItemName = NormalizeWorkbookText(row.Cell(4).GetFormattedString());
             var issuePeriod = NormalizeWorkbookText(row.Cell(5).GetFormattedString());
             var normPoint = NormalizeWorkbookText(row.Cell(6).GetFormattedString());
+            var isDepartmentSectionHeader = departmentName.Length > 0
+                && positionName.Length == 0
+                && groupName.Length == 0
+                && normItemName.Length == 0
+                && issuePeriod.Length == 0
+                && normPoint.Length == 0;
+            if (isDepartmentSectionHeader)
+            {
+                currentDepartmentName = departmentName;
+                currentScope = null;
+                currentGroupName = string.Empty;
+                currentGroupId = null;
+            }
             if (positionName.Length > 0)
             {
-                if (!positions.TryGetValue(positionName, out currentPosition))
+                if (currentDepartmentName.Length == 0)
                 {
-                    currentPosition = new PpeNormImportPosition(positionName);
-                    positions.Add(positionName, currentPosition);
+                    skippedRows += 1;
+                    warnings.Add($"Row {row.RowNumber()}: PPE position skipped because department section is empty");
+                    currentScope = null;
+                    continue;
+                }
+                var scopeKey = $"{currentDepartmentName}\u001f{positionName}";
+                if (!scopes.TryGetValue(scopeKey, out currentScope))
+                {
+                    currentScope = new PpeNormImportScope(currentDepartmentName, positionName);
+                    scopes.Add(scopeKey, currentScope);
                 }
                 currentGroupName = string.Empty;
                 currentGroupId = null;
             }
             if (normItemName.Length == 0) continue;
             sourceRows += 1;
-            if (currentPosition is null)
+            if (currentScope is null)
             {
                 skippedRows += 1;
-                warnings.Add($"Row {row.RowNumber()}: PPE item skipped because position is empty");
+                warnings.Add($"Row {row.RowNumber()}: PPE item skipped because department or position is empty");
                 continue;
             }
             ValidatePpeNormTextLength(row.RowNumber(), normItemName, normPoint);
@@ -285,21 +340,21 @@ internal sealed partial class EfInventoryWorkflowService
             {
                 currentGroupName = groupName;
                 currentGroupId = Guid.NewGuid();
-                currentPosition.Rows.Add(new PpeNormImportRow(
-                    currentGroupId.Value, null, "group", currentPosition.Rows.Count,
-                    groupName, string.Empty, string.Empty, 0, string.Empty, null));
+                currentScope.Rows.Add(new PpeNormImportRow(
+                    currentGroupId.Value, null, "group", currentScope.Rows.Count,
+                    groupName, string.Empty, string.Empty, 0, string.Empty, null, string.Empty, null, string.Empty));
                 groupsCreated += 1;
             }
 
-            var (quantity, quantityText) = ReadNormQuantity(issuePeriod);
-            currentPosition.Rows.Add(new PpeNormImportRow(
-                Guid.NewGuid(), currentGroupId, "item", currentPosition.Rows.Count,
-                normItemName, normPoint, issuePeriod, quantity, quantityText, ReadLifeMonths(issuePeriod)));
+            var (quantity, quantityText, unitSymbol) = ReadNormQuantity(issuePeriod);
+            currentScope.Rows.Add(new PpeNormImportRow(
+                Guid.NewGuid(), currentGroupId, "item", currentScope.Rows.Count,
+                normItemName, normPoint, issuePeriod, quantity, quantityText, null, unitSymbol, ReadPeriodMonths(issuePeriod), string.Empty));
             itemsCreated += 1;
         }
 
         return new PpeNormImportDocument(
-            positions.Values.Where(position => position.Rows.Any(row => row.RowType == "item")).ToList(),
+            scopes.Values.Where(scope => scope.Rows.Any(row => row.RowType == "item")).ToList(),
             sourceRows, groupsCreated, itemsCreated, skippedRows, warnings);
     }
 
@@ -406,27 +461,31 @@ internal sealed partial class EfInventoryWorkflowService
         }
     }
 
-    private static (decimal Quantity, string QuantityText) ReadNormQuantity(string value)
+    private static (decimal Quantity, string QuantityText, string UnitSymbol) ReadNormQuantity(string value)
     {
-        var match = Regex.Match(value ?? string.Empty, @"(?<quantity>\d+(?:[.,]\d+)?)\s*(?<unit>\p{L}+)?", RegexOptions.IgnoreCase);
-        if (!match.Success) return (1m, NormalizeNormLookupText(value).Contains("износ", StringComparison.Ordinal) ? "1 шт." : value ?? string.Empty);
+        var match = Regex.Match(value ?? string.Empty, @"(?<quantity>\d+(?:[.,]\d+)?)\s*(?<unit>\p{L}+[\p{L}.]*)?", RegexOptions.IgnoreCase);
+        if (!match.Success) return (1m, value ?? string.Empty, string.Empty);
         var quantity = decimal.Parse(match.Groups["quantity"].Value.Replace(',', '.'), CultureInfo.InvariantCulture);
-        var unit = match.Groups["unit"].Success ? match.Groups["unit"].Value : "шт.";
-        return (quantity, $"{match.Groups["quantity"].Value} {unit}");
+        var unit = match.Groups["unit"].Success && !match.Groups["unit"].Value.Equals("на", StringComparison.OrdinalIgnoreCase)
+            ? match.Groups["unit"].Value
+            : string.Empty;
+        var quantityText = unit.Length == 0 ? match.Groups["quantity"].Value : $"{match.Groups["quantity"].Value} {unit}";
+        return (quantity, quantityText, unit);
     }
 
-    private static int? ReadLifeMonths(string value)
+    private static int? ReadPeriodMonths(string value)
     {
         var normalized = (value ?? string.Empty).Trim().ToLowerInvariant().Replace('ё', 'е');
         var matches = Regex.Matches(normalized, @"(?<value>\d+(?:[.,]\d+)?)\s*(?<unit>\p{L}+)", RegexOptions.IgnoreCase);
         var match = matches.Cast<Match>().LastOrDefault(candidate =>
             candidate.Groups["unit"].Value.StartsWith("месяц", StringComparison.Ordinal)
+            || candidate.Groups["unit"].Value.StartsWith("мес", StringComparison.Ordinal)
             || candidate.Groups["unit"].Value.StartsWith("год", StringComparison.Ordinal)
             || candidate.Groups["unit"].Value.StartsWith("лет", StringComparison.Ordinal));
         if (match is null) return null;
         var amount = decimal.Parse(match.Groups["value"].Value.Replace(',', '.'), CultureInfo.InvariantCulture);
         var unit = match.Groups["unit"].Value;
-        if (unit.StartsWith("месяц", StringComparison.Ordinal))
+        if (unit.StartsWith("месяц", StringComparison.Ordinal) || unit.StartsWith("мес", StringComparison.Ordinal))
         {
             return (int)Math.Round(amount, MidpointRounding.AwayFromZero);
         }
@@ -451,13 +510,29 @@ internal sealed partial class EfInventoryWorkflowService
         return DateOnly.TryParseExact(match.Value, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
     }
 
-    private sealed class PpeNormImportPosition(string positionName)
+    private static string NormScopeKey(string departmentName, string positionName) => $"{departmentName}\u001f{positionName}";
+
+    private static string NextNormVersion(string baseVersion, IReadOnlySet<string> existing)
     {
+        if (!existing.Contains(baseVersion)) return baseVersion;
+
+        for (var suffix = 1; ; suffix += 1)
+        {
+            var suffixText = $"-{suffix}";
+            var prefixLength = Math.Max(1, 100 - suffixText.Length);
+            var value = $"{baseVersion[..Math.Min(baseVersion.Length, prefixLength)]}{suffixText}";
+            if (!existing.Contains(value)) return value;
+        }
+    }
+
+    internal sealed class PpeNormImportScope(string departmentName, string positionName)
+    {
+        public string DepartmentName { get; } = departmentName;
         public string PositionName { get; } = positionName;
         public List<PpeNormImportRow> Rows { get; } = [];
     }
 
-    private sealed record PpeNormImportRow(
+    internal sealed record PpeNormImportRow(
         Guid Id,
         Guid? ParentRowId,
         string RowType,
@@ -467,10 +542,13 @@ internal sealed partial class EfInventoryWorkflowService
         string IssuePeriodText,
         decimal Quantity,
         string QuantityText,
-        int? LifeMonths);
+        int? LifeMonths,
+        string UnitSymbol,
+        int? PeriodMonths,
+        string AlternativeGroup);
 
-    private sealed record PpeNormImportDocument(
-        IReadOnlyList<PpeNormImportPosition> Positions,
+    internal sealed record PpeNormImportDocument(
+        IReadOnlyList<PpeNormImportScope> Scopes,
         int SourceRows,
         int GroupsCreated,
         int ItemsCreated,

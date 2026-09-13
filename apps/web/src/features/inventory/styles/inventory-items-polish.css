@@ -217,7 +217,13 @@
 }
 
 .inventory-items-screen .inventory-items-table {
-  min-width: 760px;
+  min-width: 0;
+}
+
+@media (min-width: 641px) {
+  .inventory-items-screen .inventory-items-table { min-width: 760px; }
+  .inventory-items-screen td.inventory-table-main-cell { display: table-cell; }
+  .inventory-items-screen .inventory-table-main-cell > .inventory-item-thumb { display: none; }
 }
 
 .inventory-items-screen .inventory-items-table th {
@@ -247,7 +253,11 @@
 
 .inventory-items-screen .inventory-table-main-cell {
   gap: 8px;
+  min-width: 0;
 }
+
+.inventory-items-screen .inventory-table-main-cell > span:last-child { min-width: 0; }
+.inventory-items-screen .inventory-table-main-cell :is(strong, small) { white-space: normal; overflow-wrap: anywhere; }
 
 .inventory-items-screen .inventory-table-main-cell strong {
   color: #17345f;

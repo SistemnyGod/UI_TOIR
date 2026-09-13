@@ -42,6 +42,7 @@ services:
       ConnectionStrings__Patrol360: Host=postgres;Port=5432;Database=${POSTGRES_DB:-patrol360};Username=${POSTGRES_USER:-patrol360};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       DataProtection__KeyRingPath: /var/lib/patrol360/data-protection-keys
       MobileDiagnostics__StoragePath: /app/mobile-diagnostics
+      Features__PpeIssueDocuments: ${PPE_ISSUE_DOCUMENTS_ENABLED:-false}
       WebCors__AllowedOrigins__0: ${WEB_CORS_ALLOWED_ORIGIN:-https://192.168.2.194:5173}
       # Must match the proxy address below; all other X-Forwarded-* senders are ignored.
       ForwardedHeaders__KnownProxies__0: ${PATROL360_PROXY_IP:-172.30.0.10}
@@ -49,6 +50,9 @@ services:
       - ./secrets/data-protection-keys:/var/lib/patrol360/data-protection-keys
       - api-mobile-files:/app/mobile-files
       - ./mobile-diagnostics:/app/mobile-diagnostics
+    networks:
+      - default
+      - printing
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; grep -q \"200 OK\" <&3'"]
       interval: 10s
@@ -161,6 +165,19 @@ services:
       retries: 20
     logging: *default-logging
 
+  gotenberg:
+    build:
+      context: ../..
+      dockerfile: infra/docker/gotenberg/Dockerfile
+    container_name: patrol360-gotenberg
+    restart: unless-stopped
+    command: ["gotenberg", "--api-timeout=60s"]
+    mem_limit: ${GOTENBERG_MEM_LIMIT:-1g}
+    cpus: ${GOTENBERG_CPUS:-2}
+    networks: [printing]
+    logging: *default-logging
+    profiles: [ppe-printing]
+
   redis:
     image: redis:7-alpine
     container_name: patrol360-redis
@@ -218,6 +235,8 @@ volumes:
   minio-data:
 
 networks:
+  printing:
+    internal: true
   default:
     ipam:
       config:

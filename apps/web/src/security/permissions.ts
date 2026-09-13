@@ -48,6 +48,7 @@ export type PermissionCode =
   | "inventory.issue.manage"
   | "inventory.custody.manage"
   | "inventory.ppe.manage"
+  | "inventory.ppe.norms.manage"
   | "inventory.reports.view"
   | "inventory.reports.export"
   | "inventory.settings.manage"

@@ -1,0 +1,1668 @@
+diff --git a/README.md b/README.md
+index 3309ae3..b5aecf4 100644
+--- a/README.md
++++ b/README.md
+@@ -110,6 +110,14 @@ npm run dev
+ docker compose --profile app up -d --build
+ ```
+ 
++Пилотная печать документов выдачи СИЗ требует отдельного конвертера Gotenberg. Он не запускается в обычном профиле `app`; включайте его только при явной проверке печати:
++
++```powershell
++docker compose --profile app --profile ppe-printing up -d --build
++```
++
++Конвертер не публикует порт на хост и доступен API только через внутреннюю Docker-сеть. Лимиты по умолчанию: 1 GiB RAM и 2 CPU; при необходимости они задаются через `GOTENBERG_MEM_LIMIT` и `GOTENBERG_CPUS` в `infra/docker/.env`.
++
+ - Web HTTPS: `https://localhost`
+ - Web HTTPS LAN: `https://192.168.2.194`
+ - Web HTTPS LAN legacy-port: `https://192.168.2.194:5173`
+diff --git a/apps/api/Controllers/InventoryController.cs b/apps/api/Controllers/InventoryController.cs
+index 860102a..1416c7c 100644
+--- a/apps/api/Controllers/InventoryController.cs
++++ b/apps/api/Controllers/InventoryController.cs
+@@ -362,8 +362,16 @@ public sealed class InventoryController(
+ 
+     [HttpPost("ppe/cards/{id:guid}/issues/batch")]
+     [RequirePermission("inventory.ppe.manage")]
+-    public ActionResult<InventoryPpeCardDetailDto> CreatePpeIssueBatch(Guid id, CreateInventoryPpeIssueBatchDto request) =>
+-        ToActionResult(inventoryWorkflowService.CreatePpeIssueBatch(id, request));
++    public ActionResult<InventoryPpeCardDetailDto> CreatePpeIssueBatch(Guid id, CreateInventoryPpeIssueBatchDto request)
++    {
++        if (request.Lines.Any(line => line.SaveMappingOnSuccess || line.MakeDefaultMapping)
++            && !CurrentUserHasPermission("inventory.ppe.norms.manage"))
++        {
++            return ForbidReport("inventory.ppe.norms.manage");
++        }
++
++        return ToActionResult(inventoryWorkflowService.CreatePpeIssueBatch(id, request));
++    }
+ 
+     [HttpGet("ppe/norm-rows/{normRowId:guid}/mappings")]
+     public ActionResult<InventoryListResponseDto<InventoryPpeNormMappingDto>> PpeNormRowMappings(
+@@ -373,7 +381,7 @@ public sealed class InventoryController(
+         Ok(inventoryWorkflowService.GetPpeNormRowMappings(normRowId, new InventoryListQuery(page, pageSize)));
+ 
+     [HttpPut("ppe/norm-rows/{normRowId:guid}/mappings")]
+-    [RequirePermission("inventory.ppe.manage")]
++    [RequirePermission("inventory.ppe.norms.manage")]
+     public ActionResult<InventoryPpeNormMappingDto> UpsertPpeNormRowMapping(Guid normRowId, UpsertInventoryPpeNormMappingDto request) =>
+         ToActionResult(inventoryWorkflowService.UpsertPpeNormRowMapping(normRowId, request));
+ 
+@@ -396,7 +404,7 @@ public sealed class InventoryController(
+         ToActionResult(inventoryWorkflowService.GetPpeNormSet(normSetId));
+ 
+     [HttpPost("ppe/norm-sets/import-draft")]
+-    [RequirePermission("inventory.ppe.manage")]
++    [RequirePermission("inventory.ppe.norms.manage")]
+     [RequestSizeLimit(EmployeeImportMaxFileSizeBytes)]
+     public ActionResult<InventoryPpeNormImportResultDto> ImportPpeNormSetsDraft([FromForm] IFormFile? file)
+     {
+@@ -418,7 +426,7 @@ public sealed class InventoryController(
+     }
+ 
+     [HttpPost("ppe/norm-sets/{normSetId:guid}/publish")]
+-    [RequirePermission("inventory.ppe.manage")]
++    [RequirePermission("inventory.ppe.norms.manage")]
+     public ActionResult<InventoryPpeNormSetDto> PublishPpeNormSet(Guid normSetId, PublishInventoryPpeNormSetDto request) =>
+         ToActionResult(inventoryWorkflowService.PublishPpeNormSet(normSetId, request));
+ 
+diff --git a/apps/web/src/api/contracts.ts b/apps/web/src/api/contracts.ts
+index 13e014c..40a3a2d 100644
+--- a/apps/web/src/api/contracts.ts
++++ b/apps/web/src/api/contracts.ts
+@@ -920,6 +920,9 @@ export interface InventoryPpeNormSetDto {
+   requiresReview: boolean;
+   version: number;
+   rowsCount: number;
++  departmentName?: string;
++  positionAliases?: string[];
++  scopeConfirmed?: boolean;
+ }
+ 
+ export interface InventoryPpeNormSetDetailDto {
+@@ -941,6 +944,11 @@ export interface InventoryPpeNormRowDto {
+   quantity: number;
+   quantityText: string;
+   lifeMonths: number | null;
++  unitSymbol?: string;
++  periodMonths?: number | null;
++  requirementKey?: string;
++  alternativeGroup?: string;
++  previousRequirementRowId?: string | null;
+   mappings: InventoryPpeNormMappingDto[];
+ }
+ 
+@@ -968,8 +976,56 @@ export interface InventoryPpeNormMappingDto {
+   defaultUnitPriceMinor: number | null;
+   isDefault: boolean;
+   comment: string;
++  isApproved?: boolean;
++  normUnitsPerItem?: number;
++  approvedBy?: string;
++  approvalEvidence?: string;
+ }
+ 
++export interface PpeIssueDocumentCapabilitiesDto { enabled: boolean; }
++
++export interface PpeIssueDocumentLineInputDto {
++  id: string;
++  normRowId: string;
++  itemId: string;
++  issueDate: string;
++  quantity: number;
++  unitPriceMinor: number | null;
++  sizeText?: string;
++  exceptionReason?: string;
++  manualControlConfirmed?: boolean;
++}
++
++export interface SavePpeIssueDocumentDto {
++  employeeId: string;
++  normSetId: string;
++  documentDate: string;
++  responsibleName: string;
++  basis: string;
++  employeeDetails?: InventoryPpeEmployeeDetailsDto | null;
++  lines: PpeIssueDocumentLineInputDto[];
++  expectedVersion?: number | null;
++  acceptNormChange?: boolean;
++}
++
++export interface PpeDocumentProblemDto { lineId: string | null; code: string; message: string; }
++export interface PpeDocumentEntitlementDto { lineId: string; alreadyIssuedQuantity: number | null; availableQuantity: number | null; periodFromExclusive: string | null; periodTo: string | null; status: string; }
++export interface PpeDocumentValidationDto { errors: PpeDocumentProblemDto[]; warnings: PpeDocumentProblemDto[]; entitlements: PpeDocumentEntitlementDto[]; totalMinor: number | null; }
++export interface PpeDocumentLineDto extends PpeIssueDocumentLineInputDto { itemName: string; unitSymbol: string; brandModelArticle: string; normUnitsPerItem: number; totalMinor: number | null; }
++export interface PpeDocumentContentDto {
++  employee: { id: string; fullName: string; personnelNo: string; department: string; position: string; details: InventoryPpeEmployeeDetailsDto };
++  normSetId: string; normSetVersion: number; normVersionName: string; normSourceName: string;
++  documentDate: string; responsibleName: string; basis: string;
++  normRows: Array<InventoryPpeNormRowDto & { unitSymbol: string; periodMonths: number | null; requirementKey: string; alternativeGroup: string }>;
++  lines: PpeDocumentLineDto[];
++}
++export interface PpeIssueDocumentDto { id: string; version: number; status: string; createdAt: string; confirmedAt: string | null; content: PpeDocumentContentDto; validation: PpeDocumentValidationDto; }
++export interface PpeIssueDocumentSummaryDto { id: string; version: number; status: string; employeeId: string; employeeName: string; documentDate: string; linesCount: number; totalMinor: number | null; }
++export interface PpeNormApprovalDto { expectedVersion: number; departmentName: string; positionAliases: string[]; }
++export interface PpeNormRowRulesDto { expectedVersion: number; unitSymbol: string; periodMonths: number | null; lifeMonths: number | null; previousRequirementRowId: string | null; alternativeGroup: string; }
++export interface PpeMappingApprovalDto { expectedNormVersion: number; itemId: string; normUnitsPerItem: number; evidence: string; brandModelArticle?: string; defaultUnitPriceMinor?: number | null; }
++export interface PpeLegacyDraftMigrationDto { documentId: string | null; warnings: string[]; }
++
+ export interface CancelAssignmentDto {
+   reasonCode: string;
+   reasonText?: string;
+diff --git a/apps/web/src/features/inventory/InventoryPpeCreateScreen.tsx b/apps/web/src/features/inventory/InventoryPpeCreateScreen.tsx
+index 2574fe2..03d729e 100644
+--- a/apps/web/src/features/inventory/InventoryPpeCreateScreen.tsx
++++ b/apps/web/src/features/inventory/InventoryPpeCreateScreen.tsx
+@@ -1,6 +1,13 @@
++import { useEffect, useState } from "react";
+ import type { ScreenId } from "../../types";
++import { useInventoryRepository } from "../../repositories/inventoryRepositoryContext";
++import { PpeIssueDocumentConstructor } from "./PpeIssueDocumentConstructor";
+ import { PpeIssueWorkflowScreen } from "./ppe/PpeIssueWorkflowScreen";
+ 
+ export function InventoryPpeCreateScreen({ onNavigate, onNotify, currentUserId }: { onNavigate: (screen: ScreenId) => void; onNotify: (message: string) => void; currentUserId?: string }) {
+-  return <PpeIssueWorkflowScreen currentUserId={currentUserId} onNavigate={onNavigate} onNotify={onNotify} />;
++  const repository = useInventoryRepository();
++  const [enabled, setEnabled] = useState<boolean | null>(null);
++  useEffect(() => { void repository.getPpeIssueDocumentCapabilities().then((value) => setEnabled(value.enabled)).catch(() => setEnabled(false)); }, [repository]);
++  if (enabled === null) return <div className="ppe-document-state">Проверяем доступность конструктора…</div>;
++  return enabled ? <PpeIssueDocumentConstructor currentUserId={currentUserId} onNavigate={onNavigate} onNotify={onNotify} /> : <PpeIssueWorkflowScreen currentUserId={currentUserId} onNavigate={onNavigate} onNotify={onNotify} />;
+ }
+diff --git a/apps/web/src/features/inventory/InventoryScreen.tsx b/apps/web/src/features/inventory/InventoryScreen.tsx
+index ec2fd6f..8f357fb 100644
+--- a/apps/web/src/features/inventory/InventoryScreen.tsx
++++ b/apps/web/src/features/inventory/InventoryScreen.tsx
+@@ -37,6 +37,7 @@ import { InventoryReportsScreen } from "./InventoryReportsScreen";
+ import { InventorySettingsScreen } from "./InventorySettingsScreen";
+ import { InventorySystemLogScreen } from "./InventorySystemLogScreen";
+ import { InventoryUsersScreen } from "./InventoryUsersScreen";
++import { hasPermission } from "../../security/permissions";
+ import "./inventoryWeb.css";
+ 
+ type InventorySectionKind =
+@@ -188,6 +189,7 @@ export function InventoryScreen({
+           <InventoryItemsScreen initialSettings={state.settings} onNavigate={onNavigate} onNotify={onNotify} />
+         ) : current.id === "inventory-settings" ? (
+           <InventorySettingsScreen
++            canManagePpeNorms={hasPermission(currentUser, "inventory.ppe.norms.manage")}
+             error={state.error}
+             loading={state.loading}
+             onNotify={onNotify}
+diff --git a/apps/web/src/features/inventory/InventorySettingsScreen.tsx b/apps/web/src/features/inventory/InventorySettingsScreen.tsx
+index aaa69da..2939d2f 100644
+--- a/apps/web/src/features/inventory/InventorySettingsScreen.tsx
++++ b/apps/web/src/features/inventory/InventorySettingsScreen.tsx
+@@ -25,6 +25,7 @@ import { clearPpeNormSettingsIntent, readPpeNormSettingsIntent } from "./ppe/ppe
+ import "./inventoryWeb.css";
+ 
+ type InventorySettingsScreenProps = {
++  canManagePpeNorms?: boolean;
+   error?: string;
+   items?: InventoryItemDto[];
+   loading?: boolean;
+@@ -63,6 +64,7 @@ const referenceLabels: Record<ReferenceKind, string> = {
+ };
+ 
+ export function InventorySettingsScreen({
++  canManagePpeNorms = false,
+   error,
+   items = [],
+   loading = false,
+@@ -296,7 +298,7 @@ export function InventorySettingsScreen({
+             </section>
+           ) : null}
+ 
+-          {tab === "norms" ? <NormsPanel initialSearch={normSettingsIntent?.position ?? ""} norms={effectiveSettings.positionNorms} onCreate={() => openNormModal({})} onEdit={(row) => openNormModal({ row })} onNotify={onNotify} /> : null}
++          {tab === "norms" ? <NormsPanel canManagePpeNorms={canManagePpeNorms} initialSearch={normSettingsIntent?.position ?? ""} norms={effectiveSettings.positionNorms} onCreate={() => openNormModal({})} onEdit={(row) => openNormModal({ row })} onNotify={onNotify} /> : null}
+           {tab === "sets" ? <ItemSetsPanel itemSets={effectiveSettings.itemSets} onCreate={() => openItemSetModal({})} onEdit={(row) => openItemSetModal({ row })} onToggle={(row) => void toggleItemSet(row)} /> : null}
+           {tab === "health" ? <HealthPanel health={health} loading={healthLoading} /> : null}
+         </>
+@@ -399,12 +401,14 @@ function ReferenceCard({
+ }
+ 
+ function NormsPanel({
++  canManagePpeNorms,
+   initialSearch,
+   norms,
+   onCreate,
+   onEdit,
+   onNotify,
+ }: {
++  canManagePpeNorms: boolean;
+   initialSearch: string;
+   norms: InventorySettingsDto["positionNorms"];
+   onCreate: () => void;
+@@ -413,7 +417,7 @@ function NormsPanel({
+ }) {
+   return (
+     <div className="inventory-ppe-norms-workspace">
+-      <PpeNormSetsAdmin initialSearch={initialSearch} onNotify={onNotify} />
++      <PpeNormSetsAdmin canManage={canManagePpeNorms} initialSearch={initialSearch} onNotify={onNotify} />
+       <section className="inventory-settings-table-card inventory-ppe-manual-rules">
+       <div className="inventory-settings-panel-head">
+         <div>
+diff --git a/apps/web/src/features/inventory/PpeNormSetsAdmin.tsx b/apps/web/src/features/inventory/PpeNormSetsAdmin.tsx
+index 6f7999d..e61f02a 100644
+--- a/apps/web/src/features/inventory/PpeNormSetsAdmin.tsx
++++ b/apps/web/src/features/inventory/PpeNormSetsAdmin.tsx
+@@ -5,6 +5,7 @@ import { useInventoryRepository } from "../../repositories/inventoryRepositoryCo
+ import { matchesPpeSearchText, rankPpeCatalogItemsForNorm } from "./ppe/ppeNormSearch";
+ 
+ type Props = {
++  canManage?: boolean;
+   initialSearch?: string;
+   onNotify: (message: string) => void;
+ };
+@@ -15,7 +16,7 @@ const statusLabel: Record<InventoryPpeNormSetDto["status"], string> = {
+   draft: "Черновик",
+ };
+ 
+-export function PpeNormSetsAdmin({ initialSearch = "", onNotify }: Props) {
++export function PpeNormSetsAdmin({ canManage = false, initialSearch = "", onNotify }: Props) {
+   const repository = useInventoryRepository();
+   const fileInputRef = useRef<HTMLInputElement>(null);
+   const [rows, setRows] = useState<InventoryPpeNormSetDto[]>([]);
+@@ -46,6 +47,15 @@ export function PpeNormSetsAdmin({ initialSearch = "", onNotify }: Props) {
+     }
+   }, [repository, search]);
+ 
++  const refreshNormSet = useCallback(async (normSetId: string) => {
++    const [detail, response] = await Promise.all([
++      repository.getPpeNormSet(normSetId),
++      repository.getPpeNormSets({ page: 1, pageSize: 100, query: search.trim() || undefined }),
++    ]);
++    setDetails((current) => ({ ...current, [normSetId]: detail }));
++    setRows(response.rows);
++  }, [repository, search]);
++
+   useEffect(() => {
+     const timeout = window.setTimeout(() => void load(), 250);
+     return () => window.clearTimeout(timeout);
+@@ -180,7 +190,7 @@ export function PpeNormSetsAdmin({ initialSearch = "", onNotify }: Props) {
+           <button className="button ghost" disabled={loading} onClick={() => void load()} type="button">
+             <RefreshCw size={15} /> Обновить
+           </button>
+-          <button className="button primary" disabled={importing} onClick={() => fileInputRef.current?.click()} type="button">
++          <button className="button primary" disabled={importing || !canManage} onClick={() => fileInputRef.current?.click()} type="button">
+             <Upload size={15} /> {importing ? "Импорт..." : "Импортировать XLSX"}
+           </button>
+           <input ref={fileInputRef} accept=".xlsx" hidden onChange={importWorkbook} type="file" />
+@@ -254,13 +264,13 @@ export function PpeNormSetsAdmin({ initialSearch = "", onNotify }: Props) {
+                       />
+                       Проверил нормативный состав и периодичность
+                     </label>
+-                    <button className="button primary" disabled={!detail || !reviewed || publishingId === row.id} onClick={() => void publish(row)} type="button">
++                    <button className="button primary" disabled={!canManage || !detail || !reviewed || publishingId === row.id} onClick={() => void publish(row)} type="button">
+                       <CheckCircle2 size={15} /> {publishingId === row.id ? "Публикация..." : "Опубликовать"}
+                     </button>
+                   </div>
+                 ) : null}
+               </div>
+-              {expandedId === row.id && details[row.id] ? <NormSetDetails detail={details[row.id]} catalogItems={catalogItems} catalogLoading={catalogLoading} categoryFilter={categoryFilter} onCategoryChange={setCategoryFilter} onSaveMapping={(normRow, itemId, isDefault) => void saveMapping(row.id, normRow, itemId, isDefault)} mappingRowId={mappingRowId} /> : null}
++              {expandedId === row.id && details[row.id] ? <><NormScopeEditor canManage={canManage} normSet={row} onNotify={onNotify} onSaved={() => refreshNormSet(row.id)} /><NormSetDetails canManage={canManage} detail={details[row.id]} catalogItems={catalogItems} catalogLoading={catalogLoading} categoryFilter={categoryFilter} onCategoryChange={setCategoryFilter} onSaveMapping={(normRow, itemId, isDefault) => void saveMapping(row.id, normRow, itemId, isDefault)} mappingRowId={mappingRowId} onNotify={onNotify} onSaved={() => refreshNormSet(row.id)} /></> : null}
+             </article>
+           );
+         })}
+@@ -270,6 +280,7 @@ export function PpeNormSetsAdmin({ initialSearch = "", onNotify }: Props) {
+ }
+ 
+ function NormSetDetails({
++  canManage,
+   detail,
+   catalogItems,
+   catalogLoading,
+@@ -277,7 +288,10 @@ function NormSetDetails({
+   onCategoryChange,
+   onSaveMapping,
+   mappingRowId,
++  onNotify,
++  onSaved,
+ }: {
++  canManage: boolean;
+   detail: InventoryPpeNormSetDetailDto;
+   catalogItems: InventoryItemDto[];
+   catalogLoading: boolean;
+@@ -285,6 +299,8 @@ function NormSetDetails({
+   onCategoryChange: (value: string) => void;
+   onSaveMapping: (row: InventoryPpeNormRowDto, itemId: string, isDefault?: boolean) => void;
+   mappingRowId: string;
++  onNotify: (message: string) => void;
++  onSaved: () => Promise<void>;
+ }) {
+   const [normSearch, setNormSearch] = useState("");
+   const [catalogSearch, setCatalogSearch] = useState("");
+@@ -321,8 +337,8 @@ function NormSetDetails({
+         <small>{catalogLoading ? "Загружаем каталог СИЗ…" : `Показано ${filteredCatalogItems.length} из ${catalogItems.length} позиций`}</small>
+       </div>
+       <div className="inventory-ppe-norm-category-list">
+-        {ungrouped.length ? <NormCategoryRows title="Без категории" rows={ungrouped} catalogItems={filteredCatalogItems} onSaveMapping={onSaveMapping} mappingRowId={mappingRowId} /> : null}
+-        {visibleGroups.map((group) => <NormCategoryRows key={group.id} title={group.normItemName} rows={detail.rows.filter((row) => row.parentRowId === group.id && row.rowType === "item" && matchesNorm(row))} catalogItems={filteredCatalogItems} onSaveMapping={onSaveMapping} mappingRowId={mappingRowId} />)}
++        {ungrouped.length ? <NormCategoryRows canManage={canManage} normSetVersion={detail.normSet.version} title="Без категории" rows={ungrouped} catalogItems={filteredCatalogItems} onSaveMapping={onSaveMapping} mappingRowId={mappingRowId} onNotify={onNotify} onSaved={onSaved} /> : null}
++        {visibleGroups.map((group) => <NormCategoryRows canManage={canManage} key={group.id} normSetVersion={detail.normSet.version} title={group.normItemName} rows={detail.rows.filter((row) => row.parentRowId === group.id && row.rowType === "item" && matchesNorm(row))} catalogItems={filteredCatalogItems} onSaveMapping={onSaveMapping} mappingRowId={mappingRowId} onNotify={onNotify} onSaved={onSaved} />)}
+         {!ungrouped.length && !visibleGroups.length ? <div className="inventory-ppe-norm-message">По заданному поиску нормативные строки не найдены.</div> : null}
+       </div>
+     </div>
+@@ -330,17 +346,25 @@ function NormSetDetails({
+ }
+ 
+ function NormCategoryRows({
++  canManage,
++  normSetVersion,
+   title,
+   rows,
+   catalogItems,
+   onSaveMapping,
+   mappingRowId,
++  onNotify,
++  onSaved,
+ }: {
++  canManage: boolean;
++  normSetVersion: number;
+   title: string;
+   rows: InventoryPpeNormRowDto[];
+   catalogItems: InventoryItemDto[];
+   onSaveMapping: (row: InventoryPpeNormRowDto, itemId: string, isDefault?: boolean) => void;
+   mappingRowId: string;
++  onNotify: (message: string) => void;
++  onSaved: () => Promise<void>;
+ }) {
+   if (!rows.length) return null;
+   return (
+@@ -358,14 +382,16 @@ function NormCategoryRows({
+                 <small>{row.quantityText || "Количество не распознано"}{row.lifeMonths ? ` · ${row.lifeMonths} мес.` : ""}</small>
+                 <small className="is-point">{row.normPoint || "Основание не указано"}</small>
+               </div>
++              <NormRowRulesEditor canManage={canManage} normSetVersion={normSetVersion} onNotify={onNotify} onSaved={onSaved} row={row} />
+               {row.mappings.length ? <div className="inventory-ppe-norm-mappings" aria-label={`Допустимая номенклатура: ${row.normItemName}`}>
+                 {row.mappings.map((mapping) => <span className={mapping.isDefault ? "is-default" : ""} key={mapping.id}>
+                   <span><strong>{mapping.itemName}</strong><small>{mapping.itemSku || "Без артикула"}</small></span>
+                   {mapping.isDefault ? <em>Основное</em> : <button disabled={mappingRowId === row.id} onClick={() => onSaveMapping(row, mapping.itemId, true)} type="button">Сделать основным</button>}
++                  <MappingApprovalEditor canManage={canManage} mapping={mapping} normRowId={row.id} normSetVersion={normSetVersion} onNotify={onNotify} onSaved={onSaved} />
+                 </span>)}
+               </div> : null}
+               <NormCatalogSelector
+-                disabled={mappingRowId === row.id}
++                disabled={!canManage || mappingRowId === row.id}
+                 items={selectableItems}
+                 onSelect={(itemId) => onSaveMapping(row, itemId, row.mappings.length === 0)}
+                 row={row}
+@@ -379,6 +405,66 @@ function NormCategoryRows({
+   );
+ }
+ 
++function NormScopeEditor({ canManage, normSet, onNotify, onSaved }: { canManage: boolean; normSet: InventoryPpeNormSetDto; onNotify: (message: string) => void; onSaved: () => Promise<void> }) {
++  const repository = useInventoryRepository();
++  const [departmentName, setDepartmentName] = useState(normSet.departmentName ?? "");
++  const [aliases, setAliases] = useState((normSet.positionAliases ?? []).join(", "));
++  const [saving, setSaving] = useState(false);
++  async function save() {
++    try {
++      setSaving(true);
++      await repository.updatePpeNormSetScope(normSet.id, { expectedVersion: normSet.version, departmentName, positionAliases: aliases.split(",").map((value) => value.trim()).filter(Boolean) });
++      await onSaved();
++      onNotify("Область применения нормы сохранена");
++    } catch (reason) {
++      onNotify(reason instanceof Error ? reason.message : "Не удалось сохранить область нормы");
++    } finally { setSaving(false); }
++  }
++  return <div className="inventory-ppe-norm-detail-toolbar"><label><span>Подразделение</span><input disabled={!canManage} value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} /></label><label><span>Псевдонимы должности</span><input disabled={!canManage} value={aliases} onChange={(event) => setAliases(event.target.value)} placeholder="Через запятую" /></label><button className="button secondary" disabled={!canManage || saving} onClick={() => void save()} type="button">Подтвердить область</button></div>;
++}
++
++function NormRowRulesEditor({ canManage, normSetVersion, row, onNotify, onSaved }: { canManage: boolean; normSetVersion: number; row: InventoryPpeNormRowDto; onNotify: (message: string) => void; onSaved: () => Promise<void> }) {
++  const repository = useInventoryRepository();
++  const [unitSymbol, setUnitSymbol] = useState(row.unitSymbol ?? "шт.");
++  const [periodMonths, setPeriodMonths] = useState(row.periodMonths?.toString() ?? "");
++  const [lifeMonths, setLifeMonths] = useState(row.lifeMonths?.toString() ?? "");
++  const [alternativeGroup, setAlternativeGroup] = useState(row.alternativeGroup ?? "");
++  const [previousRequirementRowId, setPreviousRequirementRowId] = useState(row.previousRequirementRowId ?? "");
++  const [saving, setSaving] = useState(false);
++  async function save() {
++    try {
++      setSaving(true);
++      await repository.updatePpeNormRowRules(row.id, { expectedVersion: normSetVersion, unitSymbol, periodMonths: numberOrNull(periodMonths), lifeMonths: numberOrNull(lifeMonths), previousRequirementRowId: previousRequirementRowId.trim() || null, alternativeGroup });
++      await onSaved();
++      onNotify("Правила строки нормы сохранены");
++    } catch (reason) {
++      onNotify(reason instanceof Error ? reason.message : "Не удалось сохранить правила строки нормы");
++    } finally { setSaving(false); }
++  }
++  return <details className="inventory-ppe-norm-catalog-selector"><summary>Правила строки</summary><label>Единица<input disabled={!canManage} value={unitSymbol} onChange={(event) => setUnitSymbol(event.target.value)} /></label><label>Период, мес.<input disabled={!canManage} min="1" type="number" value={periodMonths} onChange={(event) => setPeriodMonths(event.target.value)} /></label><label>Срок носки, мес.<input disabled={!canManage} min="1" type="number" value={lifeMonths} onChange={(event) => setLifeMonths(event.target.value)} /></label><label>Предыдущее требование<input disabled={!canManage} value={previousRequirementRowId} onChange={(event) => setPreviousRequirementRowId(event.target.value)} /></label><label>Группа альтернатив<input disabled={!canManage} value={alternativeGroup} onChange={(event) => setAlternativeGroup(event.target.value)} /></label><button className="button secondary" disabled={!canManage || saving} onClick={() => void save()} type="button">Сохранить правила</button></details>;
++}
++
++function MappingApprovalEditor({ canManage, mapping, normRowId, normSetVersion, onNotify, onSaved }: { canManage: boolean; mapping: InventoryPpeNormRowDto["mappings"][number]; normRowId: string; normSetVersion: number; onNotify: (message: string) => void; onSaved: () => Promise<void> }) {
++  const repository = useInventoryRepository();
++  const [evidence, setEvidence] = useState(mapping.approvalEvidence ?? "");
++  const [factor, setFactor] = useState((mapping.normUnitsPerItem ?? 1).toString());
++  const [saving, setSaving] = useState(false);
++  async function approve() {
++    if (!evidence.trim()) return;
++    try {
++      setSaving(true);
++      await repository.approvePpeNormMapping(normRowId, { expectedNormVersion: normSetVersion, itemId: mapping.itemId, normUnitsPerItem: Number(factor), evidence, brandModelArticle: mapping.brandModelArticle, defaultUnitPriceMinor: mapping.defaultUnitPriceMinor });
++      await onSaved();
++      onNotify("Товар для нормы утверждён");
++    } catch (reason) {
++      onNotify(reason instanceof Error ? reason.message : "Не удалось утвердить товар для нормы");
++    } finally { setSaving(false); }
++  }
++  return <details className="inventory-ppe-norm-catalog-selector"><summary>{mapping.isApproved ? "Утверждено" : "Утвердить"}</summary><label>Основание<input disabled={!canManage} value={evidence} onChange={(event) => setEvidence(event.target.value)} /></label><label>Коэффициент<input disabled={!canManage} min="0.001" step="0.001" type="number" value={factor} onChange={(event) => setFactor(event.target.value)} /></label><button className="button secondary" disabled={!canManage || saving || !evidence.trim() || Number(factor) <= 0} onClick={() => void approve()} type="button">Подтвердить товар</button></details>;
++}
++
++function numberOrNull(value: string) { const parsed = Number(value); return Number.isFinite(parsed) && parsed > 0 ? parsed : null; }
++
+ function NormCatalogSelector({
+   disabled,
+   items,
+diff --git a/apps/web/src/repositories/inventoryRepository.ts b/apps/web/src/repositories/inventoryRepository.ts
+index 18c8e5a..28f9ca0 100644
+--- a/apps/web/src/repositories/inventoryRepository.ts
++++ b/apps/web/src/repositories/inventoryRepository.ts
+@@ -46,6 +46,7 @@ import type {
+   InventoryPpeNormCandidateBatchResponseDto,
+   InventoryPpeNormSetDetailDto,
+   InventoryPpeNormSetDto,
++  InventoryPpeNormRowDto,
+   InventoryPpeWorkspaceDto,
+   InventoryPpeModuleOptionsDto,
+   InventoryPpeCardsResponseDto,
+@@ -72,6 +73,14 @@ import type {
+   UpsertInventoryPpeNormMappingDto,
+   UpsertInventoryPositionNormDto,
+   UpsertInventoryItemDto,
++  PpeIssueDocumentCapabilitiesDto,
++  PpeIssueDocumentDto,
++  PpeIssueDocumentSummaryDto,
++  SavePpeIssueDocumentDto,
++  PpeNormApprovalDto,
++  PpeNormRowRulesDto,
++  PpeMappingApprovalDto,
++  PpeLegacyDraftMigrationDto,
+ } from "../api/contracts";
+ 
+ export type InventoryListParams = {
+@@ -80,6 +89,7 @@ export type InventoryListParams = {
+   categoryId?: string;
+   dateFrom?: string;
+   dateTo?: string;
++  date?: string;
+   department?: string;
+   employeeId?: string;
+   employeeGroup?: string;
+@@ -237,6 +247,62 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
+       );
+     },
+ 
++    getPpeIssueDocumentCapabilities() {
++      return client.get<PpeIssueDocumentCapabilitiesDto>("/api/v1/inventory/ppe/issue-documents/capabilities");
++    },
++
++    getPpeIssueDocuments(employeeId?: string) {
++      return client.get<PpeIssueDocumentSummaryDto[]>(`/api/v1/inventory/ppe/issue-documents${toQueryString({ employeeId })}`);
++    },
++
++    getPpeIssueDocument(id: string) {
++      return client.get<PpeIssueDocumentDto>(`/api/v1/inventory/ppe/issue-documents/${id}`);
++    },
++
++    createPpeIssueDocument(payload: SavePpeIssueDocumentDto) {
++      return client.post<PpeIssueDocumentDto, SavePpeIssueDocumentDto>("/api/v1/inventory/ppe/issue-documents", payload);
++    },
++
++    updatePpeIssueDocument(id: string, payload: SavePpeIssueDocumentDto) {
++      return client.put<PpeIssueDocumentDto, SavePpeIssueDocumentDto>(`/api/v1/inventory/ppe/issue-documents/${id}`, payload);
++    },
++
++    validatePpeIssueDocument(id: string) {
++      return client.post<PpeIssueDocumentDto>(`/api/v1/inventory/ppe/issue-documents/${id}/validate`);
++    },
++
++    confirmPpeIssueDocument(id: string, expectedVersion: number, idempotencyKey: string) {
++      return client.post<PpeIssueDocumentDto, { expectedVersion: number; idempotencyKey: string }>(`/api/v1/inventory/ppe/issue-documents/${id}/confirm`, { expectedVersion, idempotencyKey });
++    },
++
++    cancelPpeIssueDocument(id: string, expectedVersion: number) {
++      return client.post<PpeIssueDocumentDto, { expectedVersion: number }>(`/api/v1/inventory/ppe/issue-documents/${id}/cancel`, { expectedVersion });
++    },
++
++    migratePpeLegacyDraft(cardId: string) {
++      return client.post<PpeLegacyDraftMigrationDto>(`/api/v1/inventory/ppe/issue-documents/legacy-drafts/${cardId}/migrate`);
++    },
++
++    printPpeIssueDocument(id: string, type: "norms" | "signature", format: "docx" | "pdf") {
++      return client.download(`/api/v1/inventory/ppe/issue-documents/${id}/print${toQueryString({ type, format })}`);
++    },
++
++    getPpeIssueDocumentNorms(employeeId: string, date: string) {
++      return client.get<InventoryPpeNormSetDto[]>(`/api/v1/inventory/ppe/issue-documents/norms${toQueryString({ employeeId, date })}`);
++    },
++
++    updatePpeNormSetScope(id: string, payload: PpeNormApprovalDto) {
++      return client.put<InventoryPpeNormSetDto, PpeNormApprovalDto>(`/api/v1/inventory/ppe/issue-documents/norm-sets/${id}/scope`, payload);
++    },
++
++    updatePpeNormRowRules(id: string, payload: PpeNormRowRulesDto) {
++      return client.put<InventoryPpeNormRowDto, PpeNormRowRulesDto>(`/api/v1/inventory/ppe/issue-documents/norm-rows/${id}/rules`, payload);
++    },
++
++    approvePpeNormMapping(id: string, payload: PpeMappingApprovalDto) {
++      return client.put<InventoryPpeNormMappingDto, PpeMappingApprovalDto>(`/api/v1/inventory/ppe/issue-documents/norm-rows/${id}/approval`, payload);
++    },
++
+     getPpeWorkspace(employeeId: string) {
+       return client.get<InventoryPpeWorkspaceDto>(`/api/v1/inventory/ppe/employees/${employeeId}/workspace`);
+     },
+diff --git a/apps/web/src/repositories/mockInventoryRepository.ts b/apps/web/src/repositories/mockInventoryRepository.ts
+index 933d9c0..7e48426 100644
+--- a/apps/web/src/repositories/mockInventoryRepository.ts
++++ b/apps/web/src/repositories/mockInventoryRepository.ts
+@@ -686,6 +686,21 @@ export function createMockInventoryRepository(): InventoryRepository {
+       return pageRows([], {});
+     },
+ 
++    async getPpeIssueDocumentCapabilities() { return { enabled: false }; },
++    async getPpeIssueDocuments() { return []; },
++    async getPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
++    async createPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
++    async updatePpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
++    async validatePpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
++    async confirmPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
++    async cancelPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
++    async migratePpeLegacyDraft() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
++    async printPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
++    async getPpeIssueDocumentNorms() { return []; },
++    async updatePpeNormSetScope() { throw new Error("Редактирование норм недоступно в демонстрационном режиме"); },
++    async updatePpeNormRowRules() { throw new Error("Редактирование норм недоступно в демонстрационном режиме"); },
++    async approvePpeNormMapping() { throw new Error("Редактирование норм недоступно в демонстрационном режиме"); },
++
+     async getPpeNormSet() {
+       throw new Error("В демонстрационном режиме детали нормативных наборов недоступны");
+     },
+diff --git a/apps/web/src/security/permissions.ts b/apps/web/src/security/permissions.ts
+index 1bf5a60..600e261 100644
+--- a/apps/web/src/security/permissions.ts
++++ b/apps/web/src/security/permissions.ts
+@@ -48,6 +48,7 @@ export type PermissionCode =
+   | "inventory.issue.manage"
+   | "inventory.custody.manage"
+   | "inventory.ppe.manage"
++  | "inventory.ppe.norms.manage"
+   | "inventory.reports.view"
+   | "inventory.reports.export"
+   | "inventory.settings.manage"
+diff --git a/infra/README.md b/infra/README.md
+index 97dd41d..4c5b675 100644
+--- a/infra/README.md
++++ b/infra/README.md
+@@ -36,6 +36,16 @@ docker compose -f .\infra\docker\compose.yaml --profile app up --build
+ 
+ Наружу публикуется proxy на портах `80`, `443` и `5173`. API и web containers доступны только внутри Docker network. Proxy направляет `/api/*` и `/health/*` во внутренний API.
+ 
++## Пилот печати СИЗ
++
++Gotenberg для PDF-печати отключен по умолчанию и не входит в профиль `app`. Для пилотной проверки запускайте его явно вместе с приложением:
++
++```powershell
++docker compose -f .\infra\docker\compose.yaml --profile app --profile ppe-printing up -d --build
++```
++
++У Gotenberg нет опубликованного порта: API подключается к нему через internal-сеть `printing`. Значения по умолчанию `GOTENBERG_MEM_LIMIT=1g` и `GOTENBERG_CPUS=2` можно переопределить в `infra/docker/.env`.
++
+ Остановить:
+ 
+ ```powershell
+diff --git a/infra/docker/.env.example b/infra/docker/.env.example
+index 4a4c3a5..1aa54ea 100644
+--- a/infra/docker/.env.example
++++ b/infra/docker/.env.example
+@@ -9,3 +9,5 @@ MINIO_ENDPOINT=http://localhost:9000
+ MINIO_ROOT_USER=patrol360
+ MINIO_ROOT_PASSWORD=
+ WEB_CORS_ALLOWED_ORIGIN=
++GOTENBERG_MEM_LIMIT=1g
++GOTENBERG_CPUS=2
+diff --git a/infra/docker/compose.yaml b/infra/docker/compose.yaml
+index 6b2e129..4d9aa44 100644
+--- a/infra/docker/compose.yaml
++++ b/infra/docker/compose.yaml
+@@ -39,6 +39,7 @@ services:
+       ConnectionStrings__Patrol360: Host=postgres;Port=5432;Database=${POSTGRES_DB:-patrol360};Username=${POSTGRES_USER:-patrol360};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+       DataProtection__KeyRingPath: /var/lib/patrol360/data-protection-keys
+       MobileDiagnostics__StoragePath: /app/mobile-diagnostics
++      Features__PpeIssueDocuments: ${PPE_ISSUE_DOCUMENTS_ENABLED:-false}
+       WebCors__AllowedOrigins__0: ${WEB_CORS_ALLOWED_ORIGIN:-}
+       # Must match the proxy address below; all other X-Forwarded-* senders are ignored.
+       ForwardedHeaders__KnownProxies__0: ${PATROL360_PROXY_IP:-172.30.0.10}
+@@ -46,6 +47,9 @@ services:
+       - ./secrets/data-protection-keys:/var/lib/patrol360/data-protection-keys
+       - api-mobile-files:/app/mobile-files
+       - ./mobile-diagnostics:/app/mobile-diagnostics
++    networks:
++      - default
++      - printing
+     healthcheck:
+       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; grep -q \"200 OK\" <&3'"]
+       interval: 10s
+@@ -56,6 +60,21 @@ services:
+     profiles:
+       - app
+ 
++  gotenberg:
++    build:
++      context: ../..
++      dockerfile: infra/docker/gotenberg/Dockerfile
++    container_name: patrol360-gotenberg
++    restart: unless-stopped
++    command: ["gotenberg", "--api-timeout=60s"]
++    mem_limit: ${GOTENBERG_MEM_LIMIT:-1g}
++    cpus: ${GOTENBERG_CPUS:-2}
++    networks:
++      - printing
++    logging: *default-logging
++    profiles:
++      - ppe-printing
++
+   web:
+     build:
+       context: ../..
+@@ -217,3 +236,5 @@ networks:
+     ipam:
+       config:
+         - subnet: ${PATROL360_DOCKER_SUBNET:-172.30.0.0/24}
++  printing:
++    internal: true
+diff --git a/libs/contracts/InventoryContracts.cs b/libs/contracts/InventoryContracts.cs
+index 7df88fd..1362388 100644
+--- a/libs/contracts/InventoryContracts.cs
++++ b/libs/contracts/InventoryContracts.cs
+@@ -436,7 +436,10 @@ public sealed record InventoryPpeNormSetDto(
+     string Status,
+     bool RequiresReview,
+     long Version,
+-    int RowsCount);
++    int RowsCount,
++    string DepartmentName = "",
++    IReadOnlyList<string>? PositionAliases = null,
++    bool ScopeConfirmed = false);
+ 
+ public sealed record InventoryPpeNormRowDto(
+     Guid Id,
+@@ -449,7 +452,11 @@ public sealed record InventoryPpeNormRowDto(
+     decimal Quantity,
+     string QuantityText,
+     int? LifeMonths,
+-    IReadOnlyList<InventoryPpeNormMappingDto> Mappings);
++    IReadOnlyList<InventoryPpeNormMappingDto> Mappings,
++    string UnitSymbol = "",
++    int? PeriodMonths = null,
++    Guid RequirementKey = default,
++    string AlternativeGroup = "");
+ 
+ public sealed record InventoryPpeNormSetDetailDto(
+     InventoryPpeNormSetDto NormSet,
+@@ -480,7 +487,11 @@ public sealed record InventoryPpeNormMappingDto(
+     string BrandModelArticle,
+     long? DefaultUnitPriceMinor,
+     bool IsDefault,
+-    string Comment);
++    string Comment,
++    bool IsApproved = false,
++    decimal NormUnitsPerItem = 1m,
++    string ApprovedBy = "",
++    string ApprovalEvidence = "");
+ 
+ public sealed record InventoryPpeNormCandidateDto(
+     Guid NormRowId,
+diff --git a/libs/infrastructure/DependencyInjection.cs b/libs/infrastructure/DependencyInjection.cs
+index 194ee7b..08f551d 100644
+--- a/libs/infrastructure/DependencyInjection.cs
++++ b/libs/infrastructure/DependencyInjection.cs
+@@ -9,6 +9,7 @@ using Patrol360.Infrastructure.Attachments;
+ using Patrol360.Infrastructure.MobilePush;
+ using Patrol360.Infrastructure.MobileDiagnostics;
+ using Patrol360.Infrastructure.Persistence;
++using Patrol360.Infrastructure.Persistence.Inventory;
+ 
+ namespace Patrol360.Infrastructure;
+ 
+@@ -58,6 +59,8 @@ public static class DependencyInjection
+         services.AddScoped<IInventoryCatalogQuery, EfInventoryCatalogQuery>();
+         services.AddScoped<IInventoryCatalogCommandService, EfInventoryCatalogCommandService>();
+         services.AddScoped<IInventoryWorkflowService, EfInventoryWorkflowService>();
++        services.AddScoped<IPpeIssueDocumentService, EfInventoryWorkflowService>();
++        services.AddPpeIssueDocumentPrinting();
+         services.AddScoped<IInventoryExportService, EfInventoryExportService>();
+         services.AddScoped<IInventoryLegacyImportService, EfInventoryLegacyImportService>();
+         services.AddScoped<EfEmuService>();
+diff --git a/libs/infrastructure/Persistence/EfInventoryWorkflowService.cs b/libs/infrastructure/Persistence/EfInventoryWorkflowService.cs
+index 986f5de..b6778cb 100644
+--- a/libs/infrastructure/Persistence/EfInventoryWorkflowService.cs
++++ b/libs/infrastructure/Persistence/EfInventoryWorkflowService.cs
+@@ -9,7 +9,7 @@ using Patrol360.Infrastructure.Persistence.Entities;
+ 
+ namespace Patrol360.Infrastructure.Persistence;
+ 
+-internal sealed partial class EfInventoryWorkflowService(Patrol360DbContext dbContext) : IInventoryWorkflowService
++internal sealed partial class EfInventoryWorkflowService(Patrol360DbContext dbContext, IPatrolTimeZone? ppeTimeZone = null) : IInventoryWorkflowService
+ {
+     private const string Actor = "system";
+     private const string DefaultPpeNormPoint = "п. 1645 Приложения № 1";
+diff --git a/libs/infrastructure/Persistence/Entities/InventoryWorkflowEntities.cs b/libs/infrastructure/Persistence/Entities/InventoryWorkflowEntities.cs
+index ba0ae6d..290ca50 100644
+--- a/libs/infrastructure/Persistence/Entities/InventoryWorkflowEntities.cs
++++ b/libs/infrastructure/Persistence/Entities/InventoryWorkflowEntities.cs
+@@ -92,6 +92,10 @@ internal sealed class InventoryPpeCardLineEntity
+     public Guid Id { get; set; }
+     public int? LegacyId { get; set; }
+     public Guid CardId { get; set; }
++    public Guid? IssueDocumentId { get; set; }
++    public DateOnly? IssueDate { get; set; }
++    public Guid? RequirementKey { get; set; }
++    public decimal NormUnitsPerItem { get; set; } = 1;
+     public Guid? CardNormRowId { get; set; }
+     public Guid ItemId { get; set; }
+     public Guid? WarehouseId { get; set; }
+@@ -125,6 +129,9 @@ internal sealed class InventoryPpeNormSetEntity
+ {
+     public Guid Id { get; set; }
+     public string PositionName { get; set; } = string.Empty;
++    public string DepartmentName { get; set; } = string.Empty;
++    public string PositionAliasesJson { get; set; } = "[]";
++    public bool ScopeConfirmed { get; set; }
+     public string VersionName { get; set; } = string.Empty;
+     public DateOnly? EffectiveFrom { get; set; }
+     public DateOnly? EffectiveTo { get; set; }
+@@ -151,6 +158,10 @@ internal sealed class InventoryPpeNormRowEntity
+     public decimal Quantity { get; set; }
+     public string QuantityText { get; set; } = string.Empty;
+     public int? LifeMonths { get; set; }
++    public int? PeriodMonths { get; set; }
++    public string UnitSymbol { get; set; } = string.Empty;
++    public Guid RequirementKey { get; set; }
++    public string AlternativeGroup { get; set; } = string.Empty;
+     public InventoryPpeNormSetEntity NormSet { get; set; } = null!;
+     public InventoryPpeNormRowEntity? ParentRow { get; set; }
+     public List<InventoryPpeNormRowEntity> Children { get; set; } = [];
+@@ -166,6 +177,10 @@ internal sealed class InventoryPpeNormCatalogMappingEntity
+     public long? DefaultUnitPriceMinor { get; set; }
+     public bool IsDefault { get; set; }
+     public string Comment { get; set; } = string.Empty;
++    public bool IsApproved { get; set; }
++    public decimal NormUnitsPerItem { get; set; } = 1;
++    public string ApprovedBy { get; set; } = string.Empty;
++    public string ApprovalEvidence { get; set; } = string.Empty;
+     public DateTimeOffset CreatedAt { get; set; }
+     public DateTimeOffset UpdatedAt { get; set; }
+     public DateTimeOffset? ArchivedAt { get; set; }
+diff --git a/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.Issue.cs b/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.Issue.cs
+index 203669f..56d6ee8 100644
+--- a/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.Issue.cs
++++ b/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.Issue.cs
+@@ -233,6 +233,13 @@ internal sealed partial class EfInventoryWorkflowService
+             return Failure<InventoryPpeCardLineDto>("lineId", "PPE card line not found");
+         }
+ 
++        if (line.IssueDocumentId.HasValue)
++        {
++            return Failure<InventoryPpeCardLineDto>(
++                "status",
++                "Строка СИЗ из подтверждённого документа выдачи защищена от редактирования.");
++        }
++
+         var validation = ValidatePpeLine(request);
+         if (validation is not null)
+         {
+diff --git a/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.PpeNormImport.cs b/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.PpeNormImport.cs
+index e240c39..170d491 100644
+--- a/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.PpeNormImport.cs
++++ b/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.PpeNormImport.cs
+@@ -97,18 +97,12 @@ internal sealed partial class EfInventoryWorkflowService
+             return Failure<InventoryPpeNormImportResultDto>("file", exception.Message);
+         }
+ 
+-        if (document.Positions.Count == 0)
++        if (document.Scopes.Count == 0)
+         {
+             return Failure<InventoryPpeNormImportResultDto>("file", "The workbook does not contain PPE norm rows with a position and item name");
+         }
+ 
+         var baseVersion = ReadNormVersion(fileName);
+-        var versionName = baseVersion;
+-        if (document.Positions.Any(position => dbContext.InventoryPpeNormSets.Any(set =>
+-            set.PositionName.ToLower() == position.PositionName.ToLower() && set.VersionName == versionName)))
+-        {
+-            versionName = $"{baseVersion}-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}";
+-        }
+ 
+         var now = DateTimeOffset.UtcNow;
+         var effectiveFrom = ReadNormEffectiveDate(fileName);
+@@ -119,14 +113,33 @@ internal sealed partial class EfInventoryWorkflowService
+             .ToList()
+             .Where(IsPpeCatalogItem)
+             .ToList();
++        var versionNamesByScope = dbContext.InventoryPpeNormSets.AsNoTracking()
++            .Select(set => new { set.DepartmentName, set.PositionName, set.VersionName })
++            .ToList()
++            .GroupBy(set => NormScopeKey(set.DepartmentName, set.PositionName), StringComparer.OrdinalIgnoreCase)
++            .ToDictionary(
++                group => group.Key,
++                group => new HashSet<string>(group.Select(set => set.VersionName), StringComparer.OrdinalIgnoreCase),
++                StringComparer.OrdinalIgnoreCase);
+         var createdSets = new List<InventoryPpeNormSetEntity>();
+         var mappingWarnings = new List<string>();
+-        foreach (var position in document.Positions)
++        foreach (var scope in document.Scopes)
+         {
++            var scopeKey = NormScopeKey(scope.DepartmentName, scope.PositionName);
++            if (!versionNamesByScope.TryGetValue(scopeKey, out var versionNames))
++            {
++                versionNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
++                versionNamesByScope.Add(scopeKey, versionNames);
++            }
++            var versionName = NextNormVersion(baseVersion, versionNames);
++            versionNames.Add(versionName);
+             var normSet = new InventoryPpeNormSetEntity
+             {
+                 Id = Guid.NewGuid(),
+-                PositionName = position.PositionName,
++                DepartmentName = scope.DepartmentName,
++                PositionName = scope.PositionName,
++                PositionAliasesJson = "[]",
++                ScopeConfirmed = false,
+                 VersionName = versionName,
+                 EffectiveFrom = effectiveFrom,
+                 SourceName = Path.GetFileName(fileName),
+@@ -138,7 +151,7 @@ internal sealed partial class EfInventoryWorkflowService
+             };
+             var mappedCount = 0;
+             var itemCount = 0;
+-            foreach (var sourceRow in position.Rows.OrderBy(row => row.SortOrder))
++            foreach (var sourceRow in scope.Rows.OrderBy(row => row.SortOrder))
+             {
+                 var normRow = new InventoryPpeNormRowEntity
+                 {
+@@ -152,7 +165,11 @@ internal sealed partial class EfInventoryWorkflowService
+                     IssuePeriodText = sourceRow.IssuePeriodText,
+                     Quantity = sourceRow.Quantity,
+                     QuantityText = sourceRow.QuantityText,
+-                    LifeMonths = sourceRow.LifeMonths
++                    LifeMonths = null,
++                    PeriodMonths = sourceRow.PeriodMonths,
++                    UnitSymbol = sourceRow.UnitSymbol,
++                    RequirementKey = sourceRow.Id,
++                    AlternativeGroup = sourceRow.AlternativeGroup
+                 };
+                 if (normRow.RowType == "item")
+                 {
+@@ -169,6 +186,8 @@ internal sealed partial class EfInventoryWorkflowService
+                                 .Where(value => !string.IsNullOrWhiteSpace(value))),
+                             DefaultUnitPriceMinor = catalogItem.DefaultUnitPriceMinor,
+                             IsDefault = true,
++                            IsApproved = false,
++                            NormUnitsPerItem = 1m,
+                             CreatedAt = now,
+                             UpdatedAt = now
+                         });
+@@ -179,10 +198,10 @@ internal sealed partial class EfInventoryWorkflowService
+             }
+             createdSets.Add(normSet);
+             dbContext.InventoryPpeNormSets.Add(normSet);
+-            AddSystemLog("ppe_norm_set", normSet.Id, "draft_imported", $"{position.PositionName}; {fileName}; rows={position.Rows.Count}", now);
++            AddSystemLog("ppe_norm_set", normSet.Id, "draft_imported", $"{scope.DepartmentName}; {scope.PositionName}; {fileName}; rows={scope.Rows.Count}", now);
+             if (itemCount > mappedCount)
+             {
+-                mappingWarnings.Add($"{position.PositionName}: сопоставлено {mappedCount} из {itemCount}; вручную сопоставьте оставшиеся строки по категориям СИЗ.");
++                mappingWarnings.Add($"{scope.DepartmentName} / {scope.PositionName}: сопоставлено {mappedCount} из {itemCount}; вручную сопоставьте оставшиеся строки по категориям СИЗ.");
+             }
+         }
+ 
+@@ -204,6 +223,7 @@ internal sealed partial class EfInventoryWorkflowService
+             return Failure<InventoryPpeNormSetDto>("confirmReviewed", "Manual review must be confirmed before publishing PPE norms");
+         }
+ 
++        using var publication = dbContext.Database.BeginTransaction(System.Data.IsolationLevel.Serializable);
+         var normSet = dbContext.InventoryPpeNormSets.Include(row => row.Rows)
+             .FirstOrDefault(row => row.Id == normSetId && row.Status == "draft" && row.ArchivedAt == null);
+         if (normSet is null) return Failure<InventoryPpeNormSetDto>("normSetId", "Draft PPE norm set not found");
+@@ -214,8 +234,17 @@ internal sealed partial class EfInventoryWorkflowService
+         }
+ 
+         var now = DateTimeOffset.UtcNow;
++        if (!normSet.ScopeConfirmed)
++        {
++            return Failure<InventoryPpeNormSetDto>("scopeConfirmed", "PPE norm scope must be confirmed before publishing");
++        }
++
+         foreach (var active in dbContext.InventoryPpeNormSets.Where(row =>
+-            row.Id != normSet.Id && row.PositionName == normSet.PositionName && row.Status == "active" && row.ArchivedAt == null))
++            row.Id != normSet.Id
++            && row.DepartmentName == normSet.DepartmentName
++            && row.PositionName == normSet.PositionName
++            && row.Status == "active"
++            && row.ArchivedAt == null))
+         {
+             active.Status = "archived";
+             active.ArchivedAt = now;
+@@ -231,22 +260,26 @@ internal sealed partial class EfInventoryWorkflowService
+         try
+         {
+             dbContext.SaveChanges();
++            publication.Commit();
+         }
+-        catch (DbUpdateConcurrencyException)
++        catch (Exception exception) when (IsDocumentWriteConflict(exception))
+         {
++            publication.Dispose();
++            dbContext.ChangeTracker.Clear();
+             return Failure<InventoryPpeNormSetDto>("conflict", "PPE norm set was changed by another user");
+         }
+         return Success(MapNormSet(normSet));
+     }
+ 
+-    private static PpeNormImportDocument ReadPpeNormWorkbook(Stream source)
++    internal static PpeNormImportDocument ReadPpeNormWorkbook(Stream source)
+     {
+         using var workbook = new XLWorkbook(source);
+         var worksheet = workbook.Worksheets.FirstOrDefault()
+             ?? throw new InvalidDataException("The workbook does not contain worksheets");
+-        var positions = new Dictionary<string, PpeNormImportPosition>(StringComparer.OrdinalIgnoreCase);
++        var scopes = new Dictionary<string, PpeNormImportScope>(StringComparer.OrdinalIgnoreCase);
+         var warnings = new List<string>();
+-        PpeNormImportPosition? currentPosition = null;
++        PpeNormImportScope? currentScope = null;
++        var currentDepartmentName = string.Empty;
+         string currentGroupName = string.Empty;
+         Guid? currentGroupId = null;
+         var sourceRows = 0;
+@@ -256,27 +289,49 @@ internal sealed partial class EfInventoryWorkflowService
+ 
+         foreach (var row in worksheet.RowsUsed().Where(row => row.RowNumber() > 9))
+         {
++            var departmentName = NormalizeWorkbookText(row.Cell(1).GetFormattedString());
+             var positionName = NormalizeWorkbookText(row.Cell(2).GetFormattedString());
+             var groupName = NormalizeWorkbookText(row.Cell(3).GetFormattedString());
+             var normItemName = NormalizeWorkbookText(row.Cell(4).GetFormattedString());
+             var issuePeriod = NormalizeWorkbookText(row.Cell(5).GetFormattedString());
+             var normPoint = NormalizeWorkbookText(row.Cell(6).GetFormattedString());
++            var isDepartmentSectionHeader = departmentName.Length > 0
++                && positionName.Length == 0
++                && groupName.Length == 0
++                && normItemName.Length == 0
++                && issuePeriod.Length == 0
++                && normPoint.Length == 0;
++            if (isDepartmentSectionHeader)
++            {
++                currentDepartmentName = departmentName;
++                currentScope = null;
++                currentGroupName = string.Empty;
++                currentGroupId = null;
++            }
+             if (positionName.Length > 0)
+             {
+-                if (!positions.TryGetValue(positionName, out currentPosition))
++                if (currentDepartmentName.Length == 0)
++                {
++                    skippedRows += 1;
++                    warnings.Add($"Row {row.RowNumber()}: PPE position skipped because department section is empty");
++                    currentScope = null;
++                    continue;
++                }
++                var scopeKey = $"{currentDepartmentName}\u001f{positionName}";
++                if (!scopes.TryGetValue(scopeKey, out currentScope))
+                 {
+-                    currentPosition = new PpeNormImportPosition(positionName);
+-                    positions.Add(positionName, currentPosition);
++                    currentScope = new PpeNormImportScope(currentDepartmentName, positionName);
++                    scopes.Add(scopeKey, currentScope);
+                 }
+                 currentGroupName = string.Empty;
+                 currentGroupId = null;
+             }
+             if (normItemName.Length == 0) continue;
+             sourceRows += 1;
+-            if (currentPosition is null)
++            if (currentScope is null)
+             {
+                 skippedRows += 1;
+-                warnings.Add($"Row {row.RowNumber()}: PPE item skipped because position is empty");
++                warnings.Add($"Row {row.RowNumber()}: PPE item skipped because department or position is empty");
+                 continue;
+             }
+             ValidatePpeNormTextLength(row.RowNumber(), normItemName, normPoint);
+@@ -285,21 +340,21 @@ internal sealed partial class EfInventoryWorkflowService
+             {
+                 currentGroupName = groupName;
+                 currentGroupId = Guid.NewGuid();
+-                currentPosition.Rows.Add(new PpeNormImportRow(
+-                    currentGroupId.Value, null, "group", currentPosition.Rows.Count,
+-                    groupName, string.Empty, string.Empty, 0, string.Empty, null));
++                currentScope.Rows.Add(new PpeNormImportRow(
++                    currentGroupId.Value, null, "group", currentScope.Rows.Count,
++                    groupName, string.Empty, string.Empty, 0, string.Empty, null, string.Empty, null, string.Empty));
+                 groupsCreated += 1;
+             }
+ 
+-            var (quantity, quantityText) = ReadNormQuantity(issuePeriod);
+-            currentPosition.Rows.Add(new PpeNormImportRow(
+-                Guid.NewGuid(), currentGroupId, "item", currentPosition.Rows.Count,
+-                normItemName, normPoint, issuePeriod, quantity, quantityText, ReadLifeMonths(issuePeriod)));
++            var (quantity, quantityText, unitSymbol) = ReadNormQuantity(issuePeriod);
++            currentScope.Rows.Add(new PpeNormImportRow(
++                Guid.NewGuid(), currentGroupId, "item", currentScope.Rows.Count,
++                normItemName, normPoint, issuePeriod, quantity, quantityText, null, unitSymbol, ReadPeriodMonths(issuePeriod), string.Empty));
+             itemsCreated += 1;
+         }
+ 
+         return new PpeNormImportDocument(
+-            positions.Values.Where(position => position.Rows.Any(row => row.RowType == "item")).ToList(),
++            scopes.Values.Where(scope => scope.Rows.Any(row => row.RowType == "item")).ToList(),
+             sourceRows, groupsCreated, itemsCreated, skippedRows, warnings);
+     }
+ 
+@@ -406,27 +461,31 @@ internal sealed partial class EfInventoryWorkflowService
+         }
+     }
+ 
+-    private static (decimal Quantity, string QuantityText) ReadNormQuantity(string value)
++    private static (decimal Quantity, string QuantityText, string UnitSymbol) ReadNormQuantity(string value)
+     {
+-        var match = Regex.Match(value ?? string.Empty, @"(?<quantity>\d+(?:[.,]\d+)?)\s*(?<unit>\p{L}+)?", RegexOptions.IgnoreCase);
+-        if (!match.Success) return (1m, NormalizeNormLookupText(value).Contains("износ", StringComparison.Ordinal) ? "1 шт." : value ?? string.Empty);
++        var match = Regex.Match(value ?? string.Empty, @"(?<quantity>\d+(?:[.,]\d+)?)\s*(?<unit>\p{L}+[\p{L}.]*)?", RegexOptions.IgnoreCase);
++        if (!match.Success) return (1m, value ?? string.Empty, string.Empty);
+         var quantity = decimal.Parse(match.Groups["quantity"].Value.Replace(',', '.'), CultureInfo.InvariantCulture);
+-        var unit = match.Groups["unit"].Success ? match.Groups["unit"].Value : "шт.";
+-        return (quantity, $"{match.Groups["quantity"].Value} {unit}");
++        var unit = match.Groups["unit"].Success && !match.Groups["unit"].Value.Equals("на", StringComparison.OrdinalIgnoreCase)
++            ? match.Groups["unit"].Value
++            : string.Empty;
++        var quantityText = unit.Length == 0 ? match.Groups["quantity"].Value : $"{match.Groups["quantity"].Value} {unit}";
++        return (quantity, quantityText, unit);
+     }
+ 
+-    private static int? ReadLifeMonths(string value)
++    private static int? ReadPeriodMonths(string value)
+     {
+         var normalized = (value ?? string.Empty).Trim().ToLowerInvariant().Replace('ё', 'е');
+         var matches = Regex.Matches(normalized, @"(?<value>\d+(?:[.,]\d+)?)\s*(?<unit>\p{L}+)", RegexOptions.IgnoreCase);
+         var match = matches.Cast<Match>().LastOrDefault(candidate =>
+             candidate.Groups["unit"].Value.StartsWith("месяц", StringComparison.Ordinal)
++            || candidate.Groups["unit"].Value.StartsWith("мес", StringComparison.Ordinal)
+             || candidate.Groups["unit"].Value.StartsWith("год", StringComparison.Ordinal)
+             || candidate.Groups["unit"].Value.StartsWith("лет", StringComparison.Ordinal));
+         if (match is null) return null;
+         var amount = decimal.Parse(match.Groups["value"].Value.Replace(',', '.'), CultureInfo.InvariantCulture);
+         var unit = match.Groups["unit"].Value;
+-        if (unit.StartsWith("месяц", StringComparison.Ordinal))
++        if (unit.StartsWith("месяц", StringComparison.Ordinal) || unit.StartsWith("мес", StringComparison.Ordinal))
+         {
+             return (int)Math.Round(amount, MidpointRounding.AwayFromZero);
+         }
+@@ -451,13 +510,29 @@ internal sealed partial class EfInventoryWorkflowService
+         return DateOnly.TryParseExact(match.Value, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
+     }
+ 
+-    private sealed class PpeNormImportPosition(string positionName)
++    private static string NormScopeKey(string departmentName, string positionName) => $"{departmentName}\u001f{positionName}";
++
++    private static string NextNormVersion(string baseVersion, IReadOnlySet<string> existing)
++    {
++        if (!existing.Contains(baseVersion)) return baseVersion;
++
++        for (var suffix = 1; ; suffix += 1)
++        {
++            var suffixText = $"-{suffix}";
++            var prefixLength = Math.Max(1, 100 - suffixText.Length);
++            var value = $"{baseVersion[..Math.Min(baseVersion.Length, prefixLength)]}{suffixText}";
++            if (!existing.Contains(value)) return value;
++        }
++    }
++
++    internal sealed class PpeNormImportScope(string departmentName, string positionName)
+     {
++        public string DepartmentName { get; } = departmentName;
+         public string PositionName { get; } = positionName;
+         public List<PpeNormImportRow> Rows { get; } = [];
+     }
+ 
+-    private sealed record PpeNormImportRow(
++    internal sealed record PpeNormImportRow(
+         Guid Id,
+         Guid? ParentRowId,
+         string RowType,
+@@ -467,10 +542,13 @@ internal sealed partial class EfInventoryWorkflowService
+         string IssuePeriodText,
+         decimal Quantity,
+         string QuantityText,
+-        int? LifeMonths);
++        int? LifeMonths,
++        string UnitSymbol,
++        int? PeriodMonths,
++        string AlternativeGroup);
+ 
+-    private sealed record PpeNormImportDocument(
+-        IReadOnlyList<PpeNormImportPosition> Positions,
++    internal sealed record PpeNormImportDocument(
++        IReadOnlyList<PpeNormImportScope> Scopes,
+         int SourceRows,
+         int GroupsCreated,
+         int ItemsCreated,
+diff --git a/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.PpeWorkspace.cs b/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.PpeWorkspace.cs
+index 567df0d..436a94a 100644
+--- a/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.PpeWorkspace.cs
++++ b/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.PpeWorkspace.cs
+@@ -1,5 +1,6 @@
+ using Microsoft.EntityFrameworkCore;
+ using System.Globalization;
++using System.Text.Json;
+ using System.Text.RegularExpressions;
+ using Patrol360.Application;
+ using Patrol360.Contracts;
+@@ -1064,6 +1065,9 @@ internal sealed partial class EfInventoryWorkflowService
+                 mapping.BrandModelArticle = NormalizeOptional(requested.BrandModelArticle);
+                 mapping.DefaultUnitPriceMinor = requested.UnitPriceMinor ?? item.DefaultUnitPriceMinor;
+                 mapping.IsDefault = requested.MakeDefaultMapping;
++                mapping.IsApproved = false;
++                mapping.ApprovedBy = string.Empty;
++                mapping.ApprovalEvidence = string.Empty;
+                 mapping.UpdatedAt = now;
+                 mapping.ArchivedAt = null;
+             }
+@@ -1130,6 +1134,9 @@ internal sealed partial class EfInventoryWorkflowService
+         mapping.DefaultUnitPriceMinor = request.DefaultUnitPriceMinor;
+         mapping.IsDefault = request.IsDefault;
+         mapping.Comment = NormalizeOptional(request.Comment);
++        mapping.IsApproved = false;
++        mapping.ApprovedBy = string.Empty;
++        mapping.ApprovalEvidence = string.Empty;
+         mapping.UpdatedAt = now;
+         mapping.ArchivedAt = null;
+         dbContext.SaveChanges();
+@@ -1239,15 +1246,34 @@ internal sealed partial class EfInventoryWorkflowService
+     }
+ 
+     private static InventoryPpeNormSetDto MapNormSet(InventoryPpeNormSetEntity row) =>
+-        new(row.Id, row.PositionName, row.VersionName, row.EffectiveFrom, row.EffectiveTo, row.SourceName, row.Status, row.RequiresReview, row.Version, row.Rows.Count);
++        new(row.Id, row.PositionName, row.VersionName, row.EffectiveFrom, row.EffectiveTo, row.SourceName, row.Status, row.RequiresReview, row.Version, row.Rows.Count,
++            row.DepartmentName, ReadPositionAliases(row.PositionAliasesJson), row.ScopeConfirmed);
++
++    private static IReadOnlyList<string> ReadPositionAliases(string? value)
++    {
++        try
++        {
++            return JsonSerializer.Deserialize<List<string>>(value ?? "[]")?
++                .Where(alias => !string.IsNullOrWhiteSpace(alias))
++                .Select(alias => alias.Trim())
++                .Distinct(StringComparer.OrdinalIgnoreCase)
++                .ToList() ?? [];
++        }
++        catch (JsonException)
++        {
++            return [];
++        }
++    }
+ 
+     private static InventoryPpeNormRowDto MapNormRow(InventoryPpeNormRowEntity row) =>
+         new(row.Id, row.ParentRowId, row.RowType, row.SortOrder, row.NormItemName, row.NormPoint, row.IssuePeriodText,
+             row.Quantity, row.QuantityText, row.LifeMonths,
+-            row.Mappings.Where(mapping => mapping.ArchivedAt == null).OrderByDescending(mapping => mapping.IsDefault).Select(MapNormMapping).ToList());
++            row.Mappings.Where(mapping => mapping.ArchivedAt == null).OrderByDescending(mapping => mapping.IsDefault).Select(MapNormMapping).ToList(),
++            row.UnitSymbol, row.PeriodMonths, row.RequirementKey, row.AlternativeGroup);
+ 
+     private static InventoryPpeNormMappingDto MapNormMapping(InventoryPpeNormCatalogMappingEntity row) =>
+-        new(row.Id, row.NormRowId, row.ItemId, row.Item.Name, row.Item.Sku, row.BrandModelArticle, row.DefaultUnitPriceMinor, row.IsDefault, row.Comment);
++        new(row.Id, row.NormRowId, row.ItemId, row.Item.Name, row.Item.Sku, row.BrandModelArticle, row.DefaultUnitPriceMinor, row.IsDefault, row.Comment,
++            row.IsApproved, row.NormUnitsPerItem, row.ApprovedBy, row.ApprovalEvidence);
+ 
+     private static InventoryPpeHistoryRowDto MapPpeHistoryRow(InventoryPpeCardLineEventEntity row)
+     {
+diff --git a/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.ReturnWriteOff.cs b/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.ReturnWriteOff.cs
+index d7c665f..5f0f129 100644
+--- a/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.ReturnWriteOff.cs
++++ b/libs/infrastructure/Persistence/Inventory/EfInventoryWorkflowService.ReturnWriteOff.cs
+@@ -28,6 +28,15 @@ internal sealed partial class EfInventoryWorkflowService
+             return Failure<InventoryPpeCardLineDto>("status", "Unsupported PPE status");
+         }
+ 
++        if (line.IssueDocumentId.HasValue
++            && IsPpeSignatureLineStatus(nextStatus)
++            && !PpeIssueStatusCatalog.IsClosedStatus(nextStatus))
++        {
++            return Failure<InventoryPpeCardLineDto>(
++                "status",
++                "Строка СИЗ из подтверждённого документа выдачи не может быть переоткрыта.");
++        }
++
+         var oldStatus = line.Status;
+         if (oldStatus == nextStatus)
+         {
+@@ -53,11 +62,13 @@ internal sealed partial class EfInventoryWorkflowService
+         }
+ 
+         var now = DateTimeOffset.UtcNow;
+-        if (IsPpeSignatureLineStatus(nextStatus) && !IsPpeSignatureLineStatus(oldStatus))
++        if (line.IssueDocumentId is null
++            && IsPpeSignatureLineStatus(nextStatus)
++            && !IsPpeSignatureLineStatus(oldStatus))
+         {
+             line.IssuedAt ??= now;
+         }
+-        else if (PpeIssueStatusCatalog.IsClosedStatus(nextStatus))
++        else if (line.IssueDocumentId is null && PpeIssueStatusCatalog.IsClosedStatus(nextStatus))
+         {
+             // A closed PPE line must not keep a stale active issued date in reports.
+             line.IssuedAt ??= now;
+@@ -141,6 +152,13 @@ internal sealed partial class EfInventoryWorkflowService
+             return Failure<InventoryPpeCardLineDto>("lineId", "PPE card line not found");
+         }
+ 
++        if (line.IssueDocumentId.HasValue)
++        {
++            return Failure<InventoryPpeCardLineDto>(
++                "lineId",
++                "Строка СИЗ из подтверждённого документа выдачи защищена от архивирования.");
++        }
++
+         if (line.Status == PpeIssueStatusCatalog.Issued)
+         {
+             return Failure<InventoryPpeCardLineDto>(
+diff --git a/libs/infrastructure/Persistence/Migrations/Patrol360DbContextModelSnapshot.cs b/libs/infrastructure/Persistence/Migrations/Patrol360DbContextModelSnapshot.cs
+index 095e9b3..8744183 100644
+--- a/libs/infrastructure/Persistence/Migrations/Patrol360DbContextModelSnapshot.cs
++++ b/libs/infrastructure/Persistence/Migrations/Patrol360DbContextModelSnapshot.cs
+@@ -2705,6 +2705,14 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                         .HasDefaultValue(false)
+                         .HasColumnName("is_section_title");
+ 
++                    b.Property<DateOnly?>("IssueDate")
++                        .HasColumnType("date")
++                        .HasColumnName("issue_date");
++
++                    b.Property<Guid?>("IssueDocumentId")
++                        .HasColumnType("uuid")
++                        .HasColumnName("issue_document_id");
++
+                     b.Property<string>("IssueMethod")
+                         .IsRequired()
+                         .HasMaxLength(40)
+@@ -2735,6 +2743,11 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                         .HasColumnType("character varying(4000)")
+                         .HasColumnName("norm_point");
+ 
++                    b.Property<decimal>("NormUnitsPerItem")
++                        .HasPrecision(18, 6)
++                        .HasColumnType("numeric(18,6)")
++                        .HasColumnName("norm_units_per_item");
++
+                     b.Property<string>("PrintItemName")
+                         .IsRequired()
+                         .HasMaxLength(4000)
+@@ -2750,6 +2763,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                         .HasColumnType("text")
+                         .HasColumnName("quantity_text");
+ 
++                    b.Property<Guid?>("RequirementKey")
++                        .HasColumnType("uuid")
++                        .HasColumnName("requirement_key");
++
+                     b.Property<DateTimeOffset?>("ReturnedAt")
+                         .HasColumnType("timestamp with time zone")
+                         .HasColumnName("returned_at");
+@@ -2794,6 +2811,8 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                     b.HasIndex("CardNormRowId")
+                         .HasDatabaseName("ix_inventory_ppe_lines_card_norm_row");
+ 
++                    b.HasIndex("IssueDocumentId");
++
+                     b.HasIndex("ItemId");
+ 
+                     b.HasIndex("LegacyId")
+@@ -2804,6 +2823,8 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                     b.HasIndex("CardId", "Status")
+                         .HasDatabaseName("ix_inventory_ppe_lines_card_status");
+ 
++                    b.HasIndex("RequirementKey", "IssueDate");
++
+                     b.ToTable("ppe_card_lines", "inventory");
+                 });
+ 
+@@ -3040,6 +3061,18 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                         .HasColumnType("uuid")
+                         .HasColumnName("id");
+ 
++                    b.Property<string>("ApprovalEvidence")
++                        .IsRequired()
++                        .HasMaxLength(2000)
++                        .HasColumnType("character varying(2000)")
++                        .HasColumnName("approval_evidence");
++
++                    b.Property<string>("ApprovedBy")
++                        .IsRequired()
++                        .HasMaxLength(240)
++                        .HasColumnType("character varying(240)")
++                        .HasColumnName("approved_by");
++
+                     b.Property<DateTimeOffset?>("ArchivedAt")
+                         .HasColumnType("timestamp with time zone")
+                         .HasColumnName("archived_at");
+@@ -3064,6 +3097,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                         .HasColumnType("bigint")
+                         .HasColumnName("default_unit_price_minor");
+ 
++                    b.Property<bool>("IsApproved")
++                        .HasColumnType("boolean")
++                        .HasColumnName("is_approved");
++
+                     b.Property<bool>("IsDefault")
+                         .HasColumnType("boolean")
+                         .HasColumnName("is_default");
+@@ -3076,6 +3113,11 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                         .HasColumnType("uuid")
+                         .HasColumnName("norm_row_id");
+ 
++                    b.Property<decimal>("NormUnitsPerItem")
++                        .HasPrecision(18, 6)
++                        .HasColumnType("numeric(18,6)")
++                        .HasColumnName("norm_units_per_item");
++
+                     b.Property<DateTimeOffset>("UpdatedAt")
+                         .HasColumnType("timestamp with time zone")
+                         .HasColumnName("updated_at");
+@@ -3102,6 +3144,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                         .HasColumnType("uuid")
+                         .HasColumnName("id");
+ 
++                    b.Property<string>("AlternativeGroup")
++                        .IsRequired()
++                        .HasMaxLength(120)
++                        .HasColumnType("character varying(120)")
++                        .HasColumnName("alternative_group");
++
+                     b.Property<string>("IssuePeriodText")
+                         .IsRequired()
+                         .HasMaxLength(500)
+@@ -3132,6 +3180,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                         .HasColumnType("uuid")
+                         .HasColumnName("parent_row_id");
+ 
++                    b.Property<int?>("PeriodMonths")
++                        .HasColumnType("integer")
++                        .HasColumnName("period_months");
++
+                     b.Property<decimal>("Quantity")
+                         .HasPrecision(12, 3)
+                         .HasColumnType("numeric(12,3)")
+@@ -3143,6 +3195,10 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                         .HasColumnType("character varying(120)")
+                         .HasColumnName("quantity_text");
+ 
++                    b.Property<Guid>("RequirementKey")
++                        .HasColumnType("uuid")
++                        .HasColumnName("requirement_key");
++
+                     b.Property<string>("RowType")
+                         .IsRequired()
+                         .HasMaxLength(20)
+@@ -3153,6 +3209,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                         .HasColumnType("integer")
+                         .HasColumnName("sort_order");
+ 
++                    b.Property<string>("UnitSymbol")
++                        .IsRequired()
++                        .HasMaxLength(40)
++                        .HasColumnType("character varying(40)")
++                        .HasColumnName("unit_symbol");
++
+                     b.HasKey("Id");
+ 
+                     b.HasIndex("ParentRowId")
+@@ -3180,6 +3242,12 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                         .HasColumnType("timestamp with time zone")
+                         .HasColumnName("created_at");
+ 
++                    b.Property<string>("DepartmentName")
++                        .IsRequired()
++                        .HasMaxLength(500)
++                        .HasColumnType("character varying(500)")
++                        .HasColumnName("department_name");
++
+                     b.Property<DateOnly?>("EffectiveFrom")
+                         .HasColumnType("date")
+                         .HasColumnName("effective_from");
+@@ -3188,16 +3256,25 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                         .HasColumnType("date")
+                         .HasColumnName("effective_to");
+ 
++                    b.Property<string>("PositionAliasesJson")
++                        .IsRequired()
++                        .HasColumnType("jsonb")
++                        .HasColumnName("position_aliases_json");
++
+                     b.Property<string>("PositionName")
+                         .IsRequired()
+-                        .HasMaxLength(200)
+-                        .HasColumnType("character varying(200)")
++                        .HasMaxLength(4000)
++                        .HasColumnType("character varying(4000)")
+                         .HasColumnName("position_name");
+ 
+                     b.Property<bool>("RequiresReview")
+                         .HasColumnType("boolean")
+                         .HasColumnName("requires_review");
+ 
++                    b.Property<bool>("ScopeConfirmed")
++                        .HasColumnType("boolean")
++                        .HasColumnName("scope_confirmed");
++
+                     b.Property<string>("SourceName")
+                         .IsRequired()
+                         .HasMaxLength(500)
+@@ -3230,9 +3307,9 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                     b.HasIndex("PositionName", "Status")
+                         .HasDatabaseName("ix_inventory_ppe_norm_sets_position_status");
+ 
+-                    b.HasIndex("PositionName", "VersionName")
++                    b.HasIndex("DepartmentName", "PositionName", "VersionName")
+                         .IsUnique()
+-                        .HasDatabaseName("ux_inventory_ppe_norm_sets_position_version");
++                        .HasDatabaseName("ux_inventory_ppe_norm_sets_scope_version");
+ 
+                     b.ToTable("ppe_norm_sets", "inventory");
+                 });
+@@ -5251,6 +5328,82 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                     b.ToTable("permissions", (string)null);
+                 });
+ 
++            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PpeIssueDocumentEntity", b =>
++                {
++                    b.Property<Guid>("Id")
++                        .ValueGeneratedOnAdd()
++                        .HasColumnType("uuid")
++                        .HasColumnName("id");
++
++                    b.Property<DateTimeOffset?>("ConfirmedAt")
++                        .HasColumnType("timestamp with time zone")
++                        .HasColumnName("confirmed_at");
++
++                    b.Property<string>("ContentJson")
++                        .IsRequired()
++                        .HasColumnType("jsonb")
++                        .HasColumnName("content_json");
++
++                    b.Property<DateTimeOffset>("CreatedAt")
++                        .HasColumnType("timestamp with time zone")
++                        .HasColumnName("created_at");
++
++                    b.Property<string>("CreatedBy")
++                        .IsRequired()
++                        .HasMaxLength(240)
++                        .HasColumnType("character varying(240)")
++                        .HasColumnName("created_by");
++
++                    b.Property<Guid>("EmployeeId")
++                        .HasColumnType("uuid")
++                        .HasColumnName("employee_id");
++
++                    b.Property<string>("IdempotencyKey")
++                        .HasMaxLength(120)
++                        .HasColumnType("character varying(120)")
++                        .HasColumnName("idempotency_key");
++
++                    b.Property<Guid?>("LegacyCardId")
++                        .HasColumnType("uuid")
++                        .HasColumnName("legacy_card_id");
++
++                    b.Property<Guid>("NormSetId")
++                        .HasColumnType("uuid")
++                        .HasColumnName("norm_set_id");
++
++                    b.Property<string>("Status")
++                        .IsRequired()
++                        .HasMaxLength(20)
++                        .HasColumnType("character varying(20)")
++                        .HasColumnName("status");
++
++                    b.Property<string>("ValidationJson")
++                        .IsRequired()
++                        .HasColumnType("jsonb")
++                        .HasColumnName("validation_json");
++
++                    b.Property<long>("Version")
++                        .IsConcurrencyToken()
++                        .HasColumnType("bigint")
++                        .HasColumnName("version");
++
++                    b.HasKey("Id");
++
++                    b.HasIndex("IdempotencyKey")
++                        .IsUnique()
++                        .HasFilter("idempotency_key IS NOT NULL");
++
++                    b.HasIndex("LegacyCardId")
++                        .IsUnique()
++                        .HasFilter("legacy_card_id IS NOT NULL");
++
++                    b.HasIndex("NormSetId");
++
++                    b.HasIndex("EmployeeId", "CreatedAt");
++
++                    b.ToTable("ppe_issue_documents", "inventory");
++                });
++
+             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.RoleEntity", b =>
+                 {
+                     b.Property<Guid>("Id")
+@@ -6491,6 +6644,11 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                         .HasForeignKey("CardNormRowId")
+                         .OnDelete(DeleteBehavior.SetNull);
+ 
++                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.PpeIssueDocumentEntity", null)
++                        .WithMany()
++                        .HasForeignKey("IssueDocumentId")
++                        .OnDelete(DeleteBehavior.Restrict);
++
+                     b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryItemEntity", "Item")
+                         .WithMany()
+                         .HasForeignKey("ItemId")
+@@ -6904,6 +7062,21 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
+                     b.Navigation("CreatedByUser");
+                 });
+ 
++            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PpeIssueDocumentEntity", b =>
++                {
++                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.EmployeeEntity", null)
++                        .WithMany()
++                        .HasForeignKey("EmployeeId")
++                        .OnDelete(DeleteBehavior.Restrict)
++                        .IsRequired();
++
++                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.InventoryPpeNormSetEntity", null)
++                        .WithMany()
++                        .HasForeignKey("NormSetId")
++                        .OnDelete(DeleteBehavior.Restrict)
++                        .IsRequired();
++                });
++
+             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.RolePermissionEntity", b =>
+                 {
+                     b.HasOne("Patrol360.Infrastructure.Persistence.Entities.PermissionEntity", "Permission")
+diff --git a/libs/infrastructure/Persistence/Patrol360DbContext.cs b/libs/infrastructure/Persistence/Patrol360DbContext.cs
+index d18d5e4..ff7fbd7 100644
+--- a/libs/infrastructure/Persistence/Patrol360DbContext.cs
++++ b/libs/infrastructure/Persistence/Patrol360DbContext.cs
+@@ -218,6 +218,8 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
+ 
+     protected override void OnModelCreating(ModelBuilder modelBuilder)
+     {
++        modelBuilder.ApplyConfiguration(new PpeIssueDocumentConfiguration());
++        modelBuilder.ApplyConfiguration(new PpeIssueFactConfiguration());
+         ConfigureRoutes(modelBuilder);
+         ConfigureRoutePoints(modelBuilder);
+         ConfigureRouteRevisions(modelBuilder);
+@@ -1703,10 +1705,13 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
+ 
+         modelBuilder.Entity<InventoryPpeNormSetEntity>(entity =>
+         {
++            entity.Property(row => row.DepartmentName).HasColumnName("department_name").HasMaxLength(500);
++            entity.Property(row => row.PositionAliasesJson).HasColumnName("position_aliases_json").HasColumnType("jsonb");
++            entity.Property(row => row.ScopeConfirmed).HasColumnName("scope_confirmed");
+             entity.ToTable("ppe_norm_sets", "inventory");
+             entity.HasKey(row => row.Id);
+             entity.Property(row => row.Id).HasColumnName("id");
+-            entity.Property(row => row.PositionName).HasColumnName("position_name").HasMaxLength(200).IsRequired();
++            entity.Property(row => row.PositionName).HasColumnName("position_name").HasMaxLength(4000).IsRequired();
+             entity.Property(row => row.VersionName).HasColumnName("version_name").HasMaxLength(120).IsRequired();
+             entity.Property(row => row.EffectiveFrom).HasColumnName("effective_from");
+             entity.Property(row => row.EffectiveTo).HasColumnName("effective_to");
+@@ -1718,11 +1723,15 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
+             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+             entity.Property(row => row.ArchivedAt).HasColumnName("archived_at");
+             entity.HasIndex(row => new { row.PositionName, row.Status }).HasDatabaseName("ix_inventory_ppe_norm_sets_position_status");
+-            entity.HasIndex(row => new { row.PositionName, row.VersionName }).IsUnique().HasDatabaseName("ux_inventory_ppe_norm_sets_position_version");
++            entity.HasIndex(row => new { row.DepartmentName, row.PositionName, row.VersionName }).IsUnique().HasDatabaseName("ux_inventory_ppe_norm_sets_scope_version");
+         });
+ 
+         modelBuilder.Entity<InventoryPpeNormRowEntity>(entity =>
+         {
++            entity.Property(row => row.PeriodMonths).HasColumnName("period_months");
++            entity.Property(row => row.UnitSymbol).HasColumnName("unit_symbol").HasMaxLength(40);
++            entity.Property(row => row.RequirementKey).HasColumnName("requirement_key");
++            entity.Property(row => row.AlternativeGroup).HasColumnName("alternative_group").HasMaxLength(120);
+             entity.ToTable("ppe_norm_rows", "inventory");
+             entity.HasKey(row => row.Id);
+             entity.Property(row => row.Id).HasColumnName("id");
+@@ -1744,6 +1753,10 @@ public sealed class Patrol360DbContext(DbContextOptions<Patrol360DbContext> opti
+ 
+         modelBuilder.Entity<InventoryPpeNormCatalogMappingEntity>(entity =>
+         {
++            entity.Property(row => row.IsApproved).HasColumnName("is_approved");
++            entity.Property(row => row.NormUnitsPerItem).HasColumnName("norm_units_per_item").HasPrecision(18, 6);
++            entity.Property(row => row.ApprovedBy).HasColumnName("approved_by").HasMaxLength(240);
++            entity.Property(row => row.ApprovalEvidence).HasColumnName("approval_evidence").HasMaxLength(2000);
+             entity.ToTable("ppe_norm_catalog_mappings", "inventory");
+             entity.HasKey(row => row.Id);
+             entity.Property(row => row.Id).HasColumnName("id");
+diff --git a/libs/infrastructure/Persistence/Patrol360DbSeeder.cs b/libs/infrastructure/Persistence/Patrol360DbSeeder.cs
+index cd6aeb1..6029493 100644
+--- a/libs/infrastructure/Persistence/Patrol360DbSeeder.cs
++++ b/libs/infrastructure/Persistence/Patrol360DbSeeder.cs
+@@ -533,7 +533,10 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
+         var allPermissionCodes = await dbContext.Permissions
+             .Select(permission => permission.Code)
+             .ToListAsync(cancellationToken);
+-        var inventoryAll = CreateInventoryPermissions().Select(permission => permission.Code).ToArray();
++        var inventoryAll = CreateInventoryPermissions()
++            .Select(permission => permission.Code)
++            .Where(code => !string.Equals(code, "inventory.ppe.norms.manage", StringComparison.OrdinalIgnoreCase))
++            .ToArray();
+ 
+         await EnsureRolePermissionsAsync(AdminRoleId, allPermissionCodes, cancellationToken);
+         await EnsureRolePermissionsAsync(ManagerRoleId, inventoryAll, cancellationToken);
+@@ -927,6 +930,7 @@ internal sealed class Patrol360DbSeeder(Patrol360DbContext dbContext, IConfigura
+         CreatePermission("11111111-9999-9999-9999-999999999952", "inventory.issue.manage", "Inventory: выдача, возврат и списание"),
+         CreatePermission("11111111-9999-9999-9999-999999999953", "inventory.custody.manage", "Inventory: под запись"),
+         CreatePermission("11111111-9999-9999-9999-999999999954", "inventory.ppe.manage", "Inventory: СИЗ"),
++        CreatePermission("11111111-9999-9999-9999-999999999962", "inventory.ppe.norms.manage", "Inventory: управление нормами СИЗ"),
+         CreatePermission("11111111-9999-9999-9999-999999999955", "inventory.reports.view", "Inventory: просмотр отчетов"),
+         CreatePermission("11111111-9999-9999-9999-999999999956", "inventory.reports.export", "Inventory: экспорт отчетов и печатных форм"),
+         CreatePermission("11111111-9999-9999-9999-999999999957", "inventory.settings.manage", "Inventory: настройки и справочники"),

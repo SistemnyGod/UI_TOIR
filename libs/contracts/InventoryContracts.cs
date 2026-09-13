@@ -436,7 +436,10 @@ public sealed record InventoryPpeNormSetDto(
     string Status,
     bool RequiresReview,
     long Version,
-    int RowsCount);
+    int RowsCount,
+    string DepartmentName = "",
+    IReadOnlyList<string>? PositionAliases = null,
+    bool ScopeConfirmed = false);
 
 public sealed record InventoryPpeNormRowDto(
     Guid Id,
@@ -449,7 +452,11 @@ public sealed record InventoryPpeNormRowDto(
     decimal Quantity,
     string QuantityText,
     int? LifeMonths,
-    IReadOnlyList<InventoryPpeNormMappingDto> Mappings);
+    IReadOnlyList<InventoryPpeNormMappingDto> Mappings,
+    string UnitSymbol = "",
+    int? PeriodMonths = null,
+    Guid RequirementKey = default,
+    string AlternativeGroup = "");
 
 public sealed record InventoryPpeNormSetDetailDto(
     InventoryPpeNormSetDto NormSet,
@@ -480,7 +487,11 @@ public sealed record InventoryPpeNormMappingDto(
     string BrandModelArticle,
     long? DefaultUnitPriceMinor,
     bool IsDefault,
-    string Comment);
+    string Comment,
+    bool IsApproved = false,
+    decimal NormUnitsPerItem = 1m,
+    string ApprovedBy = "",
+    string ApprovalEvidence = "");
 
 public sealed record InventoryPpeNormCandidateDto(
     Guid NormRowId,
