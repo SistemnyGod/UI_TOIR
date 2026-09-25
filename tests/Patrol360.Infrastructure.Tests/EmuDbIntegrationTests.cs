@@ -19,6 +19,34 @@ public sealed class EmuDbIntegrationTests
     private static readonly Guid SidorovEmployeeId = Guid.Parse("aaaaaaaa-3333-3333-3333-333333333333");
 
     [DbIntegrationFact]
+    public async Task DashboardKeepsParticipantsAndRecentAuditWithoutLoadingFullAuditOrPauses()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+        var section = UseCatalog(provider, catalog => catalog.GetSettings()).Sections.First();
+        var created = UseWork(provider, work => work.CreateWorkSession(
+            new EmuCreateWorkSessionDto(DateOnly.FromDateTime(DateTime.UtcNow), section.Id, DateTimeOffset.UtcNow,
+                [IvanovEmployeeId], "Dashboard bounded loading"), null, "integration"));
+        Assert.True(created.Succeeded);
+        var counter = new MobileUploadQueryCounter();
+        await using var context = new Patrol360DbContext(new DbContextOptionsBuilder<Patrol360DbContext>()
+            .UseNpgsql(database.ConnectionString).AddInterceptors(counter).Options);
+        var service = new EfEmuService(context);
+        var dashboard = service.GetDashboard([section.Id]);
+        var work = Assert.Single(dashboard.ActiveWork, x => x.Id == created.Value!.Id);
+        Assert.Contains(work.Employees, x => x.EmployeeId == IvanovEmployeeId);
+        Assert.Contains(dashboard.RecentEvents, x => x.WorkSessionId == work.Id);
+        var auditTable = context.Model.FindEntityType(typeof(EmuWorkAuditEventEntity))!.GetTableName()!;
+        var pausesTable = context.Model.FindEntityType(typeof(EmuWorkPauseEntity))!.GetTableName()!;
+        var auditSql = Assert.Single(counter.Commands, sql => sql.Contains(auditTable));
+        Assert.Contains("LIMIT", auditSql);
+        Assert.DoesNotContain(counter.Commands, sql => sql.Contains(pausesTable));
+        Assert.Empty(service.GetDashboard([]).ActiveWork);
+        Assert.Empty(service.GetDashboard([]).RecentEvents);
+    }
+
+    [DbIntegrationFact]
     public async Task WorkSessionListLoadsAttachmentsWithOneBatchedQuery()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
@@ -2500,12 +2528,14 @@ public sealed class EmuDbIntegrationTests
     private sealed class MobileUploadQueryCounter : DbCommandInterceptor
     {
         public int Reads { get; private set; }
+        public List<string> Commands { get; } = [];
 
         public override InterceptionResult<DbDataReader> ReaderExecuting(
             DbCommand command,
             CommandEventData eventData,
             InterceptionResult<DbDataReader> result)
         {
+            Commands.Add(command.CommandText);
             if (command.CommandText.Contains("mobile_uploaded_files", StringComparison.OrdinalIgnoreCase))
             {
                 Reads++;

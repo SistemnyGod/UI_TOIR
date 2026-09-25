@@ -1,4 +1,5 @@
 import * as LocalAuthentication from "expo-local-authentication";
+import { resolvePatrolStartPath } from '@/services/patrolNavigationService';
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text } from "react-native";
@@ -99,7 +100,7 @@ export default function OfflineLoginRoute() {
       // open. NetInfo has already emitted its event in that case, so request
       // one non-blocking pass explicitly after unlocking the local session.
       void runMobileRecoveryCycle("appActive", "normal");
-      router.replace((consumePendingSessionRoute() ?? "/(tabs)/patrol") as never);
+      router.replace((consumePendingSessionRoute() ?? await resolvePatrolStartPath()) as never);
     } catch {
       setAuthError("На устройстве не настроена безопасная блокировка. Офлайн-данные не открыты.");
     } finally {

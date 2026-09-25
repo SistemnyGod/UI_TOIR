@@ -48,6 +48,8 @@ internal sealed partial class EfMobileAppService
 
         public string? ConfirmationType { get; init; }
 
+        public string? ManualReason { get; init; }
+
         public string? NfcUidHash { get; init; }
 
         public DateTimeOffset? CompletedAtLocal { get; init; }

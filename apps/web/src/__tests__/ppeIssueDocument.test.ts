@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { isPpeIssueDocumentConfirmable, mergeServerLines, problemMessagesOf, toLineInput, validateDraftLines } from "../features/inventory/PpeIssueDocumentConstructor";
+import { formatDocumentStatus, formatNormQuantity, formatRuDate, isPpeIssueDocumentConfirmable, mergeServerLines, parsePriceInput, problemMessagesOf, toLineInput, validateDraftLines } from "../features/inventory/PpeIssueDocumentConstructor";
 import { PpeIssueDocumentConstructor } from "../features/inventory/PpeIssueDocumentConstructor";
 import { ApiError } from "../api/client";
 import { InventoryRepositoryProvider } from "../repositories/inventoryRepositoryContext";
@@ -34,7 +34,7 @@ describe("PPE issue document confirmation", () => {
 
   it("does not include server display fields in the persisted line fingerprint", () => {
     const input = toLineInput({ id: "line", normRowId: "norm", itemId: "item", issueDate: "2026-09-08", quantity: 1, unitPriceMinor: 100, itemName: "Каска", normName: "Защита головы", unitSymbol: "ед. не подтверждена", approved: true });
-    expect(input).toEqual({ id: "line", normRowId: "norm", itemId: "item", issueDate: "2026-09-08", quantity: 1, unitPriceMinor: 100, sizeText: "", exceptionReason: "", manualControlConfirmed: false });
+    expect(input).toEqual({ id: "line", normRowId: "norm", itemId: "item", issueDate: "2026-09-08", quantity: 1, unitPriceMinor: 100, sizeText: "", exceptionReason: "", manualControlConfirmed: false, lifeMonths: null });
   });
 
   it("ignores stale norm list and norm detail responses", async () => {
@@ -62,9 +62,13 @@ describe("PPE issue document confirmation", () => {
     } as never));
 
     render(createElement(InventoryRepositoryProvider, { value: repository }, createElement(PpeIssueDocumentConstructor, { canManage: true, onNavigate: vi.fn(), onNotify: vi.fn() })));
-    const employeeSelect = await screen.findByLabelText("Сотрудник");
-    await user.selectOptions(employeeSelect, employeeA.id);
-    await user.selectOptions(employeeSelect, employeeB.id);
+    const employeeSelect = await screen.findByRole("combobox", { name: "Сотрудник" });
+    const chooseEmployee = async (name: string) => {
+      await user.click(employeeSelect);
+      await user.click(await screen.findByRole("option", { name: new RegExp(name) }));
+    };
+    await chooseEmployee("Первый Сотрудник");
+    await chooseEmployee("Второй Сотрудник");
     expect(await screen.findByRole("option", { name: "B · 2" })).toBeInTheDocument();
     releaseEmployeeA([normA]);
     await waitFor(() => expect(screen.queryByRole("option", { name: "A · 1" })).not.toBeInTheDocument());
@@ -77,6 +81,79 @@ describe("PPE issue document confirmation", () => {
     expect(await screen.findByText("Товар второй нормы")).toBeInTheDocument();
     releaseNormB1(normDetailFixture(normB1.id, "Устаревший товар"));
     await waitFor(() => expect(screen.queryByText("Устаревший товар")).not.toBeInTheDocument());
+  });
+
+  it("keeps a restored draft read-only without manage permission or PUT mutations", async () => {
+    const storage = new Map<string, string>();
+    Object.defineProperty(window, "localStorage", { configurable: true, value: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key), clear: () => storage.clear() } });
+    const repository = createMockInventoryRepository();
+    const employee = { id: "employee", fullName: "Сотрудник", personnelNo: "1", position: "Монтажник", department: "Цех", status: "active" };
+    const detail = normDetailFixture("norm", "Каска snapshot");
+    (detail.rows[0].mappings as unknown[]) = [{ id: "mapping", normRowId: "norm-row", itemId: "item", itemName: "Каска readonly", itemSku: "PPE-1", brandModelArticle: "", isDefault: true, isApproved: true }];
+    const restored = { id: "document", version: 4, status: "draft", createdAt: "2026-09-13T00:00:00Z", confirmedAt: null, content: { employee: { ...employee, details: { gender: "", height: "", clothingSize: "", shoeSize: "", headSize: "", respiratorSize: "", handProtectionSize: "" } }, normSetId: "norm", normSetVersion: 1, normVersionName: "1", normSourceName: "test", documentDate: "2026-09-13", responsibleName: "Ответственный", basis: "Приказ", normRows: detail.rows, lines: [] }, validation: { errors: [], warnings: [], entitlements: [], totalMinor: 0 } };
+    vi.spyOn(repository, "getEmployees").mockResolvedValue({ rows: [employee], total: 1, page: 1, pageSize: 200, pageCount: 1 } as never);
+    vi.spyOn(repository, "getPpeIssueDocument").mockResolvedValue(restored as never);
+    vi.spyOn(repository, "getPpeIssueDocumentNorms").mockResolvedValue([{ id: "norm", positionName: "Монтажник", versionName: "1" }] as never);
+    vi.spyOn(repository, "getPpeNormSet").mockResolvedValue(detail as never);
+    vi.spyOn(repository, "getPpeIssueDocuments").mockResolvedValue([{ id: "document", version: 4, employeeId: employee.id, employeeName: "Сотрудник", documentDate: "2026-09-13", status: "confirmed", linesCount: 0, totalMinor: 0 }]);
+    const update = vi.spyOn(repository, "updatePpeIssueDocument");
+
+    render(createElement(InventoryRepositoryProvider, { value: repository }, createElement(PpeIssueDocumentConstructor, { currentUserId: "readonly", onNavigate: vi.fn(), onNotify: vi.fn() })));
+    const employeeSelect = await screen.findByRole("combobox", { name: "Сотрудник" });
+    expect(employeeSelect).toBeEnabled();
+    const user = userEvent.setup();
+    await user.click(employeeSelect);
+    await user.click(await screen.findByRole("option", { name: /Сотрудник.*1/ }));
+    const historyDocument = await screen.findByRole("button", { name: /13\.09\.2026.*Подтверждён.*0 строк/ });
+    await userEvent.setup().click(historyDocument);
+    await screen.findByText("Каска snapshot");
+    expect(screen.queryByRole("button", { name: "Новая выдача" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Добавить полный комплект" })).not.toBeInTheDocument();
+    const product = screen.getByText("Каска snapshot");
+    expect(product.closest("button")).toBeNull();
+    fireEvent.click(product);
+    await new Promise((resolve) => window.setTimeout(resolve, 550));
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("ignores a stale PDF preview response after another form is requested", async () => {
+    const storage = new Map<string, string>([["patrol360.inventory.ppe.issue-document.preview-user", "document"]]);
+    Object.defineProperty(window, "localStorage", { configurable: true, value: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key), clear: () => storage.clear() } });
+    const repository = createMockInventoryRepository();
+    const employee = { id: "employee", fullName: "Сотрудник", personnelNo: "1", position: "Монтажник", department: "Цех", status: "active" };
+    const detail = normDetailFixture("norm", "Каска");
+    const restored = { id: "document", version: 4, status: "confirmed", createdAt: "2026-09-13T00:00:00Z", confirmedAt: "2026-09-13T01:00:00Z", content: { employee: { ...employee, details: { gender: "", height: "", clothingSize: "", shoeSize: "", headSize: "", respiratorSize: "", handProtectionSize: "" } }, normSetId: "norm", normSetVersion: 1, normVersionName: "1", normSourceName: "test", documentDate: "2026-09-13", responsibleName: "Ответственный", basis: "Приказ", normRows: detail.rows, lines: [] }, validation: { errors: [], warnings: [], entitlements: [], totalMinor: 0 } };
+    vi.spyOn(repository, "getEmployees").mockResolvedValue({ rows: [employee], total: 1, page: 1, pageSize: 200, pageCount: 1 } as never);
+    vi.spyOn(repository, "getPpeIssueDocument").mockResolvedValue(restored as never);
+    let releaseNorms!: (value: unknown) => void;
+    let releaseSignature!: (value: unknown) => void;
+    const norms = new Promise((resolve) => { releaseNorms = resolve; });
+    const signature = new Promise((resolve) => { releaseSignature = resolve; });
+    vi.spyOn(repository, "printPpeIssueDocument").mockImplementation((_id, type) => (type === "norms" ? norms : signature) as never);
+    const createObjectURL = vi.fn((blob: Blob) => blob.size === 1 ? "blob:signature" : "blob:norms");
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+
+    render(createElement(InventoryRepositoryProvider, { value: repository }, createElement(PpeIssueDocumentConstructor, { currentUserId: "preview-user", canExport: true, onNavigate: vi.fn(), onNotify: vi.fn() })));
+    await screen.findByText("Выдача подтверждена");
+    await userEvent.click(screen.getByRole("button", { name: "Подготовить выбранную форму" }));
+    await userEvent.click(screen.getByRole("button", { name: /02 · Выдача и подписи/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Подготовить выбранную форму" }));
+    releaseSignature({ blob: new Blob(["s"]), downloadName: "signature.pdf" });
+    await waitFor(() => expect(screen.getByTitle("Печатный PDF")).toHaveAttribute("src", "blob:signature"));
+    releaseNorms({ blob: new Blob(["norms"]), downloadName: "norms.pdf" });
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it("formats norm quantities, statuses, dates, and commits prices without rewriting partial input", () => {
+    expect(formatNormQuantity({ quantity: 1, quantityText: "1 шт.", unitSymbol: "шт." })).toBe("1 шт.");
+    expect(formatNormQuantity({ quantity: 2, quantityText: "", unitSymbol: "пара" })).toBe("2 пара");
+    expect(formatDocumentStatus("confirmed")).toBe("Подтверждён");
+    expect(formatRuDate("2026-09-13T10:00:00Z")).toBe("13.09.2026");
+    expect(parsePriceInput("12,")).toBeUndefined();
+    expect(parsePriceInput("12,5")).toBe(1250);
+    expect(parsePriceInput("")).toBeNull();
   });
 });
 

@@ -1,17 +1,79 @@
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAppTheme } from "@/features/settings/themePreference";
 import { Card } from "@/ui/Card";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
+import { useConnectionStatus } from "@/core/connectionStatus";
+import { getDatabase } from "@/db/database";
+import { getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { currentContourId } from "@/core/environments";
+import { getPatrolDeviceContext } from "@/db/repositories/patrolContextRepository";
+import { readBackgroundSyncState } from "@/sync/backgroundSyncState";
+import { getPatrolOfflineReadiness } from "@/db/repositories/patrolOfflineReadinessRepository";
 
 export default function SettingsRoute() {
   const router = useRouter();
   const { colors, effectiveScheme, preference } = useAppTheme();
+  const connection = useConnectionStatus();
+  const [summary, setSummary] = useState({ pending: 0, files: 0, points: 0, employees: 0, sections: 0, snapshotReady: false, readinessReason: "Маршрут не выбран", syncAt: null as string | null });
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  useFocusEffect(useCallback(() => {
+    let mounted = true;
+    void (async () => {
+      const owner = await getStoredOwnerUserId();
+      if (!owner) {
+        if (mounted) setSummary({ pending: 0, files: 0, points: 0, employees: 0, sections: 0, snapshotReady: false, readinessReason: "Маршрут не выбран", syncAt: null });
+        return;
+      }
+      const [db, context, sync] = await Promise.all([getDatabase(), getPatrolDeviceContext(), readBackgroundSyncState()]);
+      const [pending, files, readiness, employees, sections] = await Promise.all([
+        db.getFirstAsync<{ count: number }>("SELECT COUNT(*) AS count FROM outbox_commands WHERE owner_user_id = ? AND contour_id = ? AND status NOT IN ('accepted', 'duplicate', 'cancelled', 'superseded')", [owner, currentContourId]),
+        db.getFirstAsync<{ count: number }>("SELECT COUNT(*) AS count FROM files WHERE owner_user_id = ? AND (contour_id = ? OR contour_id IS NULL) AND server_file_id IS NULL", [owner, currentContourId]),
+        getPatrolOfflineReadiness(owner, context.assignmentId),
+        db.getFirstAsync<{ count: number }>("SELECT COUNT(*) AS count FROM mobile_employees WHERE owner_user_id = ?", [owner]),
+        db.getFirstAsync<{ count: number }>("SELECT COUNT(*) AS count FROM emu_sections")
+      ]);
+      if (mounted) {
+        setSummary({ pending: pending?.count ?? 0, files: files?.count ?? 0, points: readiness.pointCount, employees: employees?.count ?? 0, sections: sections?.count ?? 0, snapshotReady: readiness.ready, readinessReason: readiness.reason, syncAt: sync.lastSuccessfulSyncAt });
+        setSummaryError(null);
+      }
+    })().catch(() => {
+      if (mounted) {
+        setSummary(prev => ({ ...prev, snapshotReady: false }));
+        setSummaryError("Не удалось прочитать локальное состояние. Повторите открытие настроек.");
+      }
+    });
+    return () => { mounted = false; };
+  }, []));
 
   return (
     <Screen title="Настройки" subtitle="Персонализация, аккаунт, сервер, диагностика и восстановление отправки.">
+      <Card>
+        <View style={styles.headerRow}>
+          <View style={styles.headerText}>
+            <Text style={[styles.title, { color: colors.text }]}>Связь и отправка</Text>
+            <Text style={[styles.text, { color: colors.mutedText }]}>Последняя успешная синхронизация: {summary.syncAt ? new Date(summary.syncAt).toLocaleString("ru-RU") : "ещё не было"}.</Text>
+          </View>
+          <StatusPill label={connection === "connected" ? "На связи" : connection === "authorizationRequired" ? "Нужен вход" : "Нет связи"} tone={connection === "connected" ? "success" : "warning"} />
+        </View>
+        <SettingsRow label="Ожидают отправки" value={`${summary.pending} действий, ${summary.files} файлов`} onPress={() => router.push("/settings/sync-queue" as never)} />
+        {connection === "authorizationRequired" ? <SettingsRow label="Войти" value="Подтвердить доступ к серверу" onPress={() => router.push("/(auth)/login")} /> : null}
+        {connection !== "connected" && connection !== "authorizationRequired" ? <SettingsRow label="Проверить очередь" value="Посмотреть сохранённые результаты и ошибки" onPress={() => router.push("/settings/sync-queue" as never)} /> : null}
+      </Card>
+
+      <Card>
+        <Text style={[styles.title, { color: colors.text }]}>Работа без сети</Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>Текущий маршрут: {summary.points > 0 ? `загружено точек: ${summary.points}` : "не выбран или ещё не загружен"}.</Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>Справочники: сотрудников — {summary.employees}, участков — {summary.sections}.</Text>
+        <StatusPill label={summary.snapshotReady ? "Готовность подтверждена" : "Готовность не подтверждена"} tone={summary.snapshotReady ? "success" : "warning"} />
+        <Text style={[styles.text, { color: colors.mutedText }]}>{summary.readinessReason}.</Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>Результаты и фотографии остаются на телефоне до подтверждения сервером.</Text>
+        {summaryError ? <Text style={[styles.text, { color: "#b91c1c" }]}>{summaryError}</Text> : null}
+      </Card>
       <Card>
         <View style={styles.headerRow}>
           <View style={styles.headerText}>
@@ -46,6 +108,9 @@ export default function SettingsRoute() {
       </Card>
 
       <Card>
+        <Text style={[styles.title, { color: colors.text }]}>Дополнительно</Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>Сервер, технические логи и диагностика для настройки и поддержки.</Text>
+        <SettingsRow label="Адрес сервера" value="Проверка подключения и локальный HTTP для пилота" onPress={() => router.push("/(auth)/server-settings")} />
         <Text style={[styles.title, { color: colors.text }]}>Диагностика</Text>
         <Text style={[styles.text, { color: colors.mutedText }]}>
           Автоматический отчёт об ошибках, ручная отправка логов и безопасная проверка канала диагностики.
@@ -57,29 +122,6 @@ export default function SettingsRoute() {
         />
       </Card>
 
-      <Card>
-        <Text style={[styles.title, { color: colors.text }]}>Сервер</Text>
-        <Text style={[styles.text, { color: colors.mutedText }]}>
-          Адрес backend API для входа, загрузки заявок, отправки отчётов и файлов.
-        </Text>
-        <SettingsRow
-          label="Адрес сервера"
-          value="Проверка подключения и локальный HTTP для пилота"
-          onPress={() => router.push("/(auth)/server-settings")}
-        />
-      </Card>
-
-      <Card>
-        <Text style={[styles.title, { color: colors.text }]}>Режим работы</Text>
-        <Text style={[styles.text, { color: colors.mutedText }]}>
-          Приложение хранит обходы локально и отправляет отчёт автоматически после появления интернета.
-        </Text>
-        <View style={styles.pills}>
-          <StatusPill label="Offline-first" tone="success" />
-          <StatusPill label="NFC" tone="success" />
-          <StatusPill label="Фото и видео" tone="neutral" />
-        </View>
-      </Card>
     </Screen>
   );
 }

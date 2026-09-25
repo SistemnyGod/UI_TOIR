@@ -11,6 +11,7 @@ type ThemeColors = {
   border: string;
   card: string;
   mutedText: string;
+  onDark: string;
   navBackground: string;
   navBorder: string;
   primary: string;
@@ -34,6 +35,7 @@ const lightColors: ThemeColors = {
   border: "#dbe5f2",
   card: "#ffffff",
   mutedText: "#607089",
+  onDark: "#f5f7fa",
   navBackground: "#ffffff",
   navBorder: "#dbe5f2",
   primary: "#1e5bff",
@@ -47,6 +49,7 @@ const darkColors: ThemeColors = {
   border: "#22324a",
   card: "#0f1f35",
   mutedText: "#b6c2d2",
+  onDark: "#f5f7fa",
   navBackground: "#0d1d33",
   navBorder: "#22324a",
   primary: "#4b7cff",

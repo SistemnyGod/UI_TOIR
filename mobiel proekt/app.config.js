@@ -111,9 +111,36 @@ function withPilotNetworkSecurityConfig(config) {
       const configPath = path.join(resourcePath, "network_security_config.xml");
       const backupRulesPath = path.join(resourcePath, "backup_rules.xml");
       const dataExtractionRulesPath = path.join(resourcePath, "data_extraction_rules.xml");
-      const localCleartextDomains = localCleartextHosts.length > 0
+      const configuredLocalRootCa = process.env.PATROL360_ANDROID_LOCAL_ROOT_CA;
+      const localRootCaSource = configuredLocalRootCa
+        ? path.resolve(configuredLocalRootCa)
+        : path.join(__dirname, "..", "infra", "docker", "certs", "patrol360.rootCA.crt");
+      const rawResourcePath = path.join(
+        modConfig.modRequest.platformProjectRoot,
+        "app",
+        "src",
+        "main",
+        "res",
+        "raw"
+      );
+      const localHttpsTrustConfig = configuredDefaultEnvironment === "local-enterprise"
         ? `    <domain-config cleartextTrafficPermitted="true">
-${localCleartextHosts.map((host) => `        <domain includeSubdomains="true">${host}</domain>`).join("\n")}
+        <domain includeSubdomains="false">192.168.2.194</domain>
+        <trust-anchors>
+            <certificates src="@raw/patrol360_local_root_ca" />
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+`
+        : "";
+      // The enterprise host has its own HTTPS trust configuration above.
+      // Android rejects duplicate domain entries even when the surrounding
+      // domain-config blocks have different cleartext settings, so exclude it
+      // from the generic compatibility block.
+      const genericCleartextHosts = localCleartextHosts.filter((host) => host !== "192.168.2.194");
+      const localCleartextDomains = genericCleartextHosts.length > 0
+        ? `    <domain-config cleartextTrafficPermitted="true">
+${genericCleartextHosts.map((host) => `        <domain includeSubdomains="true">${host}</domain>`).join("\n")}
     </domain-config>
 `
         : "";
@@ -125,10 +152,17 @@ ${localCleartextHosts.map((host) => `        <domain includeSubdomains="true">${
         </trust-anchors>
     </base-config>
 ${localCleartextDomains}
-</network-security-config>
+${localHttpsTrustConfig}</network-security-config>
 `;
 
       await fs.promises.mkdir(resourcePath, { recursive: true });
+      if (configuredDefaultEnvironment === "local-enterprise") {
+        if (!fs.existsSync(localRootCaSource)) {
+          throw new Error("Не найден публичный Patrol360 Local Root CA для корпоративной Android-сборки.");
+        }
+        await fs.promises.mkdir(rawResourcePath, { recursive: true });
+        await fs.promises.copyFile(localRootCaSource, path.join(rawResourcePath, "patrol360_local_root_ca.crt"));
+      }
       await fs.promises.writeFile(configPath, securityConfig, "utf8");
       await fs.promises.writeFile(
         backupRulesPath,

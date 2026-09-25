@@ -8,6 +8,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { startConnectionMonitor } from "@/core/connectionStatus";
 import { bootstrapApplication } from "@/core/bootstrap";
 import { classifyStartupError, StartupState } from "@/core/startupState";
 import { SessionGateProvider, SessionGuard } from "@/auth/SessionGate";
@@ -25,6 +26,7 @@ import { cancelNextOutboxRetry, scheduleNextOutboxRetry } from "@/sync/outboxRet
 import { resolvePushNavigationTarget } from "@/services/pushNavigationResolver";
 
 export default function RootLayout() {
+  useEffect(() => { startConnectionMonitor(); }, []);
   const queryClient = useMemo(() => new QueryClient(), []);
   const [startupState, setStartupState] = useState<StartupState>({ status: "initializing" });
   const isReady = startupState.status === "ready";

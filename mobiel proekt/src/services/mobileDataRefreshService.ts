@@ -2,6 +2,7 @@ import { refreshStoredAccessTokenIfNeeded } from "@/api/httpClient";
 import { getBootstrap } from "@/api/mobileApi";
 import { hasUsableNetwork } from "@/core/network";
 import { saveBootstrap } from "@/db/repositories/bootstrapRepository";
+import { refreshPatrolAppealsPage } from "@/db/repositories/patrolAppealRepository";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { refreshPushRegistrationIfAllowed, syncMobileNotifications } from "@/services/notificationService";
@@ -48,8 +49,13 @@ async function refreshMobileDataInternal() {
     void logMobileError("mobile.refresh.push-registration.failed", error);
   }
 
-  const bootstrap = await getBootstrap(accessToken);
+  const bootstrap = await getBootstrap(accessToken, { patrolAppealsPaging: true, workItemsPaging: true });
   const snapshotUpdated = await saveBootstrap(bootstrap);
+  if (bootstrap.patrolAppealsPaging) {
+    await refreshPatrolAppealsPage().catch((error) => {
+      void logMobileError("mobile.refresh.patrol-appeals.failed", error);
+    });
+  }
   if (snapshotUpdated) {
     emitSyncEvent({
       acceptedOperationIds: [],

@@ -1,0 +1,12 @@
+.ppe-employee-combobox { position:relative; min-width:0; display:grid; gap:6px; }
+.ppe-employee-combobox-control { display:flex; min-width:0; border:1px solid #b8c9df; border-radius:8px; background:#fff; }
+.ppe-employee-combobox-control:focus-within { border-color:#0865db; outline:2px solid #dbeafe; }
+.inventory-web-shell .ppe-document-screen .ppe-employee-combobox-control input { border:0; box-shadow:none; outline:none; background:transparent; flex:1; min-width:0; width:0; }
+.ppe-employee-combobox-control button { display:grid; place-items:center; min-width:44px; min-height:44px; border:0; border-radius:8px; background:transparent; color:#385477; }
+.ppe-employee-combobox-popup { position:absolute; top:100%; margin-top:4px; left:0; right:0; z-index:30; max-height:300px; overflow:auto; overscroll-behavior:contain; border:1px solid #b8c9df; border-radius:8px; background:white; box-shadow:0 8px 24px #18345d24; }
+.ppe-employee-combobox-option { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; min-height:48px; cursor:pointer; color:#18345d; }
+.ppe-employee-combobox-option.is-active { background:#eaf3ff; }
+.ppe-employee-combobox-option strong { display:block; font-size:14px; font-weight:500; }
+.ppe-employee-combobox-option small { display:block; margin-top:3px; color:#52627a; font-size:12px; overflow-wrap:anywhere; }
+.ppe-employee-combobox-popup p { padding:12px; color:#52627a; font-size:14px; }
+@media(max-width:767px) { .inventory-web-shell .ppe-document-screen .ppe-employee-combobox-control input { font-size:16px; } }

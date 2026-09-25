@@ -1,15 +1,30 @@
-import { mobileRequest } from "@/api/httpClient";
+import { mobileRequest, MobileHttpError } from "@/api/httpClient";
 import { MobileApiProtocolError } from "@/api/protocolValidation";
 import { getMobileRuntimeConfig } from "@/core/serverSettings";
-import { bootstrapResponseSchema, outboxResponseSchema, unknownResponseSchema } from "@/api/schemas";
+import { bootstrapResponseSchema, outboxResponseSchema, patrolAppealPageResponseSchema, workItemPageResponseSchema, unknownResponseSchema } from "@/api/schemas";
 import { BootstrapDto } from "@/domain/patrol/patrolTypes";
 import { OutboxCommand, OutboxResponse } from "@/domain/sync/syncTypes";
 import { MobileDiagnosticReport } from "@/db/repositories/diagnosticReportRepository";
 
-export function getBootstrap(accessToken?: string) {
+export function getBootstrap(accessToken?: string, options: { patrolAppealsPaging?: boolean; workItemsPaging?: boolean } = {}) {
   return mobileRequest<BootstrapDto>("/api/v1/mobile/bootstrap", bootstrapResponseSchema, {
-    accessToken
+    accessToken,
+    headers: options.patrolAppealsPaging || options.workItemsPaging ? { "X-Patrol360-Mobile-Features": [options.patrolAppealsPaging ? "patrolAppealsPaging,patrolAppealsAssignmentPaging" : "", options.workItemsPaging ? "workItemsPaging" : ""].filter(Boolean).join(",") } : undefined
   });
+}
+
+export function getWorkItemsPage(scope: "active" | "history", employeeId?: string | null, cursor?: string | null, pageSize = 25) {
+  const query = new URLSearchParams({ scope, pageSize: String(pageSize) });
+  if (employeeId) query.set("employeeId", employeeId);
+  if (cursor) query.set("cursor", cursor);
+  return mobileRequest(`/api/v2/mobile/work-items/page?${query.toString()}`, workItemPageResponseSchema);
+}
+
+export function getPatrolAppealsPage(pageSize = 25, cursor: string | null = null, assignmentId?: string) {
+  const query = new URLSearchParams({ pageSize: String(pageSize) });
+  if (cursor) query.set("cursor", cursor);
+  if (assignmentId) query.set("assignmentId", assignmentId);
+  return mobileRequest(`/api/v1/mobile/patrol-appeals?${query.toString()}`, patrolAppealPageResponseSchema);
 }
 
 export async function postOutbox(commands: OutboxCommand[]) {
@@ -73,7 +88,12 @@ export function validateOutboxResponses(value: unknown, commands: OutboxCommand[
 export function getOutboxResult(clientOperationId: string) {
   return mobileRequest<unknown>(`/api/v1/mobile/outbox/${clientOperationId}`, unknownResponseSchema).then((response) =>
     validateOutboxResponse(response, clientOperationId)
-  );
+  ).catch((error) => {
+    // A 404 means the server has no receipt yet. It is not evidence that the
+    // command was cancelled; the original id must remain retryable.
+    if (error instanceof MobileHttpError && error.status === 404) return null;
+    throw error;
+  });
 }
 
 export function validateOutboxResponse(value: unknown, expectedClientOperationId: string) {

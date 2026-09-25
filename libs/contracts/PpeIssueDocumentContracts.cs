@@ -3,7 +3,7 @@ namespace Patrol360.Contracts;
 public sealed record PpeIssueDocumentLineInput(
     Guid Id, Guid NormRowId, Guid ItemId, DateOnly IssueDate, decimal Quantity,
     long? UnitPriceMinor, string SizeText = "", string ExceptionReason = "",
-    bool ManualControlConfirmed = false);
+    bool ManualControlConfirmed = false, int? LifeMonths = null, string? NormPoint = null);
 
 public sealed record SavePpeIssueDocumentDto(
     Guid EmployeeId, Guid NormSetId, DateOnly DocumentDate,
@@ -16,7 +16,7 @@ public sealed record CancelPpeIssueDocumentDto(long ExpectedVersion);
 
 public sealed record PpeDocumentEmployeeDto(
     Guid Id, string FullName, string PersonnelNo, string Department, string Position,
-    InventoryPpeEmployeeDetailsDto Details);
+    InventoryPpeEmployeeDetailsDto Details, DateOnly? HiredAt = null);
 
 public sealed record PpeDocumentNormDto(
     Guid Id, Guid? ParentRowId, string RowType, int SortOrder, string NormItemName,
@@ -28,7 +28,8 @@ public sealed record PpeDocumentLineDto(
     Guid Id, Guid NormRowId, Guid ItemId, DateOnly IssueDate, decimal Quantity,
     long? UnitPriceMinor, string SizeText, string ExceptionReason, bool ManualControlConfirmed,
     string ItemName, string UnitSymbol, string BrandModelArticle, decimal NormUnitsPerItem,
-    long? TotalMinor);
+    long? TotalMinor, int? LifeMonths = null,
+    IReadOnlyList<InventoryItemStandardDto>? Standards = null, string? NormPoint = null);
 
 public sealed record PpeDocumentContentDto(
     PpeDocumentEmployeeDto Employee, Guid NormSetId, long NormSetVersion,
@@ -50,7 +51,7 @@ public sealed record PpeIssueDocumentDto(
 
 public sealed record PpeIssueDocumentSummaryDto(
     Guid Id, long Version, string Status, Guid EmployeeId, string EmployeeName,
-    DateOnly DocumentDate, int LinesCount, long? TotalMinor);
+    DateOnly DocumentDate, int LinesCount, long? TotalMinor, string Department = "", string PersonnelNo = "", bool HasOverdue = false);
 
 public sealed record PpeNormApprovalDto(
     long ExpectedVersion, string DepartmentName, IReadOnlyList<string> PositionAliases);

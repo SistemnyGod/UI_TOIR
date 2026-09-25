@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const appRoot = dirname(fileURLToPath(import.meta.url));
 const devServerPort = parsePort(process.env.PATROL360_WEB_DEV_PORT, 5174);
+const apiProxyTarget = process.env.PATROL360_API_PROXY_TARGET || "http://localhost:5080";
 
 function parsePort(value: string | undefined, fallback: number) {
   const parsed = Number(value);
@@ -98,8 +99,8 @@ export default defineConfig({
     strictPort: true,
     allowedHosts: ["localhost", "127.0.0.1", "192.168.2.194"],
     proxy: {
-      "/api": "http://localhost:5080",
-      "/health": "http://localhost:5080"
+      "/api": apiProxyTarget,
+      "/health": apiProxyTarget
     }
   },
   preview: {
@@ -107,8 +108,8 @@ export default defineConfig({
     port: 5176,
     strictPort: true,
     proxy: {
-      "/api": "http://localhost:5080",
-      "/health": "http://localhost:5080"
+      "/api": apiProxyTarget,
+      "/health": apiProxyTarget
     }
   },
   test: {

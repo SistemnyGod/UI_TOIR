@@ -19,8 +19,8 @@
   --ppe-ui-radius-control: 8px;
   --ppe-ui-radius-panel: 10px;
   --ppe-ui-radius-modal: 12px;
-  --ppe-ui-shadow-panel: 0 1px 2px rgb(15 30 56 / 4%);
-  --ppe-ui-shadow-active: 0 8px 20px rgb(37 99 235 / 12%);
+  --ppe-ui-shadow-panel: none;
+  --ppe-ui-shadow-active: none;
   --ppe-ui-shadow-modal: 0 24px 70px rgb(15 31 55 / 28%);
 }
 
@@ -33,8 +33,8 @@
   display: inline-flex;
   flex: 0 0 auto;
   font: inherit;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: 14px;
+  font-weight: 600;
   gap: 7px;
   justify-content: center;
   line-height: 1.15;
@@ -47,7 +47,10 @@
 
 .ppe-ui-button.is-compact { min-height: 32px; padding-inline: 10px; }
 .ppe-ui-button.is-touch { min-height: 44px; padding-inline: 15px; }
-.ppe-ui-button.is-primary {
+.ppe-ui-button.is-primary,
+.inventory-web-shell .ppe-v2-screen .ppe-ui-button.is-primary {
+  background-image:none;
+  box-shadow:none;
   background: var(--ppe-ui-primary);
   border-color: var(--ppe-ui-primary);
   color: #fff;
@@ -192,14 +195,22 @@
   border-radius: var(--ppe-ui-radius-control);
   color: var(--ppe-ui-text);
 }
-.ppe-v2-table,
-.ppe-issue-table { color: var(--ppe-ui-text); }
+.inventory-web-shell .ppe-v2-table,
+.ppe-issue-table { color: var(--ppe-ui-text); font-size:14px; font-weight:400; }
+.ppe-v2-screen .ppe-v2-table td strong { font-size:14px; font-weight:600; }
+.ppe-v2-screen .ppe-v2-table td small { font-size:12px; }
+.ppe-v2-screen .ppe-v2-page-head h1 { font-size:26px; font-weight:700; }
+.ppe-v2-screen .ppe-v2-employee-identity h2 { font-size:20px; font-weight:600; }
+.ppe-v2-screen .ppe-v2-employee-list strong { font-weight:600; }
+.ppe-v2-screen .ppe-v2-employee-list small { font-size:12px; font-weight:400; }
 .ppe-v2-table thead th,
 .ppe-issue-table thead th {
   background: var(--ppe-ui-surface-soft);
   color: #526985;
-  font-size: 10px;
-  letter-spacing: .025em;
+  font-size: 12px;
+  font-weight:600;
+  text-transform:none;
+  letter-spacing:0;
 }
 .ppe-v2-table th,
 .ppe-v2-table td,
@@ -230,7 +241,10 @@
 .ppe-v2-operation-summary > div {
   border-radius: var(--ppe-ui-radius-control);
 }
-.ppe-v2-kpis > span { background: var(--ppe-ui-surface); border-color: var(--ppe-ui-border); }
+.ppe-v2-kpis > span { background:transparent; border:0; border-radius:0; }
+.ppe-v2-screen .ppe-v2-employee-head { border:0; border-bottom:1px solid var(--ppe-ui-border); border-radius:0; }
+.ppe-v2-kpis .is-danger strong { color:#b91c1c; }
+.ppe-v2-kpis .is-warn strong { color:#92400e; }
 .ppe-v2-mode-tabs,
 .ppe-issue-selection-tabs,
 .ppe-issue-print-toolbar { border-color: var(--ppe-ui-border); }
@@ -268,6 +282,8 @@
 @keyframes ppe-ui-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 640px) {
+  .ppe-v2-screen .ppe-v2-page-head h1 { font-size:22px; }
+  .ppe-v2-screen .ppe-v2-employee-identity h2 { font-size:18px; }
   .ppe-ui-button:not(.is-compact):not(.is-link) { min-height: 44px; }
   .ppe-ui-button.is-icon { height: 44px; min-height: 44px; min-width: 44px; width: 44px; }
   .ppe-ui-modal-backdrop { padding: 0; }

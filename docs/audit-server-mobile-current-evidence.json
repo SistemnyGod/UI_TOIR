@@ -1,0 +1,136 @@
+[
+  {
+    "case": "Generated Android network security XML",
+    "duplicateDomains": [
+      "192.168.2.194"
+    ]
+  },
+  {
+    "case": "Repository public certificate",
+    "subject": "C=RU\nST=Sverdlovsk\nL=Yekaterinburg\nO=Atom Minerals\nOU=Patrol360 Local\nCN=192.168.2.194",
+    "issuer": "C=RU\nST=Sverdlovsk\nL=Yekaterinburg\nO=Atom Minerals\nOU=Patrol360 Local CA\nCN=Patrol360 Local Root CA",
+    "validFrom": "May 21 13:29:13 2026 GMT",
+    "validTo": "Aug 23 13:29:13 2028 GMT",
+    "ipMatches": "192.168.2.194",
+    "signatureMatchesCA": true
+  },
+  {
+    "case": "Continue B after archived operation receipt 404",
+    "statusAfterReconciliation": "superseded",
+    "syncRequests": 1,
+    "expectedStatus": "retryLater"
+  },
+  {
+    "case": "Completion schema and attachment identity",
+    "payloadOutcomes": [
+      {
+        "payload": "{\"pointResults\":[{}]}",
+        "delivered": true
+      },
+      {
+        "payload": "{\"pointResults\":[null]}",
+        "delivered": true
+      },
+      {
+        "payload": "{\"pointResults\":[{\"photoClientFileIds\":\"broken\"}]}",
+        "delivered": true
+      },
+      {
+        "payload": "null",
+        "throws": "Cannot read properties of null (reading 'pointResults')"
+      },
+      {
+        "payload": "{bad",
+        "delivered": false
+      }
+    ],
+    "foreignFileAccepted": true
+  },
+  {
+    "case": "File retry after account change",
+    "uploadCalls": [
+      {
+        "fileOwner": "alice",
+        "token": "token-A"
+      },
+      {
+        "fileOwner": "alice",
+        "token": "token-B"
+      }
+    ]
+  },
+  {
+    "case": "Delayed QR callback after leaving",
+    "staleRoutes": [
+      "/patrol/assignment/OLD/point/p/fill"
+    ]
+  },
+  {
+    "case": "Point blur closes controller before autosave",
+    "writes": []
+  },
+  {
+    "case": "Point saved but next transition failed; second main-button press",
+    "pointSaves": 1,
+    "nextAttempts": 1,
+    "remainsFinalizing": true,
+    "message": "Метка сохранена, но переход к следующей точке не выполнен."
+  },
+  {
+    "case": "Appeals: 25 cached + 40 new",
+    "cursors": [
+      null
+    ],
+    "cached": 50,
+    "total": 65,
+    "notFetched": 15
+  },
+  {
+    "case": "Older appeals added before ascending local cursor",
+    "olderAdded": 25,
+    "shownOnNextPage": 0
+  },
+  {
+    "case": "Final persisted appeal page is not displayed",
+    "cacheReads": 0,
+    "hasMore": false
+  },
+  {
+    "case": "Appeal load invalidated by sync reload or blur",
+    "loadingMoreRemains": true
+  },
+  {
+    "case": "Opening appeals offline skips cached records",
+    "cacheReads": 0
+  },
+  {
+    "case": "Report journal cannot reveal cached next page offline",
+    "cached": 75,
+    "visible": 25,
+    "httpAttempts": 1
+  },
+  {
+    "case": "Corrupted work boundary, interruption, process restart",
+    "interrupted": {
+      "boundary_json": "broken",
+      "refresh_mode": "recovery",
+      "in_progress_cursor": "25"
+    },
+    "resumedCursors": [
+      null,
+      "25",
+      "50",
+      "75",
+      "100"
+    ],
+    "totalSaved": 115
+  },
+  {
+    "case": "HTTPS policy positive checks",
+    "corrected": "https://192.168.2.194",
+    "secureCandidates": [
+      "https://192.168.2.194"
+    ],
+    "preservedHttp": "http://192.168.2.194:5173"
+  }
+]

@@ -22,7 +22,7 @@ internal sealed partial class EfEmuService
         var activeOrder = activeQuery
             .Select((id, index) => new { id, index })
             .ToDictionary(row => row.id, row => row.index);
-        var active = LoadSessions(asNoTracking: true)
+        var active = LoadSessions(asNoTracking: true, includeAuditEvents: false, includePauses: false)
             .Where(row => activeQuery.Contains(row.Id))
             .ToList()
             .OrderBy(row => activeOrder[row.Id])
@@ -36,7 +36,6 @@ internal sealed partial class EfEmuService
         var waiting = active.Count(row => row.Employees.Any(employee => employee.Status == EmployeeWaiting || employee.Status == EmployeeOtherWork));
         var forgotten = active.Where(row => row.IsCarriedOver || row.WorkDate < today).ToList();
         var recentEventsQuery = dbContext.EmuWorkAuditEvents.AsNoTracking()
-            .Include(row => row.WorkSession)
             .AsQueryable();
         if (allowedSectionIds is not null || createdByUserId is not null)
         {

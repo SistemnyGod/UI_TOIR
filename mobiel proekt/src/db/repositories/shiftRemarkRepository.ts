@@ -8,6 +8,7 @@ import { insertOutboxCommandInTransaction } from "@/db/repositories/outboxSql";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
+import { deleteWorkDraftInTransaction } from "@/db/repositories/workDraftRepository";
 
 export type ShiftRemark = {
   remarkId: string;
@@ -31,6 +32,7 @@ export async function createShiftRemarkLocally(input: {
   sectionName: string;
   employeeId: string;
   employeeName: string;
+  draftEmployeeId?: string;
   mediaClientFileIds?: string[];
 }) {
   const ownerUserId = await getStoredOwnerUserId();
@@ -106,6 +108,7 @@ export async function createShiftRemarkLocally(input: {
         attemptCount: 0,
         status: "pending"
       });
+      await deleteWorkDraftInTransaction(tx, ownerUserId, input.draftEmployeeId ?? input.employeeId, "remark");
     })
   );
 
@@ -201,13 +204,41 @@ export async function attachMediaToShiftRemark(remarkId: string, file: LocalMobi
   requestSyncAfterMutation();
 }
 
-export async function listShiftRemarks(limit = 20) {
+export type ShiftRemarkPage = {
+  items: ShiftRemark[];
+  nextCursor: string | null;
+};
+
+type ShiftRemarkCursor = { createdAtLocal: string; remarkId: string };
+
+function encodeShiftRemarkCursor(row: { created_at_local: string; remark_id: string }) {
+  return JSON.stringify({ createdAtLocal: row.created_at_local, remarkId: row.remark_id } satisfies ShiftRemarkCursor);
+}
+
+function decodeShiftRemarkCursor(value: string | null | undefined): ShiftRemarkCursor | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<ShiftRemarkCursor>;
+    return typeof parsed.createdAtLocal === "string" && typeof parsed.remarkId === "string"
+      ? { createdAtLocal: parsed.createdAtLocal, remarkId: parsed.remarkId }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function listShiftRemarksPage(limit = 25, cursor: string | null = null): Promise<ShiftRemarkPage> {
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
-    return [];
+    return { items: [], nextCursor: null };
   }
 
   const db = await getDatabase();
+  const parsedCursor = decodeShiftRemarkCursor(cursor);
+  const pageSize = Math.max(1, Math.min(limit, 100));
+  const continuation = parsedCursor ? " AND (created_at_local < ? OR (created_at_local = ? AND remark_id < ?))" : "";
+  const values: (string | number)[] = [ownerUserId];
+  if (parsedCursor) values.push(parsedCursor.createdAtLocal, parsedCursor.createdAtLocal, parsedCursor.remarkId);
   const rows = await db.getAllAsync<{
     remark_id: string;
     title: string;
@@ -237,14 +268,16 @@ export async function listShiftRemarks(limit = 20) {
         employee_name,
         sync_status
       FROM shift_remarks
-      WHERE owner_user_id = ?
-      ORDER BY created_at_local DESC
+      WHERE owner_user_id = ?${continuation}
+      ORDER BY created_at_local DESC, remark_id DESC
       LIMIT ?
     `,
-    [ownerUserId, limit]
+    [...values, pageSize + 1]
   );
 
-  return rows.map((row) => ({
+  const pageRows = rows.slice(0, pageSize);
+  return {
+    items: pageRows.map((row) => ({
     remarkId: row.remark_id,
     title: row.title,
     comment: row.comment,
@@ -257,7 +290,21 @@ export async function listShiftRemarks(limit = 20) {
     employeeId: row.employee_id,
     employeeName: row.employee_name,
     syncStatus: row.sync_status
-  }));
+    })),
+    nextCursor: rows.length > pageSize ? encodeShiftRemarkCursor(pageRows[pageRows.length - 1]) : null
+  };
+}
+
+/** Backwards-compatible full read for sync/bootstrap code. UI uses the page API. */
+export async function listShiftRemarks(limit = 20) {
+  const items: ShiftRemark[] = [];
+  let cursor: string | null = null;
+  do {
+    const page = await listShiftRemarksPage(Math.max(1, Math.min(limit, 100)), cursor);
+    items.push(...page.items);
+    cursor = page.nextCursor;
+  } while (cursor && items.length < limit);
+  return items.slice(0, limit);
 }
 
 function safeParseStringArray(value: string) {

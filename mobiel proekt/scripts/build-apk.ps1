@@ -140,12 +140,16 @@ else {
   Join-Path $ProjectRoot $OutputDirectory
 }
 
-$sourceRevision = (& git -C $ProjectRoot rev-parse HEAD 2>$null | Select-Object -First 1).Trim()
-if ($LASTEXITCODE -ne 0 -or $sourceRevision -notmatch '^[0-9a-fA-F]{40}$') {
+$sourceRevisionOutput = & git -C $ProjectRoot rev-parse --verify HEAD 2>$null
+$sourceRevisionExitCode = $LASTEXITCODE
+$sourceRevisionLine = $sourceRevisionOutput | Select-Object -First 1
+$sourceRevision = if ($null -eq $sourceRevisionLine) { '' } else { $sourceRevisionLine.ToString().Trim() }
+if ($sourceRevisionExitCode -ne 0 -or $sourceRevision -notmatch '^[0-9a-fA-F]{40}$') {
   throw "Cannot resolve source revision for Android build."
 }
 $sourceStatus = & git -C $ProjectRoot status --porcelain --untracked-files=normal 2>$null
-if ($LASTEXITCODE -ne 0) {
+$sourceStatusExitCode = $LASTEXITCODE
+if ($sourceStatusExitCode -ne 0) {
   throw "Cannot resolve source dirty state for Android build."
 }
 $env:PATROL360_SOURCE_COMMIT = $sourceRevision
@@ -297,6 +301,15 @@ try {
   $env:GRADLE_OPTS = "-Xmx4096m -Dfile.encoding=UTF-8"
   $env:NODE_ENV = if ($Configuration -eq "Release") { "production" } else { "development" }
   $env:Path = "$JavaHome\bin;$AndroidSdk\platform-tools;$env:Path"
+  if ($Patrol360Environment -eq "local-enterprise") {
+    $localRootCa = Join-Path (Split-Path -Parent $ProjectRoot) "infra\docker\certs\patrol360.rootCA.crt"
+    if (Test-Path -LiteralPath $localRootCa) {
+      # The build is copied outside the repository, so app.config.js cannot
+      # resolve the CA through a relative path. Keep the source path explicit
+      # and copy only the public certificate into the generated APK resources.
+      $env:PATROL360_ANDROID_LOCAL_ROOT_CA = $localRootCa
+    }
+  }
 
   Write-Host "Generating Android project..."
   Invoke-Checked "npx" "expo" "prebuild" "--platform" "android" "--clean" "--no-install"

@@ -13,7 +13,7 @@ internal sealed partial class EfEmuService
     public EmuWorkSessionChangesDto GetWorkSessionChanges(DateTimeOffset since, IReadOnlyList<Guid>? allowedSectionIds = null, Guid? createdByUserId = null)
     {
         var now = DateTimeOffset.UtcNow;
-        var rows = ApplyOwnerScope(ApplySectionScope(LoadSessions(), allowedSectionIds), createdByUserId)
+        var rows = ApplyOwnerScope(ApplySectionScope(LoadSessions(asNoTracking: true, includeAuditEvents: false), allowedSectionIds), createdByUserId)
             .Where(row => row.UpdatedAt > since.ToUniversalTime())
             .OrderBy(row => row.UpdatedAt)
             .ToList();

@@ -13,21 +13,33 @@ import { requiresClientFileHash } from "@/sync/fileHash";
 import { FileUploadHttpError, PermanentFileUploadError } from "@/domain/files/fileUploadPolicy";
 import { MAX_PHOTO_BYTES, MAX_VIDEO_BYTES } from "@/domain/files/fileUploadLimits";
 import { fileUploadResponseSchema } from "@/api/schemas";
+import { assertDataOwnerContext, captureDataOwnerContext } from "@/auth/dataOwnerContext";
 
 
 export async function uploadMobileFile(file: LocalMobileFile) {
+  const context = await captureDataOwnerContext();
+  if (file.ownerUserId !== context.ownerUserId || (file.contourId && file.contourId !== context.contourId)) {
+    throw new PermanentFileUploadError("Вложение относится к другой сессии аккаунта и не будет отправлено.", file.clientFileId || "unknown");
+  }
   await validateMobileFileBeforeUpload(file);
+  await assertDataOwnerContext(context);
 
   await refreshStoredAccessTokenIfNeeded();
+  await assertDataOwnerContext(context);
   const token = await getAccessToken();
   const runtimeConfig = await getMobileRuntimeConfig();
+  await assertDataOwnerContext(context);
   let { apiBaseUrl, result } = await uploadFileWithFailover(runtimeConfig.apiBaseUrl, runtimeConfig.syncProtocolVersion, runtimeConfig.contourId, file, token);
+  await assertDataOwnerContext(context);
 
   // Keep attachment upload consistent with JSON requests when only the
   // refresh token remains available.
   if (result.status === 401) {
+    await assertDataOwnerContext(context);
     const refreshedToken = await refreshStoredAccessToken();
+    await assertDataOwnerContext(context);
     ({ result } = await uploadFileWithFailover(apiBaseUrl, runtimeConfig.syncProtocolVersion, runtimeConfig.contourId, file, refreshedToken));
+    await assertDataOwnerContext(context);
   }
 
   if (result.status === 401) {

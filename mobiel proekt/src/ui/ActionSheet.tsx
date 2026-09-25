@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAppTheme } from "@/features/settings/themePreference";
@@ -38,7 +38,7 @@ export function ActionSheet({
               <Ionicons color={colors.mutedText} name="close" size={22} />
             </Pressable>
           </View>
-          <View style={styles.actions}>
+          <ScrollView style={{ maxHeight: 480 }} contentContainerStyle={styles.actions}>
             {actions.map((action) => (
               <Pressable
                 accessibilityRole="button"
@@ -62,7 +62,7 @@ export function ActionSheet({
                 <Ionicons color={colors.mutedText} name="chevron-forward" size={18} />
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
         </View>
       </View>
     </Modal>

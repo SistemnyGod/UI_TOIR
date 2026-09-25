@@ -119,6 +119,8 @@ public sealed partial class Patrol360DbContext(DbContextOptions<Patrol360DbConte
 
     internal DbSet<InventoryPpeIssueTemplateEntity> InventoryPpeIssueTemplates => Set<InventoryPpeIssueTemplateEntity>();
 
+    internal DbSet<InventoryPpeIssueTemplateLineEntity> InventoryPpeIssueTemplateLines => Set<InventoryPpeIssueTemplateLineEntity>();
+
     internal DbSet<InventoryItemSetEntity> InventoryItemSets => Set<InventoryItemSetEntity>();
 
     internal DbSet<InventoryItemSetItemEntity> InventoryItemSetItems => Set<InventoryItemSetItemEntity>();
@@ -244,6 +246,7 @@ public sealed partial class Patrol360DbContext(DbContextOptions<Patrol360DbConte
         ConfigureMobileSyncConflictResolutions(modelBuilder);
         ConfigureMobileUploadedFiles(modelBuilder);
         ConfigureMobileShiftRemarks(modelBuilder);
+        ConfigureMobilePatrolAppeals(modelBuilder);
         ConfigureSiteUsers(modelBuilder);
         ConfigureRoles(modelBuilder);
         ConfigurePermissions(modelBuilder);
@@ -688,7 +691,7 @@ public sealed partial class Patrol360DbContext(DbContextOptions<Patrol360DbConte
                 .HasDatabaseName("ix_assignments_employee_status");
             entity.HasIndex(assignment => assignment.EmployeeId)
                 .IsUnique()
-                .HasFilter("status IN ('В пути', 'Приостановлена')")
+                .HasFilter("status = 'В пути'")
                 .HasDatabaseName("ux_assignments_employee_started");
             entity.HasIndex(assignment => new { assignment.EmployeeId, assignment.StatusCode })
                 .HasDatabaseName("ix_assignments_employee_status_code");
@@ -1024,6 +1027,7 @@ public sealed partial class Patrol360DbContext(DbContextOptions<Patrol360DbConte
             entity.Property(item => item.ModelName).HasColumnName("model_name").HasMaxLength(140).IsRequired();
             entity.Property(item => item.Article).HasColumnName("article").HasMaxLength(140).IsRequired();
             entity.Property(item => item.ProtectionClass).HasColumnName("protection_class").HasMaxLength(140).IsRequired();
+            entity.Property(item => item.StandardsJson).HasColumnName("standards_json").HasColumnType("jsonb").IsRequired();
             entity.Property(item => item.ClothingSize).HasColumnName("clothing_size").HasMaxLength(80).IsRequired();
             entity.Property(item => item.HeightSize).HasColumnName("height_size").HasMaxLength(80).IsRequired();
             entity.Property(item => item.ShoeSize).HasColumnName("shoe_size").HasMaxLength(80).IsRequired();
@@ -1428,7 +1432,41 @@ public sealed partial class Patrol360DbContext(DbContextOptions<Patrol360DbConte
             entity.HasIndex(row => row.LegacyId).HasDatabaseName("ix_inventory_ppe_events_legacy_id");
         });
 
-        ConfigureSimpleInventoryEntity<InventoryPpeIssueTemplateEntity>(modelBuilder, "ppe_issue_templates");
+        modelBuilder.Entity<InventoryPpeIssueTemplateEntity>(entity =>
+        {
+            entity.ToTable("ppe_issue_templates", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.LegacyId).HasColumnName("legacy_id");
+            entity.Property(row => row.Name).HasColumnName("name").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.IsArchived).HasColumnName("is_archived");
+            entity.Property(row => row.NormSetId).HasColumnName("norm_set_id");
+            entity.Property(row => row.OwnerUserId).HasColumnName("owner_user_id");
+            entity.Property(row => row.OwnerName).HasColumnName("owner_name").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.IsShared).HasColumnName("is_shared");
+            entity.Property(row => row.Version).HasColumnName("version").IsConcurrencyToken();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => row.LegacyId).HasDatabaseName("ix_inventory_ppe_issue_templates_legacy_id");
+            entity.HasIndex(row => new { row.OwnerUserId, row.IsArchived, row.UpdatedAt }).HasDatabaseName("ix_ppe_issue_templates_owner_archive_updated");
+            entity.HasIndex(row => new { row.IsShared, row.IsArchived, row.UpdatedAt }).HasDatabaseName("ix_ppe_issue_templates_shared_archive_updated");
+        });
+        modelBuilder.Entity<InventoryPpeIssueTemplateLineEntity>(entity =>
+        {
+            entity.ToTable("ppe_issue_template_lines", "inventory");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id");
+            entity.Property(row => row.TemplateId).HasColumnName("template_id");
+            entity.Property(row => row.NormRowId).HasColumnName("norm_row_id");
+            entity.Property(row => row.ItemId).HasColumnName("item_id");
+            entity.Property(row => row.ItemName).HasColumnName("item_name").HasMaxLength(500).IsRequired();
+            entity.Property(row => row.UnitSymbol).HasColumnName("unit_symbol").HasMaxLength(40).IsRequired();
+            entity.Property(row => row.Quantity).HasColumnName("quantity").HasPrecision(12, 3);
+            entity.Property(row => row.LifeMonths).HasColumnName("life_months");
+            entity.Property(row => row.UnitPriceMinor).HasColumnName("unit_price_minor");
+            entity.HasOne(row => row.Template).WithMany(row => row.Lines).HasForeignKey(row => row.TemplateId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(row => new { row.TemplateId, row.NormRowId, row.ItemId }).IsUnique().HasDatabaseName("ux_ppe_issue_template_lines_mapping");
+        });
         ConfigureSimpleInventoryEntity<InventoryReturnReasonEntity>(modelBuilder, "return_reasons");
         ConfigureSimpleInventoryEntity<InventoryWriteOffReasonEntity>(modelBuilder, "write_off_reasons");
 

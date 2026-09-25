@@ -30,3 +30,13 @@ test("server cancellation supersedes only commands of the cancelled assignment",
 
   assert.deepEqual(ids, ["start-cancelled", "point-cancelled"]);
 });
+
+test("server cancellation also finds the source side of a pending switch", () => {
+  const ids = getAssignmentCommandIds([{
+    clientOperationId: "switch-a-b",
+    entityLocalId: "b",
+    entityServerId: "b",
+    payloadJson: JSON.stringify({ assignmentId: "b", sourceAssignmentId: "a" })
+  }], "a");
+  assert.deepEqual(ids, ["switch-a-b"]);
+});

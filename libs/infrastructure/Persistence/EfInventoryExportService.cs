@@ -663,7 +663,7 @@ internal static class WordDocumentBuilder
             : new[]
             {
                 line.ItemName,
-                string.IsNullOrWhiteSpace(line.NormPoint) ? "п. 1645 Приложения № 1" : line.NormPoint,
+                line.NormPoint ?? string.Empty,
                 PeriodText(line),
                 QuantityText(line)
             }));
@@ -1032,7 +1032,7 @@ internal static class PpeTemplateDocumentBuilder
                 ? [line.ItemName, string.Empty, string.Empty, string.Empty]
                 : [
                     line.ItemName,
-                    string.IsNullOrWhiteSpace(line.NormPoint) ? "п. 1645 Приложения № 1" : line.NormPoint,
+                    line.NormPoint ?? string.Empty,
                     PeriodText(line),
                     QuantityText(line)
                 ],

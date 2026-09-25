@@ -27,6 +27,9 @@ export type MobileEmuSectionDto = {
 };
 
 export type PatrolRequestBoardItemDto = {
+  assignedEmployeeId?: string | null;
+  performerSelectionAvailable?: boolean;
+  routeSwitchAvailable?: boolean;
   requestId: string;
   displayNumber: string | null;
   routeId: string;
@@ -78,6 +81,7 @@ export type BootstrapConflictResolutionDto = {
 };
 
 export type PatrolAssignmentDto = {
+  employeeId?: string | null;
   assignmentId: string;
   requestId: string;
   routeId: string;
@@ -111,6 +115,18 @@ export type PatrolPointDto = {
   revision: number;
 };
 
+export type PatrolSnapshotManifestPointDto = {
+  pointId: string;
+  revision: number;
+};
+
+export type PatrolSnapshotManifestDto = {
+  routeId: string;
+  routeVersion: number;
+  isComplete: boolean;
+  points: PatrolSnapshotManifestPointDto[];
+};
+
 export type PatrolPointResultStatus = "pending" | "scanned" | "ok" | "issue" | "deferred" | "skipped";
 
 export type PatrolPointResultDto = {
@@ -125,7 +141,18 @@ export type PatrolPointResultDto = {
   completedAtLocal: string | null;
 };
 
+export type PatrolAppeal = { id: string; assignmentId: string; kind: string; message: string; status: string; reply: string | null; createdAt: string; version: number };
+
 export type BootstrapDto = {
+  patrolAppealsAvailable?: boolean;
+  patrolAppealsPaging?: boolean;
+  patrolAppealsAssignmentPaging?: boolean;
+  workItemsPaging?: boolean;
+  patrolSnapshotManifest?: boolean;
+  patrolPointResultStatusExtension?: boolean;
+  boundEmployeesComplete?: boolean;
+  patrolSnapshotManifests?: PatrolSnapshotManifestDto[];
+  patrolAppeals?: PatrolAppeal[];
   user: MobileUserDto;
   device: MobileDeviceDto;
   boundEmployees: MobileEmployeeDto[];

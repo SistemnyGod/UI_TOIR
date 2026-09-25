@@ -1,8 +1,11 @@
-import { classifyMobileNetworkError, fetchWithTimeout, MobileNetworkError, serverHealthTimeoutMs, serverUnavailableMessage, type NetworkErrorKind } from "@/api/networkTimeout";
+import { classifyMobileNetworkError, fetchWithTimeout, withTimeout, MobileNetworkError, serverHealthTimeoutMs, serverUnavailableMessage, type NetworkErrorKind } from "@/api/networkTimeout";
 import { ServerHealthCache } from "@/api/serverHealthCache";
 import { getServerBaseUrl, getServerCandidateBaseUrls, isAllowedServerBaseUrl, normalizeServerBaseUrl, setServerBaseUrl } from "@/core/serverSettings";
 import { currentContourId } from "@/core/environments";
 import { hasUsableNetwork } from "@/core/network";
+import { serverConnectionProbeBudgetMs } from "@/api/serverConnectionPolicy";
+
+export { serverConnectionProbeBudgetMs } from "@/api/serverConnectionPolicy";
 
 export type ServerConnectionFailureKind = "offline" | "serverUnavailable" | "protocolMismatch" | "wrongContour" | "invalidServerAddress";
 
@@ -28,12 +31,19 @@ export type ServerHealthProbe = {
 };
 
 const healthCache = new ServerHealthCache<ServerHealthProbe>();
+// A connection check can try a preferred and fallback address. Keep the whole
+// check short: waiting for every candidate independently made the settings
+// screen appear stuck on unreliable field networks.
 
 function healthCacheKey(serverBaseUrl: string, expectedContourId: string) {
   return expectedContourId + String.fromCharCode(0) + serverBaseUrl;
 }
 
-export async function probeServerHealth(serverBaseUrl: string, expectedContourId = currentContourId): Promise<ServerHealthProbe> {
+export async function probeServerHealth(
+  serverBaseUrl: string,
+  expectedContourId = currentContourId,
+  timeoutMs = serverHealthTimeoutMs
+): Promise<ServerHealthProbe> {
   const healthUrl = `${serverBaseUrl}/api/v1/mobile/health`;
 
   try {
@@ -47,7 +57,7 @@ export async function probeServerHealth(serverBaseUrl: string, expectedContourId
           "X-Patrol360-Contour": expectedContourId
         }
       },
-      serverHealthTimeoutMs
+      timeoutMs
     );
 
     if (!response.ok) {
@@ -88,10 +98,11 @@ export async function probeServerHealth(serverBaseUrl: string, expectedContourId
 /** Used by ordinary API calls; explicit connection checks stay uncached. */
 export async function probeServerHealthCached(
   serverBaseUrl: string,
-  expectedContourId = currentContourId
+  expectedContourId = currentContourId,
+  timeoutMs = serverHealthTimeoutMs
 ): Promise<ServerHealthProbe> {
   const key = healthCacheKey(serverBaseUrl, expectedContourId);
-  return healthCache.getOrProbe(key, () => probeServerHealth(serverBaseUrl, expectedContourId));
+  return healthCache.getOrProbe(key, () => probeServerHealth(serverBaseUrl, expectedContourId, timeoutMs));
 }
 
 export function invalidateServerHealthCache(serverBaseUrl?: string, expectedContourId = currentContourId) {
@@ -100,7 +111,7 @@ export function invalidateServerHealthCache(serverBaseUrl?: string, expectedCont
 
 export async function checkServerConnection(
   rawServerBaseUrl?: string,
-  options: { useCache?: boolean } = {}
+  options: { useCache?: boolean; persist?: boolean } = {}
 ): Promise<ServerConnectionCheckResult> {
   let serverBaseUrls: string[];
 
@@ -113,7 +124,7 @@ export async function checkServerConnection(
         message: "Адрес сервера не разрешён для текущего контура."
       };
     }
-    serverBaseUrls = await getServerCandidateBaseUrls(serverBaseUrl);
+    serverBaseUrls = rawServerBaseUrl ? [serverBaseUrl] : await getServerCandidateBaseUrls(serverBaseUrl);
   } catch (error) {
     return {
       ok: false,
@@ -129,15 +140,25 @@ export async function checkServerConnection(
   let lastContourId: string | undefined;
   let lastExpectedContourId: string | undefined;
 
+  const startedAt = Date.now();
   for (const serverBaseUrl of serverBaseUrls) {
+    const remainingMs = serverConnectionProbeBudgetMs - (Date.now() - startedAt);
+    if (remainingMs <= 0) {
+      lastProblem ??= "Превышено общее время проверки серверов.";
+      break;
+    }
     checkedUrls.push(serverBaseUrl);
-    const probe = options.useCache
-      ? await probeServerHealthCached(serverBaseUrl)
-      : await probeServerHealth(serverBaseUrl);
+    // A cache hit may share a probe that started with a longer timeout. Bound
+    // this caller's wait too, without cancelling a probe used by another request.
+    const probe: ServerHealthProbe = await withTimeout(options.useCache
+      ? probeServerHealthCached(serverBaseUrl, currentContourId, Math.min(serverHealthTimeoutMs, remainingMs))
+      : probeServerHealth(serverBaseUrl, currentContourId, Math.min(serverHealthTimeoutMs, remainingMs)), remainingMs)
+      .catch(() => ({ ok: false, errorKind: "timeout", failureKind: "serverUnavailable",
+        message: "Превышено общее время проверки серверов." } as ServerHealthProbe));
     lastStatus = probe.status ?? lastStatus;
 
     if (probe.ok) {
-      await setServerBaseUrl(serverBaseUrl).catch(() => undefined);
+      if (options.persist) await setServerBaseUrl(serverBaseUrl);
       return {
         ok: true,
         message: `Сервер доступен: ${serverBaseUrl}`,

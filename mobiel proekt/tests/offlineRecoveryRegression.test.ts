@@ -38,8 +38,8 @@ test("unchanged bootstrap does not notify every screen", () => {
 });
 
 test("pending EMU mutations keep locally visible values during stale server refresh", () => {
-  assert.match(workTaskSource, /title = CASE WHEN work_tasks\.sync_status <> 'synced' THEN work_tasks\.title ELSE excluded\.title END/);
-  assert.match(workTaskSource, /section_id = CASE WHEN work_tasks\.sync_status <> 'synced' THEN work_tasks\.section_id ELSE excluded\.section_id END/);
+  assert.match(workTaskSource, /title = CASE WHEN work_tasks\.sync_status <> 'synced' OR excluded\.revision < work_tasks\.revision THEN work_tasks\.title ELSE excluded\.title END/);
+  assert.match(workTaskSource, /section_id = CASE WHEN work_tasks\.sync_status <> 'synced' OR excluded\.revision < work_tasks\.revision THEN work_tasks\.section_id ELSE excluded\.section_id END/);
   assert.match(workTaskSource, /capabilities_json = CASE WHEN work_tasks\.sync_status <> 'synced'/);
   assert.match(workTaskSource, /'waiting_auth', 'waiting_network', 'wrong_contour', 'blocked'/);
 });

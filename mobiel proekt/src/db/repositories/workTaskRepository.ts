@@ -1,3 +1,4 @@
+import { captureDataOwnerContext, assertDataOwnerContext, type DataOwnerContext } from "@/auth/dataOwnerContext";
 import * as Crypto from "expo-crypto";
 import * as SQLite from "expo-sqlite";
 
@@ -12,11 +13,19 @@ import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { WorkTaskRow, createWorkTaskOutboxCommand, mapWorkItemRow, mapWorkTaskRow, statusForPendingAction } from "@/db/repositories/workTaskMappers";
 import { insertOutboxCommandInTransaction, type SqlExecutor } from "@/db/repositories/outboxSql";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
+import { deleteWorkDraftInTransaction } from "@/db/repositories/workDraftRepository";
 
-export async function saveWorkItems(items: WorkItemDto[]) {
-  const ownerUserId = await requireOwnerUserId();
+export async function saveWorkItems(
+  items: WorkItemDto[],
+  context?: DataOwnerContext,
+  afterSaveInTransaction?: (tx: SQLite.SQLiteDatabase) => Promise<void>
+) {
+  const ownerContext = context ?? await captureDataOwnerContext();
+  const ownerUserId = ownerContext.ownerUserId;
+  await assertDataOwnerContext(ownerContext);
   const db = await getDatabase();
   await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    await assertDataOwnerContext(ownerContext);
     for (const item of items) {
       const primaryEmployee = item.actualParticipants.find((employee) => employee.isCurrentMobileEmployee)
         ?? item.assignedEmployees.find((employee) => employee.isCurrentMobileEmployee)
@@ -29,29 +38,30 @@ export async function saveWorkItems(items: WorkItemDto[]) {
             task_id, owner_user_id, title, status, planned_at, revision, completed_at_local,
             section_id, section_name, employee_id, employee_name, created_at_local, sync_status,
             item_kind, work_session_id, plan_task_id, description, approval_status, source,
-            assigned_employees_json, actual_participants_json, attachments_json, capabilities_json
+            assigned_employees_json, actual_participants_json, attachments_json, capabilities_json, updated_at_server
           )
-          VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 'synced', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 'synced', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(task_id) DO UPDATE SET
-            title = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.title ELSE excluded.title END,
-            status = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.status ELSE excluded.status END,
-            planned_at = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.planned_at ELSE excluded.planned_at END,
-            revision = excluded.revision,
-            section_id = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.section_id ELSE excluded.section_id END,
-            section_name = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.section_name ELSE excluded.section_name END,
-            employee_id = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.employee_id ELSE excluded.employee_id END,
-            employee_name = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.employee_name ELSE excluded.employee_name END,
-            item_kind = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.item_kind ELSE excluded.item_kind END,
-            work_session_id = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.work_session_id ELSE excluded.work_session_id END,
-            plan_task_id = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.plan_task_id ELSE excluded.plan_task_id END,
-            description = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.description ELSE excluded.description END,
-            approval_status = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.approval_status ELSE excluded.approval_status END,
-            source = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.source ELSE excluded.source END,
-            assigned_employees_json = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.assigned_employees_json ELSE excluded.assigned_employees_json END,
-            actual_participants_json = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.actual_participants_json ELSE excluded.actual_participants_json END,
-            attachments_json = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.attachments_json ELSE excluded.attachments_json END,
-            capabilities_json = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.capabilities_json ELSE excluded.capabilities_json END,
-            sync_status = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.sync_status ELSE 'synced' END
+            title = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.title ELSE excluded.title END,
+            status = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.status ELSE excluded.status END,
+            planned_at = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.planned_at ELSE excluded.planned_at END,
+            revision = CASE WHEN excluded.revision < work_tasks.revision THEN work_tasks.revision ELSE excluded.revision END,
+            updated_at_server = CASE WHEN excluded.revision < work_tasks.revision THEN work_tasks.updated_at_server ELSE excluded.updated_at_server END,
+            section_id = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.section_id ELSE excluded.section_id END,
+            section_name = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.section_name ELSE excluded.section_name END,
+            employee_id = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.employee_id ELSE excluded.employee_id END,
+            employee_name = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.employee_name ELSE excluded.employee_name END,
+            item_kind = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.item_kind ELSE excluded.item_kind END,
+            work_session_id = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.work_session_id ELSE excluded.work_session_id END,
+            plan_task_id = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.plan_task_id ELSE excluded.plan_task_id END,
+            description = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.description ELSE excluded.description END,
+            approval_status = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.approval_status ELSE excluded.approval_status END,
+            source = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.source ELSE excluded.source END,
+            assigned_employees_json = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.assigned_employees_json ELSE excluded.assigned_employees_json END,
+            actual_participants_json = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.actual_participants_json ELSE excluded.actual_participants_json END,
+            attachments_json = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.attachments_json ELSE excluded.attachments_json END,
+            capabilities_json = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.capabilities_json ELSE excluded.capabilities_json END,
+            sync_status = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.sync_status ELSE 'synced' END
         `,
         [
           item.itemId,
@@ -74,34 +84,181 @@ export async function saveWorkItems(items: WorkItemDto[]) {
           JSON.stringify(item.assignedEmployees),
           JSON.stringify(item.actualParticipants),
           JSON.stringify(item.attachments),
-          JSON.stringify(item.capabilities)
+          JSON.stringify(item.capabilities),
+          item.updatedAt ?? null
         ]
       );
     }
+    await assertDataOwnerContext(ownerContext);
+    await afterSaveInTransaction?.(tx);
+    await assertDataOwnerContext(ownerContext);
   }));
 }
 
-export async function listLocalWorkItems(): Promise<WorkItemDto[]> {
+type WorkItemPageCursor = {
+  plannedAt: string | null;
+  createdAtLocal: string | null;
+  itemId: string;
+};
+
+export type LocalWorkItemsPage = {
+  items: WorkItemDto[];
+  nextCursor: string | null;
+};
+
+export type LocalWorkItemsFilter = "all" | "mine" | "available" | "history";
+
+export type LocalWorkItemBoundary = {
+  itemId: string;
+  revision: number;
+  status: string;
+  employeeId: string | null;
+  assignedEmployeesJson: string | null;
+  actualParticipantsJson: string | null;
+};
+
+/** Compact boundary read used by head refresh; it does not hydrate files or cards. */
+export async function listLocalWorkItemBoundaries(filter: LocalWorkItemsFilter = "all", employeeId: string | null = null): Promise<LocalWorkItemBoundary[]> {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) return [];
+  const db = await getDatabase();
+  const values: (string | null)[] = [ownerUserId];
+  let where = "";
+  if (filter === "history") where = " AND status IN ('completedLocal','completedServer','cancelled')";
+  if (filter === "mine") where = " AND status NOT IN ('completedLocal','completedServer','cancelled')";
+  if (employeeId) {
+    where += ` AND (employee_id = ? OR EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(assigned_employees_json) THEN assigned_employees_json ELSE '[]' END) p WHERE json_extract(p.value, '$.employeeId') = ?) OR EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(actual_participants_json) THEN actual_participants_json ELSE '[]' END) p WHERE json_extract(p.value, '$.employeeId') = ?))`;
+    values.push(employeeId, employeeId, employeeId);
+  }
+  const rows = await db.getAllAsync<LocalWorkItemBoundary>(`SELECT task_id AS itemId, revision, status, employee_id AS employeeId, assigned_employees_json AS assignedEmployeesJson, actual_participants_json AS actualParticipantsJson FROM work_tasks WHERE owner_user_id = ?${where}`, values);
+  return rows;
+}
+
+function encodeWorkItemCursor(row: { planned_at: string | null; created_at_local: string | null; task_id: string }) {
+  return JSON.stringify({ plannedAt: row.planned_at, createdAtLocal: row.created_at_local, itemId: row.task_id } satisfies WorkItemPageCursor);
+}
+
+function decodeWorkItemCursor(value: string | null | undefined): WorkItemPageCursor | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<WorkItemPageCursor>;
+    if ((typeof parsed.plannedAt !== "string" && parsed.plannedAt !== null)
+      || (typeof parsed.createdAtLocal !== "string" && parsed.createdAtLocal !== null)
+      || typeof parsed.itemId !== "string") return null;
+    return { plannedAt: parsed.plannedAt ?? null, createdAtLocal: parsed.createdAtLocal ?? null, itemId: parsed.itemId };
+  } catch {
+    return null;
+  }
+}
+
+const workItemSelect = `
+  SELECT *, item_kind, work_session_id, plan_task_id, description, approval_status, source,
+    assigned_employees_json, actual_participants_json, attachments_json,
+    (SELECT COUNT(*) FROM files WHERE files.work_task_id = work_tasks.task_id) AS local_attachment_count,
+    (SELECT COUNT(*) FROM files WHERE files.work_task_id = work_tasks.task_id AND files.media_kind = 'photo') AS local_photo_count,
+    (SELECT COUNT(*) FROM files WHERE files.work_task_id = work_tasks.task_id AND files.media_kind = 'video') AS local_video_count,
+    (SELECT last_error FROM outbox_commands WHERE outbox_commands.entity_local_id = work_tasks.task_id
+        AND outbox_commands.owner_user_id = work_tasks.owner_user_id AND outbox_commands.contour_id = ?
+        AND last_error IS NOT NULL ORDER BY updated_at_local DESC LIMIT 1) AS delivery_error
+  FROM work_tasks
+`;
+
+export async function listLocalWorkItemsPage(limit = 25, cursor: string | null = null, filter: LocalWorkItemsFilter = "all", employeeId: string | null = null): Promise<LocalWorkItemsPage> {
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
-    return [];
+    return { items: [], nextCursor: null };
   }
 
   const db = await getDatabase();
-  const rows = await db.getAllAsync<WorkTaskRow>(
-    `
-      SELECT *, item_kind, work_session_id, plan_task_id, description, approval_status, source,
-        assigned_employees_json, actual_participants_json, attachments_json, capabilities_json,
-        (SELECT COUNT(*) FROM files WHERE files.work_task_id = work_tasks.task_id) AS local_attachment_count,
-        (SELECT COUNT(*) FROM files WHERE files.work_task_id = work_tasks.task_id AND files.media_kind = 'photo') AS local_photo_count,
-        (SELECT COUNT(*) FROM files WHERE files.work_task_id = work_tasks.task_id AND files.media_kind = 'video') AS local_video_count
-      FROM work_tasks
-      WHERE owner_user_id = ?
-      ORDER BY planned_at ASC, created_at_local DESC
-    `,
-    [ownerUserId]
+  const parsedCursor = decodeWorkItemCursor(cursor);
+  const values: (string | number | null)[] = [currentContourId, ownerUserId];
+  let filterClause = "";
+  const participantMatch = employeeId
+    ? `(
+        employee_id = ? OR
+        EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(assigned_employees_json) THEN assigned_employees_json ELSE '[]' END) p WHERE json_extract(p.value, '$.employeeId') = ?) OR
+        EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(actual_participants_json) THEN actual_participants_json ELSE '[]' END) p WHERE json_extract(p.value, '$.employeeId') = ?)
+      )`
+    : "0";
+  if (filter === "mine" && employeeId) {
+    filterClause = ` AND status NOT IN ('completedLocal','completedServer','cancelled') AND ${participantMatch}`;
+    values.push(employeeId, employeeId, employeeId);
+  } else if (filter === "history" && employeeId) {
+    filterClause = ` AND status IN ('completedLocal','completedServer','cancelled') AND ${participantMatch}`;
+    values.push(employeeId, employeeId, employeeId);
+  } else if (filter === "available") {
+    // SQL NOT(NULL) is NULL, which hid unassigned work. COALESCE keeps such
+    // work available while still excluding the selected employee's work.
+    filterClause = ` AND status NOT IN ('completedLocal','completedServer','cancelled')${employeeId ? ` AND NOT COALESCE(${participantMatch}, 0)` : ""}`;
+    if (employeeId) values.push(employeeId, employeeId, employeeId);
+  } else if (filter === "mine" || filter === "history") {
+    filterClause = " AND 0";
+  }
+  let continuation = "";
+  if (parsedCursor) {
+    if (parsedCursor.plannedAt === null) {
+      continuation = ` AND (
+        planned_at IS NOT NULL OR
+        (planned_at IS NULL AND (COALESCE(created_at_local, '') < COALESCE(?, '') OR (COALESCE(created_at_local, '') = COALESCE(?, '') AND task_id > ?)))
+      )`;
+      values.push(parsedCursor.createdAtLocal, parsedCursor.createdAtLocal, parsedCursor.itemId);
+    } else {
+      continuation = ` AND (
+        planned_at > ? OR
+        (planned_at = ? AND (COALESCE(created_at_local, '') < COALESCE(?, '') OR (COALESCE(created_at_local, '') = COALESCE(?, '') AND task_id > ?)))
+      )`;
+      values.push(parsedCursor.plannedAt, parsedCursor.plannedAt, parsedCursor.createdAtLocal, parsedCursor.createdAtLocal, parsedCursor.itemId);
+    }
+  }
+  const rows = await db.getAllAsync<WorkTaskRow & { planned_at: string | null; created_at_local: string | null; task_id: string }>(
+    `${workItemSelect} WHERE owner_user_id = ?${filterClause}${continuation}
+      ORDER BY planned_at ASC, COALESCE(created_at_local, '') DESC, task_id ASC
+      LIMIT ?`,
+    [...values, Math.max(1, Math.min(limit, 100)) + 1]
   );
-  return rows.map(mapWorkItemRow);
+  const pageSize = Math.max(1, Math.min(limit, 100));
+  const pageRows = rows.slice(0, pageSize);
+  return {
+    items: pageRows.map(mapWorkItemRow),
+    nextCursor: rows.length > pageSize ? encodeWorkItemCursor(pageRows[pageRows.length - 1]) : null
+  };
+}
+
+export async function listLocalWorkItems(): Promise<WorkItemDto[]> {
+  const items: WorkItemDto[] = [];
+  let cursor: string | null = null;
+  do {
+    const page = await listLocalWorkItemsPage(100, cursor);
+    items.push(...page.items);
+    cursor = page.nextCursor;
+  } while (cursor);
+  return items;
+}
+
+/** Keeps the locally visible range stable when the work screen is reopened. */
+export async function getWorkListVisibleLimit(scopeKey: string) {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) return 25;
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ visibleLimit: number | null }>(
+    `SELECT visible_limit AS visibleLimit FROM work_item_refresh_state
+      WHERE owner_user_id = ? AND contour_id = ? AND scope_key = ?`,
+    [ownerUserId, currentContourId, scopeKey]
+  );
+  return row?.visibleLimit && row.visibleLimit > 0 ? row.visibleLimit : 25;
+}
+
+export async function setWorkListVisibleLimit(scopeKey: string, visibleLimit: number) {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) return;
+  const db = await getDatabase();
+  await db.runAsync(
+    `INSERT INTO work_item_refresh_state
+      (owner_user_id, contour_id, scope_key, boundary_json, in_progress_cursor, visible_limit, initialized, updated_at)
+      VALUES (?, ?, ?, NULL, NULL, ?, 1, ?)
+      ON CONFLICT(owner_user_id, contour_id, scope_key) DO UPDATE SET visible_limit = excluded.visible_limit, updated_at = excluded.updated_at`,
+    [ownerUserId, currentContourId, scopeKey, Math.max(25, Math.min(10000, visibleLimit)), new Date().toISOString()]
+  );
 }
 
 export type CreateWorkTaskInput = {
@@ -110,6 +267,7 @@ export type CreateWorkTaskInput = {
   sectionId: string;
   sectionName: string;
   taskDescription: string;
+  draftEmployeeId?: string;
 };
 
 export type UpdateWorkTaskInput = {
@@ -117,17 +275,18 @@ export type UpdateWorkTaskInput = {
   sectionId: string;
   sectionName: string;
   taskDescription: string;
+  draftEmployeeId?: string;
 };
 
-export async function saveWorkTasks(tasks: WorkTaskDto[]) {
-  const ownerUserId = await getStoredOwnerUserId();
-  if (!ownerUserId) {
-    return;
-  }
+export async function saveWorkTasks(tasks: WorkTaskDto[], context?: DataOwnerContext) {
+  const ownerContext = context ?? await captureDataOwnerContext();
+  const ownerUserId = ownerContext.ownerUserId;
+  await assertDataOwnerContext(ownerContext);
 
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    await assertDataOwnerContext(ownerContext);
     const pendingActions = await tx.getAllAsync<{
       task_id: string;
       command_type: string;
@@ -210,17 +369,17 @@ export async function saveWorkTasks(tasks: WorkTaskDto[]) {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(task_id) DO UPDATE SET
             owner_user_id = excluded.owner_user_id,
-            title = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.title ELSE excluded.title END,
-            status = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.status ELSE excluded.status END,
-            planned_at = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.planned_at ELSE excluded.planned_at END,
-            revision = excluded.revision,
-            completed_at_local = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.completed_at_local ELSE excluded.completed_at_local END,
-            section_id = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.section_id ELSE excluded.section_id END,
-            section_name = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.section_name ELSE excluded.section_name END,
-            employee_id = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.employee_id ELSE excluded.employee_id END,
-            employee_name = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.employee_name ELSE excluded.employee_name END,
+            title = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.title ELSE excluded.title END,
+            status = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.status ELSE excluded.status END,
+            planned_at = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.planned_at ELSE excluded.planned_at END,
+            revision = CASE WHEN excluded.revision < work_tasks.revision THEN work_tasks.revision ELSE excluded.revision END,
+            completed_at_local = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.completed_at_local ELSE excluded.completed_at_local END,
+            section_id = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.section_id ELSE excluded.section_id END,
+            section_name = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.section_name ELSE excluded.section_name END,
+            employee_id = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.employee_id ELSE excluded.employee_id END,
+            employee_name = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.employee_name ELSE excluded.employee_name END,
             created_at_local = excluded.created_at_local,
-            sync_status = CASE WHEN work_tasks.sync_status <> 'synced' THEN work_tasks.sync_status ELSE excluded.sync_status END
+            sync_status = CASE WHEN work_tasks.sync_status <> 'synced' OR excluded.revision < work_tasks.revision THEN work_tasks.sync_status ELSE excluded.sync_status END
         `,
         [
           task.taskId,
@@ -239,6 +398,7 @@ export async function saveWorkTasks(tasks: WorkTaskDto[]) {
         ]
       );
     }
+    await assertDataOwnerContext(ownerContext);
     })
   );
 }
@@ -371,6 +531,7 @@ export async function createWorkTaskLocally(input: CreateWorkTaskInput) {
       );
 
       await insertOutboxCommandInTransaction(tx, command);
+      await deleteWorkDraftInTransaction(tx, ownerUserId, input.draftEmployeeId ?? input.employeeId, "task");
     })
   );
 
@@ -586,6 +747,9 @@ export async function updateWorkTaskLocally(input: UpdateWorkTaskInput) {
         throw new Error("Работа изменилась до сохранения.");
       }
       await insertOutboxCommandInTransaction(tx, command);
+      if (input.draftEmployeeId) {
+        await deleteWorkDraftInTransaction(tx, ownerUserId, input.draftEmployeeId, "task", currentTask.taskId);
+      }
     })
   );
   requestSyncAfterMutation();
@@ -677,7 +841,7 @@ export async function resumeWorkTaskLocally(task: WorkTaskDto, comment: string) 
   requestSyncAfterMutation();
 }
 
-export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: string) {
+export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: string, draftEmployeeId?: string) {
   const ownerUserId = await requireOwnerUserId();
   assertEmuTaskAction("complete", task.status);
   const comment = resultComment.trim();
@@ -722,6 +886,9 @@ export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: 
         throw new Error("Работа изменилась до сохранения.");
       }
       await insertOutboxCommandInTransaction(tx, command);
+      if (draftEmployeeId) {
+        await deleteWorkDraftInTransaction(tx, ownerUserId, draftEmployeeId, "taskCompletion", currentTask.taskId);
+      }
     })
   );
   requestSyncAfterMutation();

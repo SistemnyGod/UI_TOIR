@@ -1,0 +1,21 @@
+{
+  "artifact": "C:\\Users\\AI_server\\Desktop\\Proekt obhod\\mobiel proekt\\build-output-server-update-debug\\patrol360-mobile-debug.apk",
+  "configuration": "Debug",
+  "environment": "local-enterprise",
+  "sourceRevision": "473f839cae7b790510d149bace9ee953b297f819",
+  "sourceDirty": true,
+  "serverApiImageRevision": "473f839cae7b790510d149bace9ee953b297f819",
+  "serverApiImage": "sha256:faaab79f36a361d82b954324f378458801d4570b13f1e20b1521c442a61da1d0",
+  "serverWorkerImage": "sha256:24970c6e64d4d56a0ed939edb96d850ae5a700a882e60bb509aa7d4ded11f37e",
+  "databaseBackup": "backups/pre-update/patrol360-20260924-081311.dump",
+  "sha256": "2a0628d525b63e82143b9ab4a3c26730db76546d189a86feb3f7111457a0b3dc",
+  "sizeBytes": 110321700,
+  "apiHttpHealth": {
+    "live": 200,
+    "ready": 200
+  },
+  "httpsPortTcp": true,
+  "releaseBuild": "blocked-by-maven-network-timeout",
+  "releaseBlocker": "commons-io-1.4 and error_prone_annotations-2.26.0 unavailable from repo.maven.apache.org",
+  "hardwareAcceptance": "not performed"
+}

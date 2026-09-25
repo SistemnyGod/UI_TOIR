@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ListRenderItem, Pressable, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect, useRouter, useLocalSearchParams } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
+import { ListRenderItem, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { listRequestBoard, RequestBoardItem } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
@@ -15,8 +15,10 @@ import { PrimaryButton } from "@/ui/PrimaryButton";
 import { ScreenList } from "@/ui/Screen";
 import { SelectionTabs, SelectionTransition } from "@/ui/SelectionTabs";
 import { StatusPill } from "@/ui/StatusPill";
+import { captureDataOwnerContext, assertDataOwnerContext } from '@/auth/dataOwnerContext';
+import { clearCurrentPatrolIfMatches, getPatrolDeviceContext } from '@/db/repositories/patrolContextRepository';
 
-type RequestTab = "all" | "history";
+type RequestTab = "all" | "assigned" | "inProgress" | "history";
 
 const historyStatuses = new Set(["completed", "completedServer", "cancelled", "cancelledServer"]);
 
@@ -31,7 +33,9 @@ function requestStatusRank(status: string) {
 
 export function RequestBoardScreen() {
   const router = useRouter();
+  const { notice } = useLocalSearchParams<{ notice?: string }>();
   const { colors } = useAppTheme();
+  const [query, setQuery] = useState("");
   const [items, setItems] = useState<RequestBoardItem[]>([]);
   const [activeTab, setActiveTab] = useState<RequestTab>("all");
   const { beginRefresh, endRefresh, showRefreshIndicator } = useSmoothRefreshIndicator();
@@ -47,6 +51,12 @@ export function RequestBoardScreen() {
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
+      void (async () => {
+        const scope = await captureDataOwnerContext();
+        const context = await getPatrolDeviceContext();
+        await assertDataOwnerContext(scope);
+        if (context.assignmentId) await clearCurrentPatrolIfMatches(scope, context.assignmentId, () => isMounted);
+      })().catch(caught => { if (isMounted) setLoadError(String(caught)); });
       void loadLocal().catch((caught) => {
         void logMobileError("patrol.request-board.load.failed", caught);
         if (isMounted) {
@@ -60,7 +70,7 @@ export function RequestBoardScreen() {
     }, [loadLocal])
   );
 
-  useEffect(() => subscribeToSyncEvents((event) => {
+  useFocusEffect(useCallback(() => subscribeToSyncEvents((event) => {
     const touchesRequests = event.refreshedZones?.includes("requests") === true
       || event.acceptedOperationIds.length > 0
       || (event.changedAssignmentIds?.length ?? 0) > 0
@@ -77,7 +87,7 @@ export function RequestBoardScreen() {
         setLoadError(caught instanceof Error ? caught.message : "Не удалось обновить заявки.");
       })
       .finally(endRefresh);
-  }), [loadLocal, beginRefresh, endRefresh]);
+  }), [loadLocal, beginRefresh, endRefresh]));
 
   async function handleRefresh() {
     beginRefresh();
@@ -98,19 +108,22 @@ export function RequestBoardScreen() {
   const summary = useMemo(
     () => ({
       all: items.filter((item) => !historyStatuses.has(item.status)).length,
+      assigned: items.filter((item) => item.status === "assigned" || item.status === "accepted").length,
+      inProgress: items.filter((item) => item.status === "inProgress" || item.status === "paused").length,
       history: items.filter((item) => historyStatuses.has(item.status)).length
     }),
     [items]
   );
 
   const filteredItems = useMemo(() => {
-    const source = activeTab === "history"
-      ? items.filter((item) => historyStatuses.has(item.status))
+    const source = activeTab === "history" ? items.filter((item) => historyStatuses.has(item.status))
+      : activeTab === "assigned" ? items.filter((item) => item.status === "assigned" || item.status === "accepted")
+      : activeTab === "inProgress" ? items.filter((item) => item.status === "inProgress" || item.status === "paused")
       : items.filter((item) => !historyStatuses.has(item.status));
-    return [...source].sort((left, right) => requestStatusRank(left.status) - requestStatusRank(right.status)
+    return source.filter((item) => `${item.routeName} ${item.assignedFullName ?? ""}`.toLocaleLowerCase("ru-RU").includes(query.trim().toLocaleLowerCase("ru-RU"))).sort((left, right) => requestStatusRank(left.status) - requestStatusRank(right.status)
       || left.plannedStartAt.localeCompare(right.plannedStartAt)
       || left.requestId.localeCompare(right.requestId));
-  }, [activeTab, items]);
+  }, [activeTab, items, query]);
 
   const renderItem: ListRenderItem<RequestBoardItem> = ({ item }) => (
     <SelectionTransition selectionKey={activeTab}>
@@ -136,14 +149,17 @@ export function RequestBoardScreen() {
         </Card>
       )}
       renderItem={renderItem}
-      title="Заявки на обход"
+      title="Маршруты обходов"
       subtitle="Откройте заявку, чтобы проверить маршрут."
       headerContent={
         <>
+          <TextInput accessibilityLabel="Найти маршрут или сотрудника" placeholder="Найти маршрут или сотрудника" value={query} onChangeText={setQuery} style={{ color: colors.text, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 14, minHeight: 48 }} />
           <SelectionTabs<RequestTab>
             accessibilityLabel="Разделы заявок"
             items={[
-              { count: summary.all, icon: "file-tray-full-outline", label: "Все заявки", value: "all" },
+              { count: summary.all, icon: "file-tray-full-outline", label: "Все", value: "all" },
+              { count: summary.assigned, icon: "person-outline", label: "Назначены", value: "assigned" },
+              { count: summary.inProgress, icon: "play-outline", label: "Незавершённые", value: "inProgress" },
               { count: summary.history, icon: "time-outline", label: "История", value: "history" }
             ]}
             onChange={setActiveTab}
@@ -152,6 +168,7 @@ export function RequestBoardScreen() {
 
           {showRefreshIndicator ? <Text style={[styles.message, { color: colors.mutedText }]}>Обновляем данные…</Text> : null}
           {message ? <Text style={[styles.message, { color: colors.mutedText }]}>{message}</Text> : null}
+          {notice ? <Text accessibilityLiveRegion="polite" style={[styles.message, { color: colors.mutedText }]}>{notice}</Text> : null}
         </>
       }
     />

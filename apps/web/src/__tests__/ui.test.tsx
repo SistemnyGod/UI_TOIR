@@ -426,7 +426,7 @@ describe("shared UI primitives", () => {
 
     await waitFor(() => expect(getPpeWorkspace).toHaveBeenCalledWith("emp-1"));
     expect(screen.getByRole("navigation", { name: "Разделы СИЗ" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Карточки СИЗ" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Средства защиты" })).toBeInTheDocument();
     expect(screen.getAllByText("Каска защитная").length).toBeGreaterThan(0);
     expect(screen.getByRole("tab", { name: /^Нормы/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /^Фактическая выдача/ })).toBeInTheDocument();
@@ -474,7 +474,7 @@ describe("shared UI primitives", () => {
 
     await user.click(await screen.findByRole("button", { name: "Повторить" }));
     await waitFor(() => expect(getPpeWorkspace).toHaveBeenCalledTimes(2));
-    expect(await screen.findByRole("heading", { name: "Карточки СИЗ" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Средства защиты" })).toBeInTheDocument();
   });
 
   it("shows a clear request fallback instead of an empty view modal", () => {

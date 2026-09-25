@@ -87,8 +87,40 @@ public sealed class MobileController(
     [HttpGet("bootstrap")]
     public ActionResult<MobileBootstrapDto> Bootstrap()
     {
-        var bootstrap = mobileAppService.GetBootstrap(MobileAccessToken);
+        var pagingAppeals = Request.Headers["X-Patrol360-Mobile-Features"].ToString()
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Contains("patrolAppealsPaging", StringComparer.OrdinalIgnoreCase);
+        var bootstrap = mobileAppService.GetBootstrap(MobileAccessToken, pagingAppeals);
         return bootstrap is null ? Unauthorized() : Ok(bootstrap);
+    }
+
+    [HttpGet("patrol-reports")]
+    public ActionResult<MobilePatrolReportPageDto> PatrolReports(int page = 1, int pageSize = 25, string? cursor = null)
+    {
+        try
+        {
+            var result = mobileAppService.GetPatrolReports(MobileAccessToken, page, pageSize, cursor);
+            return result is null ? Unauthorized() : Ok(result);
+        }
+        catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
+    }
+
+    [HttpGet("patrol-appeals")]
+    public ActionResult<MobilePatrolAppealPageDto> PatrolAppeals(int pageSize = 25, string? cursor = null, Guid? assignmentId = null)
+    {
+        try
+        {
+            var result = mobileAppService.GetPatrolAppeals(MobileAccessToken, pageSize, cursor, assignmentId);
+            return result is null ? Unauthorized() : Ok(result);
+        }
+        catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
+    }
+
+    [HttpGet("patrol-reports/{assignmentId:guid}/points")]
+    public ActionResult<IReadOnlyList<MobilePatrolReportPointDto>> PatrolReportPoints(Guid assignmentId)
+    {
+        var result = mobileAppService.GetPatrolReportPoints(MobileAccessToken, assignmentId);
+        return result is null ? NotFound() : Ok(result);
     }
 
     [HttpPost("devices/push-token")]

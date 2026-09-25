@@ -1,3 +1,4 @@
+import { mockPpeIssueDocuments } from "./mockPpeIssueDocuments";
 import type {
   ApplyInventoryPpeLineActionDto,
   CreateEmployeeDto,
@@ -699,20 +700,7 @@ export function createMockInventoryRepository(): InventoryRepository {
       return pageRows([], {});
     },
 
-    async getPpeIssueDocumentCapabilities() { return { enabled: false }; },
-    async getPpeIssueDocuments() { return []; },
-    async getPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
-    async createPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
-    async updatePpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
-    async validatePpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
-    async confirmPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
-    async cancelPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
-    async migratePpeLegacyDraft() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
-    async printPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
-    async getPpeIssueDocumentNorms() { return []; },
-    async updatePpeNormSetScope() { throw new Error("Редактирование норм недоступно в демонстрационном режиме"); },
-    async updatePpeNormRowRules() { throw new Error("Редактирование норм недоступно в демонстрационном режиме"); },
-    async approvePpeNormMapping() { throw new Error("Редактирование норм недоступно в демонстрационном режиме"); },
+    ...mockPpeIssueDocuments,
 
     async getPpeNormSet() {
       throw new Error("В демонстрационном режиме детали нормативных наборов недоступны");
@@ -1835,6 +1823,7 @@ function mapItemPayload(payload: UpsertInventoryItemDto, itemId: string, store: 
     stockPhysical: existing?.stockPhysical ?? 0,
     stockReserved: existing?.stockReserved ?? 0,
     stockStatus: existing?.stockStatus ?? "normal",
+    standards: payload.standards ?? [],
     trackLife: payload.trackLife,
     trackingType: payload.trackingType ?? "stock",
     unit: unit?.code || unit?.name || "",

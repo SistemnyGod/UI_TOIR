@@ -1,0 +1,101 @@
+[
+  {
+    "case": "HTTPS for existing allowed local host",
+    "normalized": "https://192.168.2.194:5173",
+    "allowed": false,
+    "candidateSchemes": [
+      "http:",
+      "http:"
+    ]
+  },
+  {
+    "case": "Even explicitly allowlisted HTTPS retains HTTP fallback",
+    "candidateSchemes": [
+      "https:",
+      "http:",
+      "http:"
+    ]
+  },
+  {
+    "case": "TLS failure falls back and stale generation persists address",
+    "httpRequest": true,
+    "staleAddressWrites": 1
+  },
+  {
+    "case": "401 after account change",
+    "sameBodyReplayed": true,
+    "usedAccounts": [
+      "A",
+      "B"
+    ]
+  },
+  {
+    "case": "Incomplete rejected report skips reopen action",
+    "repairCalls": 0,
+    "routes": [
+      "/patrol/assignment/A/all-points?filter=attention"
+    ]
+  },
+  {
+    "case": "Rejected point without report",
+    "reportExists": false,
+    "completionAllowed": false,
+    "editingAllowed": false,
+    "deliveryHiddenByScreen": true
+  },
+  {
+    "case": "Malformed accepted completion with empty point object",
+    "fullyDelivered": true,
+    "fileReads": 0
+  },
+  {
+    "case": "NFC cleanup completes after leaving scanner",
+    "navigationAfterBlur": [
+      "/patrol/assignment/OLD/point/point/fill"
+    ]
+  },
+  {
+    "case": "First pending navigation is replaced after SQLite error",
+    "dispatched": [
+      "second-direction"
+    ]
+  },
+  {
+    "case": "Appeal head refresh with 25 old and 40 new",
+    "requestedCursors": [
+      null
+    ],
+    "cached": 50,
+    "expected": 65,
+    "unfetched": 15
+  },
+  {
+    "case": "Older server appeals precede local ascending cursor",
+    "firstPage": 25,
+    "olderAdded": 25,
+    "nextLocalPage": 0
+  },
+  {
+    "case": "Final server page persisted but not read for display",
+    "displayReads": 0,
+    "hasMore": false
+  },
+  {
+    "case": "Local sync reload invalidates loadMore finally",
+    "loadingMoreStillTrue": true
+  },
+  {
+    "case": "Appeal open offline does not read saved history",
+    "cachedReads": 0
+  },
+  {
+    "case": "Continue B blocked by terminal superseded command",
+    "reason": "Ожидаем подтверждение уже начатой операции целевого обхода."
+  },
+  {
+    "case": "Report journal cannot expose cached next page offline",
+    "cachedReports": 75,
+    "visibleReports": 25,
+    "networkAttempts": 1
+  }
+]

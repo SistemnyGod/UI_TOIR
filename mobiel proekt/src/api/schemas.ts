@@ -87,6 +87,9 @@ const emuSectionSchema = z.object({
 }).passthrough();
 
 const patrolRequestBoardItemSchema = z.object({
+  assignedEmployeeId: nullableString.optional(),
+  performerSelectionAvailable: z.boolean().optional(),
+  routeSwitchAvailable: z.boolean().optional(),
   requestId: identifier,
   displayNumber: nullableString,
   routeId: identifier,
@@ -98,6 +101,7 @@ const patrolRequestBoardItemSchema = z.object({
 }).passthrough();
 
 const patrolAssignmentSchema = z.object({
+  employeeId: nullableString.optional(),
   assignmentId: identifier,
   requestId: identifier,
   routeId: identifier,
@@ -141,7 +145,44 @@ const bootstrapConflictResolutionSchema = z.object({
   resolvedAt: timestamp
 }).passthrough();
 
+const patrolSnapshotManifestSchema = z.object({
+  routeId: identifier,
+  routeVersion: z.number().int(),
+  isComplete: z.boolean(),
+  points: z.array(z.object({ pointId: identifier, revision: z.number().int() }))
+}).passthrough();
+
+const patrolAppealSchema = z.object({
+  id: identifier,
+  assignmentId: identifier,
+  routeName: z.string().optional(),
+  employeeName: z.string().optional(),
+  deviceId: z.string().optional(),
+  kind: z.string(),
+  message: z.string(),
+  status: z.string(),
+  reply: nullableString,
+  createdAt: timestamp,
+  resolvedAt: timestamp.nullable().optional(),
+  version: z.number().int(),
+  assignmentVersion: z.number().int().optional()
+}).passthrough();
+
+export const patrolAppealPageResponseSchema = z.object({
+  items: z.array(patrolAppealSchema),
+  nextCursor: nullableString
+}).passthrough();
+
 export const bootstrapResponseSchema = z.object({
+  patrolAppealsAvailable: z.boolean().optional(),
+  patrolAppealsPaging: z.boolean().optional(),
+  patrolAppealsAssignmentPaging: z.boolean().optional(),
+  workItemsPaging: z.boolean().optional(),
+  patrolSnapshotManifest: z.boolean().optional(),
+  patrolPointResultStatusExtension: z.boolean().optional(),
+  boundEmployeesComplete: z.boolean().optional(),
+  patrolSnapshotManifests: z.array(patrolSnapshotManifestSchema).optional(),
+  patrolAppeals: z.array(patrolAppealSchema).optional(),
   user: mobileUserSchema,
   device: mobileDeviceSchema,
   boundEmployees: z.array(mobileEmployeeSchema),
@@ -211,6 +252,7 @@ const rawWorkItemSchema = z.object({
   status: workTaskStatus,
   approvalStatus: z.string(),
   revision: z.number().int(),
+  updatedAt: timestamp.optional(),
   source: z.string(),
   assignedEmployees: z.array(workParticipantSchema),
   actualParticipants: z.array(workParticipantSchema),
@@ -219,6 +261,10 @@ const rawWorkItemSchema = z.object({
 }).passthrough();
 
 export const workItemListResponseSchema = z.array(rawWorkItemSchema);
+export const workItemPageResponseSchema = z.object({
+  items: z.array(rawWorkItemSchema),
+  nextCursor: nullableString
+}).passthrough();
 
 export const registerPushTokenResponseSchema = z.object({
   deviceId: identifier,

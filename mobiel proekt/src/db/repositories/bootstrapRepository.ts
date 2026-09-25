@@ -29,10 +29,13 @@ async function hasUnfinishedAssignmentCommandInTransaction(
         AND (
           command.entity_local_id = ?
           OR command.entity_server_id = ?
-          OR instr(command.payload_json, ?) > 0
+          OR (json_valid(command.payload_json) AND (
+            json_extract(command.payload_json, '$.assignmentId') = ?
+            OR json_extract(command.payload_json, '$.sourceAssignmentId') = ?
+          ))
         )
         AND (
-          command.status IN ('pending', 'sending', 'retryLater')
+          command.status IN ('pending', 'sending', 'retryLater', 'waiting_auth', 'waiting_network', 'blocked', 'wrong_contour')
           OR (
             command.status = 'conflict'
             AND (
@@ -54,7 +57,7 @@ async function hasUnfinishedAssignmentCommandInTransaction(
         )
       LIMIT 1
     `,
-    [ownerUserId, currentContourId, assignmentId, assignmentId, assignmentId]
+    [ownerUserId, currentContourId, assignmentId, assignmentId, assignmentId, assignmentId]
   );
   return Boolean(row);
 }
@@ -69,13 +72,17 @@ async function reconcileAssignmentIdentityInTransaction(
     status: string;
     startedAtLocal: string | null;
     completedAtLocal: string | null;
+    localReportPresent: number;
+    localReportNeedsReview: number;
   }>(
     `
       SELECT
         assignment_id AS assignmentId,
         status,
         started_at_local AS startedAtLocal,
-        completed_at_local AS completedAtLocal
+        completed_at_local AS completedAtLocal,
+        local_report_present AS localReportPresent,
+        local_report_needs_review AS localReportNeedsReview
       FROM patrol_assignments
       WHERE owner_user_id = ?
         AND request_id = ?
@@ -125,6 +132,40 @@ async function reconcileAssignmentIdentityInTransaction(
       "UPDATE files SET assignment_id = ?, contour_id = COALESCE(contour_id, ?) WHERE owner_user_id = ? AND assignment_id = ?",
       [serverAssignment.assignmentId, currentContourId, ownerUserId, local.assignmentId]
     );
+    await tx.runAsync(
+      "UPDATE patrol_appeals SET assignment_id = ? WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?",
+      [serverAssignment.assignmentId, ownerUserId, currentContourId, local.assignmentId]
+    );
+    // The local/server identity merge must carry every reference to the
+    // assignment, including both sides of a pending switch.  Keeping the
+    // source id under the old key can leave cancellation and switch commands
+    // pointing at a deleted local assignment after bootstrap.
+    await tx.runAsync(
+      `INSERT OR REPLACE INTO patrol_report_cache (
+         owner_user_id, contour_id, assignment_id, route_name, employee_name,
+         completed_at, cached_at
+       )
+       SELECT owner_user_id, contour_id, ?, route_name, employee_name,
+              completed_at, cached_at
+         FROM patrol_report_cache
+        WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?`,
+      [serverAssignment.assignmentId, ownerUserId, currentContourId, local.assignmentId]
+    );
+    await tx.runAsync(
+      `INSERT OR REPLACE INTO patrol_report_detail_cache (
+         owner_user_id, contour_id, assignment_id, points_json, cached_at
+       )
+       SELECT owner_user_id, contour_id, ?, points_json, cached_at
+         FROM patrol_report_detail_cache
+        WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?`,
+      [serverAssignment.assignmentId, ownerUserId, currentContourId, local.assignmentId]
+    );
+    await tx.runAsync(
+      `UPDATE patrol_device_context
+          SET assignment_id = ?
+        WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?`,
+      [serverAssignment.assignmentId, ownerUserId, currentContourId, local.assignmentId]
+    );
 
     const commands = await tx.getAllAsync<{
       clientOperationId: string;
@@ -145,17 +186,26 @@ async function reconcileAssignmentIdentityInTransaction(
         FROM outbox_commands
         WHERE owner_user_id = ?
           AND (contour_id = ? OR contour_id IS NULL)
-          AND (aggregate_key = ? OR entity_local_id = ? OR entity_server_id = ? OR instr(payload_json, ?) > 0)
+          AND (aggregate_key = ? OR entity_local_id = ? OR entity_server_id = ? OR
+            (json_valid(payload_json) AND (json_extract(payload_json, '$.assignmentId') = ? OR json_extract(payload_json, '$.sourceAssignmentId') = ?)))
       `,
-      [ownerUserId, currentContourId, `patrolAssignment:${local.assignmentId}`, local.assignmentId, local.assignmentId, local.assignmentId]
+      [ownerUserId, currentContourId, `patrolAssignment:${local.assignmentId}`, local.assignmentId, local.assignmentId, local.assignmentId, local.assignmentId]
     );
 
     for (const command of commands) {
       let payloadJson = command.payloadJson;
       try {
         const payload = JSON.parse(command.payloadJson) as Record<string, unknown>;
+        let changed = false;
+        if (payload.sourceAssignmentId === local.assignmentId) {
+          payload.sourceAssignmentId = serverAssignment.assignmentId;
+          changed = true;
+        }
         if (payload.assignmentId === local.assignmentId) {
           payload.assignmentId = serverAssignment.assignmentId;
+          changed = true;
+        }
+        if (changed) {
           payloadJson = JSON.stringify(payload);
         }
       } catch {
@@ -209,13 +259,51 @@ async function reconcileAssignmentIdentityInTransaction(
       }
     }
 
+    const conflicts = await tx.getAllAsync<{
+      conflictId: string;
+      payloadSnapshotJson: string;
+    }>(
+      `SELECT conflict_id AS conflictId, payload_snapshot_json AS payloadSnapshotJson
+         FROM sync_conflicts
+        WHERE owner_user_id = ?
+          AND (contour_id = ? OR contour_id IS NULL)
+          AND json_valid(payload_snapshot_json)
+          AND (json_extract(payload_snapshot_json, '$.assignmentId') = ? OR json_extract(payload_snapshot_json, '$.sourceAssignmentId') = ?)`,
+      [ownerUserId, currentContourId, local.assignmentId, local.assignmentId]
+    );
+    for (const conflict of conflicts) {
+      try {
+        const payload = JSON.parse(conflict.payloadSnapshotJson) as Record<string, unknown>;
+        let changed = false;
+        if (payload.sourceAssignmentId === local.assignmentId) {
+          payload.sourceAssignmentId = serverAssignment.assignmentId;
+          changed = true;
+        }
+        if (payload.assignmentId === local.assignmentId) {
+          payload.assignmentId = serverAssignment.assignmentId;
+          changed = true;
+        }
+        if (changed) {
+          await tx.runAsync(
+            `UPDATE sync_conflicts SET payload_snapshot_json = ?
+               WHERE owner_user_id = ? AND conflict_id = ?`,
+            [JSON.stringify(payload), ownerUserId, conflict.conflictId]
+          );
+        }
+      } catch {
+        // Preserve malformed legacy snapshots; the conflict remains visible.
+      }
+    }
+
     if (preserveLocalStatus) {
       await tx.runAsync(
         `
           UPDATE patrol_assignments
           SET status = ?,
               started_at_local = COALESCE(started_at_local, ?),
-              completed_at_local = COALESCE(completed_at_local, ?)
+              completed_at_local = COALESCE(completed_at_local, ?),
+              local_report_present = MAX(local_report_present, ?),
+              local_report_needs_review = MAX(local_report_needs_review, ?)
           WHERE owner_user_id = ?
             AND assignment_id = ?
             AND contour_id = ?
@@ -224,6 +312,8 @@ async function reconcileAssignmentIdentityInTransaction(
           local.status,
           local.startedAtLocal,
           local.completedAtLocal,
+          local.localReportPresent,
+          local.localReportNeedsReview,
           ownerUserId,
           serverAssignment.assignmentId,
           currentContourId
@@ -231,7 +321,25 @@ async function reconcileAssignmentIdentityInTransaction(
       );
     }
 
+    // Report presence is independent from the server lifecycle status. Carry
+    // it across the identity merge even when the server snapshot wins status.
+    await tx.runAsync(
+      `UPDATE patrol_assignments
+          SET local_report_present = MAX(local_report_present, ?),
+              local_report_needs_review = MAX(local_report_needs_review, ?)
+        WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?`,
+      [local.localReportPresent, local.localReportNeedsReview, ownerUserId, currentContourId, serverAssignment.assignmentId]
+    );
+
     await tx.runAsync("DELETE FROM assignment_route_points WHERE assignment_id = ?", [local.assignmentId]);
+    await tx.runAsync(
+      "DELETE FROM patrol_report_cache WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?",
+      [ownerUserId, currentContourId, local.assignmentId]
+    );
+    await tx.runAsync(
+      "DELETE FROM patrol_report_detail_cache WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?",
+      [ownerUserId, currentContourId, local.assignmentId]
+    );
     await tx.runAsync(
       "DELETE FROM patrol_assignments WHERE owner_user_id = ? AND assignment_id = ?",
       [ownerUserId, local.assignmentId]
@@ -737,6 +845,24 @@ async function refreshAssignmentSnapshotInTransaction(
   if (!snapshotPlan.shouldReplace) {
     return;
   }
+  const manifest = bootstrap.patrolSnapshotManifest
+    ? bootstrap.patrolSnapshotManifests?.find((item) => item.routeId === assignment.routeId)
+    : undefined;
+  const manifestMatchesSnapshot = Boolean(
+    manifest
+    && manifest.isComplete
+    && manifest.routeVersion === snapshotPlan.snapshotVersion
+    && assignment.employeeId
+    && bootstrap.boundEmployeesComplete
+    && bootstrap.boundEmployees.some((employee) => employee.employeeId === assignment.employeeId)
+    && samePointRevisionSet(
+      manifest.points.map((point) => [point.pointId, point.revision] as const),
+      snapshotPlan.pointIds.map((pointId) => {
+        const point = bootstrap.points.find((item) => item.pointId === pointId);
+        return [pointId, point?.revision ?? -1] as const;
+      })
+    )
+  );
 
   await tx.runAsync("DELETE FROM assignment_route_points WHERE assignment_id = ?", [assignment.assignmentId]);
   for (const point of bootstrap.points) {
@@ -778,6 +904,23 @@ async function refreshAssignmentSnapshotInTransaction(
     );
   }
 
+  if (manifestMatchesSnapshot && manifest) {
+    await tx.runAsync(
+      `INSERT INTO patrol_snapshot_manifests
+        (owner_user_id, contour_id, assignment_id, route_id, route_version, employees_complete, point_revisions_json, saved_at)
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+       ON CONFLICT(owner_user_id, contour_id, assignment_id) DO UPDATE SET
+         route_id = excluded.route_id,
+         route_version = excluded.route_version,
+         employees_complete = excluded.employees_complete,
+         point_revisions_json = excluded.point_revisions_json,
+         saved_at = excluded.saved_at`,
+      [bootstrap.user.serverUserId, currentContourId, assignment.assignmentId, manifest.routeId, manifest.routeVersion, JSON.stringify(manifest.points), bootstrap.serverTime]
+    );
+  } else {
+    await tx.runAsync("DELETE FROM patrol_snapshot_manifests WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?", [bootstrap.user.serverUserId, currentContourId, assignment.assignmentId]);
+  }
+
   await tx.runAsync(
     `
       UPDATE patrol_assignments
@@ -785,6 +928,7 @@ async function refreshAssignmentSnapshotInTransaction(
           snapshot_version = ?,
           snapshot_created_at = ?,
           snapshot_source = 'bootstrap',
+          snapshot_ready = ?,
           snapshot_allow_free_order = ?,
           snapshot_nfc_enabled = ?,
           snapshot_qr_fallback_enabled = ?
@@ -792,11 +936,26 @@ async function refreshAssignmentSnapshotInTransaction(
         AND assignment_id = ?
         AND (contour_id = ? OR contour_id IS NULL)
     `,
-    [snapshotPlan.snapshotVersion, snapshotPlan.snapshotVersion, bootstrap.serverTime, snapshotAllowFreeOrder, snapshotNfcEnabled, snapshotQrFallbackEnabled, bootstrap.user.serverUserId, assignment.assignmentId, currentContourId]
+    [snapshotPlan.snapshotVersion, snapshotPlan.snapshotVersion, bootstrap.serverTime, manifestMatchesSnapshot ? 1 : 0, snapshotAllowFreeOrder, snapshotNfcEnabled, snapshotQrFallbackEnabled, bootstrap.user.serverUserId, assignment.assignmentId, currentContourId]
   );
+}
+
+function samePointRevisionSet(left: readonly (readonly [string, number])[], right: readonly (readonly [string, number])[]) {
+  if (left.length === 0 || left.length !== right.length) return false;
+  const expected = new Map(left);
+  return expected.size === left.length && right.every(([pointId, revision]) => expected.get(pointId) === revision);
 }
 async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapDto) {
   const ownerUserId = bootstrap.user.serverUserId;
+  await tx.runAsync("INSERT INTO mobile_capabilities (owner_user_id, contour_id, patrol_appeals, patrol_appeals_paging, patrol_appeals_assignment_paging, work_items_paging, patrol_snapshot_manifest, patrol_point_result_status_extension) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(owner_user_id, contour_id) DO UPDATE SET patrol_appeals = excluded.patrol_appeals, patrol_appeals_paging = excluded.patrol_appeals_paging, patrol_appeals_assignment_paging = excluded.patrol_appeals_assignment_paging, work_items_paging = excluded.work_items_paging, patrol_snapshot_manifest = excluded.patrol_snapshot_manifest, patrol_point_result_status_extension = excluded.patrol_point_result_status_extension", [ownerUserId, currentContourId, bootstrap.patrolAppealsAvailable ? 1 : 0, bootstrap.patrolAppealsPaging ? 1 : 0, bootstrap.patrolAppealsAssignmentPaging ? 1 : 0, bootstrap.workItemsPaging ? 1 : 0, bootstrap.patrolSnapshotManifest ? 1 : 0, bootstrap.patrolPointResultStatusExtension ? 1 : 0]);
+  for (const appeal of bootstrap.patrolAppeals ?? []) {
+    await tx.runAsync(`INSERT INTO patrol_appeals (id, owner_user_id, contour_id, assignment_id, kind, message, status, reply, created_at, version)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id, owner_user_id, contour_id) DO UPDATE SET
+      status = excluded.status, reply = excluded.reply, version = excluded.version
+      WHERE excluded.version >= patrol_appeals.version`,
+      [appeal.id, ownerUserId, currentContourId, appeal.assignmentId, appeal.kind, appeal.message, appeal.status, appeal.reply, appeal.createdAt, appeal.version]);
+  }
+
   const cancelledAssignmentIds = bootstrap.cancelledAssignmentIds ?? [];
   const serverRouteIds = bootstrap.routes.map((route) => route.routeId);
   const serverPointIdsByRoute = new Map<string, string[]>();
@@ -980,6 +1139,11 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
       );
     }
 
+    for (const item of bootstrap.requestBoard) {
+      await tx.runAsync("UPDATE patrol_request_board SET assigned_employee_id = ?, performer_selection_available = ?, route_switch_available = ? WHERE request_id = ? AND owner_user_id = ?",
+        [item.assignedEmployeeId ?? null, item.performerSelectionAvailable ? 1 : 0, item.routeSwitchAvailable ? 1 : 0, item.requestId, ownerUserId]);
+    }
+
     await tx.runAsync(
       `
         UPDATE patrol_request_board
@@ -1053,19 +1217,52 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
       const snapshotNfcEnabled = route?.nfcEnabled === true ? 1 : 0;
       const snapshotQrFallbackEnabled = route?.qrFallbackEnabled === false ? 0 : 1;
       const snapshotCreatedAt = bootstrap.serverTime;
-      const localAssignment = await tx.getFirstAsync<{ status: string }>(
-        `SELECT status FROM patrol_assignments WHERE owner_user_id = ? AND assignment_id = ? AND (contour_id = ? OR contour_id IS NULL)`,
+      const localAssignment = await tx.getFirstAsync<{ status: string; revision: number }>(
+        `SELECT status, revision FROM patrol_assignments WHERE owner_user_id = ? AND assignment_id = ? AND (contour_id = ? OR contour_id IS NULL)`,
         [ownerUserId, assignment.assignmentId, currentContourId]
       );
+      // A previous build could clear completed_at_local while retaining the
+      // completion command. Recover the original timestamp before merging the
+      // server snapshot; never invent a completion time from bootstrap time.
+      let completedAtLocal = assignment.completedAtLocal;
+      if (!completedAtLocal) {
+        const completionCommand = await tx.getFirstAsync<{ payloadJson: string; createdAtLocal: string | null }>(
+          `SELECT payload_json AS payloadJson, created_at_local AS createdAtLocal
+             FROM outbox_commands
+            WHERE owner_user_id = ?
+              AND (contour_id = ? OR contour_id IS NULL)
+              AND command_type = 'completePatrolAssignment'
+              AND status NOT IN ('superseded', 'cancelledLocal')
+              AND (entity_local_id = ? OR entity_server_id = ? OR instr(payload_json, ?) > 0)
+            ORDER BY created_at_local DESC
+            LIMIT 1`,
+          [ownerUserId, currentContourId, assignment.assignmentId, assignment.assignmentId, assignment.assignmentId]
+        );
+        if (completionCommand) {
+          try {
+            const payload = JSON.parse(completionCommand.payloadJson) as { completedAtLocal?: unknown };
+            completedAtLocal = typeof payload.completedAtLocal === "string" && payload.completedAtLocal.trim()
+              ? payload.completedAtLocal
+              : completionCommand.createdAtLocal;
+          } catch {
+            completedAtLocal = completionCommand.createdAtLocal;
+          }
+        }
+      }
       const hasUnfinishedCommand = await hasUnfinishedAssignmentCommandInTransaction(tx, ownerUserId, assignment.assignmentId);
+      // A lower server revision is an older snapshot.  It must not roll back
+      // a newer local/server state, while an equal revision still preserves a
+      // pending local intention until the queue obtains a receipt.
+      const serverSnapshotIsStale = (localAssignment?.revision ?? -1) > assignment.revision;
       const resolvedBootstrapStatus = resolveBootstrapAssignmentStatus(
         localAssignment?.status ?? null,
         assignment.status,
         hasUnfinishedCommand
       );
-      const preserveLocalStatus = localAssignment?.status != null
+      const preserveLocalStatus = serverSnapshotIsStale || (localAssignment?.status != null
         && resolvedBootstrapStatus === localAssignment.status
-        && localAssignment.status !== assignment.status;
+        && localAssignment.status !== assignment.status);
+      const incomingLocalReportPresent = assignment.completedAtLocal || ["completed", "completedServer"].includes(assignment.status) ? 1 : 0;
       await tx.runAsync(
         `
           INSERT INTO patrol_assignments (
@@ -1077,22 +1274,25 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             status,
             started_at_local,
             completed_at_local,
+            local_report_present,
             revision,
             route_version_no,
             snapshot_version,
             snapshot_created_at,
             snapshot_source,
+            snapshot_ready,
             snapshot_allow_free_order,
             snapshot_nfc_enabled,
             snapshot_qr_fallback_enabled
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(assignment_id) DO UPDATE SET
             owner_user_id = excluded.owner_user_id,
             contour_id = excluded.contour_id,
             request_id = excluded.request_id,
             route_id = excluded.route_id,
             status = CASE
+              WHEN ? = 1 THEN patrol_assignments.status
               WHEN excluded.status IN ('cancelled', 'cancelledServer')
                 AND patrol_assignments.status NOT IN ('completedLocal', 'syncing') THEN 'cancelledServer'
               WHEN ? = 1
@@ -1101,10 +1301,14 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             END,
             started_at_local = COALESCE(patrol_assignments.started_at_local, excluded.started_at_local),
             completed_at_local = CASE
-              WHEN patrol_assignments.status = 'completedLocal' THEN patrol_assignments.completed_at_local
+              WHEN patrol_assignments.completed_at_local IS NOT NULL
+                AND (patrol_assignments.local_report_present = 1
+                  OR patrol_assignments.status IN ('completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision', 'cancelledServer'))
+                THEN patrol_assignments.completed_at_local
               ELSE excluded.completed_at_local
             END,
-            revision = excluded.revision,
+            local_report_present = MAX(patrol_assignments.local_report_present, excluded.local_report_present),
+            revision = MAX(patrol_assignments.revision, excluded.revision),
             route_version_no = CASE
               WHEN patrol_assignments.status IN ('releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.route_version_no
               ELSE excluded.route_version_no
@@ -1120,6 +1324,10 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
             snapshot_source = CASE
               WHEN patrol_assignments.status IN ('releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.snapshot_source
               ELSE excluded.snapshot_source
+            END,
+            snapshot_ready = CASE
+              WHEN patrol_assignments.status IN ('releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.snapshot_ready
+              ELSE excluded.snapshot_ready
             END,
             snapshot_allow_free_order = CASE
               WHEN patrol_assignments.status IN ('releasePending', 'inProgress', 'paused', 'completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN patrol_assignments.snapshot_allow_free_order
@@ -1142,18 +1350,22 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
           assignment.routeId,
           assignment.status,
           assignment.startedAtLocal,
-          assignment.completedAtLocal,
+          completedAtLocal,
+          incomingLocalReportPresent,
           assignment.revision,
           snapshotVersion,
           snapshotVersion,
           snapshotCreatedAt,
           "bootstrap",
+          0,
           snapshotAllowFreeOrder,
           snapshotNfcEnabled,
           snapshotQrFallbackEnabled,
+          serverSnapshotIsStale ? 1 : 0,
           preserveLocalStatus ? 1 : 0
         ]
       );
+      await tx.runAsync("UPDATE patrol_assignments SET employee_id = COALESCE(?, employee_id) WHERE assignment_id = ? AND owner_user_id = ? AND contour_id = ?", [assignment.employeeId ?? null, assignment.assignmentId, ownerUserId, currentContourId]);
       await reconcileAssignmentIdentityInTransaction(tx, ownerUserId, assignment);
       if (!preserveLocalStatus && ["accepted", "inProgress", "paused", "completed", "completedServer", "cancelledServer"].includes(assignment.status)) {
         const requestStatus = assignment.status === "completedServer" ? "completed" : assignment.status;

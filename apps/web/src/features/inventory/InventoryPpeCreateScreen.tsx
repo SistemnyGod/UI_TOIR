@@ -4,7 +4,7 @@ import { useInventoryRepository } from "../../repositories/inventoryRepositoryCo
 import { PpeIssueDocumentConstructor } from "./PpeIssueDocumentConstructor";
 import { PpeIssueWorkflowScreen } from "./ppe/PpeIssueWorkflowScreen";
 
-export function InventoryPpeCreateScreen({ onNavigate, onNotify, currentUserId, canManage = false, canExport = false }: { onNavigate: (screen: ScreenId) => void; onNotify: (message: string) => void; currentUserId?: string; canManage?: boolean; canExport?: boolean }) {
+export function InventoryPpeCreateScreen({ onNavigate, onNotify, currentUserId, canManage = false, canManageTemplates = false, canExport = false }: { onNavigate: (screen: ScreenId) => void; onNotify: (message: string) => void; currentUserId?: string; canManage?: boolean; canManageTemplates?: boolean; canExport?: boolean }) {
   const repository = useInventoryRepository();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [capabilitiesError, setCapabilitiesError] = useState("");
@@ -20,5 +20,5 @@ export function InventoryPpeCreateScreen({ onNavigate, onNotify, currentUserId, 
   }, [repository, retryKey]);
   if (capabilitiesError) return <div className="ppe-document-state"><p>{capabilitiesError}</p><button className="button secondary" onClick={() => setRetryKey((value) => value + 1)} type="button">Повторить проверку</button></div>;
   if (enabled === null) return <div className="ppe-document-state">Проверяем доступность конструктора…</div>;
-  return enabled ? <PpeIssueDocumentConstructor canExport={canExport} canManage={canManage} currentUserId={currentUserId} onNavigate={onNavigate} onNotify={onNotify} /> : <PpeIssueWorkflowScreen currentUserId={currentUserId} onNavigate={onNavigate} onNotify={onNotify} />;
+  return enabled ? <PpeIssueDocumentConstructor canExport={canExport} canManage={canManage} canManageTemplates={canManageTemplates} currentUserId={currentUserId} onNavigate={onNavigate} onNotify={onNotify} /> : <PpeIssueWorkflowScreen currentUserId={currentUserId} onNavigate={onNavigate} onNotify={onNotify} />;
 }

@@ -1,7 +1,7 @@
 /* Legacy Web Inventory visual bridge.
    This keeps the Patrol360 class structure, but aligns surfaces, controls,
    tables and PPE screens with the source Web-inventory interface. */
-.inventory-web-shell {
+.inventory-web-shell:not(:has(.ppe-document-screen)) {
   --inventory-bg: #f6f9fe;
   --inventory-card: rgba(255, 255, 255, 0.94);
   --inventory-card-soft: #f7faff;
@@ -104,8 +104,8 @@
   box-shadow: 0 10px 22px rgba(37, 99, 235, 0.12);
 }
 
-.inventory-web-shell .button,
-.inventory-web-shell button {
+.inventory-web-shell:not(:has(.ppe-document-screen)) .button,
+.inventory-web-shell:not(:has(.ppe-document-screen)) button {
   border-radius: 9px;
   transition:
     transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -115,41 +115,41 @@
     color 140ms ease;
 }
 
-.inventory-web-shell .button:not(.primary):not(.danger),
-.inventory-web-shell button:not(.primary):not(.danger):not(.inventory-ppe-row-menu-button):not(.ppe-ui-button) {
+.inventory-web-shell:not(:has(.ppe-document-screen)) .button:not(.primary):not(.danger),
+.inventory-web-shell:not(:has(.ppe-document-screen)) button:not(.primary):not(.danger):not(.inventory-ppe-row-menu-button):not(.ppe-ui-button) {
   border-color: var(--inventory-border);
   background: linear-gradient(180deg, #fff, #f8fbff);
   color: var(--inventory-text);
 }
 
-.inventory-web-shell .button:hover:not(:disabled),
-.inventory-web-shell button:hover:not(:disabled) {
+.inventory-web-shell:not(:has(.ppe-document-screen)) .button:hover:not(:disabled),
+.inventory-web-shell:not(:has(.ppe-document-screen)) button:hover:not(:disabled) {
   border-color: #9db9f8;
   color: var(--inventory-blue-strong);
   transform: translateY(-1px);
   box-shadow: 0 10px 22px rgba(37, 99, 235, 0.12);
 }
 
-.inventory-web-shell .button.primary,
-.inventory-web-shell button.primary,
-.inventory-web-shell .primary-action {
+.inventory-web-shell:not(:has(.ppe-document-screen)) .button.primary,
+.inventory-web-shell:not(:has(.ppe-document-screen)) button.primary,
+.inventory-web-shell:not(:has(.ppe-document-screen)) .primary-action {
   border-color: rgba(37, 99, 235, 0.9);
   background: linear-gradient(180deg, #2f7cff, #2563eb);
   color: #fff;
   box-shadow: 0 10px 22px rgba(37, 99, 235, 0.2);
 }
 
-.inventory-web-shell .button.danger,
-.inventory-web-shell button.danger,
-.inventory-web-shell .is-danger {
+.inventory-web-shell:not(:has(.ppe-document-screen)) .button.danger,
+.inventory-web-shell:not(:has(.ppe-document-screen)) button.danger,
+.inventory-web-shell:not(:has(.ppe-document-screen)) .is-danger {
   border-color: #fecaca;
   background: #fff1f2;
   color: var(--inventory-red);
 }
 
-.inventory-web-shell input,
-.inventory-web-shell select,
-.inventory-web-shell textarea,
+.inventory-web-shell:not(:has(.ppe-document-screen)) input,
+.inventory-web-shell:not(:has(.ppe-document-screen)) select,
+.inventory-web-shell:not(:has(.ppe-document-screen)) textarea,
 .inventory-ppe-field input,
 .inventory-ppe-field select,
 .inventory-ppe-field textarea,
@@ -169,9 +169,9 @@
     background-color 140ms ease;
 }
 
-.inventory-web-shell input:focus,
-.inventory-web-shell select:focus,
-.inventory-web-shell textarea:focus,
+.inventory-web-shell:not(:has(.ppe-document-screen)) input:focus,
+.inventory-web-shell:not(:has(.ppe-document-screen)) select:focus,
+.inventory-web-shell:not(:has(.ppe-document-screen)) textarea:focus,
 .inventory-ppe-field input:focus,
 .inventory-ppe-field select:focus,
 .inventory-ppe-field textarea:focus,
@@ -332,7 +332,7 @@
 }
 
 @media (max-width: 980px) {
-  .inventory-web-shell {
+  .inventory-web-shell:not(:has(.ppe-document-screen)) {
     background-size: 28px 28px, 28px 28px, auto;
   }
 

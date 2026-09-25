@@ -1,23 +1,36 @@
 import { CameraView } from "expo-camera";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { scanPointByQr } from "@/db/repositories/patrolRepository";
+import { assertDataOwnerContext, captureDataOwnerContext } from "@/auth/dataOwnerContext";
 import { ensureCameraPermission } from "@/services/cameraService";
 import { createQrScanResult } from "@/services/qrScannerService";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
+import { useAppTheme } from "@/features/settings/themePreference";
 
 export function ScanQrScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
   const { assignmentId } = useLocalSearchParams<{ assignmentId: string }>();
   const [status, setStatus] = useState<"idle" | "reading" | "matched" | "error">("reading");
   const [hasPermission, setHasPermission] = useState(false);
   const [message, setMessage] = useState("Наведите камеру на QR-метку точки.");
   const isHandlingScanRef = useRef(false);
+  const focusEpochRef = useRef(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      const epoch = ++focusEpochRef.current;
+      return () => {
+        if (focusEpochRef.current === epoch) focusEpochRef.current++;
+      };
+    }, [])
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -44,10 +57,16 @@ export function ScanQrScreen() {
 
     isHandlingScanRef.current = true;
     setStatus("idle");
+    const epoch = focusEpochRef.current;
 
     try {
+      const scope = await captureDataOwnerContext();
       const qr = createQrScanResult(data);
       const result = await scanPointByQr(assignmentId, qr.qrCodeHash);
+      await assertDataOwnerContext(scope);
+      if (epoch !== focusEpochRef.current) {
+        throw new Error("Сканирование устарело после смены маршрута.");
+      }
 
       if (!result.matched) {
         setStatus("error");
@@ -57,6 +76,8 @@ export function ScanQrScreen() {
 
       setStatus("matched");
       setMessage("QR подтвержден.");
+      await assertDataOwnerContext(scope);
+      if (epoch !== focusEpochRef.current) return;
       router.replace(`/patrol/assignment/${assignmentId}/point/${result.point.pointId}/fill`);
     } catch (error) {
       setStatus("error");
@@ -77,8 +98,8 @@ export function ScanQrScreen() {
     <Screen title="Сканирование QR" subtitle="Резервное подтверждение точки, если NFC недоступен.">
       <Card>
         <StatusPill label={statusLabel(status)} tone={statusTone(status)} />
-        <Text style={styles.title}>{message}</Text>
-        <Text style={styles.text}>QR засчитывается только если метка относится к активному маршруту.</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{message}</Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>QR засчитывается только если метка относится к активному маршруту.</Text>
       </Card>
 
       <View style={styles.cameraBox}>
@@ -91,7 +112,7 @@ export function ScanQrScreen() {
           />
         ) : (
           <View style={styles.permissionBox}>
-            <Text style={styles.permissionText}>Разрешите доступ к камере для сканирования QR.</Text>
+            <Text style={[styles.permissionText, { color: colors.onDark }]}>Разрешите доступ к камере для сканирования QR.</Text>
           </View>
         )}
       </View>
@@ -136,18 +157,16 @@ function statusTone(status: "idle" | "reading" | "matched" | "error") {
 
 const styles = StyleSheet.create({
   title: {
-    color: "#0f1a2b",
     fontSize: 20,
     fontWeight: "600"
   },
   text: {
-    color: "#6b7280",
     fontSize: 15,
     lineHeight: 21
   },
   cameraBox: {
     aspectRatio: 3 / 4,
-    backgroundColor: "#0f1a2b",
+    backgroundColor: "#0b1220",
     borderRadius: 8,
     overflow: "hidden"
   },
@@ -161,7 +180,6 @@ const styles = StyleSheet.create({
     padding: 16
   },
   permissionText: {
-    color: "#f5f7fa",
     fontSize: 15,
     lineHeight: 21,
     textAlign: "center"

@@ -18,6 +18,8 @@ public sealed class PpeIssueDocumentsControllerTests
     {
         var controller = new PpeIssueDocumentsController(null!, null!, new ConfigurationBuilder().Build());
         Assert.IsType<NotFoundResult>(controller.List(null));
+        Assert.IsType<NotFoundResult>(controller.Journal(new()));
+        Assert.IsType<NotFoundResult>(controller.ExportJournal(new()));
         Assert.IsType<NotFoundResult>(controller.Get(Guid.NewGuid()));
         Assert.IsType<NotFoundResult>(controller.Create(null!));
         Assert.IsType<NotFoundResult>(controller.Confirm(Guid.NewGuid(), null!));
@@ -47,6 +49,17 @@ public sealed class PpeIssueDocumentsControllerTests
         var context = Context("inventory.view");
         filter.OnAuthorization(context);
         Assert.Equal(403, Assert.IsType<ObjectResult>(context.Result).StatusCode);
+    }
+
+    [Fact]
+    public void JournalExportRequiresExportPermission()
+    {
+        var filter = typeof(PpeIssueDocumentsController).GetMethod(nameof(PpeIssueDocumentsController.ExportJournal))!
+            .GetCustomAttribute<RequirePermissionAttribute>()!;
+        var denied = Context("inventory.view"); filter.OnAuthorization(denied);
+        Assert.Equal(403, Assert.IsType<ObjectResult>(denied.Result).StatusCode);
+        var allowed = Context("inventory.reports.export"); filter.OnAuthorization(allowed);
+        Assert.Null(allowed.Result);
     }
 
     private static AuthorizationFilterContext Context(string permission)

@@ -3,7 +3,7 @@ import { currentContourId } from "@/core/environments";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
-import { insertOutboxCommandInTransaction, updatePendingCompleteReportBaseRevisionInTransaction, updatePendingWorkTaskRevisionInTransaction, type SqlExecutor } from "@/db/repositories/outboxSql";
+import { updatePendingPatrolSwitchRevision, insertOutboxCommandInTransaction, updatePendingCompleteReportBaseRevisionInTransaction, updatePendingWorkTaskRevisionInTransaction, type SqlExecutor } from "@/db/repositories/outboxSql";
 import { finalizeCancelledAssignmentInTransaction } from "@/db/repositories/patrolCancellationRepository";
 import { MobileEntityType, OutboxCommand, OutboxCommandStatus, OutboxCommandType, OutboxResponse } from "@/domain/sync/syncTypes";
 import type { ReportDeliveryState, ReportDeliveryStateSnapshot } from "@/domain/reporting/reportDeliveryState";
@@ -66,6 +66,13 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25,
           )
         )
         ${aggregateFilter}
+        AND NOT EXISTS (
+          SELECT 1 FROM json_each(CASE WHEN json_valid(candidate.payload_json) THEN candidate.payload_json ELSE '{}' END, '$.dependencies') dependency
+          WHERE NOT EXISTS (SELECT 1 FROM outbox_commands acknowledged
+            WHERE acknowledged.owner_user_id = candidate.owner_user_id AND acknowledged.contour_id = candidate.contour_id
+              AND acknowledged.client_operation_id = dependency.value
+              AND acknowledged.status IN ('accepted', 'duplicate', 'superseded', 'cancelled', 'cancelledLocal'))
+        )
         AND NOT EXISTS (
           SELECT 1
           FROM outbox_commands previous
@@ -238,7 +245,8 @@ function isRecoverableLifecycleRejection(commandType: string, lastError: string 
     return error.includes("only an accepted patrol assignment can be started");
   }
   if (["scanPatrolPointNfc", "scanPatrolPointQr", "markPatrolPointOk", "markPatrolPointIssue"].includes(commandType)) {
-    return error.includes("patrol point actions are allowed only while patrol is in progress");
+    return error.includes("patrol point actions are allowed only while patrol is in progress")
+      || error.includes("сначала завершите обязательные точки по порядку маршрута");
   }
   if (commandType === "completePatrolAssignment") {
     return error.includes("patrol assignment must be in progress before report submit");
@@ -259,9 +267,26 @@ export async function getReportDeliveryState(
   ownerUserId: string,
   assignmentId: string
 ): Promise<ReportDeliveryStateSnapshot> {
+  return (await getReportDeliveryStates(ownerUserId, [assignmentId])).get(assignmentId)!;
+}
+
+export async function getReportDeliveryStates(
+  ownerUserId: string,
+  assignmentIds: string[]
+): Promise<Map<string, ReportDeliveryStateSnapshot>> {
+  if (!assignmentIds.length) return new Map();
+  // Bound SQLite parameters on older devices, even after many "load more" pages.
+  if (assignmentIds.length > 250) {
+    const result = new Map<string, ReportDeliveryStateSnapshot>();
+    for (let offset = 0; offset < assignmentIds.length; offset += 250) {
+      for (const [id, delivery] of await getReportDeliveryStates(ownerUserId, assignmentIds.slice(offset, offset + 250))) result.set(id, delivery);
+    }
+    return result;
+  }
   const db = await getDatabase();
-  const aggregateKey = `patrolAssignment:${assignmentId}`;
+  const aggregateKeys = assignmentIds.map((id) => `patrolAssignment:${id}`);
   const rows = await db.getAllAsync<{
+    aggregateKey: string;
     clientOperationId: string;
     commandType: string;
     status: OutboxCommandStatus;
@@ -272,6 +297,7 @@ export async function getReportDeliveryState(
   }>(
     `
       SELECT
+        aggregate_key AS aggregateKey,
         client_operation_id AS clientOperationId,
         command_type AS commandType,
         status,
@@ -282,11 +308,24 @@ export async function getReportDeliveryState(
       FROM outbox_commands
       WHERE owner_user_id = ?
         AND contour_id = ?
-        AND aggregate_key = ?
+        AND aggregate_key IN (${aggregateKeys.map(() => '?').join(',')})
       ORDER BY sequence_no ASC, created_at_local ASC, client_operation_id ASC
     `,
-    [ownerUserId, currentContourId, aggregateKey]
+    [ownerUserId, currentContourId, ...aggregateKeys]
   );
+  const grouped = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const group = grouped.get(row.aggregateKey) ?? [];
+    group.push(row);
+    grouped.set(row.aggregateKey, group);
+  }
+  return new Map(assignmentIds.map((id) => [id, resolveReportDeliveryRows(grouped.get(`patrolAssignment:${id}`) ?? [])]));
+}
+
+function resolveReportDeliveryRows(rows: {
+  clientOperationId: string; commandType: string; status: OutboxCommandStatus;
+  lastError: string | null; nextAttemptAt: string | null; updatedAtLocal: string | null; attemptCount: number;
+}[]): ReportDeliveryStateSnapshot {
   const empty = (): ReportDeliveryStateSnapshot => ({ status: "notQueued", updatedAtLocal: null, attemptCount: 0 });
   const snapshot = (state: ReportDeliveryState, row: typeof rows[number]): ReportDeliveryStateSnapshot => ({
     ...state,
@@ -424,8 +463,7 @@ export async function quarantineInvalidPatrolCompletionCommands(ownerUserId: str
           const assignmentUpdate = await tx.runAsync(
             `
               UPDATE patrol_assignments
-              SET status = 'inProgress',
-                  completed_at_local = NULL
+              SET status = 'inProgress'
               WHERE owner_user_id = ?
                 AND contour_id = ?
                 AND assignment_id = ?
@@ -480,6 +518,7 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
     attempt_count: number;
     last_error: string | null;
     assignment_route_name: string | null;
+    source_assignment_id: string | null;
     resolution_status: string | null;
   }>(
     `
@@ -498,6 +537,7 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
         command.attempt_count,
         command.last_error,
         COALESCE(route.name, request.route_name, '') AS assignment_route_name,
+        json_extract(command.payload_json, '$.sourceAssignmentId') AS source_assignment_id,
         (SELECT resolution_status FROM sync_conflicts conflict WHERE conflict.owner_user_id = command.owner_user_id AND conflict.contour_id = command.contour_id AND conflict.client_operation_id = command.client_operation_id ORDER BY conflict.rowid DESC LIMIT 1) AS resolution_status
       FROM outbox_commands command
       LEFT JOIN patrol_assignments assignment
@@ -538,7 +578,8 @@ export async function listSyncQueueCommands(ownerUserId: string, limit = 100) {
     attemptCount: row.attempt_count,
     lastError: row.last_error,
     resolutionStatus: row.resolution_status as SyncQueueCommandItem["resolutionStatus"],
-    assignmentRouteName: row.assignment_route_name
+    assignmentRouteName: row.assignment_route_name,
+    sourceAssignmentId: row.source_assignment_id
   }));
 }
 
@@ -1185,6 +1226,8 @@ async function remapAssignmentIdentityInTransaction(
     status: string;
     startedAtLocal: string | null;
     completedAtLocal: string | null;
+    localReportPresent: number;
+    localReportNeedsReview: number;
     revision: number;
     routeVersionNo: number;
     snapshotVersion: number;
@@ -1202,6 +1245,8 @@ async function remapAssignmentIdentityInTransaction(
        status,
        started_at_local AS startedAtLocal,
        completed_at_local AS completedAtLocal,
+       local_report_present AS localReportPresent,
+       local_report_needs_review AS localReportNeedsReview,
        revision,
        route_version_no AS routeVersionNo,
        snapshot_version AS snapshotVersion,
@@ -1225,6 +1270,8 @@ async function remapAssignmentIdentityInTransaction(
               status = ?,
               started_at_local = ?,
               completed_at_local = ?,
+              local_report_present = MAX(local_report_present, ?),
+              local_report_needs_review = MAX(local_report_needs_review, ?),
               revision = ?,
               route_version_no = ?,
               snapshot_version = ?,
@@ -1240,6 +1287,8 @@ async function remapAssignmentIdentityInTransaction(
         resolveRemappedAssignmentStatus(localRow.status, serverRow.status),
         localRow.startedAtLocal ?? serverRow.startedAtLocal,
         localRow.completedAtLocal ?? serverRow.completedAtLocal,
+        Math.max(localRow.localReportPresent ?? 0, serverRow.localReportPresent ?? 0),
+        Math.max(localRow.localReportNeedsReview ?? 0, serverRow.localReportNeedsReview ?? 0),
         Math.max(localRow.revision, serverRow.revision),
         localRow.routeVersionNo || serverRow.routeVersionNo,
         localRow.snapshotVersion || serverRow.snapshotVersion,
@@ -1273,7 +1322,34 @@ async function remapAssignmentIdentityInTransaction(
     await tx.runAsync("UPDATE assignment_route_points SET assignment_id = ? WHERE assignment_id = ?", [serverAssignmentId, localAssignmentId]);
   }
   await tx.runAsync("UPDATE point_results SET assignment_id = ? WHERE owner_user_id = ? AND assignment_id = ?", [serverAssignmentId, ownerUserId, localAssignmentId]);
+  await tx.runAsync("UPDATE patrol_appeals SET assignment_id = ? WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?", [serverAssignmentId, ownerUserId, currentContourId, localAssignmentId]);
   await tx.runAsync("UPDATE files SET assignment_id = ? WHERE owner_user_id = ? AND assignment_id = ?", [serverAssignmentId, ownerUserId, localAssignmentId]);
+  await tx.runAsync(
+    `INSERT OR REPLACE INTO patrol_report_cache (
+       owner_user_id, contour_id, assignment_id, route_name, employee_name,
+       completed_at, cached_at
+     )
+     SELECT owner_user_id, contour_id, ?, route_name, employee_name,
+            completed_at, cached_at
+       FROM patrol_report_cache
+      WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?`,
+    [serverAssignmentId, ownerUserId, currentContourId, localAssignmentId]
+  );
+  await tx.runAsync(
+    `INSERT OR REPLACE INTO patrol_report_detail_cache (
+       owner_user_id, contour_id, assignment_id, points_json, cached_at
+     )
+     SELECT owner_user_id, contour_id, ?, points_json, cached_at
+       FROM patrol_report_detail_cache
+      WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?`,
+    [serverAssignmentId, ownerUserId, currentContourId, localAssignmentId]
+  );
+  await tx.runAsync(
+    `UPDATE patrol_device_context
+        SET assignment_id = ?
+      WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?`,
+    [serverAssignmentId, ownerUserId, currentContourId, localAssignmentId]
+  );
 
   const commands = await tx.getAllAsync<{
     clientOperationId: string;
@@ -1287,14 +1363,19 @@ async function remapAssignmentIdentityInTransaction(
             payload_json AS payloadJson
        FROM outbox_commands
       WHERE owner_user_id = ? AND contour_id = ?
-        AND (aggregate_key = ? OR entity_local_id = ? OR instr(payload_json, ?) > 0)`,
-    [ownerUserId, currentContourId, `patrolAssignment:${localAssignmentId}`, localAssignmentId, localAssignmentId]
+        AND (aggregate_key = ? OR entity_local_id = ? OR entity_server_id = ? OR
+          (json_valid(payload_json) AND (json_extract(payload_json, '$.assignmentId') = ? OR json_extract(payload_json, '$.sourceAssignmentId') = ?)))`,
+    [ownerUserId, currentContourId, `patrolAssignment:${localAssignmentId}`, localAssignmentId, localAssignmentId, localAssignmentId, localAssignmentId]
   );
 
   for (const command of commands) {
     let payloadJson = command.payloadJson;
     try {
       const payload = JSON.parse(command.payloadJson) as Record<string, unknown>;
+      if (payload.sourceAssignmentId === localAssignmentId) {
+        payload.sourceAssignmentId = serverAssignmentId;
+        payloadJson = JSON.stringify(payload);
+      }
       if (payload.assignmentId === localAssignmentId) {
         payload.assignmentId = serverAssignmentId;
         payloadJson = JSON.stringify(payload);
@@ -1324,6 +1405,42 @@ async function remapAssignmentIdentityInTransaction(
     );
   }
 
+  const conflicts = await tx.getAllAsync<{
+    conflictId: string;
+    payloadSnapshotJson: string;
+  }>(
+    `SELECT conflict_id AS conflictId, payload_snapshot_json AS payloadSnapshotJson
+       FROM sync_conflicts
+      WHERE owner_user_id = ?
+        AND (contour_id = ? OR contour_id IS NULL)
+        AND json_valid(payload_snapshot_json)
+        AND (json_extract(payload_snapshot_json, '$.assignmentId') = ? OR json_extract(payload_snapshot_json, '$.sourceAssignmentId') = ?)`,
+    [ownerUserId, currentContourId, localAssignmentId, localAssignmentId]
+  );
+  for (const conflict of conflicts) {
+    try {
+      const payload = JSON.parse(conflict.payloadSnapshotJson) as Record<string, unknown>;
+      let changed = false;
+      if (payload.sourceAssignmentId === localAssignmentId) {
+        payload.sourceAssignmentId = serverAssignmentId;
+        changed = true;
+      }
+      if (payload.assignmentId === localAssignmentId) {
+        payload.assignmentId = serverAssignmentId;
+        changed = true;
+      }
+      if (changed) {
+        await tx.runAsync(
+          `UPDATE sync_conflicts SET payload_snapshot_json = ?
+             WHERE owner_user_id = ? AND conflict_id = ?`,
+          [JSON.stringify(payload), ownerUserId, conflict.conflictId]
+        );
+      }
+    } catch {
+      // Keep malformed legacy snapshots visible for manual resolution.
+    }
+  }
+
   if (serverRow) {
     await tx.runAsync(
       `DELETE FROM patrol_assignments
@@ -1338,6 +1455,14 @@ async function remapAssignmentIdentityInTransaction(
       [serverAssignmentId, ownerUserId, currentContourId, localAssignmentId]
     );
   }
+  await tx.runAsync(
+    "DELETE FROM patrol_report_cache WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?",
+    [ownerUserId, currentContourId, localAssignmentId]
+  );
+  await tx.runAsync(
+    "DELETE FROM patrol_report_detail_cache WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?",
+    [ownerUserId, currentContourId, localAssignmentId]
+  );
 }
 export async function finalizeAcceptedCompleteReportCommands(ownerUserId: string, assignmentId?: string) {
   const db = await getDatabase();
@@ -1467,6 +1592,13 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
           [ownerUserId, currentContourId, response.clientOperationId]
         );
 
+        if (command?.command_type === "createPatrolAppeal" && command.entity_local_id) {
+          if (response.serverEntityId && response.serverEntityId !== command.entity_local_id) {
+            await tx.runAsync("DELETE FROM patrol_appeals WHERE id = ? AND owner_user_id = ? AND contour_id = ?", [command.entity_local_id, ownerUserId, currentContourId]);
+          } else {
+            await tx.runAsync("UPDATE patrol_appeals SET status = CASE WHEN status = 'pending' THEN 'open' ELSE status END, version = MAX(version, ?) WHERE id = ? AND owner_user_id = ? AND contour_id = ?", [response.serverRevision ?? 1, command.entity_local_id, ownerUserId, currentContourId]);
+          }
+        }
         if (command?.entity_type === "workTask" && command.entity_local_id
           && (response.serverRevision !== null || response.serverEntityId)) {
           await updatePendingWorkTaskRevisionInTransaction(
@@ -1620,6 +1752,7 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
             "acceptPatrolRequest",
             "takePatrolRequest",
             "startPatrolAssignment",
+            "switchPatrolAssignment",
             "pausePatrolAssignment",
             "resumePatrolAssignment",
             "handoffPatrolAssignment"
@@ -1676,6 +1809,14 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
           );
 
           if (response.serverRevision !== null) {
+            await updatePendingPatrolSwitchRevision(tx, command.owner_user_id, effectiveAssignmentId, response.serverRevision);
+            if (command.command_type === "switchPatrolAssignment") {
+              const payload = JSON.parse(command.payload_json) as { sourceAssignmentId: string; sourceRevision: number };
+              const sourceRevision = payload.sourceRevision + 1;
+              await tx.runAsync("UPDATE patrol_assignments SET revision = ? WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?", [sourceRevision, command.owner_user_id, currentContourId, payload.sourceAssignmentId]);
+              await updatePendingPatrolSwitchRevision(tx, command.owner_user_id, payload.sourceAssignmentId, sourceRevision);
+              await updatePendingCompleteReportBaseRevisionInTransaction(tx, command.owner_user_id, payload.sourceAssignmentId, sourceRevision);
+            }
             await updatePendingCompleteReportBaseRevisionInTransaction(
               tx,
               command.owner_user_id,
@@ -1892,6 +2033,9 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
             response.status === "rejected"
             && command.command_type === "completePatrolAssignment"
             && response.reasonCode !== "assignmentCancelled";
+          const isPointDeliveryRejection =
+            response.status === "rejected"
+            && ["scanPatrolPointNfc", "scanPatrolPointQr", "markPatrolPointOk", "markPatrolPointIssue"].includes(command.command_type);
           const assignmentId = resolvePatrolAssignmentIdentity({
             commandType: command.command_type,
             entityType: command.entity_type,
@@ -1954,15 +2098,17 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
 
             const nextStatus = response.status === "conflict"
               ? "needsDispatcherDecision"
-              : isRepairableCompletionRejection ? "inProgress" : "syncError";
+              // A malformed or temporarily rejected point is an outbox
+              // problem, not a lifecycle transition. Keep the route editable
+              // and surface the command error next to the affected point.
+              : isRepairableCompletionRejection || isPointDeliveryRejection ? "inProgress" : "syncError";
             await tx.runAsync(
               `
                 UPDATE patrol_assignments
-                SET status = ?,
-                    completed_at_local = CASE WHEN ? = 'inProgress' THEN NULL ELSE completed_at_local END
+                SET status = ?
                 WHERE owner_user_id = ? AND assignment_id = ?
               `,
-              [nextStatus, nextStatus, command.owner_user_id, assignmentId]
+              [nextStatus, command.owner_user_id, assignmentId]
             );
             await tx.runAsync(
               `
@@ -2128,7 +2274,7 @@ export async function resolveOutboxConflictAsServerWins(
               SET status = ?,
                   revision = COALESCE(?, revision),
                   started_at_local = ?,
-                  completed_at_local = ?
+                  completed_at_local = COALESCE(?, completed_at_local)
               WHERE owner_user_id = ? AND assignment_id = ?
             `,
             [snapshot.assignmentStatus, snapshot.revision, snapshot.startedAtLocal, snapshot.completedAtLocal, ownerUserId, patrolAssignmentIdentity]
@@ -2374,11 +2520,11 @@ export async function cancelRejectedOutboxCommand(ownerUserId: string, clientOpe
         const assignmentUpdate = await tx.runAsync(
           `
             UPDATE patrol_assignments
-            SET status = ?, completed_at_local = CASE WHEN ? = 'inProgress' THEN NULL ELSE completed_at_local END
+            SET status = ?
             WHERE owner_user_id = ? AND assignment_id = ?
               AND status IN ('syncError', 'completedLocal', 'needsDispatcherDecision', 'accepted', 'inProgress', 'paused')
           `,
-          [statusToRestore, statusToRestore, ownerUserId, patrolAssignmentIdentity]
+          [statusToRestore, ownerUserId, patrolAssignmentIdentity]
         );
         if (assignmentUpdate.changes !== 1) {
           throw new Error("\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u043e\u0435 \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e; \u043e\u0442\u043c\u0435\u043d\u0430 \u043a\u043e\u043c\u0430\u043d\u0434\u044b \u043d\u0435 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430.");

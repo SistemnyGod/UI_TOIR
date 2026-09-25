@@ -157,7 +157,15 @@ public sealed record MobileWorkItemDto(
     IReadOnlyList<MobileWorkParticipantDto> AssignedEmployees,
     IReadOnlyList<MobileWorkParticipantDto> ActualParticipants,
     IReadOnlyList<MobileWorkAttachmentDto> Attachments,
-    MobileWorkItemCapabilitiesDto Capabilities);
+    MobileWorkItemCapabilitiesDto Capabilities)
+{
+    // Used only by the paged endpoint. Existing clients may ignore it.
+    public DateTimeOffset UpdatedAt { get; init; }
+}
+
+public sealed record MobileWorkItemPageDto(
+    IReadOnlyList<MobileWorkItemDto> Items,
+    string? NextCursor);
 
 public sealed record MobileBootstrapDto(
     MobileUserDto User,
@@ -174,7 +182,24 @@ public sealed record MobileBootstrapDto(
     public string ContourId { get; init; } = string.Empty;
     public IReadOnlyList<Guid> CancelledAssignmentIds { get; init; } = [];
     public IReadOnlyList<MobileBootstrapConflictResolutionDto> ConflictResolutions { get; init; } = [];
+    public bool PatrolAppealsAvailable { get; init; }
+    public bool PatrolAppealsPaging { get; init; }
+    public bool PatrolAppealsAssignmentPaging { get; init; }
+    public bool WorkItemsPaging { get; init; }
+    public bool PatrolSnapshotManifest { get; init; }
+    public bool PatrolPointResultStatusExtension { get; init; }
+    public bool BoundEmployeesComplete { get; init; }
+    public IReadOnlyList<MobilePatrolSnapshotManifestDto> PatrolSnapshotManifests { get; init; } = [];
+    public IReadOnlyList<MobilePatrolAppealDto> PatrolAppeals { get; init; } = [];
 }
+
+public sealed record MobilePatrolSnapshotPointDto(Guid PointId, long Revision);
+
+public sealed record MobilePatrolSnapshotManifestDto(
+    Guid RouteId,
+    int RouteVersion,
+    bool IsComplete,
+    IReadOnlyList<MobilePatrolSnapshotPointDto> Points);
 
 public sealed record MobileBootstrapConflictResolutionDto(
     string ClientOperationId,
@@ -193,7 +218,12 @@ public sealed record MobilePatrolRequestBoardItemDto(
     DateTimeOffset PlannedStartAt,
     string? AssignedFullName,
     string Status,
-    long Revision);
+    long Revision)
+{
+    public Guid? AssignedEmployeeId { get; init; }
+    public bool PerformerSelectionAvailable { get; init; }
+    public bool RouteSwitchAvailable { get; init; }
+}
 
 public sealed record MobilePatrolAssignmentDto(
     Guid AssignmentId,
@@ -203,7 +233,10 @@ public sealed record MobilePatrolAssignmentDto(
     DateTimeOffset? StartedAtLocal,
     DateTimeOffset? CompletedAtLocal,
     long Revision,
-    int RouteVersionNo);
+    int RouteVersionNo)
+{
+    public Guid? EmployeeId { get; init; }
+}
 
 public sealed record MobilePatrolRouteDto(
     Guid RouteId,

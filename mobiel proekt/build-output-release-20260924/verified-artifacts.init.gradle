@@ -1,0 +1,34 @@
+allprojects {
+  repositories {
+    maven {
+      name = 'VerifiedMavenCentralMirror'
+      url = uri('https://maven-central.storage-download.googleapis.com/maven2/')
+    }
+    exclusiveContent {
+      forRepository {
+        ivy {
+          name = 'VerifiedReleaseArtifacts'
+          url = uri(System.getenv('PATROL360_VERIFIED_MAVEN_DIR'))
+          patternLayout { artifact '[artifact]-[revision].[ext]' }
+          metadataSources { artifact() }
+        }
+      }
+      filter {
+        includeModule('commons-io', 'commons-io')
+        includeModule('com.google.errorprone', 'error_prone_annotations')
+      }
+    }
+  }
+}
+
+def mirror = uri('https://maven-central.storage-download.googleapis.com/maven2/')
+gradle.beforeProject { project ->
+  [project.repositories, project.buildscript.repositories].each { repositories ->
+    repositories.whenObjectAdded { repository ->
+      if (repository instanceof org.gradle.api.artifacts.repositories.MavenArtifactRepository &&
+          (repository.url.toString().contains('repo.maven.apache.org') || repository.url.toString().contains('repo1.maven.org'))) {
+        repository.setUrl(mirror)
+      }
+    }
+  }
+}

@@ -58,6 +58,15 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Patrol request is not available on the server.");
         }
 
+        var selectedEmployeeId = ReadGuid(command.Payload, "employeeId");
+        if (command.Payload.ContainsKey("employeeId") && selectedEmployeeId is null)
+            return Rejected(command.ClientOperationId, "Selected employee identifier is invalid.");
+        if (selectedEmployeeId.HasValue && !boundEmployeeIds.Contains(selectedEmployeeId.Value))
+            return Rejected(command.ClientOperationId, "Selected employee is not linked to this account.");
+        if (selectedEmployeeId.HasValue && patrolRequest.EmployeeId.HasValue
+            && selectedEmployeeId.Value != patrolRequest.EmployeeId.Value)
+            return Conflict(command.ClientOperationId, "Only dispatcher can change the assigned employee.");
+
         if (patrolRequest.Status == AssignmentStatusValues.Cancelled)
         {
             return Conflict(command.ClientOperationId, "Patrol request was cancelled by dispatcher.", "assignmentCancelled");
@@ -131,7 +140,7 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Client assignment id is already used.");
         }
 
-        var employeeId = patrolRequest.EmployeeId ?? boundEmployeeIds.First();
+        var employeeId = patrolRequest.EmployeeId ?? selectedEmployeeId ?? boundEmployeeIds.OrderBy(id => id).First();
         var employee = dbContext.Employees.FirstOrDefault(item => item.Id == employeeId);
         var route = dbContext.Routes.FirstOrDefault(item => item.Id == routeId.Value && !item.IsArchived);
         if (employee is null || route is null)
@@ -262,10 +271,9 @@ internal sealed partial class EfMobileAppService
         if (dbContext.Assignments.Any(item =>
             item.EmployeeId == assignment.EmployeeId
             && item.Id != assignment.Id
-            && (item.Status == AssignmentStatusValues.InProgress
-                || item.Status == AssignmentStatusValues.Paused)))
+            && item.Status == AssignmentStatusValues.InProgress))
         {
-            return Conflict(command.ClientOperationId, "Employee already has another started or paused patrol.");
+            return Conflict(command.ClientOperationId, "Employee already has another patrol in progress.");
         }
 
         var startedAt = ReadDateTimeOffset(command.Payload, "startedAtLocal") ?? DateTimeOffset.UtcNow;
@@ -333,6 +341,13 @@ internal sealed partial class EfMobileAppService
         if (assignment.PatrolRequest?.Status == AssignmentStatusValues.Completed)
         {
             return Conflict(command.ClientOperationId, "Patrol request is already completed.");
+        }
+
+        if (dbContext.Database.IsNpgsql())
+        {
+            var employeeStartLock = $"patrol-start:{assignment.EmployeeId:N}";
+            dbContext.Database.ExecuteSqlInterpolated($"SELECT pg_advisory_xact_lock(hashtextextended({employeeStartLock}, 0))");
+            dbContext.Entry(assignment).Reload();
         }
 
         var resumeTransition = PatrolAssignmentStateMachine.Evaluate(

@@ -33,7 +33,22 @@ public sealed class PrintOutputFactAttribute : FactAttribute
 public sealed class PpeIssueDocumentPrintServiceTests
 {
     [Fact]
-    public async Task NormsDocxGroupsSnapshotNormsAndKeepsActualQuantityAndUnknownPriceVisible()
+    public async Task SignaturePrintsStandardsFromDocumentSnapshot()
+    {
+        var document = Fixture(1);
+        document = document with { Content = document.Content with { Lines = [document.Content.Lines[0] with {
+            Standards = [new("ТЕСТ-СТАНДАРТ", "Синтетическое обозначение для проверки печати")]
+        }] } };
+        using var runtime = new PpeIssueDocumentPrintRuntime();
+        var printer = new PpeIssueDocumentPrintService(new Stub(document), new NeverUsedHttpClientFactory(), runtime);
+        var result = await printer.PrintAsync(document.Id, "both", "docx", CancellationToken.None);
+        Assert.True(result.Succeeded);
+        Assert.Contains("ТЕСТ-СТАНДАРТ", Xml(result.Value!.Content));
+        Assert.Contains("Синтетическое обозначение для проверки печати", Xml(result.Value.Content));
+    }
+
+    [Fact]
+    public async Task PersonalCardUsesFourNormColumnsAndAlignedEmployeeMetadata()
     {
         var document = Fixture(lines: 2);
         document = document with
@@ -54,15 +69,19 @@ public sealed class PpeIssueDocumentPrintServiceTests
         Assert.True(result.Succeeded);
         var xml = Xml(result.Value!.Content);
         Assert.Contains("Группа защиты головы", xml, StringComparison.Ordinal);
+        Assert.Contains("ЛИЧНАЯ КАРТОЧКА", xml, StringComparison.Ordinal);
+        Assert.Contains("52-54", xml, StringComparison.Ordinal);
+        Assert.Equal(4, XDocument.Parse(xml).Descendants(W("tbl")).Last().Element(W("tblGrid"))!.Elements().Count());
+        Assert.DoesNotContain("Цена", xml, StringComparison.Ordinal);
         Assert.Contains("Каска защитная", xml, StringComparison.Ordinal);
-        Assert.Contains("Каска СОМЗ ВИЗИОН", xml, StringComparison.Ordinal);
-        Assert.Contains("дата выдачи 02.03.2026", xml, StringComparison.Ordinal);
+
+
         Assert.DoesNotContain("Невыбранная норма", xml, StringComparison.Ordinal);
         Assert.DoesNotContain("Невыбранная группа", xml, StringComparison.Ordinal);
         Assert.DoesNotContain("99 шт.", xml, StringComparison.Ordinal);
-        Assert.Contains("3 шт.", xml, StringComparison.Ordinal);
-        Assert.Contains("не указана", xml, StringComparison.Ordinal);
-        Assert.Contains("Размер одежды: 52-54", xml, StringComparison.Ordinal);
+
+
+
         Assert.Contains("ПЛАНОВЫЙ ДОКУМЕНТ", HeaderXml(result.Value.Content), StringComparison.Ordinal);
         Assert.DoesNotContain("1645", xml, StringComparison.Ordinal);
         Assert.Single(XDocument.Parse(xml).Descendants(W("tbl")).Last().Descendants(W("tblHeader")));
@@ -79,6 +98,8 @@ public sealed class PpeIssueDocumentPrintServiceTests
 
         Assert.True(result.Succeeded);
         var xml = XDocument.Parse(Xml(result.Value!.Content));
+        Assert.DoesNotContain("Табельный номер", xml.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("Дата формирования", xml.ToString(), StringComparison.Ordinal);
         var table = xml.Descendants(W("tbl")).Last();
         Assert.Equal(57, table.Descendants(W("tr")).Count());
         Assert.Equal(10, table.Descendants(W("tr")).ElementAt(3).Elements(W("tc")).Count());
@@ -89,7 +110,7 @@ public sealed class PpeIssueDocumentPrintServiceTests
     }
 
     [Fact]
-    public async Task NormsDocxUsesComputedValidationTotalForFiftyFourSelectedItems()
+    public async Task PersonalCardContainsNormsWithoutCommercialTotals()
     {
         var document = Fixture(lines: 54);
         using var runtime = new PpeIssueDocumentPrintRuntime();
@@ -99,8 +120,30 @@ public sealed class PpeIssueDocumentPrintServiceTests
 
         Assert.True(result.Succeeded);
         var xml = Xml(result.Value!.Content).Replace('\u00a0', ' ');
-        Assert.Contains("Итого: 5 400,00 руб.", xml, StringComparison.Ordinal);
+        Assert.Contains("Количество на период", xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Итого:", xml, StringComparison.Ordinal);
         Assert.DoesNotContain("Итого: не рассчитано", xml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BothDocxContainsBothFormsInPortraitThenLandscapeSections()
+    {
+        var document = Fixture(lines: 2);
+        using var runtime = new PpeIssueDocumentPrintRuntime();
+        var printer = new PpeIssueDocumentPrintService(new Stub(document), new NeverUsedHttpClientFactory(), runtime);
+
+        var result = await printer.PrintAsync(document.Id, "both", "docx", CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var xml = XDocument.Parse(Xml(result.Value!.Content));
+        var text = string.Concat(xml.Descendants(W("t")).Select(x => x.Value));
+        Assert.Contains("ЛИЧНАЯ КАРТОЧКА", text, StringComparison.Ordinal);
+        Assert.Contains("ВЫДАЧА, ВОЗВРАТ И ПОДПИСИ", text, StringComparison.Ordinal);
+        var sections = xml.Descendants(W("sectPr")).ToList();
+        Assert.Equal(2, sections.Count);
+        Assert.Equal("portrait", sections[0].Element(W("pgSz"))!.Attribute(W("orient"))?.Value);
+        Assert.Equal("landscape", sections[1].Element(W("pgSz"))!.Attribute(W("orient"))?.Value);
+        Assert.Equal("nextPage", sections[0].Element(W("type"))?.Attribute(W("val"))?.Value);
     }
 
     [Fact]
@@ -130,6 +173,24 @@ public sealed class PpeIssueDocumentPrintServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Contains("pdf.retryable", result.Errors.Keys);
+    }
+
+    [Fact]
+    public async Task PdfTimeoutReturnsRetryableErrorAndReleasesGateForRetry()
+    {
+        var document = Fixture(lines: 1);
+        using var runtime = new PpeIssueDocumentPrintRuntime();
+        var handler = new TimeoutThenSuccessPdfHandler();
+        var printer = new PpeIssueDocumentPrintService(new Stub(document), new PdfHttpClientFactory(handler), runtime);
+
+        var timedOut = await printer.PrintAsync(document.Id, "norms", "pdf", CancellationToken.None);
+        var retried = await printer.PrintAsync(document.Id, "norms", "pdf", CancellationToken.None);
+
+        Assert.False(timedOut.Succeeded);
+        Assert.Contains("pdf.retryable", timedOut.Errors.Keys);
+        Assert.Contains("Превышено время ожидания", timedOut.Errors["pdf.retryable"].Single(), StringComparison.Ordinal);
+        Assert.True(retried.Succeeded);
+        Assert.Equal(2, handler.Calls);
     }
 
     [Fact]
@@ -193,16 +254,22 @@ public sealed class PpeIssueDocumentPrintServiceTests
         var signatureDocx = await printer.PrintAsync(document.Id, "signature", "docx", CancellationToken.None);
         var normsPdf = await printer.PrintAsync(document.Id, "norms", "pdf", CancellationToken.None);
         var signaturePdf = await printer.PrintAsync(document.Id, "signature", "pdf", CancellationToken.None);
+        var bothDocx = await printer.PrintAsync(document.Id, "both", "docx", CancellationToken.None);
+        var bothPdf = await printer.PrintAsync(document.Id, "both", "pdf", CancellationToken.None);
 
         Assert.True(normsDocx.Succeeded);
         Assert.True(signatureDocx.Succeeded);
         Assert.True(normsPdf.Succeeded);
         Assert.True(signaturePdf.Succeeded);
+        Assert.True(bothDocx.Succeeded);
+        Assert.True(bothPdf.Succeeded);
         Directory.CreateDirectory(outputDirectory);
         WriteOutput(outputDirectory, "ppe-issue-norms.docx", normsDocx.Value!.Content);
         WriteOutput(outputDirectory, "ppe-issue-signature.docx", signatureDocx.Value!.Content);
         WriteOutput(outputDirectory, "ppe-issue-norms.pdf", normsPdf.Value!.Content);
         WriteOutput(outputDirectory, "ppe-issue-signature.pdf", signaturePdf.Value!.Content);
+        WriteOutput(outputDirectory, "ppe-issue-both.docx", bothDocx.Value!.Content);
+        WriteOutput(outputDirectory, "ppe-issue-both.pdf", bothPdf.Value!.Content);
     }
 
     [PrintOutputFact]
@@ -256,6 +323,8 @@ public sealed class PpeIssueDocumentPrintServiceTests
             ? new(document, new Dictionary<string, string[]>())
             : new(null, new Dictionary<string, string[]> { ["id"] = ["Not found"] });
         public IReadOnlyList<PpeIssueDocumentSummaryDto> GetIssueDocuments(Guid? employeeId) => [];
+        public PpeIssueJournalPage GetIssueJournal(PpeIssueJournalQuery query) => throw new NotSupportedException();
+        public InventoryGeneratedFileDto ExportIssueJournal(PpeIssueJournalQuery query) => throw new NotSupportedException();
         public IReadOnlyList<InventoryPpeNormSetDto> GetApplicablePpeNorms(Guid employeeId, DateOnly date) => [];
         public InventoryCommandResult<PpeIssueDocumentDto> SaveIssueDocument(Guid? id, SavePpeIssueDocumentDto request, string actor) => throw new NotSupportedException();
         public InventoryCommandResult<PpeIssueDocumentDto> ValidateIssueDocument(Guid id) => throw new NotSupportedException();
@@ -318,6 +387,21 @@ public sealed class PpeIssueDocumentPrintServiceTests
             var content = new ByteArrayContent(Encoding.ASCII.GetBytes("%PDF-1.7\nfixture"));
             content.Headers.ContentLength = 33L * 1024 * 1024;
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = content });
+        }
+    }
+
+    private sealed class TimeoutThenSuccessPdfHandler : HttpMessageHandler
+    {
+        public int Calls { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Calls++;
+            if (Calls == 1) throw new TaskCanceledException("Synthetic converter timeout.");
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(Encoding.ASCII.GetBytes("%PDF-1.7\nfixture"))
+            });
         }
     }
 }

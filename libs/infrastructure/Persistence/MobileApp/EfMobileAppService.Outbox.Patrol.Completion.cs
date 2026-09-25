@@ -128,7 +128,7 @@ internal sealed partial class EfMobileAppService
                 return Rejected(command.ClientOperationId, "Issue point result requires an issue type.");
             }
 
-            if (IsManualPointResult(result) && string.IsNullOrWhiteSpace(result.Comment))
+            if (IsManualPointResult(result) && string.IsNullOrWhiteSpace(result.ManualReason) && string.IsNullOrWhiteSpace(result.Comment))
             {
                 return Rejected(command.ClientOperationId, "Manual point result requires a reason.");
             }
@@ -209,6 +209,16 @@ internal sealed partial class EfMobileAppService
         assignment.ProgressPercent = 100;
         assignment.LockVersion += 1;
         assignment.PatrolRequest.Status = AssignmentStatusValues.Completed;
+        foreach (var appeal in dbContext.MobilePatrolAppeals.Where(item => item.AssignmentId == assignment.Id && item.Kind == "cancel" && item.Status == "open"))
+        {
+            // A pending request is not an approved cancellation. Completion wins
+            // this race; do not offer a retrospective cancellation of an accepted report.
+            appeal.Status = "obsolete";
+            appeal.ResolvedAt = now;
+            appeal.UpdatedAt = now;
+            appeal.Reply = "Обход завершён до рассмотрения запроса отмены.";
+            appeal.Version++;
+        }
 
         return new MobileOutboxResponseDto(
             command.ClientOperationId,
@@ -314,6 +324,7 @@ internal sealed partial class EfMobileAppService
                 pointResult.PointId,
                 NormalizeOptionalText(pointResult.Status),
                 NormalizeOptionalText(pointResult.Comment),
+                NormalizeOptionalText(pointResult.ManualReason),
                 NormalizeOptionalText(pointResult.IssueTypeId),
                 NormalizeOptionalText(pointResult.ConfirmationType),
                 NormalizeOptionalText(pointResult.NfcUidHash),
@@ -335,7 +346,12 @@ internal sealed partial class EfMobileAppService
 
     private static string GetCompleteReportPayloadFingerprint(IReadOnlyList<MobilePointResultPayload> pointResults)
     {
-        var canonicalPayload = JsonSerializer.Serialize(BuildCompleteReportPayloadSnapshots(pointResults), JsonOptions);
+        var canonical = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(BuildCompleteReportPayloadSnapshots(pointResults), JsonOptions))!.AsArray();
+        // Preserve fingerprints produced by clients/servers before manualReason existed.
+        foreach (var node in canonical)
+            if (node is System.Text.Json.Nodes.JsonObject item && string.IsNullOrEmpty(item["manualReason"]?.GetValue<string>()))
+                item.Remove("manualReason");
+        var canonicalPayload = canonical.ToJsonString(JsonOptions);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalPayload))).ToLowerInvariant();
     }
 
@@ -355,6 +371,7 @@ internal sealed partial class EfMobileAppService
             if (submitted.PointId != existing.PointId
                 || !submitted.Status.Equals(existing.Status, StringComparison.Ordinal)
                 || !submitted.Comment.Equals(existing.Comment, StringComparison.Ordinal)
+                || !submitted.ManualReason.Equals(existing.ManualReason, StringComparison.Ordinal)
                 || !submitted.IssueType.Equals(existing.IssueType, StringComparison.Ordinal)
                 || !submitted.ConfirmationType.Equals(existing.ConfirmationType, StringComparison.Ordinal)
                 || !submitted.NfcUidHash.Equals(existing.NfcUidHash, StringComparison.Ordinal)
@@ -494,6 +511,8 @@ internal sealed partial class EfMobileAppService
 
         if (IsManualPointResult(pointResult))
         {
+            if (!string.IsNullOrWhiteSpace(pointResult.ManualReason))
+                return $"Без NFC: {pointResult.ManualReason.Trim()}. {comment}".Trim();
             return string.IsNullOrWhiteSpace(comment)
                 ? "Заполнено вручную без сканирования"
                 : $"Заполнено вручную без сканирования: {comment}";
@@ -546,6 +565,7 @@ internal sealed partial class EfMobileAppService
         Guid PointId,
         string Status,
         string Comment,
+        string ManualReason,
         string IssueType,
         string ConfirmationType,
         string NfcUidHash,

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$CanonicalUrl = "https://192.168.2.194:5173/",
+    [string]$CanonicalUrl = "https://192.168.2.194/",
     [switch]$SkipNpmBuild
 )
 

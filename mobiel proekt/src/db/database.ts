@@ -118,6 +118,8 @@ async function initializeDatabaseOnce() {
       status TEXT NOT NULL,
       started_at_local TEXT,
       completed_at_local TEXT,
+      local_report_present INTEGER NOT NULL DEFAULT 0,
+      local_report_needs_review INTEGER NOT NULL DEFAULT 0,
       revision INTEGER NOT NULL,
       route_version_no INTEGER NOT NULL DEFAULT 0,
       snapshot_version INTEGER NOT NULL DEFAULT 0,
@@ -344,6 +346,238 @@ async function initializeDatabaseOnce() {
     await runLocalMigration(tx, "20260726_assignment_snapshot_policy", async () => {
       await ensureAssignmentSnapshotPolicy(tx);
     });
+    await runLocalMigration(tx, "20260921_atom_patrol", async () => {
+      await ensureAssignmentSnapshotPolicy(tx);
+      await tx.execAsync(`CREATE TABLE IF NOT EXISTS patrol_appeals (
+        id TEXT NOT NULL, owner_user_id TEXT NOT NULL, contour_id TEXT NOT NULL,
+        assignment_id TEXT NOT NULL, kind TEXT NOT NULL, message TEXT NOT NULL,
+        status TEXT NOT NULL, reply TEXT, created_at TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (id, owner_user_id, contour_id));
+        CREATE TABLE IF NOT EXISTS mobile_capabilities (
+        owner_user_id TEXT NOT NULL, contour_id TEXT NOT NULL, patrol_appeals INTEGER NOT NULL DEFAULT 0,
+        patrol_appeals_paging INTEGER NOT NULL DEFAULT 0,
+        patrol_appeals_assignment_paging INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (owner_user_id, contour_id));`);
+    });
+    await runLocalMigration(tx, "20260921_patrol_appeals_paging", async () => {
+      await ensureColumns(tx, "mobile_capabilities", [
+        { name: "patrol_appeals_paging", sql: "ALTER TABLE mobile_capabilities ADD COLUMN patrol_appeals_paging INTEGER NOT NULL DEFAULT 0" }
+      ]);
+      await ensureColumns(tx, "work_tasks", [
+        { name: "updated_at_server", sql: "ALTER TABLE work_tasks ADD COLUMN updated_at_server TEXT" }
+      ]);
+    });
+    await runLocalMigration(tx, "20260922_patrol_appeal_cursors", async () => {
+      await ensureColumns(tx, "mobile_capabilities", [
+        { name: "patrol_appeals_assignment_paging", sql: "ALTER TABLE mobile_capabilities ADD COLUMN patrol_appeals_assignment_paging INTEGER NOT NULL DEFAULT 0" }
+      ]);
+      await tx.execAsync(`
+        CREATE TABLE IF NOT EXISTS patrol_appeal_cursors (
+          owner_user_id TEXT NOT NULL,
+          contour_id TEXT NOT NULL,
+          scope_key TEXT NOT NULL,
+          next_cursor TEXT,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (owner_user_id, contour_id, scope_key)
+        );
+        CREATE INDEX IF NOT EXISTS ix_patrol_appeals_assignment_created
+          ON patrol_appeals (owner_user_id, contour_id, assignment_id, created_at, id);
+      `);
+    });
+    await runLocalMigration(tx, "20260923_patrol_appeal_refresh_state", async () => {
+      await tx.execAsync(`
+        CREATE TABLE IF NOT EXISTS patrol_appeal_refresh_state (
+          owner_user_id TEXT NOT NULL,
+          contour_id TEXT NOT NULL,
+          scope_key TEXT NOT NULL,
+          initialized INTEGER NOT NULL DEFAULT 0,
+          refresh_mode TEXT NOT NULL DEFAULT 'initial',
+          boundary_json TEXT,
+          confirmed_cursor TEXT,
+          in_progress_cursor TEXT,
+          visible_limit INTEGER NOT NULL DEFAULT 25,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (owner_user_id, contour_id, scope_key)
+        );
+      `);
+    });
+    await runLocalMigration(tx, "20260922_work_paging_and_drafts", async () => {
+      await ensureColumns(tx, "mobile_capabilities", [
+        { name: "work_items_paging", sql: "ALTER TABLE mobile_capabilities ADD COLUMN work_items_paging INTEGER NOT NULL DEFAULT 0" }
+      ]);
+      await tx.execAsync(`
+        CREATE TABLE IF NOT EXISTS work_item_cursors (
+          owner_user_id TEXT NOT NULL,
+          contour_id TEXT NOT NULL,
+          scope_key TEXT NOT NULL,
+          next_cursor TEXT,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (owner_user_id, contour_id, scope_key)
+        );
+        CREATE TABLE IF NOT EXISTS work_item_refresh_state (
+          owner_user_id TEXT NOT NULL,
+          contour_id TEXT NOT NULL,
+          scope_key TEXT NOT NULL,
+          boundary_json TEXT,
+          refresh_mode TEXT NOT NULL DEFAULT 'initial',
+          confirmed_cursor TEXT,
+          in_progress_cursor TEXT,
+          visible_limit INTEGER NOT NULL DEFAULT 25,
+          initialized INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (owner_user_id, contour_id, scope_key)
+        );
+        CREATE TABLE IF NOT EXISTS work_form_drafts (
+          owner_user_id TEXT NOT NULL,
+          contour_id TEXT NOT NULL,
+          employee_id TEXT NOT NULL,
+          form_kind TEXT NOT NULL,
+          entity_id TEXT NOT NULL,
+          payload_json TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (owner_user_id, contour_id, employee_id, form_kind, entity_id)
+        );
+        CREATE INDEX IF NOT EXISTS ix_work_tasks_owner_status_created
+          ON work_tasks (owner_user_id, status, created_at_local);
+      `);
+      await ensureColumns(tx, "work_item_refresh_state", [
+        { name: "refresh_mode", sql: "ALTER TABLE work_item_refresh_state ADD COLUMN refresh_mode TEXT NOT NULL DEFAULT 'initial'" },
+        { name: "confirmed_cursor", sql: "ALTER TABLE work_item_refresh_state ADD COLUMN confirmed_cursor TEXT" },
+        { name: "visible_limit", sql: "ALTER TABLE work_item_refresh_state ADD COLUMN visible_limit INTEGER NOT NULL DEFAULT 25" }
+      ]);
+    });
+    await runLocalMigration(tx, "20260921_patrol_report_cache", async () => {
+      await tx.execAsync(`
+        CREATE TABLE IF NOT EXISTS patrol_report_cache (
+          owner_user_id TEXT NOT NULL,
+          contour_id TEXT NOT NULL,
+          assignment_id TEXT NOT NULL,
+          route_name TEXT NOT NULL,
+          employee_name TEXT NOT NULL,
+          completed_at TEXT,
+          cached_at TEXT NOT NULL,
+          PRIMARY KEY (owner_user_id, contour_id, assignment_id)
+        );
+        CREATE INDEX IF NOT EXISTS ix_patrol_report_cache_completed
+          ON patrol_report_cache (owner_user_id, contour_id, completed_at DESC, assignment_id);
+      `);
+    });
+    await runLocalMigration(tx, "20260921_patrol_report_detail_cache", async () => {
+      await tx.execAsync(`
+        CREATE TABLE IF NOT EXISTS patrol_report_detail_cache (
+          owner_user_id TEXT NOT NULL,
+          contour_id TEXT NOT NULL,
+          assignment_id TEXT NOT NULL,
+          points_json TEXT NOT NULL,
+          cached_at TEXT NOT NULL,
+          PRIMARY KEY (owner_user_id, contour_id, assignment_id)
+        );
+      `);
+    });
+    await runLocalMigration(tx, "20260922_local_report_review_flag", async () => {
+      await ensureColumns(tx, "patrol_assignments", [
+        { name: "local_report_needs_review", sql: "ALTER TABLE patrol_assignments ADD COLUMN local_report_needs_review INTEGER NOT NULL DEFAULT 0" }
+      ]);
+      // The previous migration intentionally kept ambiguous rows visible. Mark
+      // only those without completion evidence for manual review; never delete
+      // their results or invent a completion timestamp.
+      await tx.runAsync(
+        `UPDATE patrol_assignments
+            SET local_report_needs_review = 1
+          WHERE local_report_present = 1
+            AND completed_at_local IS NULL
+            AND status IN ('syncError', 'authRequired', 'needsDispatcherDecision')
+            AND NOT EXISTS (
+              SELECT 1 FROM outbox_commands command
+               WHERE command.owner_user_id = patrol_assignments.owner_user_id
+                 AND command.contour_id = patrol_assignments.contour_id
+                 AND command.command_type = 'completePatrolAssignment'
+                 AND command.status NOT IN ('superseded', 'cancelledLocal')
+                 AND (command.entity_local_id = patrol_assignments.assignment_id
+                   OR command.entity_server_id = patrol_assignments.assignment_id
+                   OR json_extract(command.payload_json, '$.assignmentId') = patrol_assignments.assignment_id)
+            )`
+      );
+    });
+    await runLocalMigration(tx, "20260922_local_patrol_report_presence", async () => {
+      await ensureColumns(tx, "patrol_assignments", [
+        { name: "local_report_present", sql: "ALTER TABLE patrol_assignments ADD COLUMN local_report_present INTEGER NOT NULL DEFAULT 0" }
+      ]);
+      // Preserve reports produced by older builds even when a previous
+      // recovery path lost their completion timestamp.
+      await tx.runAsync(
+        `UPDATE patrol_assignments
+            SET local_report_present = 1
+          WHERE local_report_present = 0
+            AND (completed_at_local IS NOT NULL
+              OR status IN ('completedLocal', 'syncing')
+              OR EXISTS (
+                SELECT 1 FROM outbox_commands command
+                 WHERE command.owner_user_id = patrol_assignments.owner_user_id
+                   AND command.contour_id = patrol_assignments.contour_id
+                   AND command.command_type = 'completePatrolAssignment'
+                   AND command.status NOT IN ('superseded', 'cancelledLocal')
+                   AND (command.entity_local_id = patrol_assignments.assignment_id
+                     OR command.entity_server_id = patrol_assignments.assignment_id
+                     OR json_extract(command.payload_json, '$.assignmentId') = patrol_assignments.assignment_id)))`
+      );
+    });
+    await runLocalMigration(tx, "20260922_assignment_snapshot_readiness", async () => {
+      await ensureColumns(tx, "patrol_assignments", [
+        { name: "snapshot_ready", sql: "ALTER TABLE patrol_assignments ADD COLUMN snapshot_ready INTEGER NOT NULL DEFAULT 0" }
+      ]);
+    });
+    // Kept separate from the original paging migration. Devices which applied
+    // its earlier revision already have its marker and must still receive the
+    // table and columns introduced afterwards.
+    await runLocalMigration(tx, "20260922_work_refresh_state_recovery", async () => {
+      await ensureWorkItemRefreshStateSchema(tx);
+    });
+    // This must remain a new marker. Some installed databases have already
+    // recorded the migration above before refresh_mode was introduced.
+    await runLocalMigration(tx, "20260923_work_refresh_mode", async () => {
+      await ensureColumns(tx, "work_item_refresh_state", [
+        { name: "refresh_mode", sql: "ALTER TABLE work_item_refresh_state ADD COLUMN refresh_mode TEXT NOT NULL DEFAULT 'initial'" }
+      ]);
+    });
+    await runLocalMigration(tx, "20260922_patrol_snapshot_manifest", async () => {
+      await ensureColumns(tx, "mobile_capabilities", [
+        { name: "patrol_snapshot_manifest", sql: "ALTER TABLE mobile_capabilities ADD COLUMN patrol_snapshot_manifest INTEGER NOT NULL DEFAULT 0" }
+      ]);
+      await tx.execAsync(`
+        CREATE TABLE IF NOT EXISTS patrol_snapshot_manifests (
+          owner_user_id TEXT NOT NULL,
+          contour_id TEXT NOT NULL,
+          assignment_id TEXT NOT NULL,
+          route_id TEXT NOT NULL,
+          route_version INTEGER NOT NULL,
+          employees_complete INTEGER NOT NULL DEFAULT 0,
+          point_revisions_json TEXT NOT NULL,
+          saved_at TEXT NOT NULL,
+          PRIMARY KEY (owner_user_id, contour_id, assignment_id)
+        );
+      `);
+    });
+    // This capability is deliberately a new migration. Some field devices have
+    // already recorded the earlier atom patrol migration and must not silently
+    // miss the column after an APK update.
+    await runLocalMigration(tx, "20260923_patrol_point_result_status_extension", async () => {
+      await ensureColumns(tx, "mobile_capabilities", [
+        { name: "patrol_point_result_status_extension", sql: "ALTER TABLE mobile_capabilities ADD COLUMN patrol_point_result_status_extension INTEGER NOT NULL DEFAULT 0" }
+      ]);
+    });
+    await runLocalMigration(tx, "20260921_patrol_device_context_sqlite", async () => {
+      await tx.execAsync(`
+        CREATE TABLE IF NOT EXISTS patrol_device_context (
+          owner_user_id TEXT NOT NULL,
+          contour_id TEXT NOT NULL,
+          employee_id TEXT,
+          assignment_id TEXT,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (owner_user_id, contour_id)
+        );
+      `);
+    });
     await runLocalMigration(tx, "20260726_assignment_snapshot_source", async () =>
     {
       await tx.runAsync(
@@ -451,6 +685,13 @@ async function runLocalMigration(db: SqlExecutor, id: string, action: () => Prom
 }
 
 async function ensureAssignmentSnapshotPolicy(db: SqlExecutor) {
+  await ensureColumns(db, "patrol_request_board", [{ name: "route_switch_available", sql: "ALTER TABLE patrol_request_board ADD COLUMN route_switch_available INTEGER NOT NULL DEFAULT 0" }]);
+  await ensureColumns(db, "patrol_request_board", [
+    { name: "assigned_employee_id", sql: "ALTER TABLE patrol_request_board ADD COLUMN assigned_employee_id TEXT" },
+    { name: "performer_selection_available", sql: "ALTER TABLE patrol_request_board ADD COLUMN performer_selection_available INTEGER NOT NULL DEFAULT 0" }
+  ]);
+  await ensureColumns(db, "patrol_assignments", [{ name: "employee_id", sql: "ALTER TABLE patrol_assignments ADD COLUMN employee_id TEXT" }]);
+  await ensureColumns(db, "point_results", [{ name: "manual_reason", sql: "ALTER TABLE point_results ADD COLUMN manual_reason TEXT" }]);
   await ensureColumns(db, "patrol_assignments", [
     { name: "snapshot_allow_free_order", sql: "ALTER TABLE patrol_assignments ADD COLUMN snapshot_allow_free_order INTEGER" },
     { name: "snapshot_nfc_enabled", sql: "ALTER TABLE patrol_assignments ADD COLUMN snapshot_nfc_enabled INTEGER" },
@@ -495,6 +736,8 @@ async function ensureMobileColumns(db: SqlExecutor) {
 
   await ensureColumns(db, "patrol_assignments", [
     { name: "completed_at_local", sql: "ALTER TABLE patrol_assignments ADD COLUMN completed_at_local TEXT" },
+    { name: "local_report_present", sql: "ALTER TABLE patrol_assignments ADD COLUMN local_report_present INTEGER NOT NULL DEFAULT 0" },
+    { name: "local_report_needs_review", sql: "ALTER TABLE patrol_assignments ADD COLUMN local_report_needs_review INTEGER NOT NULL DEFAULT 0" },
     { name: "revision", sql: "ALTER TABLE patrol_assignments ADD COLUMN revision INTEGER NOT NULL DEFAULT 0" },
     { name: "route_version_no", sql: "ALTER TABLE patrol_assignments ADD COLUMN route_version_no INTEGER NOT NULL DEFAULT 0" },
     { name: "snapshot_version", sql: "ALTER TABLE patrol_assignments ADD COLUMN snapshot_version INTEGER NOT NULL DEFAULT 0" },
@@ -923,6 +1166,32 @@ async function ensureColumns(db: SqlExecutor, tableName: string, additions: { na
       await db.execAsync(addition.sql);
     }
   }
+}
+
+/** Idempotent recovery for devices that already recorded the original migration. */
+export async function ensureWorkItemRefreshStateSchema(db: SqlExecutor) {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS work_item_refresh_state (
+      owner_user_id TEXT NOT NULL,
+      contour_id TEXT NOT NULL,
+      scope_key TEXT NOT NULL,
+      boundary_json TEXT,
+      refresh_mode TEXT NOT NULL DEFAULT 'initial',
+      confirmed_cursor TEXT,
+      in_progress_cursor TEXT,
+      visible_limit INTEGER NOT NULL DEFAULT 25,
+      initialized INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (owner_user_id, contour_id, scope_key)
+    );
+  `);
+  await ensureColumns(db, "work_item_refresh_state", [
+    { name: "refresh_mode", sql: "ALTER TABLE work_item_refresh_state ADD COLUMN refresh_mode TEXT NOT NULL DEFAULT 'initial'" },
+    { name: "confirmed_cursor", sql: "ALTER TABLE work_item_refresh_state ADD COLUMN confirmed_cursor TEXT" },
+    { name: "visible_limit", sql: "ALTER TABLE work_item_refresh_state ADD COLUMN visible_limit INTEGER NOT NULL DEFAULT 25" },
+    { name: "initialized", sql: "ALTER TABLE work_item_refresh_state ADD COLUMN initialized INTEGER NOT NULL DEFAULT 0" },
+    { name: "in_progress_cursor", sql: "ALTER TABLE work_item_refresh_state ADD COLUMN in_progress_cursor TEXT" }
+  ]);
 }
 const contourScopedTableNames = [
   "users",

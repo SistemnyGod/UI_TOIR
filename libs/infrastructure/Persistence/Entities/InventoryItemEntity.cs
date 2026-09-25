@@ -28,6 +28,8 @@ internal sealed class InventoryItemEntity
 
     public string ProtectionClass { get; set; } = string.Empty;
 
+    public string StandardsJson { get; set; } = "[]";
+
     public string ClothingSize { get; set; } = string.Empty;
 
     public string HeightSize { get; set; } = string.Empty;

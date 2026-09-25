@@ -1,0 +1,28 @@
+export const mockPpeIssueDocuments = {
+    async getPpeKitTemplates() { return []; },
+    async createPpeKitTemplate() { throw new Error("Серверные шаблоны недоступны в демонстрационном режиме"); },
+    async updatePpeKitTemplate() { throw new Error("Серверные шаблоны недоступны в демонстрационном режиме"); },
+    async renamePpeKitTemplate() { throw new Error("Серверные шаблоны недоступны в демонстрационном режиме"); },
+    async copyPpeKitTemplate() { throw new Error("Серверные шаблоны недоступны в демонстрационном режиме"); },
+    async validatePpeKitTemplate() { throw new Error("Серверные шаблоны недоступны в демонстрационном режиме"); },
+    async archivePpeKitTemplate() { throw new Error("Серверные шаблоны недоступны в демонстрационном режиме"); },
+
+
+    async getPpeIssueDocumentCapabilities() { return { enabled: false }; },
+    async getPpeIssueDocuments() { return []; },
+    async getPpeIssueJournal() { return { items: [], total: 0, page: 1, pageSize: 10, pageCount: 1, summary: { total: 0, confirmed: 0, draft: 0, cancelled: 0, overdue: 0 }, departments: [] }; },
+    async exportPpeIssueJournal() { throw new Error("Экспорт журнала недоступен в демонстрационном режиме"); },
+    async getPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async createPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async updatePpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async validatePpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async confirmPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async cancelPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async migratePpeLegacyDraft() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async printPpeIssueDocument() { throw new Error("Конструктор документов выдачи недоступен в демонстрационном режиме"); },
+    async getPpeIssueDocumentNorms() { return []; },
+    async updatePpeNormSetScope() { throw new Error("Редактирование норм недоступно в демонстрационном режиме"); },
+    async updatePpeNormRowRules() { throw new Error("Редактирование норм недоступно в демонстрационном режиме"); },
+    async approvePpeNormMapping() { throw new Error("Редактирование норм недоступно в демонстрационном режиме"); },
+
+};

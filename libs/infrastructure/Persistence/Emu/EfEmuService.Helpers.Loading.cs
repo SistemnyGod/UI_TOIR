@@ -31,13 +31,16 @@ internal sealed partial class EfEmuService
 
     private IQueryable<EmuWorkSessionEntity> LoadSessions(
         bool includeParticipationIntervals = true,
-        bool asNoTracking = false)
+        bool asNoTracking = false,
+        bool includeAuditEvents = true,
+        bool includePauses = true)
     {
         var query = dbContext.EmuWorkSessions
             .Include(row => row.Section)
             .Include(row => row.CreatedByUser)
-            .Include(row => row.AuditEvents)
             .AsQueryable();
+
+        if (includeAuditEvents) query = query.Include(row => row.AuditEvents);
 
         if (asNoTracking)
         {
@@ -48,10 +51,8 @@ internal sealed partial class EfEmuService
             ? query.Include(row => row.Employees).ThenInclude(row => row.ParticipationIntervals)
             : query.Include(row => row.Employees);
 
-        return query
-            .Include(row => row.Pauses)
-            .ThenInclude(row => row.Employees)
-            .AsSplitQuery();
+        if (includePauses) query = query.Include(row => row.Pauses).ThenInclude(row => row.Employees);
+        return query.AsSplitQuery();
     }
 
     private EmuWorkSessionEntity? LoadSession(Guid id) =>

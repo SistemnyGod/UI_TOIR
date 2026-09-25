@@ -1308,7 +1308,7 @@ internal sealed partial class EfInventoryWorkflowService
 
     private static InventoryPpeNormMappingDto MapNormMapping(InventoryPpeNormCatalogMappingEntity row) =>
         new(row.Id, row.NormRowId, row.ItemId, row.Item.Name, row.Item.Sku, row.BrandModelArticle, row.DefaultUnitPriceMinor, row.IsDefault, row.Comment,
-            row.IsApproved, row.NormUnitsPerItem, row.ApprovedBy, row.ApprovalEvidence);
+            row.IsApproved, row.NormUnitsPerItem, row.ApprovedBy, row.ApprovalEvidence, ReadItemStandards(row.Item.StandardsJson));
 
     private static InventoryPpeHistoryRowDto MapPpeHistoryRow(InventoryPpeCardLineEventEntity row)
     {

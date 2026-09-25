@@ -31,6 +31,7 @@ export function PpePickerCatalogGrid({
             <span className="inventory-ppe-picker-item-main">
               <strong>{item.name}</strong>
               <small>{[item.article || item.sku || "без артикула", item.category || "без категории"].join(" • ")}</small>
+              {item.standards?.length ? <small>{item.standards.map(row => row.designation).join(" • ")}</small> : <small>Стандарты не указаны</small>}
             </span>
             <em>{formatMoney(item.defaultUnitPriceMinor ? item.defaultUnitPriceMinor / 100 : 0)}</em>
           </button>

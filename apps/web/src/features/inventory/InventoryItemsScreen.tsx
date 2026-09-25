@@ -84,6 +84,7 @@ type ItemFormState = {
   protectionClass: string;
   respiratorSize: string;
   shoeSize: string;
+  standardsText: string;
   sku: string;
   trackingType: string;
   trackLife: boolean;
@@ -824,6 +825,9 @@ function ItemFormDialog({
           <Field label="Класс защиты">
             <input value={form.protectionClass} onChange={(event) => patchForm({ protectionClass: event.target.value })} />
           </Field>
+          <Field label="Стандарты (обозначение | название)" wide>
+            <textarea aria-label="Стандарты" value={form.standardsText} onChange={(event) => patchForm({ standardsText: event.target.value })} placeholder={'ГОСТ 12.4.128-83 | Каски защитные\nТР ТС 019/2011 | О безопасности СИЗ'} rows={4} />
+          </Field>
 
           <div className="inventory-item-form-section wide"><strong>Учёт и параметры выдачи</strong><span>Числовые значения должны быть неотрицательными.</span></div>
           <Field error={errors.defaultLifeMonths} label="Срок, мес.">
@@ -887,6 +891,7 @@ function ItemDetailDialog({
         <DetailStat icon={Wrench} label="Тип учета" value={getTrackingLabel(item.trackingType)} />
         <DetailStat icon={HardHat} label="Срок службы" value={item.defaultLifeMonths ? `${item.defaultLifeMonths} мес.` : "-"} />
         <DetailStat icon={Package} label="Цена" value={formatMoney(item.defaultUnitPriceMinor)} />
+        <DetailStat icon={FileText} label="Стандарты" value={formatStandards(item.standards)} />
       </div>
       <section className="inventory-detail-comment">
         <h3>Описание</h3>
@@ -1004,6 +1009,7 @@ function createEmptyForm(settings?: InventorySettingsDto): ItemFormState {
     respiratorSize: "",
     shoeSize: "",
     sku: "",
+    standardsText: "",
     trackingType: "quantity",
     trackLife: true,
     unitId: settings?.units[0]?.id ?? "",
@@ -1034,6 +1040,7 @@ function itemToForm(item: InventoryItemDto): ItemFormState {
     respiratorSize: item.respiratorSize ?? "",
     shoeSize: item.shoeSize ?? "",
     sku: item.sku ?? "",
+    standardsText: (item.standards ?? []).map(row => `${row.designation}${row.name ? ` | ${row.name}` : ""}`).join("\n"),
     trackingType: item.trackingType || "quantity",
     trackLife: item.trackLife,
     unitId: item.unitId ?? "",
@@ -1081,10 +1088,22 @@ function itemFormToPayload(form: ItemFormState): UpsertInventoryItemDto {
     respiratorSize: trimToNull(form.respiratorSize),
     shoeSize: trimToNull(form.shoeSize),
     sku: trimToNull(form.sku || form.article),
+    standards: parseStandards(form.standardsText),
     trackingType: trimToNull(form.trackingType) ?? "quantity",
     trackLife: form.trackLife,
     unitId: trimToNull(form.unitId),
   };
+}
+
+function parseStandards(value: string) {
+  return value.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
+    const [designation, ...name] = line.split("|");
+    return { designation: designation.trim(), name: name.join("|").trim() };
+  });
+}
+
+function formatStandards(standards: InventoryItemDto["standards"]) {
+  return standards?.length ? standards.map(row => row.name ? `${row.designation} — ${row.name}` : row.designation).join("; ") : "Не указаны";
 }
 
 function itemToPayload(item: InventoryItemDto, patch: Partial<UpsertInventoryItemDto> = {}): UpsertInventoryItemDto {

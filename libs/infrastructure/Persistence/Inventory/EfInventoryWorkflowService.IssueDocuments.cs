@@ -17,17 +17,13 @@ internal sealed partial class EfInventoryWorkflowService : IPpeIssueDocumentServ
         JsonSerializer.Deserialize<PpeDocumentContentDto>(document.ContentJson, DocumentJson)
         ?? throw new InvalidDataException("PPE document snapshot is missing");
 
-    public IReadOnlyList<PpeIssueDocumentSummaryDto> GetIssueDocuments(Guid? employeeId) =>
-        dbContext.Set<PpeIssueDocumentEntity>().AsNoTracking()
+    public IReadOnlyList<PpeIssueDocumentSummaryDto> GetIssueDocuments(Guid? employeeId)
+    {
+        var documents = dbContext.Set<PpeIssueDocumentEntity>().AsNoTracking()
             .Where(x => !employeeId.HasValue || x.EmployeeId == employeeId.Value)
-            .OrderByDescending(x => x.CreatedAt).Take(200).ToList()
-            .Select(x =>
-            {
-                var content = ReadDocument(x);
-                var validation = JsonSerializer.Deserialize<PpeDocumentValidationDto>(x.ValidationJson, DocumentJson)!;
-                return new PpeIssueDocumentSummaryDto(x.Id, x.Version, x.Status, x.EmployeeId,
-                    content.Employee.FullName, content.DocumentDate, content.Lines.Count, validation.TotalMinor);
-            }).ToList();
+            .OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).Take(200).ToList();
+        return JournalSummaries(documents);
+    }
 
     public InventoryCommandResult<PpeIssueDocumentDto> GetIssueDocument(Guid id)
     {
@@ -88,6 +84,12 @@ internal sealed partial class EfInventoryWorkflowService : IPpeIssueDocumentServ
             if ((previous.NormSetId != norm.Id || previous.NormSetVersion != norm.Version) && !request.AcceptNormChange)
                 return Failure<PpeIssueDocumentDto>("normChanged", "Подтвердите изменение нормы и пересмотр выбранных строк");
         }
+        if (request.Lines.Any(line => line.NormPoint?.Length > 600))
+            return Failure<PpeIssueDocumentDto>("normPoint", "Пункт нормы: не более 600 символов");
+        var normPoints = request.Lines.Where(line => line.NormPoint is not null).GroupBy(line => line.NormRowId).ToList();
+        if (normPoints.Any(group => group.Select(line => line.NormPoint!.Trim()).Distinct().Count() > 1))
+            return Failure<PpeIssueDocumentDto>("normPoint", "У позиций одной строки нормы должен быть одинаковый пункт нормы");
+        var pointOverrides = normPoints.ToDictionary(group => group.Key, group => group.First().NormPoint!.Trim());
         var itemIds = request.Lines.Select(x => x.ItemId).Distinct().ToList();
         var items = dbContext.InventoryItems.AsNoTracking().Include(x => x.Unit).Include(x => x.Category)
             .Where(x => itemIds.Contains(x.Id)).ToDictionary(x => x.Id);
@@ -105,21 +107,27 @@ internal sealed partial class EfInventoryWorkflowService : IPpeIssueDocumentServ
             if (!NormDateContains(norm, input.IssueDate)) return Failure<PpeIssueDocumentDto>("issueDate", "Дата строки вне срока действия нормы");
             if (input.SizeText.Length > 120 || input.ExceptionReason.Length > 2000)
                 return Failure<PpeIssueDocumentDto>("lines", "Размер или причина превышают допустимую длину");
+            if (input.LifeMonths is <= 0 or > 1200)
+                return Failure<PpeIssueDocumentDto>("lifeMonths", "Срок носки должен быть от 1 до 1200 месяцев");
+            if ((input.LifeMonths ?? row.LifeMonths) is > 0 and <= 1200
+                && input.IssueDate > DateOnly.MaxValue.AddMonths(-(input.LifeMonths ?? row.LifeMonths)!.Value))
+                return Failure<PpeIssueDocumentDto>("issueDate", "Дата окончания срока носки выходит за допустимый диапазон");
             var price = input.UnitPriceMinor ?? mapping.DefaultUnitPriceMinor ?? item.DefaultUnitPriceMinor;
             selected.Add(new(input.Id, row.Id, item.Id, input.IssueDate, input.Quantity, price, input.SizeText.Trim(),
                 input.ExceptionReason.Trim(), input.ManualControlConfirmed, item.Name, item.Unit?.Symbol ?? "",
                 string.IsNullOrWhiteSpace(mapping.BrandModelArticle)
                     ? string.Join(" / ", new[] { item.BrandName, item.ModelName, item.Article, item.ProtectionClass }.Where(x => !string.IsNullOrWhiteSpace(x)))
                     : mapping.BrandModelArticle,
-                mapping.NormUnitsPerItem, PpeDocumentRules.LineTotal(input.Quantity, price)));
+                mapping.NormUnitsPerItem, PpeDocumentRules.LineTotal(input.Quantity, price), input.LifeMonths ?? row.LifeMonths,
+                ReadItemStandards(item.StandardsJson), pointOverrides.GetValueOrDefault(row.Id, row.NormPoint)));
         }
         if (request.ResponsibleName.Length > 240 || request.Basis.Length > 4000)
             return Failure<PpeIssueDocumentDto>("basis", "Слишком длинное основание или имя ответственного");
         var content = new PpeDocumentContentDto(new(employee.Id, employee.FullName, employee.PersonnelNo, employee.Department,
-                employee.Position, request.EmployeeDetails ?? new()), norm.Id, norm.Version, norm.VersionName, norm.SourceName,
+                employee.Position, request.EmployeeDetails ?? new(), employee.HiredAt), norm.Id, norm.Version, norm.VersionName, norm.SourceName,
             request.DocumentDate, request.ResponsibleName.Trim(), request.Basis.Trim(),
             norm.Rows.OrderBy(x => x.SortOrder).Select(x => new PpeDocumentNormDto(x.Id, x.ParentRowId, x.RowType, x.SortOrder,
-                x.NormItemName, x.NormPoint, x.Quantity, x.UnitSymbol, x.QuantityText, x.IssuePeriodText,
+                x.NormItemName, pointOverrides.GetValueOrDefault(x.Id, x.NormPoint), x.Quantity, x.UnitSymbol, x.QuantityText, x.IssuePeriodText,
                 x.PeriodMonths, x.LifeMonths, x.RequirementKey, x.AlternativeGroup)).ToList(), selected);
         document ??= new PpeIssueDocumentEntity { Id = Guid.NewGuid(), EmployeeId = employee.Id, CreatedAt = DateTimeOffset.UtcNow, CreatedBy = actor };
         document.NormSetId = norm.Id;
@@ -129,6 +137,12 @@ internal sealed partial class EfInventoryWorkflowService : IPpeIssueDocumentServ
         if (!id.HasValue) dbContext.Set<PpeIssueDocumentEntity>().Add(document);
         AddDocumentAudit(document, id.HasValue ? "draft_updated" : "draft_created", actor);
         return SaveDocumentChanges(document);
+    }
+
+    private static IReadOnlyList<InventoryItemStandardDto> ReadItemStandards(string json)
+    {
+        try { return JsonSerializer.Deserialize<List<InventoryItemStandardDto>>(json, DocumentJson) ?? []; }
+        catch (JsonException) { return []; }
     }
 
     private InventoryPpeNormSetEntity? LoadDocumentNorm(Guid id) => dbContext.InventoryPpeNormSets
@@ -261,7 +275,7 @@ internal sealed partial class EfInventoryWorkflowService : IPpeIssueDocumentServ
                     IssueDocumentId = document.Id, IssueDate = selected.IssueDate, RequirementKey = source.RequirementKey,
                     NormUnitsPerItem = selected.NormUnitsPerItem, ItemId = selected.ItemId, Quantity = selected.Quantity,
                     UnitPriceMinor = selected.UnitPriceMinor, Status = "issued", IssuedAt = PpeClock.StartOfDayUtc(selected.IssueDate),
-                    DueAt = source.LifeMonths is > 0 ? PpeClock.StartOfDayUtc(selected.IssueDate.AddMonths(source.LifeMonths.Value)) : null,
+                    DueAt = (selected.LifeMonths ?? source.LifeMonths) is > 0 ? PpeClock.StartOfDayUtc(selected.IssueDate.AddMonths((selected.LifeMonths ?? source.LifeMonths)!.Value)) : null,
                     Comment = selected.ExceptionReason, PrintItemName = source.NormItemName, NormPoint = source.NormPoint,
                     IssuePeriodText = source.IssuePeriodText, QuantityText = source.QuantityText,
                     BrandModelArticle = selected.BrandModelArticle, SizeText = selected.SizeText, IssueMethod = "personal" };

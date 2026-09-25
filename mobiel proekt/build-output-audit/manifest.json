@@ -1,0 +1,22 @@
+{
+  "artifact": "patrol360-mobile-debug.apk",
+  "configuration": "Debug",
+  "environment": "local-enterprise",
+  "apiHttps": "https://192.168.2.194",
+  "apiHttp": [
+    "http://192.168.2.194:80",
+    "http://192.168.2.194:5173"
+  ],
+  "sha256": "8d30035ef8d5d6d6872a801e12f8c33dd2d2a6ae5c933e0789b7c3c19c2e09e7",
+  "sizeBytes": 110321716,
+  "sourceRevision": "473f839cae7b790510d149bace9ee953b297f819",
+  "sourceDirty": true,
+  "builtAt": "2026-09-24T03:09:10.3714773Z",
+  "tests": {
+    "mobileSync": 101,
+    "mobileVitest": 128,
+    "web": 241,
+    "infrastructureIntegrationPassed": 189,
+    "infrastructureIntegrationSkipped": 4
+  }
+}

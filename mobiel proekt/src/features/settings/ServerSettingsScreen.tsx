@@ -6,6 +6,7 @@ import {
   defaultServerBaseUrl,
   getServerBaseUrl,
   isPilotHttpServer,
+  localLanSecureServerBaseUrl,
   localLanServerBaseUrl,
   resetServerBaseUrl,
 } from "@/core/serverSettings";
@@ -43,7 +44,7 @@ export function ServerSettingsScreen() {
   const handleSave = useCallback(async () => {
     setIsBusy(true);
     try {
-      const result = await checkServerConnection(serverUrl);
+      const result = await checkServerConnection(serverUrl, { persist: true });
       if (!result.ok) {
         throw new Error(result.message);
       }
@@ -66,14 +67,14 @@ export function ServerSettingsScreen() {
   const handleUseLocalServer = useCallback(async () => {
     setIsBusy(true);
     try {
-      const result = await checkServerConnection(localLanServerBaseUrl);
-      const localUrl = result.url?.replace("/api/v1/mobile/health", "") ?? localLanServerBaseUrl;
+      const result = await checkServerConnection(localLanSecureServerBaseUrl, { persist: true });
+      const localUrl = result.url?.replace("/api/v1/mobile/health", "") ?? localLanSecureServerBaseUrl;
       setServerUrl(localUrl);
       setStatusMessage({
         tone: result.ok ? "success" : "error",
         text: result.ok
           ? `Локальный сервер подключен: ${localUrl}`
-          : `Локальный адрес сохранен, но сервер не ответил. Проверьте Wi-Fi и Windows Firewall. ${result.message}`
+          : `Адрес не изменён: локальный сервер не ответил. Проверьте Wi-Fi и Windows Firewall. ${result.message}`
       });
     } catch (error) {
       setStatusMessage({
@@ -116,10 +117,10 @@ export function ServerSettingsScreen() {
           <View style={styles.headerText}>
             <Text style={[styles.title, { color: colors.text }]}>Адрес сервера</Text>
             <Text style={[styles.text, { color: colors.mutedText }]}>
-              Для работы в одной Wi-Fi/локальной сети используйте адрес сервера {localLanServerBaseUrl}. Локальные данные телефона при смене адреса не очищаются.
+              Рекомендуемый адрес в локальной сети: {localLanSecureServerBaseUrl}. Старый HTTP-вход {localLanServerBaseUrl} остаётся совместимым для уже установленных клиентов. Локальные данные телефона при смене адреса не очищаются.
             </Text>
           </View>
-          {isPilotHttpServer(serverUrl) ? <StatusPill label="Локальный HTTP" tone="neutral" /> : null}
+          {isPilotHttpServer(serverUrl) ? <StatusPill label="Локальный HTTP" tone="neutral" /> : <StatusPill label="Защищённое подключение" tone="success" />}
         </View>
 
         <TextInput
@@ -128,7 +129,7 @@ export function ServerSettingsScreen() {
           editable={!isBusy}
           keyboardType="url"
           onChangeText={setServerUrl}
-          placeholder={localLanServerBaseUrl}
+          placeholder={localLanSecureServerBaseUrl}
           placeholderTextColor={colors.mutedText}
           style={[styles.input, { borderColor: colors.border, color: colors.text }]}
           value={serverUrl}

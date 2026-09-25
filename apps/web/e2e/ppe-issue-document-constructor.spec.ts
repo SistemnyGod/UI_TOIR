@@ -9,6 +9,8 @@ const documentId = "00000000-0000-0000-0000-000000000601";
 test("PPE issue document constructor persists, reopens, confirms, and fits desktop/mobile", async ({ page }) => {
   const requests: Array<{ method: string; url: string; body?: Record<string, unknown> }> = [];
   let storedDocument: ReturnType<typeof draftDocument> = draftDocument();
+  let releaseValidation!: () => void;
+  const validationGate = new Promise<void>((resolve) => { releaseValidation = resolve; });
 
   await page.addInitScript(() => {
     if (!window.sessionStorage.getItem("ppe-issue-document-e2e-initialized")) {
@@ -26,6 +28,7 @@ test("PPE issue document constructor persists, reopens, confirms, and fits deskt
   });
 
   await page.route("**/api/**", (route) => route.abort());
+  await page.route("**/api/v1/system-notifications**", (route) => fulfill(route, []));
   await page.route("**/api/v1/auth/me", (route) => fulfill(route, {
     id: "fixture-user",
     login: "pilot",
@@ -67,6 +70,7 @@ test("PPE issue document constructor persists, reopens, confirms, and fits deskt
   });
   await page.route(`**/api/v1/inventory/ppe/issue-documents/${documentId}/validate`, async (route) => {
     recordRequest(requests, route);
+    await validationGate;
     storedDocument = { ...storedDocument, validation: cleanValidation() };
     return fulfill(route, storedDocument);
   });
@@ -77,60 +81,105 @@ test("PPE issue document constructor persists, reopens, confirms, and fits deskt
   });
 
   await page.goto("/#inventory-ppe-create");
-  await expect(page.getByRole("heading", { name: "Документ выдачи СИЗ" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Оформление выдачи СИЗ" })).toBeVisible();
   await captureStep(page, "step-1-employee");
 
-  await page.getByLabel("Сотрудник").selectOption(employeeId);
+  await page.getByRole("combobox", { name: "Сотрудник", exact: true }).fill("P-001");
+  await page.getByRole("option", { name: /Иванов Иван Иванович/ }).click();
   await page.getByLabel("Дата документа").fill("2026-09-08");
   await page.getByLabel("Нормативный набор").selectOption(normSetId);
   await page.getByLabel("Ответственный").fill("Петров Петр Петрович");
   await page.getByLabel("Основание").fill("Приказ № 42");
   await page.getByRole("button", { name: "Далее", exact: true }).click();
-  await expect(page.locator(".ppe-document-steps .is-active")).toContainText("Подбор");
+  await expect(page.locator(".ppe-document-steps .is-active")).toContainText("Проверка");
   await captureStep(page, "step-2-selection");
 
-  await page.getByRole("button", { name: "Каска защитная UVEX Air", exact: true }).click();
   await page.getByRole("button", { name: "Далее", exact: true }).click();
-  await expect(page.locator(".ppe-document-steps .is-active")).toContainText("Параметры строк");
+  await expect(page.locator(".ppe-document-lines article")).toHaveCount(1);
+  await page.getByRole("button", { name: "Заполнить по норме", exact: true }).click();
+  await expect(page.locator(".ppe-document-lines article")).toHaveCount(1);
+  await expect(page.locator(".ppe-document-steps .is-active")).toContainText("Комплект СИЗ");
   await expect(page.locator(".ppe-document-lines article").first().getByText("Каска защитная", { exact: true })).toBeVisible();
 
   const line = page.locator(".ppe-document-lines article").first();
-  await line.getByLabel("Дата").fill("2026-09-07");
+  await line.getByLabel("Пункт нормы", { exact: true }).fill("п. 4560 Приложения № 1");
+  await line.getByLabel("Дата выдачи").fill("2026-09-07");
   await line.getByLabel("Количество").fill("2");
   await line.getByLabel("Цена, руб.").fill("1250.50");
+  await line.getByLabel("Срок, мес.").fill("18");
   await captureStep(page, "step-3-lines");
-  await page.getByRole("button", { name: "Проверить" }).click();
-  await expect(page.getByRole("heading", { name: "Проверка документа" })).toBeVisible();
+  await page.getByRole("button", { name: "Предпросмотр документов" }).click();
+  await expect.poll(() => requests.filter((entry) => entry.url.endsWith("/validate")).length).toBe(1);
+  await expect(page.getByRole("button", { name: "Предпросмотр документов", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Действия", exact: true })).toBeDisabled();
+  await expect(line.getByLabel("Количество")).toBeDisabled();
+  releaseValidation();
+  await expect(page.getByRole("heading", { name: "Предпросмотр и печать" })).toBeVisible();
   await captureStep(page, "step-4-review");
 
   const putsBeforeReopen = requests.filter((entry) => entry.method === "PUT" && entry.url.endsWith(documentId)).length;
   await page.reload();
-  await expect(page.locator(".ppe-document-steps .is-active")).toContainText("Подбор");
+  await expect(page.locator(".ppe-document-steps .is-active")).toContainText("Проверка");
   await page.waitForTimeout(700);
   expect(requests.filter((entry) => entry.method === "PUT" && entry.url.endsWith(documentId))).toHaveLength(putsBeforeReopen);
   await page.getByRole("button", { name: "Далее", exact: true }).click();
-  await expect(page.locator(".ppe-document-steps .is-active")).toContainText("Параметры строк");
+  await expect(page.locator(".ppe-document-steps .is-active")).toContainText("Комплект СИЗ");
   await expect(page.locator(".ppe-document-lines article").first().getByLabel("Количество")).toHaveValue("2");
   await expect(page.locator(".ppe-document-lines article").first().getByLabel("Цена, руб.")).toHaveValue("1250.50");
-  await page.getByRole("button", { name: "Проверить" }).click();
-  await expect(page.getByRole("heading", { name: "Проверка документа" })).toBeVisible();
-  await page.getByRole("button", { name: "Подтвердить" }).click();
+  await page.getByRole("button", { name: "Предпросмотр документов" }).click();
+  await expect(page.getByRole("heading", { name: "Предпросмотр и печать" })).toBeVisible();
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "Подтвердить выдачу" }).click();
   await expect(page.locator('.ppe-document-saved[data-status="confirmed"]')).toBeVisible();
 
   const updatePayloads = requests.filter((entry) => entry.method === "PUT" && entry.url.endsWith(documentId));
   const updatePayload = updatePayloads[updatePayloads.length - 1]?.body;
+  expect(JSON.stringify(updatePayload)).toContain("п. 4560 Приложения № 1");
   expect(updatePayload).toEqual(expect.objectContaining({ employeeId, normSetId, documentDate: "2026-09-08" }));
   expect(updatePayload?.lines).toEqual(expect.arrayContaining([
-    expect.objectContaining({ normRowId, itemId, issueDate: "2026-09-07", quantity: 2, unitPriceMinor: 125050 }),
+    expect.objectContaining({ normRowId, itemId, issueDate: "2026-09-07", quantity: 2, unitPriceMinor: 125050, lifeMonths: 18 }),
   ]));
   expect(requests.some((entry) => entry.method === "POST" && entry.url.endsWith("/confirm"))).toBe(true);
+});
+
+test("journal document request survives remount and reload", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("patrol360.dataSourceMode", JSON.stringify({ version: 1, value: "api" }));
+    localStorage.setItem("patrol360.sessionToken", "fixture-token");
+    if (!sessionStorage.getItem("resume-initialized")) {
+      sessionStorage.setItem("ppe.open-document.fixture-user", "00000000-0000-0000-0000-000000000601");
+      sessionStorage.setItem("resume-initialized", "true");
+    }
+  });
+  await page.route("**/api/**", route => fulfill(route, []));
+  await page.route("**/api/v1/auth/me", route => fulfill(route, { id: "fixture-user", login: "pilot", displayName: "Тест", roles: ["admin"], permissions: ["inventory.view", "inventory.ppe.manage"] }));
+  await page.route("**/api/v1/inventory/employees**", route => fulfill(route, { rows: [], total: 0, page: 1, pageCount: 1, pageSize: 200 }));
+  await page.route("**/api/v1/inventory/ppe/issue-documents/capabilities", route => fulfill(route, { enabled: true }));
+  await page.route(`**/api/v1/inventory/ppe/issue-documents/${documentId}`, route => fulfill(route, { ...draftDocument(), status: "confirmed" }));
+  await page.goto("/#inventory-ppe-create");
+  await expect(page.getByRole("heading", { name: "Предпросмотр и печать" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Предпросмотр и печать" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Подтвердить выдачу" })).toHaveCount(0);
 });
 
 async function captureStep(page: Page, name: string) {
   for (const viewport of [{ width: 1365, height: 768 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
     await expectNoHorizontalOverflow(page, `${name} ${viewport.width}px`);
-    await page.locator(".ppe-document-screen").screenshot({ path: `test-results/ppe-issue-document-${name}-${viewport.width}.png` });
+    await page.locator(".ppe-document-screen").screenshot({ path: `test-results/ppe-issue-document-${name}-${viewport.width}.png`, animations: "disabled" });
+    if (viewport.width < 1200) {
+      await expect(page.locator(".sidebar")).toHaveAttribute("inert", "");
+      const menuBox = await page.locator(".sidebar").boundingBox();
+      expect(menuBox ? menuBox.x + menuBox.width : 0).toBeLessThanOrEqual(1);
+      if (name === "step-4-review") {
+        for (const cell of await page.locator(".ppe-document-review-table tbody td").all()) {
+          const box = (await cell.boundingBox())!;
+          expect(box.x).toBeGreaterThanOrEqual(0);
+          expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+        }
+      }
+    }
   }
   await page.setViewportSize({ width: 1365, height: 768 });
 }

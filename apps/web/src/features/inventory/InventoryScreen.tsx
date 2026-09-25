@@ -30,7 +30,7 @@ import { InventoryIssueScreen } from "./InventoryIssueScreen";
 import { InventoryItemsScreen } from "./InventoryItemsScreen";
 import { InventoryOperationsScreen } from "./InventoryOperationsScreen";
 import { InventoryOverviewScreen } from "./InventoryOverviewScreen";
-import { InventoryPpeScreen } from "./InventoryPpeScreen";
+import { PpeIssueJournal } from "./ppe/PpeIssueJournal";
 import { InventoryPpeCreateScreen } from "./InventoryPpeCreateScreen";
 import { InventoryPpeHistoryScreen } from "./InventoryPpeHistoryScreen";
 import { InventoryReportsScreen } from "./InventoryReportsScreen";
@@ -240,7 +240,10 @@ export function InventoryScreen({
             onReload={reload}
           />
         ) : current.id === "inventory-ppe" ? (
-          <InventoryPpeScreen
+          <PpeIssueJournal
+            currentUserId={currentUser?.id}
+            canManage={hasPermission(currentUser, "inventory.ppe.manage")}
+            canExport={hasPermission(currentUser, "inventory.reports.export")}
             onNavigate={onNavigate}
             onNotify={onNotify}
           />
@@ -250,6 +253,7 @@ export function InventoryScreen({
           <InventoryPpeCreateScreen
             canExport={hasPermission(currentUser, "inventory.reports.export")}
             canManage={hasPermission(currentUser, "inventory.ppe.manage")}
+            canManageTemplates={hasPermission(currentUser, "inventory.ppe.norms.manage")}
             currentUserId={currentUser?.id}
             onNavigate={onNavigate}
             onNotify={onNotify}

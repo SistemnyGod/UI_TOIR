@@ -1,15 +1,15 @@
-import { Redirect } from "expo-router";
+import { Redirect, type Href } from "expo-router";
+import { resolvePatrolStartPath } from '@/services/patrolNavigationService';
+import { consumePendingSessionRoute, markSessionUnlocked } from '@/auth/sessionGateState';
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { resolveSessionRestoreDecision } from "@/auth/sessionRestorePolicy";
-import { markSessionUnlocked } from "@/auth/sessionGateState";
 import { clearAuthTokens, getAccessToken, getOfflineSession, getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
 
-const protectedRoute = "/(tabs)/patrol" as const;
 type AuthRoute = "/(auth)/login" | "/(auth)/offline-login";
-type TargetRoute = AuthRoute | typeof protectedRoute;
+type TargetRoute = AuthRoute | string;
 
 type IndexState = {
   status: "checking" | "ready" | "error";
@@ -45,13 +45,15 @@ export default function IndexRoute() {
           markSessionUnlocked();
         }
 
-        setState({
-          status: "ready",
-          target: decision === "resume"
-            ? protectedRoute
+        const target = decision === "resume"
+            ? consumePendingSessionRoute() ?? await resolvePatrolStartPath()
             : decision === "offline-unlock"
               ? "/(auth)/offline-login"
-              : "/(auth)/login",
+              : "/(auth)/login";
+        if (!isMounted) return;
+        setState({
+          status: "ready",
+          target,
           error: null
         });
       })
@@ -98,7 +100,7 @@ export default function IndexRoute() {
     );
   }
 
-  return <Redirect href={state.target} />;
+  return <Redirect href={state.target as Href} />;
 }
 
 const styles = StyleSheet.create({

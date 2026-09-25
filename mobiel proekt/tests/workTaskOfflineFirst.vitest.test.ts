@@ -1,3 +1,9 @@
+vi.mock("@/auth/tokenStorage", () => ({ getStoredOwnerUserId: async () => "test-owner" }));
+vi.mock("@/core/environments", () => ({ currentContourId: "test" }));
+vi.mock("@/auth/dataOwnerContext", () => ({ captureDataOwnerContext: async () => ({ ownerUserId: "test-owner", contourId: "test" }) }));
+vi.mock("@/db/database", () => ({ getDatabase: async () => ({ getFirstAsync: async () => ({ paging: 0 }) }) }));
+vi.mock("@/api/mobileApi", () => ({ getWorkItemsPage: vi.fn() }));
+vi.mock("@/db/repositories/patrolContextRepository", () => ({ getPatrolDeviceContext: async () => ({ employeeId: null, assignmentId: null }) }));
 import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -6,19 +12,22 @@ const mocks = vi.hoisted(() => ({
   listLocalWorkTasks: vi.fn(),
   saveWorkTasks: vi.fn(),
   listLocalWorkItems: vi.fn(),
+  listLocalWorkItemsPage: vi.fn(),
   saveWorkItems: vi.fn(),
   logMobileError: vi.fn()
 }));
 
 vi.mock("@/api/emuApi", () => ({
   getWorkTasks: mocks.getWorkTasks,
-  getWorkItemsV2: mocks.getWorkItemsV2
+  getWorkItemsV2: mocks.getWorkItemsV2,
+  normalizeWorkItems: (items: unknown[]) => items
 }));
 
 vi.mock("@/db/repositories/workTaskRepository", () => ({
   listLocalWorkTasks: mocks.listLocalWorkTasks,
   saveWorkTasks: mocks.saveWorkTasks,
   listLocalWorkItems: mocks.listLocalWorkItems,
+  listLocalWorkItemsPage: mocks.listLocalWorkItemsPage,
   saveWorkItems: mocks.saveWorkItems
 }));
 
@@ -33,6 +42,7 @@ describe("EMU offline-first loading", () => {
     const localItems = [{ itemId: "local-item", title: "Локальная работа" }];
     const refreshError = new Error("server unavailable");
     mocks.listLocalWorkItems.mockResolvedValue(localItems);
+    mocks.listLocalWorkItemsPage.mockResolvedValue({ items: localItems, nextCursor: null });
     mocks.getWorkItemsV2.mockRejectedValue(refreshError);
     const onRefreshFailed = vi.fn();
 

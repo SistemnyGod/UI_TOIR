@@ -1,31 +1,36 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
-  acceptRequestLocally,
   ActiveAssignment,
   getAssignmentByRequestId,
   getRequestBoardItem,
   releaseAcceptedRequestLocally,
   RequestBoardItem,
-  resumeAssignmentLocally,
-  startAssignmentLocally,
 } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
 import { logMobileError } from "@/services/mobileErrorReporter";
+import { listMobileEmployees } from "@/db/repositories/workTaskRepository";
+import type { MobileEmployeeDto } from "@/domain/patrol/patrolTypes";
 import { ActionSheet } from "@/ui/ActionSheet";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
+import { getPatrolDeviceContext } from "@/db/repositories/patrolContextRepository";
+import { enterPatrolRequest } from '@/services/patrolEntryService';
+import { captureDataOwnerContext, assertDataOwnerContext } from '@/auth/dataOwnerContext';
 
 export function PatrolRequestScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const { requestId } = useLocalSearchParams<{ requestId: string }>();
+  const [employees, setEmployees] = useState<MobileEmployeeDto[]>([]);
+  const [employeeId, setEmployeeId] = useState<string | undefined>();
+  const [employeePicker, setEmployeePicker] = useState(false);
   const [request, setRequest] = useState<RequestBoardItem | null>(null);
   const [assignment, setAssignment] = useState<ActiveAssignment | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,6 +40,8 @@ export function PatrolRequestScreen() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const actionInProgressRef = useRef(false);
   const hasLoadedRef = useRef(false);
+  const focusVersion = useRef(0);
+  const focused = useRef(false);
 
   const load = useCallback(async () => {
     if (!hasLoadedRef.current) {
@@ -43,6 +50,10 @@ export function PatrolRequestScreen() {
     try {
       const [item, existing] = await Promise.all([getRequestBoardItem(requestId), getAssignmentByRequestId(requestId)]);
       setRequest(item);
+      const availableEmployees = await listMobileEmployees();
+      const context = await getPatrolDeviceContext();
+      setEmployees(availableEmployees);
+      setEmployeeId((current) => current ?? context.employeeId ?? (availableEmployees.length === 1 ? availableEmployees[0].employeeId : undefined));
       setAssignment(existing);
       setLoadError(null);
     } finally {
@@ -54,6 +65,8 @@ export function PatrolRequestScreen() {
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
+      focused.current = true;
+      focusVersion.current++;
       void load().catch((caught) => {
         void logMobileError("patrol.request.load.failed", caught);
         if (isMounted) {
@@ -62,25 +75,24 @@ export function PatrolRequestScreen() {
       });
       return () => {
         isMounted = false;
+        focused.current = false;
+        focusVersion.current++;
       };
     }, [load])
   );
 
-  useEffect(() => subscribeToSyncEvents((event) => {
-    const assignmentId = assignment?.assignmentId;
+  useFocusEffect(useCallback(() => subscribeToSyncEvents((event) => {
+    const currentAssignmentId = assignment?.assignmentId;
     const touchesRequest = event.refreshedZones?.some((zone) => zone === "requests" || zone === "activePatrols") === true
-      || (assignmentId ? event.changedAssignmentIds?.includes(assignmentId) === true : false)
-      || (assignmentId ? event.completedAssignmentIds.includes(assignmentId) : false)
-      || (assignmentId ? event.cancelledAssignmentIds?.includes(assignmentId) === true : false);
-    if (!touchesRequest) {
-      return;
-    }
-
+      || (currentAssignmentId ? event.changedAssignmentIds?.includes(currentAssignmentId) === true : false)
+      || (currentAssignmentId ? event.completedAssignmentIds.includes(currentAssignmentId) : false)
+      || (currentAssignmentId ? event.cancelledAssignmentIds?.includes(currentAssignmentId) === true : false);
+    if (!touchesRequest) return;
     void load().catch((caught) => {
       void logMobileError("patrol.request.sync-load.failed", caught);
       setLoadError(caught instanceof Error ? caught.message : "Не удалось обновить заявку.");
     });
-  }), [assignment?.assignmentId, load]);
+  }), [assignment?.assignmentId, load]));
 
   async function runAction(action: () => Promise<void>) {
     if (actionInProgressRef.current) {
@@ -99,42 +111,17 @@ export function PatrolRequestScreen() {
     }
   }
 
-  async function handleAccept() {
-    if (!request) {
-      return;
-    }
-    const currentRequest = request;
-
-    Alert.alert(
-      currentRequest.status === "available" ? "Принять эту заявку?" : "Принять эту заявку?",
-      "Проверьте маршрут и время. После принятия заявка появится в разделе \"Мои\", но до старта ее еще можно вернуть.",
-      [
-        { text: "Назад", style: "cancel" },
-        {
-          text: "Принять",
-          onPress: () => {
-            void runAction(async () => {
-
-              const result = await acceptRequestLocally(requestId);
-              setAssignment(result.assignment);
-              setRequest((current) => current ? { ...current, status: "accepted" } : current);
-            });
-          }
-        }
-      ]
-    );
-  }
-
   async function handleStart() {
-    if (!assignment) {
-      return;
-    }
+    const version = focusVersion.current;
     await runAction(async () => {
-      const updated = assignment.status === "paused"
-        ? await resumeAssignmentLocally(assignment.assignmentId)
-        : await startAssignmentLocally(assignment.assignmentId);
-      if (updated) {
-        router.replace(`/patrol/assignment/${updated.assignmentId}`);
+      try {
+        const scope = await captureDataOwnerContext();
+        const path = await enterPatrolRequest(requestId, request?.assignedEmployeeId ?? employeeId, () => focused.current && focusVersion.current === version);
+        await assertDataOwnerContext(scope);
+        if (focused.current && focusVersion.current === version) router.replace(path as never);
+      } catch (caught) {
+        await load();
+        throw caught;
       }
     });
   }
@@ -197,10 +184,11 @@ export function PatrolRequestScreen() {
   const canAccept = (request.status === "available" || request.status === "assigned") && (!assignment || assignment.status === "assigned");
   const canStart = assignment?.status === "accepted" || assignment?.status === "paused";
   const canRelease = assignment?.status === "accepted" && !assignment.startedAtLocal;
-  const canOpen = assignment && !canStart && assignment.status !== "releasePending";
+  const canOpenNfc = assignment?.status === "inProgress";
+  const canOpenReview = assignment && !canAccept && !canStart && !canOpenNfc;
 
   return (
-    <Screen title="Проверка заявки" subtitle="Проверьте маршрут и выполните следующий шаг.">
+    <Screen title="Карточка обхода" subtitle="Проверьте маршрут и выполните следующий шаг.">
       <Card>
         <View style={styles.headerRow}>
           <StatusPill label={statusLabel(assignment?.status ?? request.status)} tone={statusTone(assignment?.status ?? request.status)} />
@@ -218,12 +206,21 @@ export function PatrolRequestScreen() {
         </View>
       </Card>
 
+      {canAccept ? <Card>
+        <Text style={[styles.title, { color: colors.text }]}>Кто выполняет обход</Text>
+        {request.assignedEmployeeId ? <Text style={{ color: colors.text }}>{request.assignedFullName}</Text> :
+          <PrimaryButton variant="secondary" label={employees.find((item) => item.employeeId === employeeId)?.fullName ?? "Выберите сотрудника"} onPress={() => setEmployeePicker(true)} />}
+        <Text style={{ color: colors.mutedText }}>Исполнитель указывается отдельно от общего аккаунта.</Text>
+      </Card> : null}
+      <ActionSheet title="Исполнитель обхода" visible={employeePicker} onClose={() => setEmployeePicker(false)}
+        actions={employees.map((employee) => ({ label: employee.fullName, icon: "person-outline" as const, onPress: () => setEmployeeId(employee.employeeId) }))} />
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {isSubmitting ? <ActivityIndicator /> : null}
 
-      {canAccept ? <PrimaryButton disabled={isSubmitting} icon="checkmark-circle-outline" label="Принять заявку" onPress={handleAccept} size="large" /> : null}
+      {canAccept ? <PrimaryButton disabled={isSubmitting || (!request.assignedEmployeeId && !employeeId)} icon="play-outline" label="Начать обход" onPress={handleStart} size="large" /> : null}
       {canStart ? <PrimaryButton disabled={isSubmitting} icon="play-outline" label={assignment?.status === "paused" ? "Продолжить обход" : "Начать обход"} onPress={handleStart} /> : null}
-      {canOpen ? <PrimaryButton disabled={isSubmitting} icon="shield-checkmark-outline" label="Открыть обход" onPress={() => router.replace(`/patrol/assignment/${assignment.assignmentId}`)} /> : null}
+      {canOpenNfc ? <PrimaryButton disabled={isSubmitting} icon="scan-outline" label="Продолжить" onPress={handleStart} /> : null}
+      {canOpenReview ? <PrimaryButton disabled={isSubmitting} icon="document-text-outline" label="Открыть отчёт" onPress={() => router.replace(`/patrol/assignment/${assignment.assignmentId}`)} /> : null}
       <View style={styles.secondaryRow}>
         <Pressable accessibilityRole="button" onPress={() => router.replace("/patrol/request-board")} style={styles.linkButton}>
           <Ionicons color={colors.primary} name="arrow-back-outline" size={18} />
@@ -301,7 +298,7 @@ function actionHint(status: string) {
   switch (status) {
     case "available":
     case "assigned":
-      return "Если это нужный маршрут, нажмите \"Принять эту заявку\". Одним касанием из списка заявка не принимается.";
+      return "Нажмите «Начать обход»: приложение примет заявку и откроет прохождение маршрута.";
     case "accepted":
       return "Заявка принята, обход еще не начат. Можно начать обход или вернуть заявку в список.";
     case "paused":
@@ -310,10 +307,10 @@ function actionHint(status: string) {
       return "Обход уже идет. Откройте его, чтобы сканировать метки или отправить отчет.";
     case "completedLocal":
     case "syncing":
-      return "Отчет сохранен на телефоне и ожидает отправки. Его можно проверить в очереди.";
+      return "Отчёт сохранён на телефоне. Откройте итог, чтобы проверить отправку.";
     case "syncError":
     case "authRequired":
-      return "Есть проблема с отправкой. Данные не удалены, откройте очередь восстановления.";
+      return "Есть проблема с отправкой. Данные сохранены; откройте отчёт, чтобы увидеть причину.";
     case "cancelledServer":
     case "cancelled":
       return "Заявка отменена диспетчером. Начинать обход по ней не нужно.";

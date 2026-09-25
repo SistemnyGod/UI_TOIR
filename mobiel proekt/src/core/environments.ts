@@ -9,7 +9,9 @@ const configuredPublicApiBaseUrl = typeof Constants.expoConfig?.extra?.publicApi
   ? Constants.expoConfig.extra.publicApiBaseUrl.trim()
   : "";
 export const publicFallbackServerBaseUrl = "http://31.173.110.118";
+export const localEnterpriseHttpsBaseUrl = "https://192.168.2.194";
 const localEnterpriseAllowedBaseUrls = uniqueValues([
+  localEnterpriseHttpsBaseUrl,
   "http://192.168.2.194:5173",
   "http://192.168.2.194",
   publicFallbackServerBaseUrl,
@@ -41,7 +43,7 @@ export const environments: Record<EnvironmentName, MobileEnvironment> = {
   },
   "local-enterprise": {
     name: "local-enterprise",
-    apiBaseUrl: "http://192.168.2.194:5173",
+    apiBaseUrl: localEnterpriseHttpsBaseUrl,
     contourId: "patrol360-local-enterprise",
     allowedBaseUrls: localEnterpriseAllowedBaseUrls,
     syncProtocolVersion: "1.0"

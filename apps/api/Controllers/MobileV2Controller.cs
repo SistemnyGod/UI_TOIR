@@ -16,4 +16,16 @@ public sealed class MobileV2Controller(IMobileAppService mobileAppService) : Mob
     {
         return Ok(mobileAppService.GetWorkItemsV2(MobileAccessToken));
     }
+
+    [HttpGet("work-items/page")]
+    public ActionResult<MobileWorkItemPageDto> WorkItemsPage(
+        string scope = "active", Guid? employeeId = null, string? cursor = null, int pageSize = 25)
+    {
+        try
+        {
+            var result = mobileAppService.GetWorkItemsPage(MobileAccessToken, scope, employeeId, cursor, pageSize);
+            return result is null ? Unauthorized() : Ok(result);
+        }
+        catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
+    }
 }

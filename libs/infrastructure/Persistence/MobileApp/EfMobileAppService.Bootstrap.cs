@@ -11,7 +11,7 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfMobileAppService
 {
-    public MobileBootstrapDto? GetBootstrap(string accessToken)
+    public MobileBootstrapDto? GetBootstrap(string accessToken, bool patrolAppealsPaging = false)
     {
         var session = FindActiveSession(accessToken);
         if (session?.MobileAccount is null)
@@ -73,6 +73,16 @@ internal sealed partial class EfMobileAppService
                     point.Description,
                     point.Instruction)))
             .ToArray();
+        var snapshotManifests = routeDtos
+            .Select(route => new MobilePatrolSnapshotManifestDto(
+                route.RouteId,
+                route.Version,
+                true,
+                pointDtos.Where(point => point.RouteId == route.RouteId)
+                    .OrderBy(point => point.PointId)
+                    .Select(point => new MobilePatrolSnapshotPointDto(point.PointId, point.Revision))
+                    .ToArray()))
+            .ToArray();
 
         if (sessionTouched)
         {
@@ -83,8 +93,17 @@ internal sealed partial class EfMobileAppService
         var device = MapDevice(account, session);
         var employees = BuildMobileEmployees(boundEmployeeIds);
         var emuSections = BuildMobileEmuSections();
-        var syncCursor = BuildBootstrapCursor(user, device, employees, emuSections, requestBoard, assignments, cancelledAssignmentIds, conflictResolutions, routeDtos, pointDtos);
+        var appeals = patrolAppealsPaging
+            ? Array.Empty<MobilePatrolAppealDto>()
+            : dbContext.MobilePatrolAppeals.AsNoTracking()
+                .Include(item => item.Assignment)!.ThenInclude(item => item!.Route)
+                .Include(item => item.Assignment)!.ThenInclude(item => item!.PatrolRequest)
+                .Where(item => item.MobileAccountId == account.Id && boundEmployeeIds.Contains(item.Assignment!.EmployeeId))
+                .OrderBy(item => item.Id).ToArray().Select(MapAppeal).ToArray();
+        var syncCursor = BuildBootstrapCursor(user, device, employees, emuSections, requestBoard, assignments, cancelledAssignmentIds, conflictResolutions, routeDtos, pointDtos, snapshotManifests, true, true);
 
+        syncCursor += ":atom1:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(appeals))));
         return new MobileBootstrapDto(
             user,
             device,
@@ -99,7 +118,16 @@ internal sealed partial class EfMobileAppService
         {
             ContourId = MobileContourId,
             CancelledAssignmentIds = cancelledAssignmentIds,
-            ConflictResolutions = conflictResolutions
+            ConflictResolutions = conflictResolutions,
+            PatrolAppealsAvailable = true,
+            PatrolAppealsPaging = patrolAppealsPaging,
+            PatrolAppealsAssignmentPaging = patrolAppealsPaging,
+            WorkItemsPaging = true,
+            PatrolSnapshotManifest = true,
+            PatrolPointResultStatusExtension = true,
+            BoundEmployeesComplete = true,
+            PatrolSnapshotManifests = snapshotManifests,
+            PatrolAppeals = patrolAppealsPaging ? [] : appeals
         };
     }
 
@@ -393,6 +421,11 @@ internal sealed partial class EfMobileAppService
     }
 
     public IReadOnlyList<MobileWorkItemDto> GetWorkItemsV2(string accessToken)
+        => GetWorkItemsV2Internal(accessToken, 200);
+
+    // The legacy route keeps its bounded response. The paged route owns the
+    // complete history and is therefore allowed to enumerate beyond that cap.
+    private IReadOnlyList<MobileWorkItemDto> GetWorkItemsV2Internal(string accessToken, int? itemLimit)
     {
         var session = FindActiveSession(accessToken);
         if (session?.MobileAccount is null)
@@ -415,7 +448,7 @@ internal sealed partial class EfMobileAppService
             .Where(row => row.DeletedAt == null)
             .Where(row => row.CompletedAt == null || row.Employees.Any(employee => boundEmployeeIds.Contains(employee.EmployeeId)))
             .OrderByDescending(row => row.UpdatedAt)
-            .Take(200)
+            .Take(itemLimit ?? int.MaxValue)
             .ToList();
         var sessionIds = sessionRows.Select(row => row.Id).ToArray();
         var attachmentsByWorkTaskId = sessionIds.Length == 0
@@ -447,7 +480,7 @@ internal sealed partial class EfMobileAppService
             .Where(row => row.ApprovalStatus == "Согласовано" && row.Status == "Запланировано")
             .Where(row => !startedPlanTaskIds.Contains(row.Id))
             .OrderBy(row => row.PlannedDate)
-            .Take(200)
+            .Take(itemLimit ?? int.MaxValue)
             .AsEnumerable()
             .Select(row => MapMobilePlanItem(row, boundEmployeeIds, mobilePlanTaskIds.Contains(row.Id)));
 
@@ -501,7 +534,7 @@ internal sealed partial class EfMobileAppService
                 CanReplace: !completed && !hasCurrentParticipant && hasOtherActiveParticipant,
                 CanPause: !completed && hasCurrentParticipant && !paused,
                 CanResume: !completed && hasCurrentParticipant && paused,
-                CanComplete: !completed && hasCurrentParticipant));
+                CanComplete: !completed && hasCurrentParticipant)) { UpdatedAt = row.UpdatedAt };
     }
 
     private static MobileWorkAttachmentDto MapMobileWorkAttachment(MobileUploadedFileEntity row) =>
@@ -544,7 +577,7 @@ internal sealed partial class EfMobileAppService
                 CanReplace: false,
                 CanPause: false,
                 CanResume: false,
-                CanComplete: false));
+                CanComplete: false)) { UpdatedAt = row.UpdatedAt };
     }
 
 
@@ -590,7 +623,7 @@ internal sealed partial class EfMobileAppService
                 BuildPlannedStartAt(request.ScheduledDate, request.ScheduledTime),
                 ResolveRequestEmployeeName(request),
                 MapRequestStatus(request),
-                request.CreatedAt.ToUnixTimeMilliseconds()))
+                request.CreatedAt.ToUnixTimeMilliseconds()) { AssignedEmployeeId = request.EmployeeId, PerformerSelectionAvailable = true, RouteSwitchAvailable = true })
             .ToArray();
     }
 
@@ -604,7 +637,10 @@ internal sealed partial class EfMobileAppService
         IReadOnlyList<Guid> cancelledAssignmentIds,
         IReadOnlyList<MobileBootstrapConflictResolutionDto> conflictResolutions,
         IReadOnlyList<MobilePatrolRouteDto> routes,
-        IReadOnlyList<MobilePatrolPointDto> points)
+        IReadOnlyList<MobilePatrolPointDto> points,
+        IReadOnlyList<MobilePatrolSnapshotManifestDto> snapshotManifests,
+        bool boundEmployeesComplete,
+        bool patrolPointResultStatusExtension)
     {
         // Do not include server time: an unchanged snapshot must keep the same
         // cursor so the client can skip a costly SQLite rewrite safely.
@@ -619,7 +655,10 @@ internal sealed partial class EfMobileAppService
             cancelledAssignmentIds,
             conflictResolutions,
             routes,
-            points
+            points,
+            snapshotManifests,
+            boundEmployeesComplete,
+            patrolPointResultStatusExtension
         }, JsonOptions);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshot))).ToLowerInvariant();
     }
@@ -643,7 +682,7 @@ internal sealed partial class EfMobileAppService
                 assignment.StartedAt,
                 assignment.FinishedAt,
                 assignment.LockVersion,
-                assignment.RouteVersionNo))
+                assignment.RouteVersionNo) { EmployeeId = assignment.EmployeeId })
             .ToArray();
     }
 

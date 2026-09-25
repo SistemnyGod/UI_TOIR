@@ -22,7 +22,7 @@ public sealed class PpeIssueDocumentPrintService : IPpeIssueDocumentPrintService
     {
         type = Normalize(type);
         format = Normalize(format);
-        if (type is not ("norms" or "signature")) return Failure("type", "Поддерживаются варианты печати: norms или signature.");
+        if (type is not ("norms" or "signature" or "both")) return Failure("type", "Поддерживаются варианты печати: norms, signature или both.");
         if (format is not ("docx" or "pdf")) return Failure("format", "Поддерживаются форматы: docx или pdf.");
 
         var loaded = documentService.GetIssueDocument(id);

@@ -34,13 +34,13 @@ export class ServerHealthCache<TValue extends HealthProbeValue> {
 
     const request = probe()
       .then((value) => {
-        this.entries.set(key, {
+        if (this.inFlight.get(key) === request) this.entries.set(key, {
           value,
           expiresAt: Date.now() + (value.ok ? serverHealthSuccessTtlMs : serverHealthFailureTtlMs)
         });
         return value;
       })
-      .finally(() => this.inFlight.delete(key));
+      .finally(() => { if (this.inFlight.get(key) === request) this.inFlight.delete(key); });
 
     this.inFlight.set(key, request);
     return request;
@@ -49,8 +49,10 @@ export class ServerHealthCache<TValue extends HealthProbeValue> {
   invalidate(key?: string) {
     if (key) {
       this.entries.delete(key);
+      this.inFlight.delete(key);
       return;
     }
     this.entries.clear();
+    this.inFlight.clear();
   }
 }

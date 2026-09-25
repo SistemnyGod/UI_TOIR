@@ -241,6 +241,28 @@ internal sealed class InventoryPpeIssueTemplateEntity
     public int? LegacyId { get; set; }
     public string Name { get; set; } = string.Empty;
     public bool IsArchived { get; set; }
+    public Guid NormSetId { get; set; }
+    public Guid OwnerUserId { get; set; }
+    public string OwnerName { get; set; } = string.Empty;
+    public bool IsShared { get; set; }
+    public long Version { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public List<InventoryPpeIssueTemplateLineEntity> Lines { get; set; } = [];
+}
+
+internal sealed class InventoryPpeIssueTemplateLineEntity
+{
+    public Guid Id { get; set; }
+    public Guid TemplateId { get; set; }
+    public Guid NormRowId { get; set; }
+    public Guid ItemId { get; set; }
+    public string ItemName { get; set; } = string.Empty;
+    public string UnitSymbol { get; set; } = string.Empty;
+    public decimal Quantity { get; set; }
+    public int? LifeMonths { get; set; }
+    public long? UnitPriceMinor { get; set; }
+    public InventoryPpeIssueTemplateEntity Template { get; set; } = null!;
 }
 
 internal sealed class InventoryItemSetEntity

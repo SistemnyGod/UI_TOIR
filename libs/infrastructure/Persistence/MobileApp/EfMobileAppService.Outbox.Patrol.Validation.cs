@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using Patrol360.Contracts;
 using Patrol360.Infrastructure.Persistence.Entities;
 namespace Patrol360.Infrastructure.Persistence;
@@ -107,6 +108,7 @@ internal sealed partial class EfMobileAppService
                         && (result.Status == "ok" || result.Status == "issue" || result.Status == "skipped"))
                     .Select(result => result.RoutePointId!.Value)
                     .ToHashSet();
+                completedEarlierPointIds.UnionWith(GetConfirmedMobilePointResultIds(account.Id, assignmentId, earlierRequiredPointIds));
                 if (earlierRequiredPointIds.Any(id => !completedEarlierPointIds.Contains(id)))
                 {
                     return AssignmentPointValidation.Fail(
@@ -115,5 +117,50 @@ internal sealed partial class EfMobileAppService
             }
         }
         return new AssignmentPointValidation(true, assignment, point, null);
+    }
+
+    // Point actions are acknowledged before the final report is submitted.
+    // PatrolResults is intentionally written only by completion, therefore it
+    // cannot be the sole source of truth for a route which requires ordering.
+    private HashSet<Guid> GetConfirmedMobilePointResultIds(Guid mobileAccountId, Guid assignmentId, IReadOnlyCollection<Guid> candidatePointIds)
+    {
+        var candidateIds = candidatePointIds.Select(id => id.ToString()).ToArray();
+        if (candidateIds.Length == 0) return [];
+        var payloads = dbContext.MobileOutboxOperations
+            .AsNoTracking()
+            .Where(operation => operation.MobileAccountId == mobileAccountId
+                && operation.EntityLocalId != null
+                && candidateIds.Contains(operation.EntityLocalId)
+                && (operation.Status == "accepted" || operation.Status == "duplicate")
+                && (operation.CommandType == "markPatrolPointOk" || operation.CommandType == "markPatrolPointIssue"))
+            .Select(operation => operation.PayloadJson)
+            .ToArray();
+        var pointIds = new HashSet<Guid>();
+        foreach (var payload in payloads)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(payload);
+                var root = document.RootElement;
+                if (!root.TryGetProperty("assignmentId", out var operationAssignment)
+                    || !Guid.TryParse(operationAssignment.GetString(), out var operationAssignmentId)
+                    || operationAssignmentId != assignmentId
+                    || !root.TryGetProperty("pointId", out var point)
+                    || !Guid.TryParse(point.GetString(), out var pointId))
+                {
+                    continue;
+                }
+                var status = root.TryGetProperty("pointResultStatus", out var statusValue)
+                    ? statusValue.GetString()
+                    : "ok";
+                if (status is "ok" or "issue" or "skipped") pointIds.Add(pointId);
+            }
+            catch (JsonException)
+            {
+                // A malformed historical receipt is never evidence that a
+                // route point was completed.
+            }
+        }
+        return pointIds;
     }
 }

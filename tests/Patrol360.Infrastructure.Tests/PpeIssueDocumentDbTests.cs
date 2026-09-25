@@ -11,9 +11,30 @@ using Xunit.Abstractions;
 namespace Patrol360.Infrastructure.Tests;
 
 [Collection("Postgres integration")]
-public sealed class PpeIssueDocumentDbTests(ITestOutputHelper output)
+public sealed partial class PpeIssueDocumentDbTests(ITestOutputHelper output)
 {
     private static readonly DateOnly Today = new(2026, 4, 1);
+
+    [DbIntegrationFact]
+    public async Task SelectedLifetimeSurvivesReopenAndSetsDueDate()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        await using var context = CreateContext(database.ConnectionString);
+        var fixture = Seed(context);
+        var service = new EfInventoryWorkflowService(context, new FixedClock(Today));
+        var request = Request(fixture, Today);
+        request = request with { Lines = [request.Lines[0] with { LifeMonths = 18 }] };
+        var saved = service.SaveIssueDocument(null, request, "tester");
+        Assert.True(saved.Succeeded);
+        context.ChangeTracker.Clear();
+        Assert.Equal(18, Assert.Single(service.GetIssueDocument(saved.Value!.Id).Value!.Content.Lines).LifeMonths);
+        var confirmed = service.ConfirmIssueDocument(saved.Value.Id, new(saved.Value.Version, "custom-lifetime"), "tester");
+        Assert.True(confirmed.Succeeded);
+        Assert.Equal(new FixedClock(Today).StartOfDayUtc(Today.AddMonths(18)), Assert.Single(context.InventoryPpeCardLines).DueAt);
+        var invalid = service.SaveIssueDocument(null, request with { Lines = [request.Lines[0] with { LifeMonths = 0 }] }, "tester");
+        Assert.False(invalid.Succeeded);
+        Assert.Contains("lifeMonths", invalid.Errors.Keys);
+    }
 
     [DbIntegrationFact]
     public async Task SaveAndConfirmCreatesOneFactWithoutWarehouseMovementsAndIsIdempotent()
@@ -61,7 +82,11 @@ public sealed class PpeIssueDocumentDbTests(ITestOutputHelper output)
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
         await using var context = CreateContext(database.ConnectionString);
         var fixture = Seed(context);
+        fixture.Item.StandardsJson = "[{\"designation\":\"ГОСТ 12.4.128-83\",\"name\":\"Каски защитные\"},{\"designation\":\"ТР ТС 019/2011\",\"name\":\"О безопасности СИЗ\"}]";
+        context.SaveChanges();
         var service = new EfInventoryWorkflowService(context, new FixedClock(Today));
+        var catalogMapping = Assert.Single(Assert.Single(service.GetPpeNormSet(fixture.Norm.Id).Value!.Rows).Mappings);
+        Assert.Equal(new[] { "ГОСТ 12.4.128-83", "ТР ТС 019/2011" }, catalogMapping.Standards!.Select(x => x.Designation));
         var saved = service.SaveIssueDocument(null, Request(fixture, Today), "tester");
         var confirmed = service.ConfirmIssueDocument(saved.Value!.Id, new(saved.Value!.Version, "snapshot-001"), "tester");
 
@@ -69,6 +94,7 @@ public sealed class PpeIssueDocumentDbTests(ITestOutputHelper output)
 
         fixture.Item.Name = "Каска изменена после сохранения";
         fixture.Item.DefaultUnitPriceMinor = 99_999;
+        fixture.Item.StandardsJson = "[{\"designation\":\"ГОСТ ИЗМЕНЕН\",\"name\":\"Новая редакция\"}]";
         context.SaveChanges();
         context.ChangeTracker.Clear();
 
@@ -78,6 +104,7 @@ public sealed class PpeIssueDocumentDbTests(ITestOutputHelper output)
         var line = Assert.Single(loaded.Value!.Content.Lines);
         Assert.Equal("Каска синтетическая", line.ItemName);
         Assert.Equal(1_000, line.UnitPriceMinor);
+        Assert.Equal(new[] { "ГОСТ 12.4.128-83", "ТР ТС 019/2011" }, line.Standards!.Select(x => x.Designation));
         Assert.Equal("Каска по норме", Assert.Single(loaded.Value!.Content.NormRows).NormItemName);
     }
 

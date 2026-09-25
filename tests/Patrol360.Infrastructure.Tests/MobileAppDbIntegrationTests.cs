@@ -8,12 +8,53 @@ using Patrol360.Infrastructure.Persistence;
 namespace Patrol360.Infrastructure.Tests;
 
 [Collection("Postgres integration")]
-public sealed class MobileAppDbIntegrationTests
+public sealed partial class MobileAppDbIntegrationTests
 {
     private const string AssignmentAcceptedStatus = "Принята";
     private const string AssignmentInProgressStatus = "В пути";
     private const string AssignmentPausedStatus = "Приостановлена";
     private const string AssignmentNeedsDispatcherDecisionStatus = "Требует решения диспетчера";
+
+    [DbIntegrationFact]
+    public async Task MobileWorkItemsPagingExecutesOnPostgres()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var employee = UseEmployees(provider, employees => employees.GetEmployees().First());
+        var account = UseMobileAccounts(provider, accounts => accounts.CreateAccount(new CreateMobileAccountDto(
+            employee.FullName,
+            "selected",
+            $"page_{Guid.NewGuid():N}"[..18],
+            "Маршрутный обходчик",
+            BindEmployee: true,
+            RestrictToBoundDevice: false,
+            TemporaryPassword: false,
+            Password: "Patrol360!",
+            ConfirmPassword: "Patrol360!",
+            RequirePasswordChange: false)));
+        Assert.True(account.Succeeded);
+
+        var login = Login(provider, account.Account!.Login, "Patrol360!");
+        Assert.True(login.Succeeded);
+        var accessToken = Assert.IsType<string>(login.Session?.AccessToken);
+        var first = UseMobileApp(provider, mobile => mobile.GetWorkItemsPage(accessToken, "active", null, null, 25));
+        Assert.NotNull(first);
+        Assert.InRange(first!.Items.Count, 0, 25);
+
+        var cursorProbe = $"{DateTimeOffset.UtcNow.UtcDateTime.Ticks}:planTask:{Guid.Empty:D}";
+        var cursorPage = UseMobileApp(provider, mobile => mobile.GetWorkItemsPage(accessToken, "active", null, cursorProbe, 25));
+        Assert.NotNull(cursorPage);
+        Assert.InRange(cursorPage!.Items.Count, 0, 25);
+
+        if (!string.IsNullOrWhiteSpace(first.NextCursor))
+        {
+            var second = UseMobileApp(provider, mobile => mobile.GetWorkItemsPage(accessToken, "active", null, first.NextCursor, 25));
+            Assert.NotNull(second);
+            Assert.InRange(second!.Items.Count, 0, 25);
+        }
+    }
     [DbIntegrationFact]
     public async Task MobileLoginBootstrapAndOutboxArePersisted()
     {

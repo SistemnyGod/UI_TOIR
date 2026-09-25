@@ -2,6 +2,7 @@ import * as Crypto from "expo-crypto";
 import * as SQLite from "expo-sqlite";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { assertDataOwnerContext, type DataOwnerContext } from '@/auth/dataOwnerContext';
 import { currentContourId } from "@/core/environments";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
@@ -14,7 +15,8 @@ import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { getCompletionAttachmentFailure } from "@/domain/files/completionAttachmentPolicy";
 import { isPhotoEvidenceRequired, type PhotoEvidenceStatus } from "@/domain/patrol/photoEvidencePolicy";
 import { normalizePointDraft, PointDraftSelectedStatus } from "@/domain/patrol/pointDraftPolicy";
-import { canCreateCompletionCommand, evaluateReportPointReadiness, isTerminalPointStatus } from "@/domain/patrol/reportReadinessPolicy";
+import { canCreateCompletionCommand, isTerminalPointStatus } from "@/domain/patrol/reportReadinessPolicy";
+import { evaluatePointEvidence } from '@/domain/patrol/pointEvidenceReadiness';
 import { canPatrolAction, patrolActionError } from "@/domain/patrol/patrolStateMachine";
 import { OutboxCommand } from "@/domain/sync/syncTypes";
 import { getNfcCodeCandidates, normalizeNfcCode } from "@/services/nfcService";
@@ -29,6 +31,8 @@ const frozenSnapshotAssignmentStatuses = new Set(["releasePending", "inProgress"
 
 
 export type RequestBoardItem = {
+  assignedEmployeeId?: string | null;
+  performerSelectionAvailable?: number;
   requestId: string;
   displayNumber: string | null;
   routeId: string;
@@ -40,6 +44,8 @@ export type RequestBoardItem = {
 };
 
 export type ActiveAssignment = {
+  employeeId?: string | null;
+  assignedFullName?: string | null;
   assignmentId: string;
   requestId: string;
   routeId: string;
@@ -68,6 +74,7 @@ export type PointListItem = {
   requiresPhoto: boolean;
   status: "pending" | "scanned" | "ok" | "issue" | "deferred" | "skipped";
   comment: string | null;
+  manualReason?: string | null;
   issueTypeId?: string | null;
   confirmationType?: "nfc" | "qr" | "manual" | null;
   photoClientFileIds: string[];
@@ -87,6 +94,8 @@ export type PointForFill = PointListItem & {
 
 export type AssignmentProgress = {
   total: number;
+  /** Points actually inspected. A skipped point is processed but never inspected. */
+  inspected: number;
   completed: number;
   deferred: number;
   issues: number;
@@ -113,6 +122,7 @@ function assertPatrolAction(action: Parameters<typeof canPatrolAction>[0], statu
 }
 
 export type DeferPointInput = {
+  manualReason?: string;
   selectedStatus?: PointDraftSelectedStatus;
   comment?: string | null;
   issueTypeId?: string | null;
@@ -133,6 +143,8 @@ export async function listRequestBoard() {
         route_name AS routeName,
         planned_start_at AS plannedStartAt,
         assigned_full_name AS assignedFullName,
+        assigned_employee_id AS assignedEmployeeId,
+        performer_selection_available AS performerSelectionAvailable,
         status,
         revision
       FROM patrol_request_board
@@ -156,6 +168,8 @@ export async function getRequestBoardItem(requestId: string) {
         route_name AS routeName,
         planned_start_at AS plannedStartAt,
         assigned_full_name AS assignedFullName,
+        assigned_employee_id AS assignedEmployeeId,
+        performer_selection_available AS performerSelectionAvailable,
         status,
         revision
       FROM patrol_request_board
@@ -166,13 +180,15 @@ export async function getRequestBoardItem(requestId: string) {
   );
 }
 
-export async function getActiveAssignment() {
+export async function getActiveAssignment(context: { employeeId?: string | null; assignmentId?: string | null } = {}) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
 
   const assignment = await db.getFirstAsync<ActiveAssignment>(
     `
       SELECT
+        assignment.employee_id AS employeeId,
+        request.assigned_full_name AS assignedFullName,
         assignment.assignment_id AS assignmentId,
         assignment.request_id AS requestId,
         assignment.route_id AS routeId,
@@ -193,6 +209,8 @@ export async function getActiveAssignment() {
       LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
       WHERE assignment.owner_user_id = ?
         AND (assignment.contour_id = ? OR assignment.contour_id IS NULL)
+        AND (? IS NULL OR assignment.employee_id = ?)
+        AND (? IS NULL OR assignment.assignment_id = ?)
         AND assignment.status NOT IN ('completed', 'completedServer', 'cancelled', 'cancelledServer', 'conflict')
       ORDER BY
         CASE
@@ -206,7 +224,7 @@ export async function getActiveAssignment() {
         assignment.started_at_local DESC
       LIMIT 1
     `,
-    [ownerUserId, currentContourId]
+    [ownerUserId, currentContourId, context.employeeId ?? null, context.employeeId ?? null, context.assignmentId ?? null, context.assignmentId ?? null]
   );
 
   if (assignment) {
@@ -223,6 +241,8 @@ export async function getAssignmentByRequestId(requestId: string) {
   const assignment = await db.getFirstAsync<ActiveAssignment>(
     `
       SELECT
+        assignment.employee_id AS employeeId,
+        request.assigned_full_name AS assignedFullName,
         assignment.assignment_id AS assignmentId,
         assignment.request_id AS requestId,
         assignment.route_id AS routeId,
@@ -267,7 +287,7 @@ export async function getAssignmentByRequestId(requestId: string) {
   return assignment;
 }
 
-export async function acceptRequestLocally(requestId: string) {
+export async function acceptRequestLocally(requestId: string, selectedEmployeeId?: string) {
   const db = await getDatabase();
   const ownerUserId = await requireOwnerUserId();
   const request = await getRequestBoardItem(requestId);
@@ -281,6 +301,15 @@ export async function acceptRequestLocally(requestId: string) {
   }
 
   assertPatrolAction("acceptRequest", request.status);
+  const performer = await db.getFirstAsync<{ employeeId: string | null; available: number }>(
+    "SELECT assigned_employee_id AS employeeId, performer_selection_available AS available FROM patrol_request_board WHERE request_id = ? AND owner_user_id = ?", [requestId, ownerUserId]);
+  const employeeId = performer?.employeeId ?? selectedEmployeeId ?? null;
+  if (performer?.available && !employeeId) throw new Error("Выберите исполнителя обхода.");
+  if (selectedEmployeeId && !performer?.available) throw new Error("Обновите сервер для выбора исполнителя.");
+  if (selectedEmployeeId && performer?.employeeId && selectedEmployeeId !== performer.employeeId) throw new Error("Назначенного сотрудника меняет диспетчер.");
+  const employee = employeeId ? await db.getFirstAsync<{ fullName: string }>("SELECT full_name AS fullName FROM mobile_employees WHERE owner_user_id = ? AND employee_id = ?", [ownerUserId, employeeId]) : null;
+  if (employeeId && !employee) throw new Error("Сотрудник не связан с текущим аккаунтом.");
+
   const route = await db.getFirstAsync<{
     version: number;
     allowFreeOrder: number | null;
@@ -307,7 +336,8 @@ export async function acceptRequestLocally(requestId: string) {
       requestId: request.requestId,
       routeId: request.routeId,
       requestRevision: request.revision,
-      acceptedAtLocal
+      acceptedAtLocal,
+      ...(employeeId ? { employeeId } : {})
     },
     createdAtLocal: acceptedAtLocal,
     attemptCount: 0,
@@ -421,6 +451,8 @@ export async function acceptRequestLocally(requestId: string) {
         await insertOutboxCommandInTransaction(tx, command);
       }
 
+      await tx.runAsync("UPDATE patrol_assignments SET employee_id = ? WHERE assignment_id = ? AND owner_user_id = ? AND contour_id = ?", [employeeId, assignmentId, ownerUserId, currentContourId]);
+      if (employee) await tx.runAsync("UPDATE patrol_request_board SET assigned_full_name = ?, assigned_employee_id = ? WHERE request_id = ? AND owner_user_id = ?", [employee.fullName, employeeId, requestId, ownerUserId]);
       await tx.runAsync(
         `
           UPDATE patrol_request_board
@@ -433,8 +465,7 @@ export async function acceptRequestLocally(requestId: string) {
     })
   );
 
-  requestSyncAfterMutation();
-  return {
+  const acceptedAssignment = {
     assignment: existing
       ? { ...existing, status: "accepted", revision: existing.revision + 1 }
       : {
@@ -456,6 +487,8 @@ export async function acceptRequestLocally(requestId: string) {
         } satisfies ActiveAssignment,
     created: !existing
   };
+  requestSyncAfterMutation();
+  return acceptedAssignment;
 }
 export async function releaseAcceptedRequestLocally(assignmentId: string) {
   const db = await getDatabase();
@@ -696,6 +729,7 @@ export async function listAssignmentPoints(assignmentId: string, ownerUserId: st
     requiresPhoto: number;
     status: PointListItem["status"];
     comment: string | null;
+  manualReason?: string | null;
     issueTypeId: string | null;
     confirmationType: PointListItem["confirmationType"];
     photoClientFileIdsJson: string | null;
@@ -722,6 +756,7 @@ export async function listAssignmentPoints(assignmentId: string, ownerUserId: st
     requiresPhoto: row.requiresPhoto === 1,
     status: row.status,
     comment: row.comment,
+    manualReason: row.manualReason,
     issueTypeId: row.issueTypeId,
     confirmationType: row.confirmationType,
     photoClientFileIds: parseStringArray(row.photoClientFileIdsJson)
@@ -731,6 +766,7 @@ export async function listAssignmentPoints(assignmentId: string, ownerUserId: st
 type ExistingPointResultForScan = {
   status: PointListItem["status"];
   comment: string | null;
+  manualReason?: string | null;
   issueTypeId: string | null;
   severity: string | null;
   deferredReason: string | null;
@@ -1147,6 +1183,7 @@ export async function getPointForFill(assignmentId: string, pointId: string, own
     qrCodeHash: string | null;
     status: PointListItem["status"] | null;
     comment: string | null;
+  manualReason?: string | null;
     confirmationType: "nfc" | "qr" | "manual" | null;
     scannedAtLocal: string | null;
     completedAtLocal: string | null;
@@ -1176,6 +1213,7 @@ export async function getPointForFill(assignmentId: string, pointId: string, own
     qrCodeHash: row.qrCodeHash,
     status: row.status ?? "pending",
     comment: row.comment,
+    manualReason: row.manualReason,
     confirmationType: row.confirmationType,
     scannedAtLocal: row.scannedAtLocal,
     completedAtLocal: row.completedAtLocal,
@@ -1201,6 +1239,19 @@ export async function assertPointCanBeOpened(
   const db = await getDatabase();
   await assertPointOrderAllowed(db, ownerUserId, assignmentId, pointId, point.orderIndex, scanPolicy.allowFreeOrder);
   return point;
+}
+
+export async function beginManualPointInspection(assignmentId: string, pointId: string, reason: string) {
+  const manualReason = reason.trim();
+  if (!manualReason || manualReason.length > 120) throw new Error("Укажите короткую причину: от 1 до 120 символов.");
+  const ownerUserId = await requireOwnerUserId();
+  const point = await assertPointCanBeOpened(assignmentId, pointId);
+  if (point.status === "ok" || point.status === "issue") throw new Error("Результат точки уже сохранён.");
+  await upsertPointResult({ ownerUserId, assignmentId, pointId,
+    status: "pending", comment: point.comment, issueTypeId: point.issueTypeId,
+    severity: null, deferredReason: null, completedAtLocal: null, syncStatus: "localOnly",
+    confirmationType: "manual", nfcUidHash: null, scannedAtLocal: null,
+    manualReason, photoClientFileIds: point.photoClientFileIds, requireInProgress: true });
 }
 
 export async function savePointOk(assignmentId: string, pointId: string, comment: string) {
@@ -1235,17 +1286,19 @@ export async function deferPoint(assignmentId: string, pointId: string, input: D
   }).catch(() => undefined);
 }
 
-export async function savePointDraft(assignmentId: string, pointId: string, input: DeferPointInput = {}) {
-  await persistPointDraft(assignmentId, pointId, input, "localOnly");
+export async function savePointDraft(assignmentId: string, pointId: string, input: DeferPointInput = {}, scope?: DataOwnerContext) {
+  await persistPointDraft(assignmentId, pointId, input, "localOnly", scope);
 }
 
 async function persistPointDraft(
   assignmentId: string,
   pointId: string,
   input: DeferPointInput,
-  syncStatus: "localOnly"
+  syncStatus: "localOnly",
+  scope?: DataOwnerContext
 ) {
-  const ownerUserId = await requireOwnerUserId();
+  if (scope) await assertDataOwnerContext(scope);
+  const ownerUserId = scope?.ownerUserId ?? await requireOwnerUserId();
   await assertPointActionAllowed(assignmentId, "editPoint");
   const point = await assertPointCanBeOpened(assignmentId, pointId);
   if (!point) {
@@ -1255,11 +1308,14 @@ async function persistPointDraft(
   const draft = normalizePointDraft(input, point);
   const photoClientFileIds = input.photoClientFileIds ?? point.photoClientFileIds;
 
-  await upsertPointResult({
+  const db = await getDatabase();
+  await withProtectedExclusiveTransactionAsync(db, async tx => {
+    if (scope) await assertDataOwnerContext(scope);
+    await upsertPointResultInTransaction(tx, {
     ownerUserId,
     assignmentId,
     pointId,
-    status: "deferred",
+    status: input.manualReason !== undefined && !input.selectedStatus ? point.status : "deferred",
     comment: draft.comment ?? point.comment,
     issueTypeId: draft.issueTypeId,
     severity: null,
@@ -1267,10 +1323,13 @@ async function persistPointDraft(
     completedAtLocal: null,
     syncStatus,
     confirmationType: point.confirmationType ?? "manual",
+    manualReason: input.manualReason,
     nfcUidHash: point.nfcUidHash,
-    scannedAtLocal: point.scannedAtLocal ?? new Date().toISOString(),
+    scannedAtLocal: point.scannedAtLocal,
     photoClientFileIds,
     requireInProgress: true
+    });
+    if (scope) await assertDataOwnerContext(scope);
   });
 
   return {
@@ -1288,23 +1347,32 @@ export async function skipPoint(assignmentId: string, pointId: string, input: Pi
   }
 
   const completedAtLocal = point.status === "skipped" && point.completedAtLocal ? point.completedAtLocal : new Date().toISOString();
-  await upsertPointResult({
-    ownerUserId,
-    assignmentId,
-    pointId,
-    status: "skipped",
-    comment: input.comment ?? point.comment,
-    issueTypeId: null,
-    severity: null,
-    deferredReason: "Метка недоступна",
-    completedAtLocal,
-    syncStatus: "pending",
-    confirmationType: "manual",
-    nfcUidHash: null,
-    scannedAtLocal: point.scannedAtLocal ?? completedAtLocal,
-    photoClientFileIds: input.photoClientFileIds ?? point.photoClientFileIds,
-    requireInProgress: true
-  });
+  const comment = input.comment ?? point.comment;
+  const photoClientFileIds = input.photoClientFileIds ?? point.photoClientFileIds;
+  const db = await getDatabase();
+  // A pre-extension server reads markPatrolPointOk as an ordinary successful
+  // mark. Do not fabricate that result: keep the local skipped result for the
+  // final report and require an upgraded server for strict-order progression.
+  const capability = await db.getFirstAsync<{ enabled: number }>(
+    "SELECT patrol_point_result_status_extension AS enabled FROM mobile_capabilities WHERE owner_user_id = ? AND contour_id = ?",
+    [ownerUserId, currentContourId]
+  );
+  const command: OutboxCommand | null = capability?.enabled ? {
+    clientOperationId: Crypto.randomUUID(), ownerUserId,
+    commandType: "markPatrolPointOk", entityType: "patrolPoint", entityLocalId: pointId, entityServerId: pointId,
+    payload: { assignmentId, pointId, pointResultStatus: "skipped", comment, manualReason: "Метка недоступна", photoClientFileIds, completedAtLocal },
+    createdAtLocal: completedAtLocal, attemptCount: 0, status: "pending"
+  } : null;
+  await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    await supersedePendingPointStatusCommands(tx, ownerUserId, assignmentId, pointId);
+    await upsertPointResultInTransaction(tx, {
+      ownerUserId, assignmentId, pointId, status: "skipped", comment, issueTypeId: null, severity: null,
+      deferredReason: "Метка недоступна", completedAtLocal, syncStatus: "pending", confirmationType: "manual",
+      nfcUidHash: null, scannedAtLocal: point.scannedAtLocal, photoClientFileIds, requireInProgress: true
+    });
+    if (command) await insertOutboxCommandInTransaction(tx, command);
+  }));
+  requestSyncAfterMutation();
 
   void logMobileAction({
     eventType: "patrol.point.skipped",
@@ -1444,53 +1512,8 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
     });
   }
 
-  for (const point of points) {
-
-    if (point.status === "issue" && !point.comment?.trim()) {
-      problems.push({
-        pointId: point.pointId,
-        pointName: point.name,
-        orderIndex: point.orderIndex,
-        reason: "Для неисправности нужен комментарий"
-      });
-    }
-
-    if (point.status === "issue" && !point.issueTypeId?.trim()) {
-      problems.push({
-        pointId: point.pointId,
-        pointName: point.name,
-        orderIndex: point.orderIndex,
-        reason: "Для неисправности нужно указать тип"
-      });
-    }
-
-    if (point.status === "skipped" && !point.comment?.trim()) {
-      problems.push({
-        pointId: point.pointId,
-        pointName: point.name,
-        orderIndex: point.orderIndex,
-        reason: "Укажите причину недоступности метки"
-      });
-    }
-
-    if (isPhotoEvidenceRequired(point.requiresPhoto, point.status) && point.photoClientFileIds.length === 0) {
-      problems.push({
-        pointId: point.pointId,
-        pointName: point.name,
-        orderIndex: point.orderIndex,
-        reason: "Для метки требуется фотофиксация"
-      });
-    }
-  }
-
   const progress = await getAssignmentProgress(assignmentId);
-  const reportPointReadiness = evaluateReportPointReadiness(points.map((point) => ({
-    pointId: point.pointId,
-    pointName: point.name,
-    orderIndex: point.orderIndex,
-    required: point.required,
-    status: point.status
-  })));
+  const reportPointReadiness = evaluatePointEvidence(points);
 
   for (const problem of reportPointReadiness.problems) {
     problems.push(problem);
@@ -1558,7 +1581,9 @@ export async function reopenInvalidCompletionReportLocally(assignmentId: string)
       const assignmentUpdate = await tx.runAsync(
         `UPDATE patrol_assignments
             SET status = 'inProgress',
-                completed_at_local = NULL
+                completed_at_local = NULL,
+                local_report_present = 0,
+                local_report_needs_review = 0
           WHERE owner_user_id = ?
             AND contour_id = ?
             AND assignment_id = ?
@@ -1665,7 +1690,8 @@ export async function completeAssignmentLocally(assignmentId: string) {
           `
             UPDATE patrol_assignments
             SET status = 'completedLocal',
-                completed_at_local = COALESCE(completed_at_local, ?)
+                completed_at_local = COALESCE(completed_at_local, ?),
+                local_report_present = 1
             WHERE owner_user_id = ?
               AND contour_id = ?
               AND assignment_id = ?
@@ -1700,7 +1726,8 @@ export async function completeAssignmentLocally(assignmentId: string) {
       `
         UPDATE patrol_assignments
         SET status = 'completedLocal',
-            completed_at_local = ?
+            completed_at_local = ?,
+            local_report_present = 1
         WHERE owner_user_id = ?
           AND contour_id = ?
           AND assignment_id = ?
@@ -1743,6 +1770,7 @@ export async function getAssignmentProgress(assignmentId: string): Promise<Assig
 
   return {
     total: points.length,
+    inspected: points.filter((point) => point.status === "ok" || point.status === "issue").length,
     completed: points.filter((point) => isTerminalPointStatus(point.status)).length,
     deferred: points.filter((point) => point.status === "deferred").length,
     issues: points.filter((point) => point.status === "issue").length,
@@ -1750,8 +1778,8 @@ export async function getAssignmentProgress(assignmentId: string): Promise<Assig
   };
 }
 
-export async function getActiveAssignmentWithProgress() {
-  const assignment = await getActiveAssignment();
+export async function getActiveAssignmentWithProgress(context: { employeeId?: string | null; assignmentId?: string | null } = {}) {
+  const assignment = await getActiveAssignment(context);
   if (!assignment) {
     return null;
   }
@@ -1873,6 +1901,8 @@ export async function getAssignmentById(assignmentId: string) {
   return db.getFirstAsync<ActiveAssignment>(
     `
       SELECT
+        assignment.employee_id AS employeeId,
+        request.assigned_full_name AS assignedFullName,
         assignment.assignment_id AS assignmentId,
         assignment.request_id AS requestId,
         assignment.route_id AS routeId,
@@ -1937,13 +1967,14 @@ async function updateAssignmentLifecycleLocally(
         WHERE owner_user_id = ?
           AND assignment_id <> ?
           AND contour_id = ?
-          AND status IN ('inProgress', 'paused')
+          AND status = 'inProgress'
+          AND (employee_id IS NULL OR employee_id = COALESCE((SELECT employee_id FROM patrol_assignments WHERE assignment_id = ?), employee_id))
         LIMIT 1
       `,
-      [ownerUserId, assignment.assignmentId, currentContourId]
+      [ownerUserId, assignment.assignmentId, currentContourId, assignment.assignmentId]
     );
     if (competing) {
-      throw new Error("Сначала завершите или передайте текущий обход.");
+      throw new Error("У сотрудника уже есть выполняемый обход. Используйте смену маршрута.");
     }
   }
 
@@ -2042,13 +2073,14 @@ async function updateAssignmentLifecycleLocally(
             WHERE owner_user_id = ?
               AND assignment_id <> ?
               AND contour_id = ?
-              AND status IN ('inProgress', 'paused')
+              AND status = 'inProgress'
+          AND (employee_id IS NULL OR employee_id = COALESCE((SELECT employee_id FROM patrol_assignments WHERE assignment_id = ?), employee_id))
             LIMIT 1
           `,
-          [ownerUserId, assignment.assignmentId, currentContourId]
+          [ownerUserId, assignment.assignmentId, currentContourId, assignment.assignmentId]
         );
         if (competing) {
-          throw new Error("Сначала завершите или передайте текущий обход.");
+          throw new Error("У сотрудника уже есть выполняемый обход. Используйте смену маршрута.");
         }
       }
 
@@ -2184,6 +2216,7 @@ async function buildCompletedPointResults(
     pointId: string;
     status: string | null;
     comment: string | null;
+  manualReason?: string | null;
     issueTypeId: string | null;
     photoClientFileIdsJson: string | null;
     confirmationType: "nfc" | "qr" | "manual" | null;
@@ -2195,6 +2228,7 @@ async function buildCompletedPointResults(
         point.point_id AS pointId,
         result.status AS status,
         result.comment AS comment,
+        result.manual_reason AS manualReason,
         result.issue_type_id AS issueTypeId,
         result.photo_client_file_ids_json AS photoClientFileIdsJson,
         result.confirmation_type AS confirmationType,
@@ -2217,7 +2251,8 @@ async function buildCompletedPointResults(
   return rows.filter((row): row is typeof row & { status: "ok" | "issue" | "skipped" } => isTerminalPointStatus(row.status)).map((row) => ({
     pointId: row.pointId,
     status: row.status,
-    comment: row.comment ?? "",
+    comment: row.comment?.trim() ? row.comment : row.manualReason ?? "",
+    manualReason: row.manualReason ?? null,
     issueTypeId: row.issueTypeId,
     photoClientFileIds: parseStringArray(row.photoClientFileIdsJson),
     confirmationType: row.confirmationType ?? "manual",
@@ -2678,7 +2713,7 @@ async function savePointResult({
   }
 
   const completedAtLocal = new Date().toISOString();
-  if (point.confirmationType !== "nfc" && point.confirmationType !== "qr" && !comment.trim()) {
+  if (point.confirmationType !== "nfc" && point.confirmationType !== "qr" && !point.manualReason?.trim() && !comment.trim()) {
     throw new Error("Для ручного подтверждения укажите причину, почему метку не удалось отсканировать.");
   }
 
@@ -2729,7 +2764,7 @@ async function savePointResult({
         syncStatus: "pending",
         confirmationType: point.confirmationType ?? "manual",
         nfcUidHash: point.nfcUidHash,
-        scannedAtLocal: point.scannedAtLocal ?? completedAtLocal,
+        scannedAtLocal: point.scannedAtLocal,
         photoClientFileIds: point.photoClientFileIds,
         requireInProgress: true
       });
@@ -2746,4 +2781,10 @@ async function savePointResult({
     message: status === "issue" ? "Метка сохранена как неисправная." : "Метка сохранена как исправная.",
     payload: { assignmentId, status, photoCount: point.photoClientFileIds.length }
   }).catch(() => undefined);
+}
+
+export async function getNextPendingAssignmentPoint(assignmentId: string) {
+  const ownerUserId = await requireOwnerUserId();
+  const points = await listAssignmentPoints(assignmentId, ownerUserId, currentContourId);
+  return points.find((point) => !isTerminalPointStatus(point.status)) ?? null;
 }

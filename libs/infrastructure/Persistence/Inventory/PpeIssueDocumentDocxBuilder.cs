@@ -6,9 +6,9 @@ using Patrol360.Contracts;
 
 namespace Patrol360.Infrastructure.Persistence.Inventory;
 
-internal static class PpeIssueDocumentDocxBuilder
+internal static partial class PpeIssueDocumentDocxBuilder
 {
-    internal const string TemplateVersion = "ppe-issue-v1";
+    internal const string TemplateVersion = "ppe-issue-v3-standards-combined";
     private const string Font = "Liberation Serif";
 
     public static byte[] Build(PpeIssueDocumentDto document, string type)
@@ -20,10 +20,18 @@ internal static class PpeIssueDocumentDocxBuilder
             main.Document = new Document(new Body());
             var body = main.Document.Body!;
             var headerReference = AddHeader(main, document, type);
-            AddEmployeeHeader(body, document, type == "signature");
-            if (type == "signature") AddSignature(body, document);
-            else AddNorms(body, document);
-            body.Append(PageSetup(type == "signature", headerReference));
+            if (type != "signature")
+            {
+                AddPersonalCardHeader(body, document);
+                AddNorms(body, document);
+            }
+            if (type == "both")
+            {
+                body.Append(SectionBreak(false, headerReference));
+                AddSignature(body, document);
+            }
+            else if (type == "signature") AddSignature(body, document);
+            body.Append(PageSetup(type is "signature" or "both", headerReference));
             main.Document.Save();
         }
 
@@ -35,93 +43,46 @@ internal static class PpeIssueDocumentDocxBuilder
         var header = main.AddNewPart<HeaderPart>();
         var status = IsDraft(document) ? "ПЛАНОВЫЙ ДОКУМЕНТ - НЕ ПОДТВЕРЖДАЕТ ПОЛУЧЕНИЕ" : "ПОДТВЕРЖДЕННЫЙ ДОКУМЕНТ";
         header.Header = new Header(ParagraphText(
-            $"{status} | {document.Content.Employee.PersonnelNo} | {document.Content.DocumentDate:dd.MM.yyyy}",
+            status,
             16, false, JustificationValues.Right));
         header.Header.Save();
         return new HeaderReference { Type = HeaderFooterValues.Default, Id = main.GetIdOfPart(header) };
     }
 
-    private static void AddEmployeeHeader(Body body, PpeIssueDocumentDto document, bool landscape)
-    {
-        var content = document.Content;
-        body.Append(ParagraphText("ВЫБРАННЫЕ СИЗ ДЛЯ ВЫДАЧИ", 28, true, JustificationValues.Center));
-        body.Append(ParagraphText(IsDraft(document) ? "Планируемая выдача. Получение сотрудником не подтверждено." : "Подтвержденная выдача СИЗ", 20, true, JustificationValues.Center));
-
-        var employee = content.Employee;
-        var details = employee.Details;
-        var table = NewTable(landscape ? [7700, 7700] : [4600, 4600]);
-        AddRow(table, [
-            $"Сотрудник: {employee.FullName}\nТабельный номер: {employee.PersonnelNo}\nПодразделение: {employee.Department}\nДолжность: {employee.Position}",
-            $"Пол: {Blank(details.Gender)}\nРост: {Blank(details.Height)}\nРазмер одежды: {Blank(details.ClothingSize)}\nОбувь: {Blank(details.ShoeSize)}\nГоловной убор: {Blank(details.HeadSize)}\nСИЗОД: {Blank(details.RespiratorSize)}\nСИЗ рук: {Blank(details.HandProtectionSize)}"
-        ], false, 18);
-        body.Append(table);
-        body.Append(ParagraphText($"Основание: {Blank(content.Basis)}", 18));
-        body.Append(ParagraphText($"Ответственное лицо: {Blank(content.ResponsibleName)}", 18));
-        body.Append(ParagraphText($"Нормы: {content.NormSourceName} / {content.NormVersionName}", 16));
-    }
-
     private static void AddNorms(Body body, PpeIssueDocumentDto document)
     {
-        body.Append(ParagraphText("Нормы и выбранная номенклатура", 22, true));
-        var table = NewTable([500, 2100, 1100, 1450, 1100, 900, 1100, 1050]);
-        AddRow(table, ["№", "Наименование по нормам", "Пункт", "Периодичность", "Кол-во по норме", "Выбрано", "Цена", "Сумма"], true, 15, repeatHeader: true);
-        var linesByNorm = document.Content.Lines
-            .Select((line, index) => (line, index))
-            .GroupBy(x => x.line.NormRowId)
-            .ToDictionary(x => x.Key, x => x.ToList());
-        var includedNormIds = SelectedNormsAndParentGroups(document.Content.NormRows, linesByNorm.Keys);
-        var number = 1;
-        foreach (var norm in document.Content.NormRows.Where(x => includedNormIds.Contains(x.Id)).OrderBy(x => x.SortOrder).ThenBy(x => x.Id))
+        var table = NewTable([4900, 1500, 1700, 1600]);
+        AddRow(table, ["Наименование СИЗ", "Пункт норм", "Единица измерения, периодичность выдачи", "Количество на период"], true, 20, repeatHeader: true);
+        var ids = SelectedNormsAndParentGroups(document.Content.NormRows, document.Content.Lines.Select(x => x.NormRowId));
+        foreach (var norm in document.Content.NormRows.Where(x => ids.Contains(x.Id)).OrderBy(x => x.SortOrder).ThenBy(x => x.Id))
         {
-            if (string.Equals(norm.RowType, "group", StringComparison.OrdinalIgnoreCase))
-            {
-                AddRow(table, [norm.NormItemName, "", "", "", "", "", "", ""], true, 15, mergeAll: true);
-                continue;
-            }
-
-            AddRow(table, [number++.ToString(CultureInfo.InvariantCulture), norm.NormItemName, norm.NormPoint, norm.IssuePeriodText,
-                Quantity(norm.Quantity, norm.UnitSymbol), "", "", ""], false, 15);
-            if (!linesByNorm.TryGetValue(norm.Id, out var selected)) continue;
-            foreach (var item in selected)
-            {
-                AddCatalogLine(table, item.line, 15);
-            }
+            if (norm.RowType == "group") AddRow(table, [norm.NormItemName, "", "", ""], true, 20, mergeAll: true);
+            else AddRow(table, [norm.NormItemName, norm.NormPoint, norm.IssuePeriodText,
+                string.IsNullOrWhiteSpace(norm.QuantityText) ? Quantity(norm.Quantity, norm.UnitSymbol) : norm.QuantityText], false, 20);
         }
-
         body.Append(table);
-        var hasUnknown = document.Content.Lines.Any(x => !x.UnitPriceMinor.HasValue || !x.TotalMinor.HasValue);
-        var total = document.Validation.TotalMinor;
-        var totalText = total.HasValue ? $"Итого: {Money(total.Value)}" : "Итого: не рассчитано";
-        body.Append(ParagraphText(totalText + (hasUnknown ? ". Не все цены указаны." : string.Empty), 18, true));
-    }
-
-    private static void AddCatalogLine(Table table, PpeDocumentLineDto line, int fontSize)
-    {
-        AddSpannedRow(table, [
-            ("", 1),
-            (CatalogLineDescription(line), 4),
-            (Quantity(line.Quantity, line.UnitSymbol), 1),
-            (Price(line.UnitPriceMinor), 1),
-            (Price(line.TotalMinor), 1)
-        ], false, fontSize);
+        body.Append(ParagraphText("", 20));
+        body.Append(ParagraphText($"Ответственное лицо за ведение карточек учёта выдачи СИЗ: {document.Content.ResponsibleName}", 20));
+        body.Append(ParagraphText("____________________                         ____________________\n          (подпись)                                                   (Ф.И.О.)", 18));
     }
 
     private static void AddSignature(Body body, PpeIssueDocumentDto document)
     {
-        body.Append(ParagraphText("ЛИСТ ПОДПИСИ ПОЛУЧЕНИЯ СИЗ", 22, true, JustificationValues.Center));
-        body.Append(ParagraphText(IsDraft(document) ? "Планируемая выдача. Поля подписи оставлены пустыми." : "", 16, true, JustificationValues.Center));
+        body.Append(ParagraphText("ВЫДАЧА, ВОЗВРАТ И ПОДПИСИ\nСРЕДСТВ ИНДИВИДУАЛЬНОЙ ЗАЩИТЫ", 22, true, JustificationValues.Center));
+
         var table = NewTable([2600, 2400, 1050, 800, 1050, 2200, 1050, 800, 2000, 1450]);
         AddSpannedRow(table, [
             ("Наименование СИЗ", 1),
             ("Модель, марка, артикул, класс защиты", 1),
             ("Выдано", 4),
-            ("Возвращено", 4)
+            ("Возвращено", 3),
+            ("Акт списания (дата, номер)", 1)
         ], true, 16, repeatHeader: true);
         AddRow(table, ["", "", "дата", "кол-во", "лично / дозатор", "подпись получившего", "дата", "кол-во", "подпись сдавшего", "акт списания"], true, 16, repeatHeader: true);
         AddRow(table, ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"], true, 16, repeatHeader: true);
         foreach (var line in document.Content.Lines.Select((line, index) => (line, index)).OrderBy(x => x.line.IssueDate).ThenBy(x => x.index).Select(x => x.line))
         {
-            AddRow(table, [line.ItemName, line.BrandModelArticle, line.IssueDate.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture),
+            AddRow(table, [line.ItemName, CatalogProductDetails(line), line.IssueDate.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture),
                 Quantity(line.Quantity, line.UnitSymbol), "Лично", "", "", "", "", ""], false, 16);
         }
         body.Append(table);
@@ -151,7 +112,7 @@ internal static class PpeIssueDocumentDocxBuilder
             if (mergeAll && index > 0) continue;
             var properties = new TableCellProperties(new TableCellVerticalAlignment { Val = TableVerticalAlignmentValues.Center });
             if (mergeAll) properties.Append(new GridSpan { Val = values.Count });
-            if (header) properties.Append(new Shading { Val = ShadingPatternValues.Clear, Fill = "D9E2F3" });
+
             properties.Append(new TableCellMargin(
                 new TopMargin { Width = "60", Type = TableWidthUnitValues.Dxa }, new BottomMargin { Width = "60", Type = TableWidthUnitValues.Dxa },
                 new StartMargin { Width = "70", Type = TableWidthUnitValues.Dxa }, new EndMargin { Width = "70", Type = TableWidthUnitValues.Dxa }));
@@ -170,7 +131,7 @@ internal static class PpeIssueDocumentDocxBuilder
         {
             var properties = new TableCellProperties(new TableCellVerticalAlignment { Val = TableVerticalAlignmentValues.Center });
             if (span > 1) properties.Append(new GridSpan { Val = span });
-            if (header) properties.Append(new Shading { Val = ShadingPatternValues.Clear, Fill = "D9E2F3" });
+
             properties.Append(new TableCellMargin(
                 new TopMargin { Width = "60", Type = TableWidthUnitValues.Dxa }, new BottomMargin { Width = "60", Type = TableWidthUnitValues.Dxa },
                 new StartMargin { Width = "70", Type = TableWidthUnitValues.Dxa }, new EndMargin { Width = "70", Type = TableWidthUnitValues.Dxa }));
@@ -196,9 +157,16 @@ internal static class PpeIssueDocumentDocxBuilder
     }
 
     private static SectionProperties PageSetup(bool landscape, HeaderReference headerReference) => new(
-        headerReference,
+        headerReference.CloneNode(true),
         new PageSize { Width = landscape ? (UInt32Value)16838U : 11906U, Height = landscape ? (UInt32Value)11906U : 16838U, Orient = landscape ? PageOrientationValues.Landscape : PageOrientationValues.Portrait },
         new PageMargin { Top = 720, Right = 720, Bottom = 720, Left = 720, Header = 360, Footer = 360, Gutter = 0 });
+
+    private static Paragraph SectionBreak(bool landscape, HeaderReference headerReference)
+    {
+        var section = PageSetup(landscape, headerReference);
+        section.Append(new SectionType { Val = SectionMarkValues.NextPage });
+        return new Paragraph(new ParagraphProperties(section));
+    }
 
     private static bool IsDraft(PpeIssueDocumentDto document) => !string.Equals(document.Status, "confirmed", StringComparison.OrdinalIgnoreCase);
     private static string Blank(string value) => string.IsNullOrWhiteSpace(value) ? "не указано" : value.Trim();
@@ -221,9 +189,15 @@ internal static class PpeIssueDocumentDocxBuilder
     {
         var parts = new List<string> { "  " + line.ItemName, $"дата выдачи {line.IssueDate:dd.MM.yyyy}" };
         if (!string.IsNullOrWhiteSpace(line.BrandModelArticle)) parts.Add(line.BrandModelArticle.Trim());
+        if (line.Standards is { Count: > 0 }) parts.Add(string.Join(", ", line.Standards.Select(StandardText)));
         if (!string.IsNullOrWhiteSpace(line.SizeText)) parts.Add("размер " + line.SizeText.Trim());
         return string.Join("; ", parts);
     }
+    private static string CatalogProductDetails(PpeDocumentLineDto line) => string.Join("; ",
+        new[] { line.BrandModelArticle, line.Standards is { Count: > 0 } ? string.Join(", ", line.Standards.Select(StandardText)) : "" }
+            .Where(value => !string.IsNullOrWhiteSpace(value)));
+    private static string StandardText(InventoryItemStandardDto standard) => string.IsNullOrWhiteSpace(standard.Name)
+        ? standard.Designation : $"{standard.Designation} — {standard.Name}";
     private static string Quantity(decimal value, string unit) => $"{value:0.###} {Blank(unit)}";
     private static string Price(long? value) => value is null ? "не указана" : Money(value.Value);
     private static string Money(long value) => (value / 100m).ToString("N2", CultureInfo.GetCultureInfo("ru-RU")) + " руб.";

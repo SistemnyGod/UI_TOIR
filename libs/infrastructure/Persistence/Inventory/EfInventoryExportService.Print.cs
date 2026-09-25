@@ -80,7 +80,7 @@ internal sealed partial class EfInventoryExportService
 
         var normalizedType = Normalize(type);
         var isSheet = normalizedType == "sheet";
-        var title = isSheet ? "Лист подписи по получению СИЗ" : "Личная карточка учета выдачи СИЗ";
+
         var orderedLines = card.Lines
             .Where(line => line.Status != "archived")
             .OrderBy(line => isSheet ? line.IssuedAt ?? DateTimeOffset.MaxValue : PpeLineCreatedAt(line))
@@ -138,42 +138,11 @@ internal sealed partial class EfInventoryExportService
             : $"ppe-personal-card-{card.Employee.PersonnelNo}-{card.Id:N}";
 
 
-            var content = isSheet
+        var content = isSheet
                 ? PpeTemplateDocumentBuilder.BuildSignatureSheet(card.Employee.FullName, card.Employee.PersonnelNo, card.Position, card.CreatedAt, printLines)
                 : PpeTemplateDocumentBuilder.BuildPersonalCard(card.Id, card.Employee.FullName, card.Employee.PersonnelNo, card.Employee.Department, card.Position, card.CreatedAt, employeeDetails, printLines);
 
-            return BuildGeneratedFile(fileBaseName, normalizedFormat, content, "ppe_card", card.Id);
-    }
-
-    private static List<string> BuildPpePrintParagraphs(
-        string title,
-        bool isSheet,
-        InventoryPpeCardEntity card,
-        IReadOnlyList<PpePrintLine> lines)
-    {
-        var paragraphs = new List<string>
-        {
-            title,
-            $"Сотрудник: {card.Employee.FullName}",
-            $"Должность: {card.Position}",
-            $"Статус карточки: {ToPpeStatusLabel(card.Status)}",
-            $"Дата создания: {card.CreatedAt.LocalDateTime:dd.MM.yyyy HH:mm}",
-            string.Empty,
-            isSheet ? "Фактически выданная номенклатура:" : "Нормативные строки СИЗ:"
-        };
-
-        if (isSheet)
-        {
-            paragraphs.AddRange(lines.Select(line =>
-                $"{(string.IsNullOrWhiteSpace(line.CatalogName) ? line.ItemName : line.CatalogName)}; модель/марка/артикул: {line.Model}; количество: {line.Quantity:0.###} {line.Unit}; способ: {IssueMethodText(line)}; дата: {line.IssuedAt}; возврат: {ReturnDateText(line)}; акт списания: {WriteOffActText(line)}"));
-        }
-        else
-        {
-            paragraphs.AddRange(lines.Select(line =>
-                $"{line.ItemName}; пункт нормы: {line.NormPoint}; периодичность: {line.IssuePeriodText}; количество на период: {PpePrintQuantityText(line)}"));
-        }
-
-        return paragraphs;
+        return BuildGeneratedFile(fileBaseName, normalizedFormat, content, "ppe_card", card.Id);
     }
 
     private static string IssueMethodText(PpePrintLine line) => Normalize(line.IssueMethod) switch

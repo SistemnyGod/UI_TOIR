@@ -61,7 +61,12 @@ public sealed record InventoryItemDto(
     bool IsConsumable,
     bool TrackLife,
     bool IsActive,
-    string Status);
+    string Status,
+    IReadOnlyList<InventoryItemStandardDto>? Standards = null);
+
+public sealed record InventoryItemStandardDto(
+    string Designation,
+    string Name = "");
 
 public sealed record InventoryFacetDto(
     string Id,
@@ -221,7 +226,8 @@ public sealed record UpsertInventoryItemDto(
     bool TrackLife = true,
     string? TrackingType = null,
     string? Comment = null,
-    bool IsActive = true);
+    bool IsActive = true,
+    IReadOnlyList<InventoryItemStandardDto>? Standards = null);
 
 public sealed record InventoryInitialStockDto(
     Guid ItemId,
@@ -491,7 +497,8 @@ public sealed record InventoryPpeNormMappingDto(
     bool IsApproved = false,
     decimal NormUnitsPerItem = 1m,
     string ApprovedBy = "",
-    string ApprovalEvidence = "");
+    string ApprovalEvidence = "",
+    IReadOnlyList<InventoryItemStandardDto>? Standards = null);
 
 public sealed record InventoryPpeNormCandidateDto(
     Guid NormRowId,

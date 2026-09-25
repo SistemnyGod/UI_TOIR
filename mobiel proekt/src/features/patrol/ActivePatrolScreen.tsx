@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { enterPatrolRequest } from '@/services/patrolEntryService';
 
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 
@@ -19,13 +20,10 @@ import {
 
   getAssignmentScanPolicy,
 
-  handoffAssignmentLocally,
+
 
   pauseAssignmentLocally,
 
-  resumeAssignmentLocally,
-
-  startAssignmentLocally
 
 } from "@/db/repositories/patrolRepository";
 
@@ -50,10 +48,12 @@ import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 
 import { StatusPill } from "@/ui/StatusPill";
+import { buildPatrolActionMenu } from "@/features/patrol/patrolActionMenu";
 
 
 
 export function ActivePatrolScreen() {
+  const screenActive = useRef(false);
 
   const router = useRouter();
 
@@ -124,6 +124,7 @@ export function ActivePatrolScreen() {
     useCallback(() => {
 
       let isMounted = true;
+      screenActive.current = true;
 
       void loadAssignment({ showLoader: true }).catch((caught) => {
 
@@ -144,6 +145,7 @@ export function ActivePatrolScreen() {
       return () => {
 
         isMounted = false;
+        screenActive.current = false;
 
       };
 
@@ -153,7 +155,7 @@ export function ActivePatrolScreen() {
 
 
 
-  useEffect(() => subscribeToSyncEvents((event) => {
+  useFocusEffect(useCallback(() => subscribeToSyncEvents((event) => {
 
     if (event.snapshotRefreshed === true || event.completedAssignmentIds.includes(assignmentId) || event.cancelledAssignmentIds?.includes(assignmentId)) {
 
@@ -167,7 +169,7 @@ export function ActivePatrolScreen() {
 
     }
 
-  }), [assignmentId, loadAssignment]);
+  }), [assignmentId, loadAssignment]));
 
 
 
@@ -401,7 +403,7 @@ export function ActivePatrolScreen() {
 
           <Text style={[styles.progressLabel, { color: colors.text }]}>Прогресс</Text>
 
-          <Text style={[styles.progressLabel, { color: colors.text }]}>{progress.total === 0 ? "Загружаем точки маршрута" : `${progress.completed} из ${progress.total} точек`}</Text>
+          <Text style={[styles.progressLabel, { color: colors.text }]}>{progress.total === 0 ? "Загружаем точки маршрута" : `Обработано ${progress.completed} из ${progress.total}`}</Text>
 
         </View>
 
@@ -423,7 +425,7 @@ export function ActivePatrolScreen() {
 
         {progress.deferred > 0 || progress.issues > 0 || progress.skipped > 0 ? (
 
-          <Text style={[styles.percentText, { color: colors.mutedText }]}>Отложено: {progress.deferred}. Неисправно: {progress.issues}. Метка недоступна: {progress.skipped}.</Text>
+          <Text style={[styles.percentText, { color: colors.mutedText }]}>Отложено: {progress.deferred}. Неисправно: {progress.issues}. Не осмотрено: {progress.skipped}.</Text>
 
         ) : null}
 
@@ -489,15 +491,8 @@ export function ActivePatrolScreen() {
 
           onPress={() => runAction(async () => {
 
-            if (isPaused) {
-
-              await resumeAssignmentLocally(assignment.assignmentId);
-
-            } else {
-
-              await startAssignmentLocally(assignment.assignmentId);
-
-            }
+            const path = await enterPatrolRequest(assignment.requestId, assignment.employeeId ?? undefined, () => screenActive.current);
+            if (screenActive.current) router.replace(path as never);
 
           })}
 
@@ -555,15 +550,19 @@ export function ActivePatrolScreen() {
 
       <ActionSheet
 
-        actions={[
-
-          ...(scanPolicy.qrFallbackEnabled ? [{ label: "QR", icon: "qr-code-outline" as const, onPress: () => router.push(`/patrol/assignment/${assignment.assignmentId}/scan-qr`) }] : []),
-
-          { label: "Приостановить", icon: "pause-outline", onPress: () => void runAction(async () => { await pauseAssignmentLocally(assignment.assignmentId); }) },
-
-          { label: "Передать диспетчеру", icon: "alert-circle-outline", danger: true, onPress: () => void runAction(async () => { await handoffAssignmentLocally(assignment.assignmentId); }) }
-
-        ]}
+        actions={buildPatrolActionMenu({
+          assignmentId: assignment.assignmentId,
+          status: assignment.status,
+          onQr: scanPolicy.qrFallbackEnabled ? () => router.push(`/patrol/assignment/${assignment.assignmentId}/scan-qr`) : undefined,
+          onPause: isInProgress ? () => void pauseAssignmentLocally(assignment.assignmentId)
+            .then(() => loadAssignment())
+            .catch((error) => setError(error instanceof Error ? error.message : "Не удалось приостановить обход.")) : undefined,
+          onSwitch: () => router.push(`/patrol/assignment/${assignment.assignmentId}/switch` as never),
+          onPoints: () => router.push(`/patrol/assignment/${assignment.assignmentId}/all-points` as never),
+          onSubmit: () => router.push(`/patrol/assignment/${assignment.assignmentId}/submit`),
+          onAppeal: () => router.push(`/patrol/assignment/${assignment.assignmentId}/appeal` as never),
+          onCancel: () => router.push(`/patrol/assignment/${assignment.assignmentId}/appeal?kind=cancel` as never)
+        })}
 
         onClose={() => setIsMenuOpen(false)}
 

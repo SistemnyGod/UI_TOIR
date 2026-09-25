@@ -15,7 +15,7 @@ services:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
-      WebCors__AllowedOrigins__0: ${WEB_CORS_ALLOWED_ORIGIN:-https://192.168.2.194:5173}
+      WebCors__AllowedOrigins__0: ${WEB_CORS_ALLOWED_ORIGIN:-https://192.168.2.194}
       ConnectionStrings__Patrol360: Host=postgres;Port=5432;Database=${POSTGRES_DB:-patrol360};Username=${POSTGRES_USER:-patrol360};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       DataProtection__KeyRingPath: /var/lib/patrol360/data-protection-keys
       Patrol360__BootstrapAdminPassword: ${PATROL360_BOOTSTRAP_ADMIN_PASSWORD:-}
@@ -43,7 +43,7 @@ services:
       DataProtection__KeyRingPath: /var/lib/patrol360/data-protection-keys
       MobileDiagnostics__StoragePath: /app/mobile-diagnostics
       Features__PpeIssueDocuments: ${PPE_ISSUE_DOCUMENTS_ENABLED:-false}
-      WebCors__AllowedOrigins__0: ${WEB_CORS_ALLOWED_ORIGIN:-https://192.168.2.194:5173}
+      WebCors__AllowedOrigins__0: ${WEB_CORS_ALLOWED_ORIGIN:-https://192.168.2.194}
       # Must match the proxy address below; all other X-Forwarded-* senders are ignored.
       ForwardedHeaders__KnownProxies__0: ${PATROL360_PROXY_IP:-172.30.0.10}
     volumes:

@@ -38,6 +38,16 @@ export function resolveBootstrapAssignmentStatus(
     return localStatus;
   }
 
+  // Pause/resume are reversible states. They must follow the server's current
+  // version once there is no local command waiting to be acknowledged; treating
+  // pause as a higher lifecycle rank leaves a device paused after another
+  // device resumed the same assignment.
+  if (!hasUnfinishedCommand
+    && (localStatus === "paused" || localStatus === "inProgress")
+    && (serverStatus === "paused" || serverStatus === "inProgress")) {
+    return serverStatus;
+  }
+
   const localRank = localStatus ? monotonicLifecycleRank.get(localStatus) : undefined;
   const serverRank = monotonicLifecycleRank.get(serverStatus);
   if (localRank !== undefined && localRank >= 2 && serverRank !== undefined && localRank > serverRank) {

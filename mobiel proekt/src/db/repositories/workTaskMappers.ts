@@ -10,6 +10,7 @@ export type WorkTaskRow = {
   status: WorkTaskDto["status"];
   planned_at: string | null;
   revision: number;
+  updated_at_server?: string | null;
   completed_at_local: string | null;
   section_id: string | null;
   section_name: string | null;
@@ -30,6 +31,7 @@ export type WorkTaskRow = {
   local_attachment_count?: number | null;
   local_photo_count?: number | null;
   local_video_count?: number | null;
+  delivery_error?: string | null;
 };
 
 export function statusForPendingAction(commandType: string): WorkTaskDto["status"] {
@@ -97,6 +99,7 @@ export function mapWorkItemRow(row: WorkTaskRow): WorkItemDto {
     status: row.status,
     approvalStatus: row.approval_status ?? "",
     revision: row.revision,
+    updatedAt: row.updated_at_server ?? row.created_at_local ?? new Date(0).toISOString(),
     source: row.source ?? "web",
     assignedEmployees,
     actualParticipants,
@@ -109,7 +112,8 @@ export function mapWorkItemRow(row: WorkTaskRow): WorkItemDto {
     employeeName: row.employee_name,
     createdAtLocal: row.created_at_local ?? row.planned_at ?? new Date().toISOString(),
     completedAtLocal: row.completed_at_local,
-    syncStatus: row.sync_status
+    syncStatus: row.sync_status,
+    deliveryError: row.delivery_error ?? null
   };
 }
 

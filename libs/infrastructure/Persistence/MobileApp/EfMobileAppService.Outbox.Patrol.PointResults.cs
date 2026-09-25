@@ -83,12 +83,32 @@ internal sealed partial class EfMobileAppService
         }
 
         var comment = NormalizeOptionalText(ReadString(command.Payload, "comment"));
-        if (isIssue && string.IsNullOrWhiteSpace(comment))
+        var pointResultStatus = NormalizeOptionalText(ReadString(command.Payload, "pointResultStatus"), isIssue ? "issue" : "ok").ToLowerInvariant();
+        if (pointResultStatus is not ("ok" or "issue" or "skipped"))
+        {
+            return Rejected(command.ClientOperationId, "Point result status is not supported.");
+        }
+        if (pointResultStatus == "skipped"
+            && string.IsNullOrWhiteSpace(comment)
+            && string.IsNullOrWhiteSpace(ReadString(command.Payload, "manualReason")))
+        {
+            return Rejected(command.ClientOperationId, "Skipped point result requires a reason.");
+        }
+        if (isIssue && pointResultStatus != "issue")
+        {
+            return Rejected(command.ClientOperationId, "Тип команды не соответствует статусу результата точки.");
+        }
+
+        if (pointResultStatus == "issue" && !isIssue)
+        {
+            return Rejected(command.ClientOperationId, "Issue point result requires the issue command.");
+        }
+        if (pointResultStatus == "issue" && string.IsNullOrWhiteSpace(comment))
         {
             return Rejected(command.ClientOperationId, "Issue point result requires a comment.");
         }
 
-        if (isIssue && string.IsNullOrWhiteSpace(ReadString(command.Payload, "issueTypeId")))
+        if (pointResultStatus == "issue" && string.IsNullOrWhiteSpace(ReadString(command.Payload, "issueTypeId")))
         {
             return Rejected(command.ClientOperationId, "Issue point result requires an issue type.");
         }
@@ -97,6 +117,6 @@ internal sealed partial class EfMobileAppService
             command.ClientOperationId,
             pointId.Value,
             validation.Assignment!.LockVersion,
-            isIssue ? "Issue point result accepted." : "Ok point result accepted.");
+            pointResultStatus == "skipped" ? "Skipped point result accepted." : isIssue ? "Issue point result accepted." : "Ok point result accepted.");
     }
 }

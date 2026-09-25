@@ -54,6 +54,17 @@ export function statusTone(status: WorkTaskStatus) {
   return "neutral";
 }
 
+export function workDeliveryPresentation(syncStatus: string) {
+  if (syncStatus === "synced" || syncStatus === "accepted" || syncStatus === "duplicate") {
+    return { label: "Получено сервером", tone: "success" as const };
+  }
+  if (syncStatus === "sending") return { label: "Отправляется", tone: "neutral" as const };
+  if (["rejected", "conflict", "invalidPayload", "wrong_contour"].includes(syncStatus)) {
+    return { label: "Требуется действие", tone: "danger" as const };
+  }
+  return { label: "Сохранено на телефоне", tone: "warning" as const };
+}
+
 export function remarkStatusLabel(status: ShiftRemark["status"]) {
   if (status === "accepted" || status === "duplicate") {
     return "Отправлено";
@@ -235,6 +246,7 @@ export const workAccountingStyles = StyleSheet.create({
     borderColor: "#e5edf7",
     borderTopWidth: 1,
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
     paddingHorizontal: 18,
     paddingTop: 12

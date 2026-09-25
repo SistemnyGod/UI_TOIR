@@ -48,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<IEmployeeDirectoryService>(provider => provider.GetRequiredService<EfPatrolStore>());
         services.AddScoped<IMobileAccountService>(provider => provider.GetRequiredService<EfPatrolStore>());
         services.AddScoped<EfMobileAppService>();
+        services.AddScoped<IMobilePatrolAppealService>(provider => provider.GetRequiredService<EfMobileAppService>());
         services.AddScoped<IMobileAppService>(provider => provider.GetRequiredService<EfMobileAppService>());
         services.AddScoped<IMobileSessionAuthenticationService>(provider => provider.GetRequiredService<EfMobileAppService>());
         services.TryAddScoped<IMobilePushSender, FirebaseMobilePushSender>();
@@ -60,6 +61,7 @@ public static class DependencyInjection
         services.AddScoped<IInventoryCatalogCommandService, EfInventoryCatalogCommandService>();
         services.AddScoped<IInventoryWorkflowService, EfInventoryWorkflowService>();
         services.AddScoped<IPpeIssueDocumentService, EfInventoryWorkflowService>();
+        services.AddScoped<IPpeKitTemplateService, EfPpeKitTemplateService>();
         services.AddPpeIssueDocumentPrinting();
         services.AddScoped<IInventoryExportService, EfInventoryExportService>();
         services.AddScoped<IInventoryLegacyImportService, EfInventoryLegacyImportService>();

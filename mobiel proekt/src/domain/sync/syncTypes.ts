@@ -19,6 +19,8 @@ export type OutboxCommandType =
   | "takePatrolRequest"
   | "acceptPatrolRequest"
   | "releasePatrolRequest"
+  | "switchPatrolAssignment"
+  | "createPatrolAppeal"
   | "startPatrolAssignment"
   | "pausePatrolAssignment"
   | "resumePatrolAssignment"
@@ -41,6 +43,7 @@ export type OutboxCommandType =
   | "attachShiftRemarkMedia";
 
 export type MobileEntityType =
+  | "patrolAppeal"
   | "patrolRequest"
   | "patrolAssignment"
   | "patrolPoint"
@@ -62,6 +65,8 @@ export type OutboxCommand = {
   status: OutboxCommandStatus;
   aggregateKey?: string | null;
   sequenceNo?: number | null;
+  /** Allows an explicit user-confirmed continuation to bypass a failed switch barrier. */
+  bypassSwitchBarrier?: boolean;
 };
 
 export type OutboxResponseStatus =

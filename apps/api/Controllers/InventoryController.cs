@@ -306,18 +306,10 @@ public sealed class InventoryController(
         [FromQuery] Guid? categoryId = null)
     {
         var paging = NormalizeControllerPaging(page, pageSize);
-        var rows = LoadPpeItems(query, categoryId);
-        var pageRows = rows
-            .Skip((paging.Page - 1) * paging.PageSize)
-            .Take(paging.PageSize)
-            .ToList();
-
-        return Ok(new InventoryListResponseDto<InventoryItemDto>(
-            pageRows,
-            rows.Count,
-            paging.Page,
-            paging.PageSize,
-            Math.Max(1, (int)Math.Ceiling(rows.Count / (double)paging.PageSize))));
+        var result = inventoryCatalogQuery.GetItems(new InventoryListQuery(
+            Page: paging.Page, PageSize: paging.PageSize, Query: query,
+            Status: "active", CategoryId: categoryId, PpeOnly: true));
+        return Ok(result with { PageCount = Math.Max(1, result.PageCount) });
     }
 
     [HttpGet("ppe/items/{itemId:guid}/norm-candidates")]
@@ -902,51 +894,10 @@ public sealed class InventoryController(
         return rows;
     }
 
-    private List<InventoryItemDto> LoadPpeItems(string? query, Guid? categoryId) =>
+    private IReadOnlyList<InventoryItemDto> LoadPpeItems(string? query, Guid? categoryId) =>
         LoadAllPages(page => inventoryCatalogQuery.GetItems(new InventoryListQuery(
-                Page: page,
-                PageSize: 100,
-                Query: query,
-                Status: "active",
-                CategoryId: categoryId)))
-            .Where(IsPpeItem)
-            .OrderBy(item => item.Category)
-            .ThenBy(item => item.Name)
-            .ToList();
-
-    private static bool IsPpeItem(InventoryItemDto item)
-    {
-        if (!item.IsActive)
-        {
-            return false;
-        }
-
-        var kind = item.ItemKind.Trim();
-        if (kind.Contains("СИЗ", StringComparison.OrdinalIgnoreCase)
-            || kind.Contains("спец", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-        if (kind.Equals("ppe", StringComparison.OrdinalIgnoreCase)
-            || kind.Equals("siz", StringComparison.OrdinalIgnoreCase)
-            || kind.Contains("glove", StringComparison.OrdinalIgnoreCase)
-            || kind.Contains("СИЗ", StringComparison.OrdinalIgnoreCase)
-            || kind.Contains("спец", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        var category = item.Category.Trim();
-        if (category.Contains("СИЗ", StringComparison.OrdinalIgnoreCase)
-            || category.Contains("спецодеж", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return category.Contains("СИЗ", StringComparison.OrdinalIgnoreCase)
-            || category.Contains("спецодеж", StringComparison.OrdinalIgnoreCase)
-            || category.Contains("ppe", StringComparison.OrdinalIgnoreCase);
-    }
+            Page: page, PageSize: 100, Query: query, Status: "active",
+            CategoryId: categoryId, PpeOnly: true)));
 
     private static string CreateEmployeeImportPreviewToken(IFormFile file)
     {

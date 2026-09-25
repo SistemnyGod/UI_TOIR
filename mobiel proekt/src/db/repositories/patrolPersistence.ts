@@ -130,6 +130,7 @@ export async function upsertPointResult(input: {
   scannedAtLocal: string | null;
   photoClientFileIds: string[];
   requireInProgress?: boolean;
+  manualReason?: string | null;
 }) {
   const db = await getDatabase();
   await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
@@ -156,6 +157,7 @@ export async function upsertPointResultInTransaction(executor: SqlExecutor, inpu
   scannedAtLocal: string | null;
   photoClientFileIds: string[];
   requireInProgress?: boolean;
+  manualReason?: string | null;
 }) {
   if (input.requireInProgress) {
     const assignment = await executor.getFirstAsync<{ status: string }>(
@@ -167,9 +169,9 @@ export async function upsertPointResultInTransaction(executor: SqlExecutor, inpu
     }
   }
 
-  const existing = await executor.getFirstAsync<{ localResultId: string }>(
+  const existing = await executor.getFirstAsync<{ localResultId: string; manualReason: string | null }>(
     `
-      SELECT local_result_id AS localResultId
+      SELECT local_result_id AS localResultId, manual_reason AS manualReason
       FROM point_results
       WHERE owner_user_id = ?
         AND assignment_id = ?
@@ -199,9 +201,9 @@ export async function upsertPointResultInTransaction(executor: SqlExecutor, inpu
         confirmation_type,
         nfc_uid_hash,
         scanned_at_local,
-        photo_client_file_ids_json
+        photo_client_file_ids_json, manual_reason
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       localResultId,
@@ -219,7 +221,8 @@ export async function upsertPointResultInTransaction(executor: SqlExecutor, inpu
       input.confirmationType,
       input.nfcUidHash,
       input.scannedAtLocal,
-      JSON.stringify(input.photoClientFileIds)
+      JSON.stringify(input.photoClientFileIds),
+      input.manualReason === undefined ? existing?.manualReason ?? null : input.manualReason
     ]
   );
 }

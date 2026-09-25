@@ -1,10 +1,11 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ListRenderItem, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
-import { getActiveAssignment, getAssignmentById, getAssignmentScanPolicy, listAssignmentPoints, PointListItem } from "@/db/repositories/patrolRepository";
+import { getPatrolDeviceContext } from "@/db/repositories/patrolContextRepository";
+import { getActiveAssignment, getAssignmentById, getAssignmentScanPolicy, listAssignmentPoints, getReportReadiness, type ReportReadiness, PointListItem } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { shouldReloadAssignmentAfterSync, subscribeToSyncEvents } from "@/sync/syncEvents";
@@ -25,17 +26,19 @@ export function AllPointsScreen() {
   const [assignmentStatus, setAssignmentStatus] = useState<string | null>(null);
   const [nfcEnabled, setNfcEnabled] = useState(false);
   const [points, setPoints] = useState<PointListItem[]>([]);
+  const [readiness, setReadiness] = useState<ReportReadiness | null>(null);
   const [filter, setFilter] = useState<Filter>(routeFilter === "attention" ? "attention" : "all");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadRevision, setReloadRevision] = useState(0);
   const [syncRevision, setSyncRevision] = useState(0);
 
+  useFocusEffect(useCallback(() => { requestMobileDataRefresh("appActive"); }, []));
 
-  useEffect(() => subscribeToSyncEvents((event) => {
+  useFocusEffect(useCallback(() => subscribeToSyncEvents((event) => {
     if (assignmentId && shouldReloadAssignmentAfterSync(event, assignmentId)) {
       setSyncRevision((value) => value + 1);
     }
-  }), [assignmentId]);
+  }), [assignmentId]));
 
   useFocusEffect(
     useCallback(() => {
@@ -44,18 +47,20 @@ export function AllPointsScreen() {
       let isMounted = true;
 
       async function load() {
-        const active = routeAssignmentId ? null : await getActiveAssignment();
+        const context = routeAssignmentId ? null : await getPatrolDeviceContext();
+        const active = context?.employeeId && context.assignmentId ? await getActiveAssignment(context) : null;
         const ownerUserId = await getStoredOwnerUserId();
         const targetAssignmentId = routeAssignmentId ?? active?.assignmentId ?? null;
         const targetAssignment = targetAssignmentId && routeAssignmentId
           ? await getAssignmentById(targetAssignmentId)
           : active;
-        const [rows, scanPolicy] = targetAssignmentId && ownerUserId
+        const [rows, scanPolicy, loadedReadiness] = targetAssignmentId && ownerUserId
           ? await Promise.all([
               listAssignmentPoints(targetAssignmentId, ownerUserId, currentContourId),
-              getAssignmentScanPolicy(targetAssignmentId)
+              getAssignmentScanPolicy(targetAssignmentId),
+              getReportReadiness(targetAssignmentId)
             ])
-          : [[], { nfcEnabled: false, qrFallbackEnabled: false, allowFreeOrder: true }];
+          : [[], { nfcEnabled: false, qrFallbackEnabled: false, allowFreeOrder: true }, null];
 
         if (isMounted) {
           setLoadError(null);
@@ -63,10 +68,10 @@ export function AllPointsScreen() {
           setAssignmentStatus(targetAssignment?.status ?? null);
           setNfcEnabled(scanPolicy.nfcEnabled);
           setPoints(rows);
+          setReadiness(loadedReadiness);
         }
       }
 
-      requestMobileDataRefresh("appActive");
       void load().catch((error) => {
         void logMobileError("patrol.points.load.failed", error);
         if (isMounted) {
@@ -81,8 +86,14 @@ export function AllPointsScreen() {
   );
 
   const summary = useMemo(() => buildSummary(points), [points]);
+  const reasonsByPoint = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const problem of readiness?.problems ?? []) map.set(problem.pointId, [...(map.get(problem.pointId) ?? []), problem.reason]);
+    return map;
+  }, [readiness]);
+  const attentionCount = points.filter(point => reasonsByPoint.has(point.pointId)).length;
   const percent = progressPercent(summary);
-  const isReadyForReport = assignmentStatus === "inProgress" && summary.total > 0 && summary.completed >= summary.total;
+  const isReadyForReport = assignmentStatus === "inProgress" && readiness?.ready === true;
 
   const visiblePoints = useMemo(() => {
     if (filter === "all") {
@@ -90,19 +101,20 @@ export function AllPointsScreen() {
     }
 
     const filtered = filter === "attention"
-      ? points.filter(isAttentionPoint)
+      ? points.filter(point => reasonsByPoint.has(point.pointId))
       : points.filter((point) => point.status === filter);
 
     return filter === "attention"
       ? [...filtered].sort((left, right) => attentionRank(left) - attentionRank(right) || left.orderIndex - right.orderIndex)
       : filtered;
-  }, [filter, points]);
+  }, [filter, points, reasonsByPoint]);
 
   const renderItem: ListRenderItem<PointListItem> = ({ item }) => (
     <SelectionTransition selectionKey={filter}>
       <PointRow
-        onPress={() => assignmentId && router.push(`/patrol/assignment/${assignmentId}/point/${item.pointId}`)}
+        onPress={() => assignmentId && router.push(`/patrol/assignment/${assignmentId}/point/${item.pointId}${filter === 'attention' && assignmentStatus === 'inProgress' ? '/fill' : ''}` as never)}
         point={item}
+        reasons={reasonsByPoint.get(item.pointId)}
       />
     </SelectionTransition>
   );
@@ -154,17 +166,20 @@ export function AllPointsScreen() {
           ) : null}
           {assignmentId ? (
             <>
+            {(readiness?.problems ?? []).filter(problem => !points.some(point => point.pointId === problem.pointId)).map(problem => (
+              <Card key={problem.pointId}><Text style={{ color: colors.text }}>{problem.reason}</Text></Card>
+            ))}
             <Card>
               <View style={styles.progressHeader}>
                 <Text style={[styles.title, { color: colors.text }]}>Прогресс маршрута</Text>
                 <Text style={[styles.meta, { color: colors.mutedText }]}>
-                  {summary.total === 0 ? "Загружаем метки" : `${summary.completed} из ${summary.total}`}
+                  {summary.total === 0 ? "Загружаем метки" : `Обработано ${summary.completed} из ${summary.total}`}
                 </Text>
               </View>
               <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
                 <View style={[styles.progressFill, { width: `${percent}%` }]} />
               </View>
-              {summary.total > 0 ? <Text style={[styles.meta, { color: colors.mutedText }]}>{percent}%</Text> : null}
+              {summary.total > 0 ? <Text style={[styles.meta, { color: colors.mutedText }]}>{percent}% обработано · Осмотрено: {summary.inspected} · Не осмотрено: {summary.skipped}</Text> : null}
             </Card>
 
             {assignmentStatus !== "inProgress" ? (
@@ -178,10 +193,10 @@ export function AllPointsScreen() {
               compact
               items={[
                 { count: summary.total, icon: "list-outline", label: "Все", value: "all" },
-                { count: summary.attention, icon: "alert-circle-outline", label: "Внимание", value: "attention" },
+                { count: attentionCount, icon: "alert-circle-outline", label: "Требуют внимания", value: "attention" },
                 { count: summary.pending, icon: "ellipse-outline", label: "Не заполнено", value: "pending" },
                 { count: summary.issue, icon: "warning-outline", label: "Проблемы", value: "issue" },
-                { count: summary.skipped, icon: "close-circle-outline", label: "Недоступны", value: "skipped" },
+                { count: summary.skipped, icon: "close-circle-outline", label: "Не осмотрено", value: "skipped" },
                 { count: summary.deferred, icon: "time-outline", label: "Отложено", value: "deferred" }
               ]}
               onChange={setFilter}
@@ -196,7 +211,7 @@ export function AllPointsScreen() {
   );
 }
 
-function PointRow({ point, onPress }: { point: PointListItem; onPress: () => void }) {
+function PointRow({ point, onPress, reasons }: { point: PointListItem; onPress: () => void; reasons?: string[] }) {
   const { colors } = useAppTheme();
 
   return (
@@ -213,6 +228,7 @@ function PointRow({ point, onPress }: { point: PointListItem; onPress: () => voi
           </View>
           <View style={styles.pointTitleBox}>
             <Text style={[styles.pointTitle, { color: colors.text }]} numberOfLines={2}>{point.name}</Text>
+            {reasons?.map(reason => <Text key={reason} style={{ color: colors.mutedText }}>{reason}</Text>)}
           </View>
           <View style={styles.pointStatusBox}>
             <StatusPill label={pointStatusLabel(point.status)} tone={pointStatusTone(point.status)} />
@@ -222,18 +238,6 @@ function PointRow({ point, onPress }: { point: PointListItem; onPress: () => voi
       </Card>
     </Pressable>
   );
-}
-
-function isAttentionPoint(point: PointListItem) {
-  if (point.status === "pending" || point.status === "scanned" || point.status === "deferred" || point.status === "skipped") {
-    return true;
-  }
-
-  if (point.status === "issue" && (!point.comment?.trim() || !point.issueTypeId)) {
-    return true;
-  }
-
-  return point.requiresPhoto && point.photoClientFileIds.length === 0;
 }
 
 function attentionRank(point: PointListItem) {
@@ -246,8 +250,8 @@ function attentionRank(point: PointListItem) {
 function buildSummary(points: PointListItem[]) {
   return {
     total: points.length,
-    attention: points.filter(isAttentionPoint).length,
     pending: points.filter((point) => point.status === "pending").length,
+    inspected: points.filter((point) => point.status === "ok" || point.status === "issue").length,
     completed: points.filter((point) => point.status === "ok" || point.status === "issue" || point.status === "skipped").length,
     deferred: points.filter((point) => point.status === "deferred").length,
     skipped: points.filter((point) => point.status === "skipped").length,
@@ -286,7 +290,7 @@ function pointStatusLabel(status: PointListItem["status"]) {
     case "scanned":
       return "Сканирована";
     case "skipped":
-      return "Метка недоступна";
+      return "Не осмотрено";
     default:
       return "Не заполнено";
   }

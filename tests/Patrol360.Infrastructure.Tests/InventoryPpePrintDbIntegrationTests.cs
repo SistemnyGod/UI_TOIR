@@ -1,6 +1,9 @@
 using System.IO.Compression;
 using System.Text;
 using System.Xml.Linq;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Patrol360.Application;
@@ -12,6 +15,38 @@ namespace Patrol360.Infrastructure.Tests;
 [Collection("Postgres integration")]
 public sealed class InventoryPpePrintDbIntegrationTests
 {
+    [DbIntegrationFact]
+    public async Task PpeMigrationPreservesPopulatedLegacyCardsAndDoesNotInventIssueDocuments()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+        var employee = UseWorkflow(provider, workflow => workflow.GetEmployees(new InventoryListQuery(PageSize: 1)).Rows.Single());
+        var item = CreatePpeItem(provider, "Старая каска", "Тест");
+        var card = UseWorkflow(provider, workflow => workflow.CreatePpeCard(new CreateInventoryPpeCardDto(employee.Id, "Старая карточка")));
+        Assert.True(card.Succeeded);
+        var line = UseWorkflow(provider, workflow => workflow.AddPpeCardLine(card.Value!.Id,
+            new UpsertInventoryPpeCardLineDto(item.Id, null, 1, 1_000, "issued", null, "Сохранить факт",
+                NormPoint: "", PrintItemName: "Старая каска", IssuePeriodText: "12 месяцев", IssuedAt: DateTimeOffset.UtcNow)));
+        Assert.True(line.Succeeded);
+        using var scope = provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<Patrol360DbContext>();
+        var migrator = context.GetService<IMigrator>();
+        // Only the helper-created disposable database is rolled back to the pre-feature schema.
+        await migrator.MigrateAsync("20260831120000_PerformanceSearchIndexes");
+        await context.Database.MigrateAsync();
+        await context.Database.MigrateAsync();
+        var retained = await context.InventoryPpeCardLines.AsNoTracking().SingleAsync(row => row.Id == line.Value!.Id);
+        Assert.Equal(item.Id, retained.ItemId);
+        Assert.Equal(1, retained.Quantity);
+        Assert.Equal("issued", retained.Status);
+        Assert.Equal("", retained.NormPoint);
+        Assert.Null(retained.IssueDocumentId);
+        Assert.Empty(await context.Set<Patrol360.Infrastructure.Persistence.Entities.PpeIssueDocumentEntity>().ToListAsync());
+        var legacyNorms = await context.InventoryPpeNormSets.AsNoTracking().ToListAsync();
+        Assert.All(legacyNorms, norm => Assert.False(norm.ScopeConfirmed));
+    }
+
     [DbIntegrationFact]
     public async Task CatalogIdentityLookupIgnoresSearchPageAndDoesNotReturnAnUnrelatedItem()
     {

@@ -96,6 +96,7 @@ export function ProfileScreen() {
           <StatusPill label="Offline-first" tone="success" />
         </View>
         <View style={styles.settingsGrid}>
+          <PrimaryButton icon="list-outline" label="Все метки" onPress={() => router.push("/all-points")} variant="secondary" />
           <PrimaryButton icon="server-outline" label="Сервер" onPress={() => router.push("/(auth)/server-settings")} variant="secondary" />
           <PrimaryButton icon="bug-outline" label="Диагностика" onPress={() => router.push("/settings/diagnostics" as never)} variant="secondary" />
           <PrimaryButton icon="color-palette-outline" label="Тема" onPress={() => router.push("/settings/theme")} variant="secondary" />

@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { resolvePatrolStartPath } from '@/services/patrolNavigationService';
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -24,7 +25,7 @@ import { isOfflineSessionValid } from "@/auth/offlineSession";
 import { currentContourId } from "@/core/environments";
 import { consumePendingSessionRoute, markSessionUnlocked } from "@/auth/sessionGateState";
 import { getOfflineSession, getRefreshToken, getStoredOwnerUserId } from "@/auth/tokenStorage";
-import { getServerBaseUrl, localLanServerBaseUrl, setLocalLanServerBaseUrl } from "@/core/serverSettings";
+import { getServerBaseUrl, localLanServerBaseUrl } from "@/core/serverSettings";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 
 const rememberedLoginKey = "patrol360.rememberedLogin";
@@ -43,6 +44,7 @@ export function LoginScreen() {
   const [serverBaseUrl, setServerBaseUrl] = useState("");
   const [serverStatus, setServerStatus] = useState<string | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [offlineSessionName, setOfflineSessionName] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -63,6 +65,11 @@ export function LoginScreen() {
     }
 
     void loadRememberedLogin();
+    void getOfflineSession().then((session) => {
+      if (isMounted && session && isOfflineSessionValid(session, currentContourId)) {
+        setOfflineSessionName(session.fullName || session.userId);
+      }
+    }).catch(() => undefined);
     void LocalAuthentication.hasHardwareAsync()
       .then(async (hasHardware) => hasHardware && LocalAuthentication.isEnrolledAsync())
       .then((isAvailable) => {
@@ -135,7 +142,7 @@ export function LoginScreen() {
       await saveRememberChoice(normalizedLogin);
       await signIn(normalizedLogin, password);
       markSessionUnlocked();
-      router.replace((consumePendingSessionRoute() ?? "/(tabs)/patrol") as never);
+      router.replace((consumePendingSessionRoute() ?? await resolvePatrolStartPath()) as never);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -153,12 +160,12 @@ export function LoginScreen() {
     }
 
     setError(null);
+    setIsSubmitting(true);
     setServerStatus("Проверяем локальный сервер...");
 
     try {
-      const localUrl = await setLocalLanServerBaseUrl();
-      setServerBaseUrl(localUrl);
-      const result = await checkServerConnection(localUrl);
+      const result = await checkServerConnection(localLanServerBaseUrl, { persist: true });
+      if (result.ok) setServerBaseUrl(await getServerBaseUrl());
       setServerStatus(result.message);
 
       if (!result.ok) {
@@ -168,6 +175,8 @@ export function LoginScreen() {
       const message = caughtError instanceof Error ? caughtError.message : "Не удалось подключить локальный сервер.";
       setServerStatus(message);
       setError(message);
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -214,7 +223,7 @@ export function LoginScreen() {
         // network event has already been consumed. Resume the retained outbox
         // explicitly after unlocking the local session.
         void triggerForegroundSyncWithRetry({ mode: "normal" });
-        router.replace((consumePendingSessionRoute() ?? "/(tabs)/patrol") as never);
+        router.replace((consumePendingSessionRoute() ?? await resolvePatrolStartPath()) as never);
         return;
       }
 
@@ -225,7 +234,7 @@ export function LoginScreen() {
 
       await restoreSessionWithRefreshToken();
       markSessionUnlocked();
-      router.replace((consumePendingSessionRoute() ?? "/(tabs)/patrol") as never);
+      router.replace((consumePendingSessionRoute() ?? await resolvePatrolStartPath()) as never);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -332,10 +341,22 @@ export function LoginScreen() {
                   <View style={styles.line} />
                 </View>
 
-                <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={handleBiometricLogin} style={styles.fingerprintButton}>
-                  <Ionicons color="#16a8ff" name="finger-print-outline" size={34} />
-                </Pressable>
-                <Text style={styles.fingerprintText}>По отпечатку</Text>
+                {offlineSessionName ? (
+                  <>
+                    <Text style={styles.offlineSessionText}>Сохранённая смена: {offlineSessionName}</Text>
+                    <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push("/(auth)/offline-login")} style={[styles.loginButton, isSubmitting ? styles.loginButtonDisabled : null]}>
+                      <Text style={styles.loginButtonText}>Открыть сохранённую смену</Text>
+                    </Pressable>
+                  </>
+                ) : null}
+                {biometricAvailable ? (
+                  <>
+                    <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={handleBiometricLogin} style={styles.fingerprintButton}>
+                      <Ionicons color="#16a8ff" name="finger-print-outline" size={34} />
+                    </Pressable>
+                    <Text style={styles.fingerprintText}>Войти по отпечатку</Text>
+                  </>
+                ) : null}
               </View>
 
               <Pressable
@@ -345,7 +366,7 @@ export function LoginScreen() {
                 style={styles.serverQuickLink}
               >
                 <Text style={styles.serverQuickLinkText}>
-                  {serverBaseUrl ? `Сервер: ${serverBaseUrl}` : "Настроить адрес сервера"}
+                  {serverBaseUrl ? `Настроить сервер: ${serverBaseUrl}` : "Настроить адрес сервера"}
                 </Text>
               </Pressable>
 
@@ -561,6 +582,12 @@ const styles = StyleSheet.create({
     color: "#c7dbf4",
     fontSize: 13,
     marginTop: 6,
+    textAlign: "center"
+  },
+  offlineSessionText: {
+    color: "#c7dbf4",
+    fontSize: 13,
+    marginTop: 10,
     textAlign: "center"
   },
   serverQuickLink: {

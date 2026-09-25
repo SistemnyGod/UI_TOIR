@@ -16,4 +16,5 @@ export type SyncQueueCommandItem = {
   attemptCount: number;
   lastError: string | null;
   assignmentRouteName: string | null;
+  sourceAssignmentId: string | null;
 };

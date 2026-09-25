@@ -59,6 +59,7 @@ describe("Inventory nomenclature catalog", () => {
     await user.type(invalidPrice, "3100");
     await user.type(screen.getByLabelText("Нормативное название"), "Костюм для защиты от ОПЗ");
     await user.type(screen.getByLabelText("Фактическое название"), "Костюм Профессионал");
+    await user.type(screen.getByLabelText("Стандарты"), "ГОСТ 12.4.280-2014 | Одежда специальная\nТР ТС 019/2011 | О безопасности СИЗ");
     await user.click(screen.getByRole("button", { name: "Сохранить позицию" }));
 
     await waitFor(() => expect(createItem).toHaveBeenCalledTimes(1));
@@ -67,6 +68,10 @@ describe("Inventory nomenclature catalog", () => {
       defaultUnitPriceMinor: 310000,
       name: "Костюм защитный Профессионал",
       normItemName: "Костюм для защиты от ОПЗ",
+      standards: [
+        { designation: "ГОСТ 12.4.280-2014", name: "Одежда специальная" },
+        { designation: "ТР ТС 019/2011", name: "О безопасности СИЗ" },
+      ],
     }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Создать позицию номенклатуры" })).not.toBeInTheDocument());
   });

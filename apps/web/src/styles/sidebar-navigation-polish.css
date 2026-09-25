@@ -142,13 +142,13 @@ body .app-shell .sidebar-reference .nav-item.active .nav-icon { color:#0065d9; }
 body .app-shell .sidebar-reference .sidebar-submenu header,
 body .app-shell .sidebar-reference .sidebar-submenu-item .nav-icon,
 body .app-shell .sidebar-reference .sidebar-submenu-item small { display:none; }
-body .app-shell .sidebar-reference .sidebar-submenu-item { display:flex; align-items:center; padding:8px 12px 8px 32px; min-height:40px; border:0; border-radius:6px; background:transparent; box-shadow:none; width:100%; position:relative; }
+body .app-shell .sidebar-reference .sidebar-submenu-item { display:flex; align-items:center; padding:7px 12px 7px 30px; min-height:36px; border:0; border-radius:6px; background:transparent; box-shadow:none; width:100%; position:relative; }
 body .app-shell .sidebar-reference .sidebar-submenu-item strong { font:inherit; font-size:14px; line-height:1.4; font-weight:400; color:#243650; overflow-wrap:normal; word-break:normal; }
-body .app-shell .sidebar-reference .sidebar-submenu-item.active { background:#eaf3ff; box-shadow:inset 3px 0 #0877f9; }
-body .app-shell .sidebar-reference .sidebar-submenu-item.active strong { color:#0065d9; font-weight:500; }
+body .app-shell .sidebar-reference .sidebar-submenu-item.active { background:#dfedff; box-shadow:inset 3px 0 #0877f9; }
+body .app-shell .sidebar-reference .sidebar-submenu-item.active strong { color:#0065d9; font-weight:600; }
 body .app-shell .sidebar-reference .sidebar-submenu-item:hover { background:#f1f5f9; }
 body .app-shell .sidebar-reference button:focus-visible { outline:2px solid #0065d9; outline-offset:-2px; }
-.sidebar-reference .sidebar-group-title { color:#61738c; font-size:12px; font-weight:500; text-transform:uppercase; padding:16px 12px 6px 24px; }
+.sidebar-reference .sidebar-group-title { color:#61738c; font-size:12px; font-weight:500; text-transform:uppercase; padding:12px 12px 4px 30px; }
 body .app-shell .sidebar-reference .sidebar-section-label { border-top:1px solid #e2e8f0; margin:16px 0 6px; padding:18px 12px 6px; font-size:12px; color:#61738c; }
 body .app-shell .sidebar-reference .sidebar-footer { display:flex; gap:8px; align-items:center; border-top:1px solid #e2e8f0; padding:16px 0 4px; flex-shrink:0; }
 .sidebar-profile { display:flex; align-items:center; gap:10px; min-width:0; flex:1; }
@@ -189,3 +189,18 @@ body .app-shell .sidebar-reference::after { content:none !important; }
 body .app-shell .sidebar-reference .sidebar-submenu { border:0; background:#fff; box-shadow:none; }
 body .app-shell .sidebar-reference .sidebar-submenu-list { gap:0; }
 .sidebar-reference .sidebar-nav-group { display:block; }
+
+/* Navigation search belongs to the sidebar, independent of workspace search. */
+.sidebar-reference .sidebar-search { display:flex; align-items:center; gap:8px; flex-shrink:0; margin:4px 0 14px; padding:0 10px; min-height:40px; border:1px solid #dce5f0; border-radius:8px; background:#f7f9fc; color:#60728c; }
+.sidebar-reference .sidebar-search input { width:100%; min-width:0; border:0; padding:8px 0; background:transparent; font:inherit; font-size:13px; color:#243650; outline:none; }
+.sidebar-reference .sidebar-search:focus-within { border-color:#2475dc; box-shadow:0 0 0 2px #e0edff; }
+.sidebar-reference .sidebar-search button { display:grid; place-items:center; min-width:28px; min-height:32px; border:0; background:transparent; color:#526783; }
+.sidebar-reference .sidebar-search-empty { color:#526783; font-size:13px; line-height:1.5; padding:12px; }
+body .app-shell .sidebar-reference .module-trigger { padding:10px 12px; }
+body .app-shell .sidebar-reference .module-trigger:hover { background:#edf3fb !important; }
+body .app-shell .sidebar-reference .sidebar-submenu-item.active:hover { background:#dfedff; }
+body .app-shell .sidebar-reference .nav-list { scrollbar-width:thin; scrollbar-color:#cbd6e5 transparent; overscroll-behavior:contain; }
+body .app-shell .sidebar-reference .sidebar-footer { padding:12px 0 4px; }
+@media(min-width:1200px) { body .app-shell.sidebar-collapsed .sidebar-search { display:none; } }
+@media(max-width:1199px) { .sidebar-reference .sidebar-search { min-height:44px; } .sidebar-reference .sidebar-search input { font-size:16px; } .sidebar-reference .sidebar-search button { min-width:44px; min-height:44px; } }
+body .app-shell .sidebar-reference .sidebar-search input { box-shadow:none; border:0; background:transparent; } .sidebar-reference .sidebar-search input::-webkit-search-cancel-button { -webkit-appearance:none; }

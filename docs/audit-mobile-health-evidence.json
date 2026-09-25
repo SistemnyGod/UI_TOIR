@@ -1,0 +1,20 @@
+[
+  {
+    "url": "http://192.168.2.194/api/v1/mobile/health",
+    "status": 200,
+    "body": "{\"status\":\"ok\",\"dependency\":null,\"serverTime\":\"2026-09-23T11:54:47.9185948+00:00\",\"syncProtocolVersion\":\"1.0\",\"contourId\":\"patrol360-local-enterprise\"}"
+  },
+  {
+    "url": "http://192.168.2.194:5173/api/v1/mobile/health",
+    "status": 200,
+    "body": "{\"status\":\"ok\",\"dependency\":null,\"serverTime\":\"2026-09-23T11:54:47.918585+00:00\",\"syncProtocolVersion\":\"1.0\",\"contourId\":\"patrol360-local-enterprise\"}"
+  },
+  {
+    "url": "https://192.168.2.194/api/v1/mobile/health",
+    "status": 200,
+    "body": "{\"status\":\"ok\",\"dependency\":null,\"serverTime\":\"2026-09-23T11:54:47.9228042+00:00\",\"syncProtocolVersion\":\"1.0\",\"contourId\":\"patrol360-local-enterprise\"}",
+    "authorized": true,
+    "certificate": "2E:80:B3:69:77:1D:CF:A0:E6:F7:2F:2C:97:0F:B0:4A:7F:01:DC:CF:EC:DD:41:2C:FE:F3:FF:D6:52:08:52:6C",
+    "validTo": "Aug 23 13:29:13 2028 GMT"
+  }
+]

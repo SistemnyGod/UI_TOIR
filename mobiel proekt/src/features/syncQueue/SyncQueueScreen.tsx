@@ -1,11 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { listSyncQueueFiles, SyncQueueFileItem } from "@/db/repositories/filesRepository";
 import { listSyncQueueCommands, SyncQueueCommandItem } from "@/db/repositories/outboxRepository";
+import { continuePatrolWithReconciliation } from "@/services/patrolContinuationService";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { countWaitingAuthItems } from "@/features/syncQueue/syncQueueAuthPolicy";
 import { logMobileError } from "@/services/mobileErrorReporter";
@@ -67,11 +68,11 @@ export function SyncQueueScreen() {
     }, [load])
   );
 
-  useEffect(() => subscribeToSyncEvents(() => {
+  useFocusEffect(useCallback(() => subscribeToSyncEvents(() => {
     void load();
-  }), [load]);
+  }), [load]));
 
-  async function resolveCommand(command: SyncQueueCommandItem, action: "serverWins" | "dispatcher" | "retryRevision" | "cancelRejected") {
+  async function resolveCommand(command: SyncQueueCommandItem, action: "serverWins" | "dispatcher" | "retryRevision" | "cancelRejected" | "continueSwitch") {
     if (actionInProgressId) {
       return;
     }
@@ -92,6 +93,9 @@ export function SyncQueueScreen() {
       } else if (action === "retryRevision") {
         await retryConflictWithLatestRevision(ownerUserId, command);
         setFeedback("Конфликт закрыт, команда создана с актуальной ревизией.");
+      } else if (action === "continueSwitch") {
+        await continuePatrolWithReconciliation(ownerUserId, command.clientOperationId);
+        setFeedback("Целевой обход B поставлен на отдельный запуск. Результаты сохранены.");
       } else {
         await cancelRejectedCommand(ownerUserId, command);
         setFeedback("Отклонённое локальное действие отменено. Запись сохранена в журнале действий.");
@@ -236,6 +240,19 @@ export function SyncQueueScreen() {
               ) : null}
               {command.status === "conflict" ? (
                 <View style={styles.actionGroup}>
+                {command.commandType === "switchPatrolAssignment" && command.sourceAssignmentId ? (
+                  <>
+                    <Text style={[styles.text, { color: colors.mutedText }]}>Переключение не принято: {command.lastError ?? "сервер отменил исходный обход"}</Text>
+                    <PrimaryButton
+                      disabled={actionInProgressId === command.clientOperationId}
+                      icon="play-circle-outline"
+                      label="Продолжить B"
+                      onPress={() => void resolveCommand(command, "continueSwitch")}
+                      size="large"
+                      variant="secondary"
+                    />
+                  </>
+                ) : null}
                 {canAcceptServerConflict(command) ? (
                   <PrimaryButton
                     disabled={actionInProgressId === command.clientOperationId}
@@ -267,14 +284,26 @@ export function SyncQueueScreen() {
                 </View>
               ) : null}
               {command.status === "rejected" ? (
-                <PrimaryButton
-                  disabled={actionInProgressId === command.clientOperationId}
-                  icon="close-circle-outline"
-                  label="Отменить локальное действие"
-                  onPress={() => void resolveCommand(command, "cancelRejected")}
-                  size="large"
-                  variant="ghost"
-                />
+                <View style={styles.actionGroup}>
+                  {command.commandType === "switchPatrolAssignment" && command.sourceAssignmentId ? (
+                    <PrimaryButton
+                      disabled={actionInProgressId === command.clientOperationId}
+                      icon="play-circle-outline"
+                      label="Продолжить B"
+                      onPress={() => void resolveCommand(command, "continueSwitch")}
+                      size="large"
+                      variant="secondary"
+                    />
+                  ) : null}
+                  <PrimaryButton
+                    disabled={actionInProgressId === command.clientOperationId}
+                    icon="close-circle-outline"
+                    label="Отменить локальное действие"
+                    onPress={() => void resolveCommand(command, "cancelRejected")}
+                    size="large"
+                    variant="ghost"
+                  />
+                </View>
               ) : null}
               {command.commandType === "completePatrolAssignment" && command.entityLocalId ? (
                 <PrimaryButton

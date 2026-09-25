@@ -13,3 +13,13 @@ test("local enterprise prefers the last stored server before probing LAN", () =>
 
   assert.deepEqual(candidates, ["http://31.173.110.118", "http://192.168.2.194:5173"]);
 });
+
+test("legacy HTTP remains available to already configured clients", () => {
+  const candidates = orderServerCandidateBaseUrls({
+    primaryBaseUrl: "https://192.168.2.194",
+    preferredBaseUrl: "https://192.168.2.194",
+    storedBaseUrl: "http://192.168.2.194:5173",
+    allowedBaseUrls: ["https://192.168.2.194", "http://192.168.2.194:5173"]
+  });
+  assert.equal(candidates[0], "http://192.168.2.194:5173");
+});

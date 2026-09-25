@@ -1,3 +1,5 @@
+import { getSessionGeneration } from "@/auth/sessionGeneration";
+import { recordMobileConnectionOutcome, getMobileConnectionContextGeneration } from "@/core/connectionStateEvents";
 import { login, logout } from "@/api/authApi";
 import { isReauthenticationRequiredError } from "@/auth/sessionErrors";
 import { beginAuthTransition, refreshStoredAccessToken } from "@/api/httpClient";
@@ -72,6 +74,7 @@ async function revokeServerSession() {
 
 export async function signIn(loginName: string, password: string) {
   beginAuthTransition();
+  const loginSessionGeneration = getSessionGeneration();
   if (!(await flushPendingLogout())) {
     throw new Error("Предыдущая сессия ожидает отзыва. Подключите сервер и повторите вход.");
   }
@@ -149,6 +152,9 @@ export async function signIn(loginName: string, password: string) {
     await cleanupPreviousUserPhotos().catch(() => undefined);
   }
 
+  if (loginSessionGeneration === getSessionGeneration()) {
+    recordMobileConnectionOutcome("authorizationRecovered", getMobileConnectionContextGeneration());
+  }
   await syncWorkItems().catch(() => []);
   await registerPushNotifications().catch(() => null);
   await syncMobileNotifications().catch(() => []);
@@ -171,6 +177,7 @@ export async function signIn(loginName: string, password: string) {
 }
 
 export async function restoreSessionWithRefreshToken() {
+  const loginSessionGeneration = getSessionGeneration();
   const previousSession = await getStoredSessionSnapshot();
   const previousOwnerUserId = await getStoredOwnerUserId();
   const contourMismatch = Boolean(previousSession.ownerUserId && previousSession.offlineSession?.contourId !== currentContourId);
@@ -215,6 +222,9 @@ export async function restoreSessionWithRefreshToken() {
     await cleanupPreviousUserPhotos().catch(() => undefined);
   }
 
+  if (loginSessionGeneration === getSessionGeneration()) {
+    recordMobileConnectionOutcome("authorizationRecovered", getMobileConnectionContextGeneration());
+  }
   await syncWorkItems().catch(() => []);
   await registerPushNotifications().catch(() => null);
   await syncMobileNotifications().catch(() => []);

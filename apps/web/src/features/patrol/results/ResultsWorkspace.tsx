@@ -24,6 +24,7 @@ import type { DataSourceMode, PatrolResult, PatrolResultAttachment, ResultMode, 
 import { PatrolResultDetails } from "./PatrolResultDetails";
 import { ResultMediaViewer, type ResultMediaPreviewState } from "./ResultMediaViewer";
 import { FoundRemarksView } from "./FoundRemarksView";
+import { PatrolAppealsView } from "./PatrolAppealsView";
 import { PatrolRequestHistory } from "./PatrolRequestHistory";
 import type { DurationSummary, ResultGroup } from "./resultTypes";
 import { Button, CompactTable, PageHeader, SectionTabs, type CompactTableColumn } from "../../../shared/ui";
@@ -114,7 +115,7 @@ export function ResultsWorkspace({
   const [photoLoadingResultId, setPhotoLoadingResultId] = useState<string | null>(null);
   const [mediaPreview, setMediaPreview] = useState<ResultMediaPreviewState | null>(null);
   const mediaTriggerRef = useRef<HTMLElement | null>(null);
-  const [activeView, setActiveView] = useState<"results" | "remarks" | "requests">("results");
+  const [activeView, setActiveView] = useState<"results" | "remarks" | "requests" | "appeals">("results");
   const [exportInProgress, setExportInProgress] = useState(false);
   const [mutatingGroupId, setMutatingGroupId] = useState<string | null>(null);
   const apiResultsRepository = useMemo(() => createApiResultsRepository(), []);
@@ -527,9 +528,10 @@ export function ResultsWorkspace({
           <FileText size={16} />
           История заявок
         </button>
+        <button className={activeView === "appeals" ? "is-active" : ""} onClick={() => setActiveView("appeals")} type="button">Обращения диспетчеру</button>
       </nav>
 
-      {activeView === "remarks" ? (
+      {activeView === "appeals" ? <PatrolAppealsView dataSourceMode={dataSourceMode} /> : activeView === "remarks" ? (
         <FoundRemarksView dataSourceMode={dataSourceMode} onNotify={onNotify} />
       ) : activeView === "requests" ? (
         <PatrolRequestHistory

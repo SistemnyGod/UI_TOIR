@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
@@ -31,15 +31,14 @@ export function PointDetailScreen() {
   const [reloadRevision, setReloadRevision] = useState(0);
 
 
-  useEffect(() => subscribeToSyncEvents((event) => {
-    if (shouldReloadAssignmentAfterSync(event, assignmentId)) {
-      setReloadRevision((value) => value + 1);
-    }
-  }), [assignmentId]);
-
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
+      const unsubscribe = subscribeToSyncEvents((event) => {
+        if (shouldReloadAssignmentAfterSync(event, assignmentId)) {
+          setReloadRevision((value) => value + 1);
+        }
+      });
       void reloadRevision;
       requestMobileDataRefresh("appActive");
       void (async () => {
@@ -78,6 +77,7 @@ export function PointDetailScreen() {
       })();
       return () => {
         isMounted = false;
+        unsubscribe();
       };
     }, [assignmentId, pointId, reloadRevision])
   );
@@ -253,7 +253,7 @@ function pointStatusLabel(status: PointListItem["status"]) {
     case "scanned":
       return "Сканирована";
     case "skipped":
-      return "Метка недоступна";
+      return "Не осмотрено";
     default:
       return "Не заполнено";
   }
@@ -284,7 +284,7 @@ function scanMethodsHint(policy: { nfcEnabled: boolean; qrFallbackEnabled: boole
 
 function confirmationLabel(point: PointForFill) {
   if (point.status === "skipped") {
-    return "Метка недоступна";
+    return "Не осмотрено";
   }
 
   if (point.confirmationType === "nfc") {

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Patrol360.Application;
 using Patrol360.Contracts;
+using System.Text.Json;
 using Patrol360.Infrastructure.Persistence.Entities;
 
 namespace Patrol360.Infrastructure.Persistence;
@@ -799,6 +800,13 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
             return Failure<InventoryItemDto>("minStockQty", "Минимальный остаток не может быть отрицательным");
         }
 
+        if (request.Standards is { Count: > 50 }
+            || (request.Standards ?? []).Any(x => x is null || string.IsNullOrWhiteSpace(x.Designation)
+                || x.Designation.Length > 160 || x.Name is null || x.Name.Length > 500))
+        {
+            return Failure<InventoryItemDto>("standards", "Допустимо до 50 стандартов; укажите обозначение и проверьте длину полей");
+        }
+
         return null;
     }
 
@@ -815,6 +823,15 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
         item.ModelName = NormalizeOptional(request.ModelName);
         item.Article = NormalizeOptional(request.Article);
         item.ProtectionClass = NormalizeOptional(request.ProtectionClass);
+        if (request.Standards is not null)
+        {
+            item.StandardsJson = JsonSerializer.Serialize(
+                request.Standards.Select(x => new InventoryItemStandardDto(
+                    NormalizeOptional(x.Designation), NormalizeOptional(x.Name)))
+                    .Where(x => x.Designation.Length > 0)
+                    .DistinctBy(x => (x.Designation.ToUpperInvariant(), x.Name.ToUpperInvariant())).ToList(),
+                new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
         item.ClothingSize = NormalizeOptional(request.ClothingSize);
         item.HeightSize = NormalizeOptional(request.HeightSize);
         item.ShoeSize = NormalizeOptional(request.ShoeSize);
@@ -932,7 +949,14 @@ internal sealed class EfInventoryCatalogCommandService(Patrol360DbContext dbCont
             item.IsConsumable,
             item.TrackLife,
             item.IsActive,
-            item.IsActive ? "active" : "inactive");
+            item.IsActive ? "active" : "inactive",
+            DeserializeStandards(item.StandardsJson));
+
+    private static IReadOnlyList<InventoryItemStandardDto> DeserializeStandards(string json)
+    {
+        try { return JsonSerializer.Deserialize<List<InventoryItemStandardDto>>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? []; }
+        catch (JsonException) { return []; }
+    }
 
     private InventoryItemSetDetailDto MapItemSetDetail(InventoryItemSetEntity itemSet)
     {

@@ -1,4 +1,3 @@
-import NetInfo from "@react-native-community/netinfo";
 import { Ionicons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
 import { ReactNode, useEffect, useMemo, useState } from "react";
@@ -18,14 +17,14 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAppTheme } from "@/features/settings/themePreference";
-import { canAttemptServerConnection } from "@/core/networkPolicy";
-import { checkServerConnection } from "@/api/serverHealthApi";
+import { useConnectionStatus } from "@/core/connectionStatus";
 
 type ScreenProps = {
   title: string;
   subtitle?: string;
   children: ReactNode;
   bottomAction?: ReactNode;
+  scroll?: boolean;
 };
 
 type ScreenListProps<T> = Omit<FlatListProps<T>, "ListHeaderComponent" | "contentContainerStyle"> & {
@@ -36,22 +35,29 @@ type ScreenListProps<T> = Omit<FlatListProps<T>, "ListHeaderComponent" | "conten
   contentContainerStyle?: StyleProp<ViewStyle>;
 };
 
-export function Screen({ title, subtitle, children, bottomAction }: ScreenProps) {
+export function Screen({ title, subtitle, children, bottomAction, scroll = true }: ScreenProps) {
   const shell = useScreenShell();
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: shell.colors.background }]}>
       <ScreenBackground />
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: shell.showNestedNavigation ? 184 + shell.bottomInset : Math.max(shell.insets.bottom + 176, 196) }
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        <ScreenHeader title={title} subtitle={subtitle} networkStatus={shell.networkStatus} />
-        {children}
-      </ScrollView>
+      {scroll ? (
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: (shell.showNestedNavigation ? 88 + shell.bottomInset : 24) + (bottomAction ? 88 : 0) }
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <ScreenHeader title={title} subtitle={subtitle} networkStatus={shell.networkStatus} />
+          {children}
+        </ScrollView>
+      ) : (
+        <View style={styles.nonScrollingContent}>
+          <View style={styles.nonScrollingHeader}><ScreenHeader title={title} subtitle={subtitle} networkStatus={shell.networkStatus} /></View>
+          {children}
+        </View>
+      )}
       {bottomAction ? <View style={[styles.bottomAction, { bottom: shell.showNestedNavigation ? shell.bottomInset + 84 : shell.insets.bottom + 16 }]}>{bottomAction}</View> : null}
       <NestedNavigation shell={shell} />
     </SafeAreaView>
@@ -75,7 +81,7 @@ export function ScreenList<T>({
         {...listProps}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: shell.showNestedNavigation ? 184 + shell.bottomInset : Math.max(shell.insets.bottom + 176, 196) },
+          { paddingBottom: (shell.showNestedNavigation ? 88 + shell.bottomInset : 24) + (bottomAction ? 88 : 0) },
           contentContainerStyle
         ]}
         ListHeaderComponent={
@@ -98,36 +104,12 @@ function useScreenShell() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const router = useRouter();
-  const [networkStatus, setNetworkStatus] = useState<NetworkStatus>("offline");
+  const networkStatus = useConnectionStatus();
   const assignmentId = useMemo(() => pathname.match(/^\/patrol\/assignment\/([^/]+)/)?.[1] ?? null, [pathname]);
   const showNestedNavigation =
     pathname.startsWith("/patrol/") || pathname.startsWith("/camera/") || pathname === "/settings" || pathname.startsWith("/settings/");
-  const bottomInset = Math.max(insets.bottom, 34);
+  const bottomInset = Math.max(insets.bottom, 8);
 
-  useEffect(() => {
-    let mounted = true;
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      if (!canAttemptServerConnection(state)) {
-        setNetworkStatus("offline");
-        return;
-      }
-
-      setNetworkStatus("checking");
-      void checkServerConnection()
-        .then((result) => {
-          if (!mounted) return;
-          setNetworkStatus(result.ok ? "connected" : result.failureKind === "wrongContour" ? "otherServer" : "serverUnavailable");
-        })
-        .catch(() => {
-          if (mounted) setNetworkStatus("serverUnavailable");
-        });
-    });
-
-    return () => {
-      mounted = false;
-      unsubscribe();
-    };
-  }, []);
 
   return { assignmentId, bottomInset, colors, insets, networkStatus, pathname, router, showNestedNavigation };
 }
@@ -143,7 +125,7 @@ function ScreenBackground() {
   );
 }
 
-type NetworkStatus = "offline" | "checking" | "connected" | "serverUnavailable" | "otherServer";
+type NetworkStatus = "offline" | "checking" | "connected" | "serverUnavailable" | "otherServer" | "authorizationRequired";
 
 function ScreenHeader({ title, subtitle, networkStatus }: { title: string; subtitle?: string; networkStatus: NetworkStatus }) {
   const { colors } = useAppTheme();
@@ -151,12 +133,7 @@ function ScreenHeader({ title, subtitle, networkStatus }: { title: string; subti
   return (
     <>
       <View style={styles.topBar}>
-        <View style={styles.brandRow}>
-          <View style={styles.brandMark}>
-            <Text style={styles.brandMarkText}>AM</Text>
-          </View>
-          <Text style={[styles.brandText, { color: colors.text }]}>ATOM{"\n"}MINERALS</Text>
-        </View>
+        <Text accessibilityLabel="ATOM" style={{ color: "#00a7e5", fontSize: 32, fontWeight: "900", letterSpacing: -1 }}>ATOM</Text>
         <View style={styles.networkBadge}>
           <Text style={[styles.networkText, { color: colors.mutedText }]}>{networkStatusLabel(networkStatus)}</Text>
           <View style={[styles.networkDot, { backgroundColor: networkStatusColor(networkStatus) }]} />
@@ -171,11 +148,12 @@ function ScreenHeader({ title, subtitle, networkStatus }: { title: string; subti
 }
 
 function networkStatusLabel(status: NetworkStatus) {
-  if (status === "connected") return "Подключено";
+  if (status === "connected") return "На связи";
   if (status === "serverUnavailable") return "Сервер недоступен";
+  if (status === "authorizationRequired") return "Нужен вход";
   if (status === "otherServer") return "Другой сервер";
   if (status === "checking") return "Проверяем";
-  return "Оффлайн";
+  return "Офлайн";
 }
 
 function networkStatusColor(status: NetworkStatus) {
@@ -184,7 +162,7 @@ function networkStatusColor(status: NetworkStatus) {
   return "#ef4444";
 }
 function NestedNavigation({ shell }: { shell: ReturnType<typeof useScreenShell> }) {
-  const { assignmentId, bottomInset, colors, pathname, router, showNestedNavigation } = shell;
+  const { bottomInset, colors, pathname, router, showNestedNavigation } = shell;
 
   if (!showNestedNavigation) {
     return null;
@@ -209,20 +187,8 @@ function NestedNavigation({ shell }: { shell: ReturnType<typeof useScreenShell> 
         label="Обход"
         onPress={() => router.replace("/patrol")}
       />
-      <NestedNavItem
-        active={pathname.includes("/all-points")}
-        activeIcon="list"
-        icon="list-outline"
-        label="Метки"
-        onPress={() => router.replace(assignmentId ? `/patrol/assignment/${assignmentId}/all-points` : "/all-points")}
-      />
-      <NestedNavItem
-        active={pathname.startsWith("/work-accounting")}
-        activeIcon="construct"
-        icon="construct-outline"
-        label="Работы"
-        onPress={() => router.replace("/work-accounting")}
-      />
+      <NestedNavItem active={pathname.startsWith("/work-accounting")} activeIcon="construct" icon="construct-outline" label="Работы" onPress={() => router.replace("/work-accounting")} />
+      <NestedNavItem active={pathname.startsWith("/reports")} activeIcon="document-text" icon="document-text-outline" label="Отчёты" onPress={() => router.replace("/reports" as never)} />
       <NestedNavItem
         active={pathname.startsWith("/profile") || pathname.startsWith("/settings")}
         activeIcon="person-circle"
@@ -320,6 +286,8 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 28
   },
+  nonScrollingContent: { flex: 1 },
+  nonScrollingHeader: { paddingHorizontal: 16, paddingTop: 16 },
   listHeader: {
     gap: 13
   },

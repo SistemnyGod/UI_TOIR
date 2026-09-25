@@ -6,6 +6,8 @@ export type SyncEvent = {
   cancelledAssignmentIds?: string[];
   changedAssignmentIds?: string[];
   deliveryChangedAssignmentIds?: string[];
+  changedWorkItemIds?: string[];
+  changedRemarkIds?: string[];
   snapshotRefreshed?: boolean;
   refreshedZones?: RefreshZone[];
 };
@@ -37,6 +39,8 @@ export function mergeSyncEvents(events: SyncEvent[]): SyncEvent {
     cancelledAssignmentIds: unique(events.flatMap((event) => event.cancelledAssignmentIds ?? [])),
     changedAssignmentIds: unique(events.flatMap((event) => event.changedAssignmentIds ?? [])),
     deliveryChangedAssignmentIds: unique(events.flatMap((event) => event.deliveryChangedAssignmentIds ?? [])),
+    changedWorkItemIds: unique(events.flatMap((event) => event.changedWorkItemIds ?? [])),
+    changedRemarkIds: unique(events.flatMap((event) => event.changedRemarkIds ?? [])),
     snapshotRefreshed: events.some((event) => event.snapshotRefreshed === true),
     refreshedZones: unique(events.flatMap((event) => event.refreshedZones ?? [])) as RefreshZone[]
   };

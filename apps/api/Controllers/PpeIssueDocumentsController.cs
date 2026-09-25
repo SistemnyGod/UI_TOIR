@@ -21,6 +21,18 @@ public sealed class PpeIssueDocumentsController(
     [HttpGet]
     public IActionResult List([FromQuery] Guid? employeeId) => Enabled ? Ok(service.GetIssueDocuments(employeeId)) : NotFound();
 
+    [HttpGet("journal")]
+    public IActionResult Journal([FromQuery] PpeIssueJournalQuery query) => Enabled ? Ok(service.GetIssueJournal(query)) : NotFound();
+
+    [HttpGet("journal/export")]
+    [RequirePermission("inventory.reports.export")]
+    public IActionResult ExportJournal([FromQuery] PpeIssueJournalQuery query)
+    {
+        if (!Enabled) return NotFound();
+        var file = service.ExportIssueJournal(query);
+        return File(file.Content, file.ContentType, file.DownloadName);
+    }
+
     [HttpGet("norms")]
     public IActionResult Norms([FromQuery] Guid employeeId, [FromQuery] DateOnly date) => Enabled ? Ok(service.GetApplicablePpeNorms(employeeId, date)) : NotFound();
 

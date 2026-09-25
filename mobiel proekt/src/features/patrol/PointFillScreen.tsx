@@ -1,4 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation, usePreventRemove } from 'expo-router/react-navigation';
+import { createPointDraftController } from '@/services/pointDraftController';
+import { captureDataOwnerContext, assertDataOwnerContext, type DataOwnerContext } from '@/auth/dataOwnerContext';
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -6,7 +9,7 @@ import { ActivityIndicator, AppState, Image, Pressable, StyleSheet, Text, TextIn
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
 import { listPointFiles } from "@/db/repositories/filesRepository";
-import { assertPointCanBeOpened, deferPoint, getAssignmentScanPolicy, getPointForFill, getReportReadiness, PointForFill, savePointDraft, savePointIssue, savePointOk, skipPoint } from "@/db/repositories/patrolRepository";
+import { beginManualPointInspection, assertPointCanBeOpened, deferPoint, getAssignmentScanPolicy, getPointForFill, getReportReadiness, PointForFill, savePointDraft, savePointIssue, savePointOk, skipPoint } from "@/db/repositories/patrolRepository";
 import { isPhotoEvidenceRequired } from "@/domain/patrol/photoEvidencePolicy";
 import { restoreDeferredPointSelection } from "@/domain/patrol/pointDraftPolicy";
 import { useAppTheme } from "@/features/settings/themePreference";
@@ -27,78 +30,87 @@ import type { FillPhase, PointAttachment, SelectedStatus } from "./pointFillType
 export function PointFillScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
-  const { assignmentId, pointId } = useLocalSearchParams<{ assignmentId: string; pointId: string }>();
+  const { assignmentId, pointId, manual } = useLocalSearchParams<{ assignmentId: string; pointId: string; manual?: string }>();
   const [point, setPoint] = useState<PointForFill | null>(null);
+  const [manualReason, setManualReason] = useState("");
+  const [manualOpen, setManualOpen] = useState(manual === "1");
   const [phase, setPhase] = useState<FillPhase>("status");
   const [selectedStatus, setSelectedStatus] = useState<SelectedStatus | null>(null);
   const [comment, setComment] = useState("");
   const [issueTypeId, setIssueTypeId] = useState("Неисправность");
   const [attachments, setAttachments] = useState<PointAttachment[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingBeforeLeave, setIsSavingBeforeLeave] = useState(false);
+  const [hasPendingLeave, setHasPendingLeave] = useState(false);
   const [isMediaBusy, setIsMediaBusy] = useState(false);
   const [mediaProgress, setMediaProgress] = useState<number | null>(null);
+  const [transitionPending, setTransitionPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<"attachments" | "more" | null>(null);
   const draftReadyRef = useRef(false);
   const finalizingRef = useRef(false);
-  const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const draftSaveChainRef = useRef<Promise<void>>(Promise.resolve());
-  const handleMediaProgress = useCallback(({ progress }: MediaPreparationProgress) => {
-    setMediaProgress(progress);
+  const savedRef = useRef(false);
+  const loadVersion = useRef(0);
+  type Draft = { selectedStatus: SelectedStatus | null; comment: string; issueTypeId: string; photoClientFileIds: string[]; manualReason?: string };
+  const scopeRef = useRef<DataOwnerContext | null>(null);
+  const draftController = useRef<ReturnType<typeof createPointDraftController<Draft>> | null>(null);
+  const leaving = useRef(false);
+  const pendingLeaveAction = useRef<Parameters<typeof navigation.dispatch>[0] | null>(null);
+  const navigation = useNavigation();
+  const handleMediaProgress = useCallback(({ progress }: MediaPreparationProgress) => setMediaProgress(progress), []);
+  const latestDraftRef = useRef<Draft>({ selectedStatus: null, comment: "", issueTypeId: "Неисправность", photoClientFileIds: [] });
+  const recordDraft = useCallback((change: Partial<Draft>) => {
+    latestDraftRef.current = { ...latestDraftRef.current, ...change };
+    if (draftReadyRef.current && !finalizingRef.current) draftController.current?.update(latestDraftRef.current);
   }, []);
-
-  const latestDraftRef = useRef({
-    selectedStatus: null as SelectedStatus | null,
-    comment: "",
-    issueTypeId: "Неисправность",
-    photoClientFileIds: [] as string[]
+  const persistDraft = useCallback(async () => {
+    if (!finalizingRef.current) await draftController.current?.flushUntilSettled();
+  }, []);
+  const flushDraft = persistDraft;
+  const retryPendingLeave = useCallback(() => {
+    const action = pendingLeaveAction.current;
+    if (!action || leaving.current) return;
+    leaving.current = true;
+    setIsSavingBeforeLeave(true);
+    void flushDraft().then(() => {
+      pendingLeaveAction.current = null;
+      setHasPendingLeave(false);
+      navigation.dispatch(action);
+    }).catch(caught => setError(caught instanceof Error ? caught.message : "Не удалось сохранить. Повторите переход."))
+      .finally(() => { leaving.current = false; setIsSavingBeforeLeave(false); });
+  }, [flushDraft, navigation]);
+  usePreventRemove(!!point, ({ data }) => {
+    if (savedRef.current) { navigation.dispatch(data.action); return; }
+    if (finalizingRef.current) return;
+    if (leaving.current) return;
+    // The first requested destination is the employee's intent. Further
+    // taps while SQLite is still saving must not silently replace it.
+    if (!pendingLeaveAction.current) pendingLeaveAction.current = data.action;
+    const action = pendingLeaveAction.current;
+    setHasPendingLeave(true);
+    leaving.current = true;
+    setIsSavingBeforeLeave(true);
+    void flushDraft().then(() => {
+      pendingLeaveAction.current = null;
+      setHasPendingLeave(false);
+      navigation.dispatch(action);
+    })
+      .catch(caught => setError(caught instanceof Error ? caught.message : "Не удалось сохранить. Повторите переход."))
+      .finally(() => { leaving.current = false; setIsSavingBeforeLeave(false); });
   });
 
-  useEffect(() => {
-    latestDraftRef.current = {
-      selectedStatus,
-      comment,
-      issueTypeId,
-      photoClientFileIds: attachments.map((attachment) => attachment.clientFileId)
-    };
-  }, [attachments, comment, issueTypeId, selectedStatus]);
-
-  const clearDraftSaveTimer = useCallback(() => {
-    if (draftSaveTimerRef.current) {
-      clearTimeout(draftSaveTimerRef.current);
-      draftSaveTimerRef.current = null;
-    }
-  }, []);
-
-  const persistDraft = useCallback(async () => {
-    if (!draftReadyRef.current || finalizingRef.current) {
-      return;
-    }
-
-    const draft = latestDraftRef.current;
-    if (!draft.selectedStatus) {
-      return;
-    }
-
-    const save = draftSaveChainRef.current
-      .catch((previousError) => {
-        void logMobileError("patrol.point.draft.save.failed", previousError);
-      })
-      .then(() => savePointDraft(assignmentId, pointId, draft));
-    draftSaveChainRef.current = save;
-    await save;
-  }, [assignmentId, pointId]);
-
-  const flushDraft = useCallback(async () => {
-    clearDraftSaveTimer();
-    await persistDraft();
-  }, [clearDraftSaveTimer, persistDraft]);
-
   const reload = useCallback(async () => {
-    clearDraftSaveTimer();
+    const version = ++loadVersion.current;
+    pendingLeaveAction.current = null;
+    setHasPendingLeave(false);
+    draftController.current?.close();
     draftReadyRef.current = false;
     finalizingRef.current = false;
+    savedRef.current = false;
+    setTransitionPending(false);
+    const scope = await captureDataOwnerContext();
+    scopeRef.current = scope;
     const ownerUserId = await getStoredOwnerUserId();
     if (!ownerUserId) {
       setPoint(null);
@@ -106,9 +118,12 @@ export function PointFillScreen() {
       return;
     }
     const [loaded, files] = await Promise.all([assertPointCanBeOpened(assignmentId, pointId), listPointFiles(assignmentId, pointId)]);
+    await assertDataOwnerContext(scope);
+    if (version !== loadVersion.current) return;
     setLoadError(null);
     setPoint(loaded);
     setComment(loaded?.comment ?? "");
+    setManualReason(loaded?.manualReason ?? '');
     setIssueTypeId(loaded?.issueTypeId ?? "Неисправность");
     setAttachments(files.map(toPointAttachment));
 
@@ -122,8 +137,18 @@ export function PointFillScreen() {
       setSelectedStatus(null);
       setPhase("status");
     }
+    latestDraftRef.current = {
+      selectedStatus: loaded?.status === 'deferred' ? restoreDeferredPointSelection(loaded) : loaded && ['ok','issue','skipped'].includes(loaded.status) ? loaded.status as SelectedStatus : null,
+      comment: loaded?.comment ?? '', issueTypeId: loaded?.issueTypeId ?? 'Неисправность',
+      photoClientFileIds: files.map(file => file.clientFileId),
+      manualReason: loaded?.manualReason ?? undefined
+    };
+    draftController.current = createPointDraftController(async draft => {
+      await assertDataOwnerContext(scope);
+      if (draft.selectedStatus || draft.manualReason !== undefined) await savePointDraft(assignmentId, pointId, draft, scope);
+    }, caught => setError(caught instanceof Error ? caught.message : 'Не удалось сохранить черновик точки.'));
     draftReadyRef.current = Boolean(loaded);
-  }, [assignmentId, clearDraftSaveTimer, pointId]);
+  }, [assignmentId, pointId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -138,25 +163,22 @@ export function PointFillScreen() {
 
       return () => {
         isMounted = false;
-        clearDraftSaveTimer();
-        void persistDraft().catch((draftError) => { void logMobileError("patrol.point.draft.save.failed", draftError); });
+        loadVersion.current++;
+        const controller = draftController.current;
+        if (controller) {
+          // Focus can be lost without React Navigation dispatching a remove
+          // action (tabs and native camera do this). Drain the last revision
+          // before invalidating the controller; an immediate close used to
+          // cancel that write.
+          void controller.flushUntilSettled()
+            .catch((draftError) => { void logMobileError("patrol.point.draft.save.failed", draftError); })
+            .finally(() => {
+              if (draftController.current === controller) controller.close();
+            });
+        }
       };
-    }, [clearDraftSaveTimer, persistDraft, reload])
+    }, [reload])
   );
-
-  useEffect(() => {
-    if (!draftReadyRef.current || finalizingRef.current || !selectedStatus) {
-      return;
-    }
-
-    clearDraftSaveTimer();
-    draftSaveTimerRef.current = setTimeout(() => {
-      draftSaveTimerRef.current = null;
-      void persistDraft().catch(() => setError("Не удалось сохранить черновик точки."));
-    }, 400);
-
-    return clearDraftSaveTimer;
-  }, [attachments, clearDraftSaveTimer, comment, issueTypeId, persistDraft, selectedStatus]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
@@ -171,16 +193,23 @@ export function PointFillScreen() {
   }, [flushDraft]);
 
   function selectStatus(status: SelectedStatus) {
+    recordDraft({ selectedStatus: status });
     setSelectedStatus(status);
     setError(null);
     setPhase("details");
   }
 
   function handleSkipTag() {
-    selectStatus("skipped");
+    setManualOpen(true);
   }
 
   async function handleSave() {
+    if (savedRef.current && transitionPending) {
+      await retrySavedTransition();
+      return;
+    }
+    if (finalizingRef.current) return;
+    const { selectedStatus, comment, issueTypeId } = latestDraftRef.current;
     setError(null);
     if (!selectedStatus) {
       setPhase("status");
@@ -202,12 +231,12 @@ export function PointFillScreen() {
       return;
     }
 
-    clearDraftSaveTimer();
     finalizingRef.current = true;
     setIsSubmitting(true);
     let pointSaved = false;
     try {
-      await draftSaveChainRef.current.catch(() => undefined);
+      await draftController.current?.pause();
+      if (scopeRef.current) await assertDataOwnerContext(scopeRef.current);
       if (selectedStatus === "issue") {
         await savePointIssue(assignmentId, pointId, comment.trim(), issueTypeId.trim() || "Неисправность");
       } else if (selectedStatus === "skipped") {
@@ -219,11 +248,19 @@ export function PointFillScreen() {
         await savePointOk(assignmentId, pointId, comment.trim());
       }
       pointSaved = true;
+      savedRef.current = true;
+      draftController.current?.close();
       await continuePatrolFlow();
     } catch {
       if (!pointSaved) {
         finalizingRef.current = false;
+        draftController.current?.resume();
         void persistDraft().catch((draftError) => { void logMobileError("patrol.point.draft.save.failed", draftError); });
+      } else {
+        // The point is already persisted. Keep the action idempotent and let
+        // the employee retry only navigation, never the point command.
+        finalizingRef.current = false;
+        setTransitionPending(true);
       }
       setError(pointSaved ? "Метка сохранена, но переход к следующей точке не выполнен." : "Не удалось сохранить метку.");
     } finally {
@@ -231,13 +268,19 @@ export function PointFillScreen() {
     }
   }
   async function handleDefer() {
+    if (savedRef.current && transitionPending) {
+      await retrySavedTransition();
+      return;
+    }
+    if (finalizingRef.current) return;
+    const { selectedStatus, comment, issueTypeId } = latestDraftRef.current;
     setError(null);
-    clearDraftSaveTimer();
     finalizingRef.current = true;
     setIsSubmitting(true);
     let deferred = false;
     try {
-      await draftSaveChainRef.current.catch(() => undefined);
+      await draftController.current?.pause();
+      if (scopeRef.current) await assertDataOwnerContext(scopeRef.current);
       await deferPoint(assignmentId, pointId, {
         selectedStatus,
         comment: comment.trim(),
@@ -245,14 +288,37 @@ export function PointFillScreen() {
         photoClientFileIds: attachments.map((attachment) => attachment.clientFileId)
       });
       deferred = true;
+      savedRef.current = true;
+      draftController.current?.close();
       await continuePatrolFlow();
     } catch {
       if (!deferred) {
         finalizingRef.current = false;
+        draftController.current?.resume();
         void persistDraft().catch((draftError) => { void logMobileError("patrol.point.draft.save.failed", draftError); });
+      } else {
+        finalizingRef.current = false;
+        setTransitionPending(true);
       }
       setError(deferred ? "Точка отложена, но переход к следующей точке не выполнен." : "Не удалось отложить метку.");
     } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function retrySavedTransition() {
+    if (!savedRef.current || finalizingRef.current) return;
+    finalizingRef.current = true;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await continuePatrolFlow();
+      setTransitionPending(false);
+    } catch (caught) {
+      setTransitionPending(true);
+      setError(caught instanceof Error ? caught.message : "Метка сохранена, но переход не выполнен. Повторите переход.");
+    } finally {
+      finalizingRef.current = false;
       setIsSubmitting(false);
     }
   }
@@ -320,6 +386,7 @@ export function PointFillScreen() {
       getReportReadiness(assignmentId),
       getAssignmentScanPolicy(assignmentId)
     ]);
+    if (scopeRef.current) await assertDataOwnerContext(scopeRef.current);
     router.replace(readiness.ready
       ? `/patrol/assignment/${assignmentId}/submit`
       : scanPolicy.nfcEnabled
@@ -342,6 +409,7 @@ export function PointFillScreen() {
     ]);
     setPoint(updatedPoint);
     setAttachments(files.map(toPointAttachment));
+    recordDraft({ photoClientFileIds: files.map(file => file.clientFileId) });
   }
 
   if (loadError) {
@@ -364,6 +432,30 @@ export function PointFillScreen() {
     );
   }
 
+  if (manualOpen) {
+    return <Screen title="Метка недоступна" subtitle="Укажите причину, затем осмотрите объект без NFC.">
+      <Card>
+        <Text style={{ color: colors.text }}>Почему нельзя считать метку?</Text>
+        <TextInput accessibilityLabel="Причина недоступности NFC" value={manualReason} onChangeText={value => { recordDraft({ manualReason: value }); setManualReason(value); }}
+          placeholder="Например: повреждена" maxLength={120} style={[styles.input, { color: colors.text }]} />
+        {error ? <Text style={{ color: "#dc2626" }}>{error}</Text> : null}
+        <PrimaryButton label="Перейти к осмотру" disabled={!manualReason.trim() || isSubmitting} onPress={() => {
+          if (finalizingRef.current) return;
+          finalizingRef.current = true;
+          setIsSubmitting(true);
+          void (async () => {
+            await draftController.current?.pause();
+            if (scopeRef.current) await assertDataOwnerContext(scopeRef.current);
+            await beginManualPointInspection(assignmentId, pointId, latestDraftRef.current.manualReason ?? manualReason);
+            await reload(); setPhase("status"); setManualOpen(false);
+          })().catch((e) => { draftController.current?.resume(); setError(e instanceof Error ? e.message : "Не удалось сохранить причину"); })
+            .finally(() => { finalizingRef.current = false; setIsSubmitting(false); });
+        }} />
+        <PrimaryButton label="Назад" variant="secondary" onPress={() => setManualOpen(false)} />
+      </Card>
+    </Screen>;
+  }
+
   if (phase === "status") {
     return (
       <Screen title="Статус метки" subtitle="Выберите состояние объекта.">
@@ -376,7 +468,7 @@ export function PointFillScreen() {
           </View>
           <View style={styles.scanMeta}>
             <Ionicons color={colors.mutedText} name="time-outline" size={17} />
-            <Text style={[styles.scanMetaText, { color: colors.mutedText }]}>Сканирование: {formatScanTime(point.scannedAtLocal)}</Text>
+            <Text style={[styles.scanMetaText, { color: colors.mutedText }]}>{point.confirmationType === "manual" ? `Без NFC: ${point.manualReason ?? "ручной осмотр"}` : `Сканирование: ${formatScanTime(point.scannedAtLocal)}`}</Text>
           </View>
         </Card>
 
@@ -392,9 +484,18 @@ export function PointFillScreen() {
           <StatusButton label="Неисправно" description="Найдена неисправность или отклонение" tone="danger" onPress={() => selectStatus("issue")} />
         </View>
 
+        <Pressable accessibilityRole="button" onPress={() => selectStatus("skipped")} style={styles.uninspectableButton}>
+          <Ionicons color="#b45309" name="eye-off-outline" size={24} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.skipTitle}>Осмотр невозможен</Text>
+            <Text style={styles.skipDescription}>Оборудование недоступно. Укажите причину и приложите фото, если оно требуется.</Text>
+          </View>
+          <Ionicons color="#b45309" name="chevron-forward" size={18} />
+        </Pressable>
+
         <Card style={styles.manualCloseCard}>
-          <Text style={styles.manualCloseTitle}>{"\u0420\u0443\u0447\u043d\u043e\u0435 \u0437\u0430\u043a\u0440\u044b\u0442\u0438\u0435 \u0442\u043e\u0447\u043a\u0438"}</Text>
-          <Text style={styles.photoNote}>{"\u0415\u0441\u043b\u0438 NFC/QR \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u044b, \u043d\u0430\u0436\u043c\u0438\u0442\u0435 \u00ab\u041c\u0435\u0442\u043a\u0430 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430\u00bb \u0438 \u0437\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442 \u0432\u0440\u0443\u0447\u043d\u0443\u044e."}</Text>
+          <Text style={styles.manualCloseTitle}>Осмотр без NFC</Text>
+          <Text style={styles.photoNote}>Если недоступна только метка, выберите «Метка недоступна», укажите причину и выполните обычный осмотр.</Text>
         </Card>
 
         <Pressable
@@ -412,7 +513,7 @@ export function PointFillScreen() {
             <Ionicons color="#b45309" name="alert-circle-outline" size={18} />
           </View>
           <View style={styles.skipTextBlock}>
-            <Text style={styles.skipTitle}>Метка недоступна</Text>
+            <Text style={styles.skipTitle}>Осмотреть без NFC</Text>
             <Text style={styles.skipDescription}>Нет NFC/QR или метка утеряна</Text>
           </View>
           <Ionicons color="#b45309" name="chevron-forward" size={18} />
@@ -449,9 +550,9 @@ export function PointFillScreen() {
 
       {selectedStatus === "skipped" ? (
         <Card style={styles.skipInfoCard}>
-          <Text style={[styles.label, { color: colors.text }]}>Аварийное закрытие точки</Text>
+          <Text style={[styles.label, { color: colors.text }]}>Осмотр невозможен</Text>
           <Text style={[styles.text, { color: colors.mutedText }]}>
-            В web-отчете будет указано: метка недоступна, точка закрыта вручную без сканирования.
+            В отчёте будет указано, что оборудование не осмотрено, с указанной причиной.
           </Text>
         </Card>
       ) : null}
@@ -459,7 +560,7 @@ export function PointFillScreen() {
       {selectedStatus === "issue" ? (
         <Card>
           <Text style={[styles.label, { color: colors.text }]}>Тип неисправности</Text>
-          <TextInput editable={!isSubmitting} onBlur={() => void flushDraft().catch(() => setError("Не удалось сохранить черновик точки."))} onChangeText={setIssueTypeId} style={styles.input} value={issueTypeId} />
+          <TextInput editable={!isSubmitting} onBlur={() => void flushDraft().catch(() => setError("Не удалось сохранить черновик точки."))} onChangeText={value => { recordDraft({ issueTypeId: value }); setIssueTypeId(value); }} style={styles.input} value={issueTypeId} />
         </Card>
       ) : null}
 
@@ -469,7 +570,7 @@ export function PointFillScreen() {
           editable={!isSubmitting}
           multiline
           onBlur={() => void flushDraft().catch(() => setError("Не удалось сохранить черновик точки."))}
-          onChangeText={setComment}
+          onChangeText={value => { recordDraft({ comment: value }); setComment(value); }}
           placeholder={commentPlaceholder(selectedStatus)}
           placeholderTextColor="#9ca3af"
           style={[styles.input, styles.textArea]}
@@ -522,8 +623,11 @@ export function PointFillScreen() {
       </Card>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {transitionPending ? <PrimaryButton label="Повторить переход" onPress={() => void retrySavedTransition()} variant="secondary" /> : null}
+      {hasPendingLeave && !isSavingBeforeLeave ? <PrimaryButton label="Повторить сохранение" onPress={retryPendingLeave} variant="secondary" /> : null}
       {isSubmitting ? <ActivityIndicator /> : null}
       <View style={styles.bottomActions}>
+        {isSavingBeforeLeave ? <Text accessibilityLiveRegion="polite" style={[styles.savingNotice, { color: colors.mutedText }]}>Сохраняем последние изменения…</Text> : null}
         <Pressable accessibilityRole="button" onPress={() => setPhase("status")} style={styles.inlineLink}>
           <Ionicons color={colors.primary} name="swap-horizontal-outline" size={19} />
           <Text style={[styles.inlineLinkText, { color: colors.primary }]}>Изменить состояние</Text>
@@ -538,6 +642,7 @@ export function PointFillScreen() {
           { label: "Снять видео", icon: "videocam-outline", onPress: () => void handleAddVideo() },
           { label: "Выбрать из галереи", icon: "images-outline", onPress: () => void handleAddFromGallery() }
         ] : [
+          { label: 'Сменить маршрут', icon: 'swap-horizontal-outline', onPress: () => router.replace(`/patrol/assignment/${assignmentId}/switch` as never) },
           { label: "Отложить точку", icon: "time-outline", danger: true, onPress: () => void handleDefer() }
         ]}
         onClose={() => setOpenMenu(null)}
@@ -621,7 +726,7 @@ function confirmationLabel(point: PointForFill) {
   }
 
   if (point.status === "skipped") {
-    return "Метка недоступна";
+    return "Не осмотрена";
   }
 
   return "Ручное заполнение";
@@ -633,7 +738,7 @@ function statusLabel(status: SelectedStatus | null) {
   }
 
   if (status === "skipped") {
-    return "Метка недоступна";
+    return "Не осмотрено";
   }
 
   return "Исправно";
@@ -657,7 +762,7 @@ function commentPlaceholder(status: SelectedStatus | null) {
   }
 
   if (status === "skipped") {
-    return "Можно уточнить, почему метка недоступна";
+    return "Обязательно укажите, почему осмотр невозможен";
   }
 
   return "Что заметили во время обхода?";
@@ -733,7 +838,6 @@ const styles = StyleSheet.create({
     borderColor: "#d1d5db",
     borderRadius: 8,
     borderWidth: 1,
-    color: "#0f1a2b",
     fontSize: 16,
     paddingHorizontal: 12,
     paddingVertical: 10
@@ -744,6 +848,18 @@ const styles = StyleSheet.create({
   statusGrid: {
     flexDirection: "row",
     gap: 12
+  },
+  uninspectableButton: {
+    alignItems: "center",
+    backgroundColor: "#fffbeb",
+    borderColor: "#f59e0b",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 68,
+    paddingHorizontal: 14,
+    paddingVertical: 10
   },
   statusButton: {
     alignItems: "center",
@@ -921,6 +1037,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between"
+  },
+  savingNotice: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    marginRight: 8
   },
   inlineLink: {
     alignItems: "center",

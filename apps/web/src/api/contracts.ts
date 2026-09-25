@@ -695,7 +695,10 @@ export interface InventoryItemDto {
   trackLife: boolean;
   isActive: boolean;
   status: string;
+  standards?: InventoryItemStandardDto[] | null;
 }
+
+export interface InventoryItemStandardDto { designation: string; name: string; }
 
 export interface InventoryFacetDto {
   id: string;
@@ -980,11 +983,14 @@ export interface InventoryPpeNormMappingDto {
   normUnitsPerItem?: number;
   approvedBy?: string;
   approvalEvidence?: string;
+  standards?: InventoryItemStandardDto[] | null;
 }
 
 export interface PpeIssueDocumentCapabilitiesDto { enabled: boolean; }
 
 export interface PpeIssueDocumentLineInputDto {
+  normPoint?: string | null;
+  lifeMonths?: number | null;
   id: string;
   normRowId: string;
   itemId: string;
@@ -1011,18 +1017,22 @@ export interface SavePpeIssueDocumentDto {
 export interface PpeDocumentProblemDto { lineId: string | null; code: string; message: string; }
 export interface PpeDocumentEntitlementDto { lineId: string; alreadyIssuedQuantity: number | null; availableQuantity: number | null; periodFromExclusive: string | null; periodTo: string | null; status: string; }
 export interface PpeDocumentValidationDto { errors: PpeDocumentProblemDto[]; warnings: PpeDocumentProblemDto[]; entitlements: PpeDocumentEntitlementDto[]; totalMinor: number | null; }
-export interface PpeDocumentLineDto extends PpeIssueDocumentLineInputDto { itemName: string; unitSymbol: string; brandModelArticle: string; normUnitsPerItem: number; totalMinor: number | null; }
+export interface PpeDocumentLineDto extends PpeIssueDocumentLineInputDto { itemName: string; unitSymbol: string; brandModelArticle: string; normUnitsPerItem: number; totalMinor: number | null; standards?: InventoryItemStandardDto[] | null; }
 export interface PpeDocumentContentDto {
-  employee: { id: string; fullName: string; personnelNo: string; department: string; position: string; details: InventoryPpeEmployeeDetailsDto };
+  employee: { id: string; fullName: string; personnelNo: string; department: string; position: string; details: InventoryPpeEmployeeDetailsDto; hiredAt?: string | null };
   normSetId: string; normSetVersion: number; normVersionName: string; normSourceName: string;
   documentDate: string; responsibleName: string; basis: string;
   normRows: Array<InventoryPpeNormRowDto & { unitSymbol: string; periodMonths: number | null; requirementKey: string; alternativeGroup: string }>;
   lines: PpeDocumentLineDto[];
 }
 export interface PpeIssueDocumentDto { id: string; version: number; status: string; createdAt: string; confirmedAt: string | null; content: PpeDocumentContentDto; validation: PpeDocumentValidationDto; }
-export interface PpeIssueDocumentSummaryDto { id: string; version: number; status: string; employeeId: string; employeeName: string; documentDate: string; linesCount: number; totalMinor: number | null; }
+export interface PpeIssueDocumentSummaryDto { department?: string; personnelNo?: string; hasOverdue?: boolean; id: string; version: number; status: string; employeeId: string; employeeName: string; documentDate: string; linesCount: number; totalMinor: number | null; }
 export interface PpeNormApprovalDto { expectedVersion: number; departmentName: string; positionAliases: string[]; }
 export interface PpeNormRowRulesDto { expectedVersion: number; unitSymbol: string; periodMonths: number | null; lifeMonths: number | null; previousRequirementRowId: string | null; alternativeGroup: string; }
+export interface PpeKitTemplateLineDto { normRowId: string; itemId: string; itemName: string; unitSymbol: string; quantity: number; lifeMonths: number | null; unitPriceMinor: number | null; }
+export interface PpeKitTemplateDto { id: string; name: string; normSetId: string; ownerUserId: string; ownerName: string; isShared: boolean; version: number; updatedAt: string; lines: PpeKitTemplateLineDto[]; }
+export interface SavePpeKitTemplateLineDto { normRowId: string; itemId: string; itemName: string; unitSymbol: string; quantity: number; lifeMonths: number | null; unitPriceMinor: number | null; }
+export interface CreatePpeKitTemplateDto { name: string; normSetId: string; isShared: boolean; lines: SavePpeKitTemplateLineDto[]; }
 export interface PpeMappingApprovalDto { expectedNormVersion: number; itemId: string; normUnitsPerItem: number; evidence: string; brandModelArticle?: string; defaultUnitPriceMinor?: number | null; }
 export interface PpeLegacyDraftMigrationDto { documentId: string | null; warnings: string[]; }
 
@@ -1570,6 +1580,7 @@ export interface UpsertInventoryItemDto {
   trackingType?: string | null;
   comment?: string | null;
   isActive: boolean;
+  standards?: InventoryItemStandardDto[] | null;
 }
 
 export interface InventoryInitialStockDto {

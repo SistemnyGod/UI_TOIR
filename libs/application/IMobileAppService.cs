@@ -17,7 +17,13 @@ public interface IMobileAppService
 
     bool Logout(string accessToken);
 
-    MobileBootstrapDto? GetBootstrap(string accessToken);
+    MobileBootstrapDto? GetBootstrap(string accessToken, bool patrolAppealsPaging = false);
+
+    MobilePatrolReportPageDto? GetPatrolReports(string accessToken, int page, int pageSize, string? cursor = null);
+
+    MobilePatrolAppealPageDto? GetPatrolAppeals(string accessToken, int pageSize = 25, string? cursor = null, Guid? assignmentId = null);
+
+    IReadOnlyList<MobilePatrolReportPointDto>? GetPatrolReportPoints(string accessToken, Guid assignmentId);
 
     MobileDeviceRegistrationDto? RegisterPushToken(string accessToken, MobilePushTokenRegistrationDto request);
 
@@ -32,6 +38,8 @@ public interface IMobileAppService
     MobileWorkTaskDto? GetWorkTask(string accessToken, Guid taskId);
 
     IReadOnlyList<MobileWorkItemDto> GetWorkItemsV2(string accessToken);
+
+    MobileWorkItemPageDto? GetWorkItemsPage(string accessToken, string scope, Guid? employeeId, string? cursor, int pageSize);
 
     IReadOnlyList<MobileOutboxResponseDto> SaveOutbox(string accessToken, MobileOutboxBatchDto request);
 

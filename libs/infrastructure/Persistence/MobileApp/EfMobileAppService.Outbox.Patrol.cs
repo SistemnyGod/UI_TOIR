@@ -85,8 +85,12 @@ internal sealed partial class EfMobileAppService
         // create two server results before either transaction commits.
         if (dbContext.Database.IsNpgsql())
         {
-            var patrolLockKey = BuildPatrolCommandLockKey(command);
-            if (patrolLockKey is not null)
+            var lockKeys = new List<string>();
+            if (BuildPatrolCommandLockKey(command) is { } targetKey) lockKeys.Add(targetKey);
+            if (command.CommandType.Equals("switchPatrolAssignment", StringComparison.OrdinalIgnoreCase)
+                && ReadGuid(command.Payload, "sourceAssignmentId") is { } sourceId)
+                lockKeys.Add($"mobile-patrol-assignment:{sourceId:N}");
+            foreach (var patrolLockKey in lockKeys.Distinct().OrderBy(key => key, StringComparer.Ordinal))
             {
                 dbContext.Database.ExecuteSqlInterpolated(
                     $"SELECT pg_advisory_xact_lock(hashtextextended({patrolLockKey}, 0))");
@@ -96,6 +100,8 @@ internal sealed partial class EfMobileAppService
         transaction.CreateSavepoint("before_command");
         var response = command.CommandType.ToLowerInvariant() switch
         {
+            var type when type.Equals("createPatrolAppeal", StringComparison.OrdinalIgnoreCase) =>
+                ProcessCreatePatrolAppeal(session, command),
             var type when type.Equals("takePatrolRequest", StringComparison.OrdinalIgnoreCase) =>
                 RejectLegacyTakePatrolRequest(command),
             var type when type.Equals("acceptPatrolRequest", StringComparison.OrdinalIgnoreCase) =>
@@ -104,6 +110,8 @@ internal sealed partial class EfMobileAppService
                 ProcessReleasePatrolRequest(account, command),
             var type when type.Equals("startPatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
                 ProcessStartPatrolAssignment(account, command),
+            var type when type.Equals("switchPatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
+                ProcessSwitchPatrolAssignment(account, command),
             var type when type.Equals("pausePatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
                 ProcessPausePatrolAssignment(account, command),
             var type when type.Equals("resumePatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
@@ -270,12 +278,11 @@ internal sealed partial class EfMobileAppService
         var hasAnotherActivePatrol = dbContext.Assignments
             .AsNoTracking()
             .Any(item => item.EmployeeId == employeeId.Value
-                && (item.Status == AssignmentStatusValues.InProgress
-                    || item.Status == AssignmentStatusValues.Paused)
+                && item.Status == AssignmentStatusValues.InProgress
                 && (!currentAssignmentId.HasValue || item.Id != currentAssignmentId.Value));
 
         return hasAnotherActivePatrol
-            ? Conflict(command.ClientOperationId, "Employee already has another started or paused patrol.", "activePatrolExists")
+            ? Conflict(command.ClientOperationId, "Employee already has another patrol in progress.", "activePatrolExists")
             : null;
     }
 
@@ -354,8 +361,7 @@ internal sealed partial class EfMobileAppService
         if (!recoverableCommand
             || !existing.Status.Equals("rejected", StringComparison.OrdinalIgnoreCase)
             || !HasEquivalentLegacyStartPayload(existing.PayloadJson, command.Payload)
-            || (!existing.ResponseJson.Contains("Patrol point actions are allowed only while patrol is in progress.", StringComparison.Ordinal)
-                && !existing.ResponseJson.Contains("Patrol assignment must be in progress before report submit.", StringComparison.Ordinal)))
+            || !IsRecoverablePatrolLifecycleResponse(existing.ResponseJson))
         {
             return null;
         }
@@ -386,6 +392,25 @@ internal sealed partial class EfMobileAppService
         dbContext.SaveChanges();
         transaction.Commit();
         return response;
+    }
+
+    private static bool IsRecoverablePatrolLifecycleResponse(string responseJson)
+    {
+        try
+        {
+            var prior = JsonSerializer.Deserialize<MobileOutboxResponseDto>(responseJson, JsonOptions);
+            var message = prior?.Message ?? string.Empty;
+            return message.Contains("Patrol point actions are allowed only while patrol is in progress.", StringComparison.Ordinal)
+                || message.Contains("Patrol assignment must be in progress before report submit.", StringComparison.Ordinal)
+                || message.Contains("Сначала завершите обязательные точки по порядку маршрута.", StringComparison.Ordinal);
+        }
+        catch (JsonException)
+        {
+            // Older stored receipts can still contain the legacy ASCII
+            // messages; unreadable snapshots are never made retryable.
+            return responseJson.Contains("Patrol point actions are allowed only while patrol is in progress.", StringComparison.Ordinal)
+                || responseJson.Contains("Patrol assignment must be in progress before report submit.", StringComparison.Ordinal);
+        }
     }
 
     private static bool HasEquivalentLegacyStartPayload(

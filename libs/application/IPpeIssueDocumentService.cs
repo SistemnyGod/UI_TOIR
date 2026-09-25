@@ -5,6 +5,8 @@ namespace Patrol360.Application;
 public interface IPpeIssueDocumentService
 {
     IReadOnlyList<PpeIssueDocumentSummaryDto> GetIssueDocuments(Guid? employeeId);
+    PpeIssueJournalPage GetIssueJournal(PpeIssueJournalQuery query);
+    InventoryGeneratedFileDto ExportIssueJournal(PpeIssueJournalQuery query);
     InventoryCommandResult<PpeIssueDocumentDto> GetIssueDocument(Guid id);
     IReadOnlyList<InventoryPpeNormSetDto> GetApplicablePpeNorms(Guid employeeId, DateOnly date);
     InventoryCommandResult<PpeIssueDocumentDto> SaveIssueDocument(Guid? id, SavePpeIssueDocumentDto request, string actor);

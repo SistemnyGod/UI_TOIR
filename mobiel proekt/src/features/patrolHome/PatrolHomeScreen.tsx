@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { ActiveAssignment, AssignmentProgress, RequestBoardItem } from "@/db/repositories/patrolRepository";
@@ -8,25 +8,51 @@ import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
+import { ActionSheet } from "@/ui/ActionSheet";
+import { useState, useRef, useCallback } from "react";
+import { enterPatrolRequest } from '@/services/patrolEntryService';
 import { PatrolHomeActive, usePatrolHomeDashboard } from "./usePatrolHomeDashboard";
 
 export function PatrolHomeScreen() {
   const router = useRouter();
   const dashboard = usePatrolHomeDashboard();
+  const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
+  const entering = useRef(false);
+  const activeScreen = useRef(false);
+  const [entryError, setEntryError] = useState<string | null>(null);
+  useFocusEffect(useCallback(() => { activeScreen.current = true; return () => { activeScreen.current = false; }; }, []));
+  async function openCurrent() {
+    if (entering.current || !dashboard.active) return;
+    entering.current = true;
+    const { assignment, progress } = dashboard.active;
+    try {
+      const path = assignment.status === 'inProgress' && progress.total > 0 && progress.completed >= progress.total
+        ? `/patrol/assignment/${assignment.assignmentId}/submit`
+        : await enterPatrolRequest(assignment.requestId, assignment.employeeId ?? undefined, () => activeScreen.current);
+      if (activeScreen.current) router.push(path as never);
+    } catch (error) { if (activeScreen.current) setEntryError(error instanceof Error ? error.message : 'Не удалось открыть обход'); }
+    finally { entering.current = false; }
+  }
 
   return (
     <Screen
-      title="Обход"
-      subtitle={dashboard.active ? undefined : "Выберите заявку, проверьте маршрут и подтвердите принятие."}
+      title="Моя смена"
+      subtitle={new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}
     >
+      {dashboard.employees.length > 1 || (dashboard.employees.length === 1 && !dashboard.selectedEmployeeId) ? <Card>
+        <Text style={{ color: "#64748b", fontSize: 12, fontWeight: "800" }}>ИСПОЛНИТЕЛЬ НА ЭТОМ ТЕЛЕФОНЕ</Text>
+        <PrimaryButton variant="secondary" icon="person-outline"
+          label={dashboard.employees.find((item) => item.employeeId === dashboard.selectedEmployeeId)?.fullName ?? "Выберите сотрудника"}
+          onPress={() => setEmployeePickerOpen(true)} />
+      </Card> : null}
+      <ActionSheet title="Исполнитель обходов" visible={employeePickerOpen} onClose={() => setEmployeePickerOpen(false)}
+        actions={dashboard.employees.map((employee) => ({ label: employee.fullName, icon: "person-outline" as const, onPress: () => void dashboard.selectEmployee(employee.employeeId) }))} />
       {dashboard.active ? (
         <ActivePatrolCard
           active={dashboard.active}
           onOpenAllPoints={() => router.push(`/patrol/assignment/${dashboard.active!.assignment.assignmentId}/all-points`)}
-          onOpenPatrol={() => {
-            const action = getPrimaryAction(dashboard.active!.assignment.status, dashboard.active!.progress, dashboard.active!.scanPolicy.nfcEnabled);
-            router.push(action.path(dashboard.active!.assignment.assignmentId) as never);
-          }}
+          onOpenNextPoint={() => dashboard.active!.nextPoint && router.push(`/patrol/assignment/${dashboard.active!.assignment.assignmentId}/point/${dashboard.active!.nextPoint.pointId}`)}
+          onOpenPatrol={() => void openCurrent()}
           onOpenQueue={() => router.push("/settings/sync-queue" as never)}
           onOpenRequests={() => router.push("/patrol/request-board")}
         />
@@ -45,6 +71,7 @@ export function PatrolHomeScreen() {
       />
 
       {dashboard.message ? <DashboardMessage message={dashboard.message} /> : null}
+      {entryError ? <DashboardMessage message={entryError} /> : null}
     </Screen>
   );
 }
@@ -52,12 +79,14 @@ export function PatrolHomeScreen() {
 function ActivePatrolCard({
   active,
   onOpenAllPoints,
+  onOpenNextPoint,
   onOpenPatrol,
   onOpenQueue,
   onOpenRequests
 }: {
   active: PatrolHomeActive;
   onOpenAllPoints: () => void;
+  onOpenNextPoint: () => void;
   onOpenPatrol: () => void;
   onOpenQueue: () => void;
   onOpenRequests: () => void;
@@ -75,16 +104,28 @@ function ActivePatrolCard({
   return (
     <Card>
       <CardHeading
-        eyebrow="Текущая заявка"
+        eyebrow="Текущий обход"
         statusLabel={assignmentStatusLabel(status)}
         statusTone={isCompletedLocal || isAccepted || isPaused ? "warning" : isInProgress ? "success" : "neutral"}
         title={active.assignment.routeName || "Маршрут без названия"}
       />
 
+      <Text style={{ color: colors.mutedText }}>Назначен: {active.assignment.assignedFullName ?? "Не указан"}</Text>
+
+      {active.nextPoint ? <Pressable accessibilityRole="button" onPress={onOpenNextPoint} style={[styles.nextPoint, { borderColor: colors.border, backgroundColor: colors.backgroundAccent }]}>
+        <Ionicons color={colors.primary} name="location-outline" size={22} />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.sectionLabel, { color: colors.mutedText }]}>Следующая точка</Text>
+          <Text numberOfLines={1} style={[styles.nextPointTitle, { color: colors.text }]}>{active.nextPoint.name}</Text>
+          {active.nextPoint.description ? <Text numberOfLines={1} style={[styles.bodyText, { color: colors.mutedText }]}>{active.nextPoint.description}</Text> : null}
+        </View>
+        <Ionicons color={colors.primary} name="chevron-forward" size={20} />
+      </Pressable> : null}
+
       <View
         accessibilityLabel={active.progress.total === 0
           ? "Метки маршрута загружаются"
-          : `Пройдено ${active.progress.completed} из ${active.progress.total} меток`}
+          : `Обработано ${active.progress.completed} из ${active.progress.total} меток`}
         accessibilityRole="progressbar"
         accessibilityValue={{ min: 0, max: 100, now: percent }}
         style={styles.progressBlock}
@@ -101,6 +142,7 @@ function ActivePatrolCard({
           <View style={[styles.progressFill, { backgroundColor: colors.primary, width: `${percent}%` }]} />
         </View>
       </View>
+      {active.progress.skipped > 0 ? <Text style={[styles.uninspectedNotice, { color: "#b45309" }]}>Не осмотрено: {active.progress.skipped}. Маршрут будет завершён с замечанием.</Text> : null}
 
       {canUsePatrolAction && !isCompletedLocal ? (
         <PrimaryButton
@@ -119,7 +161,7 @@ function ActivePatrolCard({
 
       <View style={styles.actions}>
         <HomeQuickAction icon="list-outline" label="Все метки" onPress={onOpenAllPoints} />
-        <HomeQuickAction icon="swap-horizontal-outline" label="Заявки" onPress={onOpenRequests} />
+        <HomeQuickAction icon="swap-horizontal-outline" label="Маршруты" onPress={onOpenRequests} />
         {isCompletedLocal ? (
           <HomeQuickAction icon="cloud-upload-outline" label="Очередь" onPress={onOpenQueue} />
         ) : null}
@@ -265,7 +307,7 @@ function RequestCard({ request }: { request: RequestBoardItem }) {
         <View style={styles.titleBlock}>
           <Text style={[styles.requestTitle, { color: colors.text }]}>{request.routeName}</Text>
           <Text style={[styles.requestMeta, { color: colors.mutedText }]}>
-            {request.assignedFullName ?? "Свободная заявка"}
+            {request.assignedFullName ? `Назначен: ${request.assignedFullName}` : "Исполнитель не назначен"}
           </Text>
           <Text style={[styles.requestMeta, { color: colors.mutedText }]}>План: {formatDateTime(request.plannedStartAt)}</Text>
         </View>
@@ -489,6 +531,25 @@ const styles = StyleSheet.create({
   },
   progressBlock: {
     gap: 8
+  },
+  nextPoint: {
+    alignItems: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 72,
+    padding: 12
+  },
+  nextPointTitle: {
+    fontSize: 17,
+    fontWeight: "900",
+    lineHeight: 22
+  },
+  uninspectedNotice: {
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 18
   },
   progressFill: {
     borderRadius: 999,

@@ -9,6 +9,21 @@ namespace Patrol360.Api.Tests;
 
 public sealed class InventoryControllerTests
 {
+    [Theory]
+    [InlineData("pdf", true)]
+    [InlineData("docx", false)]
+    public async Task LegacyPpePrintUsesDocxSourceAndOnlyConvertsPdf(string format, bool converts)
+    {
+        var exporter = new PpeDocxExportFake();
+        var converter = new PpePdfConverterFake();
+        var controller = CreateController(exportService: exporter);
+        var result = Assert.IsType<FileContentResult>(await controller.PrintPpeCard(Guid.NewGuid(), converter, "card", format));
+        Assert.Equal(converts, converter.Called);
+        Assert.Equal(converts ? "application/pdf" : exporter.File.ContentType, result.ContentType);
+        Assert.Equal(converts ? "%PDF-test"u8.ToArray() : exporter.File.Content, result.FileContents);
+        if (converts) Assert.Same(exporter.File, converter.Source);
+    }
+
     [Fact]
     public void ItemLookupUsesIdentityBeyondFirstSearchPageAndReturnsNotFoundForMissingItem()
     {
@@ -70,6 +85,19 @@ public sealed class InventoryControllerTests
     }
 
     [Fact]
+    public void PpeItemsPreservesEmptyPageContractAndNormalizesPaging()
+    {
+        var catalog = new InventoryCatalogQueryFake([]);
+        var controller = CreateController(catalogQuery: catalog);
+        var response = AssertOk<InventoryListResponseDto<InventoryItemDto>>(controller.PpeItems(page: 0, pageSize: 1000).Result);
+        Assert.Equal(1, response.Page);
+        Assert.Equal(100, response.PageSize);
+        Assert.Equal(1, response.PageCount);
+        Assert.Equal(0, response.Total);
+        Assert.True(Assert.Single(catalog.Queries).PpeOnly);
+    }
+
+    [Fact]
     public void PpeItemsReturnsOnlyPpeVisibleItems()
     {
         var ppeCategoryId = Guid.NewGuid();
@@ -86,6 +114,9 @@ public sealed class InventoryControllerTests
 
         var response = AssertOk<InventoryListResponseDto<InventoryItemDto>>(result.Result);
         Assert.Equal(3, response.Total);
+        var forwarded = Assert.Single(catalog.Queries);
+        Assert.True(forwarded.PpeOnly);
+        Assert.Equal(10, forwarded.PageSize);
         Assert.All(response.Rows, row => Assert.True(row.IsActive));
         Assert.DoesNotContain(response.Rows, row => row.Name.Contains("Дрель", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(response.Rows, row => row.Name.Contains("Архивная", StringComparison.OrdinalIgnoreCase));
@@ -191,12 +222,13 @@ public sealed class InventoryControllerTests
 
     private static InventoryController CreateController(
         IInventoryCatalogQuery? catalogQuery = null,
-        IInventoryWorkflowService? workflowService = null) =>
+        IInventoryWorkflowService? workflowService = null,
+        IInventoryExportService? exportService = null) =>
         new(
             catalogQuery ?? new ThrowingInventoryCatalogQuery(),
             new ThrowingInventoryCatalogCommandService(),
             workflowService ?? new ThrowingInventoryWorkflowService(),
-            new ThrowingInventoryExportService(),
+            exportService ?? new ThrowingInventoryExportService(),
             new ThrowingInventoryLegacyImportService(),
             new AuthenticatedSiteUserContext());
 
@@ -261,10 +293,13 @@ public sealed class InventoryControllerTests
 
     private sealed class InventoryCatalogQueryFake(IReadOnlyList<InventoryItemDto> items) : IInventoryCatalogQuery
     {
+        public List<InventoryListQuery> Queries { get; } = [];
         public InventoryOverviewDto GetOverview() => throw new NotImplementedException();
         public InventoryListResponseDto<InventoryItemDto> GetItems(InventoryListQuery query)
         {
+            Queries.Add(query);
             var rows = items
+                .Where(item => !query.PpeOnly || item.IsActive && (item.ItemKind.Contains("ppe", StringComparison.OrdinalIgnoreCase) || item.Category.Contains("СИЗ", StringComparison.OrdinalIgnoreCase) || item.Category.Contains("PPE", StringComparison.OrdinalIgnoreCase) || item.Category.Contains("спецодеж", StringComparison.OrdinalIgnoreCase)))
                 .Where(item => query.ItemId is null || item.Id == query.ItemId)
                 .Where(item => query.Status is null || item.Status.Equals(query.Status, StringComparison.OrdinalIgnoreCase))
                 .Where(item => query.CategoryId is null || item.CategoryId == query.CategoryId)
@@ -455,6 +490,26 @@ public sealed class InventoryControllerTests
         public InventoryCommandResult<InventoryEmployeeDto> ArchiveEmployee(Guid id) => throw new NotImplementedException();
         public InventoryListResponseDto<InventoryUserDto> GetUsers(InventoryListQuery query) => throw new NotImplementedException();
         public InventoryCommandResult<InventoryUserDto> DisableUser(Guid id) => throw new NotImplementedException();
+    }
+
+    private sealed class PpePdfConverterFake : IPpeDocxPdfConverter
+    {
+        public bool Called { get; private set; }
+        public InventoryGeneratedFileDto? Source { get; private set; }
+        public Task<InventoryCommandResult<InventoryGeneratedFileDto>> ConvertAsync(InventoryGeneratedFileDto docx, CancellationToken cancellationToken)
+        {
+            Called = true; Source = docx;
+            return Task.FromResult(new InventoryCommandResult<InventoryGeneratedFileDto>(
+                new("card.pdf", "application/pdf", "%PDF-test"u8.ToArray()), new Dictionary<string, string[]>()));
+        }
+    }
+
+    private sealed class PpeDocxExportFake : IInventoryExportService
+    {
+        public InventoryGeneratedFileDto File { get; } = new("card.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", [80, 75, 3, 4]);
+        public InventoryCommandResult<InventoryGeneratedFileDto> BuildPpeCardDocx(Guid cardId, string type) => new(File, new Dictionary<string, string[]>());
+        public InventoryCommandResult<InventoryGeneratedFileDto> ExportReport(string reportId, string format) => throw new NotImplementedException();
+        public InventoryCommandResult<InventoryGeneratedFileDto> PrintCustodyDocument(Guid documentId, string format) => throw new NotImplementedException();
     }
 
     private sealed class ThrowingInventoryExportService : IInventoryExportService

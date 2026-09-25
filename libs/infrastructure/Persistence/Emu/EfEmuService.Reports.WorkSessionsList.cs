@@ -23,7 +23,7 @@ internal sealed partial class EfEmuService
         var pageOrder = pageIds
             .Select((id, index) => new { id, index })
             .ToDictionary(row => row.id, row => row.index);
-        var rows = LoadSessions(asNoTracking: true)
+        var rows = LoadSessions(asNoTracking: true, includeAuditEvents: false)
             .Where(row => pageIds.Contains(row.Id))
             .ToList()
             .OrderBy(row => pageOrder[row.Id])

@@ -9,6 +9,7 @@ import {
   AssignmentProgress,
   getAssignmentById,
   listAssignmentPoints,
+  pauseAssignmentLocally,
   PointListItem,
   scanPointByNfc
 } from '@/db/repositories/patrolRepository';
@@ -24,6 +25,8 @@ import { Card } from '@/ui/Card';
 import { PrimaryButton } from '@/ui/PrimaryButton';
 import { Screen } from '@/ui/Screen';
 import { StatusPill } from '@/ui/StatusPill';
+import { ActionSheet } from '@/ui/ActionSheet';
+import { buildPatrolActionMenu } from '@/features/patrol/patrolActionMenu';
 
 type NfcStatus =
   | 'idle'
@@ -47,16 +50,19 @@ export function ScanNfcScreen() {
   const { colors } = useAppTheme();
   const { assignmentId } = useLocalSearchParams<{ assignmentId: string }>();
   const screenActiveRef = useRef(false);
+  const screenEpochRef = useRef(0);
   const appActiveRef = useRef(AppState.currentState === 'active');
   const scanInProgressRef = useRef(false);
   const readerStartInProgressRef = useRef(false);
   const lastTagRef = useRef<LastTag | null>(null);
   const [status, setStatus] = useState<NfcStatus>('idle');
   const [routeName, setRouteName] = useState<string | null>(null);
+  const [assignmentStatus, setAssignmentStatus] = useState<string | null>(null);
   const [progress, setProgress] = useState<AssignmentProgress | null>(null);
   const [nextPoint, setNextPoint] = useState<PointListItem | null>(null);
   const [progressError, setProgressError] = useState<string | null>(null);
   const [message, setMessage] = useState('Поднесите телефон к NFC-метке');
+  const [actionsOpen, setActionsOpen] = useState(false);
 
   const handleTag = useCallback(async (tag: unknown) => {
     if (!screenActiveRef.current || !appActiveRef.current || scanInProgressRef.current) {
@@ -78,13 +84,15 @@ export function ScanNfcScreen() {
     }
     lastTagRef.current = { key: tagKey, at: Date.now() };
 
+    const ownerEpoch = screenEpochRef.current;
+    const isCurrent = () => screenActiveRef.current && appActiveRef.current && screenEpochRef.current === ownerEpoch;
     scanInProgressRef.current = true;
     setStatus('reading');
     setMessage('Метка обнаружена. Проверяем…');
 
     try {
       const result = await scanPointByNfc(assignmentId, nfcCodes);
-      if (!screenActiveRef.current) {
+      if (!isCurrent()) {
         return;
       }
 
@@ -106,9 +114,10 @@ export function ScanNfcScreen() {
       setMessage('Метка подтверждена');
       Vibration.vibrate(80);
       await stopNfcReaderSession();
+      if (!isCurrent()) return;
       router.replace(`/patrol/assignment/${assignmentId}/point/${result.point.pointId}/fill`);
     } catch (error) {
-      if (!screenActiveRef.current) {
+      if (!isCurrent()) {
         return;
       }
 
@@ -126,7 +135,9 @@ export function ScanNfcScreen() {
         Vibration.vibrate([0, 80, 60, 80]);
       }
     } finally {
-      scanInProgressRef.current = false;
+      // A stale scanner must not unlock a reader owned by the next focused
+      // assignment.
+      if (screenEpochRef.current === ownerEpoch) scanInProgressRef.current = false;
     }
   }, [assignmentId, router]);
 
@@ -196,6 +207,7 @@ export function ScanNfcScreen() {
 
     const loadedProgress = buildProgress(points);
     setRouteName(assignment?.routeName ?? null);
+    setAssignmentStatus(assignment?.status ?? null);
     setProgress(loadedProgress);
     setNextPoint(points.find((point) => !['ok', 'issue', 'skipped'].includes(point.status)) ?? null);
     setProgressError(null);
@@ -212,6 +224,7 @@ export function ScanNfcScreen() {
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
+      screenEpochRef.current++;
       screenActiveRef.current = true;
       appActiveRef.current = AppState.currentState === 'active';
       const appStateSubscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
@@ -239,6 +252,7 @@ export function ScanNfcScreen() {
         isMounted = false;
         appStateSubscription.remove();
         screenActiveRef.current = false;
+        screenEpochRef.current++;
         appActiveRef.current = false;
         scanInProgressRef.current = false;
         void stopNfcReaderSession();
@@ -256,7 +270,7 @@ export function ScanNfcScreen() {
           <View style={styles.progressHeader}>
             <Text style={[styles.progressLabel, { color: colors.text }]}>Прогресс маршрута</Text>
             <Text style={[styles.progressLabel, { color: colors.text }]}>
-              {progress.completed} из {progress.total}
+              Обработано {progress.completed} из {progress.total}
             </Text>
           </View>
           <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
@@ -305,11 +319,26 @@ export function ScanNfcScreen() {
         />
       ) : null}
 
-      <PrimaryButton
-        icon='list-outline'
-        label='Все метки'
-        onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)}
-        variant='secondary'
+      {nextPoint ? <PrimaryButton icon="lock-closed-outline" label="Метка недоступна" variant="secondary"
+        onPress={() => router.push(`/patrol/assignment/${assignmentId}/point/${nextPoint.pointId}/fill?manual=1` as never)} /> : null}
+      <PrimaryButton icon="ellipsis-horizontal" label="Действия с обходом" variant="secondary"
+        onPress={() => setActionsOpen(true)} />
+      <ActionSheet
+        title="Действия с обходом"
+        visible={actionsOpen}
+        onClose={() => setActionsOpen(false)}
+        actions={buildPatrolActionMenu({
+          assignmentId,
+          status: assignmentStatus ?? 'inProgress',
+          onPause: () => void pauseAssignmentLocally(assignmentId)
+            .then(() => router.replace(`/patrol/assignment/${assignmentId}` as never))
+            .catch((error) => setProgressError(error instanceof Error ? error.message : 'Не удалось приостановить обход.')),
+          onSwitch: () => router.push(`/patrol/assignment/${assignmentId}/switch` as never),
+          onPoints: () => router.push(`/patrol/assignment/${assignmentId}/all-points` as never),
+          onSubmit: () => router.push(`/patrol/assignment/${assignmentId}/submit` as never),
+          onAppeal: () => router.push(`/patrol/assignment/${assignmentId}/appeal` as never),
+          onCancel: () => router.push(`/patrol/assignment/${assignmentId}/appeal?kind=cancel` as never)
+        })}
       />
     </Screen>
   );
@@ -378,6 +407,7 @@ function progressPercent(progress: AssignmentProgress) {
 function buildProgress(points: PointListItem[]): AssignmentProgress {
   return {
     total: points.length,
+    inspected: points.filter((point) => point.status === 'ok' || point.status === 'issue').length,
     completed: points.filter((point) => ['ok', 'issue', 'skipped'].includes(point.status)).length,
     deferred: points.filter((point) => point.status === 'deferred').length,
     issues: points.filter((point) => point.status === 'issue').length,

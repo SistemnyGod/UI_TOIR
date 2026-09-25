@@ -50,6 +50,7 @@ export type WorkItemDto = {
   status: WorkTaskStatus;
   approvalStatus: string;
   revision: number;
+  updatedAt: string;
   source: "mobile" | "web" | string;
   assignedEmployees: WorkParticipantDto[];
   actualParticipants: WorkParticipantDto[];
@@ -63,6 +64,7 @@ export type WorkItemDto = {
   createdAtLocal: string;
   completedAtLocal: string | null;
   syncStatus: string;
+  deliveryError?: string | null;
 };
 
 export type WorkTaskDto = {

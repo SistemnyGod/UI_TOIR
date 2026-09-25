@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronsLeft, ChevronsRight, X } from "lucide-react";
+import { ChevronDown, ChevronsLeft, ChevronsRight, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionUserDto } from "../../api/contracts";
 import { hasPermission, type PermissionCode } from "../../security/permissions";
@@ -52,6 +52,10 @@ export function Sidebar({
   onCloseMobile?: () => void;
 }) {
   const [openModule, setOpenModule] = useState<NavigationModuleId | null>(null);
+  const [navQuery, setNavQuery] = useState("");
+  const query = navQuery.trim().toLocaleLowerCase("ru-RU");
+  const matches = (item: ScreenConfig) => !query || (getScreenLabel(item) ?? "").toLocaleLowerCase("ru-RU").includes(query);
+  const selectedScreen = screen === "inventory-ppe-create" || screen === "inventory-ppe-history" ? "inventory-ppe" : screen;
   const sidebarRef = useRef<HTMLElement>(null);
   const phoneLayout = usePhoneLayout();
   const patrolScreens = useMemo(() => {
@@ -76,7 +80,7 @@ export function Sidebar({
     [currentUser, screens],
   );
   const patrolIsActive = patrolScreens.some((item) => item.id === screen);
-  const accountingIsActive = accountingScreens.some((item) => item.id === screen);
+  const accountingIsActive = accountingScreens.some((item) => item.id === selectedScreen);
   const emuIsActive = emuScreens.some((item) => item.id === screen);
 
   useEffect(() => {
@@ -104,7 +108,7 @@ export function Sidebar({
 
   useEffect(() => {
     if (!mobileOpen) return;
-    const focusable = () => Array.from(sidebarRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), a[href]") ?? []).filter((element) => element.getClientRects().length > 0);
+    const focusable = () => Array.from(sidebarRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled]), a[href]") ?? []).filter((element) => element.getClientRects().length > 0);
     const firstControl = focusable()[0];
     firstControl?.focus();
     function trapFocus(event: KeyboardEvent) {
@@ -133,6 +137,7 @@ export function Sidebar({
   }
 
   function navigateFromModule(nextScreen: ScreenId) {
+    setNavQuery("");
     onNavigate(nextScreen);
     onCloseMobile?.();
   }
@@ -140,8 +145,8 @@ export function Sidebar({
   function renderSubmenuItem(item: ScreenConfig, moduleId: NavigationModuleId, isModuleOpen = true) {
     return (
       <button
-        aria-current={screen === item.id ? "page" : undefined}
-        className={`sidebar-submenu-item ${screen === item.id ? "active" : ""}`}
+        aria-current={selectedScreen === item.id ? "page" : undefined}
+        className={`sidebar-submenu-item ${selectedScreen === item.id ? "active" : ""}`}
         key={item.id}
         onClick={() => navigateFromModule(item.id)}
         tabIndex={isModuleOpen ? 0 : -1}
@@ -160,7 +165,9 @@ export function Sidebar({
   }
 
   function renderModule(moduleId: NavigationModuleId, items: ScreenConfig[], active: boolean) {
-    const isOpen = openModule === moduleId;
+    if (query && !moduleCopy[moduleId].title.toLocaleLowerCase("ru-RU").includes(query)) items = items.filter(matches);
+    if (!items.length) return null;
+    const isOpen = Boolean(query) || openModule === moduleId;
     const copy = moduleCopy[moduleId];
 
     return (
@@ -217,6 +224,7 @@ export function Sidebar({
         </div>
       </div>
 
+      <div className="sidebar-search"><Search size={17} aria-hidden="true" /><input aria-label="Найти раздел" placeholder="Найти раздел…" type="search" value={navQuery} onChange={event => setNavQuery(event.target.value)} />{navQuery ? <button type="button" aria-label="Очистить поиск разделов" onClick={() => setNavQuery("")}><X size={16} /></button> : null}</div>
       <nav className="nav-list" aria-label="Основные разделы">
         {renderModule("patrol", patrolScreens, patrolIsActive)}
         {renderModule(
@@ -235,10 +243,11 @@ export function Sidebar({
           emuIsActive,
         )}
 
-        {usersScreen ? (
+        {usersScreen && (!query || matches(usersScreen) || (percoScreen && matches(percoScreen))) ? (
           <>
             <div className="sidebar-section-label">Настройки</div>
-            <button
+            {matches(usersScreen) ? <button
+              aria-current={screen === usersScreen.id ? "page" : undefined}
               className={`nav-item ${screen === usersScreen.id ? "active" : ""}`}
               onClick={() => {
                 onNavigate(usersScreen.id);
@@ -252,9 +261,10 @@ export function Sidebar({
                 <NavIcon screen={usersScreen.id} />
               </span>
               <span className="nav-item-label">{getScreenLabel(usersScreen)}</span>
-            </button>
-            {percoScreen && hasPermission(currentUser, "integrations.perco.view") ? (
+            </button> : null}
+            {percoScreen && matches(percoScreen) && hasPermission(currentUser, "integrations.perco.view") ? (
               <button
+                aria-current={screen === percoScreen.id ? "page" : undefined}
                 className={`nav-item ${screen === percoScreen.id ? "active" : ""}`}
                 onClick={() => {
                   onNavigate(percoScreen.id);
@@ -272,6 +282,7 @@ export function Sidebar({
             ) : null}
           </>
         ) : null}
+        {query && ![...patrolScreens, ...accountingScreens, ...emuScreens, ...(usersScreen ? [usersScreen] : []), ...(percoScreen && hasPermission(currentUser, "integrations.perco.view") ? [percoScreen] : [])].some(matches) && !Object.values(moduleCopy).some(copy => copy.title.toLocaleLowerCase("ru-RU").includes(query)) ? <p className="sidebar-search-empty" role="status">Раздел не найден. Попробуйте другое название.</p> : null}
       </nav>
 
       <div className="sidebar-footer">

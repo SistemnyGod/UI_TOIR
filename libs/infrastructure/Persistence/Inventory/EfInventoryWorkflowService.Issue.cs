@@ -186,7 +186,7 @@ internal sealed partial class EfInventoryWorkflowService
             DueAt = request.DueAt,
             Comment = NormalizeOptional(request.Comment),
             PrintItemName = NormalizePrintField(request.PrintItemName, item.NormItemName ?? item.Name, 600),
-            NormPoint = isSectionTitle ? NormalizePrintField(request.NormPoint, string.Empty, 240) : NormalizePrintField(request.NormPoint, DefaultPpeNormPoint, 240),
+            NormPoint = isSectionTitle ? NormalizePrintField(request.NormPoint, string.Empty, 240) : NormalizePrintField(request.NormPoint, string.Empty, 240),
             IssuePeriodText = isSectionTitle ? NormalizePrintField(request.IssuePeriodText, string.Empty, 160) : NormalizePrintField(request.IssuePeriodText, DefaultIssuePeriodText(item.DefaultLifeMonths), 160),
             QuantityText = quantityText.Length == 0 ? null : quantityText,
             IsSectionTitle = isSectionTitle,
@@ -268,7 +268,7 @@ internal sealed partial class EfInventoryWorkflowService
         line.DueAt = request.DueAt;
         line.Comment = NormalizeOptional(request.Comment);
         line.PrintItemName = NormalizePrintField(request.PrintItemName, item.NormItemName ?? item.Name, 600);
-        line.NormPoint = isSectionTitle ? NormalizePrintField(request.NormPoint, string.Empty, 240) : NormalizePrintField(request.NormPoint, DefaultPpeNormPoint, 240);
+        line.NormPoint = isSectionTitle ? NormalizePrintField(request.NormPoint, string.Empty, 240) : NormalizePrintField(request.NormPoint, string.Empty, 240);
         line.IssuePeriodText = isSectionTitle ? NormalizePrintField(request.IssuePeriodText, string.Empty, 160) : NormalizePrintField(request.IssuePeriodText, DefaultIssuePeriodText(item.DefaultLifeMonths), 160);
         line.QuantityText = quantityText.Length == 0 ? null : quantityText;
         line.IsSectionTitle = isSectionTitle;
@@ -557,7 +557,7 @@ internal sealed partial class EfInventoryWorkflowService
             IsPpeSectionLine(line)
                 ? string.Empty
                 : string.IsNullOrWhiteSpace(line.NormPoint)
-                    ? DefaultPpeNormPoint
+                    ? string.Empty
                     : line.NormPoint,
             string.IsNullOrWhiteSpace(line.PrintItemName) ? line.Item.NormItemName ?? line.Item.Name : line.PrintItemName,
             IsPpeSectionLine(line) || string.IsNullOrWhiteSpace(line.IssuePeriodText) ? (IsPpeSectionLine(line) ? string.Empty : DefaultIssuePeriodText(line.Item.DefaultLifeMonths)) : line.IssuePeriodText,

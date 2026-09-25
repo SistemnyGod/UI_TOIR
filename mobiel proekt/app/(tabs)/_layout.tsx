@@ -13,7 +13,7 @@ const tabIcon = (outline: keyof typeof Ionicons.glyphMap, filled: keyof typeof I
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const { colors } = useAppTheme();
-  const bottomInset = Math.max(insets.bottom, 34);
+  const bottomInset = Math.max(insets.bottom, 8);
   const tabBarHeight = 72 + bottomInset;
 
   return (
@@ -64,8 +64,9 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="patrol" options={{ title: "Обход", tabBarIcon: tabIcon("shield-checkmark-outline", "shield-checkmark") }} />
-      <Tabs.Screen name="all-points" options={{ title: "Метки", tabBarIcon: tabIcon("list-outline", "list") }} />
+      <Tabs.Screen name="all-points" options={{ href: null }} />
       <Tabs.Screen name="work-accounting" options={{ title: "Работы", tabBarIcon: tabIcon("construct-outline", "construct") }} />
+      <Tabs.Screen name="reports" options={{ title: "Отчёты", tabBarIcon: tabIcon("document-text-outline", "document-text") }} />
       <Tabs.Screen name="profile" options={{ title: "Профиль", tabBarIcon: tabIcon("person-circle-outline", "person-circle") }} />
     </Tabs>
   );

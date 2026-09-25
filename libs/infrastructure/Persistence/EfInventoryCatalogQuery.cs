@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Patrol360.Application;
 using Patrol360.Contracts;
+using System.Text.Json;
 using Patrol360.Infrastructure.Persistence.Entities;
 
 namespace Patrol360.Infrastructure.Persistence;
@@ -109,9 +110,25 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
             itemsQuery = itemsQuery.Where(item => item.ItemKind.ToLower() == itemKind);
         }
 
+        if (query.PpeOnly)
+        {
+            itemsQuery = itemsQuery.Where(item => item.IsActive && (
+                EF.Functions.ILike(item.ItemKind, "%СИЗ%")
+                || EF.Functions.ILike(item.ItemKind, "%спец%")
+                || EF.Functions.ILike(item.ItemKind.Trim(), "ppe")
+                || EF.Functions.ILike(item.ItemKind.Trim(), "siz")
+                || EF.Functions.ILike(item.ItemKind, "%glove%")
+                || (item.Category != null && (
+                    EF.Functions.ILike(item.Category.Name, "%СИЗ%")
+                    || EF.Functions.ILike(item.Category.Name, "%спецодеж%")
+                    || EF.Functions.ILike(item.Category.Name, "%ppe%")))));
+        }
+
         var total = itemsQuery.Count();
-        var items = itemsQuery
-            .OrderBy(item => item.Name)
+        var orderedItems = query.PpeOnly
+            ? itemsQuery.OrderBy(item => item.Category == null ? "" : item.Category.Name).ThenBy(item => item.Name).ThenBy(item => item.Id)
+            : itemsQuery.OrderBy(item => item.Name).ThenBy(item => item.Id);
+        var items = orderedItems
             .Skip((paging.Page - 1) * paging.PageSize)
             .Take(paging.PageSize)
             .ToList();
@@ -627,7 +644,14 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
             item.IsConsumable,
             item.TrackLife,
             item.IsActive,
-            item.IsActive ? "active" : "inactive");
+            item.IsActive ? "active" : "inactive",
+            DeserializeStandards(item.StandardsJson));
+
+    private static IReadOnlyList<InventoryItemStandardDto> DeserializeStandards(string json)
+    {
+        try { return JsonSerializer.Deserialize<List<InventoryItemStandardDto>>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? []; }
+        catch (JsonException) { return []; }
+    }
 
     private InventoryItemSetDetailDto MapItemSetDetail(InventoryItemSetEntity itemSet)
     {
@@ -677,6 +701,7 @@ internal sealed class EfInventoryCatalogQuery(Patrol360DbContext dbContext) : II
         if (itemIds is not null)
         {
             var ids = itemIds.ToArray();
+            if (ids.Length == 0) return [];
             stockMoves = stockMoves.Where(move => ids.Contains(move.ItemId));
         }
 

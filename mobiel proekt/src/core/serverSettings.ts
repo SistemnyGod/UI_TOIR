@@ -1,11 +1,17 @@
 import * as SecureStore from "expo-secure-store";
 
-import { currentContourId, defaultEnvironment } from "@/core/environments";
+import { currentContourId, defaultEnvironment, localEnterpriseHttpsBaseUrl } from "@/core/environments";
 import { orderServerCandidateBaseUrls } from "@/core/serverCandidatePolicy";
 
 const serverBaseUrlKey = `patrol360.serverBaseUrl.${currentContourId}`;
+const settingsListeners = new Set<() => void>();
+export function subscribeToServerSettings(listener: () => void) {
+  settingsListeners.add(listener);
+  return () => { settingsListeners.delete(listener); };
+}
 
 export const localLanServerBaseUrl = "http://192.168.2.194:5173";
+export const localLanSecureServerBaseUrl = localEnterpriseHttpsBaseUrl;
 export const defaultServerBaseUrl = defaultEnvironment.apiBaseUrl;
 
 export type MobileRuntimeConfig = {
@@ -44,13 +50,19 @@ export async function getServerBaseUrl() {
 export async function getServerCandidateBaseUrls(preferredBaseUrl?: string) {
   const storedValue = await SecureStore.getItemAsync(serverBaseUrlKey);
   const candidates = orderServerCandidateBaseUrls({
-    primaryBaseUrl: isLocalEnvironment() ? localLanServerBaseUrl : undefined,
+    primaryBaseUrl: isLocalEnvironment() ? localLanSecureServerBaseUrl : undefined,
     preferredBaseUrl,
     storedBaseUrl: storedValue ?? undefined,
     allowedBaseUrls: defaultEnvironment.allowedBaseUrls
   });
 
-  return uniqueNormalizedUrls(candidates).filter(isAllowedServerBaseUrl);
+  const normalizedPreferred = preferredBaseUrl ? normalizeServerBaseUrl(preferredBaseUrl) : undefined;
+  const preferredScheme = normalizedPreferred ? new URL(normalizedPreferred).protocol : undefined;
+  return uniqueNormalizedUrls(candidates)
+    .filter(isAllowedServerBaseUrl)
+    // HTTPS is deliberately sticky for one operation. A certificate failure
+    // must be visible to the employee, never silently retried over HTTP.
+    .filter((candidate) => preferredScheme !== "https:" || new URL(candidate).protocol === "https:");
 }
 
 export async function getMobileRuntimeConfig(): Promise<MobileRuntimeConfig> {
@@ -62,18 +74,24 @@ export async function getMobileRuntimeConfig(): Promise<MobileRuntimeConfig> {
   };
 }
 
-export async function setServerBaseUrl(value: string) {
+export async function setServerBaseUrl(value: string, isCurrent?: () => boolean) {
   const normalizedValue = normalizeServerBaseUrl(value);
   if (!isAllowedServerBaseUrl(normalizedValue)) {
     throw new Error(`Адрес сервера не разрешён для контура ${currentContourId}.`);
   }
 
+  if (isCurrent && !isCurrent()) throw new Error("Настройки сервера изменились. Устаревший адрес не сохранён.");
+  const previous = await getServerBaseUrl();
+  if (previous === normalizedValue) return normalizedValue;
+  if (isCurrent && !isCurrent()) throw new Error("Настройки сервера изменились. Устаревший адрес не сохранён.");
   await SecureStore.setItemAsync(serverBaseUrlKey, normalizedValue);
+  settingsListeners.forEach(listener => listener());
   return normalizedValue;
 }
 
 export async function resetServerBaseUrl() {
   await SecureStore.deleteItemAsync(serverBaseUrlKey);
+  settingsListeners.forEach(listener => listener());
   return defaultServerBaseUrl;
 }
 
@@ -134,7 +152,16 @@ export function normalizeServerBaseUrl(value: string) {
       throw new Error();
     }
 
-    if (parsedUrl.hostname === "192.168.2.194" && (!parsedUrl.port || parsedUrl.port === "5000")) {
+    // HTTPS was briefly documented with the legacy HTTP development port.
+    // Correct only that exact historical typo; persisted HTTP endpoints retain
+    // their original protocol for installed clients.
+    if (parsedUrl.protocol === "https:" && parsedUrl.hostname === "192.168.2.194" && parsedUrl.port === "5173") {
+      parsedUrl.port = "";
+    }
+
+    // Preserve a scheme explicitly supplied by the employee. Only normalize
+    // legacy HTTP addresses which historically pointed at the development port.
+    if (parsedUrl.protocol === "http:" && parsedUrl.hostname === "192.168.2.194" && (!parsedUrl.port || parsedUrl.port === "5000")) {
       parsedUrl.protocol = "http:";
       parsedUrl.port = "5173";
     }

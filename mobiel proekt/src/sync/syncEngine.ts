@@ -457,6 +457,14 @@ function buildSyncEvent(
         && (response.status === 'rejected' || response.status === 'conflict')))
     .map(getCommandAssignmentId)
     .filter((assignmentId): assignmentId is string => assignmentId !== null);
+  const changedWorkItemIds = commands
+    .filter((command) => command.entityType === "workTask" && respondedOperationIds.has(command.clientOperationId))
+    .map((command) => command.entityLocalId)
+    .filter((id): id is string => Boolean(id));
+  const changedRemarkIds = commands
+    .filter((command) => command.entityType === "shiftRemark" && respondedOperationIds.has(command.clientOperationId))
+    .map((command) => command.entityLocalId)
+    .filter((id): id is string => Boolean(id));
 
   const refreshedZones = new Set<RefreshZone>();
   for (const command of commands) {
@@ -475,6 +483,8 @@ function buildSyncEvent(
     cancelledAssignmentIds: Array.from(new Set(cancelledAssignmentIds)),
     changedAssignmentIds: Array.from(new Set([...changedAssignmentIds, ...additionalAssignmentIds])),
     deliveryChangedAssignmentIds: Array.from(new Set(deliveryChangedAssignmentIds)),
+    changedWorkItemIds: Array.from(new Set(changedWorkItemIds)),
+    changedRemarkIds: Array.from(new Set(changedRemarkIds)),
     refreshedZones: Array.from(refreshedZones)
   };
 }

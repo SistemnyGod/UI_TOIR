@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { ReportDeliveryState, ReportDeliveryStateSnapshot } from '@/domain/reporting/reportDeliveryState';
-import { getStoredOwnerUserId } from '@/auth/tokenStorage';
+import { captureDataOwnerContext, assertDataOwnerContext } from '@/auth/dataOwnerContext';
+import { finishDeliveredNavigation, getPatrolReportState, isReportFullyDelivered, deliveredBoardPath } from '@/services/patrolNavigationService';
 import { getReportDeliveryState } from '@/db/repositories/outboxRepository';
+import { clearCurrentPatrolIfMatches, getPatrolDeviceContext } from '@/db/repositories/patrolContextRepository';
 import {
   getReportReadiness,
   reopenInvalidCompletionReportLocally,
@@ -29,44 +31,65 @@ type DeliveryState = ReportDeliveryStateSnapshot | null;
 export function SubmitReportScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
-  const { assignmentId } = useLocalSearchParams<{ assignmentId: string }>();
+  const { assignmentId, mode } = useLocalSearchParams<{ assignmentId: string; mode?: string }>();
   const [readiness, setReadiness] = useState<ReportReadiness | null>(null);
   const [delivery, setDelivery] = useState<DeliveryState>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
+  const didAutoLeaveRef = useRef(false);
+  const focused = useRef(false);
+  const loadVersion = useRef(0);
+  const submitting = useRef(false);
 
   const reload = useCallback(async () => {
+    if (!focused.current) return;
+    const version = ++loadVersion.current;
+    const isCurrent = () => focused.current && version === loadVersion.current;
     setLoadError(null);
     try {
-      const ownerUserId = await getStoredOwnerUserId();
-      const [loadedReadiness, loadedDelivery] = await Promise.all([
+      const scope = await captureDataOwnerContext();
+      const [loadedReadiness, loadedDelivery, reportState] = await Promise.all([
         getReportReadiness(assignmentId),
-        ownerUserId ? getReportDeliveryState(ownerUserId, assignmentId) : Promise.resolve(null)
+        getReportDeliveryState(scope.ownerUserId, assignmentId),
+        getPatrolReportState(scope, assignmentId)
       ]);
+      const reportDelivery = reportState.completedLocally ? loadedDelivery : null;
+      const fullyDelivered = reportState.completedLocally && loadedDelivery.status === 'delivered' && await isReportFullyDelivered(scope, assignmentId);
+      await assertDataOwnerContext(scope);
+      if (!isCurrent()) return;
       setReadiness(loadedReadiness);
-      setDelivery(loadedDelivery);
+      setDelivery(reportDelivery?.status === 'delivered' && !fullyDelivered
+        ? { ...reportDelivery, status: 'sending' }
+        : reportDelivery);
+      if (reportState.completedLocally && loadedDelivery.status === 'delivered' && !fullyDelivered) setSyncNotice('Ожидаем подтверждение обязательных вложений. Отчёт сохранён.');
+      if (mode !== 'history' && fullyDelivered && !didAutoLeaveRef.current) {
+        if (await finishDeliveredNavigation(scope, assignmentId, isCurrent)) {
+          didAutoLeaveRef.current = true;
+          router.replace(deliveredBoardPath as never);
+        }
+      }
     } catch (error) {
       void logMobileError('report.screen.load.failed', error);
-      setLoadError(error instanceof Error ? error.message : 'Не удалось прочитать локальный отчёт');
+      if (isCurrent()) setLoadError(error instanceof Error ? error.message : 'Не удалось прочитать локальный отчёт');
     }
-  }, [assignmentId]);
+  }, [assignmentId, mode, router]);
 
   useFocusEffect(
     useCallback(() => {
+      focused.current = true;
+      didAutoLeaveRef.current = false;
       void reload();
+      return () => { focused.current = false; loadVersion.current++; };
     }, [reload])
   );
 
-  useEffect(
-    () => subscribeToSyncEvents((event) => {
+  useFocusEffect(useCallback(() => subscribeToSyncEvents((event) => {
       if (shouldReloadReportAfterSync(event, assignmentId)) {
         void reload();
       }
-    }),
-    [assignmentId, reload]
-  );
+    }), [assignmentId, reload]));
 
   const problemGroups = useMemo(
     () => groupReportProblems(readiness?.problems ?? []),
@@ -82,11 +105,8 @@ export function SubmitReportScreen() {
       return;
     }
 
-    if (!readiness?.ready) {
-      router.push(`/patrol/assignment/${assignmentId}/all-points?filter=attention`);
-      return;
-    }
-
+    // Account and repair actions are meaningful even when the local readiness
+    // snapshot is stale. Handle them before routing a user to points again.
     if (presentation.action === 'serverSettings') {
       router.push('/(auth)/server-settings');
       return;
@@ -103,7 +123,7 @@ export function SubmitReportScreen() {
     }
 
     if (presentation.action === 'done') {
-      router.replace('/(tabs)/patrol');
+      await leaveToRequestBoard();
       return;
     }
 
@@ -138,11 +158,31 @@ export function SubmitReportScreen() {
     setIsConfirmOpen(true);
   }
 
+  async function leaveToRequestBoard() {
+    try {
+      const version = ++loadVersion.current;
+      const scope = await captureDataOwnerContext();
+      const isCurrent = () => focused.current && version === loadVersion.current;
+      await clearCurrentPatrolIfMatches(scope, assignmentId, isCurrent);
+      await assertDataOwnerContext(scope);
+      const context = await getPatrolDeviceContext();
+      await assertDataOwnerContext(scope);
+      if (isCurrent() && (!context.assignmentId || context.assignmentId === assignmentId)) router.replace('/patrol/request-board');
+    } catch (error) {
+      setSyncNotice(error instanceof Error ? error.message : 'Не удалось открыть список заявок');
+    }
+  }
+
   async function confirmLocalSubmission() {
-    if (isSubmitting || !readiness?.ready) {
+    if (submitting.current || !readiness?.ready) {
       return;
     }
 
+    if (!readiness?.ready) {
+      router.push(`/patrol/assignment/${assignmentId}/all-points?filter=attention`);
+      return;
+    }
+    submitting.current = true;
     setIsConfirmOpen(false);
     setIsSubmitting(true);
     setSyncNotice(null);
@@ -156,6 +196,7 @@ export function SubmitReportScreen() {
         ? error.message
         : 'Не удалось сохранить отчёт на телефоне');
     } finally {
+      submitting.current = false;
       setIsSubmitting(false);
     }
   }
@@ -176,17 +217,7 @@ export function SubmitReportScreen() {
   }
 
   const actionDisabled = isSubmitting || presentation.action === 'wait' || !readiness.ready && problemGroups.length === 0;
-  const primaryLabel = !readiness.ready
-    ? 'Открыть незаполненные'
-    : presentation.action === 'done'
-      ? 'К списку обходов'
-      : presentation.action === 'retry'
-      ? 'Повторить отправку'
-      : presentation.action === 'repair'
-          ? 'Исправить отчёт'
-          : presentation.action === 'wait'
-            ? 'Отчёт отправляется'
-          : 'Завершить и отправить';
+  const primaryLabel = !readiness.ready ? 'Открыть незаполненные' : presentation.buttonLabel;
 
   return (
     <Screen
@@ -213,8 +244,10 @@ export function SubmitReportScreen() {
           />
         </View>
         <View style={styles.progressRow}>
-          <ProgressValue label='Пройдено' value={`${readiness.progress.completed}/${readiness.progress.total}`} />
+          <ProgressValue label='Обработано' value={`${readiness.progress.completed}/${readiness.progress.total}`} />
+          <ProgressValue label='Осмотрено' value={`${readiness.progress.inspected}/${readiness.progress.total}`} />
           <ProgressValue label='Замечания' value={String(readiness.progress.issues)} />
+          <ProgressValue label='Не осмотрено' value={String(readiness.progress.skipped)} />
           <ProgressValue label='Отложено' value={String(readiness.progress.deferred)} />
         </View>
       </Card>
@@ -235,7 +268,9 @@ export function SubmitReportScreen() {
       {problemGroups.length > 0 ? (
         <Card>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Нужно заполнить перед отправкой</Text>
-          {problemGroups.map((problem) => (
+          {problemGroups.map((problem) => problem.orderIndex === 0 ? (
+            <Text key={problem.pointId} style={[styles.text, styles.error]}>{problem.reasons.join('. ')}</Text>
+          ) : (
             <ProblemGroupButton
               key={problem.pointId}
               onPress={() => router.push(`/patrol/assignment/${assignmentId}/point/${problem.pointId}/fill`)}
@@ -256,6 +291,10 @@ export function SubmitReportScreen() {
         <Pressable accessibilityRole='button' onPress={() => router.push('/settings/sync-queue' as never)} style={styles.link}>
           <Ionicons color={colors.primary} name='cloud-upload-outline' size={18} />
           <Text style={[styles.linkText, { color: colors.primary }]}>Статус отправки</Text>
+        </Pressable>
+        <Pressable accessibilityRole='button' onPress={() => void leaveToRequestBoard()} style={styles.link}>
+          <Ionicons color={colors.primary} name='list-outline' size={18} />
+          <Text style={[styles.linkText, { color: colors.primary }]}>К выбору заявок</Text>
         </Pressable>
       </View>
 

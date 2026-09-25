@@ -1,4 +1,5 @@
 import { ApiClient, type ApiRequestOptions } from "../api/client";
+import type { PpeIssueJournalPage, PpeIssueJournalQuery } from "../api/ppeJournalContracts";
 import type {
   ApplyInventoryPpeLineActionDto,
   CreateEmployeeDto,
@@ -81,6 +82,8 @@ import type {
   PpeNormRowRulesDto,
   PpeMappingApprovalDto,
   PpeLegacyDraftMigrationDto,
+  PpeKitTemplateDto,
+  CreatePpeKitTemplateDto,
 } from "../api/contracts";
 
 export type InventoryListParams = {
@@ -259,6 +262,14 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
       return client.get<PpeIssueDocumentSummaryDto[]>(`/api/v1/inventory/ppe/issue-documents${toQueryString({ employeeId })}`);
     },
 
+    getPpeIssueJournal(params: PpeIssueJournalQuery, signal?: AbortSignal) {
+      return client.get<PpeIssueJournalPage>(`/api/v1/inventory/ppe/issue-documents/journal${toQueryString(params)}`, { signal });
+    },
+
+    exportPpeIssueJournal(params: PpeIssueJournalQuery) {
+      return client.download(`/api/v1/inventory/ppe/issue-documents/journal/export${toQueryString(params)}`);
+    },
+
     getPpeIssueDocument(id: string) {
       return client.get<PpeIssueDocumentDto>(`/api/v1/inventory/ppe/issue-documents/${id}`);
     },
@@ -287,13 +298,20 @@ export function createInventoryRepository({ baseUrl }: { baseUrl?: string } = {}
       return client.post<PpeLegacyDraftMigrationDto>(`/api/v1/inventory/ppe/issue-documents/legacy-drafts/${cardId}/migrate`);
     },
 
-    printPpeIssueDocument(id: string, type: "norms" | "signature", format: "docx" | "pdf") {
+    printPpeIssueDocument(id: string, type: "norms" | "signature" | "both", format: "docx" | "pdf") {
       return client.download(`/api/v1/inventory/ppe/issue-documents/${id}/print${toQueryString({ type, format })}`);
     },
 
     getPpeIssueDocumentNorms(employeeId: string, date: string) {
       return client.get<InventoryPpeNormSetDto[]>(`/api/v1/inventory/ppe/issue-documents/norms${toQueryString({ employeeId, date })}`);
     },
+    getPpeKitTemplates() { return client.get<PpeKitTemplateDto[]>("/api/v1/inventory/ppe/kit-templates", { cacheMode: "reload" }); },
+    createPpeKitTemplate(payload: CreatePpeKitTemplateDto) { return client.post<PpeKitTemplateDto, CreatePpeKitTemplateDto>("/api/v1/inventory/ppe/kit-templates", payload); },
+    updatePpeKitTemplate(id: string, payload: CreatePpeKitTemplateDto & { expectedVersion: number }) { return client.put<PpeKitTemplateDto, CreatePpeKitTemplateDto & { expectedVersion: number }>(`/api/v1/inventory/ppe/kit-templates/${id}`, payload); },
+    renamePpeKitTemplate(id: string, expectedVersion: number, name: string) { return client.patch<PpeKitTemplateDto, { expectedVersion: number; name: string }>(`/api/v1/inventory/ppe/kit-templates/${id}/name`, { expectedVersion, name }); },
+    copyPpeKitTemplate(id: string, name?: string, isShared = false) { return client.post<PpeKitTemplateDto, { name?: string; isShared: boolean }>(`/api/v1/inventory/ppe/kit-templates/${id}/copy`, { name, isShared }); },
+    validatePpeKitTemplate(id: string, normSetId: string) { return client.post<PpeKitTemplateDto, { normSetId: string }>(`/api/v1/inventory/ppe/kit-templates/${id}/apply`, { normSetId }); },
+    archivePpeKitTemplate(id: string, expectedVersion: number) { return client.patch<PpeKitTemplateDto, { expectedVersion: number }>(`/api/v1/inventory/ppe/kit-templates/${id}/archive`, { expectedVersion }); },
 
     updatePpeNormSetScope(id: string, payload: PpeNormApprovalDto) {
       return client.put<InventoryPpeNormSetDto, PpeNormApprovalDto>(`/api/v1/inventory/ppe/issue-documents/norm-sets/${id}/scope`, payload);

@@ -73,6 +73,30 @@ test('lifecycle and completed report commands are idempotent', () => {
   assert.ok(!completeLookup.includes("'rejected'"));
 });
 
+test('automatic outbox recovery never erases a locally completed report', () => {
+  const quarantine = outboxRepositorySource.slice(
+    outboxRepositorySource.indexOf('export async function quarantineInvalidPatrolCompletionCommands'),
+    outboxRepositorySource.indexOf('export async function hasPendingOutboxCommands')
+  );
+  const responseTransition = outboxRepositorySource.slice(
+    outboxRepositorySource.indexOf('const nextStatus = response.status === "conflict"'),
+    outboxRepositorySource.indexOf('export async function markOutboxConflictForDispatcher')
+  );
+  const rejectedTransition = outboxRepositorySource.slice(
+    outboxRepositorySource.indexOf('export async function cancelRejectedOutboxCommand'),
+    outboxRepositorySource.length
+  );
+  const explicitRepair = repositorySource.slice(
+    repositorySource.indexOf('export async function reopenInvalidCompletionReportLocally'),
+    repositorySource.indexOf('export async function completeAssignmentLocally')
+  );
+
+  assert.ok(!quarantine.includes('completed_at_local = NULL'));
+  assert.ok(!responseTransition.includes('completed_at_local ='));
+  assert.ok(!rejectedTransition.includes('completed_at_local ='));
+  has(explicitRepair, "completed_at_local = NULL");
+});
+
 test('manual retry reactivates server failures without bypassing rate limits', () => {
   const activation = outboxRepositorySource.slice(
     outboxRepositorySource.indexOf('export async function activateRetryableReportCommands'),

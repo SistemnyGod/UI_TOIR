@@ -16,8 +16,8 @@ export function getAssignmentCommandIds(
       }
 
       try {
-        const payload = JSON.parse(command.payloadJson) as { assignmentId?: unknown };
-        return payload.assignmentId === assignmentId;
+        const payload = JSON.parse(command.payloadJson) as { assignmentId?: unknown; sourceAssignmentId?: unknown };
+        return payload.assignmentId === assignmentId || payload.sourceAssignmentId === assignmentId;
       } catch {
         return false;
       }

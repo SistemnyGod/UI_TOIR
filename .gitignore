@@ -38,3 +38,5 @@ firebase-service-account*.json
 google-services.json
 .codex-tmp/gradle-home/
 .codex-tmp/patrol360-release-20260908-01a07f74/
+.codex-tmp/ppe-integration-20260913/
+output/ppe-api-smoke/
