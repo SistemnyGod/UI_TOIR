@@ -119,6 +119,7 @@ export function App() {
   const systemNotifications = useSystemNotifications({
     dataSourceMode,
     enabled: hasApiSession && hasPermission(session.user, "dashboard.read"),
+    sessionKey: session.user?.id ?? "anonymous",
     showToast,
   });
 

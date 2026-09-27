@@ -474,6 +474,18 @@ async function initializeDatabaseOnce() {
         );
       `);
     });
+    // Report recovery below reads these columns before the historical contour
+    // migration runs. A separate prerequisite also repairs partially upgraded
+    // databases without replaying their migration markers or assigning owners.
+    await runLocalMigration(tx, "20260927_report_recovery_prerequisites", async () => {
+      await ensureColumns(tx, "patrol_assignments", [
+        { name: "contour_id", sql: "ALTER TABLE patrol_assignments ADD COLUMN contour_id TEXT" },
+        { name: "local_report_present", sql: "ALTER TABLE patrol_assignments ADD COLUMN local_report_present INTEGER NOT NULL DEFAULT 0" }
+      ]);
+      await ensureColumns(tx, "outbox_commands", [
+        { name: "contour_id", sql: "ALTER TABLE outbox_commands ADD COLUMN contour_id TEXT" }
+      ]);
+    });
     await runLocalMigration(tx, "20260922_local_report_review_flag", async () => {
       await ensureColumns(tx, "patrol_assignments", [
         { name: "local_report_needs_review", sql: "ALTER TABLE patrol_assignments ADD COLUMN local_report_needs_review INTEGER NOT NULL DEFAULT 0" }

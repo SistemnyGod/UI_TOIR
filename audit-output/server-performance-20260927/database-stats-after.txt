@@ -1,0 +1,59 @@
+BEGIN
+SET
+          sampled_at          | stats_reset | numbackends | xact_commit | xact_rollback | blks_read | blks_hit  | tup_returned | tup_fetched | tup_inserted | tup_updated | temp_files | temp_bytes  | deadlocks 
+------------------------------+-------------+-------------+-------------+---------------+-----------+-----------+--------------+-------------+--------------+-------------+------------+-------------+-----------
+ 2026-09-27 12:14:55.93986+00 |             |           6 |     3979010 |            26 |      5186 | 485073181 |    427758202 |    90084825 |     16842229 |      189401 |       3385 | 17068408832 |         0
+(1 row)
+
+ state  | wait_event_type | wait_event | connections 
+--------+-----------------+------------+-------------
+ idle   | Client          | ClientRead |           5
+ active |                 |            |           1
+(2 rows)
+
+           relname           | n_live_tup | n_dead_tup | seq_scan | seq_tup_read | idx_scan |  size   |        last_autovacuum        
+-----------------------------+------------+------------+----------+--------------+----------+---------+-------------------------------
+ perco_access_events         |      14300 |        152 |    16183 |    181911412 | 33637458 | 13 MB   | 
+ employee_presence_intervals |       5420 |       1021 |     6795 |     33834884 |      559 | 2640 kB | 2026-09-27 02:48:58.257394+00
+ __EFMigrationsHistory       |          9 |          0 |   262835 |     21025821 |        0 | 24 kB   | 
+ role_permissions            |          1 |          0 |    74666 |     13218782 |        0 | 72 kB   | 
+ patrol_results              |         60 |          0 |    16081 |     11878111 |   427397 | 560 kB  | 
+ employees                   |          0 |          0 |    39665 |      8527333 | 16955636 | 368 kB  | 
+ assignments                 |          9 |         23 |    62832 |      5705892 |        0 | 216 kB  | 
+ perco_employee_links        |        641 |        149 |     8393 |      5370619 |   108249 | 424 kB  | 2026-09-27 04:48:59.326819+00
+ emu_work_audit_events       |          6 |          0 |    21969 |      2416662 |        0 | 144 kB  | 
+ emu_work_sessions           |          1 |          5 |   113979 |      1918145 |    65617 | 224 kB  | 
+ site_users                  |          0 |          9 |   298694 |      1194773 |        0 | 112 kB  | 
+ emu_decisions               |          0 |          0 |    43595 |      1177065 |        0 | 136 kB  | 
+ items                       |          0 |          0 |      621 |       836487 |      428 | 1272 kB | 
+ patrol_requests             |          9 |         23 |     8231 |       752968 |   101275 | 312 kB  | 
+ mobile_notifications        |         12 |         24 |     5987 |       692830 |   982981 | 248 kB  | 
+ emu_work_session_employees  |          1 |          4 |    26999 |       599641 |    43996 | 88 kB   | 
+ emu_shift_templates         |          0 |          0 |   246536 |       493074 |        3 | 56 kB   | 
+ route_points                |          0 |          0 |    19012 |       474316 |        0 | 96 kB   | 
+ patrol_result_attachments   |          0 |          0 |     3166 |       265944 |        0 | 72 kB   | 
+ routes                      |          0 |          0 |   132074 |       247164 |        0 | 80 kB   | 
+ perco_sync_state            |          2 |         28 |    57376 |        92963 |        0 | 80 kB   | 2026-09-27 10:05:02.259519+00
+ perco_integration_settings  |          1 |          6 |    48349 |        48349 |        0 | 56 kB   | 
+ stock_moves                 |          0 |          0 |      364 |        35308 |        0 | 176 kB  | 
+ perco_integration_logs      |      36231 |          0 |        1 |        35180 |        2 | 14 MB   | 
+ mobile_account_sessions     |        196 |         59 |      157 |        30772 |     1881 | 368 kB  | 2026-09-21 01:54:54.652466+00
+(25 rows)
+
+           relname           |  size   | n_live_tup | n_dead_tup 
+-----------------------------+---------+------------+------------
+ perco_integration_logs      | 14 MB   |      36231 |          0
+ perco_access_events         | 13 MB   |      14300 |        152
+ employee_presence_intervals | 2640 kB |       5420 |       1021
+ mobile_outbox_operations    | 2512 kB |        161 |          0
+ items                       | 1272 kB |          0 |          0
+ ppe_norm_rows               | 992 kB  |        662 |          0
+ patrol_results              | 560 kB  |         60 |          0
+ perco_employee_links        | 424 kB  |        641 |        149
+ employees                   | 368 kB  |          0 |          0
+ mobile_account_sessions     | 368 kB  |        196 |         59
+ site_user_sessions          | 344 kB  |        396 |        114
+ patrol_requests             | 312 kB  |          9 |         23
+(12 rows)
+
+COMMIT

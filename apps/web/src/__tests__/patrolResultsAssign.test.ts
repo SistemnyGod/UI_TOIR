@@ -140,6 +140,25 @@ describe("patrol results and assignment stabilization", () => {
     expect(refresh).toHaveBeenCalledTimes(2);
   });
 
+  it("does not refresh heavy assignment data while the tab is hidden", async () => {
+    vi.useFakeTimers();
+    const originalVisibility = Object.getOwnPropertyDescriptor(document, "visibilityState");
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const unsubscribe = subscribeAssignmentAutoRefresh(refresh);
+
+    await vi.advanceTimersByTimeAsync(ASSIGNMENT_AUTO_REFRESH_INTERVAL_MS * 2);
+    expect(refresh).not.toHaveBeenCalled();
+
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    await Promise.resolve();
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    if (originalVisibility) Object.defineProperty(document, "visibilityState", originalVisibility);
+  });
+
   it("uses the live active assignment over a stale history copy", () => {
     const stale = createAssignment();
     const live = { ...stale, progress: 40, status: "В пути" } as ActivePatrol;

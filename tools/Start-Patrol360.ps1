@@ -1,6 +1,7 @@
 param(
   [switch]$SkipWebBuild,
   [switch]$SkipServiceBuild,
+  [switch]$IncludeOptionalServices,
   [switch]$NoCache,
   [switch]$SkipHealthWait,
   [int]$HealthTimeoutSeconds = 180,
@@ -17,6 +18,9 @@ $composeBaseArgs = @(
   "-f",
   "infra/docker/compose.web-prebuilt.yaml"
 )
+if ($IncludeOptionalServices) {
+  $composeBaseArgs += @("-f", "infra/docker/compose.optional-services.yaml")
+}
 $composeArgs = $composeBaseArgs + @("--profile", "app")
 
 function Invoke-Native {

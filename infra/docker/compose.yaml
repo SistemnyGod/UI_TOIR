@@ -55,9 +55,9 @@ services:
       - printing
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; grep -q \"200 OK\" <&3'"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
-      retries: 12
+      retries: 4
       start_period: 20s
     logging: *default-logging
     profiles:
@@ -138,9 +138,9 @@ services:
       - ./certs/patrol360.local.key:/etc/caddy/certs/patrol360.local.key:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider --max-redirect=0 http://127.0.0.1/health/ready"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
-      retries: 12
+      retries: 4
       start_period: 10s
     logging: *default-logging
     profiles:
@@ -177,57 +177,6 @@ services:
     networks: [printing]
     logging: *default-logging
     profiles: [ppe-printing]
-
-  redis:
-    image: redis:7-alpine
-    container_name: patrol360-redis
-    restart: unless-stopped
-    mem_limit: ${REDIS_MEM_LIMIT:-512m}
-    command: redis-server --maxmemory ${REDIS_MAXMEMORY:-256mb} --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
-    ports:
-      - "127.0.0.1:6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-    logging: *default-logging
-
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: patrol360-rabbitmq
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:5672:5672"
-      - "127.0.0.1:15672:15672"
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 15s
-      timeout: 10s
-      retries: 12
-      start_period: 30s
-    logging: *default-logging
-
-  minio:
-    image: minio/minio:latest
-    container_name: patrol360-minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-patrol360}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
-    ports:
-      - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
-    volumes:
-      - minio-data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/ready"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
-    logging: *default-logging
 
 volumes:
   api-mobile-files:

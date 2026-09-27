@@ -165,9 +165,6 @@ public sealed class MobileAccountDbLifecycleTests
 
 internal sealed class TemporaryPostgresDatabase : IAsyncDisposable
 {
-    private const string DefaultAdminConnectionString =
-        "Host=localhost;Port=5432;Database=postgres;Username=patrol360;Password=patrol360_dev";
-
     private readonly string adminConnectionString;
     private readonly string databaseName;
     private static readonly SemaphoreSlim TemplateGate = new(1, 1);
@@ -190,9 +187,13 @@ internal sealed class TemporaryPostgresDatabase : IAsyncDisposable
 
     public static async Task<TemporaryPostgresDatabase> CreateAsync()
     {
-        var adminConnectionString =
-            Environment.GetEnvironmentVariable("PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING")
-            ?? DefaultAdminConnectionString;
+        var adminConnectionString = Environment.GetEnvironmentVariable("PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING");
+        if (string.IsNullOrWhiteSpace(adminConnectionString))
+        {
+            throw new InvalidOperationException(
+                "DB integration tests require PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING. " +
+                "Use Test-All.ps1 -IncludeDbIntegration to create an isolated PostgreSQL instance, or provide an explicit test-only connection string.");
+        }
         var templateName = await EnsureTemplateDatabaseAsync(adminConnectionString);
         var databaseName = $"patrol360_dbtests_{Guid.NewGuid():N}";
         var testConnectionBuilder = new NpgsqlConnectionStringBuilder(adminConnectionString)

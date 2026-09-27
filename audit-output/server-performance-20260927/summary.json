@@ -1,0 +1,209 @@
+{
+  "StartedAt": "2026-09-27T17:09:21.7918328+05:00",
+  "EndedAt": "2026-09-27T17:10:47.5862655+05:00",
+  "SampleCount": 8,
+  "FreeMiBMin": 10045.49,
+  "FreeMiBMax": 10231.86,
+  "Containers": [
+    {
+      "Name": "whisperx-atom-postgres-1",
+      "MeanCpu": 3.85,
+      "MaxCpu": 6.61,
+      "FinalMemory": "62.46MiB / 15.62GiB"
+    },
+    {
+      "Name": "whisperx-atom-summary-worker-1",
+      "MeanCpu": 0.86,
+      "MaxCpu": 1.03,
+      "FinalMemory": "553.3MiB / 8GiB"
+    },
+    {
+      "Name": "whisperx-atom-outbox-relay-1",
+      "MeanCpu": 0.75,
+      "MaxCpu": 0.99,
+      "FinalMemory": "38.71MiB / 15.62GiB"
+    },
+    {
+      "Name": "patrol360-api",
+      "MeanCpu": 0.71,
+      "MaxCpu": 2.65,
+      "FinalMemory": "241.2MiB / 15.62GiB"
+    },
+    {
+      "Name": "patrol360-postgres",
+      "MeanCpu": 0.63,
+      "MaxCpu": 2.29,
+      "FinalMemory": "154.9MiB / 15.62GiB"
+    },
+    {
+      "Name": "whisperx-atom-nats-1",
+      "MeanCpu": 0.55,
+      "MaxCpu": 1.93,
+      "FinalMemory": "21.09MiB / 15.62GiB"
+    },
+    {
+      "Name": "whisperx-atom-api-1",
+      "MeanCpu": 0.47,
+      "MaxCpu": 0.52,
+      "FinalMemory": "141.5MiB / 15.62GiB"
+    },
+    {
+      "Name": "whisperx-atom-gpu-worker-1",
+      "MeanCpu": 0.47,
+      "MaxCpu": 1.19,
+      "FinalMemory": "888MiB / 12GiB"
+    },
+    {
+      "Name": "patrol360-rabbitmq",
+      "MeanCpu": 0.24,
+      "MaxCpu": 0.48,
+      "FinalMemory": "88.13MiB / 15.62GiB"
+    },
+    {
+      "Name": "patrol360-redis",
+      "MeanCpu": 0.24,
+      "MaxCpu": 0.29,
+      "FinalMemory": "15.12MiB / 512MiB"
+    },
+    {
+      "Name": "patrol360-proxy",
+      "MeanCpu": 0.2,
+      "MaxCpu": 1.64,
+      "FinalMemory": "27.53MiB / 15.62GiB"
+    },
+    {
+      "Name": "patrol360-web",
+      "MeanCpu": 0.2,
+      "MaxCpu": 1.62,
+      "FinalMemory": "18.96MiB / 15.62GiB"
+    },
+    {
+      "Name": "patrol360-ppe-test-20260913",
+      "MeanCpu": 0.06,
+      "MaxCpu": 0.49,
+      "FinalMemory": "48.07MiB / 15.62GiB"
+    },
+    {
+      "Name": "patrol360-worker",
+      "MeanCpu": 0.06,
+      "MaxCpu": 0.23,
+      "FinalMemory": "183.9MiB / 15.62GiB"
+    },
+    {
+      "Name": "whisperx-atom-memory-worker-1",
+      "MeanCpu": 0.06,
+      "MaxCpu": 0.32,
+      "FinalMemory": "53.27MiB / 15.62GiB"
+    },
+    {
+      "Name": "atom-summary-fix-test-20260923",
+      "MeanCpu": 0.04,
+      "MaxCpu": 0.36,
+      "FinalMemory": "22.62MiB / 15.62GiB"
+    },
+    {
+      "Name": "patrol360-minio",
+      "MeanCpu": 0.03,
+      "MaxCpu": 0.07,
+      "FinalMemory": "111.9MiB / 15.62GiB"
+    },
+    {
+      "Name": "whisperx-atom-import-worker-1",
+      "MeanCpu": 0.01,
+      "MaxCpu": 0.03,
+      "FinalMemory": "29.59MiB / 15.62GiB"
+    },
+    {
+      "Name": "whisperx-atom-lan-gateway-1",
+      "MeanCpu": 0.0,
+      "MaxCpu": 0.03,
+      "FinalMemory": "14.43MiB / 15.62GiB"
+    },
+    {
+      "Name": "whisperx-atom-media-worker-1",
+      "MeanCpu": 0.0,
+      "MaxCpu": 0.0,
+      "FinalMemory": "77.39MiB / 15.62GiB"
+    },
+    {
+      "Name": "whisperx-atom-tusd-1",
+      "MeanCpu": 0.0,
+      "MaxCpu": 0.01,
+      "FinalMemory": "22.73MiB / 15.62GiB"
+    }
+  ],
+  "Processes": [
+    {
+      "Name": "vmmem",
+      "WorkingSetMiB": 2264.1
+    },
+    {
+      "Name": "ChatGPT",
+      "WorkingSetMiB": 1915.0
+    },
+    {
+      "Name": "browser",
+      "WorkingSetMiB": 1891.0
+    },
+    {
+      "Name": "svchost",
+      "WorkingSetMiB": 1058.3
+    },
+    {
+      "Name": "node",
+      "WorkingSetMiB": 862.0
+    },
+    {
+      "Name": "iexplore",
+      "WorkingSetMiB": 793.3
+    },
+    {
+      "Name": "Memory Compression",
+      "WorkingSetMiB": 783.2
+    },
+    {
+      "Name": "msedge",
+      "WorkingSetMiB": 466.4
+    },
+    {
+      "Name": "MsMpEng",
+      "WorkingSetMiB": 424.5
+    },
+    {
+      "Name": "codex",
+      "WorkingSetMiB": 302.5
+    },
+    {
+      "Name": "Docker Desktop",
+      "WorkingSetMiB": 299.0
+    },
+    {
+      "Name": "conhost",
+      "WorkingSetMiB": 286.8
+    },
+    {
+      "Name": "mysqld",
+      "WorkingSetMiB": 263.5
+    },
+    {
+      "Name": "warp-svc",
+      "WorkingSetMiB": 257.3
+    },
+    {
+      "Name": "com.docker.backend",
+      "WorkingSetMiB": 241.4
+    },
+    {
+      "Name": "AnyDesk",
+      "WorkingSetMiB": 217.1
+    },
+    {
+      "Name": "Bitwarden",
+      "WorkingSetMiB": 212.0
+    },
+    {
+      "Name": "explorer",
+      "WorkingSetMiB": 184.6
+    }
+  ]
+}

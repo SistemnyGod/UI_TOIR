@@ -1,6 +1,6 @@
 # Infrastructure
 
-Дата актуализации: 2026-07-22.
+Дата актуализации: 2026-09-27.
 
 `infra` содержит локальные и будущие deployment-артефакты проекта.
 
@@ -13,11 +13,12 @@ docker compose -f .\infra\docker\compose.yaml up -d
 Состав:
 
 - PostgreSQL 17
-- Redis 7
-- RabbitMQ 3 Management
-- MinIO
 
-PostgreSQL используется application-кодом. Redis, RabbitMQ и MinIO доступны как инфраструктурный резерв и пока не являются обязательными runtime adapters.
+PostgreSQL используется application-кодом. Redis, RabbitMQ и MinIO являются совместимыми необязательными сервисами и в обычный запуск не входят. Для их явного подключения используйте второй Compose-файл:
+
+```powershell
+docker compose -f .\infra\docker\compose.yaml -f .\infra\docker\compose.optional-services.yaml up -d
+```
 
 ## Полный Docker-запуск приложения
 
@@ -32,7 +33,9 @@ docker compose -f .\infra\docker\compose.yaml --profile app up --build
 - web;
 - worker;
 - reverse proxy;
-- PostgreSQL и доступные stateful-сервисы.
+- PostgreSQL.
+
+Для добавления Redis, RabbitMQ и MinIO к профилю `app` передайте `-IncludeOptionalServices` в `tools\Start-Patrol360.ps1` либо второй Compose-файл из примера выше.
 
 Наружу публикуется proxy на портах `80`, `443` и `5173`. API и web containers доступны только внутри Docker network. Proxy направляет `/api/*` и `/health/*` во внутренний API.
 

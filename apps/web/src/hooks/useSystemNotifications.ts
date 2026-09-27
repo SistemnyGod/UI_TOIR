@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DataSourceMode } from "../types";
 import type { SystemNotificationDto } from "../api/contracts";
 import { createSystemNotificationsRepository } from "../repositories/systemNotificationsRepository";
@@ -8,13 +8,17 @@ const REFRESH_INTERVAL_MS = 60_000;
 export function useSystemNotifications({
   dataSourceMode,
   enabled,
+  sessionKey,
   showToast,
 }: {
   dataSourceMode: DataSourceMode;
   enabled: boolean;
+  sessionKey: string;
   showToast: (message: string) => void;
 }) {
   const repository = useMemo(() => createSystemNotificationsRepository(), []);
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
   const [items, setItems] = useState<SystemNotificationDto[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
@@ -27,8 +31,11 @@ export function useSystemNotifications({
 
     let cancelled = false;
     let didReportError = false;
+    let refreshInProgress = false;
 
     async function load({ silent = false }: { silent?: boolean } = {}) {
+      if (cancelled || refreshInProgress) return;
+      refreshInProgress = true;
       if (!silent) setStatus("loading");
       try {
         const next = await repository.list(24);
@@ -40,8 +47,10 @@ export function useSystemNotifications({
         setStatus("error");
         if (!didReportError) {
           didReportError = true;
-          showToast(error instanceof Error ? error.message : "Не удалось загрузить системные уведомления");
+          showToastRef.current(error instanceof Error ? error.message : "Не удалось загрузить системные уведомления");
         }
+      } finally {
+        refreshInProgress = false;
       }
     }
 
@@ -52,7 +61,7 @@ export function useSystemNotifications({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [dataSourceMode, enabled, repository, showToast]);
+  }, [dataSourceMode, enabled, repository, sessionKey]);
 
   return { items, status };
 }

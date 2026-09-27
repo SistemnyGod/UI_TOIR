@@ -14,6 +14,10 @@ internal sealed partial class EfEmuService
     {
         var operationAt = now.ToUniversalTime();
         var today = GetBusinessDate(now);
+        // This snapshot exists only for the current worker pass. It removes
+        // repeated reference queries without hiding later template edits.
+        var shiftTemplates = dbContext.EmuShiftTemplates.AsNoTracking().ToList();
+        var ambiguousShiftTemplateResolutions = new Dictionary<string, EmuShiftTemplateEntity>(StringComparer.OrdinalIgnoreCase);
         var activeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var changed = 0;
 
@@ -161,7 +165,11 @@ internal sealed partial class EfEmuService
                     EmuEmployeeShiftDto? accessShift = null;
                     if (accessEmployee is not null)
                     {
-                        accessShift = MapEmployeeShift(BuildDefaultShift(accessEmployee, GetBusinessDate(accessEvent.EventAt)));
+                        accessShift = MapEmployeeShift(BuildDefaultShift(
+                            accessEmployee,
+                            GetBusinessDate(accessEvent.EventAt),
+                            templateSnapshot: shiftTemplates,
+                            ambiguousTemplateResolutions: ambiguousShiftTemplateResolutions));
                     }
 
                     var isLunchExit = accessShift is not null
@@ -293,7 +301,11 @@ internal sealed partial class EfEmuService
                             continue;
                         }
 
-                        var shift = MapEmployeeShift(BuildDefaultShift(employee, GetBusinessDate(interval.StartedAt)));
+                        var shift = MapEmployeeShift(BuildDefaultShift(
+                            employee,
+                            GetBusinessDate(interval.StartedAt),
+                            templateSnapshot: shiftTemplates,
+                            ambiguousTemplateResolutions: ambiguousShiftTemplateResolutions));
                         if (operationAt <= shift.ActualEndAt || interval.StartedAt >= shift.ActualEndAt)
                         {
                             continue;

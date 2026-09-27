@@ -2,6 +2,7 @@ param(
   [switch]$SkipFrontendInstall,
   [switch]$IncludeE2E,
   [switch]$IncludeDbIntegration,
+  [string]$DbIntegrationAdminConnectionString,
   [switch]$CollectCoverage,
   [string]$ResultsDirectory = "TestResults"
 )
@@ -68,6 +69,52 @@ function Invoke-DotnetTestProject {
   Invoke-Native dotnet @arguments
 }
 
+function Start-IsolatedDbIntegrationPostgres {
+  param([Parameter(Mandatory = $true)][string]$DiagnosticsPath)
+
+  $testContainerName = "patrol360-dbtests-$PID-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
+  $containerId = (& docker run -d --name $testContainerName --label "patrol360.test-runner=true" `
+    -e "POSTGRES_DB=postgres" -e "POSTGRES_USER=patrol360" -e "POSTGRES_PASSWORD=patrol360_dev" `
+    -p "127.0.0.1::5432" postgres:17-alpine).Trim()
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($containerId)) {
+    throw "Could not start the isolated PostgreSQL container for DB integration tests."
+  }
+
+  try {
+    $deadline = (Get-Date).AddSeconds(90)
+    do {
+      & docker exec $containerId pg_isready -U patrol360 -d postgres *> $null
+      if ($LASTEXITCODE -eq 0) { break }
+      Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $deadline)
+    if ($LASTEXITCODE -ne 0) {
+      throw "The isolated PostgreSQL container did not become ready in 90 seconds."
+    }
+
+    $publishedPort = (& docker port $containerId 5432/tcp | Select-Object -First 1).Trim()
+    if ($LASTEXITCODE -ne 0 -or $publishedPort -notmatch ":(?<port>\d+)$") {
+      throw "Could not determine the loopback port of the isolated PostgreSQL container."
+    }
+
+    return [pscustomobject]@{
+      ContainerId = $containerId
+      ConnectionString = "Host=127.0.0.1;Port=$($Matches.port);Database=postgres;Username=patrol360;Password=patrol360_dev"
+      DiagnosticsPath = $DiagnosticsPath
+    }
+  }
+  catch {
+    & docker logs $containerId *> $DiagnosticsPath
+    & docker rm -f $containerId *> $null
+    throw
+  }
+}
+
+function Stop-IsolatedDbIntegrationPostgres {
+  param([Parameter(Mandatory = $true)]$Instance)
+  & docker logs $Instance.ContainerId *> $Instance.DiagnosticsPath
+  & docker rm -f $Instance.ContainerId *> $null
+}
+
 Push-Location $repoRoot
 try {
   $dotnetResults = Join-Path $resultsRoot "dotnet"
@@ -80,6 +127,7 @@ try {
 
   $previousDbIntegration = $env:PATROL360_RUN_DB_INTEGRATION
   $previousDbAdminConnectionString = $env:PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING
+  $isolatedDbIntegration = $null
   try {
     # The ordinary suite must never inherit a DB switch from the calling shell.
     Remove-Item Env:\PATROL360_RUN_DB_INTEGRATION -ErrorAction SilentlyContinue
@@ -99,19 +147,39 @@ try {
 
     if ($IncludeDbIntegration) {
       $env:PATROL360_RUN_DB_INTEGRATION = "true"
-      if ([string]::IsNullOrWhiteSpace($env:PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING)) {
-        $env:PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING = "Host=localhost;Port=5432;Database=postgres;Username=patrol360;Password=patrol360_dev"
-      }
-
       $dbResults = Join-Path $dotnetResults "db"
       New-Item -ItemType Directory -Force -Path $dbResults | Out-Null
-      Invoke-DotnetTestProject `
-        -ProjectPath ".\tests\Patrol360.Infrastructure.Tests\Patrol360.Infrastructure.Tests.csproj" `
-        -ProjectName "Patrol360.Infrastructure.Tests.DbIntegration" `
-        -ResultsPath $dbResults
+      $explicitConnection = if (-not [string]::IsNullOrWhiteSpace($DbIntegrationAdminConnectionString)) {
+        $DbIntegrationAdminConnectionString
+      }
+      else {
+        $previousDbAdminConnectionString
+      }
+      if ([string]::IsNullOrWhiteSpace($explicitConnection)) {
+        $isolatedDbIntegration = Start-IsolatedDbIntegrationPostgres -DiagnosticsPath (Join-Path $dbResults "isolated-postgres.log")
+        $env:PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING = $isolatedDbIntegration.ConnectionString
+      }
+      else {
+        $env:PATROL360_DB_INTEGRATION_ADMIN_CONNECTION_STRING = $explicitConnection
+      }
+      try {
+        Invoke-DotnetTestProject `
+          -ProjectPath ".\tests\Patrol360.Infrastructure.Tests\Patrol360.Infrastructure.Tests.csproj" `
+          -ProjectName "Patrol360.Infrastructure.Tests.DbIntegration" `
+          -ResultsPath $dbResults
+      }
+      finally {
+        if ($null -ne $isolatedDbIntegration) {
+          Stop-IsolatedDbIntegrationPostgres -Instance $isolatedDbIntegration
+          $isolatedDbIntegration = $null
+        }
+      }
     }
   }
   finally {
+    if ($null -ne $isolatedDbIntegration) {
+      Stop-IsolatedDbIntegrationPostgres -Instance $isolatedDbIntegration
+    }
     if ($null -eq $previousDbIntegration) {
       Remove-Item Env:\PATROL360_RUN_DB_INTEGRATION -ErrorAction SilentlyContinue
     }

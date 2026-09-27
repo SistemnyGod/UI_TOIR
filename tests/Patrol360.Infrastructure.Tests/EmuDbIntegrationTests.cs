@@ -1356,6 +1356,38 @@ public sealed class EmuDbIntegrationTests
     }
 
     [DbIntegrationFact]
+    public async Task RefreshNotificationsLoadsShiftTemplatesOnceForManyPercoEvents()
+    {
+        await using var database = await TemporaryPostgresDatabase.CreateAsync();
+        using var provider = BuildProvider(database.ConnectionString);
+        await provider.InitializePatrolDatabaseAsync();
+
+        var section = UseCatalog(provider, catalog => catalog.GetSettings()).Sections.First();
+        var startedAt = DateTimeOffset.UtcNow.AddMinutes(-40);
+        var created = UseWork(provider, work => work.CreateWorkSession(
+            new EmuCreateWorkSessionDto(DateOnly.FromDateTime(DateTime.UtcNow), section.Id, startedAt, [IvanovEmployeeId], "Template snapshot query budget"),
+            null,
+            "integration"));
+        Assert.True(created.Succeeded);
+        for (var index = 0; index < 50; index++)
+        {
+            InsertPercoAccessEvent(provider, IvanovEmployeeId, "OUT", startedAt.AddMinutes(index + 1));
+        }
+
+        var counter = new ShiftTemplateQueryCounter();
+        var options = new DbContextOptionsBuilder<Patrol360DbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(counter)
+            .Options;
+        await using var context = new Patrol360DbContext(options);
+        var service = new EfEmuService(context);
+
+        service.RefreshNotifications(DateTimeOffset.UtcNow);
+
+        Assert.Equal(1, counter.Reads);
+    }
+
+    [DbIntegrationFact]
     public async Task RefreshNotificationsCreatesDecisionForWorkWithoutPercoPresence()
     {
         await using var database = await TemporaryPostgresDatabase.CreateAsync();
@@ -2537,6 +2569,24 @@ public sealed class EmuDbIntegrationTests
         {
             Commands.Add(command.CommandText);
             if (command.CommandText.Contains("mobile_uploaded_files", StringComparison.OrdinalIgnoreCase))
+            {
+                Reads++;
+            }
+
+            return result;
+        }
+    }
+
+    private sealed class ShiftTemplateQueryCounter : DbCommandInterceptor
+    {
+        public int Reads { get; private set; }
+
+        public override InterceptionResult<DbDataReader> ReaderExecuting(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result)
+        {
+            if (command.CommandText.Contains("emu_shift_templates", StringComparison.OrdinalIgnoreCase))
             {
                 Reads++;
             }

@@ -10,7 +10,11 @@ namespace Patrol360.Infrastructure.Persistence;
 
 internal sealed partial class EfEmuService
 {
-    private EmuShiftTemplateEntity ResolveShiftTemplate(string? requestedShiftType, EmployeeEntity employee)
+    private EmuShiftTemplateEntity ResolveShiftTemplate(
+        string? requestedShiftType,
+        EmployeeEntity employee,
+        IReadOnlyList<EmuShiftTemplateEntity>? templateSnapshot = null,
+        IDictionary<string, EmuShiftTemplateEntity>? ambiguousTemplateResolutions = null)
     {
         var code = NormalizeShiftType(requestedShiftType);
         if (code.Length == 0)
@@ -18,13 +22,46 @@ internal sealed partial class EfEmuService
             code = InferShiftType(employee.Shift);
         }
 
-        return dbContext.EmuShiftTemplates.FirstOrDefault(row => row.Code == code || row.ShiftType == code)
+        if (templateSnapshot is null)
+        {
+            return dbContext.EmuShiftTemplates.FirstOrDefault(row => row.Code == code || row.ShiftType == code)
+                ?? CreateFallbackShiftTemplate(code);
+        }
+
+        var candidates = templateSnapshot
+            .Where(row => row.Code == code || row.ShiftType == code)
+            .Take(2)
+            .ToArray();
+        if (candidates.Length < 2)
+        {
+            return candidates.FirstOrDefault() ?? CreateFallbackShiftTemplate(code);
+        }
+
+        // Keep the previous database ordering for ambiguous legacy codes, but
+        // only ask once while RefreshNotifications processes this snapshot.
+        if (ambiguousTemplateResolutions is not null && ambiguousTemplateResolutions.TryGetValue(code, out var resolved))
+        {
+            return resolved;
+        }
+
+        resolved = dbContext.EmuShiftTemplates.FirstOrDefault(row => row.Code == code || row.ShiftType == code)
             ?? CreateFallbackShiftTemplate(code);
+        if (ambiguousTemplateResolutions is not null)
+        {
+            ambiguousTemplateResolutions[code] = resolved;
+        }
+        return resolved;
     }
 
-    private EmuEmployeeShiftEntity BuildDefaultShift(EmployeeEntity employee, DateOnly date, EmuShiftTemplateEntity? template = null, Guid? id = null)
+    private EmuEmployeeShiftEntity BuildDefaultShift(
+        EmployeeEntity employee,
+        DateOnly date,
+        EmuShiftTemplateEntity? template = null,
+        Guid? id = null,
+        IReadOnlyList<EmuShiftTemplateEntity>? templateSnapshot = null,
+        IDictionary<string, EmuShiftTemplateEntity>? ambiguousTemplateResolutions = null)
     {
-        template ??= ResolveShiftTemplate(null, employee);
+        template ??= ResolveShiftTemplate(null, employee, templateSnapshot, ambiguousTemplateResolutions);
         var plannedStart = ToBusinessDateTime(date, template.StartTime);
         var endDate = template.CrossesMidnight || template.EndTime <= template.StartTime ? date.AddDays(1) : date;
         var plannedEnd = ToBusinessDateTime(endDate, template.EndTime);

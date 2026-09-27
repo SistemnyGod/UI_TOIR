@@ -69,7 +69,7 @@ docs/
   inventory-interface-style.css
   inventory-interface-map.md
 infra/
-  docker/    локальные PostgreSQL/Redis/RabbitMQ/MinIO
+  docker/    PostgreSQL и отдельный Compose-файл для Redis/RabbitMQ/MinIO
 tests/
   Patrol360.Structure.Tests/
   Patrol360.Domain.Tests/

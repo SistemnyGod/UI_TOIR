@@ -1,0 +1,17 @@
+BEGIN
+SET
+                                             QUERY PLAN                                             
+----------------------------------------------------------------------------------------------------
+ Limit  (cost=0.00..5.75 rows=1 width=756) (actual rows=1 loops=1)
+   Buffers: shared hit=1
+   ->  Seq Scan on emu_shift_templates  (cost=0.00..11.50 rows=2 width=756) (actual rows=1 loops=1)
+         Filter: (((code)::text = 'day'::text) OR ((shift_type)::text = 'day'::text))
+         Rows Removed by Filter: 1
+         Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=116
+ Planning Time: 0.695 ms
+ Execution Time: 0.051 ms
+(10 rows)
+
+COMMIT

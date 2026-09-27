@@ -7,8 +7,9 @@ export function subscribeAssignmentAutoRefresh(
   let disposed = false;
   let refreshInProgress = false;
 
-  const runRefresh = async () => {
+  const runRefresh = async (periodic = false) => {
     if (disposed || refreshInProgress) return;
+    if (periodic && document.visibilityState !== "visible") return;
     refreshInProgress = true;
     try {
       await refresh();
@@ -22,7 +23,7 @@ export function subscribeAssignmentAutoRefresh(
     if (document.visibilityState === "visible") void runRefresh();
   };
 
-  const intervalId = window.setInterval(() => void runRefresh(), intervalMs);
+  const intervalId = window.setInterval(() => void runRefresh(true), intervalMs);
   window.addEventListener("focus", handleFocus);
   document.addEventListener("visibilitychange", handleVisibilityChange);
 
