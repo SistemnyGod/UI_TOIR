@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
   content: { alignItems: 'center', gap: 20, paddingBottom: 4 },
   symbol: { width: 76, height: 76, borderRadius: 38, alignItems: 'center', justifyContent: 'center' },
   copy: { gap: 10, alignSelf: 'stretch' },
-  title: { fontSize: 22, lineHeight: 28, fontWeight: '800', textAlign: 'center' },
+  title: { fontSize: 22, lineHeight: 28, fontFamily: "Manrope_800ExtraBold", textAlign: 'center' },
   message: { fontSize: 16, lineHeight: 24, textAlign: 'center' },
   action: { alignSelf: 'stretch' }
 });

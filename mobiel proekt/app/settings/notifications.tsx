@@ -61,7 +61,7 @@ export default function NotificationsRoute() {
     ListEmptyComponent={<Text style={{ color: colors.mutedText, fontSize: 16 }}>{busy ? 'Загружаем уведомления…' : 'После назначения обхода уведомления появятся здесь.'}</Text>}
     ListFooterComponent={more ? <PrimaryButton label="Загрузить ещё" disabled={busy} variant="secondary" onPress={() => setLimit(value => value + 25)} /> : null}
     renderItem={({ item: row, index }) => { const day = notificationDay(row.createdAt); const date = new Date(row.createdAt); return <Fragment>
-      {index === 0 || day !== notificationDay(rows[index - 1].createdAt) ? <Text style={{ marginTop: 14, color: colors.mutedText, fontSize: 16, fontWeight: "700" }}>{day}</Text> : null}
+      {index === 0 || day !== notificationDay(rows[index - 1].createdAt) ? <Text style={{ marginTop: 14, color: colors.mutedText, fontSize: 16, fontFamily: "Manrope_700Bold" }}>{day}</Text> : null}
       <Pressable accessibilityRole="button" accessibilityLabel={row.title || "Уведомление"} onPress={() => {
         const run = epoch.current;
         if (!row.readAt) void markMobileNotificationRead(row.id).catch(() => {

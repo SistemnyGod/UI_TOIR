@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Animated, Easing, Text, View } from "react-native";
 
 import { useAppTheme } from "@/features/settings/themePreference";
@@ -10,8 +10,8 @@ import { useReducedMotion } from "@/ui/useReducedMotion";
 export function BootSplash({ message = "Подготавливаем защищённое хранилище…" }: { message?: string }) {
   const { colors } = useAppTheme();
   const reduced = useReducedMotion();
-  const appear = useRef(new Animated.Value(reduced ? 1 : 0)).current;
-  const sweep = useRef(new Animated.Value(0)).current;
+  const [appear] = useState(() => new Animated.Value(reduced ? 1 : 0));
+  const [sweep] = useState(() => new Animated.Value(0));
   useEffect(() => {
     if (reduced) { appear.setValue(1); return; }
     Animated.timing(appear, { toValue: 1, duration: 700, easing: Easing.bezier(0.2, 0.9, 0.3, 1.2), useNativeDriver: true }).start();

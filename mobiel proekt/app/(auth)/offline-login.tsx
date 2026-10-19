@@ -177,13 +177,13 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   label: {
     color: colors.mutedText,
     fontSize: 14,
-    fontWeight: "700",
+    fontFamily: "Manrope_700Bold",
     textTransform: "uppercase"
   },
   title: {
     color: colors.text,
     fontSize: 20,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   },
   text: {
     color: colors.mutedText,

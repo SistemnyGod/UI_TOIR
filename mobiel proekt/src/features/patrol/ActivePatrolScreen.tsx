@@ -739,7 +739,7 @@ const styles = StyleSheet.create({
 
     fontSize: 13,
 
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
 
   },
 
@@ -747,7 +747,7 @@ const styles = StyleSheet.create({
 
     fontSize: 21,
 
-    fontWeight: "800",
+    fontFamily: "Manrope_800ExtraBold",
 
     lineHeight: 27
 
@@ -765,7 +765,7 @@ const styles = StyleSheet.create({
 
     fontSize: 18,
 
-    fontWeight: "900"
+    fontFamily: "Manrope_800ExtraBold"
 
   },
 
@@ -781,7 +781,7 @@ const styles = StyleSheet.create({
 
     fontSize: 14,
 
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
 
   },
 
@@ -807,7 +807,7 @@ const styles = StyleSheet.create({
 
     fontSize: 13,
 
-    fontWeight: "700"
+    fontFamily: "Manrope_700Bold"
 
   },
 
@@ -827,7 +827,7 @@ const styles = StyleSheet.create({
 
     fontSize: 11,
 
-    fontWeight: "900",
+    fontFamily: "Manrope_800ExtraBold",
 
     textTransform: "uppercase"
 
@@ -837,7 +837,7 @@ const styles = StyleSheet.create({
 
     fontSize: 14,
 
-    fontWeight: "800",
+    fontFamily: "Manrope_800ExtraBold",
 
     lineHeight: 19
 
@@ -877,7 +877,7 @@ const styles = StyleSheet.create({
 
     fontSize: 14,
 
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
 
   },
 

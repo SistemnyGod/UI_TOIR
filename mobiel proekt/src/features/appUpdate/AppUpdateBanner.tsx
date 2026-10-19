@@ -55,6 +55,6 @@ const styles = StyleSheet.create({
     shadowRadius: 12
   },
   header: { alignItems: "center", flexDirection: "row", gap: 10 },
-  title: { flex: 1, fontSize: 17, fontWeight: "800", lineHeight: 22 },
+  title: { flex: 1, fontSize: 17, fontFamily: "Manrope_800ExtraBold", lineHeight: 22 },
   notes: { fontSize: 14, lineHeight: 20 }
 });

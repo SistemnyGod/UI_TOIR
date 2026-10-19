@@ -697,7 +697,7 @@ const styles = StyleSheet.create({
   },
   itemTitle: {
     fontSize: 16,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   },
   itemTitleBox: {
     flex: 1,
@@ -723,12 +723,12 @@ const styles = StyleSheet.create({
   },
   metaLabel: {
     fontSize: 11,
-    fontWeight: "800",
+    fontFamily: "Manrope_800ExtraBold",
     textTransform: "uppercase"
   },
   metaValue: {
     fontSize: 13,
-    fontWeight: "700"
+    fontFamily: "Manrope_700Bold"
   },
   authNotice: {
     gap: 10,
@@ -738,13 +738,13 @@ const styles = StyleSheet.create({
   },
   authNoticeTitle: {
     fontSize: 16,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   },
   notice: {
     borderRadius: 12,
     borderWidth: 1,
     fontSize: 13,
-    fontWeight: "700",
+    fontFamily: "Manrope_700Bold",
     lineHeight: 18,
     padding: 10
   },
@@ -760,6 +760,6 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   }
 });

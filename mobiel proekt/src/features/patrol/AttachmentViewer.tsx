@@ -85,7 +85,7 @@ export function AttachmentViewer({ attachment, blockReason, readOnly = false, bu
 const styles = StyleSheet.create({
   root: { flex: 1, paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
   header: { flexDirection: "row", alignItems: "center", gap: 8 },
-  title: { flex: 1, fontSize: 20, lineHeight: 26, fontWeight: "700" },
+  title: { flex: 1, fontSize: 20, lineHeight: 26, fontFamily: "Manrope_700Bold" },
   close: { minWidth: 48, minHeight: 48, alignItems: "center", justifyContent: "center" },
   media: { flex: 1, borderRadius: 12, overflow: "hidden", alignItems: "center", justifyContent: "center" },
   image: { width: "100%", height: "100%" },

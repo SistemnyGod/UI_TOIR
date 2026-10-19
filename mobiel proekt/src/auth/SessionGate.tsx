@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
   errorTitle: {
     color: "#14233d",
     fontSize: 22,
-    fontWeight: "800",
+    fontFamily: "Manrope_800ExtraBold",
     textAlign: "center"
   },
   errorMessage: {
@@ -177,6 +177,6 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: "#ffffff",
     fontSize: 15,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   }
 });

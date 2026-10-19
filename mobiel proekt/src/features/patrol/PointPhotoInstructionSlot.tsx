@@ -26,7 +26,7 @@ export function PointPhotoInstructionSlot({ instruction, placeholderEnabled }: {
 
 const styles = StyleSheet.create({
   placeholder: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 48, padding: 12, borderRadius: 12, borderWidth: 1, borderStyle: "dashed" },
-  label: { fontSize: 16, lineHeight: 22, fontWeight: "700" },
+  label: { fontSize: 16, lineHeight: 22, fontFamily: "Manrope_700Bold" },
   text: { flexShrink: 1, fontSize: 14, lineHeight: 20 },
   photo: { width: "100%", aspectRatio: 4 / 3, borderRadius: 8 }
 });

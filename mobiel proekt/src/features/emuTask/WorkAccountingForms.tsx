@@ -363,7 +363,7 @@ export function ChoiceButton({ active, label, onPress }: { active: boolean; labe
 function FormHeader({ title, loading, onClose, onDelete }: { title: string; loading: boolean; onClose: () => void; onDelete: () => void }) {
   const { colors } = useAppTheme();
   return <View style={{ paddingLeft: 18, paddingRight: 6, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 4 }}>
-    <Text accessibilityRole="header" style={{ flex: 1, color: colors.text, fontSize: 20, fontWeight: "700" }}>{title}</Text>
+    <Text accessibilityRole="header" style={{ flex: 1, color: colors.text, fontSize: 20, fontFamily: "Manrope_700Bold" }}>{title}</Text>
     <View style={{ flexDirection: "row" }}>
       <Pressable accessibilityRole="button" accessibilityLabel="Действия" style={{ minHeight: 48, width: 48, alignItems: "center", justifyContent: "center" }} disabled={loading} onPress={() => Alert.alert("Черновик", "Удаление черновика не изменяет саму работу.", [{ text: "Отмена", style: "cancel" }, { text: "Удалить черновик", style: "destructive", onPress: () => Alert.alert("Удалить черновик?", "Сохранённый текст этой формы будет удалён.", [{ text: "Оставить", style: "cancel" }, { text: "Удалить", style: "destructive", onPress: onDelete }]) }])}><Ionicons name="ellipsis-horizontal" size={22} color={loading ? colors.disabledText : colors.mutedText} /></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Закрыть" style={{ minHeight: 48, width: 48, alignItems: "center", justifyContent: "center" }} disabled={loading} onPress={onClose}><Ionicons name="close-outline" size={24} color={loading ? colors.disabledText : colors.text} /></Pressable>

@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
   failureTitle: {
     color: "#14233d",
     fontSize: 22,
-    fontWeight: "800",
+    fontFamily: "Manrope_800ExtraBold",
     marginBottom: 12,
     textAlign: "center"
   },
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
   failureCode: {
     color: "#14233d",
     fontSize: 14,
-    fontWeight: "700",
+    fontFamily: "Manrope_700Bold",
     marginTop: 16,
     textAlign: "center"
   },
@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: "#ffffff",
     fontSize: 16,
-    fontWeight: "800",
+    fontFamily: "Manrope_800ExtraBold",
     textAlign: "center"
   },
   failureSupport: {

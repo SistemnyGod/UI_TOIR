@@ -27,7 +27,7 @@ export function AccountIdentity() {
   return <Card>
     <View style={{ gap: 4 }}>
       <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>Аккаунт приложения</Text>
-      <Text style={{ color: colors.text, fontSize: 16, lineHeight: 24, fontWeight: "700" }}>{identity?.account ?? (error ? "Не удалось прочитать аккаунт" : "Загрузка…")}</Text>
+      <Text style={{ color: colors.text, fontSize: 16, lineHeight: 24, fontFamily: "Manrope_700Bold" }}>{identity?.account ?? (error ? "Не удалось прочитать аккаунт" : "Загрузка…")}</Text>
     </View>
   </Card>;
 }

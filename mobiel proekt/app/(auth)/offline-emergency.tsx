@@ -53,7 +53,7 @@ export default function OfflineEmergencyRoute() {
 }
 
 const styles = StyleSheet.create({
-  label: { color: "#64748b", fontSize: 13, fontWeight: "700", textTransform: "uppercase" },
-  title: { color: "#0f172a", fontSize: 20, fontWeight: "800", marginTop: 4 },
+  label: { color: "#64748b", fontSize: 13, fontFamily: "Manrope_700Bold", textTransform: "uppercase" },
+  title: { color: "#0f172a", fontSize: 20, fontFamily: "Manrope_800ExtraBold", marginTop: 4 },
   text: { color: "#475569", fontSize: 15, lineHeight: 21, marginTop: 12 }
 });

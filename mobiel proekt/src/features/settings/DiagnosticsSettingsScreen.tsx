@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: "#1d4ed8",
     fontSize: 13,
-    fontWeight: "700",
+    fontFamily: "Manrope_700Bold",
     lineHeight: 18,
     padding: 10
   },
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   },
   itemTitle: {
     fontSize: 15,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   },
   pills: {
     flexDirection: "row",
@@ -315,6 +315,6 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   }
 });

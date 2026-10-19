@@ -111,7 +111,7 @@ export function PatrolAppealScreen() {
     keyExtractor={item => item.id}
     ListEmptyComponent={<Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>Обращений пока нет.</Text>}
     ListFooterComponent={hasMore ? <PrimaryButton label={loadingMore ? "Загрузка…" : "Загрузить ещё"} disabled={loadingMore} variant="secondary" onPress={() => void loadMore()} /> : null}
-    renderItem={({ item }) => <Card><Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>Вы · {new Date(item.createdAt).toLocaleString("ru-RU")}</Text><Text style={{ color: colors.text, fontWeight: "700" }}>{statusLabels[item.status] ?? item.status}</Text>
+    renderItem={({ item }) => <Card><Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>Вы · {new Date(item.createdAt).toLocaleString("ru-RU")}</Text><Text style={{ color: colors.text, fontFamily: "Manrope_700Bold" }}>{statusLabels[item.status] ?? item.status}</Text>
       <Text style={{ color: colors.text, fontSize: 16, lineHeight: 24 }}>{item.message}</Text>
       {item.reply ? <View><Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>Ответ диспетчера</Text><Text style={{ color: colors.text, fontSize: 16, lineHeight: 24 }}>{item.reply}</Text></View> : null}
       {["rejected", "conflict", "blocked", "invalidPayload"].includes(item.delivery ?? "") ? <Text style={{ color: colors.danger }}>Не доставлено. Проверьте очередь отправки в профиле.</Text> : null}

@@ -126,10 +126,10 @@ export function UpdateRequiredScreen({ state }: { state: AppUpdateState }) {
 const styles = StyleSheet.create({
   content: { gap: 16, paddingHorizontal: 20 },
   icon: { alignSelf: "center" },
-  title: { fontSize: 24, fontWeight: "800", lineHeight: 30, textAlign: "center" },
+  title: { fontSize: 24, fontFamily: "Manrope_800ExtraBold", lineHeight: 30, textAlign: "center" },
   body: { fontSize: 16, lineHeight: 22 },
   notes: { fontSize: 15, lineHeight: 21 },
   section: { borderRadius: 16, borderWidth: 1, gap: 12, padding: 16 },
-  sectionTitle: { fontSize: 17, fontWeight: "800", lineHeight: 22 },
+  sectionTitle: { fontSize: 17, fontFamily: "Manrope_800ExtraBold", lineHeight: 22 },
   hint: { fontSize: 13, lineHeight: 18 }
 });

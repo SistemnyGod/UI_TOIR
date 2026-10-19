@@ -60,7 +60,7 @@ export default function AccountRoute() {
 const styles = StyleSheet.create({
   title: {
     fontSize: 18,
-    fontWeight: "600"
+    fontFamily: "Manrope_600SemiBold"
   },
   text: {
     fontSize: 15,

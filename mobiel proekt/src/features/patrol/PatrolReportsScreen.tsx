@@ -54,7 +54,7 @@ export function PatrolReportsScreen() {
       {detail.cached ? <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>Сохранённая копия. Фото не загружены для просмотра офлайн.</Text> : null}
     </>}
     renderItem={({ item: point }) => <Card>
-      <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>{point.pointName}</Text>
+      <Text style={{ color: colors.text, fontSize: 18, fontFamily: "Manrope_700Bold" }}>{point.pointName}</Text>
       <Text style={{ color: colors.text, fontSize: 16, lineHeight: 24 }}>{point.status === 'skipped' ? 'Не осмотрена' : point.status === 'ok' ? 'Исправно' : point.status === 'issue' ? 'Неисправно' : point.status === 'manual' ? 'Без NFC — ручной осмотр' : 'Состояние требует проверки'}</Text>
       <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>{point.comment}</Text>
       <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>Фото: {point.photos}</Text>
@@ -73,7 +73,7 @@ export function PatrolReportsScreen() {
       const delivered = row.serverConfirmed || row.delivery?.status === 'delivered';
       const label = requiresAction ? 'Требуется действие' : delivered ? 'Получен сервером' : row.delivery?.status === 'sending' ? 'Отправляется' : 'Сохранён на телефоне';
       return <Card>
-        <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700' }}>{row.routeName}</Text>
+        <Text style={{ color: colors.text, fontSize: 20, fontFamily: "Manrope_700Bold" }}>{row.routeName}</Text>
         <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>{row.employeeName}</Text>
         <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>{row.completedAt ? new Date(row.completedAt).toLocaleString('ru-RU') : 'Дата не указана'}</Text>
         {row.needsReview ? <Text accessibilityRole="alert" style={{ color: colors.warning }}>Завершение не подтверждено. Проверьте отчёт вручную.</Text> : null}

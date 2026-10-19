@@ -418,21 +418,21 @@ const styles = StyleSheet.create({
   logoText: {
     color: "#ffffff",
     fontSize: 44,
-    fontWeight: "900",
+    fontFamily: "Manrope_800ExtraBold",
     lineHeight: 48,
     textAlign: "center"
   },
   logoSubText: {
     color: "#ffffff",
     fontSize: 14,
-    fontWeight: "900",
+    fontFamily: "Manrope_800ExtraBold",
     marginTop: -2,
     textAlign: "center"
   },
   title: {
     color: "#ffffff",
     fontSize: 21,
-    fontWeight: "800",
+    fontFamily: "Manrope_800ExtraBold",
     lineHeight: 26,
     marginTop: 18,
     textAlign: "center"
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
   label: {
     color: "#ffffff",
     fontSize: 16,
-    fontWeight: "800",
+    fontFamily: "Manrope_800ExtraBold",
     marginBottom: 8
   },
   passwordLabel: {
@@ -545,7 +545,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 26,
     textAlign: "center",
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   },
   quickLoginWrap: {
     alignItems: "center",
@@ -616,7 +616,7 @@ const styles = StyleSheet.create({
   localServerButtonText: {
     color: "#ffffff",
     fontSize: 14,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   },
   localServerButtonUrl: {
     color: "#9db7d7",

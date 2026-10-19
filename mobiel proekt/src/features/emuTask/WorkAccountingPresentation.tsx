@@ -135,7 +135,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.text,
     flex: 1,
     fontSize: 18,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   },
   choice: {
     minHeight: 48,
@@ -153,7 +153,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   choiceText: {
     color: colors.mutedText,
     fontSize: 14,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   },
   choiceTextActive: {
     color: colors.primary
@@ -193,7 +193,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   label: {
     color: colors.mutedText,
     fontSize: 14,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   },
   disabledAction: {
     opacity: 0.45
@@ -234,19 +234,19 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.primary,
     flex: 1,
     fontSize: 14,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   },
   menuSubtitle: {
     color: colors.mutedText,
     fontSize: 14,
-    fontWeight: "700",
+    fontFamily: "Manrope_700Bold",
     lineHeight: 20,
     marginHorizontal: 18,
     marginTop: -8
   },
   message: {
     fontSize: 14,
-    fontWeight: "700",
+    fontFamily: "Manrope_700Bold",
     lineHeight: 20
   },
   metaRow: {
@@ -293,7 +293,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   modalTitle: {
     color: colors.text,
     fontSize: 20,
-    fontWeight: "900",
+    fontFamily: "Manrope_800ExtraBold",
     margin: 18,
     marginBottom: 12
   },
@@ -311,7 +311,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 10,
     color: colors.mutedText,
     fontSize: 14,
-    fontWeight: "700",
+    fontFamily: "Manrope_700Bold",
     padding: 12
   },
   row: {
@@ -340,7 +340,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   segmentText: {
     color: colors.mutedText,
     fontSize: 14,
-    fontWeight: "900"
+    fontFamily: "Manrope_800ExtraBold"
   },
   segmentTextActive: {
     color: colors.onPrimary

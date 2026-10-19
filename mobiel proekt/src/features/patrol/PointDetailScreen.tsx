@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 12,
-    fontWeight: "700",
+    fontFamily: "Manrope_700Bold",
     textTransform: "uppercase"
   },
   infoLine: {
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
   videoLabel: {
     color: "#1d4ed8",
     fontSize: 12,
-    fontWeight: "800",
+    fontFamily: "Manrope_800ExtraBold",
     marginTop: 4
   },
   pills: {
@@ -431,11 +431,11 @@ const styles = StyleSheet.create({
   },
   secondaryActionText: {
     fontSize: 14,
-    fontWeight: "700"
+    fontFamily: "Manrope_700Bold"
   },
   sectionTitle: {
     fontSize: 17,
-    fontWeight: "700"
+    fontFamily: "Manrope_700Bold"
   },
   text: {
     fontSize: 15,
@@ -443,7 +443,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: "700",
+    fontFamily: "Manrope_700Bold",
     lineHeight: 26
   },
   titleBox: {

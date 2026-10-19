@@ -21,6 +21,6 @@ export function ProfileRow({ title, detail, icon, onPress, last, danger, trailin
 }
 export const profileStyles = StyleSheet.create({
   row: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 12, marginHorizontal: 16 },
-  label: { fontSize: 16, lineHeight: 22, fontWeight: "700" },
+  label: { fontSize: 16, lineHeight: 22, fontFamily: "Manrope_700Bold" },
   detail: { fontSize: 14, lineHeight: 20 },
 });

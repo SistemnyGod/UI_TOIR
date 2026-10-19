@@ -352,11 +352,11 @@ const styles = StyleSheet.create({
   },
   displayNumber: {
     fontSize: 14,
-    fontWeight: "900"
+    fontFamily: "Manrope_800ExtraBold"
   },
   title: {
     fontSize: 22,
-    fontWeight: "900",
+    fontFamily: "Manrope_800ExtraBold",
     lineHeight: 28
   },
   text: {
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 17,
-    fontWeight: "900"
+    fontFamily: "Manrope_800ExtraBold"
   },
   infoGrid: {
     flexDirection: "row",
@@ -384,12 +384,12 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 14,
-    fontWeight: "900",
+    fontFamily: "Manrope_800ExtraBold",
     textTransform: "uppercase"
   },
   infoValue: {
     fontSize: 14,
-    fontWeight: "900"
+    fontFamily: "Manrope_800ExtraBold"
   },
   nextStepBox: {
     backgroundColor: "#eef4ff",
@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
   nextStepLabel: {
     color: "#1e5bff",
     fontSize: 14,
-    fontWeight: "900",
+    fontFamily: "Manrope_800ExtraBold",
     textTransform: "uppercase"
   },
   secondaryRow: {
@@ -417,7 +417,7 @@ const styles = StyleSheet.create({
   },
   linkLabel: {
     fontSize: 14,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   },
   iconButton: {
     alignItems: "center",

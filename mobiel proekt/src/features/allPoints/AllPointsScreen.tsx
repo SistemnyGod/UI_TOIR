@@ -233,9 +233,9 @@ function PointRow({ point, onPress, reasons }: { point: PointListItem; onPress: 
           </View>
           <View style={styles.pointTitleBox}>
             <Text style={[styles.pointTitle, font(800), { color: colors.text }]}>{point.orderIndex}. {point.name}</Text>
+            <StatusPill label={pointStatusLabel(point.status)} tone={tone} />
             {reasons?.filter(reason => reason !== "Обязательная метка не заполнена.").map(reason => <Text key={reason} style={[styles.text, font(600), { color: colors.mutedText }]}>{reason}</Text>)}
           </View>
-          <StatusPill label={pointStatusLabel(point.status)} tone={tone} />
           <Ionicons name="chevron-forward" size={18} color={colors.faintText} />
         </View>
       </Card>
@@ -351,12 +351,12 @@ const styles = StyleSheet.create({
   },
   pointIndexText: {
     fontSize: 14,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   },
   pointTitleBox: {
     flex: 1,
     alignItems: "flex-start",
-    gap: 2,
+    gap: 5,
     minWidth: 0
   },
   pointTitle: {
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
   title: {
     flex: 1,
     fontSize: 18,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   },
   text: {
     fontSize: 14,
@@ -378,6 +378,6 @@ const styles = StyleSheet.create({
   },
   chevron: {
     fontSize: 24,
-    fontWeight: "600"
+    fontFamily: "Manrope_600SemiBold"
   }
 });

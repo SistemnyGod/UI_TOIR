@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontWeight: "800",
+    fontFamily: "Manrope_800ExtraBold",
     textAlign: "center"
   },
   message: {
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 16,
-    fontWeight: "800",
+    fontFamily: "Manrope_800ExtraBold",
     textAlign: "center"
   },
   hint: {

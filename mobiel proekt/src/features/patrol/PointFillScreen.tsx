@@ -2,6 +2,8 @@ import { subscribeToSyncEvents } from "@/sync/syncEvents";
 import { TransientNotice } from "@/ui/TransientNotice";
 import { inspectionChoices, needsManualInspectionReason } from "./pointInspectionPresentation";
 import type { ThemeColors } from "@/ui/atomTheme";
+import { toneFill } from "@/ui/atomTheme";
+import { font } from "@/ui/typography";
 import { StatusMessage } from "@/ui/StatusMessage";
 import { SelectField } from "@/ui/SelectField";
 import { TextField as TextInput } from "@/ui/TextField";
@@ -565,11 +567,11 @@ export function PointFillScreen() {
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end", paddingTop: 16 }}>
         <View style={{ alignItems: "center", gap: 10, padding: 24 }}>
           <Text style={{ color: colors.mutedText, fontSize: 16 }}>{point.name}</Text>
-          <Ionicons name="radio-outline" size={80} color={colors.mutedText} />
+          <View style={{ width: 96, height: 96, borderRadius: 32, alignItems: "center", justifyContent: "center", backgroundColor: colors.warningSurface }}><Ionicons name="pricetag-outline" size={48} color={colors.warning} /></View>
         </View>
-        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, gap: 14, borderWidth: 1, borderColor: colors.border }}>
+        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 14, borderWidth: 1, borderColor: colors.cardBorder, shadowColor: colors.shadow, shadowOpacity: 0.18, shadowRadius: 24, shadowOffset: { width: 0, height: -8 }, elevation: 12 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Text accessibilityRole="header" style={{ flex: 1, fontSize: 22, fontWeight: "700", color: colors.text }}>Метка недоступна</Text>
+            <Text accessibilityRole="header" style={[font(800), { flex: 1, fontSize: 22, color: colors.text }]}>Метка недоступна</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Закрыть причину недоступности метки" disabled={isSubmitting} onPress={() => router.back()} style={{ minWidth: 48, minHeight: 48, alignItems: "center", justifyContent: "center" }}>
               <Ionicons name="close-outline" size={24} color={colors.text} />
             </Pressable>
@@ -771,12 +773,12 @@ function StatusButton({ label, tone, selected, disabled, stacked, wrap, onPress 
     disabled={disabled} onPress={onPress}
     style={({ pressed }) => [styles.statusButton, stacked && styles.statusButtonStack,
       wrap && { flexGrow: 1, flexBasis: tone === 'warning' ? '100%' : '45%' },
-      { backgroundColor: colors[`${tone}Surface`], borderColor: colors[tone], opacity: disabled ? 0.55 : pressed ? 0.8 : 1,
+      { backgroundColor: colors[`${tone}Surface`], borderColor: selected ? colors[tone] : colors[`${tone}Surface`], opacity: disabled ? 0.55 : 1,
         transform: [{ scale: pressed ? 0.97 : 1 }] }]}>
-    <View style={[styles.statusIcon, { backgroundColor: colors.card }]}>
-      <Ionicons color={colors[tone]} name={tone === "success" ? "checkmark-circle-outline" : tone === "danger" ? "alert-circle-outline" : "eye-off-outline"} size={40} />
+    <View style={[styles.statusIcon, { backgroundColor: toneFill(colors, tone), shadowColor: toneFill(colors, tone) }]}>
+      <Ionicons color={colors.onAccent} name={tone === "success" ? "checkmark" : tone === "danger" ? "alert" : "eye-off-outline"} size={34} />
     </View>
-    <Text textBreakStrategy="simple" style={[styles.statusText, { color: colors[tone] }]}>{!stacked && label === "Осмотр невозможен" ? "Осмотр\nневозможен" : label}</Text>
+    <Text textBreakStrategy="simple" style={[styles.statusText, font(800), { color: colors[tone] }]}>{!stacked && label === "Осмотр невозможен" ? "Осмотр\nневозможен" : label}</Text>
   </Pressable>;
 }
 
@@ -822,9 +824,10 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: "700",
-    lineHeight: 26
+    fontSize: 22,
+    fontFamily: "Manrope_800ExtraBold",
+    letterSpacing: -0.3,
+    lineHeight: 28
   },
   text: {
     fontSize: 16,
@@ -840,13 +843,13 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 14, lineHeight: 20, color: colors.mutedText
   },
   field: { gap: 8 },
-  label: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "700" },
+  label: { color: colors.text, fontSize: 16, lineHeight: 22, fontFamily: "Manrope_700Bold" },
   input: {
-    borderColor: colors.border,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 14,
+    borderWidth: 1.5,
     fontSize: 16,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10
   },
   textArea: {
@@ -858,8 +861,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   statusStack: { flexDirection: "column" },
   statusButton: { flex: 1, minHeight: 156, alignItems: "center", justifyContent: "center", gap: 16, borderRadius: 24, borderWidth: 1.5, paddingHorizontal: 10, paddingVertical: 24 },
   statusButtonStack: { flex: 0, minHeight: 120, flexDirection: "row", paddingHorizontal: 20 },
-  statusIcon: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center" },
-  statusText: { flexShrink: 1, fontSize: 18, lineHeight: 26, fontWeight: "700", textAlign: "center" },
+  statusIcon: { width: 64, height: 64, borderRadius: 22, alignItems: "center", justifyContent: "center", shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5 },
+  statusText: { flexShrink: 1, fontSize: 20, lineHeight: 26, textAlign: "center" },
   guidanceBlock: {
     gap: 5
   },
@@ -929,7 +932,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   videoLabel: {
     color: colors.primary,
     fontSize: 14,
-    fontWeight: "800",
+    fontFamily: "Manrope_800ExtraBold",
     marginTop: 4
   },
   bottomActions: {
@@ -953,7 +956,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   inlineLinkText: {
     fontSize: 14,
-    fontWeight: "800"
+    fontFamily: "Manrope_800ExtraBold"
   },
   moreButton: {
     alignItems: "center",

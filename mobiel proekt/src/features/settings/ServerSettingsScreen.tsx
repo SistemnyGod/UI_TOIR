@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: "600"
+    fontFamily: "Manrope_600SemiBold"
   },
   text: {
     fontSize: 14,
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: "Manrope_600SemiBold",
     lineHeight: 20
   },
   buttonColumn: {

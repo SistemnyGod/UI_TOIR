@@ -41,7 +41,7 @@ export function AppUpdateSettingsScreen() {
         {!state.lastCheckError && state.lastCheckedAt !== null ? <StatusMessage message={checkResultLabel(state)} tone={manifest ? "warning" : "success"} /> : null}
         {manifest ? (
           <View style={{ gap: 10 }}>
-            <Text style={{ color: colors.text, fontSize: 17, fontWeight: "800" }}>{appUpdateTitle(manifest.versionName)}</Text>
+            <Text style={{ color: colors.text, fontSize: 17, fontFamily: "Manrope_800ExtraBold" }}>{appUpdateTitle(manifest.versionName)}</Text>
             {manifest.releaseNotes ? <Text style={{ color: colors.mutedText, fontSize: 15, lineHeight: 21 }}>{manifest.releaseNotes}</Text> : null}
             <Text selectable style={{ color: colors.mutedText, fontSize: 13 }}>
               {`${formatMegabytes(manifest.apkSizeBytes)} · SHA-256 ${shortSha256(manifest.sha256)}`}

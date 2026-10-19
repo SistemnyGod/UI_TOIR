@@ -320,7 +320,7 @@ export function SubmitReportScreen() {
         </View> : null}
         <Pressable accessibilityRole="button" accessibilityLabel={showStatistics ? "Скрыть статистику" : "Подробная статистика"} accessibilityState={{ expanded: showStatistics }}
           onPress={() => setShowStatistics(value => !value)} style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={{ flex: 1, color: colors.primary, fontSize: 14, lineHeight: 20, fontWeight: '600' }}>Подробная статистика</Text>
+          <Text style={{ flex: 1, color: colors.primary, fontSize: 14, lineHeight: 20, fontFamily: "Manrope_600SemiBold" }}>Подробная статистика</Text>
           <Ionicons color={colors.primary} name={showStatistics ? 'chevron-up' : 'chevron-down'} size={20} />
         </Pressable>
         {showStatistics ? <View style={styles.progressRow}>
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
   title: {
     flexShrink: 1,
     fontSize: 20,
-    fontWeight: '800'
+    fontFamily: "Manrope_800ExtraBold"
   },
   routeSummary: {
     flex: 1,
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
   count: {
     fontSize: 16,
     lineHeight: 22,
-    fontWeight: '700',
+    fontFamily: "Manrope_700Bold",
     flexShrink: 0
   },
   progressRow: {
@@ -482,11 +482,11 @@ const styles = StyleSheet.create({
   },
   progressLabel: {
     fontSize: 14,
-    fontWeight: '700'
+    fontFamily: "Manrope_700Bold"
   },
   progressNumber: {
     fontSize: 18,
-    fontWeight: '900'
+    fontFamily: "Manrope_800ExtraBold"
   },
   deliveryHeader: {
     alignItems: 'flex-start',
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     lineHeight: 22,
-    fontWeight: '800'
+    fontFamily: "Manrope_800ExtraBold"
   },
   text: {
     fontSize: 14,
@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     lineHeight: 22,
-    fontWeight: '800'
+    fontFamily: "Manrope_800ExtraBold"
   },
   reason: {
     fontSize: 14,
@@ -546,6 +546,6 @@ const styles = StyleSheet.create({
   },
   linkText: {
     fontSize: 14,
-    fontWeight: '800'
+    fontFamily: "Manrope_800ExtraBold"
   }
 });

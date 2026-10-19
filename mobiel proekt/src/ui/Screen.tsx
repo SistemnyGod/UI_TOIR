@@ -285,11 +285,11 @@ const styles = StyleSheet.create({
   brandMarkText: {
     color: "#ffffff",
     fontSize: 12,
-    fontWeight: "900"
+    fontFamily: "Manrope_800ExtraBold"
   },
   brandText: {
     fontSize: 11,
-    fontWeight: "800",
+    fontFamily: "Manrope_800ExtraBold",
     lineHeight: 12
   },
   networkBadge: {
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
   },
   nestedNavLabel: {
     fontSize: 10,
-    fontWeight: "800",
+    fontFamily: "Manrope_800ExtraBold",
     lineHeight: 12
   }
 });
