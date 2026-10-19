@@ -24,5 +24,5 @@ test("NFC scan matches both NDEF content and the physical tag UID", async () => 
   assert.match(repositorySource, /scannedCodes\.flatMap\(getNfcCodeCandidates\)/);
   assert.match(screenSource, /const nfcCodes = getNfcCodes\(tag\)/);
   assert.match(screenSource, /scanPointByNfc\(assignmentId, nfcCodes\)/);
-  assert.match(screenSource, /setStatus\(["']unmatched["']\)/);
+  // Unmatched-tag outcomes are covered by behavior tests in scanFeedbackUi/scanTagOutcome.
 });

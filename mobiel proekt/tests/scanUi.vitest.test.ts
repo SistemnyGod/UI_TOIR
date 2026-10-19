@@ -52,11 +52,14 @@ vi.mock('@/auth/dataOwnerContext', () => ({ captureDataOwnerContext: async () =>
 vi.mock('@/services/cameraService', () => ({ ensureCameraPermission: async () => state.cameraPermission }));
 vi.mock('@/services/qrScannerService', () => ({ createQrScanResult: (value: string) => ({ qrCodeHash: value }) }));
 vi.mock('@/services/nfcService', () => ({
-  getNfcCodes: () => ['nfc-code'], initializeNfc: state.nfcLookup, isNfcEnabled: state.enabledLookup,
+  getNfcCodes: () => ['nfc-code'], isIncompleteNdefRead: () => false, initializeNfc: state.nfcLookup, isNfcEnabled: state.enabledLookup,
   openNfcSettings: state.openNfcSettings, subscribeNfcAdapterState: (callback: (enabled: boolean) => void) => { state.adapterChange = callback; return () => { state.adapterChange = undefined; }; },
   startNfcReaderSession: state.startReader, stopNfcReaderSession: state.stopReader
 }));
 vi.mock('@/sync/PatrolSyncCoordinator', () => ({ requestPatrolSync: vi.fn() }));
+vi.mock('@/db/repositories/scanTagLookupRepository', () => ({ findScanTagOwner: async () => ({ kind: 'unknown' }) }));
+vi.mock('@/db/repositories/mobileActionLogRepository', () => ({ logMobileAction: async () => undefined }));
+vi.mock('expo-keep-awake', () => ({ activateKeepAwakeAsync: async () => undefined, deactivateKeepAwake: async () => undefined }));
 vi.mock('@/sync/syncTriggers', () => ({ requestMobileDataRefresh: state.refreshMobile }));
 vi.mock('@/sync/syncEvents', () => ({ shouldReloadAssignmentAfterSync: () => true, subscribeToSyncEvents: (callback: (event: any) => void) => { state.syncEvent = callback; return () => { state.syncEvent = undefined; }; } }));
 vi.mock('@/services/mobileErrorReporter', () => ({ logMobileError: vi.fn() }));

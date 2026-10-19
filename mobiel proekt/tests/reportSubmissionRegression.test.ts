@@ -29,7 +29,7 @@ test('NFC waits for a non-empty route snapshot and arms automatically', () => {
   has(activePatrolScreenSource, 'router.push');
   has(activePatrolScreenSource, '/submit');
   has(scanNfcScreenSource, 'loadedProgress.total === 0');
-  has(scanNfcScreenSource, "setStatus('routeUnavailable')");
+  has(scanNfcScreenSource, "show('routeUnavailable'");
   has(scanNfcScreenSource, 'await armReader()');
   has(scanNfcScreenSource, 'startNfcReaderSession(handleTag)');
   has(scanNfcScreenSource, 'screenActiveRef.current = false');

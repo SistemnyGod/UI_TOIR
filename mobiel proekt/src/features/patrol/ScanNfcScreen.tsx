@@ -1,8 +1,13 @@
 import { ScanActionBar } from "./ScanActionBar";
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AppState, AppStateStatus, Vibration } from 'react-native';
+import { AppState, AppStateStatus } from 'react-native';
 import { ScanMessage, ScanProgress } from './ScanPresentation';
+import { createNfcReadRetryTracker, nfcReaderStartRetryDelaysMs, type NfcReadFailureKind } from './nfcReadRetryPolicy';
+import { logNfcReadFailure, logScanMatchFailure } from './scanDiagnostics';
+import { holdStillHint, presentScanOutcome, scanOutcomeRoute, type ScanOutcomeAction } from './scanOutcome';
+import { resolveScanOutcome } from './scanOutcomeResolver';
+import { useScanKeepAwake } from './useScanKeepAwake';
 
 import { captureDataOwnerContext, assertDataOwnerContext } from '@/auth/dataOwnerContext';
 import { shouldReloadAssignmentAfterSync, subscribeToSyncEvents } from '@/sync/syncEvents';
@@ -17,6 +22,7 @@ import {
 } from '@/db/repositories/patrolRepository';
 import {
   getNfcCodes,
+  isIncompleteNdefRead,
   openNfcSettings,
   subscribeNfcAdapterState,
   initializeNfc,
@@ -24,6 +30,7 @@ import {
   startNfcReaderSession,
   stopNfcReaderSession
 } from '@/services/nfcService';
+import { playScanFeedback } from '@/services/scanFeedback';
 import { requestPatrolSync } from '@/sync/PatrolSyncCoordinator';
 import { PrimaryButton } from '@/ui/PrimaryButton';
 import { Screen } from '@/ui/Screen';
@@ -35,6 +42,7 @@ type NfcStatus =
   | 'idle'
   | 'reading'
   | 'processing'
+  | 'retrying'
   | 'matched'
   | 'alreadyHandled'
   | 'unmatched'
@@ -49,6 +57,11 @@ type LastTag = {
   at: number;
 };
 
+const readPrompt = 'Поднесите телефон к NFC-метке';
+const rereadMessage = 'Метка не дочиталась. Не убирайте телефон — читаем ещё раз';
+/** After a silent re-arm with no tag in the field, fall back to the normal prompt. */
+const rereadPromptMs = 3000;
+
 export function ScanNfcScreen() {
   const router = useRouter();
   const { assignmentId } = useLocalSearchParams<{ assignmentId: string }>();
@@ -60,10 +73,13 @@ export function ScanNfcScreen() {
   const readerEpochRef = useRef(0);
   const readerRunningRef = useRef(false);
   const readerWakeRequestedRef = useRef(false);
-  const armReaderRef = useRef<() => Promise<void>>(async () => undefined);
+  const armReaderRef = useRef<(quiet?: boolean) => Promise<void>>(async () => undefined);
   const progressReadRef = useRef(0);
   const routeCanScanRef = useRef(false);
   const lastTagRef = useRef<LastTag | null>(null);
+  const readRetryRef = useRef(createNfcReadRetryTracker());
+  const readerStartFailuresRef = useRef(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [status, setStatus] = useState<NfcStatus>('idle');
   const [routeName, setRouteName] = useState<string | null>(null);
   const [assignmentStatus, setAssignmentStatus] = useState<string | null>(null);
@@ -71,8 +87,49 @@ export function ScanNfcScreen() {
   const [progress, setProgress] = useState<AssignmentProgress | null>(null);
   const [nextPoint, setNextPoint] = useState<PointListItem | null>(null);
   const [progressError, setProgressError] = useState<string | null>(null);
-  const [message, setMessage] = useState('Поднесите телефон к NFC-метке');
+  const [message, setMessage] = useState(readPrompt);
+  const [hint, setHint] = useState<string | null>(null);
+  const [outcomeAction, setOutcomeAction] = useState<ScanOutcomeAction | null>(null);
+  const [readerFailed, setReaderFailed] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  useScanKeepAwake('patrol-scan-nfc');
+
+  const show = useCallback((nextStatus: NfcStatus, nextMessage: string, nextHint: string | null = null, action: ScanOutcomeAction | null = null) => {
+    setStatus(nextStatus);
+    setMessage(nextMessage);
+    setHint(nextHint);
+    setOutcomeAction(action);
+  }, []);
+
+  const clearRetryTimer = useCallback(() => {
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    retryTimerRef.current = null;
+  }, []);
+
+  /** Re-arms the reader after a delay; Android then re-polls a tag that is still held. */
+  const scheduleReaderRestart = useCallback((delayMs: number) => {
+    const epoch = screenEpochRef.current;
+    clearRetryTimer();
+    readerEpochRef.current++;
+    readerRunningRef.current = false;
+    void stopNfcReaderSession();
+    retryTimerRef.current = setTimeout(() => {
+      retryTimerRef.current = null;
+      if (screenEpochRef.current === epoch) void armReaderRef.current(true);
+    }, delayMs);
+  }, [clearRetryTimer]);
+
+  const handleReadFailure = useCallback((kind: NfcReadFailureKind) => {
+    const decision = readRetryRef.current.recordFailure(kind);
+    logNfcReadFailure(assignmentId, kind, decision.attempt, decision.retry);
+    if (decision.retry) {
+      show('retrying', rereadMessage);
+      scheduleReaderRestart(decision.delayMs);
+      return;
+    }
+    show('error', 'Не удалось прочитать NFC-метку', decision.showHint ? holdStillHint : 'Поднесите телефон к метке ещё раз.');
+    playScanFeedback('readError');
+  }, [assignmentId, scheduleReaderRestart, show]);
 
   const handleTag = useCallback(async (tag: unknown) => {
     if (!screenActiveRef.current || !appActiveRef.current || scanInProgressRef.current) {
@@ -82,11 +139,10 @@ export function ScanNfcScreen() {
 
     const nfcCodes = getNfcCodes(tag);
     if (nfcCodes.length === 0) {
-      setStatus('error');
-      setMessage('Не удалось прочитать код NFC-метки');
-      Vibration.vibrate([0, 80, 60, 80]);
+      handleReadFailure('unreadableTag');
       return;
     }
+    const incompleteRead = isIncompleteNdefRead(tag);
 
     const tagKey = [...nfcCodes].sort().join('|');
     const previousTag = lastTagRef.current;
@@ -98,37 +154,37 @@ export function ScanNfcScreen() {
     const ownerEpoch = screenEpochRef.current;
     const isCurrent = () => screenActiveRef.current && appActiveRef.current && routeCanScanRef.current && screenEpochRef.current === ownerEpoch;
     scanInProgressRef.current = true;
-    setStatus('processing');
-    setMessage('Метка обнаружена. Проверяем…');
+    show('processing', 'Метка обнаружена. Проверяем…');
 
     try {
-      const result = await scanPointByNfc(assignmentId, nfcCodes);
+      const outcome = await resolveScanOutcome(assignmentId, 'nfc', nfcCodes, () => scanPointByNfc(assignmentId, nfcCodes));
       if (!isCurrent()) {
         return;
       }
+      if (outcome.kind === 'unknown' && incompleteRead) {
+        // Re-read the same tag instead of calling a half-read route tag foreign.
+        lastTagRef.current = null;
+        handleReadFailure('tagLost');
+        return;
+      }
+      readRetryRef.current.recordSuccess();
 
-      if (!result.matched) {
-        setStatus('unmatched');
-        setMessage('Метка не относится к выбранному маршруту');
-        Vibration.vibrate([0, 90, 60, 90]);
+      const view = presentScanOutcome(outcome, 'nfc');
+      playScanFeedback(view.feedback);
+      logScanMatchFailure(assignmentId, 'nfc', outcome);
+      // Duplicate, wrong-point and unknown tags leave the route unchanged; the reader stays armed.
+      if (outcome.kind !== 'confirmed') {
+        show(outcome.kind === 'alreadyScanned' || outcome.kind === 'alreadyCompleted' ? 'alreadyHandled' : 'unmatched',
+          view.message, view.hint, view.action);
         return;
       }
 
-      if (result.alreadyScanned || result.alreadyCompleted) {
-        setStatus('alreadyHandled');
-        setMessage('Метка уже обработана. Поднесите следующую');
-        Vibration.vibrate([0, 45]);
-        return;
-      }
-
-      setStatus('matched');
-      setMessage('Метка подтверждена');
-      Vibration.vibrate(80);
+      show('matched', view.message);
       readerEpochRef.current++;
       readerRunningRef.current = false;
       await stopNfcReaderSession();
       if (!isCurrent()) return;
-      router.replace(`/patrol/assignment/${assignmentId}/point/${result.point.pointId}/fill`);
+      router.replace(`/patrol/assignment/${assignmentId}/point/${outcome.point.pointId}/fill`);
     } catch (error) {
       if (!isCurrent()) {
         return;
@@ -143,22 +199,20 @@ export function ScanNfcScreen() {
         readerEpochRef.current++;
         readerRunningRef.current = false;
         void stopNfcReaderSession();
-        setStatus('blocked');
-        setMessage('Запуск обхода временно восстанавливается');
+        show('blocked', 'Запуск обхода временно восстанавливается');
         void requestPatrolSync({ mode: 'normal' });
       } else {
-        setStatus('error');
-        setMessage(errorMessage);
-        Vibration.vibrate([0, 80, 60, 80]);
+        show('error', errorMessage);
+        playScanFeedback('readError');
       }
     } finally {
       // A stale scanner must not unlock a reader owned by the next focused
       // assignment.
       if (screenEpochRef.current === ownerEpoch) scanInProgressRef.current = false;
     }
-  }, [assignmentId, router]);
+  }, [assignmentId, handleReadFailure, router, show]);
 
-  const armReader = useCallback(async (): Promise<void> => {
+  const armReader = useCallback(async (quiet = false): Promise<void> => {
     if (!screenActiveRef.current || !appActiveRef.current || !routeCanScanRef.current || readerRunningRef.current || scanInProgressRef.current) return;
     if (readerStartInProgressRef.current) {
       // Keep an ON event that arrives while the disabled lookup is pending.
@@ -172,26 +226,45 @@ export function ScanNfcScreen() {
       && screenEpochRef.current === epoch && readerEpochRef.current === readerEpoch;
     readerStartInProgressRef.current = operation;
     readerWakeRequestedRef.current = false;
-    setStatus('idle');
-    setMessage('Подготавливаем сканирование…');
+    clearRetryTimer();
+    setReaderFailed(false);
+    // A silent retry keeps the "reading again" message instead of flashing a setup state.
+    if (!quiet) show('idle', 'Подготавливаем сканирование…');
     try {
       const nfc = await initializeNfc();
       if (!isCurrent()) return;
       if (!nfc.supported) {
-        setStatus('unsupported'); setMessage('Телефон не поддерживает NFC'); return;
+        show('unsupported', 'Телефон не поддерживает NFC'); return;
       }
       if (!nfc.enabled) {
-        setStatus('disabled'); setMessage('NFC выключен. Включите NFC в настройках телефона'); return;
+        show('disabled', 'NFC выключен. Включите NFC в настройках телефона'); return;
       }
       const stopOwnReader = await startNfcReaderSession(handleTag);
       if (!isCurrent()) { await stopOwnReader?.(); return; }
       readerRunningRef.current = true;
-      setStatus('reading');
-      setMessage('Поднесите телефон к NFC-метке');
-    } catch (error) {
+      readerStartFailuresRef.current = 0;
+      if (quiet) {
+        setStatus('reading');
+        retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null;
+          setMessage(current => current === rereadMessage ? readPrompt : current);
+        }, rereadPromptMs);
+      } else show('reading', readPrompt);
+    } catch {
       if (isCurrent()) {
-        setStatus('error');
-        setMessage(error instanceof Error ? error.message : 'Не удалось включить сканирование NFC');
+        const attempt = ++readerStartFailuresRef.current;
+        const delayMs = nfcReaderStartRetryDelaysMs[attempt - 1];
+        logNfcReadFailure(assignmentId, 'readerStart', attempt, delayMs !== undefined);
+        if (delayMs !== undefined) {
+          show('retrying', 'Подготавливаем сканирование…');
+          scheduleReaderRestart(delayMs);
+        } else {
+          readerStartFailuresRef.current = 0;
+          setReaderFailed(true);
+          show('error', 'Не удалось включить сканирование NFC',
+            'Нажмите «Повторить». Если не помогло, выключите и снова включите NFC в настройках телефона.');
+          playScanFeedback('readError');
+        }
       }
     } finally {
       if (readerStartInProgressRef.current === operation) readerStartInProgressRef.current = null;
@@ -200,7 +273,7 @@ export function ScanNfcScreen() {
         void armReaderRef.current();
       }
     }
-  }, [handleTag]);
+  }, [assignmentId, clearRetryTimer, handleTag, scheduleReaderRestart, show]);
   useLayoutEffect(() => { armReaderRef.current = armReader; }, [armReader]);
 
   const loadRouteProgress = useCallback(async () => {
@@ -233,22 +306,22 @@ export function ScanNfcScreen() {
       readerEpochRef.current++;
       readerRunningRef.current = false;
       readerWakeRequestedRef.current = false;
+      clearRetryTimer();
       void stopNfcReaderSession();
     }
     if (loadedProgress.total > 0 && loadedProgress.completed === loadedProgress.total) {
-      setStatus('completed'); setMessage('Все точки заполнены. Можно проверить отчёт'); return;
+      show('completed', 'Все точки заполнены. Можно проверить отчёт'); return;
     }
     if (assignment?.status !== 'inProgress' || !scanPolicy.nfcEnabled) {
-      setStatus('blocked'); setMessage('Сканирование недоступно для текущего обхода'); return;
+      show('blocked', 'Сканирование недоступно для текущего обхода'); return;
     }
     if (loadedProgress.total === 0) {
-      setStatus('routeUnavailable');
-      setMessage('Точки маршрута ещё не загружены');
+      show('routeUnavailable', 'Точки маршрута ещё не загружены');
       return;
     }
 
     if (appActiveRef.current) await armReader();
-  }, [armReader, assignmentId]);
+  }, [armReader, assignmentId, clearRetryTimer, show]);
 
   useFocusEffect(
     useCallback(() => {
@@ -256,6 +329,8 @@ export function ScanNfcScreen() {
       screenEpochRef.current++;
       screenActiveRef.current = true;
       routeCanScanRef.current = false;
+      readRetryRef.current.reset();
+      readerStartFailuresRef.current = 0;
       setStatus('idle');
       appActiveRef.current = AppState.currentState === 'active';
       const appStateSubscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
@@ -269,6 +344,7 @@ export function ScanNfcScreen() {
           readerRunningRef.current = false;
           readerWakeRequestedRef.current = false;
           scanInProgressRef.current = false;
+          clearRetryTimer();
           setStatus('idle');
           void stopNfcReaderSession();
           return;
@@ -286,8 +362,8 @@ export function ScanNfcScreen() {
           readerEpochRef.current++;
           readerRunningRef.current = false;
           readerWakeRequestedRef.current = false;
-          setStatus('disabled');
-          setMessage('NFC выключен. Включите NFC в настройках телефона');
+          clearRetryTimer();
+          show('disabled', 'NFC выключен. Включите NFC в настройках телефона');
           void stopNfcReaderSession();
         } else if (appActiveRef.current) void armReader();
       });
@@ -301,8 +377,7 @@ export function ScanNfcScreen() {
       void loadRouteProgress().catch(() => {
         if (isMounted) {
           setProgressError('Прогресс маршрута временно недоступен. Данные на телефоне сохранены.');
-          setStatus('error');
-          setMessage('Не удалось подготовить сканирование');
+          show('error', 'Не удалось подготовить сканирование');
         }
       });
 
@@ -311,6 +386,7 @@ export function ScanNfcScreen() {
         appStateSubscription.remove();
         removeAdapterListener();
         removeSyncListener();
+        clearRetryTimer();
         readerEpochRef.current++;
         readerRunningRef.current = false;
         readerWakeRequestedRef.current = false;
@@ -323,7 +399,7 @@ export function ScanNfcScreen() {
         scanInProgressRef.current = false;
         void stopNfcReaderSession();
       };
-    }, [armReader, assignmentId, loadRouteProgress])
+    }, [armReader, assignmentId, clearRetryTimer, loadRouteProgress, show])
   );
 
   useEffect(() => {
@@ -340,6 +416,7 @@ export function ScanNfcScreen() {
     return () => { active = false; clearInterval(timer); };
   }, [armReader, status]);
 
+  const warning = !!progressError || ['error', 'unmatched', 'disabled'].includes(status);
   return (
     <Screen compactHeader plainBackground title='' bottomActionBackground='transparent' bottomAction={<ScanActionBar
       onPoints={() => router.push(`/patrol/assignment/${assignmentId}/all-points` as never)}
@@ -348,12 +425,21 @@ export function ScanNfcScreen() {
       {progress ? <ScanProgress routeName={routeName || 'Сканирование NFC'} completed={progress.completed} total={progress.total} nextPoint={nextPoint} /> : null}
       <ScanMessage
         hero
-        scanning={status === 'reading' && !actionsOpen}
+        scanning={(status === 'reading' || status === 'retrying') && !actionsOpen}
         message={progressError ?? message}
-        icon={progressError || ['error', 'unmatched', 'disabled'].includes(status) ? 'warning-outline' : ['matched', 'completed'].includes(status) ? 'checkmark-circle-outline' : ['reading', 'processing', 'idle'].includes(status) ? 'radio-outline' : 'information-circle-outline'}
-        tone={progressError || ['error', 'unmatched', 'disabled'].includes(status) ? 'error' : ['matched', 'completed'].includes(status) ? 'success' : 'neutral'}
+        hint={progressError ? null : hint}
+        icon={warning ? 'warning-outline' : ['matched', 'completed'].includes(status) ? 'checkmark-circle-outline' : ['reading', 'processing', 'retrying', 'idle'].includes(status) ? 'radio-outline' : 'information-circle-outline'}
+        tone={warning ? 'error' : ['matched', 'completed'].includes(status) ? 'success' : 'neutral'}
         busy={status === 'processing'}
       />
+      {outcomeAction ? <PrimaryButton label={outcomeAction.label} icon='navigate-outline' variant='secondary'
+        onPress={() => {
+          const target = scanOutcomeRoute(assignmentId, outcomeAction);
+          if (outcomeAction.target === 'fill') router.replace(target as never);
+          else router.push(target as never);
+        }} /> : null}
+      {status === 'error' && readerFailed ? <PrimaryButton label='Повторить' icon='refresh-outline'
+        onPress={() => void armReader()} /> : null}
       {status === 'disabled' ? <PrimaryButton label='Включить NFC' icon='settings-outline' variant='secondary'
         onPress={() => void openNfcSettings().catch(() => {
           if (screenActiveRef.current) setMessage('Откройте настройки телефона → Подключения → NFC и включите NFC');

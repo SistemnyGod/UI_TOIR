@@ -1350,6 +1350,14 @@ export async function completeAssignmentLocally(assignmentId: string) {
 
 
 
+/** A strict-order route refuses this point until an earlier required point is finished. */
+export class PointOrderError extends Error {
+  constructor(readonly requiredPoint: { pointId: string; name: string; orderIndex: number }, message: string) {
+    super(message);
+    this.name = "PointOrderError";
+  }
+}
+
 async function assertPointOrderAllowed(
   db: SqlExecutor,
   ownerUserId: string,
@@ -1362,11 +1370,12 @@ async function assertPointOrderAllowed(
     return;
   }
 
-  const unfinished = await db.getFirstAsync<{ pointId: string; name: string }>(
+  const unfinished = await db.getFirstAsync<{ pointId: string; name: string; orderIndex: number }>(
     `
       SELECT
         point.point_id AS pointId,
-        point.name
+        point.name,
+        point.order_index AS orderIndex
       FROM assignment_route_points point
       LEFT JOIN point_results result
         ON result.owner_user_id = ?
@@ -1383,7 +1392,7 @@ async function assertPointOrderAllowed(
   );
 
   if (unfinished && unfinished.pointId !== pointId) {
-    throw new Error(`\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0435 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u0443\u044e \u0442\u043e\u0447\u043a\u0443 \u00ab${unfinished.name}\u00bb.`);
+    throw new PointOrderError(unfinished, `\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0435 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u0443\u044e \u0442\u043e\u0447\u043a\u0443 \u00ab${unfinished.name}\u00bb.`);
   }
 }
 
