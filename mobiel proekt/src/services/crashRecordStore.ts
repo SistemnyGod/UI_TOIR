@@ -167,6 +167,11 @@ export function recordCrash(kind: CrashKind, error: unknown, options: { componen
   }
 }
 
+/** Sign-out: undelivered crashes would otherwise be reported under the next account. */
+export function clearCrashRecords() {
+  getStorage().remove();
+}
+
 export function crashEventType(kind: CrashKind) {
   return `app.crash.${kind}`;
 }

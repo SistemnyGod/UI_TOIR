@@ -16,8 +16,6 @@ import {
   storeSessionEnvelope,
 } from "@/auth/tokenStorage";
 import {
-  clearLocalUserData,
-  cleanupPreviousUserPhotos,
   completePendingAuthTransition,
   countBlockingLocalUserData,
   hasLocalUserData,
@@ -34,6 +32,7 @@ import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import { cancelNextOutboxRetry, scheduleNextOutboxRetry } from "@/sync/outboxRetryScheduler";
 import { currentContourId } from "@/core/environments";
 import { wipeRememberedCredentials } from "@/auth/rememberedCredentials";
+import { wipeAccountDeviceTraces, wipeSignedOutAccountData } from "@/services/accountDataWipe";
 
 // SQLite account replacement and SecureStore publication form one logical
 // transition. Serialize startup recovery, login and logout around both stores.
@@ -173,7 +172,7 @@ async function signInInternal(loginName: string, password: string) {
   }
 
   if (replacementCommitted) {
-    await cleanupPreviousUserPhotos().catch(() => undefined);
+    await wipeAccountDeviceTraces(previousOwnerUserId).catch(() => undefined);
   }
 
   if (loginSessionGeneration === getSessionGeneration()) {
@@ -248,7 +247,7 @@ async function restoreSessionWithRefreshTokenInternal() {
   });
   if (replacementCommitted) {
     await completePendingAuthTransition(bootstrap.user.serverUserId);
-    await cleanupPreviousUserPhotos().catch(() => undefined);
+    await wipeAccountDeviceTraces(previousOwnerUserId).catch(() => undefined);
   }
 
   if (loginSessionGeneration === getSessionGeneration()) {
@@ -299,9 +298,10 @@ async function signOutInternal() {
     await clearLocalSessionKeepingRefreshToken();
   }
 
-  // A shared phone must not offer the previous employee's password.
-  await wipeRememberedCredentials().catch(() => undefined);
-  await clearLocalUserData();
+  // The saved login pair stays only when the employee ticked «Запомнить логин
+  // и пароль»: an unticked choice is already stored as a tombstone, and a
+  // different account signing in next wipes the pair (see signInInternal).
+  await wipeSignedOutAccountData(ownerUserId);
   return serverRevoked;
 }
 
