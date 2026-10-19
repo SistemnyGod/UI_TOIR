@@ -13,6 +13,7 @@ import { bootstrapApplication } from "@/core/bootstrap";
 import { classifyStartupError, StartupState } from "@/core/startupState";
 import { SessionGateProvider, SessionGuard } from "@/auth/SessionGate";
 import { AppUpdateGate } from "@/features/appUpdate/AppUpdateGate";
+import { NfcGuardHost } from "@/features/patrol/NfcGuardHost";
 import { isSessionUnlocked, setPendingSessionRoute } from "@/auth/sessionGateState";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { ThemeProvider, useAppTheme } from "@/features/settings/themePreference";
@@ -155,6 +156,7 @@ function RootContent() {
         <SessionGuard>
           <RootStack />
         </SessionGuard>
+        <NfcGuardHost />
       </SessionGateProvider>
     </AppUpdateGate>
   );

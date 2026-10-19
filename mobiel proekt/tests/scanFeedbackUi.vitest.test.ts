@@ -345,16 +345,27 @@ it('NFC guard: a second tag while the first is being checked is ignored, and the
   expect(state.router.replace).toHaveBeenCalledWith('/patrol/assignment/a1/point/gate/fill');
 });
 
-it('NFC guard: the same tag within 2 seconds is checked once, and again after the window', async () => {
+it('NFC guard: the same tag within 3 seconds is checked once, and again after the window', async () => {
   vi.useFakeTimers();
   state.scanNfc.mockResolvedValue({ matched: false });
   await mount(ScanNfcScreen);
   await tapTag();
+  await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
   await tapTag();
   expect(state.scanNfc).toHaveBeenCalledTimes(1);
-  await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(600); });
   await tapTag();
   expect(state.scanNfc).toHaveBeenCalledTimes(2);
+});
+
+it('NFC: a repeated read keeps the full "already marked" outcome and its action', async () => {
+  state.scanNfc.mockResolvedValue({ matched: true, alreadyScanned: true, point: { ...gate, status: 'scanned' } });
+  await mount(ScanNfcScreen);
+  await tapTag();
+  await tapTag();
+  expect(state.scanNfc).toHaveBeenCalledTimes(1);
+  expect(scanMessage().message).toBe('Точка 1 «Ворота» уже отмечена');
+  expect(button('Продолжить точку 1')).toBeDefined();
 });
 
 it('NFC: an empty route snapshot never arms the reader and offers a route refresh', async () => {

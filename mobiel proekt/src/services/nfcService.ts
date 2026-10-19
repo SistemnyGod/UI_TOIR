@@ -1,10 +1,33 @@
 import NfcManager, { NfcAdapter, NfcEvents } from 'react-native-nfc-manager';
 
 type NfcTagHandler = (tag: unknown) => void | Promise<void>;
+type ReaderMode = 'scan' | 'guard';
 
-let activeReaderStop: (() => Promise<void>) | null = null;
+/**
+ * Android hands a tag to other apps (Tags, a browser for URL records) whenever
+ * reader mode is off while our activity is in front, which minimizes Patrol360.
+ * So reader mode stays on all the time the app is signed in: the scan screen's
+ * session reads tags, and between sessions a quiet "guard" reader swallows them.
+ * Switching modes re-registers reader mode in place, never through an
+ * unregistered gap. The native module disables reader mode on pause and
+ * re-enables it on resume by itself.
+ */
+let activeScanSession: object | null = null;
+let guardOwner: { onTag: NfcTagHandler } | null = null;
 let readerOperation: Promise<void> = Promise.resolve();
 let adapterListenerOwner: object | null = null;
+
+const scanReaderFlags =
+  NfcAdapter.FLAG_READER_NFC_A
+  | NfcAdapter.FLAG_READER_NFC_B
+  | NfcAdapter.FLAG_READER_NFC_F
+  | NfcAdapter.FLAG_READER_NFC_V;
+// The scan keeps the NDEF check (points are matched by the NDEF text too) and the
+// platform beep, the only sound a read makes. The guard needs only the UID and
+// must stay silent: the tag is not processed there.
+const guardReaderFlags = scanReaderFlags
+  | NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK
+  | NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS;
 
 export function subscribeNfcAdapterState(onChange: (enabled: boolean) => void) {
   const owner = {};
@@ -47,7 +70,8 @@ export async function initializeNfc() {
 /**
  * Starts one foreground Android reader session. Reader mode consumes the tag
  * inside the app, so Android does not route the same tag to the system Tags
- * storage application when the patrol screen is active.
+ * storage application when the patrol screen is active. Stopping the session
+ * hands the reader back to the guard when one is enabled.
  */
 export async function startNfcReaderSession(onTag: NfcTagHandler) {
   const stop = await withReaderOperation(() => startNfcReaderSessionUnsafe(onTag));
@@ -57,22 +81,91 @@ export async function startNfcReaderSession(onTag: NfcTagHandler) {
 }
 
 async function startNfcReaderSessionUnsafe(onTag: NfcTagHandler) {
-  await stopNfcReaderSessionUnsafe();
+  const session = {};
+  // A previous session's stop becomes a no-op; the reader is re-registered in place.
+  activeScanSession = session;
 
-  const readerFlags =
-    NfcAdapter.FLAG_READER_NFC_A
-    | NfcAdapter.FLAG_READER_NFC_B
-    | NfcAdapter.FLAG_READER_NFC_F
-    | NfcAdapter.FLAG_READER_NFC_V;
+  try {
+    await registerReader('scan', onTag);
+  } catch (error) {
+    if (activeScanSession === session) {
+      activeScanSession = null;
+      await restoreIdleReader();
+    }
+    throw error;
+  }
 
-  NfcManager.setEventListener(NfcEvents.DiscoverTag, onTag);
+  return async () => {
+    if (activeScanSession !== session) {
+      return;
+    }
+
+    activeScanSession = null;
+    await restoreIdleReader();
+  };
+}
+
+export async function stopNfcReaderSession() {
+  return withReaderOperation(async () => {
+    activeScanSession = null;
+    await restoreIdleReader();
+  });
+}
+
+/**
+ * Keeps reader mode on outside scan sessions so a tag touched by accident is
+ * consumed by the app instead of opening another app. Returns the disable call.
+ */
+export async function enableNfcGuard(onTag: NfcTagHandler) {
+  const owner = { onTag };
+  await withReaderOperation(async () => {
+    const nfc = await initializeNfc().catch(() => null);
+    if (!nfc?.supported) return;
+    guardOwner = owner;
+    if (!activeScanSession) await restoreIdleReader();
+  });
+
+  return () => withReaderOperation(async () => {
+    if (guardOwner !== owner) return;
+    guardOwner = null;
+    if (!activeScanSession) await restoreIdleReader();
+  });
+}
+
+/** Re-applies the guard, e.g. after the app returns to the foreground. */
+export async function refreshNfcGuard() {
+  await withReaderOperation(async () => {
+    if (guardOwner && !activeScanSession) await restoreIdleReader();
+  });
+}
+
+async function restoreIdleReader() {
+  const guard = guardOwner;
+  if (guard) {
+    try {
+      await registerReader('guard', guard.onTag);
+      return;
+    } catch {
+      // Fall through: a half-registered guard must not keep a stale listener.
+    }
+  }
+
+  NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
+  await NfcManager.unregisterTagEvent().catch(() => undefined);
+}
+
+async function registerReader(mode: ReaderMode, onTag: NfcTagHandler) {
+  // Tags already in flight with the old flags go to the old owner: the guard
+  // takes over at once, the scan only after its own flags are active, so a
+  // UID-only guard read is never treated as a scan.
+  if (mode === 'guard') NfcManager.setEventListener(NfcEvents.DiscoverTag, onTag);
 
   try {
     await NfcManager.registerTagEvent({
       alertMessage: 'Поднесите телефон к NFC-метке',
       invalidateAfterFirstRead: false,
       isReaderModeEnabled: true,
-      readerModeFlags: readerFlags,
+      readerModeFlags: mode === 'scan' ? scanReaderFlags : guardReaderFlags,
       readerModeDelay: 250
     });
   } catch (error) {
@@ -80,36 +173,7 @@ async function startNfcReaderSessionUnsafe(onTag: NfcTagHandler) {
     throw error;
   }
 
-  let stopped = false;
-  const stop = async () => {
-    if (stopped) {
-      return;
-    }
-
-    stopped = true;
-    NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
-    await NfcManager.unregisterTagEvent().catch(() => undefined);
-  };
-
-  activeReaderStop = stop;
-  return stop;
-}
-
-export async function stopNfcReaderSession() {
-  return withReaderOperation(stopNfcReaderSessionUnsafe);
-}
-
-async function stopNfcReaderSessionUnsafe() {
-  const stop = activeReaderStop;
-  activeReaderStop = null;
-
-  if (stop) {
-    await stop();
-    return;
-  }
-
-  NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
-  await NfcManager.unregisterTagEvent().catch(() => undefined);
+  if (mode === 'scan') NfcManager.setEventListener(NfcEvents.DiscoverTag, onTag);
 }
 
 async function withReaderOperation<T>(operation: () => Promise<T>) {
