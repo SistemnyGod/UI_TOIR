@@ -20,7 +20,7 @@ import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
-import { getPatrolDeviceContext } from "@/db/repositories/patrolContextRepository";
+import { StatusMessage } from "@/ui/StatusMessage";
 import { enterPatrolRequest } from '@/services/patrolEntryService';
 import { captureDataOwnerContext, assertDataOwnerContext } from '@/auth/dataOwnerContext';
 
@@ -29,7 +29,10 @@ export function PatrolRequestScreen() {
   const { colors } = useAppTheme();
   const { requestId } = useLocalSearchParams<{ requestId: string }>();
   const [employees, setEmployees] = useState<MobileEmployeeDto[]>([]);
-  const [employeeId, setEmployeeId] = useState<string | undefined>();
+  const [employeeChoice, setEmployeeChoice] = useState<{ requestId: string; employeeId: string | undefined } | null>(null);
+  const employeeId = employeeChoice?.requestId === requestId ? employeeChoice.employeeId : undefined;
+  const setEmployeeId = (value: string) => setEmployeeChoice({ requestId, employeeId: value });
+  const loadVersion = useRef(0);
   const [employeePicker, setEmployeePicker] = useState(false);
   const [request, setRequest] = useState<RequestBoardItem | null>(null);
   const [assignment, setAssignment] = useState<ActiveAssignment | null>(null);
@@ -44,21 +47,30 @@ export function PatrolRequestScreen() {
   const focused = useRef(false);
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     if (!hasLoadedRef.current) {
       setIsLoading(true);
     }
     try {
+      const scope = await captureDataOwnerContext();
       const [item, existing] = await Promise.all([getRequestBoardItem(requestId), getAssignmentByRequestId(requestId)]);
-      setRequest(item);
       const availableEmployees = await listMobileEmployees();
-      const context = await getPatrolDeviceContext();
+      await assertDataOwnerContext(scope);
+      if (version !== loadVersion.current || !focused.current) return;
+      setRequest(item);
       setEmployees(availableEmployees);
-      setEmployeeId((current) => current ?? context.employeeId ?? (availableEmployees.length === 1 ? availableEmployees[0].employeeId : undefined));
+      setEmployeeChoice(previous => {
+        const current = previous?.requestId === requestId ? previous.employeeId : undefined;
+        const selected = current && availableEmployees.some(employee => employee.employeeId === current) ? current : undefined;
+        return { requestId, employeeId: existing?.employeeId ?? (item?.performerSelectionAvailable ? selected : item?.assignedEmployeeId) ?? (availableEmployees.length === 1 ? availableEmployees[0].employeeId : undefined) };
+      });
       setAssignment(existing);
       setLoadError(null);
     } finally {
-      hasLoadedRef.current = true;
-      setIsLoading(false);
+      if (version === loadVersion.current && focused.current) {
+        hasLoadedRef.current = true;
+        setIsLoading(false);
+      }
     }
   }, [requestId]);
 
@@ -76,6 +88,7 @@ export function PatrolRequestScreen() {
       return () => {
         isMounted = false;
         focused.current = false;
+        loadVersion.current++;
         focusVersion.current++;
       };
     }, [load])
@@ -116,7 +129,7 @@ export function PatrolRequestScreen() {
     await runAction(async () => {
       try {
         const scope = await captureDataOwnerContext();
-        const path = await enterPatrolRequest(requestId, request?.assignedEmployeeId ?? employeeId, () => focused.current && focusVersion.current === version);
+        const path = await enterPatrolRequest(requestId, employeeId, () => focused.current && focusVersion.current === version);
         await assertDataOwnerContext(scope);
         if (focused.current && focusVersion.current === version) router.replace(path as never);
       } catch (caught) {
@@ -160,11 +173,11 @@ export function PatrolRequestScreen() {
     );
   }
 
-  if (loadError) {
+  if (loadError && !request) {
     return (
       <Screen title="Заявка" subtitle="Карточка заявки на обход.">
         <Card>
-          <Text style={[styles.error, { color: "#b91c1c" }]}>{loadError}</Text>
+          <Text style={[styles.error, { color: colors.danger }]}>{loadError}</Text>
           <PrimaryButton icon="refresh-outline" label="Повторить загрузку" onPress={() => void load()} variant="secondary" />
         </Card>
       </Screen>
@@ -188,7 +201,12 @@ export function PatrolRequestScreen() {
   const canOpenReview = assignment && !canAccept && !canStart && !canOpenNfc;
 
   return (
-    <Screen title="Карточка обхода" subtitle="Проверьте маршрут и выполните следующий шаг.">
+    <Screen title="Заявка на обход" floatingNotice={loadError ? <StatusMessage message={loadError} tone="warning" /> : undefined} bottomAction={<>
+      {canAccept ? <PrimaryButton loading={isSubmitting} disabled={isSubmitting || (!request.assignedEmployeeId && !employeeId)} disabledReason={!request.assignedEmployeeId && !employeeId ? "Сначала выберите исполнителя обхода." : undefined} icon="play-outline" label="Начать обход" onPress={handleStart} size="large" /> : null}
+      {canStart ? <PrimaryButton disabled={isSubmitting} icon="play-outline" label={assignment?.status === "paused" ? "Продолжить обход" : "Начать обход"} onPress={handleStart} /> : null}
+      {canOpenNfc ? <PrimaryButton disabled={isSubmitting} icon="scan-outline" label="Продолжить" onPress={handleStart} /> : null}
+      {canOpenReview ? <PrimaryButton disabled={isSubmitting} icon="document-text-outline" label="Открыть отчёт" onPress={() => router.replace(`/patrol/assignment/${assignment.assignmentId}`)} /> : null}
+    </>}>
       <Card>
         <View style={styles.headerRow}>
           <StatusPill label={statusLabel(assignment?.status ?? request.status)} tone={statusTone(assignment?.status ?? request.status)} />
@@ -200,27 +218,22 @@ export function PatrolRequestScreen() {
           <Info label="Начало" value={formatDateTime(request.plannedStartAt)} />
           <Info label="Состояние" value={statusLabel(assignment?.status ?? request.status)} />
         </View>
-        <View style={styles.nextStepBox}>
-          <Text style={styles.nextStepLabel}>Следующий шаг</Text>
+        <View style={[styles.nextStepBox, { backgroundColor: colors.backgroundAccent }]}>
+          <Text style={[styles.nextStepLabel, { color: colors.primary }]}>Следующий шаг</Text>
           <Text style={[styles.text, { color: colors.text }]}>{actionHint(assignment?.status ?? request.status)}</Text>
         </View>
       </Card>
 
-      {canAccept ? <Card>
+      {canAccept && !request.assignedEmployeeId ? <Card>
         <Text style={[styles.title, { color: colors.text }]}>Кто выполняет обход</Text>
-        {request.assignedEmployeeId ? <Text style={{ color: colors.text }}>{request.assignedFullName}</Text> :
-          <PrimaryButton variant="secondary" label={employees.find((item) => item.employeeId === employeeId)?.fullName ?? "Выберите сотрудника"} onPress={() => setEmployeePicker(true)} />}
+        <PrimaryButton variant="secondary" label={employees.find((item) => item.employeeId === employeeId)?.fullName ?? "Выберите сотрудника"} onPress={() => setEmployeePicker(true)} />
         <Text style={{ color: colors.mutedText }}>Исполнитель указывается отдельно от общего аккаунта.</Text>
       </Card> : null}
       <ActionSheet title="Исполнитель обхода" visible={employeePicker} onClose={() => setEmployeePicker(false)}
         actions={employees.map((employee) => ({ label: employee.fullName, icon: "person-outline" as const, onPress: () => setEmployeeId(employee.employeeId) }))} />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
       {isSubmitting ? <ActivityIndicator /> : null}
 
-      {canAccept ? <PrimaryButton disabled={isSubmitting || (!request.assignedEmployeeId && !employeeId)} icon="play-outline" label="Начать обход" onPress={handleStart} size="large" /> : null}
-      {canStart ? <PrimaryButton disabled={isSubmitting} icon="play-outline" label={assignment?.status === "paused" ? "Продолжить обход" : "Начать обход"} onPress={handleStart} /> : null}
-      {canOpenNfc ? <PrimaryButton disabled={isSubmitting} icon="scan-outline" label="Продолжить" onPress={handleStart} /> : null}
-      {canOpenReview ? <PrimaryButton disabled={isSubmitting} icon="document-text-outline" label="Открыть отчёт" onPress={() => router.replace(`/patrol/assignment/${assignment.assignmentId}`)} /> : null}
       <View style={styles.secondaryRow}>
         <Pressable accessibilityRole="button" onPress={() => router.replace("/patrol/request-board")} style={styles.linkButton}>
           <Ionicons color={colors.primary} name="arrow-back-outline" size={18} />
@@ -245,7 +258,7 @@ export function PatrolRequestScreen() {
 function Info({ label, value }: { label: string; value: string }) {
   const { colors } = useAppTheme();
   return (
-    <View style={styles.infoCell}>
+    <View style={[styles.infoCell, { backgroundColor: colors.backgroundAccent, borderColor: colors.border }]}>
       <Text style={[styles.infoLabel, { color: colors.mutedText }]}>{label}</Text>
       <Text style={[styles.infoValue, { color: colors.text }]}>{value}</Text>
     </View>
@@ -338,7 +351,7 @@ const styles = StyleSheet.create({
     gap: 12
   },
   displayNumber: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900"
   },
   title: {
@@ -347,7 +360,7 @@ const styles = StyleSheet.create({
     lineHeight: 28
   },
   text: {
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 21
   },
   sectionTitle: {
@@ -370,7 +383,7 @@ const styles = StyleSheet.create({
     padding: 10
   },
   infoLabel: {
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: "900",
     textTransform: "uppercase"
   },
@@ -386,7 +399,7 @@ const styles = StyleSheet.create({
   },
   nextStepLabel: {
     color: "#1e5bff",
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: "900",
     textTransform: "uppercase"
   },

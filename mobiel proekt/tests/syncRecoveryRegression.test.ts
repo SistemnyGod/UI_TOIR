@@ -18,7 +18,8 @@ test("network events coalesce sync and only recover on a real transition", () =>
 });
 
 test("background and corrected contour reactivate dormant report commands", () => {
-  assert.match(backgroundSource, /runForegroundSync\(\{ mode: "networkRecovered" \}\)/);
+  assert.match(backgroundSource, /runBackgroundOutboxSync\(\)/);
+  assert.match(engineSource, /mode: "networkRecovered", deferContinuation: true/);
   assert.match(engineSource, /activateWrongContourOutboxCommands\(ownerUserId, aggregateKey\)/);
   assert.match(engineSource, /checkServerConnection\(undefined, \{ useCache: true \}\)/);
   assert.match(engineSource, /activateWaitingAuthOutboxCommands\(ownerUserId, aggregateKey\)/);

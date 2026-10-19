@@ -3,6 +3,8 @@ param(
   [string]$BuildRoot = '',
   [string]$OutputDirectory = '',
   [string]$JavaHome = $env:JAVA_HOME,
+  [string]$ReactNativeArchitectures = 'armeabi-v7a,arm64-v8a,x86,x86_64',
+  [switch]$KeepBuildRoot,
   [switch]$ValidateOnly,
 
   [ValidateSet("dev", "test", "local-enterprise", "production")]
@@ -188,6 +190,8 @@ try {
       Configuration = 'Release'
       Patrol360Environment = $Patrol360Environment
       PublicApiBaseUrl = $PublicApiBaseUrl
+      ReactNativeArchitectures = $ReactNativeArchitectures
+      KeepBuildRoot = $KeepBuildRoot
     }
     if (-not [string]::IsNullOrWhiteSpace($BuildRoot)) {
       $arguments.BuildRoot = $BuildRoot

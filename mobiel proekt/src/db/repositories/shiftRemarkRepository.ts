@@ -2,9 +2,11 @@ import { currentContourId } from "@/core/environments";
 import * as Crypto from "expo-crypto";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { assertDataOwnerContext, captureDataOwnerContext, type DataOwnerContext } from "@/auth/dataOwnerContext";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
 import { insertOutboxCommandInTransaction } from "@/db/repositories/outboxSql";
+import { withOwnerExclusiveTransactionAsync } from "@/db/ownerTransaction";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
@@ -32,13 +34,11 @@ export async function createShiftRemarkLocally(input: {
   sectionName: string;
   employeeId: string;
   employeeName: string;
-  draftEmployeeId?: string;
+  draftKey?: string;
   mediaClientFileIds?: string[];
-}) {
-  const ownerUserId = await getStoredOwnerUserId();
-  if (!ownerUserId) {
-    throw new Error("Нужно войти в мобильный аккаунт.");
-  }
+}, context?: DataOwnerContext) {
+  const scope = context ?? await captureDataOwnerContext();
+  const ownerUserId = scope.ownerUserId;
 
   const title = input.title?.trim() || "Замечание по смене";
   const comment = input.comment.trim();
@@ -53,7 +53,7 @@ export async function createShiftRemarkLocally(input: {
   const mediaClientFileIds = input.mediaClientFileIds ?? [];
 
   await withSqliteBusyRetry(() =>
-    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    withOwnerExclusiveTransactionAsync(db, scope, async (tx) => {
       await tx.runAsync(
         `
           INSERT INTO shift_remarks (
@@ -108,7 +108,7 @@ export async function createShiftRemarkLocally(input: {
         attemptCount: 0,
         status: "pending"
       });
-      await deleteWorkDraftInTransaction(tx, ownerUserId, input.draftEmployeeId ?? input.employeeId, "remark");
+      await deleteWorkDraftInTransaction(tx, ownerUserId, input.draftKey ?? input.employeeId, "remark");
     })
   );
 
@@ -116,44 +116,50 @@ export async function createShiftRemarkLocally(input: {
   return remarkId;
 }
 
-export async function attachMediaToShiftRemark(remarkId: string, file: LocalMobileFile) {
-  const ownerUserId = await getStoredOwnerUserId();
-  if (!ownerUserId) {
-    throw new Error("Нужно войти в мобильный аккаунт.");
+export async function attachMediaToShiftRemark(remarkId: string, file: LocalMobileFile, context?: DataOwnerContext) {
+  const scope = context ?? await captureDataOwnerContext();
+  await assertDataOwnerContext(scope);
+  const ownerUserId = scope.ownerUserId;
+  if (file.ownerUserId !== ownerUserId || (file.contourId && file.contourId !== scope.contourId)
+    || (file.remarkId && file.remarkId !== remarkId)) {
+    throw new Error("Вложение относится к другому аккаунту или замечанию.");
   }
 
   const db = await getDatabase();
-  const row = await db.getFirstAsync<{ media_client_file_ids_json: string }>(
-    "SELECT media_client_file_ids_json FROM shift_remarks WHERE remark_id = ? AND owner_user_id = ?",
-    [remarkId, ownerUserId]
-  );
-  if (!row) {
-    throw new Error("Замечание не найдено на телефоне.");
-  }
-
-  const mediaClientFileIds = Array.from(new Set([...safeParseStringArray(row.media_client_file_ids_json), file.clientFileId]));
-  const outboxRow = await db.getFirstAsync<{ payload_json: string }>(
-    `
-      SELECT payload_json
-      FROM outbox_commands
-      WHERE entity_local_id = ?
-        AND contour_id = ?
-        AND command_type = 'createShiftRemark'
-        AND status IN ('pending', 'retryLater')
-      ORDER BY created_at_local DESC
-      LIMIT 1
-    `,
-    [remarkId, currentContourId]
-  );
-  const nextPayload = {
-    ...safeParseRecord(outboxRow?.payload_json),
-    mediaClientFileIds
-  };
   const clientOperationId = Crypto.randomUUID();
   const createdAtLocal = new Date().toISOString();
 
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      await assertDataOwnerContext(scope);
+      // Read the list under the same write lock as the update to preserve concurrent attachments.
+      const row = await tx.getFirstAsync<{ media_client_file_ids_json: string }>(
+        "SELECT media_client_file_ids_json FROM shift_remarks WHERE remark_id = ? AND owner_user_id = ?",
+        [remarkId, ownerUserId]
+      );
+      if (!row) {
+        throw new Error("Замечание не найдено на телефоне.");
+      }
+
+      const mediaClientFileIds = Array.from(new Set([...safeParseStringArray(row.media_client_file_ids_json), file.clientFileId]));
+      const outboxRow = await tx.getFirstAsync<{ payload_json: string }>(
+        `
+          SELECT payload_json
+          FROM outbox_commands
+          WHERE entity_local_id = ?
+            AND owner_user_id = ?
+            AND contour_id = ?
+            AND command_type = 'createShiftRemark'
+            AND status IN ('pending', 'retryLater')
+          ORDER BY created_at_local DESC
+          LIMIT 1
+        `,
+        [remarkId, ownerUserId, currentContourId]
+      );
+      const nextPayload = {
+        ...safeParseRecord(outboxRow?.payload_json),
+        mediaClientFileIds
+      };
       await insertLocalFileInTransaction(tx, { ...file, status: "queued", remarkId });
       await tx.runAsync(
         `
@@ -161,9 +167,9 @@ export async function attachMediaToShiftRemark(remarkId: string, file: LocalMobi
           SET media_client_file_ids_json = ?,
               status = 'pending',
               sync_status = 'pending'
-          WHERE remark_id = ?
+          WHERE remark_id = ? AND owner_user_id = ?
         `,
-        [JSON.stringify(mediaClientFileIds), remarkId]
+        [JSON.stringify(mediaClientFileIds), remarkId, ownerUserId]
       );
 
       if (outboxRow) {
@@ -199,6 +205,7 @@ export async function attachMediaToShiftRemark(remarkId: string, file: LocalMobi
         attemptCount: 0,
         status: "pending"
       });
+      await assertDataOwnerContext(scope);
     })
   );
   requestSyncAfterMutation();

@@ -1,6 +1,8 @@
 type ConnectionState = {
   isConnected: boolean | null | undefined;
   isInternetReachable?: boolean | null;
+  type?: string;
+  details?: { isConnectionExpensive?: boolean; ipAddress?: string | null; ssid?: string | null; subnet?: string | null } | null;
 };
 
 /**
@@ -10,4 +12,13 @@ type ConnectionState = {
  */
 export function canAttemptServerConnection(state: ConnectionState) {
   return state.isConnected === true;
+}
+
+/** A LAN route can disappear while cellular keeps isConnected true. */
+export function networkRouteKey(state: ConnectionState) {
+  return JSON.stringify([
+    canAttemptServerConnection(state), state.type ?? null,
+    state.details?.ipAddress ?? null, state.details?.subnet ?? null,
+    state.type === 'wifi' ? state.details?.ssid ?? null : null
+  ]);
 }

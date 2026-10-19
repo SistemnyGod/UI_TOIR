@@ -13,7 +13,7 @@ import { requiresClientFileHash } from "@/sync/fileHash";
 import { FileUploadHttpError, PermanentFileUploadError } from "@/domain/files/fileUploadPolicy";
 import { MAX_PHOTO_BYTES, MAX_VIDEO_BYTES } from "@/domain/files/fileUploadLimits";
 import { fileUploadResponseSchema } from "@/api/schemas";
-import { assertDataOwnerContext, captureDataOwnerContext } from "@/auth/dataOwnerContext";
+import { assertDataOwnerContext, captureDataOwnerContext, type DataOwnerContext } from "@/auth/dataOwnerContext";
 
 
 export async function uploadMobileFile(file: LocalMobileFile) {
@@ -29,7 +29,7 @@ export async function uploadMobileFile(file: LocalMobileFile) {
   const token = await getAccessToken();
   const runtimeConfig = await getMobileRuntimeConfig();
   await assertDataOwnerContext(context);
-  let { apiBaseUrl, result } = await uploadFileWithFailover(runtimeConfig.apiBaseUrl, runtimeConfig.syncProtocolVersion, runtimeConfig.contourId, file, token);
+  let { apiBaseUrl, result } = await uploadFileWithFailover(runtimeConfig.apiBaseUrl, runtimeConfig.syncProtocolVersion, runtimeConfig.contourId, file, token, context);
   await assertDataOwnerContext(context);
 
   // Keep attachment upload consistent with JSON requests when only the
@@ -38,7 +38,7 @@ export async function uploadMobileFile(file: LocalMobileFile) {
     await assertDataOwnerContext(context);
     const refreshedToken = await refreshStoredAccessToken();
     await assertDataOwnerContext(context);
-    ({ result } = await uploadFileWithFailover(apiBaseUrl, runtimeConfig.syncProtocolVersion, runtimeConfig.contourId, file, refreshedToken));
+    ({ result } = await uploadFileWithFailover(apiBaseUrl, runtimeConfig.syncProtocolVersion, runtimeConfig.contourId, file, refreshedToken, context));
     await assertDataOwnerContext(context);
   }
 
@@ -113,7 +113,7 @@ async function validateMobileFileBeforeUpload(file: LocalMobileFile) {
 
   const sizeBytes = file.sizeBytes;
   const maxSize = file.contentType === "video/mp4" || file.mediaKind === "video" ? MAX_VIDEO_BYTES : MAX_PHOTO_BYTES;
-  if (sizeBytes === null || sizeBytes === undefined || sizeBytes <= 0 || sizeBytes > maxSize) {
+  if (sizeBytes === null || sizeBytes === undefined || !Number.isSafeInteger(sizeBytes) || sizeBytes <= 0 || sizeBytes > maxSize) {
     if (file.mediaKind !== "video" && file.contentType !== "video/mp4") {
       rejectLocalFile("Фото слишком большое. Максимум 6 МБ.");
     }
@@ -129,6 +129,9 @@ async function validateMobileFileBeforeUpload(file: LocalMobileFile) {
   if (!fileInfo || !fileInfo.exists) {
     rejectLocalFile("Файл не найден на телефоне. Добавьте вложение повторно.");
   }
+  if (fileInfo?.exists && (fileInfo.isDirectory || fileInfo.size !== sizeBytes)) {
+    rejectLocalFile("Размер сохранённого файла изменился. Замените вложение и повторите отправку.");
+  }
 }
 
 async function uploadFileWithFailover(
@@ -136,15 +139,18 @@ async function uploadFileWithFailover(
   syncProtocolVersion: string,
   contourId: string,
   file: LocalMobileFile,
-  token: string | null
+  token: string | null,
+  context: DataOwnerContext
 ) {
   const apiBaseUrls = await getServerCandidateBaseUrls(preferredApiBaseUrl);
   let lastError: unknown = null;
   let lastResult: Awaited<ReturnType<typeof uploadFileWithToken>> | null = null;
 
   for (const apiBaseUrl of apiBaseUrls) {
+    await assertDataOwnerContext(context);
     try {
       const health = await probeServerHealthCached(apiBaseUrl, contourId);
+      await assertDataOwnerContext(context);
       if (!health.ok) {
         const message = health.message ?? "Сервер не прошёл проверку контура: " + apiBaseUrl;
         lastError = health.errorKind
@@ -154,6 +160,7 @@ async function uploadFileWithFailover(
       }
 
       const result = await uploadFileWithToken(apiBaseUrl, syncProtocolVersion, contourId, file, token);
+      await assertDataOwnerContext(context);
       if (shouldTryNextMobileServer(result.status, null, Boolean(result.body))
           && apiBaseUrl !== apiBaseUrls[apiBaseUrls.length - 1]) {
         lastResult = result;
@@ -162,6 +169,8 @@ async function uploadFileWithFailover(
 
       return { apiBaseUrl, result };
     } catch (error) {
+      // Session changes terminate failover; they are not network failures.
+      await assertDataOwnerContext(context);
       invalidateServerHealthCache(apiBaseUrl, contourId);
       lastError = error;
     }
@@ -206,9 +215,9 @@ async function uploadTaskWithCancellation(
     };
 
     timeoutId = setTimeout(() => {
-      void uploadTask.cancelAsync()
-        .catch(() => undefined)
-        .finally(() => settle(() => reject(new MobileNetworkError("timeout", new Error(serverUnavailableMessage), serverUnavailableMessage))));
+      settle(() => reject(new MobileNetworkError("timeout", new Error(serverUnavailableMessage), serverUnavailableMessage)));
+      // Native cancellation is best effort and must not hold the queue lock.
+      void Promise.resolve().then(() => uploadTask.cancelAsync()).catch(() => undefined);
     }, timeoutMs);
 
     void uploadTask.uploadAsync().then(

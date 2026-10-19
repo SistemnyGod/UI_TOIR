@@ -4,6 +4,8 @@ import { getOutboxResult, postOutbox } from "@/api/mobileApi";
 import { MobileNetworkError } from "@/api/networkTimeout";
 import { checkServerConnection } from "@/api/serverHealthApi";
 import { getAccessToken, getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { getSessionGeneration } from "@/auth/sessionGeneration";
+import { assertDataOwnerContext, captureDataOwnerContext, StaleDataOwnerContextError, type DataOwnerContext } from "@/auth/dataOwnerContext";
 import { isReauthenticationRequiredError } from "@/auth/sessionErrors";
 import { hasUsableNetwork } from "@/core/network";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
@@ -50,7 +52,7 @@ import { resolvePatrolAssignmentIdentity } from "@/db/repositories/outboxPolicie
 import type { LocalMobileFile } from "@/domain/files/fileTypes";
 import { getPendingOutboxBatch } from "@/sync/outboxProcessor";
 import { findMissingClientFileIds } from "@/sync/fileReferenceIntegrity";
-import { SerializedTaskQueue } from "@/sync/serializedTaskQueue";
+import { PrioritySyncQueue } from "@/sync/prioritySyncQueue";
 import { processOrderedOutboxBatch } from "@/sync/orderedOutboxBatch";
 import { getCommandAggregateKey } from "@/sync/outboxOrderingPolicy";
 import { mapWithConcurrency } from "@/sync/boundedAsync";
@@ -80,26 +82,57 @@ export type ForegroundSyncOptions = {
 };
 
 type SyncResultBase = Omit<ForegroundSyncResult, "nextRetryAt" | "retryableCount" | "outcome">;
-type InternalForegroundSyncOptions = Required<Pick<ForegroundSyncOptions, "mode">> & ForegroundSyncOptions & { skipPreparation?: boolean };
+type InternalForegroundSyncOptions = Required<Pick<ForegroundSyncOptions, "mode">> & ForegroundSyncOptions & { skipPreparation?: boolean; deferContinuation?: boolean };
 
 const staleSendingTimeoutMs = 5 * 60 * 1000;
 const maxSyncBatchesPerRun = 4;
 const reconciliationPageSize = 24;
 const reconciliationConcurrency = 4;
-const foregroundSyncQueue = new SerializedTaskQueue<ForegroundSyncResult>();
+const foregroundSyncQueue = new PrioritySyncQueue<ForegroundSyncResult>();
 
 export async function runForegroundSync(options: ForegroundSyncOptions = {}): Promise<ForegroundSyncResult> {
   return executeForegroundSync(normalizeSyncOptions(options));
 }
 
+/** Keep the registered background task alive for its queue continuations.
+ * Time is checked only between passes; no polling or forced interruption of
+ * an in-flight upload/transaction. Unfinished work stays in the durable queue.
+ */
+export async function runBackgroundOutboxSync(): Promise<ForegroundSyncResult> {
+  const generation = getSessionGeneration();
+  const deadline = Date.now() + 90_000;
+  let result = await executeForegroundSync({ mode: "networkRecovered", deferContinuation: true });
+  let sent = result.sent;
+  for (let pass = 1; result.hasMore && pass < 8 && Date.now() < deadline; pass++) {
+    if (generation !== getSessionGeneration()) throw new StaleDataOwnerContextError("Сессия изменилась во время фоновой отправки.");
+    result = await executeForegroundSync({ mode: "normal", skipPreparation: true, deferContinuation: true });
+    sent += result.sent;
+  }
+  return { ...result, sent };
+}
+
 async function executeForegroundSync(options: InternalForegroundSyncOptions): Promise<ForegroundSyncResult> {
-  const result = await foregroundSyncQueue.run(() => runForegroundSyncInternal(options));
+  const generation = getSessionGeneration();
+  const result = await foregroundSyncQueue.run(async checkpoint => {
+    if (generation !== getSessionGeneration()) throw new StaleDataOwnerContextError("Сессия изменилась до отправки отчёта.");
+    try {
+      return await runForegroundSyncInternal(options, checkpoint);
+    } finally {
+      // Also publish preflight outcomes (offline/auth/server unavailable).
+      // No polling: one delivery update after this pass has persisted its state.
+      if (generation === getSessionGeneration()) emitSyncEvent({
+        acceptedOperationIds: [], completedAssignmentIds: [],
+        deliveryChangedAssignmentIds: options.assignmentId ? [options.assignmentId] : [],
+        refreshedZones: options.assignmentId ? [] : ["reportDelivery"]
+      });
+    }
+  }, options.mode === "manualReport");
   const ownerUserId = await getStoredOwnerUserId();
   void scheduleNextOutboxRetry(ownerUserId).catch((error) => {
     void logMobileError("sync.retry_schedule.failed", error);
   });
 
-  if (result.hasMore) {
+  if (result.hasMore && !options.deferContinuation && generation === getSessionGeneration()) {
     scheduleOutboxContinuation(options);
   }
 
@@ -124,11 +157,14 @@ function scheduleOutboxContinuation(options: InternalForegroundSyncOptions) {
   });
 }
 
-async function runForegroundSyncInternal(options: InternalForegroundSyncOptions): Promise<ForegroundSyncResult> {
+async function runForegroundSyncInternal(options: InternalForegroundSyncOptions, checkpoint: () => Promise<boolean>): Promise<ForegroundSyncResult> {
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
     return buildForegroundSyncResult(null, { sent: 0, skipped: "unauthenticated", hasMore: false });
   }
+
+  const ownerContext = await captureDataOwnerContext();
+  if (ownerContext.ownerUserId !== ownerUserId) throw new StaleDataOwnerContextError("Сессия изменилась до синхронизации.");
 
   const aggregateKey = options.mode === "manualReport" && options.assignmentId
     ? `patrolAssignment:${options.assignmentId}`
@@ -145,7 +181,6 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions)
   }
 
   if (options.mode === "manualReport" && options.assignmentId) {
-    await reconcileAcceptedCompleteReports(options.assignmentId);
     await resetStaleSendingOutboxCommands(ownerUserId, getStaleSendingBoundaryIso(), aggregateKey);
   }
 
@@ -192,6 +227,8 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions)
     await resetStaleSendingOutboxCommands(ownerUserId, getStaleSendingBoundaryIso());
   }
   await reconcileAcceptedCompleteReports(options.assignmentId);
+  await checkpoint();
+  await assertDataOwnerContext(ownerContext);
 
   let sent = 0;
   let processedBatches = 0;
@@ -209,14 +246,35 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions)
     try {
       await processOrderedOutboxBatch(commands, {
       getDependencyKey: getCommandDependencyKey,
-      isFatal: (error) => isAuthRequiredError(error) || isOfflineNetworkError(error),
+      isFatal: (error) => error instanceof StaleDataOwnerContextError || isAuthRequiredError(error) || isOfflineNetworkError(error),
       process: async (command) => {
+        const resumedAfterPriority = await checkpoint();
+        await assertDataOwnerContext(ownerContext);
+        if (resumedAfterPriority) {
+          // The priority pass may have accepted this command, changed its
+          // revision or scheduled a server-directed retry. Never claim a stale
+          // cached head and accidentally bypass Retry-After.
+          const [current] = await getPendingOutboxBatch(ownerUserId, 1, new Set(), getCommandDependencyKey(command));
+          await assertDataOwnerContext(ownerContext);
+          if (!current || current.clientOperationId !== command.clientOperationId) return;
+          command = current;
+        }
         const commandIds = [command.clientOperationId];
-        await markOutboxCommandsSending(ownerUserId, commandIds);
+        const claimed = await markOutboxCommandsSending(ownerUserId, commandIds, command.payload);
+        // Cancellation or another worker can win after the queue was read.
+        // Only the worker that changed the durable status may send this item.
+        if (claimed === 0) return;
+        await assertDataOwnerContext(ownerContext);
+        notifyReportDeliveryChanged(command);
         try {
-          await uploadFilesForCompleteCommands(ownerUserId, [command]);
-          const responses = await postOutboxWithServerReconciliation(ownerUserId, [command]);
-          await applyOutboxResponses(ownerUserId, responses);
+          await uploadFilesForCompleteCommands(ownerUserId, [command], ownerContext);
+          await assertDataOwnerContext(ownerContext);
+          const responses = await postOutboxWithServerReconciliation(ownerUserId, [command], ownerContext);
+          await assertDataOwnerContext(ownerContext);
+          await applyOutboxResponses(ownerUserId, responses, ownerContext);
+          // The receipt is durable now. A slow operation elsewhere in this
+          // batch (or local media cleanup) must not leave the open report stale.
+          notifyReportDeliveryChanged(command);
           await reclaimAcceptedLocalMedia(ownerUserId, getAcceptedCompletionFileIds([command], responses));
           logAcceptedReports([command], responses);
           batchEvents.push(buildSyncEvent([command], responses));
@@ -234,8 +292,9 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions)
             await markOutboxCommandsRejected(ownerUserId, commandIds, readableError);
           } else {
             await markOutboxCommandsRetryLater(ownerUserId, commandIds, readableError, null, getRetryReason(error));
-            await maybeTriggerReportDeliveryDiagnostic(ownerUserId, command);
+            void maybeTriggerReportDeliveryDiagnostic(ownerUserId, command);
           }
+          notifyReportDeliveryChanged(command);
           batchEvents.push(buildSyncEvent([command], [], [getCommandAssignmentId(command)].filter((id): id is string => id !== null)));
           throw error;
         }
@@ -337,11 +396,13 @@ function getCommandDependencyKey(command: OutboxCommand) {
   return getCommandAggregateKey(command) ?? `${command.entityType}:${command.entityLocalId ?? command.entityServerId ?? command.clientOperationId}`;
 }
 
-async function postOutboxWithServerReconciliation(ownerUserId: string, commands: OutboxCommand[]) {
+async function postOutboxWithServerReconciliation(ownerUserId: string, commands: OutboxCommand[], context: DataOwnerContext) {
   try {
+    await assertDataOwnerContext(context);
     return await postOutbox(commands);
   } catch (error) {
-    const reconciledResponses = await getAcceptedOutboxResults(commands);
+    await assertDataOwnerContext(context);
+    const reconciledResponses = await getAcceptedOutboxResults(commands, context);
 
     const reconciledIds = new Set(reconciledResponses.map((response) => response.clientOperationId));
     const remainingCommandIds = commands
@@ -353,10 +414,10 @@ async function postOutboxWithServerReconciliation(ownerUserId: string, commands:
     }
 
     if (reconciledResponses.length > 0) {
-      await applyOutboxResponses(ownerUserId, reconciledResponses);
+      await applyOutboxResponses(ownerUserId, reconciledResponses, context);
+      emitSyncEvent(buildSyncEvent(commands, reconciledResponses));
       await reclaimAcceptedLocalMedia(ownerUserId, getAcceptedCompletionFileIds(commands, reconciledResponses));
       logAcceptedReports(commands, reconciledResponses);
-      emitSyncEvent(buildSyncEvent(commands, reconciledResponses));
     }
 
     await markOutboxCommandsRetryLater(ownerUserId, remainingCommandIds, getReadableSyncError(error), null, getRetryReason(error));
@@ -366,11 +427,15 @@ async function postOutboxWithServerReconciliation(ownerUserId: string, commands:
   }
 }
 
-async function getAcceptedOutboxResults(commands: OutboxCommand[]): Promise<OutboxResponse[]> {
+async function getAcceptedOutboxResults(commands: OutboxCommand[], context: DataOwnerContext): Promise<OutboxResponse[]> {
   const responses = await mapWithConcurrency(commands, reconciliationConcurrency, async (command) => {
       try {
-        return await getOutboxResult(command.clientOperationId);
+        await assertDataOwnerContext(context);
+        const response = await getOutboxResult(command.clientOperationId);
+        await assertDataOwnerContext(context);
+        return response;
       } catch {
+        await assertDataOwnerContext(context);
         return null;
       }
     });
@@ -408,6 +473,15 @@ function getCommandAssignmentId(command: OutboxCommand) {
     entityLocalId: command.entityLocalId,
     payload: command.payload
   });
+}
+
+function notifyReportDeliveryChanged(command: OutboxCommand) {
+  if (command.commandType !== "completePatrolAssignment") return;
+  const assignmentId = getCommandAssignmentId(command);
+  if (!assignmentId) return;
+  // Only delivery subscribers need this immediate update. List refreshes and
+  // accepted-operation events remain coalesced at the end of the batch.
+  emitSyncEvent({ acceptedOperationIds: [], completedAssignmentIds: [], deliveryChangedAssignmentIds: [assignmentId] });
 }
 
 function buildSyncEvent(
@@ -513,21 +587,24 @@ export async function reconcileAcceptedCompleteReports(assignmentId?: string) {
     return { reconciled: 0 };
   }
 
+  const context = await captureDataOwnerContext();
+  if (context.ownerUserId !== ownerUserId) throw new StaleDataOwnerContextError("Сессия изменилась до сверки отчётов.");
+
   const localFinalized = await finalizeAcceptedCompleteReportCommands(ownerUserId, assignmentId);
   const commands = await listUnconfirmedCompleteReportCommands(ownerUserId, assignmentId, reconciliationPageSize);
   if (commands.length === 0) {
     return { reconciled: localFinalized.finalized };
   }
 
-  const responses = await getAcceptedOutboxResults(commands);
+  const responses = await getAcceptedOutboxResults(commands, context);
   if (responses.length === 0) {
     return { reconciled: localFinalized.finalized };
   }
 
-  await applyOutboxResponses(ownerUserId, responses);
+  await applyOutboxResponses(ownerUserId, responses, context);
+  emitSyncEvent(buildSyncEvent(commands, responses));
   await reclaimAcceptedLocalMedia(ownerUserId, getAcceptedCompletionFileIds(commands, responses));
   logAcceptedReports(commands, responses);
-  emitSyncEvent(buildSyncEvent(commands, responses));
 
   return { reconciled: localFinalized.finalized + responses.length };
 }
@@ -536,7 +613,7 @@ function getStaleSendingBoundaryIso() {
   return new Date(Date.now() - staleSendingTimeoutMs).toISOString();
 }
 
-async function uploadFilesForCompleteCommands(ownerUserId: string, commands: OutboxCommand[]) {
+async function uploadFilesForCompleteCommands(ownerUserId: string, commands: OutboxCommand[], context: DataOwnerContext) {
   const clientFileIds = Array.from(new Set(commands.flatMap(extractUploadClientFileIds)));
   const fileReferencesById = new Map<string, UploadFileReference[]>();
   for (const reference of commands.flatMap(extractUploadFileReferences)) {
@@ -550,6 +627,7 @@ async function uploadFilesForCompleteCommands(ownerUserId: string, commands: Out
     .filter((value): value is string => Boolean(value)));
   const files = await listFilesByClientIds(clientFileIds);
   const workFiles = await listWorkFilesForCommands(commands);
+  await assertDataOwnerContext(context);
   const allFilesById = new Map([...files, ...workFiles].map((file) => [file.clientFileId, file]));
   const missingClientFileIds = findMissingClientFileIds(
     clientFileIds,
@@ -565,6 +643,7 @@ async function uploadFilesForCompleteCommands(ownerUserId: string, commands: Out
 
   for (const file of allFilesById.values()) {
     try {
+      await assertDataOwnerContext(context);
       if (file.ownerUserId !== ownerUserId) {
         throw new PermanentFileUploadError("Локальный файл принадлежит другому пользователю и не будет отправлен.", file.clientFileId);
       }
@@ -579,6 +658,7 @@ async function uploadFilesForCompleteCommands(ownerUserId: string, commands: Out
       }
       await markFileUploading(file.clientFileId);
       const response = await uploadMobileFile(file);
+      await assertDataOwnerContext(context);
       await markFileUploaded(file.clientFileId, response.serverFileId);
       const mediaLabel = file.mediaKind === "video" ? "Видео" : "Фото";
       const entityType = file.workTaskId ? "workTask" : file.remarkId ? "shiftRemark" : "patrolPoint";

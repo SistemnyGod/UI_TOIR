@@ -4,10 +4,10 @@ import { join } from "node:path";
 import test from "node:test";
 
 test("planned work start reuses the local session and retains the plan until server acceptance", async () => {
-  const [workTaskSource, outboxSource] = await Promise.all([
+  const [workTaskSource, outboxSource] = (await Promise.all([
     readFile(join(process.cwd(), "src/db/repositories/workTaskRepository.ts"), "utf8"),
-    readFile(join(process.cwd(), "src/db/repositories/outboxRepository.ts"), "utf8")
-  ]);
+    readFile(join(process.cwd(), "src/db/repositories/outboxResponseRepository.ts"), "utf8")
+  ])).map(source => source.replace(/\r\n/g, "\n"));
   const startFunction = workTaskSource.match(
     /export async function startPlannedWorkLocally[\s\S]*?\n}\n\nexport async function joinWorkTaskLocally/
   );
@@ -16,7 +16,7 @@ test("planned work start reuses the local session and retains the plan until ser
   assert.doesNotMatch(startFunction[0], /DELETE FROM work_tasks/);
   assert.match(
     startFunction[0],
-    /item_kind = 'workSession'\s+AND plan_task_id = \?[\s\S]*?if \(existing\) \{\s*return existing\.taskId;/
+    /item_kind = 'workSession'\s+AND plan_task_id = \?[\s\S]*?if \(existing\) \{[\s\S]*?return existing\.taskId;/
   );
   assert.ok(
     startFunction[0].indexOf("if (existing)") < startFunction[0].indexOf("INSERT INTO work_tasks"),

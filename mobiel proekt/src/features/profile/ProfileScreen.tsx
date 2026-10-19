@@ -1,350 +1,44 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-
+import { useRouter } from "expo-router";
+import { useRef, useState } from "react";
+import { Modal, ScrollView, Text, View } from "react-native";
 import { signOut } from "@/auth/authService";
-import { getDeviceDisplayName } from "@/auth/deviceInfo";
-import { listLocalNotifications } from "@/db/repositories/notificationRepository";
-import { MobileNotificationDto } from "@/domain/patrol/patrolTypes";
+import { useConnectionStatus } from "@/core/connectionStatus";
 import { useAppTheme } from "@/features/settings/themePreference";
-import { syncMobileNotifications } from "@/services/notificationService";
-import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
-import { StatusPill } from "@/ui/StatusPill";
+import { StatusMessage } from "@/ui/StatusMessage";
+import { ProfileGroup, ProfileRow } from "./ProfileComponents";
+import { useProfileSummary } from "./useProfileSummary";
+import { useProfileIdentity } from "./useProfileIdentity";
+import { ThemePicker, themeLabel } from "./ThemePicker";
 
-const NOTIFICATION_LIMIT = 8;
-
+export const connectionLabel = (value: string) => value === "connected" ? "На связи" : value === "authorizationRequired" ? "Нужен вход" : value === "checking" ? "Проверяем связь" : value === "otherServer" ? "Другой контур" : value === "serverUnavailable" ? "Сервер недоступен" : "Нет сети";
 export function ProfileScreen() {
-  const router = useRouter();
-  const { colors } = useAppTheme();
-  const deviceName = getDeviceDisplayName();
-  const [notifications, setNotifications] = useState<MobileNotificationDto[]>([]);
-  const [isRefreshingNotifications, setIsRefreshingNotifications] = useState(false);
-
-  const visibleNotifications = useMemo(
-    () => [...notifications].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
-    [notifications]
-  );
-
-
-  const refreshNotifications = useCallback(async () => {
-    setIsRefreshingNotifications(true);
-    try {
-      setNotifications(await listLocalNotifications(NOTIFICATION_LIMIT));
-      await syncMobileNotifications().catch(() => []);
-      setNotifications(await listLocalNotifications(NOTIFICATION_LIMIT));
-    } finally {
-      setIsRefreshingNotifications(false);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      let isMounted = true;
-
-      void listLocalNotifications(NOTIFICATION_LIMIT).then((rows) => {
-        if (isMounted) {
-          setNotifications(rows);
-        }
-      });
-      void syncMobileNotifications()
-        .catch(() => [])
-        .then(() => listLocalNotifications(NOTIFICATION_LIMIT))
-        .then((rows) => {
-          if (isMounted) {
-            setNotifications(rows);
-          }
-        });
-
-      return () => {
-        isMounted = false;
-      };
-    }, [])
-  );
-
-  async function handleChangeAccount() {
-    try {
-      await signOut();
-      router.replace("/(auth)/login");
-    } catch (error) {
-      Alert.alert(
-        "Нельзя сменить пользователя",
-        error instanceof Error ? error.message : "Сначала отправьте все локальные отчёты и действия."
-      );
-    }
-  }
-
-
-  return (
-    <Screen title="Профиль" subtitle="Устройство, настройки, диагностика и смена пользователя.">
-      <Card>
-        <View style={styles.row}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Устройство</Text>
-          <StatusPill label={deviceName} tone="success" />
-        </View>
-        <Text style={[styles.deviceTitle, { color: colors.text }]}>{deviceName}</Text>
-        <Text style={[styles.text, { color: colors.mutedText }]}>
-          Patrol360. Устройство привязано к мобильной сессии.
-        </Text>
-      </Card>
-
-      <Card>
-        <View style={styles.row}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Настройки</Text>
-          <StatusPill label="Offline-first" tone="success" />
-        </View>
-        <View style={styles.settingsGrid}>
-          <PrimaryButton icon="list-outline" label="Все метки" onPress={() => router.push("/all-points")} variant="secondary" />
-          <PrimaryButton icon="server-outline" label="Сервер" onPress={() => router.push("/(auth)/server-settings")} variant="secondary" />
-          <PrimaryButton icon="bug-outline" label="Диагностика" onPress={() => router.push("/settings/diagnostics" as never)} variant="secondary" />
-          <PrimaryButton icon="color-palette-outline" label="Тема" onPress={() => router.push("/settings/theme")} variant="secondary" />
-          <PrimaryButton icon="settings-outline" label="Все настройки" onPress={() => router.push("/settings")} variant="secondary" />
-        </View>
-      </Card>
-
-      <Card>
-        <View style={styles.notificationHeader}>
-          <View style={styles.notificationHeaderText}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Уведомления</Text>
-            <Text style={[styles.text, { color: colors.mutedText }]}>
-              {notifications.length === 0 ? "Уведомлений нет." : `${notifications.length} последних уведомлений`}
-            </Text>
-          </View>
-          <View style={styles.notificationHeaderActions}>
-            <CompactAction
-              icon="refresh-outline"
-              label={isRefreshingNotifications ? "Обновляем" : "Обновить"}
-              onPress={refreshNotifications}
-            />
-          </View>
-        </View>
-
-        {notifications.length > 0 ? (
-          <View style={styles.notificationList}>
-            {visibleNotifications.map((notification) => (
-              <NotificationRow key={notification.id} notification={notification} onPress={() => handleNotificationPress(notification, router)} />
-            ))}
-          </View>
-        ) : (
-          <View style={[styles.emptyNotifications, { borderColor: colors.border }]}>
-            <Ionicons color={colors.mutedText} name="notifications-off-outline" size={22} />
-            <Text style={[styles.text, { color: colors.mutedText }]}>После назначения обхода уведомления появятся здесь.</Text>
-          </View>
-        )}
-      </Card>
-
-      <View style={styles.settingsGrid}>
-        <PrimaryButton icon="person-add-outline" label="Сменить пользователя" onPress={handleChangeAccount} variant="secondary" />
-      </View>
-    </Screen>
-  );
+  const router = useRouter(); const { colors, preference } = useAppTheme();
+  const connection = useConnectionStatus(); const { summary, summaryError } = useProfileSummary(); const identity = useProfileIdentity();
+  const [themeOpen, setThemeOpen] = useState(false); const [logoutOpen, setLogoutOpen] = useState(false); const [busy, setBusy] = useState(false); const lock = useRef(false); const [error, setError] = useState<string | null>(null);
+  async function logout() { if (lock.current) return; lock.current = true; setBusy(true); setError(null); try { await signOut(); router.replace("/(auth)/login"); } catch (e) { setError(e instanceof Error ? e.message : "Не удалось выйти. Повторите попытку."); } finally { lock.current = false; setBusy(false); } }
+  return <Screen compactHeader title="Профиль" subtitle="Аккаунт, уведомления и настройки">
+    <ProfileGroup><ProfileRow title="Учётная запись" detail={identity.account} detailLines={2} last onPress={() => router.push("/settings/account")} leading={<View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: colors.backgroundAccent, alignItems: "center", justifyContent: "center" }}><Text style={{ fontSize: 24, fontWeight: "700", color: colors.primary }}>{identity.account.charAt(0).toUpperCase()}</Text></View>} /></ProfileGroup>
+    <ProfileGroup>
+      <ProfileRow icon="cloud-upload-outline" title="Связь и отправка" detail={`${connectionLabel(connection)} · ${summaryError ? "очередь недоступна" : `${summary.pending} действий ожидают`}`} onPress={() => router.push("/settings/connection" as never)} />
+      <ProfileRow icon="cloud-outline" title="Офлайн-доступ" detail={!summaryError && summary.snapshotReady ? "Готовность подтверждена" : "Готовность не подтверждена"} onPress={() => router.push("/settings/offline" as never)} />
+      <ProfileRow icon="notifications-outline" title="Уведомления" detail={identity.unread === null ? "Данные недоступны" : `${identity.unread} непрочитанных`} onPress={() => router.push("/settings/notifications" as never)} />
+      <ProfileRow icon="color-palette-outline" title="Оформление" detail={themeLabel(preference)} onPress={() => setThemeOpen(true)} />
+      <ProfileRow icon="settings-outline" title="Дополнительно" onPress={() => router.push("/settings")} last />
+    </ProfileGroup>
+    <ProfileGroup><ProfileRow icon="log-out-outline" title="Выйти" danger last trailing={<View />} onPress={() => { setError(null); setLogoutOpen(true); }} /></ProfileGroup>
+    <ThemePicker visible={themeOpen} onClose={() => setThemeOpen(false)} />
+    <Modal transparent visible={logoutOpen} animationType="none" onRequestClose={() => { if (!lock.current) setLogoutOpen(false); }}><View style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: colors.scrim }}><View accessibilityViewIsModal style={{ maxHeight: "90%", borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: 18 }}><ScrollView contentContainerStyle={{ gap: 16 }}>
+      <Ionicons name="alert-circle" size={42} color={colors.warning} style={{ alignSelf: "center" }} />
+      <Text accessibilityRole="header" style={{ fontSize: 22, fontWeight: "700", textAlign: "center", color: colors.text }}>Выйти из аккаунта?</Text>
+      <Text style={{ fontSize: 16, lineHeight: 24, textAlign: "center", color: colors.mutedText }}>{summary.pending || summary.files ? "Есть неотправленные данные. Для безопасного выхода сначала дождитесь отправки. Приложение дополнительно проверит незавершённые записи." : "Перед выходом проверим, что на телефоне не осталось неотправленных данных. Для следующего входа потребуется авторизация."}</Text>
+      {error ? <StatusMessage message={error} tone="danger" /> : null}
+      <PrimaryButton label="Остаться" disabled={busy} onPress={() => setLogoutOpen(false)} />
+      {error ? <PrimaryButton label="Открыть очередь" variant="secondary" disabled={busy} onPress={() => { setLogoutOpen(false); router.push("/settings/sync-queue" as never); }} /> : null}
+      <PrimaryButton label="Выйти" loading={busy} variant="secondary" onPress={() => void logout()} />
+    </ScrollView></View></View></Modal>
+  </Screen>;
 }
 
-function handleNotificationPress(notification: MobileNotificationDto, router: ReturnType<typeof useRouter>) {
-  const entityType = notification.entityType?.toLowerCase() ?? "";
-  if (notification.entityId && entityType.includes("request")) {
-    router.push(`/patrol/request/${notification.entityId}`);
-    return;
-  }
-  if (notification.entityId && (entityType.includes("assignment") || entityType.includes("patrol"))) {
-    router.push(`/patrol/assignment/${notification.entityId}`);
-    return;
-  }
-  if (notification.entityId && entityType.includes("report")) {
-    router.push("/settings/sync-queue" as never);
-    return;
-  }
-  Alert.alert(notification.title || "Уведомление", notification.message || "Без текста уведомления.");
-}
-
-function NotificationRow({ notification, onPress }: { notification: MobileNotificationDto; onPress: () => void }) {
-  const { colors } = useAppTheme();
-
-  return (
-    <Pressable
-      accessibilityHint="Открыть уведомление"
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.notificationItem,
-        { backgroundColor: colors.card, borderColor: colors.border },
-        pressed ? styles.notificationPressed : null
-      ]}
-    >
-      <View style={styles.notificationTopLine}>
-        <Text style={[styles.notificationType, { color: colors.mutedText }]}>{formatNotificationType(notification.type)}</Text>
-        <Text style={[styles.notificationDate, { color: colors.mutedText }]}>{formatNotificationDate(notification.createdAt)}</Text>
-      </View>
-      <Text numberOfLines={2} style={[styles.notificationTitle, { color: colors.text }]}>
-        {notification.title || "Уведомление"}
-      </Text>
-      <Text numberOfLines={4} style={[styles.text, { color: colors.mutedText }]}>
-        {notification.message || "Без текста уведомления."}
-      </Text>
-    </Pressable>
-  );
-}
-
-function CompactAction({
-  icon,
-  label,
-  onPress
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-}) {
-  const { colors } = useAppTheme();
-
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={[styles.compactAction, { borderColor: colors.border }]}>
-      <Ionicons color={colors.primary} name={icon} size={16} />
-      <Text style={[styles.compactActionText, { color: colors.primary }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function formatNotificationType(type: string) {
-  switch (type) {
-    case "patrol_request":
-    case "patrol-assignment":
-      return "Заявка";
-    case "patrol_cancelled":
-    case "assignment-cancelled":
-      return "Отмена";
-    case "report":
-    case "report-status":
-      return "Отчёт";
-    default:
-      return "Система";
-  }
-}
-
-function formatNotificationDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Дата неизвестна";
-  }
-
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(date);
-}
-
-const styles = StyleSheet.create({
-  compactAction: {
-    alignItems: "center",
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 5,
-    minHeight: 36,
-    paddingHorizontal: 10,
-    paddingVertical: 7
-  },
-  compactActionText: {
-    fontSize: 12,
-    fontWeight: "800"
-  },
-  deviceTitle: {
-    fontSize: 17,
-    fontWeight: "800"
-  },
-  emptyNotifications: {
-    alignItems: "center",
-    borderRadius: 14,
-    borderStyle: "dashed",
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 12,
-    padding: 12
-  },
-  inlineReadButton: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    gap: 6,
-    minHeight: 36,
-    paddingTop: 2
-  },
-  inlineReadText: {
-    fontSize: 13,
-    fontWeight: "800"
-  },
-  notificationDate: {
-    fontSize: 12,
-    fontWeight: "700"
-  },
-  notificationHeader: {
-    gap: 12
-  },
-  notificationHeaderActions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
-  },
-  notificationHeaderText: {
-    gap: 3
-  },
-  notificationItem: {
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 7,
-    padding: 12
-  },
-  notificationList: {
-    gap: 10,
-    marginTop: 12
-  },
-  notificationPressed: {
-    opacity: 0.78
-  },
-  notificationMeta: {
-    alignItems: "center",
-    flexDirection: "row",
-    flexShrink: 1,
-    flexWrap: "wrap",
-    gap: 6
-  },
-  notificationTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    lineHeight: 20
-  },
-  notificationTopLine: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "space-between"
-  },
-  notificationType: {
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.4,
-    textTransform: "uppercase"
-  },
-  row: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "space-between"
-  },
-  sectionTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: "800"
-  },
-  settingsGrid: {
-    gap: 10
-  },
-  text: {
-    fontSize: 14,
-    lineHeight: 20
-  }
-});

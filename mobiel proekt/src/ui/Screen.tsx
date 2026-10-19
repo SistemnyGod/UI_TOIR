@@ -1,12 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ReactNode, type Ref } from "react";
 import {
-  Animated,
-  ColorValue,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
   FlatList,
   FlatListProps,
-  Pressable,
   ScrollView,
   StyleProp,
   StyleSheet,
@@ -17,85 +17,115 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAppTheme } from "@/features/settings/themePreference";
+import { NavigationBar, navigationItems, useKeyboardVisible } from "./NavigationBar";
 import { useConnectionStatus } from "@/core/connectionStatus";
+import { useStableListAnchor } from './useStableListAnchor';
 
 type ScreenProps = {
   title: string;
+  onBack?: () => void;
+  compactHeader?: boolean;
   subtitle?: string;
   children: ReactNode;
+  floatingNotice?: ReactNode;
   bottomAction?: ReactNode;
+  bottomActionBackground?: 'surface' | 'transparent';
+  plainBackground?: boolean;
   scroll?: boolean;
-};
-
-type ScreenListProps<T> = Omit<FlatListProps<T>, "ListHeaderComponent" | "contentContainerStyle"> & {
-  title: string;
-  subtitle?: string;
-  bottomAction?: ReactNode;
-  headerContent?: ReactNode;
   contentContainerStyle?: StyleProp<ViewStyle>;
 };
 
-export function Screen({ title, subtitle, children, bottomAction, scroll = true }: ScreenProps) {
+type ScreenListProps<T> = Omit<FlatListProps<T>, "ListHeaderComponent" | "contentContainerStyle"> & {
+  onBack?: () => void;
+  listRef?: Ref<FlatList<T>>;
+  title: string;
+  compactHeader?: boolean;
+  subtitle?: string;
+  bottomAction?: ReactNode;
+  headerContent?: ReactNode;
+  floatingNotice?: ReactNode;
+  contentContainerStyle?: StyleProp<ViewStyle>;
+};
+
+export function Screen({ title, subtitle, children, floatingNotice, bottomAction, bottomActionBackground = 'surface', plainBackground = false, scroll = true, compactHeader = false, onBack, contentContainerStyle }: ScreenProps) {
   const shell = useScreenShell();
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: shell.colors.background }]}>
-      <ScreenBackground />
+    <SafeAreaView edges={["top", "left", "right"]} style={[styles.safeArea, { backgroundColor: shell.colors.background }]}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      {plainBackground ? null : <ScreenBackground />}
       {scroll ? (
         <ScrollView
+          style={{ flex: 1 }}
           contentContainerStyle={[
             styles.content,
-            { paddingBottom: (shell.showNestedNavigation ? 88 + shell.bottomInset : 24) + (bottomAction ? 88 : 0) }
+            { paddingBottom: 24 },
+            contentContainerStyle
           ]}
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <ScreenHeader title={title} subtitle={subtitle} networkStatus={shell.networkStatus} />
+          <ScreenHeader onBack={onBack} compact={compactHeader} title={title} subtitle={subtitle} networkStatus={shell.networkStatus} />
           {children}
         </ScrollView>
       ) : (
         <View style={styles.nonScrollingContent}>
-          <View style={styles.nonScrollingHeader}><ScreenHeader title={title} subtitle={subtitle} networkStatus={shell.networkStatus} /></View>
+          <View style={styles.nonScrollingHeader}><ScreenHeader onBack={onBack} compact={compactHeader} title={title} subtitle={subtitle} networkStatus={shell.networkStatus} /></View>
           {children}
         </View>
       )}
-      {bottomAction ? <View style={[styles.bottomAction, { bottom: shell.showNestedNavigation ? shell.bottomInset + 84 : shell.insets.bottom + 16 }]}>{bottomAction}</View> : null}
-      <NestedNavigation shell={shell} />
-    </SafeAreaView>
+      {floatingNotice ? <View pointerEvents="box-none" style={{ flexShrink: 0, paddingHorizontal: 16 }}>{floatingNotice}</View> : null}
+      <View style={{ flexShrink: 0, backgroundColor: bottomActionBackground === 'transparent' ? 'transparent' : shell.colors.navBackground }}>
+        {bottomAction ? <View style={{ padding: 16, paddingBottom: shell.showNestedNavigation && !shell.keyboard ? 12 : Math.max(shell.insets.bottom, 12) }}>{bottomAction}</View> : null}
+        <NestedNavigation shell={shell} />
+      </View>
+    </KeyboardAvoidingView></SafeAreaView>
   );
 }
 
 export function ScreenList<T>({
+  listRef,
+  onBack,
+  compactHeader = false,
   title,
   subtitle,
   headerContent,
+  floatingNotice,
   bottomAction,
   contentContainerStyle,
   ...listProps
 }: ScreenListProps<T>) {
   const shell = useScreenShell();
+  const stableAnchor = useStableListAnchor(Array.from(listProps.data ?? []).map((item, index) => listProps.keyExtractor?.(item, index) ?? String(index)));
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: shell.colors.background }]}>
+    <SafeAreaView edges={["top", "left", "right"]} style={[styles.safeArea, { backgroundColor: shell.colors.background }]}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScreenBackground />
       <FlatList
+        ref={listRef}
         {...listProps}
+        maintainVisibleContentPosition={stableAnchor ? listProps.maintainVisibleContentPosition : undefined}
+        style={[{ flex: 1 }, listProps.style]}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: (shell.showNestedNavigation ? 88 + shell.bottomInset : 24) + (bottomAction ? 88 : 0) },
-          contentContainerStyle
+          contentContainerStyle,
+          { paddingBottom: 24 }
         ]}
         ListHeaderComponent={
           <View style={styles.listHeader}>
-            <ScreenHeader title={title} subtitle={subtitle} networkStatus={shell.networkStatus} />
+            <ScreenHeader onBack={onBack} compact={compactHeader} title={title} subtitle={subtitle} networkStatus={shell.networkStatus} />
             {headerContent}
           </View>
         }
-        removeClippedSubviews
-        showsVerticalScrollIndicator={false}
+        removeClippedSubviews={false}
+        keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
       />
-      {bottomAction ? <View style={[styles.bottomAction, { bottom: shell.showNestedNavigation ? shell.bottomInset + 84 : shell.insets.bottom + 16 }]}>{bottomAction}</View> : null}
-      <NestedNavigation shell={shell} />
-    </SafeAreaView>
+      {floatingNotice ? <View pointerEvents="box-none" style={{ flexShrink: 0, paddingHorizontal: 16 }}>{floatingNotice}</View> : null}
+      <View style={{ flexShrink: 0, backgroundColor: shell.colors.navBackground }}>
+        {bottomAction ? <View style={{ padding: 16, paddingBottom: shell.showNestedNavigation && !shell.keyboard ? 12 : Math.max(shell.insets.bottom, 12) }}>{bottomAction}</View> : null}
+        <NestedNavigation shell={shell} />
+      </View>
+    </KeyboardAvoidingView></SafeAreaView>
   );
 }
 
@@ -105,13 +135,13 @@ function useScreenShell() {
   const pathname = usePathname();
   const router = useRouter();
   const networkStatus = useConnectionStatus();
-  const assignmentId = useMemo(() => pathname.match(/^\/patrol\/assignment\/([^/]+)/)?.[1] ?? null, [pathname]);
+  const keyboard = useKeyboardVisible();
   const showNestedNavigation =
     pathname.startsWith("/patrol/") || pathname.startsWith("/camera/") || pathname === "/settings" || pathname.startsWith("/settings/");
   const bottomInset = Math.max(insets.bottom, 8);
 
 
-  return { assignmentId, bottomInset, colors, insets, networkStatus, pathname, router, showNestedNavigation };
+  return { bottomInset, colors, insets, keyboard, networkStatus, pathname, router, showNestedNavigation };
 }
 
 function ScreenBackground() {
@@ -127,22 +157,26 @@ function ScreenBackground() {
 
 type NetworkStatus = "offline" | "checking" | "connected" | "serverUnavailable" | "otherServer" | "authorizationRequired";
 
-function ScreenHeader({ title, subtitle, networkStatus }: { title: string; subtitle?: string; networkStatus: NetworkStatus }) {
+function ScreenHeader({ title, subtitle, networkStatus, compact = false, onBack }: { title: string; subtitle?: string; networkStatus: NetworkStatus; compact?: boolean; onBack?: () => void }) {
   const { colors } = useAppTheme();
 
+  if (onBack) return <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+    <Pressable accessibilityRole="button" accessibilityLabel="Назад" onPress={onBack} style={{ minWidth: 48, minHeight: 48, alignItems: "center", justifyContent: "center" }}><Ionicons name="arrow-back" size={24} color={colors.text} /></Pressable>
+    <Text accessibilityRole="header" style={{ flex: 1, color: colors.text, fontSize: 20, fontWeight: "700" }}>{title}</Text>
+  </View>;
   return (
     <>
       <View style={styles.topBar}>
-        <Text accessibilityLabel="ATOM" style={{ color: "#00a7e5", fontSize: 32, fontWeight: "900", letterSpacing: -1 }}>ATOM</Text>
+        <Text accessibilityLabel="ATOM" style={{ color: colors.brand, fontSize: 22, fontWeight: "900", letterSpacing: -1 }}>ATOM</Text>
         <View style={styles.networkBadge}>
           <Text style={[styles.networkText, { color: colors.mutedText }]}>{networkStatusLabel(networkStatus)}</Text>
-          <View style={[styles.networkDot, { backgroundColor: networkStatusColor(networkStatus) }]} />
+          <View style={[styles.networkDot, { backgroundColor: networkStatus === "connected" ? colors.success : networkStatus === "checking" ? colors.warning : networkStatus === "offline" ? colors.mutedText : colors.danger }]} />
         </View>
       </View>
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+      {title || subtitle ? <View style={styles.header}>
+        <Text style={[styles.title, { color: colors.text }, compact ? { fontSize: 22, lineHeight: 28 } : null]}>{title}</Text>
         {subtitle ? <Text style={[styles.subtitle, { color: colors.mutedText }]}>{subtitle}</Text> : null}
-      </View>
+      </View> : null}
     </>
   );
 }
@@ -156,99 +190,14 @@ function networkStatusLabel(status: NetworkStatus) {
   return "Офлайн";
 }
 
-function networkStatusColor(status: NetworkStatus) {
-  if (status === "connected") return "#22c55e";
-  if (status === "checking") return "#f59e0b";
-  return "#ef4444";
-}
 function NestedNavigation({ shell }: { shell: ReturnType<typeof useScreenShell> }) {
-  const { bottomInset, colors, pathname, router, showNestedNavigation } = shell;
-
-  if (!showNestedNavigation) {
-    return null;
-  }
-
-  return (
-    <View
-      style={[
-        styles.nestedNav,
-        {
-          backgroundColor: colors.navBackground,
-          borderTopColor: colors.navBorder,
-          height: 72 + bottomInset,
-          paddingBottom: bottomInset + 8
-        }
-      ]}
-    >
-      <NestedNavItem
-        active={pathname.startsWith("/patrol") && !pathname.includes("/all-points")}
-        activeIcon="shield-checkmark"
-        icon="shield-checkmark-outline"
-        label="Обход"
-        onPress={() => router.replace("/patrol")}
-      />
-      <NestedNavItem active={pathname.startsWith("/work-accounting")} activeIcon="construct" icon="construct-outline" label="Работы" onPress={() => router.replace("/work-accounting")} />
-      <NestedNavItem active={pathname.startsWith("/reports")} activeIcon="document-text" icon="document-text-outline" label="Отчёты" onPress={() => router.replace("/reports" as never)} />
-      <NestedNavItem
-        active={pathname.startsWith("/profile") || pathname.startsWith("/settings")}
-        activeIcon="person-circle"
-        icon="person-circle-outline"
-        label="Профиль"
-        onPress={() => router.replace("/profile")}
-      />
-    </View>
-  );
-}
-
-function NestedNavItem({
-  active,
-  activeIcon,
-  icon,
-  label,
-  onPress
-}: {
-  active: boolean;
-  activeIcon: keyof typeof Ionicons.glyphMap;
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-}) {
-  const { colors } = useAppTheme();
-  const color: ColorValue = active ? colors.primary : colors.mutedText;
-  const [activeProgress] = useState(() => new Animated.Value(active ? 1 : 0));
-
-  useEffect(() => {
-    Animated.timing(activeProgress, {
-      duration: 150,
-      toValue: active ? 1 : 0,
-      useNativeDriver: true
-    }).start();
-  }, [active, activeProgress]);
-
-  return (
-    <Pressable
-      accessibilityRole="tab"
-      accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={({ pressed }) => [styles.nestedNavItem, pressed ? styles.nestedNavItemPressed : null]}
-    >
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.nestedNavActiveBackground,
-          {
-            backgroundColor: colors.backgroundAccent,
-            opacity: activeProgress,
-            transform: [{ scale: activeProgress.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }]
-          }
-        ]}
-      />
-      <View style={styles.nestedNavContent}>
-        <Ionicons color={String(color)} name={active ? activeIcon : icon} size={active ? 25 : 24} />
-        <Text style={[styles.nestedNavLabel, { color: String(color) }]}>{label}</Text>
-      </View>
-    </Pressable>
-  );
+  if (!shell.showNestedNavigation || shell.keyboard) return null;
+  const active = shell.pathname.startsWith("/settings") || shell.pathname.startsWith("/profile") ? "profile"
+    : shell.pathname.startsWith("/reports") ? "reports" : shell.pathname.startsWith("/work-accounting") ? "work-accounting" : "patrol";
+  return <NavigationBar active={active} onSelect={name => {
+    const item = navigationItems.find(tab => tab.name === name)!;
+    shell.router.replace(item.path as never);
+  }} />;
 }
 const styles = StyleSheet.create({
   bottomAction: {
@@ -282,14 +231,14 @@ const styles = StyleSheet.create({
     width: "100%"
   },
   content: {
-    gap: 13,
+    gap: 10,
     padding: 16,
     paddingBottom: 28
   },
   nonScrollingContent: { flex: 1 },
   nonScrollingHeader: { paddingHorizontal: 16, paddingTop: 16 },
   listHeader: {
-    gap: 13
+    gap: 10
   },
   topBar: {
     alignItems: "center",
@@ -325,6 +274,8 @@ const styles = StyleSheet.create({
     lineHeight: 12
   },
   networkBadge: {
+    flexShrink: 1,
+    marginLeft: 16,
     alignItems: "center",
     flexDirection: "row",
     gap: 7
@@ -335,8 +286,9 @@ const styles = StyleSheet.create({
     width: 8
   },
   networkText: {
-    fontSize: 12,
-    fontWeight: "700"
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: "600"
   },
   header: {
     gap: 6

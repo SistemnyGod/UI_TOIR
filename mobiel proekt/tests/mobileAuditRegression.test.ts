@@ -1,10 +1,15 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
+import ts from "typescript";
 
 async function readSource(relativePath: string) {
-  return readFile(join(process.cwd(), relativePath), "utf8");
+  const modules: Record<string, string[]> = {
+    'src/db/repositories/patrolRepository.ts': ['src/db/repositories/patrolAssignmentRepository.ts', 'src/db/repositories/patrolRequestBoardRepository.ts'],
+    'src/db/repositories/outboxRepository.ts': ['src/db/repositories/outboxResponseRepository.ts', 'src/db/repositories/outboxReadRepository.ts']
+  };
+  return (await Promise.all([relativePath, ...(modules[relativePath] ?? [])].map(path => readFile(join(process.cwd(), path), 'utf8')))).join('\n');
 }
 
 test("work item refresh uses v2 without pruning a partial server snapshot", async () => {
@@ -65,12 +70,12 @@ test("offline report becomes immediately retryable when network returns", async 
     readSource("src/db/repositories/outboxRepository.ts")
   ]);
 
-  assert.match(triggerSource, /networkBecameUsable[\s\S]*forceRetry: networkBecameUsable/);
-  assert.match(triggerSource, /result\.skipped === "serverUnavailable" \|\| result\.skipped === "offline"/);
-  assert.match(engineSource, /activateRetryableOutboxCommandsForImmediateRetry\(ownerUserId\)/);
+  assert.match(triggerSource, /networkBecameUsable[\s\S]*runMobileRecoveryCycle\("network", "networkRecovered"\)/);
+  assert.match(triggerSource, /activeSyncRequests\.get\(requestKey\)/);
+  assert.match(engineSource, /options\.mode === "networkRecovered"[\s\S]*activateNetworkRecoveredOutboxCommands\(ownerUserId\)/);
   assert.match(
     repositorySource,
-    /next_attempt_at = NULL[\s\S]*status IN \('retryLater', 'waiting_network'\)/
+    /next_attempt_at = NULL[\s\S]*status = 'waiting_network'[\s\S]*retry_reason IN \('network', 'timeout'\)/
   );
 });
 
@@ -89,15 +94,15 @@ test("EMU refresh preserves local conflict, rejection, and waiting state", async
 
   assert.match(
     saveWorkTasksSource,
-    /status = CASE WHEN work_tasks\.sync_status <> 'synced' THEN work_tasks\.status ELSE excluded\.status END/
+    /status = CASE WHEN work_tasks\.sync_status <> 'synced' OR excluded\.revision < work_tasks\.revision THEN work_tasks\.status ELSE excluded\.status END/
   );
   assert.match(
     saveWorkTasksSource,
-    /sync_status = CASE WHEN work_tasks\.sync_status <> 'synced' THEN work_tasks\.sync_status ELSE excluded\.sync_status END/
+    /sync_status = CASE WHEN work_tasks\.sync_status <> 'synced' OR excluded\.revision < work_tasks\.revision THEN work_tasks\.sync_status ELSE excluded\.sync_status END/
   );
   assert.match(
     saveWorkTasksSource,
-    /completed_at_local = CASE WHEN work_tasks\.sync_status <> 'synced' THEN work_tasks\.completed_at_local ELSE excluded\.completed_at_local END/
+    /completed_at_local = CASE WHEN work_tasks\.sync_status <> 'synced' OR excluded\.revision < work_tasks\.revision THEN work_tasks\.completed_at_local ELSE excluded\.completed_at_local END/
   );
   assert.match(
     saveWorkTasksSource,
@@ -187,8 +192,10 @@ test("bootstrap keeps non-assignment conflicts open without server entity state"
 test("frozen snapshot readiness ignores current route version", async () => {
   const source = await readSource("src/db/repositories/patrolRepository.ts");
   const databaseSource = await readSource("src/db/database.ts");
-  const bootstrapSource = await readSource("src/db/repositories/bootstrapRepository.ts");
-  const readiness = source.match(/export async function getReportReadiness[\s\S]*?export async function completeAssignmentLocally/)?.[0] ?? "";
+  const parsed = ts.createSourceFile('repository.ts', source, ts.ScriptTarget.Latest, true);
+  const declaration = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'getReportReadiness');
+  assert.ok(declaration, 'getReportReadiness must exist');
+  const readiness = declaration.getText(parsed);
   const startedBlockStart = readiness.indexOf("if (assignment && frozenSnapshotAssignmentStatuses.has(assignment.status))");
   const startedBlockEnd = readiness.indexOf("if (assignment && points.length === 0)", startedBlockStart);
 
@@ -200,7 +207,8 @@ test("frozen snapshot readiness ignores current route version", async () => {
   assert.match(source, /frozenSnapshotAssignmentStatuses\.has\(row\.status\)/);
   assert.match(databaseSource, /snapshot_allow_free_order INTEGER/);
   assert.match(databaseSource, /20260726_assignment_snapshot_policy/);
-  assert.match(bootstrapSource, /const snapshotVersion = frozenSnapshot[\s\S]*assignment\.routeVersionNo/);
+  // Immutable bootstrap persistence, empty-snapshot repair and late replies are
+  // covered with a real SQLite database in assignmentSnapshotDatabase.vitest.test.ts.
   assert.ok(startedBlockStart >= 0 && startedBlockEnd > startedBlockStart);
   assert.doesNotMatch(readiness.slice(startedBlockStart, startedBlockEnd), /route\.version/);
 });

@@ -5,6 +5,20 @@ import { orderServerCandidateBaseUrls } from "@/core/serverCandidatePolicy";
 
 const serverBaseUrlKey = `patrol360.serverBaseUrl.${currentContourId}`;
 const settingsListeners = new Set<() => void>();
+let settingsMutationQueue: Promise<void> = Promise.resolve();
+function enqueueSettingsMutation<T>(operation: () => Promise<T>): Promise<T> {
+  const request = settingsMutationQueue.then(operation);
+  settingsMutationQueue = request.then(() => undefined, () => undefined);
+  return request;
+}
+
+function repairStoredServerValue(expected: string, normalized: string | null) {
+  return enqueueSettingsMutation(async () => {
+    if (await SecureStore.getItemAsync(serverBaseUrlKey) !== expected) return;
+    if (normalized === null) await SecureStore.deleteItemAsync(serverBaseUrlKey);
+    else await SecureStore.setItemAsync(serverBaseUrlKey, normalized);
+  });
+}
 export function subscribeToServerSettings(listener: () => void) {
   settingsListeners.add(listener);
   return () => { settingsListeners.delete(listener); };
@@ -22,6 +36,10 @@ export type MobileRuntimeConfig = {
 };
 
 export async function getServerBaseUrl() {
+  return readServerBaseUrl();
+}
+
+async function readServerBaseUrl(repair = true) {
   const storedValue = await SecureStore.getItemAsync(serverBaseUrlKey);
   if (!storedValue) {
     return defaultServerBaseUrl;
@@ -31,17 +49,17 @@ export async function getServerBaseUrl() {
   try {
     normalizedValue = normalizeServerBaseUrl(storedValue);
   } catch {
-    await SecureStore.deleteItemAsync(serverBaseUrlKey).catch(() => undefined);
+    if (repair) await repairStoredServerValue(storedValue, null).catch(() => undefined);
     return defaultServerBaseUrl;
   }
 
   if (!isAllowedServerBaseUrl(normalizedValue)) {
-    await SecureStore.deleteItemAsync(serverBaseUrlKey).catch(() => undefined);
+    if (repair) await repairStoredServerValue(storedValue, null).catch(() => undefined);
     return defaultServerBaseUrl;
   }
 
-  if (normalizedValue !== storedValue) {
-    await SecureStore.setItemAsync(serverBaseUrlKey, normalizedValue).catch(() => undefined);
+  if (repair && normalizedValue !== storedValue) {
+    await repairStoredServerValue(storedValue, normalizedValue).catch(() => undefined);
   }
 
   return normalizedValue;
@@ -74,25 +92,35 @@ export async function getMobileRuntimeConfig(): Promise<MobileRuntimeConfig> {
   };
 }
 
-export async function setServerBaseUrl(value: string, isCurrent?: () => boolean) {
+export function setServerBaseUrl(value: string, isCurrent?: () => boolean) {
+  return enqueueSettingsMutation(() => setServerBaseUrlInternal(value, isCurrent));
+}
+
+async function setServerBaseUrlInternal(value: string, isCurrent?: () => boolean) {
   const normalizedValue = normalizeServerBaseUrl(value);
   if (!isAllowedServerBaseUrl(normalizedValue)) {
     throw new Error(`Адрес сервера не разрешён для контура ${currentContourId}.`);
   }
 
   if (isCurrent && !isCurrent()) throw new Error("Настройки сервера изменились. Устаревший адрес не сохранён.");
-  const previous = await getServerBaseUrl();
+  const previous = await readServerBaseUrl(false);
   if (previous === normalizedValue) return normalizedValue;
   if (isCurrent && !isCurrent()) throw new Error("Настройки сервера изменились. Устаревший адрес не сохранён.");
   await SecureStore.setItemAsync(serverBaseUrlKey, normalizedValue);
+  if (isCurrent && !isCurrent()) {
+    await SecureStore.setItemAsync(serverBaseUrlKey, previous);
+    throw new Error("Настройки сервера изменились. Устаревший адрес не сохранён.");
+  }
   settingsListeners.forEach(listener => listener());
   return normalizedValue;
 }
 
 export async function resetServerBaseUrl() {
-  await SecureStore.deleteItemAsync(serverBaseUrlKey);
-  settingsListeners.forEach(listener => listener());
-  return defaultServerBaseUrl;
+  return enqueueSettingsMutation(async () => {
+    await SecureStore.deleteItemAsync(serverBaseUrlKey);
+    settingsListeners.forEach(listener => listener());
+    return defaultServerBaseUrl;
+  });
 }
 
 export async function setLocalLanServerBaseUrl() {

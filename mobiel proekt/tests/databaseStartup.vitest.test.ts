@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { writeFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("expo-sqlite", () => ({}));
@@ -26,6 +27,46 @@ async function start() {
 }
 
 describe("actual startup migrations", () => {
+  it("adds matching list indexes to an upgraded database without changing rows or order", async () => {
+    raw = new DatabaseSync(":memory:");
+    await start();
+    raw.exec(`DROP INDEX ix_patrol_request_board_owner_date;
+      DROP INDEX ix_work_tasks_active_page; DROP INDEX ix_work_tasks_history_page;
+      DROP INDEX ix_shift_remarks_owner_page;
+      DELETE FROM schema_migrations WHERE id='20260930_chronological_list_indexes';`);
+    const request = raw.prepare(`INSERT INTO patrol_request_board(request_id,owner_user_id,route_id,route_name,planned_start_at,status,revision)
+      VALUES (?,?,'route','Маршрут',?,'new',1)`);
+    const work = raw.prepare(`INSERT INTO work_tasks(task_id,owner_user_id,title,status,planned_at,revision,created_at_local)
+      VALUES (?,?,'Работа',?,NULL,1,?)`);
+    raw.exec('BEGIN');
+    for (let i = 0; i < 30_000; i++) {
+      const id = String(i).padStart(8, '0'), owner = i % 3 ? 'owner' : 'other';
+      const date = new Date(Date.UTC(2026, 8, 30) - i * 1000).toISOString();
+      request.run(id, owner, date); work.run(id, owner, i % 2 ? 'inProgress' : 'completedServer', date);
+    }
+    raw.exec('COMMIT');
+    const requestSql = `SELECT request_id, route_name, planned_start_at FROM patrol_request_board WHERE owner_user_id = ?
+      ORDER BY julianday(planned_start_at) DESC, request_id ASC`;
+    const queries = [requestSql, `SELECT task_id FROM work_tasks WHERE owner_user_id = ? AND status NOT IN ('completedLocal','completedServer','cancelled')
+      ORDER BY planned_at ASC, COALESCE(created_at_local, '') DESC, task_id ASC LIMIT 26`,
+      `SELECT task_id FROM work_tasks WHERE owner_user_id = ? AND status IN ('completedLocal','completedServer','cancelled')
+      ORDER BY planned_at ASC, COALESCE(created_at_local, '') DESC, task_id ASC LIMIT 26`,
+      `SELECT remark_id FROM shift_remarks WHERE owner_user_id = ? ORDER BY created_at_local DESC, remark_id DESC LIMIT 26`];
+    const plans = () => queries.map(sql => raw.prepare('EXPLAIN QUERY PLAN ' + sql).all('owner'));
+    const measure = () => { const sql = raw.prepare(requestSql); const times: number[] = [];
+      sql.all('owner'); for (let i = 0; i < 7; i++) { const start = performance.now(); sql.all('owner'); times.push(performance.now() - start); }
+      return times.sort((a,b) => a-b)[3]; };
+    const before = { plans: plans(), requestMedianMs: measure() };
+    const previousOrder = raw.prepare(requestSql).all('owner');
+    await start();
+    expect(raw.prepare(requestSql).all('owner')).toEqual(previousOrder);
+    const after = { plans: plans(), requestMedianMs: measure() };
+    for (const plan of after.plans) expect(plan.map(row => row.detail).join(' ')).not.toContain('TEMP B-TREE');
+    expect(raw.prepare('SELECT COUNT(*) AS n FROM work_tasks').get()).toMatchObject({ n: 30_000 });
+    writeFileSync('output/selected-optimizations-audit/database-benchmark.json', JSON.stringify({ rowsPerTable: 30_000, before, after }, null, 2));
+    await start();
+    expect(raw.prepare("SELECT COUNT(*) AS n FROM schema_migrations WHERE id='20260930_chronological_list_indexes'").get()).toMatchObject({ n: 1 });
+  });
   it("initializes a clean database and can restart", async () => {
     raw = new DatabaseSync(":memory:");
     await start();

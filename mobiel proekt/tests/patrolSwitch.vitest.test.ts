@@ -39,6 +39,6 @@ it('continues the target with a separate command after a failed switch', async (
   expect(continuation.commandType).toBe('startPatrolAssignment');
   expect(continuation.entityLocalId).toBe('b');
   expect(continuation.bypassSwitchBarrier).toBe(true);
-  expect(state.selectInTransaction).toHaveBeenCalledWith(expect.anything(), 'shared-account', { assignmentId: 'b', employeeId: 'alice' });
+  expect(state.selectInTransaction).toHaveBeenCalledWith(expect.anything(), 'shared-account', { assignmentId: 'b' });
   expect(state.sync).toHaveBeenCalled();
 });

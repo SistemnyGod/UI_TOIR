@@ -1,11 +1,14 @@
 import * as Notifications from "expo-notifications";
 import * as TaskManager from "expo-task-manager";
+import { Platform } from "react-native";
 
 import { initializeDatabase } from "@/db/database";
 import { refreshMobileData } from "@/services/mobileDataRefreshService";
 import { logMobileError } from "@/services/mobileErrorReporter";
+import { createNotificationIdWindow, isPresentedByNativeAndroid, readNotificationData } from "./notificationPresentation";
 
 export const PATROL360_BACKGROUND_NOTIFICATION_TASK = "patrol360-background-notification";
+const localPresentations = createNotificationIdWindow();
 
 if (!TaskManager.isTaskDefined(PATROL360_BACKGROUND_NOTIFICATION_TASK)) {
   TaskManager.defineTask<Notifications.NotificationTaskPayload>(
@@ -16,21 +19,23 @@ if (!TaskManager.isTaskDefined(PATROL360_BACKGROUND_NOTIFICATION_TASK)) {
         return Notifications.BackgroundNotificationTaskResult.Failed;
       }
 
-      const payload = isNotificationResponse(data) ? data.notification.request.content.data : data;
+      // A tap, or a notification already presented by the OS, only refreshes data.
+      // Legacy direct FCM payloads with title/message are presented by Expo on Android.
+      if (!isNotificationResponse(data) && data && typeof data === "object" && !data.notification) {
+        const payload = readNotificationData(data.data);
+        if (!isPresentedByNativeAndroid(data.data, Platform.OS)) {
+          await showLocalNotification(payload).catch(error =>
+            logMobileError("background.notification.presentation.failed", error));
+        }
+      }
       try {
         await initializeDatabase();
         const updated = await refreshMobileData();
-        if (!isNotificationResponse(data)) {
-          await showLocalNotification(payload);
-        }
         return updated
           ? Notifications.BackgroundNotificationTaskResult.NewData
           : Notifications.BackgroundNotificationTaskResult.NoData;
       } catch (error) {
         await logMobileError("background.notification.failed", error);
-        if (!isNotificationResponse(data)) {
-          await showLocalNotification(payload).catch(() => undefined);
-        }
         return Notifications.BackgroundNotificationTaskResult.Failed;
       }
     }
@@ -57,32 +62,31 @@ function isNotificationResponse(
   return typeof data === "object" && data !== null && "actionIdentifier" in data && "notification" in data;
 }
 
-async function showLocalNotification(payload: unknown) {
-  const data = asStringRecord(payload);
-  const title = data.title || "Patrol360";
-  const body = data.body || "Данные обновлены. Откройте приложение для просмотра.";
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title,
-      body,
-      data: {
-        notificationId: data.notificationId ?? "",
-        type: data.type ?? "",
-        entityType: data.entityType ?? "",
-        entityId: data.entityId ?? ""
+async function showLocalNotification(data: Record<string, string>) {
+  const notificationId = data.notificationId || data.tag;
+  // Silent refreshes and malformed payloads must not produce a generic alert.
+  if (!notificationId || !(data.title || data.message || data.body || data.alertTitle || data.alertBody)) return;
+  if (!localPresentations.claim(notificationId)) return;
+  try {
+    const presented = await Notifications.getPresentedNotificationsAsync().catch(() => []);
+    if (presented.some(notification => notification.request.identifier === notificationId)) return;
+    await Notifications.scheduleNotificationAsync({
+      identifier: notificationId,
+      content: {
+        title: data.title || data.alertTitle || "Patrol360",
+        body: data.message || data.alertBody || data.body || "Откройте приложение для просмотра.",
+        data: {
+          notificationId,
+          type: data.type ?? "",
+          entityType: data.entityType ?? "",
+          entityId: data.entityId ?? ""
+        },
+        sound: true
       },
-      sound: true
-    },
-    trigger: null
-  });
-}
-
-function asStringRecord(value: unknown): Record<string, string> {
-  if (!value || typeof value !== "object") {
-    return {};
+      trigger: null
+    });
+  } catch (error) {
+    localPresentations.release(notificationId);
+    throw error;
   }
-
-  return Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string")
-  );
 }

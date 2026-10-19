@@ -9,7 +9,7 @@ import { MobileDiagnosticReport } from "@/db/repositories/diagnosticReportReposi
 export function getBootstrap(accessToken?: string, options: { patrolAppealsPaging?: boolean; workItemsPaging?: boolean } = {}) {
   return mobileRequest<BootstrapDto>("/api/v1/mobile/bootstrap", bootstrapResponseSchema, {
     accessToken,
-    headers: options.patrolAppealsPaging || options.workItemsPaging ? { "X-Patrol360-Mobile-Features": [options.patrolAppealsPaging ? "patrolAppealsPaging,patrolAppealsAssignmentPaging" : "", options.workItemsPaging ? "workItemsPaging" : ""].filter(Boolean).join(",") } : undefined
+    headers: { "X-Patrol360-Mobile-Features": ["assignmentSnapshots", options.patrolAppealsPaging ? "patrolAppealsPaging,patrolAppealsAssignmentPaging" : "", options.workItemsPaging ? "workItemsPaging" : ""].filter(Boolean).join(",") }
   });
 }
 

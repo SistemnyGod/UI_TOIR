@@ -1,3 +1,4 @@
+import { useReducedMotion } from "./useReducedMotion";
 import { Ionicons } from "@expo/vector-icons";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,33 +17,38 @@ export function ActionSheet({
   actions,
   onClose,
   title,
+  message,
   visible
 }: {
   actions: ActionSheetItem[];
   onClose: () => void;
   title: string;
+  message?: string;
   visible: boolean;
 }) {
   const { colors } = useAppTheme();
   const insets = useSafeAreaInsets();
+  const reducedMotion = useReducedMotion();
 
   return (
-    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
-      <View style={styles.backdrop}>
+    <Modal statusBarTranslucent navigationBarTranslucent animationType={reducedMotion ? "none" : "fade"} onRequestClose={onClose} transparent visible={visible}>
+      <View style={[styles.backdrop, { backgroundColor: colors.scrim }]}>
         <Pressable accessibilityLabel="Закрыть меню" accessibilityRole="button" onPress={onClose} style={StyleSheet.absoluteFill} />
         <View accessibilityLabel={title} accessibilityViewIsModal style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <View style={styles.handle} />
+          <View style={[styles.handle, { backgroundColor: colors.border }]} />
           <View style={styles.header}>
             <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{title}</Text>
             <Pressable accessibilityLabel="Закрыть" accessibilityRole="button" hitSlop={8} onPress={onClose} style={styles.closeButton}>
               <Ionicons color={colors.mutedText} name="close" size={22} />
             </Pressable>
           </View>
-          <ScrollView style={{ maxHeight: 480 }} contentContainerStyle={styles.actions}>
+          <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={styles.actions}>
+            {message ? <Text style={{ color: colors.mutedText, fontSize: 16, lineHeight: 24, marginBottom: 8 }}>{message}</Text> : null}
             {actions.map((action) => (
               <Pressable
                 accessibilityRole="button"
                 disabled={action.disabled}
+                accessibilityState={{ disabled: !!action.disabled }}
                 key={action.label}
                 onPress={() => {
                   onClose();
@@ -51,14 +57,14 @@ export function ActionSheet({
                 style={({ pressed }) => [
                   styles.action,
                   { borderColor: colors.border },
-                  pressed && !action.disabled ? styles.actionPressed : null,
+                  pressed && !action.disabled ? { backgroundColor: colors.backgroundAccent } : null,
                   action.disabled ? styles.disabled : null
                 ]}
               >
-                <View style={[styles.iconBox, { backgroundColor: action.danger ? "#fef2f2" : "#eef4ff" }]}>
-                  <Ionicons color={action.danger ? "#dc2626" : colors.primary} name={action.icon} size={21} />
+                <View style={[styles.iconBox, { backgroundColor: action.danger ? colors.dangerSurface : colors.backgroundAccent }]}>
+                  <Ionicons color={action.danger ? colors.danger : colors.primary} name={action.icon} size={21} />
                 </View>
-                <Text style={[styles.actionLabel, { color: action.danger ? "#dc2626" : colors.text }]}>{action.label}</Text>
+                <Text style={[styles.actionLabel, { color: action.danger ? colors.danger : colors.text }]}>{action.label}</Text>
                 <Ionicons color={colors.mutedText} name="chevron-forward" size={18} />
               </Pressable>
             ))}
@@ -76,6 +82,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end"
   },
   sheet: {
+    maxHeight: "90%",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     gap: 12,

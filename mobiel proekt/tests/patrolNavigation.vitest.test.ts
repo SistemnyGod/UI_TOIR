@@ -44,12 +44,12 @@ it('does not treat an ambiguous legacy report as a completed report', async () =
   expect((await getPatrolReportState(await captureDataOwnerContext(), 'B')).completedLocally).toBe(false);
 });
 
-it('A unfinished, B selected and delivered: clears B, keeps employee B and restores the board', async () => {
+it('A unfinished, B selected and delivered: clears B and restores the board without a device performer', async () => {
   const scope = await captureDataOwnerContext();
-  await selectPatrolForContext(scope, 'B', 'employee-B');
+  await selectPatrolForContext(scope, 'B');
   state.delivery = 'delivered';
   expect(await finishDeliveredNavigation(scope, 'B', () => true)).toBe(true);
-  expect(await getPatrolDeviceContext()).toEqual({ employeeId: 'employee-B', assignmentId: null });
+  expect(await getPatrolDeviceContext()).toEqual({ assignmentId: null });
   expect(await resolvePatrolStartPath()).toBe(requestBoardPath);
 });
 it('a late receipt cannot clear another selected route', async () => {
@@ -69,7 +69,7 @@ it('a corrupted completion payload never counts as delivered', async () => {
 it('pending point delivery does not open the report before local completion', async () => {
   state.db.exec("DELETE FROM outbox_commands WHERE command_type='completePatrolAssignment'; UPDATE outbox_commands SET command_type='savePatrolPoint', entity_local_id='B-point-1', status='pending';");
   state.delivery = 'queued'; state.status = 'inProgress';
-  await selectPatrolForContext(await captureDataOwnerContext(), 'B', 'employee-B');
+  await selectPatrolForContext(await captureDataOwnerContext(), 'B');
   expect(await resolvePatrolStartPath()).toBe('/patrol/assignment/B/scan-nfc');
 });
 it('point delivery error does not create a local report', async () => {
@@ -80,7 +80,7 @@ it('point delivery error does not create a local report', async () => {
 });
 it('blur during an awaited receipt prevents both clearing and navigation', async () => {
   state.delivery = 'delivered'; let active = true;
-  const scope = await captureDataOwnerContext(); await selectPatrolForContext(scope, 'B', 'employee-B');
+  const scope = await captureDataOwnerContext(); await selectPatrolForContext(scope, 'B');
   state.readBarrier = async () => { active = false; };
   expect(await finishDeliveredNavigation(scope, 'B', () => active)).toBe(false);
   state.readBarrier = null;
@@ -92,7 +92,7 @@ it('a former account context cannot clear a matching ID in a new session', async
   expect((await getPatrolDeviceContext()).assignmentId).toBe('A');
 });
 it('offline submission restores its summary; paused selection requires explicit continuation', async () => {
-  await selectPatrolForContext(await captureDataOwnerContext(), 'B', 'employee-B');
+  await selectPatrolForContext(await captureDataOwnerContext(), 'B');
   state.delivery = 'queued';
   expect(await resolvePatrolStartPath()).toBe('/patrol/assignment/B/submit');
   state.db.exec("DELETE FROM outbox_commands WHERE client_operation_id='complete-B'");

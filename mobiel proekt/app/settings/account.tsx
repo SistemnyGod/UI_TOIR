@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, StyleSheet, Text } from "react-native";
 
+import { AccountIdentity } from "@/ui/AccountIdentity";
 import { signOut } from "@/auth/authService";
 import { getDeviceDisplayName } from "@/auth/deviceInfo";
 import { useAppTheme } from "@/features/settings/themePreference";
@@ -30,7 +31,8 @@ export default function AccountRoute() {
   }
 
   return (
-    <Screen title="Аккаунт" subtitle="Безопасный выход и смена пользователя на телефоне.">
+    <Screen title="Учётная запись" onBack={() => router.back()}>
+      <AccountIdentity />
       <Card>
         <StatusPill label="Защита данных" tone="success" />
         <Text style={[styles.title, { color: colors.text }]}>Безопасный выход</Text>

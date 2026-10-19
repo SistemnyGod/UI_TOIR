@@ -15,7 +15,11 @@ export class ConnectionMonitor {
   constructor(private probe: () => Promise<ProbeResult>, private publish: (status: ConnectionStatus) => void,
     private now = () => Date.now()) {}
 
-  private set(status: ConnectionStatus) { this.status = status; this.publish(status); }
+  private set(status: ConnectionStatus) {
+    if (this.status === status) return;
+    this.status = status;
+    this.publish(status);
+  }
   setContextGeneration(contextGeneration: number) {
     if (this.contextGeneration === contextGeneration) return;
     this.contextGeneration = contextGeneration;
@@ -27,11 +31,14 @@ export class ConnectionMonitor {
     if (!active) this.invalidate();
     else void this.check();
   }
-  setNetwork(online: boolean) {
-    if (this.online !== online) { this.invalidate(); this.checkedAt = -Infinity; }
+  setNetwork(online: boolean, routeChanged = false) {
+    if (this.online !== online || routeChanged) { this.invalidate(); this.checkedAt = -Infinity; }
     this.online = online;
     if (!online) this.set('offline');
-    else void this.check();
+    else {
+      if (routeChanged) this.set('checking');
+      void this.check();
+    }
   }
   outcome(outcome: 'connected' | 'serverUnavailable' | 'authorizationRequired' | 'authorizationRecovered', requestContextGeneration = this.contextGeneration) {
     if (requestContextGeneration !== this.contextGeneration) return;
@@ -70,7 +77,8 @@ export class ConnectionMonitor {
     if (this.now() - this.checkedAt < 30_000) return Promise.resolve();
     const generation = ++this.generation;
     this.checkedAt = this.now();
-    if (this.status !== 'authorizationRequired' && this.status !== 'connected') this.set('checking');
+    // Retain the last result during routine probes. Only an explicit context
+    // reset needs a visible "checking" state.
     this.pending = this.probe().then(result => {
       if (generation !== this.generation) return;
       this.set(result.ok ? this.authRequired ? 'authorizationRequired' : 'connected'

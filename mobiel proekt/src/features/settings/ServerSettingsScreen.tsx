@@ -1,5 +1,6 @@
+import { TextField as TextInput } from "@/ui/TextField";
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { checkServerConnection } from "@/api/serverHealthApi";
 import {

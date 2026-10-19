@@ -16,14 +16,10 @@ import {
   getAccessTokenExpiresAt,
   getRefreshToken,
   getOrCreateRefreshOperationId,
-  clearRefreshOperationId,
-  clearVolatileTokens,
   getStoredOwnerUserId,
   preserveOfflineSessionAfterRefreshFailure,
   revokeStoredSession,
-  setOfflineSession,
-  setStoredOwnerUserId,
-  setTokens
+  updateSessionEnvelope
 } from "@/auth/tokenStorage";
 import { hasUsableNetwork } from "@/core/network";
 import { getMobileRuntimeConfig, getServerCandidateBaseUrls, setServerBaseUrl } from "@/core/serverSettings";
@@ -53,13 +49,14 @@ let authEpoch = 0;
 
 export function beginAuthTransition() {
   authEpoch += 1;
+  refreshPromise = null;
   advanceSessionGeneration();
   invalidateMobileConnectionContext();
 }
 
 class StaleAuthResponseError extends Error {
   constructor() {
-    super("Stale authentication response ignored.");
+    super("Сессия обновилась во время запроса. Повторите синхронизацию; локальные данные сохранены.");
     this.name = "StaleAuthResponseError";
   }
 }
@@ -84,19 +81,27 @@ export async function mobileRequest<TResponse>(
 
 async function mobileRequestWithinDeadline<TResponse>(path: string, schema: ZodType<TResponse>, options: RequestOptions) {
   const connectionContextGeneration = getMobileConnectionContextGeneration();
-  const requestOptions = { ...options, connectionContextGeneration };
-  const requestSession = options.accessToken === undefined
-    ? { ownerUserId: await getStoredOwnerUserId(), generation: getSessionGeneration() }
-    : null;
+  const sessionGeneration = getSessionGeneration();
+  // Keep the guard's captured values separate across the native async boundary.
+  // The release runtime lost fields of the object containing an awaited value,
+  // causing valid stored-session requests to be rejected before HTTP.
+  const usesStoredSession = options.accessToken === undefined;
+  const requestOwnerUserId = usesStoredSession ? await getStoredOwnerUserId() : null;
   const assertRequestSession = async () => {
-    if (!requestSession) return;
-    if (requestSession.generation !== getSessionGeneration()
-      || requestSession.ownerUserId !== await getStoredOwnerUserId()) {
+    options.deadline?.remaining();
+    if (!usesStoredSession) return;
+    const ownerUserId = await getStoredOwnerUserId();
+    options.deadline?.remaining();
+    if (sessionGeneration !== getSessionGeneration()
+      || requestOwnerUserId !== ownerUserId) {
       throw new StaleAuthResponseError();
     }
   };
+  const requestOptions = { ...options, connectionContextGeneration, assertSession: assertRequestSession };
+  await assertRequestSession();
   const token = options.accessToken === undefined ? await getAccessToken() : options.accessToken;
   const runtimeConfig = await getMobileRuntimeConfig();
+  await assertRequestSession();
   let requestResult = await sendMobileRequestWithFailover(runtimeConfig.apiBaseUrl, path, requestOptions, token);
   let { apiBaseUrl, response, contextGeneration: responseContextGeneration } = requestResult;
 
@@ -124,6 +129,7 @@ async function mobileRequestWithinDeadline<TResponse>(path: string, schema: ZodT
     }
   }
 
+  await assertRequestSession();
   if (!response.ok) {
     if (response.status === 401) {
       recordMobileConnectionOutcome("authorizationRequired", responseContextGeneration);
@@ -144,6 +150,7 @@ async function mobileRequestWithinDeadline<TResponse>(path: string, schema: ZodT
     }
 
     const message = await readErrorMessage(response);
+    await assertRequestSession();
     throw new MobileHttpError(message ?? `Ошибка mobile API: ${response.status}`, response.status);
   }
 
@@ -160,6 +167,7 @@ async function mobileRequestWithinDeadline<TResponse>(path: string, schema: ZodT
     throw new MobileApiProtocolError("Ответ сервера не является корректным JSON mobile API. Локальные данные сохранены.");
   }
 
+  await assertRequestSession();
   const result = parseMobileResponse(schema, payload);
   recordMobileConnectionOutcome("connected", responseContextGeneration);
   return result;
@@ -168,7 +176,7 @@ async function mobileRequestWithinDeadline<TResponse>(path: string, schema: ZodT
 async function sendMobileRequestWithFailover(
   preferredApiBaseUrl: string,
   path: string,
-  options: RequestOptions,
+  options: RequestOptions & { assertSession?: () => Promise<void> },
   token: string | null
 ) {
   const apiBaseUrls = await getServerCandidateBaseUrls(preferredApiBaseUrl);
@@ -177,8 +185,10 @@ async function sendMobileRequestWithFailover(
 
   for (const apiBaseUrl of apiBaseUrls) {
     options.deadline?.remaining();
+    await options.assertSession?.();
     try {
       const health = await options.deadline!.wait(probeServerHealthCached(apiBaseUrl));
+      await options.assertSession?.();
       if (!health.ok) {
         lastError = health.errorKind
           ? new MobileNetworkError(
@@ -191,6 +201,7 @@ async function sendMobileRequestWithFailover(
       }
 
       const response = await sendMobileRequest(apiBaseUrl, path, options, token);
+      await options.assertSession?.();
       if (shouldTryNextServer(response, path) && apiBaseUrl !== apiBaseUrls[apiBaseUrls.length - 1]) {
         lastResponse = response;
         continue;
@@ -216,6 +227,7 @@ async function sendMobileRequestWithFailover(
           : options.connectionContextGeneration ?? currentContext
       };
     } catch (error) {
+      if (error instanceof StaleAuthResponseError) throw error;
       invalidateServerHealthCache(apiBaseUrl);
       recordMobileConnectionOutcome("serverUnavailable", options.connectionContextGeneration);
       lastError = error;
@@ -249,8 +261,9 @@ function shouldTryNextServer(response: Response, path: string) {
   return false;
 }
 
-async function sendMobileRequest(apiBaseUrl: string, path: string, options: RequestOptions, token: string | null) {
+async function sendMobileRequest(apiBaseUrl: string, path: string, options: RequestOptions & { assertSession?: () => Promise<void> }, token: string | null) {
   const runtimeConfig = await getMobileRuntimeConfig();
+  await options.assertSession?.();
 
   try {
     const timeoutMs = Math.min(10_000, options.deadline!.remaining());
@@ -274,9 +287,12 @@ async function sendMobileRequest(apiBaseUrl: string, path: string, options: Requ
 }
 
 async function refreshAccessToken(apiBaseUrl: string) {
+  if (refreshPromise) return refreshPromise;
   const requestEpoch = authEpoch;
   const requestConnectionGeneration = getMobileConnectionContextGeneration();
-  refreshPromise ??= refreshAccessTokenInternal(apiBaseUrl, requestEpoch)
+  const deadline = new OperationDeadline();
+  let request!: Promise<string>;
+  request = deadline.wait(refreshAccessTokenInternal(apiBaseUrl, requestEpoch, deadline))
     .then((accessToken) => {
       // A refresh may finish after the employee changed account/address. Do
       // not publish recovery for the newer context; the caller will reject
@@ -292,6 +308,7 @@ async function refreshAccessToken(apiBaseUrl: string) {
       return accessToken;
     })
     .catch((error) => {
+      if (requestEpoch !== authEpoch) throw new StaleAuthResponseError();
       if (error instanceof StaleAuthResponseError) {
         throw error;
       }
@@ -307,32 +324,44 @@ async function refreshAccessToken(apiBaseUrl: string) {
       throw error;
     })
     .finally(() => {
-      refreshPromise = null;
+      deadline.cancel();
+      if (refreshPromise === request) refreshPromise = null;
     });
-
-  return refreshPromise;
+  refreshPromise = request;
+  return request;
 }
 
-async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: number) {
+async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: number, deadline: OperationDeadline) {
+  const assertCurrent = () => {
+    if (requestEpoch !== authEpoch) throw new StaleAuthResponseError();
+    deadline.remaining();
+  };
   const connectionContextGeneration = getMobileConnectionContextGeneration();
   const refreshToken = await getRefreshToken();
+  assertCurrent();
   if (!refreshToken) {
     if (requestEpoch === authEpoch) recordMobileConnectionOutcome("authorizationRequired", connectionContextGeneration);
     throw new Error("Ключ мобильной сессии недоступен. Локальные отчёты сохранены; автоматическая отправка приостановлена.");
   }
 
   const runtimeConfig = await getMobileRuntimeConfig();
+  assertCurrent();
   const deviceId = await getOrCreateDeviceId();
-  const clientOperationId = await getOrCreateRefreshOperationId();
+  assertCurrent();
+  const clientOperationId = await getOrCreateRefreshOperationId(assertCurrent);
+  assertCurrent();
   const apiBaseUrls = await getServerCandidateBaseUrls(apiBaseUrl);
+  assertCurrent();
   let response: Response | null = null;
   let lastResponse: Response | null = null;
   let activeApiBaseUrl = apiBaseUrl;
   let lastError: unknown = null;
 
   for (const candidateApiBaseUrl of apiBaseUrls) {
+    assertCurrent();
     try {
-      const health = await probeServerHealthCached(candidateApiBaseUrl);
+      const health = await deadline.wait(probeServerHealthCached(candidateApiBaseUrl));
+      assertCurrent();
       if (!health.ok) {
         lastError = health.errorKind
           ? new MobileNetworkError(
@@ -345,6 +374,7 @@ async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: numb
       }
 
       response = await fetchWithTimeout(`${candidateApiBaseUrl}/api/v1/mobile/auth/refresh`, {
+        signal: deadline.signal,
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -353,7 +383,8 @@ async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: numb
           "X-Patrol360-Contour": runtimeConfig.contourId
         },
         body: JSON.stringify({ deviceId, refreshToken, contourId: runtimeConfig.contourId, clientOperationId })
-      });
+      }, Math.min(10_000, deadline.remaining()));
+      assertCurrent();
       if (shouldTryNextMobileServer(response.status, response.headers.get("content-type"))
           && candidateApiBaseUrl !== apiBaseUrls[apiBaseUrls.length - 1]) {
         lastResponse = response;
@@ -364,6 +395,7 @@ async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: numb
       activeApiBaseUrl = candidateApiBaseUrl;
       break;
     } catch (error) {
+      assertCurrent();
       invalidateServerHealthCache(candidateApiBaseUrl);
       lastError = error;
     }
@@ -385,13 +417,12 @@ async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: numb
     response = lastResponse!;
   }
 
-  if (requestEpoch !== authEpoch) {
-    throw new StaleAuthResponseError();
-  }
+  assertCurrent();
 
   if (response.status === 401) {
     recordMobileConnectionOutcome("authorizationRequired", connectionContextGeneration);
-    const failureCode = await readAuthFailureCode(response);
+    const failureCode = await deadline.wait(readAuthFailureCode(response));
+    assertCurrent();
     if (failureCode === "device_reenrollment_required"
       || failureCode === "device_session_not_found"
       || failureCode === "device_mismatch"
@@ -399,11 +430,10 @@ async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: numb
       if (requestEpoch !== authEpoch) {
         throw new StaleAuthResponseError();
       }
-      await preserveOfflineSessionAfterRefreshFailure(failureCode);
-      await clearRefreshOperationId();
-      await clearVolatileTokens();
+      await preserveOfflineSessionAfterRefreshFailure(failureCode, assertCurrent);
       const message = recoverableRefreshFailureMessage(failureCode);
       const ownerUserId = await getStoredOwnerUserId();
+      assertCurrent();
       if (ownerUserId) {
         await markPendingOutboxCommandsAuthRequired(ownerUserId, message).catch((error) => {
           void logMobileError("auth.refresh.mark-waiting-auth.failed", error);
@@ -419,7 +449,7 @@ async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: numb
       if (requestEpoch !== authEpoch) {
         throw new StaleAuthResponseError();
       }
-      await revokeStoredSession(failureCode);
+      await revokeStoredSession(failureCode, assertCurrent);
       throw new Error(explicitRevocationMessage(failureCode));
     }
 
@@ -429,28 +459,32 @@ async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: numb
   }
 
   if (!response.ok) {
-    const message = await readErrorMessage(response);
+    const message = await deadline.wait(readErrorMessage(response));
+    assertCurrent();
     throw new Error(message ?? `Не удалось обновить сессию: ${response.status}. Адрес: ${activeApiBaseUrl}`);
   }
 
   let session: ReturnType<typeof refreshResponseSchema.parse>;
   let payload: unknown;
   try {
-    payload = await response.json();
-  } catch {
+    payload = await deadline.wait(response.json());
+  } catch (error) {
+    if (error instanceof MobileNetworkError) throw error;
     throw new MobileApiProtocolError("Ответ refresh сессии не является корректным JSON. Локальные данные сохранены.");
   }
   session = parseMobileResponse(refreshResponseSchema, payload);
+  assertCurrent();
 
   if (session.contourId !== runtimeConfig.contourId) {
     throw new Error(`Сервер вернул сессию другого контура (${session.contourId}). Токены не сохранены.`);
   }
 
   const expectedOwnerUserId = await getStoredOwnerUserId();
+  assertCurrent();
   try {
     assertSessionOwner(expectedOwnerUserId, session.user.serverUserId);
   } catch (error) {
-    await revokeStoredSession("session_owner_mismatch");
+    await revokeStoredSession("session_owner_mismatch", assertCurrent);
     throw error;
   }
 
@@ -458,32 +492,34 @@ async function refreshAccessTokenInternal(apiBaseUrl: string, requestEpoch: numb
     throw new StaleAuthResponseError();
   }
 
-  await setTokens(session.accessToken, session.refreshToken, {
+  await updateSessionEnvelope(current => ({
+    ...current,
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
     accessExpiresAt: session.expiresAt,
-    refreshExpiresAt: session.refreshExpiresAt
-  });
-  await setOfflineSession({
-    userId: session.user.serverUserId,
-    contourId: runtimeConfig.contourId,
-    fullName: session.user.fullName,
-    lastOnlineLoginAt: new Date().toISOString(),
-    expiresAt: session.refreshExpiresAt,
-    offlineExpiresAt: session.refreshExpiresAt,
-    deviceTrusted: session.device.trusted,
-    userBlockedAt: (session.user as typeof session.user & { blockedAt?: string | null }).blockedAt ?? null,
-    deviceBlockedAt: session.device.blockedAt
-  });
-  // Bind legacy installations that have a valid refresh token but predate the
-  // stored owner id. This avoids an unnecessary sign-in while reports are queued.
-  if (!expectedOwnerUserId) {
-    await setStoredOwnerUserId(session.user.serverUserId);
-  }
+    refreshExpiresAt: session.refreshExpiresAt,
+    refreshOperationId: null,
+    ownerUserId: session.user.serverUserId,
+    offlineSession: {
+      userId: session.user.serverUserId,
+      contourId: runtimeConfig.contourId,
+      fullName: session.user.fullName,
+      lastOnlineLoginAt: new Date().toISOString(),
+      expiresAt: session.refreshExpiresAt,
+      offlineExpiresAt: session.refreshExpiresAt,
+      deviceTrusted: session.device.trusted,
+      userBlockedAt: (session.user as typeof session.user & { blockedAt?: string | null }).blockedAt ?? null,
+      deviceBlockedAt: session.device.blockedAt
+    }
+  }), assertCurrent);
 
   return session.accessToken;
 }
 
 export async function refreshStoredAccessToken() {
+  const requestEpoch = authEpoch;
   const runtimeConfig = await getMobileRuntimeConfig();
+  if (requestEpoch !== authEpoch) throw new StaleAuthResponseError();
   return refreshAccessToken(runtimeConfig.apiBaseUrl);
 }
 

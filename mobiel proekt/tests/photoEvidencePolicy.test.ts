@@ -7,9 +7,9 @@ test("an OK point never requires photo evidence", () => {
   assert.equal(isPhotoEvidenceRequired(true, "ok"), false);
 });
 
-test("configured issue and skipped states require photo evidence", () => {
-  assert.equal(isPhotoEvidenceRequired(true, "issue"), true);
-  assert.equal(isPhotoEvidenceRequired(true, "skipped"), true);
+test("legacy required-photo flags do not block issue and skipped results", () => {
+  assert.equal(isPhotoEvidenceRequired(true, "issue"), false);
+  assert.equal(isPhotoEvidenceRequired(true, "skipped"), false);
 });
 
 test("pending and deferred points do not add a duplicate photo problem", () => {

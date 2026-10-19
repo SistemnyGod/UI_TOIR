@@ -11,7 +11,7 @@ const layoutSource = read("../app/_layout.tsx");
 const workTaskSource = read("../src/db/repositories/workTaskRepository.ts");
 const diagnosticSource = read("../src/db/repositories/diagnosticReportRepository.ts");
 const requestScreenSource = read("../src/features/patrol/PatrolRequestScreen.tsx");
-const dashboardSource = read("../src/features/patrolHome/usePatrolHomeDashboard.ts");
+const dashboardSource = read("../src/features/patrol/RequestBoardScreen.tsx");
 const queueScreenSource = read("../src/features/syncQueue/SyncQueueScreen.tsx");
 
 test("refresh rejection preserves offline access and pauses delivery for online sign-in", () => {
@@ -29,7 +29,7 @@ test("network recovery refreshes auth, delivers outbox, then downloads a fresh s
   const snapshot = recovery.indexOf("refreshMobileData()");
   assert.ok(refreshToken >= 0 && refreshToken < outbox && outbox < snapshot);
   assert.match(layoutSource, /runMobileRecoveryCycle\("appActive", "normal"\)/);
-  assert.match(triggerSource, /if \(networkRecoveryPromise\)/);
+  assert.match(triggerSource, /if \(networkRecoveryPromise && recoveryOwner\?\.generation === generation\)/);
 });
 
 test("unchanged bootstrap does not notify every screen", () => {
@@ -52,7 +52,10 @@ test("forced diagnostics refresh an existing pending payload", () => {
 test("background events reload only related screens without restoring the initial loader", () => {
   assert.match(requestScreenSource, /hasLoadedRef\.current/);
   assert.match(requestScreenSource, /zone === "requests" \|\| zone === "activePatrols"/);
-  assert.match(dashboardSource, /const touchesDashboard/);
-  assert.match(dashboardSource, /zone === "requests" \|\| zone === "activePatrols" \|\| zone === "points"/);
-  assert.match(queueScreenSource, /if \(!hasLoadedRef\.current\)/);
+  assert.match(dashboardSource, /const touchesRequests/);
+  assert.match(dashboardSource, /event\.refreshedZones\?\.includes\("requests"\)/);
+  assert.match(dashboardSource, /readVersion !== loadVersion\.current/);
+  assert.match(dashboardSource, /retainEqualItems\(previous, rows/);
+  assert.match(queueScreenSource, /useFocusedOwnerLoad\(readQueue, publishQueue/);
+  assert.doesNotMatch(queueScreenSource, /setIsLoading\(true\)/);
 });

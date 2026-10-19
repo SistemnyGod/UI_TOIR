@@ -1,39 +1,53 @@
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
-import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
+import { getDatabase } from "@/db/database";
+import { captureDataOwnerContext, assertDataOwnerContext, type DataOwnerContext } from "@/auth/dataOwnerContext";
+import { withOwnerExclusiveTransactionAsync } from "@/db/ownerTransaction";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { MobileNotificationDto } from "@/domain/patrol/patrolTypes";
 import { mergeNotificationReadState } from "@/services/notificationReadState";
 
-export async function saveDevicePushToken(deviceId: string, pushToken: string) {
+export async function saveDevicePushToken(deviceId: string, pushToken: string, context?: DataOwnerContext) {
+  const scope = context ?? await captureDataOwnerContext();
+  await assertDataOwnerContext(scope);
   const db = await getDatabase();
-  await withSqliteBusyRetry(() => db.runAsync("UPDATE devices SET push_token = ? WHERE device_id = ?", [pushToken, deviceId]));
+  await withSqliteBusyRetry(() => withOwnerExclusiveTransactionAsync(db, scope, tx =>
+    tx.runAsync("UPDATE devices SET push_token = ? WHERE device_id = ? AND push_token IS NOT ?", [pushToken, deviceId, pushToken])));
 }
 
-export async function saveNotifications(notifications: MobileNotificationDto[]) {
-  const ownerUserId = await getStoredOwnerUserId();
-  if (!ownerUserId) {
-    return;
-  }
+export async function saveNotifications(notifications: MobileNotificationDto[], context?: DataOwnerContext) {
+  const scope = context ?? await captureDataOwnerContext();
+  await assertDataOwnerContext(scope);
+  const ownerUserId = scope.ownerUserId;
+  if (notifications.length === 0) return false;
 
   const db = await getDatabase();
-  await withSqliteBusyRetry(() =>
-    withProtectedExclusiveTransactionAsync(db, async (tx) => {
-    for (const notification of notifications) {
-      const local = await tx.getFirstAsync<{ read_at: string | null; read_sync_pending: number }>(
-        `
-          SELECT read_at, read_sync_pending
-          FROM mobile_notifications
-          WHERE notification_id = ? AND owner_user_id = ?
-        `,
-        [notification.id, ownerUserId]
+  return withSqliteBusyRetry(() =>
+    withOwnerExclusiveTransactionAsync(db, scope, async (tx) => {
+    const localById = new Map<string, MobileNotificationDto & { readSyncPending: number }>();
+    for (let offset = 0; offset < notifications.length; offset += 200) {
+      const ids = notifications.slice(offset, offset + 200).map(item => item.id);
+      const localRows = await tx.getAllAsync<MobileNotificationDto & { readSyncPending: number }>(
+        `SELECT notification_id AS id, notification_type AS type, title, message,
+          entity_type AS entityType, entity_id AS entityId, created_at AS createdAt,
+          read_at AS readAt, read_sync_pending AS readSyncPending
+         FROM mobile_notifications WHERE owner_user_id = ? AND notification_id IN (${ids.map(() => "?").join(",")})`,
+        [ownerUserId, ...ids]
       );
+      for (const row of localRows) localById.set(row.id, row);
+    }
+    let changed = false;
+    for (const notification of notifications) {
+      const local = localById.get(notification.id);
       const mergedReadState = mergeNotificationReadState(
         {
-          readAt: local?.read_at ?? null,
-          readSyncPending: (local?.read_sync_pending ?? 0) === 1
+          readAt: local?.readAt ?? null,
+          readSyncPending: (local?.readSyncPending ?? 0) === 1
         },
         notification.readAt
       );
+      if (local && local.type === notification.type && local.title === notification.title && local.message === notification.message
+          && local.entityType === notification.entityType && local.entityId === notification.entityId && local.createdAt === notification.createdAt
+          && local.readAt === mergedReadState.readAt && Boolean(local.readSyncPending) === mergedReadState.readSyncPending) continue;
 
       await tx.runAsync(
         `
@@ -74,7 +88,9 @@ export async function saveNotifications(notifications: MobileNotificationDto[]) 
           mergedReadState.readSyncPending ? 1 : 0
         ]
       );
+      changed = true;
     }
+    return changed;
     })
   );
 }
@@ -106,17 +122,15 @@ export async function listLocalNotifications(limit = 5) {
   );
 }
 
-export async function markLocalNotificationRead(notificationId: string, readAt: string, readSyncPending = true) {
-  const ownerUserId = await getStoredOwnerUserId();
-  if (!ownerUserId) {
-    return;
-  }
+export async function markLocalNotificationRead(notificationId: string, readAt: string, readSyncPending = true, context?: DataOwnerContext) {
+  const scope = context ?? await captureDataOwnerContext();
+  await assertDataOwnerContext(scope);
 
   const db = await getDatabase();
-  await withSqliteBusyRetry(() => db.runAsync(
+  await withSqliteBusyRetry(() => withOwnerExclusiveTransactionAsync(db, scope, tx => tx.runAsync(
     "UPDATE mobile_notifications SET read_at = ?, read_sync_pending = ? WHERE notification_id = ? AND owner_user_id = ?",
-    [readAt, readSyncPending ? 1 : 0, notificationId, ownerUserId]
-  ));
+    [readAt, readSyncPending ? 1 : 0, notificationId, scope.ownerUserId]
+  )));
 }
 
 export async function listPendingNotificationReads() {

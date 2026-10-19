@@ -1,10 +1,14 @@
+import { getAssignmentById, getReportReadiness, getAssignmentByRequestId, getAssignmentScanPolicy, repairAssignmentContourBinding } from './patrolAssignmentRepository';
+import type { ActiveAssignment, PointListItem, PointForFill, DeferPointInput } from './patrolRepositoryTypes';
+import { getRequestBoardItem } from './patrolRequestBoardRepository';
 import * as Crypto from "expo-crypto";
 import * as SQLite from "expo-sqlite";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
-import { assertDataOwnerContext, type DataOwnerContext } from '@/auth/dataOwnerContext';
+import { captureDataOwnerContext, assertDataOwnerContext, type DataOwnerContext } from '@/auth/dataOwnerContext';
 import { currentContourId } from "@/core/environments";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
+import { withOwnerExclusiveTransactionAsync } from "@/db/ownerTransaction";
 import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { insertOutboxCommandInTransaction } from "@/db/repositories/outboxSql";
@@ -14,277 +18,27 @@ import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { getCompletionAttachmentFailure } from "@/domain/files/completionAttachmentPolicy";
 import { isPhotoEvidenceRequired, type PhotoEvidenceStatus } from "@/domain/patrol/photoEvidencePolicy";
-import { normalizePointDraft, PointDraftSelectedStatus } from "@/domain/patrol/pointDraftPolicy";
+import { normalizePointDraft } from "@/domain/patrol/pointDraftPolicy";
 import { canCreateCompletionCommand, isTerminalPointStatus } from "@/domain/patrol/reportReadinessPolicy";
-import { evaluatePointEvidence } from '@/domain/patrol/pointEvidenceReadiness';
+
 import { canPatrolAction, patrolActionError } from "@/domain/patrol/patrolStateMachine";
 import { OutboxCommand } from "@/domain/sync/syncTypes";
 import { getNfcCodeCandidates, normalizeNfcCode } from "@/services/nfcService";
 import { getLocalFileInfo } from "@/services/fileStorageService";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
+export { getAssignmentById, listAssignmentPoints, getAssignmentProgress, getReportReadiness, getActiveAssignment, getAssignmentByRequestId, getActiveAssignmentWithProgress, getNextPendingAssignmentPoint, getAssignmentScanPolicy } from './patrolAssignmentRepository';
+export type { AssignmentScanPolicy, RequestBoardItem, ActiveAssignment, PointListItem, PointForFill, AssignmentProgress, ReportProblem, ReportReadiness, DeferPointInput } from './patrolRepositoryTypes';
+export { listRequestBoard, getRequestBoardItem } from './patrolRequestBoardRepository';
 
 type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "getFirstAsync" | "runAsync">;
 
 const nfcDisabledMessage = "\u004e\u0046\u0043-\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 \u0434\u043b\u044f \u044d\u0442\u043e\u0433\u043e \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043e\u0442\u043a\u043b\u044e\u0447\u0435\u043d\u043e.";
 const qrDisabledMessage = "\u0051\u0052-\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 \u0434\u043b\u044f \u044d\u0442\u043e\u0433\u043e \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043e\u0442\u043a\u043b\u044e\u0447\u0435\u043d\u043e.";
-const frozenSnapshotAssignmentStatuses = new Set(["releasePending", "inProgress", "paused", "completedLocal", "syncing", "syncError", "authRequired", "needsDispatcherDecision"]);
 
-
-export type RequestBoardItem = {
-  assignedEmployeeId?: string | null;
-  performerSelectionAvailable?: number;
-  requestId: string;
-  displayNumber: string | null;
-  routeId: string;
-  routeName: string;
-  plannedStartAt: string;
-  assignedFullName: string | null;
-  status: string;
-  revision: number;
-};
-
-export type ActiveAssignment = {
-  employeeId?: string | null;
-  assignedFullName?: string | null;
-  assignmentId: string;
-  requestId: string;
-  routeId: string;
-  routeName: string;
-  status: string;
-  startedAtLocal: string | null;
-  completedAtLocal: string | null;
-  revision: number;
-  routeVersionNo: number;
-  snapshotVersion?: number;
-  snapshotCreatedAt?: string | null;
-  snapshotSource?: string | null;
-  snapshotAllowFreeOrder?: number | null;
-  snapshotNfcEnabled?: number | null;
-  snapshotQrFallbackEnabled?: number | null;
-};
-
-export type PointListItem = {
-  pointId: string;
-  routeId: string;
-  name: string;
-  description?: string | null;
-  instruction?: string | null;
-  orderIndex: number;
-  required: boolean;
-  requiresPhoto: boolean;
-  status: "pending" | "scanned" | "ok" | "issue" | "deferred" | "skipped";
-  comment: string | null;
-  manualReason?: string | null;
-  issueTypeId?: string | null;
-  confirmationType?: "nfc" | "qr" | "manual" | null;
-  photoClientFileIds: string[];
-};
-
-export type PointForFill = PointListItem & {
-  assignmentId: string;
-  nfcUidHash: string | null;
-  qrCodeHash: string | null;
-  confirmationType: "nfc" | "qr" | "manual" | null;
-  scannedAtLocal: string | null;
-  completedAtLocal: string | null;
-  issueTypeId: string | null;
-  deferredReason: string | null;
-  photoClientFileIds: string[];
-};
-
-export type AssignmentProgress = {
-  total: number;
-  /** Points actually inspected. A skipped point is processed but never inspected. */
-  inspected: number;
-  completed: number;
-  deferred: number;
-  issues: number;
-  skipped: number;
-};
-
-export type ReportProblem = {
-  pointId: string;
-  pointName: string;
-  orderIndex: number;
-  reason: string;
-};
-
-export type ReportReadiness = {
-  assignment: ActiveAssignment | null;
-  progress: AssignmentProgress;
-  problems: ReportProblem[];
-  ready: boolean;
-};
 function assertPatrolAction(action: Parameters<typeof canPatrolAction>[0], status: string) {
   if (!canPatrolAction(action, status)) {
     throw new Error(patrolActionError(action, status) ?? "Действие недоступно для текущего статуса назначения.");
   }
-}
-
-export type DeferPointInput = {
-  manualReason?: string;
-  selectedStatus?: PointDraftSelectedStatus;
-  comment?: string | null;
-  issueTypeId?: string | null;
-  photoClientFileIds?: string[];
-  reason?: string;
-};
-
-export async function listRequestBoard() {
-  const db = await getDatabase();
-  const ownerUserId = await requireOwnerUserId();
-
-  return db.getAllAsync<RequestBoardItem>(
-    `
-      SELECT
-        request_id AS requestId,
-        display_number AS displayNumber,
-        route_id AS routeId,
-        route_name AS routeName,
-        planned_start_at AS plannedStartAt,
-        assigned_full_name AS assignedFullName,
-        assigned_employee_id AS assignedEmployeeId,
-        performer_selection_available AS performerSelectionAvailable,
-        status,
-        revision
-      FROM patrol_request_board
-      WHERE owner_user_id = ?
-      ORDER BY planned_start_at ASC
-    `,
-    [ownerUserId]
-  );
-}
-
-export async function getRequestBoardItem(requestId: string) {
-  const db = await getDatabase();
-  const ownerUserId = await requireOwnerUserId();
-
-  return db.getFirstAsync<RequestBoardItem>(
-    `
-      SELECT
-        request_id AS requestId,
-        display_number AS displayNumber,
-        route_id AS routeId,
-        route_name AS routeName,
-        planned_start_at AS plannedStartAt,
-        assigned_full_name AS assignedFullName,
-        assigned_employee_id AS assignedEmployeeId,
-        performer_selection_available AS performerSelectionAvailable,
-        status,
-        revision
-      FROM patrol_request_board
-      WHERE owner_user_id = ?
-        AND request_id = ?
-    `,
-    [ownerUserId, requestId]
-  );
-}
-
-export async function getActiveAssignment(context: { employeeId?: string | null; assignmentId?: string | null } = {}) {
-  const db = await getDatabase();
-  const ownerUserId = await requireOwnerUserId();
-
-  const assignment = await db.getFirstAsync<ActiveAssignment>(
-    `
-      SELECT
-        assignment.employee_id AS employeeId,
-        request.assigned_full_name AS assignedFullName,
-        assignment.assignment_id AS assignmentId,
-        assignment.request_id AS requestId,
-        assignment.route_id AS routeId,
-        COALESCE(route.name, request.route_name, '') AS routeName,
-        assignment.status,
-        assignment.started_at_local AS startedAtLocal,
-        assignment.completed_at_local AS completedAtLocal,
-        assignment.revision,
-        assignment.route_version_no AS routeVersionNo,
-        assignment.snapshot_version AS snapshotVersion,
-        assignment.snapshot_created_at AS snapshotCreatedAt,
-        assignment.snapshot_source AS snapshotSource,
-        assignment.snapshot_allow_free_order AS snapshotAllowFreeOrder,
-        assignment.snapshot_nfc_enabled AS snapshotNfcEnabled,
-        assignment.snapshot_qr_fallback_enabled AS snapshotQrFallbackEnabled
-      FROM patrol_assignments assignment
-      LEFT JOIN routes route ON route.route_id = assignment.route_id
-      LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
-      WHERE assignment.owner_user_id = ?
-        AND (assignment.contour_id = ? OR assignment.contour_id IS NULL)
-        AND (? IS NULL OR assignment.employee_id = ?)
-        AND (? IS NULL OR assignment.assignment_id = ?)
-        AND assignment.status NOT IN ('completed', 'completedServer', 'cancelled', 'cancelledServer', 'conflict')
-      ORDER BY
-        CASE
-          WHEN assignment.status = 'inProgress' THEN 0
-          WHEN assignment.status = 'paused' THEN 1
-          WHEN assignment.status IN ('completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN 2
-          WHEN assignment.status = 'accepted' THEN 3
-          WHEN assignment.status = 'releasePending' THEN 4
-          ELSE 5
-        END,
-        assignment.started_at_local DESC
-      LIMIT 1
-    `,
-    [ownerUserId, currentContourId, context.employeeId ?? null, context.employeeId ?? null, context.assignmentId ?? null, context.assignmentId ?? null]
-  );
-
-  if (assignment) {
-    await repairAssignmentContourBinding(db, assignment.assignmentId, ownerUserId);
-  }
-
-  return assignment;
-}
-
-export async function getAssignmentByRequestId(requestId: string) {
-  const db = await getDatabase();
-  const ownerUserId = await requireOwnerUserId();
-
-  const assignment = await db.getFirstAsync<ActiveAssignment>(
-    `
-      SELECT
-        assignment.employee_id AS employeeId,
-        request.assigned_full_name AS assignedFullName,
-        assignment.assignment_id AS assignmentId,
-        assignment.request_id AS requestId,
-        assignment.route_id AS routeId,
-        COALESCE(route.name, request.route_name, '') AS routeName,
-        assignment.status,
-        assignment.started_at_local AS startedAtLocal,
-        assignment.completed_at_local AS completedAtLocal,
-        assignment.revision,
-        assignment.route_version_no AS routeVersionNo,
-        assignment.snapshot_version AS snapshotVersion,
-        assignment.snapshot_created_at AS snapshotCreatedAt,
-        assignment.snapshot_source AS snapshotSource,
-        assignment.snapshot_allow_free_order AS snapshotAllowFreeOrder,
-        assignment.snapshot_nfc_enabled AS snapshotNfcEnabled,
-        assignment.snapshot_qr_fallback_enabled AS snapshotQrFallbackEnabled
-      FROM patrol_assignments assignment
-      LEFT JOIN routes route ON route.route_id = assignment.route_id
-      LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
-      WHERE assignment.owner_user_id = ?
-        AND assignment.request_id = ?
-        AND (assignment.contour_id = ? OR assignment.contour_id IS NULL)
-        AND assignment.status NOT IN ('completed', 'completedServer', 'cancelled', 'cancelledServer', 'conflict')
-      ORDER BY
-        CASE
-          WHEN assignment.status = 'inProgress' THEN 0
-          WHEN assignment.status = 'paused' THEN 1
-          WHEN assignment.status IN ('completedLocal', 'syncing', 'syncError', 'authRequired', 'needsDispatcherDecision') THEN 2
-          WHEN assignment.status = 'accepted' THEN 3
-          WHEN assignment.status = 'releasePending' THEN 4
-          ELSE 5
-        END,
-        assignment.started_at_local DESC
-      LIMIT 1
-    `,
-    [ownerUserId, requestId, currentContourId]
-  );
-
-  if (assignment) {
-    await repairAssignmentContourBinding(db, assignment.assignmentId, ownerUserId);
-  }
-
-  return assignment;
 }
 
 export async function acceptRequestLocally(requestId: string, selectedEmployeeId?: string) {
@@ -667,7 +421,6 @@ export async function startAssignmentLocally(assignmentId: string) {
   return updateAssignmentLifecycleLocally(assignmentId, "startPatrolAssignment", "inProgress", "startedAtLocal");
 }
 
-
 export async function pauseAssignmentLocally(assignmentId: string) {
   return updateAssignmentLifecycleLocally(assignmentId, "pausePatrolAssignment", "paused");
 }
@@ -678,89 +431,6 @@ export async function resumeAssignmentLocally(assignmentId: string) {
 
 export async function handoffAssignmentLocally(assignmentId: string) {
   return updateAssignmentLifecycleLocally(assignmentId, "handoffPatrolAssignment", "needsDispatcherDecision");
-}
-
-async function repairEmptyAssignmentSnapshot(
-  db: SQLite.SQLiteDatabase,
-  assignmentId: string,
-  ownerUserId: string,
-  contourId: string
-) {
-  await withSqliteBusyRetry(() =>
-    withProtectedExclusiveTransactionAsync(db, async (tx) => {
-      await tx.runAsync(
-        `
-          INSERT OR IGNORE INTO assignment_route_points (
-            assignment_id, point_id, route_id, name, description, instruction,
-            order_index, nfc_uid_hash, qr_code_hash, required, requires_photo, revision
-          )
-          SELECT
-            assignment.assignment_id, point.point_id, point.route_id, point.name,
-            point.description, point.instruction, point.order_index, point.nfc_uid_hash,
-            point.qr_code_hash, point.required, point.requires_photo, point.revision
-          FROM patrol_assignments assignment
-          JOIN route_points point ON point.route_id = assignment.route_id
-          WHERE assignment.assignment_id = ?
-            AND assignment.owner_user_id = ?
-            AND assignment.contour_id = ?
-            AND NOT EXISTS (
-              SELECT 1
-              FROM assignment_route_points existing
-              WHERE existing.assignment_id = assignment.assignment_id
-            )
-        `,
-        [assignmentId, ownerUserId, contourId]
-      );
-    })
-  );
-}
-export async function listAssignmentPoints(assignmentId: string, ownerUserId: string, contourId: string) {
-  const db = await getDatabase();
-  await repairAssignmentContourBinding(db, assignmentId, ownerUserId);
-
-  let rows = await db.getAllAsync<{
-    pointId: string;
-    routeId: string;
-    name: string;
-    description: string | null;
-    instruction: string | null;
-    orderIndex: number;
-    required: number;
-    requiresPhoto: number;
-    status: PointListItem["status"];
-    comment: string | null;
-  manualReason?: string | null;
-    issueTypeId: string | null;
-    confirmationType: PointListItem["confirmationType"];
-    photoClientFileIdsJson: string | null;
-  }>(
-    listAssignmentPointsOwnedSql,
-    [assignmentId, ownerUserId, contourId]
-  );
-  if (rows.length === 0) {
-    await repairEmptyAssignmentSnapshot(db, assignmentId, ownerUserId, contourId);
-    rows = await db.getAllAsync<(typeof rows)[number]>(
-      listAssignmentPointsOwnedSql,
-      [assignmentId, ownerUserId, contourId]
-    );
-  }
-
-  return rows.map((row) => ({
-    pointId: row.pointId,
-    routeId: row.routeId,
-    name: row.name,
-    description: row.description,
-    instruction: row.instruction,
-    orderIndex: row.orderIndex,
-    required: row.required === 1,
-    requiresPhoto: row.requiresPhoto === 1,
-    status: row.status,
-    comment: row.comment,
-    manualReason: row.manualReason,
-    issueTypeId: row.issueTypeId,
-    confirmationType: row.confirmationType,
-    photoClientFileIds: parseStringArray(row.photoClientFileIdsJson)
-  } satisfies PointListItem));
 }
 
 type ExistingPointResultForScan = {
@@ -797,7 +467,6 @@ async function getExistingPointResultForScan(
     [ownerUserId, assignmentId, pointId]
   );
 }
-
 
 type PointScanCommandType = "scanPatrolPointNfc" | "scanPatrolPointQr";
 
@@ -1383,8 +1052,11 @@ export async function skipPoint(assignmentId: string, pointId: string, input: Pi
   }).catch(() => undefined);
 }
 
-export async function attachPhotoToPoint(assignmentId: string, pointId: string, file: LocalMobileFile) {
-  const ownerUserId = await requireOwnerUserId();
+export async function attachPhotoToPoint(assignmentId: string, pointId: string, file: LocalMobileFile, context?: DataOwnerContext) {
+  const scope = context ?? await captureDataOwnerContext();
+  await assertDataOwnerContext(scope);
+  const ownerUserId = scope.ownerUserId;
+  if (file.ownerUserId !== ownerUserId || (file.contourId && file.contourId !== scope.contourId) || (file.assignmentId && file.assignmentId !== assignmentId) || (file.pointId && file.pointId !== pointId)) throw new Error("Вложение относится к другому аккаунту или метке.");
   await assertPointActionAllowed(assignmentId, "attachMedia");
   const point = await assertPointCanBeOpened(assignmentId, pointId, "attachMedia");
   if (!point) {
@@ -1395,6 +1067,7 @@ export async function attachPhotoToPoint(assignmentId: string, pointId: string, 
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      await assertDataOwnerContext(scope);
       await insertLocalFileInTransaction(tx, { ...file, status: "queued", assignmentId, pointId });
       await upsertPointResultInTransaction(tx, {
         ownerUserId,
@@ -1413,6 +1086,7 @@ export async function attachPhotoToPoint(assignmentId: string, pointId: string, 
         photoClientFileIds
       });
       await updateLatestPendingMarkPhotoPayloadInTransaction(tx, assignmentId, pointId, photoClientFileIds);
+      await assertDataOwnerContext(scope);
     })
   );
 
@@ -1424,109 +1098,6 @@ export async function attachPhotoToPoint(assignmentId: string, pointId: string, 
     message: file.mediaKind === "video" ? "Видео добавлено к метке." : "Фото добавлено к метке.",
     payload: { assignmentId, clientFileId: file.clientFileId }
   }).catch(() => undefined);
-}
-
-async function hasConsistentAssignmentSnapshot(
-  db: SqlExecutor,
-  assignment: ActiveAssignment,
-  points: PointListItem[],
-  ownerUserId: string
-): Promise<boolean> {
-  if (points.length === 0 || points.some((point) => point.routeId !== assignment.routeId)) {
-    return false;
-  }
-
-  const pointIds = new Set(points.map((point) => point.pointId));
-  if (pointIds.size !== points.length) {
-    return false;
-  }
-
-  const orphanResult = await db.getFirstAsync<{ count: number }>(
-    `
-      SELECT COUNT(*) AS count
-      FROM point_results result
-      LEFT JOIN assignment_route_points point
-        ON point.assignment_id = result.assignment_id
-       AND point.point_id = result.point_id
-      WHERE result.owner_user_id = ?
-        AND result.assignment_id = ?
-        AND point.point_id IS NULL
-    `,
-    [ownerUserId, assignment.assignmentId]
-  );
-
-  return (orphanResult?.count ?? 0) === 0;
-}
-export async function getReportReadiness(assignmentId: string): Promise<ReportReadiness> {
-  const db = await getDatabase();
-  const ownerUserId = await requireOwnerUserId();
-  const assignment = await getAssignmentById(assignmentId);
-  const points = await listAssignmentPoints(assignmentId, ownerUserId, currentContourId);
-  const problems: ReportProblem[] = [];
-
-  // An accepted assignment may be refreshed to the current route version.
-  if (assignment?.status === "accepted" && assignment.routeVersionNo) {
-    const route = await db.getFirstAsync<{ version: number }>(
-      "SELECT version FROM routes WHERE route_id = ? LIMIT 1",
-      [assignment.routeId]
-    );
-    if (route && route.version !== assignment.routeVersionNo) {
-      problems.push({
-        pointId: "route-version",
-        pointName: assignment.routeName,
-        orderIndex: 0,
-        reason: "\u041c\u0430\u0440\u0448\u0440\u0443\u0442 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d \u043f\u043e\u0441\u043b\u0435 \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f. \u0421\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0438\u0440\u0443\u0439\u0442\u0435 \u0434\u0430\u043d\u043d\u044b\u0435 \u0438 \u043f\u043e\u043b\u0443\u0447\u0438\u0442\u0435 \u0430\u043a\u0442\u0443\u0430\u043b\u044c\u043d\u044b\u0439 \u0447\u0435\u043a-\u043b\u0438\u0441\u0442.",
-      });
-    }
-  }
-
-  // Once work has started, the assignment owns an immutable snapshot.
-  // The current routes.version is intentionally not consulted here.
-  if (assignment && frozenSnapshotAssignmentStatuses.has(assignment.status)) {
-    if (assignment.snapshotVersion !== assignment.routeVersionNo) {
-      problems.push({
-        pointId: "snapshot-version",
-        pointName: assignment.routeName,
-        orderIndex: 0,
-        reason: "\u0421\u043d\u0438\u043c\u043e\u043a \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043d\u0430\u0447\u0430\u0442\u043e\u0433\u043e \u043e\u0431\u0445\u043e\u0434\u0430 \u043d\u0435 \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u0435\u0442 \u0441 \u0432\u0435\u0440\u0441\u0438\u0435\u0439 \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f.",
-      });
-    }
-
-    const snapshotIsConsistent = await hasConsistentAssignmentSnapshot(db, assignment, points, ownerUserId);
-    if (!snapshotIsConsistent) {
-      problems.push({
-        pointId: "snapshot-integrity",
-        pointName: assignment.routeName,
-        orderIndex: 0,
-        reason: "\u0421\u043d\u0438\u043c\u043e\u043a \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043d\u0430\u0447\u0430\u0442\u043e\u0433\u043e \u043e\u0431\u0445\u043e\u0434\u0430 \u043f\u043e\u0432\u0440\u0435\u0436\u0434\u0451\u043d \u0438\u043b\u0438 \u043d\u0435\u043f\u043e\u043b\u043e\u043d.",
-      });
-    }
-  }
-
-  if (assignment && points.length === 0) {
-    problems.push({
-      pointId: "route-empty",
-      pointName: assignment.routeName,
-      orderIndex: 0,
-      reason: "Маршрут не загружен на телефон"
-    });
-  }
-
-  const progress = await getAssignmentProgress(assignmentId);
-  const reportPointReadiness = evaluatePointEvidence(points);
-
-  for (const problem of reportPointReadiness.problems) {
-    problems.push(problem);
-  }
-
-  return {
-    assignment,
-    progress,
-    problems,
-    ready: assignment !== null
-      && reportPointReadiness.ready
-      && problems.length === 0
-  };
 }
 
 export async function reopenInvalidCompletionReportLocally(assignmentId: string) {
@@ -1605,8 +1176,21 @@ export async function reopenInvalidCompletionReportLocally(assignmentId: string)
   return { reopened };
 }
 export async function completeAssignmentLocally(assignmentId: string) {
+  const context = await captureDataOwnerContext();
   const db = await getDatabase();
-  const ownerUserId = await requireOwnerUserId();
+  const ownerUserId = context.ownerUserId;
+  const queued = await getQueuedCompleteAssignmentCommand(db, ownerUserId, assignmentId);
+  if (queued) {
+    const assignment = await getAssignmentById(assignmentId);
+    await assertDataOwnerContext(context);
+    if (assignment && ["completedLocal", "syncing", "syncError", "authRequired"].includes(assignment.status)) {
+      return {
+        completedAtLocal: assignment.completedAtLocal ?? queued.createdAtLocal,
+        clientOperationId: queued.clientOperationId,
+        alreadyQueued: true as const
+      };
+    }
+  }
   await assertPointActionAllowed(assignmentId, "completeAssignment");
   const readiness = await getReportReadiness(assignmentId);
   if (!readiness.assignment) {
@@ -1617,13 +1201,13 @@ export async function completeAssignmentLocally(assignmentId: string) {
   }
   const expectedAssignmentRevision = readiness.assignment.revision;
 
-
   const completedAtLocal = new Date().toISOString();
   const pointResults = await buildCompletedPointResults(db, assignmentId, ownerUserId, completedAtLocal);
   if (readiness.progress.total <= 0 || pointResults.length !== readiness.progress.total) {
     throw new Error("Отчёт не содержит результаты всех точек маршрута.");
   }
   await assertCompletionAttachmentsAvailable(db, ownerUserId, assignmentId, pointResults);
+  await assertDataOwnerContext(context);
   const photoCount = pointResults.reduce((sum, result) => sum + result.photoClientFileIds.length, 0);
   const command: OutboxCommand = {
     clientOperationId: Crypto.randomUUID(),
@@ -1661,7 +1245,7 @@ export async function completeAssignmentLocally(assignmentId: string) {
   const completionResultRef: { current: CompletionResult | null } = { current: null };
 
   await withSqliteBusyRetry(() =>
-    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    withOwnerExclusiveTransactionAsync(db, context, async (tx) => {
       // The duplicate check must be inside the same exclusive transaction as
       // the insert. This protects double taps and concurrent lifecycle callbacks
       // from creating two completion commands for one assignment.
@@ -1764,83 +1348,7 @@ export async function completeAssignmentLocally(assignmentId: string) {
   return { ...completionResult, alreadyQueued: false as const };
 }
 
-export async function getAssignmentProgress(assignmentId: string): Promise<AssignmentProgress> {
-  const ownerUserId = await requireOwnerUserId();
-  const points = await listAssignmentPoints(assignmentId, ownerUserId, currentContourId);
 
-  return {
-    total: points.length,
-    inspected: points.filter((point) => point.status === "ok" || point.status === "issue").length,
-    completed: points.filter((point) => isTerminalPointStatus(point.status)).length,
-    deferred: points.filter((point) => point.status === "deferred").length,
-    issues: points.filter((point) => point.status === "issue").length,
-    skipped: points.filter((point) => point.status === "skipped").length
-  };
-}
-
-export async function getActiveAssignmentWithProgress(context: { employeeId?: string | null; assignmentId?: string | null } = {}) {
-  const assignment = await getActiveAssignment(context);
-  if (!assignment) {
-    return null;
-  }
-
-  return {
-    assignment,
-    progress: await getAssignmentProgress(assignment.assignmentId)
-  };
-}
-
-export type AssignmentScanPolicy = {
-  allowFreeOrder: boolean;
-  nfcEnabled: boolean;
-  qrFallbackEnabled: boolean;
-};
-
-export async function getAssignmentScanPolicy(assignmentId: string): Promise<AssignmentScanPolicy> {
-  const db = await getDatabase();
-  const ownerUserId = await requireOwnerUserId();
-  const row = await db.getFirstAsync<{
-    status: string;
-    snapshotAllowFreeOrder: number | null;
-    snapshotNfcEnabled: number | null;
-    snapshotQrFallbackEnabled: number | null;
-    allowFreeOrder: number | null;
-    nfcEnabled: number | null;
-    qrFallbackEnabled: number | null;
-  }>(
-    `
-      SELECT
-        assignment.status,
-        assignment.snapshot_allow_free_order AS snapshotAllowFreeOrder,
-        assignment.snapshot_nfc_enabled AS snapshotNfcEnabled,
-        assignment.snapshot_qr_fallback_enabled AS snapshotQrFallbackEnabled,
-        COALESCE(route.allow_free_order, 1) AS allowFreeOrder,
-        COALESCE(route.nfc_enabled, 0) AS nfcEnabled,
-        COALESCE(route.qr_fallback_enabled, 1) AS qrFallbackEnabled
-      FROM patrol_assignments assignment
-      LEFT JOIN routes route ON route.route_id = assignment.route_id
-      WHERE assignment.owner_user_id = ?
-        AND assignment.assignment_id = ?
-        AND assignment.contour_id = ?
-      LIMIT 1
-    `,
-    [ownerUserId, assignmentId, currentContourId]
-  );
-
-  if (row && frozenSnapshotAssignmentStatuses.has(row.status)) {
-    return {
-      allowFreeOrder: row.snapshotAllowFreeOrder !== 0,
-      nfcEnabled: row.snapshotNfcEnabled === 1,
-      qrFallbackEnabled: row.snapshotQrFallbackEnabled !== 0
-    };
-  }
-
-  return {
-    allowFreeOrder: row?.allowFreeOrder !== 0,
-    nfcEnabled: row?.nfcEnabled === 1,
-    qrFallbackEnabled: row?.qrFallbackEnabled !== 0
-  };
-}
 
 async function assertPointOrderAllowed(
   db: SqlExecutor,
@@ -1891,43 +1399,6 @@ async function assertScanMethodAllowed(assignmentId: string, method: "nfc" | "qr
   }
 
   return policy;
-}
-
-export async function getAssignmentById(assignmentId: string) {
-  const db = await getDatabase();
-  const ownerUserId = await requireOwnerUserId();
-  await repairAssignmentContourBinding(db, assignmentId, ownerUserId);
-
-  return db.getFirstAsync<ActiveAssignment>(
-    `
-      SELECT
-        assignment.employee_id AS employeeId,
-        request.assigned_full_name AS assignedFullName,
-        assignment.assignment_id AS assignmentId,
-        assignment.request_id AS requestId,
-        assignment.route_id AS routeId,
-        COALESCE(route.name, request.route_name, '') AS routeName,
-        assignment.status,
-        assignment.started_at_local AS startedAtLocal,
-        assignment.completed_at_local AS completedAtLocal,
-        assignment.revision,
-        assignment.route_version_no AS routeVersionNo,
-        assignment.snapshot_version AS snapshotVersion,
-        assignment.snapshot_created_at AS snapshotCreatedAt,
-        assignment.snapshot_source AS snapshotSource,
-        assignment.snapshot_allow_free_order AS snapshotAllowFreeOrder,
-        assignment.snapshot_nfc_enabled AS snapshotNfcEnabled,
-        assignment.snapshot_qr_fallback_enabled AS snapshotQrFallbackEnabled
-      FROM patrol_assignments assignment
-      LEFT JOIN routes route ON route.route_id = assignment.route_id
-      LEFT JOIN patrol_request_board request ON request.request_id = assignment.request_id
-      WHERE assignment.owner_user_id = ?
-        AND assignment.assignment_id = ?
-        AND assignment.contour_id = ?
-      LIMIT 1
-    `,
-    [ownerUserId, assignmentId, currentContourId]
-  );
 }
 
 async function updateAssignmentLifecycleLocally(
@@ -2170,41 +1641,6 @@ async function snapshotRoutePointsInTransaction(executor: SqlExecutor, assignmen
     throw new Error("Маршрут не загружен на телефон.");
   }
 }
-async function repairAssignmentContourBinding(
-  db: SQLite.SQLiteDatabase,
-  assignmentId: string,
-  ownerUserId: string
-) {
-  const legacyAssignment = await db.getFirstAsync<{ assignmentId: string }>(
-    `
-      SELECT assignment_id AS assignmentId
-      FROM patrol_assignments
-      WHERE assignment_id = ?
-        AND owner_user_id = ?
-        AND contour_id IS NULL
-      LIMIT 1
-    `,
-    [assignmentId, ownerUserId]
-  );
-  if (!legacyAssignment) {
-    return;
-  }
-
-  await withSqliteBusyRetry(() =>
-    withProtectedExclusiveTransactionAsync(db, async (tx) => {
-      await tx.runAsync(
-        `
-          UPDATE patrol_assignments
-          SET contour_id = ?
-          WHERE assignment_id = ?
-            AND owner_user_id = ?
-            AND contour_id IS NULL
-        `,
-        [currentContourId, assignmentId, ownerUserId]
-      );
-    })
-  );
-}
 
 async function buildCompletedPointResults(
   executor: SqlExecutor,
@@ -2413,16 +1849,18 @@ export async function restoreMissingPointAttachment(
   assignmentId: string,
   pointId: string,
   missingClientFileId: string,
-  file: LocalMobileFile
+  file: LocalMobileFile,
+  context?: DataOwnerContext
 ) {
-  const ownerUserId = await requireOwnerUserId();
+  const scope = context ?? await captureDataOwnerContext();
+  await assertDataOwnerContext(scope);
+  const ownerUserId = scope.ownerUserId;
   if (file.ownerUserId !== ownerUserId || file.assignmentId !== assignmentId || file.pointId !== pointId) {
     throw new Error("Вложение не соответствует текущему пользователю или точке.");
   }
   if (file.clientFileId === missingClientFileId) {
     throw new Error("Для восстановления требуется новый файл.");
   }
-
 
   const assignment = await getAssignmentById(assignmentId);
   if (!assignment) {
@@ -2437,6 +1875,7 @@ export async function restoreMissingPointAttachment(
 
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      await assertDataOwnerContext(scope);
       const command = await tx.getFirstAsync<{
         clientOperationId: string;
         payloadJson: string;
@@ -2638,6 +2077,7 @@ export async function restoreMissingPointAttachment(
         throw new Error("Не удалось вернуть команду отчёта в очередь после восстановления вложения.");
       }
 
+      await assertDataOwnerContext(scope);
       resultRef.clientOperationId = command.clientOperationId;
     })
   );
@@ -2781,10 +2221,4 @@ async function savePointResult({
     message: status === "issue" ? "Метка сохранена как неисправная." : "Метка сохранена как исправная.",
     payload: { assignmentId, status, photoCount: point.photoClientFileIds.length }
   }).catch(() => undefined);
-}
-
-export async function getNextPendingAssignmentPoint(assignmentId: string) {
-  const ownerUserId = await requireOwnerUserId();
-  const points = await listAssignmentPoints(assignmentId, ownerUserId, currentContourId);
-  return points.find((point) => !isTerminalPointStatus(point.status)) ?? null;
 }

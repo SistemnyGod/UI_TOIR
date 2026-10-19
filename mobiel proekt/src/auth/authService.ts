@@ -34,7 +34,20 @@ import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import { cancelNextOutboxRetry, scheduleNextOutboxRetry } from "@/sync/outboxRetryScheduler";
 import { currentContourId } from "@/core/environments";
 
-export async function flushPendingLogout() {
+// SQLite account replacement and SecureStore publication form one logical
+// transition. Serialize startup recovery, login and logout around both stores.
+let authTransitionQueue: Promise<void> = Promise.resolve();
+function enqueueAuthTransition<T>(operation: () => Promise<T>): Promise<T> {
+  const request = authTransitionQueue.then(operation);
+  authTransitionQueue = request.then(() => undefined, () => undefined);
+  return request;
+}
+
+export function flushPendingLogout() {
+  return enqueueAuthTransition(flushPendingLogoutInternal);
+}
+
+async function flushPendingLogoutInternal() {
   const pendingContourId = await getPendingLogoutContourId();
   if (pendingContourId === undefined) {
     return true;
@@ -72,10 +85,14 @@ async function revokeServerSession() {
   }
 }
 
-export async function signIn(loginName: string, password: string) {
+export function signIn(loginName: string, password: string) {
+  return enqueueAuthTransition(() => signInInternal(loginName, password));
+}
+
+async function signInInternal(loginName: string, password: string) {
   beginAuthTransition();
   const loginSessionGeneration = getSessionGeneration();
-  if (!(await flushPendingLogout())) {
+  if (!(await flushPendingLogoutInternal())) {
     throw new Error("Предыдущая сессия ожидает отзыва. Подключите сервер и повторите вход.");
   }
   const deviceId = await getOrCreateDeviceId();
@@ -106,6 +123,9 @@ export async function signIn(loginName: string, password: string) {
     bootstrap = await getBootstrap(result.accessToken);
     if (bootstrap.contourId !== currentContourId) {
       throw new Error(`Bootstrap относится к другому контуру (${bootstrap.contourId}). Локальные данные не изменены.`);
+    }
+    if (bootstrap.user.serverUserId !== result.user.serverUserId) {
+      throw new Error("Bootstrap относится к другому пользователю. Вход остановлен, локальные данные сохранены.");
     }
 
     const shouldClearLocalData = contourMismatch || await hasUnscopedLocalData() || (previousOwnerUserId
@@ -176,7 +196,11 @@ export async function signIn(loginName: string, password: string) {
   return result;
 }
 
-export async function restoreSessionWithRefreshToken() {
+export function restoreSessionWithRefreshToken() {
+  return enqueueAuthTransition(restoreSessionWithRefreshTokenInternal);
+}
+
+async function restoreSessionWithRefreshTokenInternal() {
   const loginSessionGeneration = getSessionGeneration();
   const previousSession = await getStoredSessionSnapshot();
   const previousOwnerUserId = await getStoredOwnerUserId();
@@ -240,7 +264,11 @@ export async function restoreSessionWithRefreshToken() {
   return bootstrap;
 }
 
-export async function signOut() {
+export function signOut() {
+  return enqueueAuthTransition(signOutInternal);
+}
+
+async function signOutInternal() {
   await assertNoPendingLocalChanges("Нельзя выйти из аккаунта: на телефоне есть неотправленные отчеты или действия. Сначала выполните синхронизацию.");
   beginAuthTransition();
   cancelNextOutboxRetry();

@@ -65,8 +65,7 @@ export async function switchPatrolLocally(sourceId: string, targetId: string, va
       createdAtLocal: now, attemptCount: 0, status: "pending"
     });
     await setPatrolDeviceContextInTransaction(tx, owner, {
-      assignmentId: targetId,
-      employeeId: target.employeeId
+      assignmentId: targetId
     });
     await validateContext?.();
   }));
@@ -225,7 +224,7 @@ export async function continuePatrolAfterSwitchConflict(ownerUserId: string, cli
        WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?`,
       [now, "Переключение отклонено; создана отдельная команда продолжения целевого обхода.", ownerUserId, currentContourId, clientOperationId]
     );
-    await setPatrolDeviceContextInTransaction(tx, ownerUserId, { assignmentId: targetId, employeeId: target.employeeId });
+    await setPatrolDeviceContextInTransaction(tx, ownerUserId, { assignmentId: targetId });
     continuationOperationId = newOperationId;
   }));
   if (continuationOperationId) requestSyncAfterMutation();

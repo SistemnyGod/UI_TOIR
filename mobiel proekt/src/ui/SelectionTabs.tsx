@@ -1,6 +1,7 @@
+import { useReducedMotion } from "./useReducedMotion";
 import { Ionicons } from "@expo/vector-icons";
 import { ReactNode, useEffect, useState } from "react";
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import { useAppTheme } from "@/features/settings/themePreference";
 
@@ -29,13 +30,17 @@ export function SelectionTabs<T extends string>({
   value
 }: SelectionTabsProps<T>) {
   const { colors } = useAppTheme();
+  const { fontScale } = useWindowDimensions();
+  const horizontal = scrollable;
+  const wrapped = !horizontal && (items.length > 3 || fontScale > 1.3);
   const content = (
     <View
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="tablist"
       style={[
         styles.track,
-        scrollable ? styles.scrollTrack : styles.fixedTrack,
+        horizontal ? styles.scrollTrack : styles.fixedTrack,
+        wrapped ? { flexWrap: "wrap" } : null,
         { backgroundColor: colors.backgroundAccent, borderColor: colors.border }
       ]}
     >
@@ -46,13 +51,14 @@ export function SelectionTabs<T extends string>({
           item={item}
           onPress={() => onChange(item.value)}
           selected={item.value === value}
-          stretch={!scrollable}
+          stretch={!horizontal && !wrapped}
+          wrapWidth={wrapped ? (fontScale > 1.5 ? "100%" : "48%") : undefined}
         />
       ))}
     </View>
   );
 
-  if (!scrollable) {
+  if (!horizontal) {
     return content;
   }
 
@@ -72,24 +78,28 @@ function SelectionTabButton<T extends string>({
   item,
   onPress,
   selected,
-  stretch
+  stretch,
+  wrapWidth
 }: {
   compact: boolean;
   item: SelectionTab<T>;
   onPress: () => void;
   selected: boolean;
   stretch: boolean;
+  wrapWidth?: "48%" | "100%";
 }) {
   const { colors } = useAppTheme();
+  const { width } = useWindowDimensions();
+  const reducedMotion = useReducedMotion();
   const [selectedProgress] = useState(() => new Animated.Value(selected ? 1 : 0));
 
   useEffect(() => {
     Animated.timing(selectedProgress, {
-      duration: 150,
+      duration: reducedMotion ? 0 : 150,
       toValue: selected ? 1 : 0,
       useNativeDriver: true
     }).start();
-  }, [selected, selectedProgress]);
+  }, [selected, selectedProgress, reducedMotion]);
 
   const animatedStyle = {
     opacity: selectedProgress.interpolate({
@@ -115,6 +125,8 @@ function SelectionTabButton<T extends string>({
         styles.button,
         compact ? styles.buttonCompact : styles.buttonRegular,
         stretch ? styles.buttonStretch : null,
+        wrapWidth ? { flexBasis: wrapWidth, flexGrow: 1 } : null,
+        !stretch ? { maxWidth: width - 48 } : null,
         pressed ? styles.buttonPressed : null
       ]}
     >
@@ -122,12 +134,11 @@ function SelectionTabButton<T extends string>({
         pointerEvents="none"
         style={[styles.selectedBackground, { backgroundColor: colors.card }, animatedStyle]}
       />
-      <View style={styles.labelRow}>
+      <View style={[styles.labelRow, compact ? styles.labelRowCompact : null, compact && stretch ? styles.stackedLabelRow : null]}>
         {item.icon ? (
-          <Ionicons color={selected ? colors.primary : colors.mutedText} name={item.icon} size={compact ? 17 : 18} />
+          <Ionicons color={selected ? colors.primary : colors.mutedText} name={item.icon} size={compact ? 16 : 18} />
         ) : null}
         <Text
-          numberOfLines={1}
           style={[
             styles.label,
             compact ? styles.labelCompact : null,
@@ -138,7 +149,7 @@ function SelectionTabButton<T extends string>({
         </Text>
         {typeof item.count === "number" ? (
           <View style={[styles.countBadge, { backgroundColor: selected ? colors.primary : colors.border }]}>
-            <Text style={[styles.countText, { color: selected ? "#ffffff" : colors.text }]}>{item.count}</Text>
+            <Text style={[styles.countText, compact ? styles.countTextCompact : null, { color: selected ? colors.onPrimary : colors.text }]}>{item.count}</Text>
           </View>
         ) : null}
       </View>
@@ -147,17 +158,18 @@ function SelectionTabButton<T extends string>({
 }
 
 export function SelectionTransition({ children, selectionKey }: { children: ReactNode; selectionKey: string }) {
+  const reducedMotion = useReducedMotion();
   const [opacity] = useState(() => new Animated.Value(1));
   const [translateY] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
-    opacity.setValue(0.68);
-    translateY.setValue(4);
+    opacity.setValue(reducedMotion ? 1 : 0.68);
+    translateY.setValue(reducedMotion ? 0 : 4);
     Animated.parallel([
-      Animated.timing(opacity, { duration: 150, toValue: 1, useNativeDriver: true }),
-      Animated.timing(translateY, { duration: 150, toValue: 0, useNativeDriver: true })
+      Animated.timing(opacity, { duration: reducedMotion ? 0 : 150, toValue: 1, useNativeDriver: true }),
+      Animated.timing(translateY, { duration: reducedMotion ? 0 : 150, toValue: 0, useNativeDriver: true })
     ]).start();
-  }, [opacity, selectionKey, translateY]);
+  }, [opacity, selectionKey, translateY, reducedMotion]);
 
   return <Animated.View style={{ opacity, transform: [{ translateY }] }}>{children}</Animated.View>;
 }
@@ -190,10 +202,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12
   },
   buttonCompact: {
-    minHeight: 44,
-    paddingHorizontal: 10
+    minHeight: 48,
+    paddingHorizontal: 8
   },
   buttonStretch: {
+    minWidth: 0,
     flex: 1
   },
   buttonPressed: {
@@ -202,26 +215,35 @@ const styles = StyleSheet.create({
   selectedBackground: {
     ...StyleSheet.absoluteFill,
     borderRadius: 12,
-    elevation: 2,
-    shadowColor: "#0f1a2b",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6
   },
   labelRow: {
+    flexWrap: "nowrap",
+    justifyContent: "center",
+    paddingVertical: 8,
+    maxWidth: "100%",
     alignItems: "center",
     flexDirection: "row",
     gap: 6,
     zIndex: 1
   },
+  labelRowCompact: {
+    gap: 4,
+    paddingVertical: 4
+  },
+  stackedLabelRow: {
+    flexDirection: "column"
+  },
   label: {
-    fontSize: 13,
+    flexShrink: 1,
+    textAlign: "center",
+    fontSize: 14,
     fontWeight: "800"
   },
   labelCompact: {
-    fontSize: 12
+    fontSize: 13
   },
   countBadge: {
+    flexShrink: 0,
     alignItems: "center",
     borderRadius: 999,
     justifyContent: "center",
@@ -230,8 +252,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6
   },
   countText: {
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: "900",
-    lineHeight: 14
+    lineHeight: 20
+  },
+  countTextCompact: {
+    fontSize: 12,
+    lineHeight: 18
   }
 });

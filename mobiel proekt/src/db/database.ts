@@ -1,3 +1,4 @@
+import { ensureChronologicalListIndexes } from './listIndexes';
 import * as SQLite from "expo-sqlite";
 
 import { openProtectedDatabase, openProtectedDatabaseConnection } from "@/db/encryptedDatabase";
@@ -672,6 +673,10 @@ async function initializeDatabaseOnce() {
 
     await runLocalMigration(tx, "20260726_media_retention", async () => {
       await ensureMediaRetention(tx);
+    });
+
+    await runLocalMigration(tx, "20260930_chronological_list_indexes", async () => {
+      await ensureChronologicalListIndexes(tx);
     });
 
     await runLocalMigration(tx, "20260726_file_retry_metadata", async () => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getReportDeliveryPresentation } from "../src/features/patrol/reportDeliveryPresentation.ts";
+import { getReportDeliveryPresentation, getReportPrimaryAction } from "../src/features/patrol/reportDeliveryPresentation.ts";
 
 test("retryable report stays saved and offers an explicit retry", () => {
   const view = getReportDeliveryPresentation("retryLater", "Сервер временно недоступен");
@@ -52,4 +52,18 @@ test("a conflicting point blocks the complete report delivery state", () => {
   assert.equal(view.action, "repair");
   assert.equal(view.title, "Отправка отчёта остановлена");
   assert.doesNotMatch(view.detail, /автоматически отправ/i);
+});
+
+test("report title and button agree before completion", () => {
+  const incomplete = getReportPrimaryAction({ status: "notQueued" }, { ready: false, hasPointProblems: true });
+  assert.equal(incomplete.title, "Нужно заполнить результаты");
+  assert.equal(incomplete.action, "openProblems");
+  assert.equal(incomplete.disabled, false);
+  const ready = getReportPrimaryAction({ status: "notQueued" }, { ready: true, hasPointProblems: false });
+  assert.equal(ready.title, "Всё готово к отправке отчёта");
+  assert.equal(ready.action, "submit");
+  for (const [status, action] of [["waitingAuth", "signIn"], ["wrongContour", "serverSettings"], ["repairRequired", "repair"]] as const) {
+    const view = getReportPrimaryAction({ status } as never, { ready: false, hasPointProblems: true });
+    assert.equal(view.action, action);
+  }
 });

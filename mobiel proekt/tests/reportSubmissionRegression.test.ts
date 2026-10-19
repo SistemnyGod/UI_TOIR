@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import ts from 'typescript';
+import { getSnapshotRefreshPlan } from '../src/domain/patrol/snapshotPolicy.ts';
 
 const repositorySource = readFileSync(new URL('../src/db/repositories/patrolRepository.ts', import.meta.url), 'utf8');
 const reportScreenSource = readFileSync(new URL('../src/features/patrol/SubmitReportScreen.tsx', import.meta.url), 'utf8');
@@ -10,20 +12,24 @@ const outboxRepositorySource = readFileSync(new URL('../src/db/repositories/outb
 const activePatrolScreenSource = readFileSync(new URL('../src/features/patrol/ActivePatrolScreen.tsx', import.meta.url), 'utf8');
 const scanNfcScreenSource = readFileSync(new URL('../src/features/patrol/ScanNfcScreen.tsx', import.meta.url), 'utf8');
 const nfcServiceSource = readFileSync(new URL('../src/services/nfcService.ts', import.meta.url), 'utf8');
-const bootstrapRepositorySource = readFileSync(new URL('../src/db/repositories/bootstrapRepository.ts', import.meta.url), 'utf8');
 const attachmentPolicySource = readFileSync(new URL('../src/domain/files/completionAttachmentPolicy.ts', import.meta.url), 'utf8');
+
+const outboxResponseSource = readFileSync(new URL('../src/db/repositories/outboxResponseRepository.ts', import.meta.url), 'utf8');
+function functionSource(source: string, name: string) {
+  const parsed = ts.createSourceFile('repository.ts', source, ts.ScriptTarget.Latest, true);
+  const declaration = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
+  assert.ok(declaration, name + ' must exist');
+  return declaration.getText(parsed);
+}
 
 const has = (source: string, value: string) => assert.ok(source.includes(value), value);
 
 test('report submission commits locally before background delivery', () => {
-  const completion = repositorySource.slice(
-    repositorySource.indexOf('export async function completeAssignmentLocally'),
-    repositorySource.indexOf('export async function getAssignmentProgress')
-  );
+  const completion = functionSource(repositorySource, 'completeAssignmentLocally');
 
   assert.ok(!completion.includes('requestSyncAfterMutation()'));
   has(reportCoordinatorSource, 'await completeAssignmentLocally(assignmentId)');
-  has(reportCoordinatorSource, "void requestPatrolSync({ mode: 'manualReport', assignmentId }).catch");
+  has(reportCoordinatorSource, "const deliveryAttempt = requestPatrolSync({ mode: 'manualReport', assignmentId }).catch");
   has(reportScreenSource, 'queuePatrolReport(assignmentId)');
   assert.ok(!reportScreenSource.includes('Alert.alert'));
 });
@@ -36,10 +42,7 @@ test('request acceptance and report repair cannot regress concurrently', () => {
     repositorySource.indexOf('export async function reopenInvalidCompletionReportLocally'),
     repositorySource.indexOf('export async function completeAssignmentLocally')
   );
-  const completion = repositorySource.slice(
-    repositorySource.indexOf('export async function completeAssignmentLocally'),
-    repositorySource.indexOf('export async function getAssignmentProgress')
-  );
+  const completion = functionSource(repositorySource, 'completeAssignmentLocally');
 
   has(requestScreenSource, 'actionInProgressRef.current');
   has(acceptance, 'request_id = ?');
@@ -78,10 +81,7 @@ test('automatic outbox recovery never erases a locally completed report', () => 
     outboxRepositorySource.indexOf('export async function quarantineInvalidPatrolCompletionCommands'),
     outboxRepositorySource.indexOf('export async function hasPendingOutboxCommands')
   );
-  const responseTransition = outboxRepositorySource.slice(
-    outboxRepositorySource.indexOf('const nextStatus = response.status === "conflict"'),
-    outboxRepositorySource.indexOf('export async function markOutboxConflictForDispatcher')
-  );
+  const responseTransition = functionSource(outboxResponseSource, 'applyOutboxResponses');
   const rejectedTransition = outboxRepositorySource.slice(
     outboxRepositorySource.indexOf('export async function cancelRejectedOutboxCommand'),
     outboxRepositorySource.length
@@ -131,17 +131,14 @@ test('active patrol recovers from reload failures and serializes actions', () =>
 });
 
 test('snapshot freeze uses local lifecycle and attachment errors are user-facing', () => {
-  has(bootstrapRepositorySource, 'includes(local.status)');
-  has(bootstrapRepositorySource, 'local.snapshotVersion ?? assignment.routeVersionNo');
+  assert.deepEqual(getSnapshotRefreshPlan({ localStatus: 'inProgress', localSnapshotVersion: 1, localPointCount: 1, routeVersion: 2, incomingPointIds: ['new-point'] }),
+    { shouldReplace: false, snapshotVersion: 1, pointIds: ['new-point'] });
+  assert.equal(getSnapshotRefreshPlan({ localStatus: 'inProgress', localSnapshotVersion: 99, localPointCount: 0, routeVersion: 1, incomingPointIds: ['assigned-point'] }).snapshotVersion, 1);
   assert.ok(!attachmentPolicySource.includes('local file'));
   assert.ok(!attachmentPolicySource.includes('video exceeds'));
   assert.ok(!attachmentPolicySource.includes('photo exceeds'));
   assert.ok(!attachmentPolicySource.includes('required evidence'));
 });
 
-test('report screen uses a large confirmation sheet and one local submit action', () => {
-  has(reportScreenSource, 'ConfirmationSheet');
-  has(reportScreenSource, 'setIsConfirmOpen(true)');
-  has(reportScreenSource, 'confirmLocalSubmission');
-  has(reportScreenSource, 'setSyncNotice(');
-});
+// One-click submission and the synchronous duplicate guard are exercised on the
+// mounted screen in submitReportUi.vitest.test.ts.

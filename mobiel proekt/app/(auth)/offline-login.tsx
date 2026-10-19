@@ -11,6 +11,8 @@ import { getOfflineSession, getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
 import { getLocalUserProfile } from "@/db/repositories/bootstrapRepository";
 import { runMobileRecoveryCycle } from "@/sync/syncTriggers";
+import { useAppTheme } from "@/features/settings/themePreference";
+import { ThemeColors } from "@/ui/atomTheme";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -22,6 +24,8 @@ type LocalUserProfile = {
 
 export default function OfflineLoginRoute() {
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const [profile, setProfile] = useState<LocalUserProfile | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -160,8 +164,8 @@ export default function OfflineLoginRoute() {
       ) : null}
       {authError ? <Text style={styles.error}>{authError}</Text> : null}
       <PrimaryButton
-        disabled={isAuthenticating}
-        label={isAuthenticating ? "Проверяем доступ..." : "Продолжить офлайн"}
+        loading={isAuthenticating}
+        label={isAuthenticating ? "Проверяем доступ..." : "Открыть сохранённую смену"}
         onPress={() => void continueOffline()}
       />
       <PrimaryButton label={requiresReenrollment ? "Подтвердить вход для синхронизации" : "Войти онлайн"} onPress={() => router.replace("/(auth)/login")} />
@@ -169,25 +173,25 @@ export default function OfflineLoginRoute() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   label: {
-    color: "#64748b",
-    fontSize: 13,
+    color: colors.mutedText,
+    fontSize: 14,
     fontWeight: "700",
     textTransform: "uppercase"
   },
   title: {
-    color: "#0f172a",
+    color: colors.text,
     fontSize: 20,
     fontWeight: "800"
   },
   text: {
-    color: "#475569",
-    fontSize: 15,
-    lineHeight: 21
+    color: colors.mutedText,
+    fontSize: 16,
+    lineHeight: 24
   },
   error: {
-    color: "#b91c1c",
+    color: colors.danger,
     fontSize: 14,
     lineHeight: 20
   }

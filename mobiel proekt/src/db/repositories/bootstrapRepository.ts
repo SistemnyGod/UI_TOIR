@@ -1,4 +1,5 @@
 import * as SQLite from "expo-sqlite";
+import { assertDataOwnerContext, type DataOwnerContext } from "@/auth/dataOwnerContext";
 import { currentContourId } from "@/core/environments";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
@@ -7,6 +8,7 @@ import { finalizeCancelledAssignmentInTransaction } from "@/db/repositories/patr
 import { deletePatrolPhotoDirectory } from "@/services/fileStorageService";
 import { resolveBootstrapAssignmentStatus } from "@/domain/sync/bootstrapResolutionPolicy";
 import { getSnapshotRefreshPlan } from "@/domain/patrol/snapshotPolicy";
+import { resolveAssignmentSnapshot } from "@/domain/patrol/assignmentSnapshot";
 import { isPatrolAssignmentCommand, resolvePatrolAssignmentIdentity } from "@/db/repositories/outboxPolicies";
 
 const bootstrapScope = `bootstrap:${currentContourId}`;
@@ -453,7 +455,14 @@ export async function getLocalUserProfile(ownerUserId: string) {
     : null;
 }
 
-export async function saveBootstrap(bootstrap: BootstrapDto, options?: { force?: boolean }) {
+export async function saveBootstrap(bootstrap: BootstrapDto, options?: { force?: boolean; context?: DataOwnerContext }) {
+  const context = options?.context;
+  if (context) {
+    await assertDataOwnerContext(context);
+    if (bootstrap.user.serverUserId !== context.ownerUserId) {
+      throw new Error("Данные сервера принадлежат другому мобильному аккаунту.");
+    }
+  }
   if (await hasUnscopedLocalData()) {
     throw new Error("Локальные данные не привязаны к серверному контуру. Выполните вход после безопасной очистки или синхронизации очереди.");
   }
@@ -466,7 +475,9 @@ export async function saveBootstrap(bootstrap: BootstrapDto, options?: { force?:
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
     withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      if (context) await assertDataOwnerContext(context);
       await saveBootstrapInTransaction(tx, bootstrap);
+      if (context) await assertDataOwnerContext(context);
     })
   );
   return true;
@@ -807,10 +818,11 @@ async function refreshAssignmentSnapshotInTransaction(
   assignment: BootstrapAssignment,
   bootstrap: BootstrapDto
 ) {
-  const local = await tx.getFirstAsync<{ status: string; snapshotVersion: number | null; pointCount: number }>(
+  const local = await tx.getFirstAsync<{ status: string; snapshotVersion: number | null; pointCount: number; revision: number }>(
     `
       SELECT
         status,
+        revision,
         snapshot_version AS snapshotVersion,
         (SELECT COUNT(*) FROM assignment_route_points point WHERE point.assignment_id = patrol_assignments.assignment_id) AS pointCount
       FROM patrol_assignments
@@ -821,15 +833,13 @@ async function refreshAssignmentSnapshotInTransaction(
     `,
     [bootstrap.user.serverUserId, assignment.assignmentId, currentContourId]
   );
-  if (!local) {
+  if (!local || local.revision > assignment.revision) {
     return;
   }
 
-  const route = bootstrap.routes.find((item) => item.routeId === assignment.routeId);
-  const frozenSnapshot = ["releasePending", "inProgress", "paused", "completedLocal", "syncing", "syncError", "authRequired", "needsDispatcherDecision"].includes(local.status);
-  const snapshotVersion = frozenSnapshot
-    ? (local.snapshotVersion ?? assignment.routeVersionNo ?? route?.version ?? 0)
-    : (route?.version ?? assignment.routeVersionNo ?? local.snapshotVersion ?? 0);
+  const incoming = resolveAssignmentSnapshot(bootstrap, assignment);
+  if (!incoming) return;
+  const { route, points, manifest } = incoming;
   const snapshotAllowFreeOrder = route?.allowFreeOrder === false ? 0 : 1;
   const snapshotNfcEnabled = route?.nfcEnabled === true ? 1 : 0;
   const snapshotQrFallbackEnabled = route?.qrFallbackEnabled === false ? 0 : 1;
@@ -837,17 +847,12 @@ async function refreshAssignmentSnapshotInTransaction(
     localStatus: local.status,
     localSnapshotVersion: local.snapshotVersion,
     localPointCount: local.pointCount,
-    routeVersion: snapshotVersion,
-    incomingPointIds: bootstrap.points
-      .filter((point) => point.routeId === assignment.routeId)
-      .map((point) => point.pointId)
+    routeVersion: route.version,
+    incomingPointIds: points.map((point) => point.pointId)
   });
   if (!snapshotPlan.shouldReplace) {
     return;
   }
-  const manifest = bootstrap.patrolSnapshotManifest
-    ? bootstrap.patrolSnapshotManifests?.find((item) => item.routeId === assignment.routeId)
-    : undefined;
   const manifestMatchesSnapshot = Boolean(
     manifest
     && manifest.isComplete
@@ -858,14 +863,14 @@ async function refreshAssignmentSnapshotInTransaction(
     && samePointRevisionSet(
       manifest.points.map((point) => [point.pointId, point.revision] as const),
       snapshotPlan.pointIds.map((pointId) => {
-        const point = bootstrap.points.find((item) => item.pointId === pointId);
+        const point = points.find((item) => item.pointId === pointId);
         return [pointId, point?.revision ?? -1] as const;
       })
     )
   );
 
   await tx.runAsync("DELETE FROM assignment_route_points WHERE assignment_id = ?", [assignment.assignmentId]);
-  for (const point of bootstrap.points) {
+  for (const point of points) {
     if (point.routeId !== assignment.routeId) {
       continue;
     }
@@ -1208,11 +1213,8 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
     );
 
     for (const assignment of bootstrap.assignments) {
-      const route = bootstrap.routes.find((item) => item.routeId === assignment.routeId);
-      const frozenSnapshot = ["releasePending", "inProgress", "paused", "completedLocal", "syncing", "syncError", "authRequired", "needsDispatcherDecision"].includes(assignment.status);
-      const snapshotVersion = frozenSnapshot
-        ? (assignment.routeVersionNo || route?.version || 0)
-        : (route?.version ?? assignment.routeVersionNo ?? 0);
+      const route = resolveAssignmentSnapshot(bootstrap, assignment)?.route;
+      const snapshotVersion = assignment.routeVersionNo;
       const snapshotAllowFreeOrder = route?.allowFreeOrder === false ? 0 : 1;
       const snapshotNfcEnabled = route?.nfcEnabled === true ? 1 : 0;
       const snapshotQrFallbackEnabled = route?.qrFallbackEnabled === false ? 0 : 1;
@@ -1221,6 +1223,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
         `SELECT status, revision FROM patrol_assignments WHERE owner_user_id = ? AND assignment_id = ? AND (contour_id = ? OR contour_id IS NULL)`,
         [ownerUserId, assignment.assignmentId, currentContourId]
       );
+      if (localAssignment && localAssignment.revision > assignment.revision) continue;
       // A previous build could clear completed_at_local while retaining the
       // completion command. Recover the original timestamp before merging the
       // server snapshot; never invent a completion time from bootstrap time.

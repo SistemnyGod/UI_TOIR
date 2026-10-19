@@ -4,6 +4,31 @@ type NfcTagHandler = (tag: unknown) => void | Promise<void>;
 
 let activeReaderStop: (() => Promise<void>) | null = null;
 let readerOperation: Promise<void> = Promise.resolve();
+let adapterListenerOwner: object | null = null;
+
+export function subscribeNfcAdapterState(onChange: (enabled: boolean) => void) {
+  const owner = {};
+  adapterListenerOwner = owner;
+  NfcManager.setEventListener(NfcEvents.StateChanged, ({ state }: { state: string }) => {
+    if (adapterListenerOwner !== owner) return;
+    if (state === 'on') onChange(true);
+    else if (state === 'off' || state === 'turning_off') onChange(false);
+  });
+  return () => {
+    if (adapterListenerOwner !== owner) return;
+    adapterListenerOwner = null;
+    NfcManager.setEventListener(NfcEvents.StateChanged, null);
+  };
+}
+
+export async function openNfcSettings() {
+  await NfcManager.goToNfcSetting();
+}
+
+/** Lightweight fallback for devices that miss the adapter broadcast. */
+export async function isNfcEnabled() {
+  return NfcManager.isEnabled();
+}
 
 export async function initializeNfc() {
   const isSupported = await NfcManager.isSupported();
@@ -14,7 +39,7 @@ export async function initializeNfc() {
 
   await NfcManager.start();
 
-  const enabled = await NfcManager.isEnabled().catch(() => true);
+  const enabled = await NfcManager.isEnabled();
 
   return { supported: true, enabled };
 }
@@ -25,7 +50,10 @@ export async function initializeNfc() {
  * storage application when the patrol screen is active.
  */
 export async function startNfcReaderSession(onTag: NfcTagHandler) {
-  return withReaderOperation(() => startNfcReaderSessionUnsafe(onTag));
+  const stop = await withReaderOperation(() => startNfcReaderSessionUnsafe(onTag));
+  // A late screen owns only this session. Serialize its cleanup so it cannot
+  // unregister a newer reader while Android is still completing the old stop.
+  return () => withReaderOperation(stop);
 }
 
 async function startNfcReaderSessionUnsafe(onTag: NfcTagHandler) {

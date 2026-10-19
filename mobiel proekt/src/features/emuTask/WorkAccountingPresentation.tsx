@@ -1,3 +1,6 @@
+import { useMemo } from "react";
+import { useAppTheme } from "@/features/settings/themePreference";
+import type { ThemeColors } from "@/ui/atomTheme";
 import { StyleSheet } from "react-native";
 
 import { ShiftRemark } from "@/db/repositories/shiftRemarkRepository";
@@ -118,51 +121,59 @@ export function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-export const workAccountingStyles = StyleSheet.create({
+export function useWorkAccountingStyles() {
+  const { colors } = useAppTheme();
+  return useMemo(() => createStyles(colors), [colors]);
+}
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  detailRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  cardActions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 },
   actions: {
     gap: 8
   },
   cardTitle: {
-    color: "#0f1a2b",
+    color: colors.text,
     flex: 1,
     fontSize: 18,
     fontWeight: "800"
   },
   choice: {
-    borderColor: "#dbe5f2",
+    minHeight: 48,
+    justifyContent: "center",
+    borderColor: colors.border,
     borderRadius: 10,
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 9
   },
   choiceActive: {
-    backgroundColor: "#eaf1ff",
-    borderColor: "#1e5bff"
+    backgroundColor: colors.backgroundAccent,
+    borderColor: colors.primary
   },
   choiceText: {
-    color: "#42526b",
-    fontSize: 13,
+    color: colors.mutedText,
+    fontSize: 14,
     fontWeight: "800"
   },
   choiceTextActive: {
-    color: "#1e5bff"
+    color: colors.primary
   },
   field: {
     gap: 8
   },
   iconButton: {
     alignItems: "center",
-    borderColor: "#dbe5f2",
+    borderColor: colors.border,
     borderRadius: 10,
     borderWidth: 1,
-    height: 38,
+    minHeight: 48,
     justifyContent: "center",
-    width: 42
+    width: 48
   },
   helperText: {
-    color: "#6b7280",
-    fontSize: 13,
-    lineHeight: 18
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 20
   },
   inlineActions: {
     flexDirection: "row",
@@ -170,47 +181,48 @@ export const workAccountingStyles = StyleSheet.create({
     gap: 8
   },
   input: {
-    borderColor: "#d1d5db",
+    backgroundColor: colors.field,
+    borderColor: colors.border,
     borderRadius: 10,
     borderWidth: 1,
-    color: "#0f1a2b",
-    fontSize: 15,
+    color: colors.text,
+    fontSize: 16,
     paddingHorizontal: 12,
     paddingVertical: 10
   },
   label: {
-    color: "#42526b",
-    fontSize: 13,
+    color: colors.mutedText,
+    fontSize: 14,
     fontWeight: "800"
   },
   disabledAction: {
     opacity: 0.45
   },
   menuBackdrop: {
-    backgroundColor: "rgba(15, 26, 43, 0.22)",
+    backgroundColor: colors.scrim,
     flex: 1,
     justifyContent: "flex-end",
     padding: 18
   },
   menuCard: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.card,
     borderRadius: 16,
     gap: 10,
     padding: 16
   },
   menuSecondaryAction: {
     alignItems: "center",
-    borderColor: "#e5edf7",
+    borderColor: colors.border,
     borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",
     gap: 9,
-    minHeight: 46,
+    minHeight: 48,
     paddingHorizontal: 12,
     paddingVertical: 10
   },
   menuSecondaryDanger: {
-    color: "#ef4444"
+    color: colors.danger
   },
   menuSecondaryList: {
     gap: 8
@@ -219,16 +231,16 @@ export const workAccountingStyles = StyleSheet.create({
     opacity: 0.72
   },
   menuSecondaryText: {
-    color: "#1e5bff",
+    color: colors.primary,
     flex: 1,
     fontSize: 14,
     fontWeight: "800"
   },
   menuSubtitle: {
-    color: "#6b7280",
-    fontSize: 13,
+    color: colors.mutedText,
+    fontSize: 14,
     fontWeight: "700",
-    lineHeight: 18,
+    lineHeight: 20,
     marginHorizontal: 18,
     marginTop: -8
   },
@@ -243,28 +255,34 @@ export const workAccountingStyles = StyleSheet.create({
     gap: 8
   },
   modalActions: {
-    borderColor: "#e5edf7",
+    borderColor: colors.border,
     borderTopWidth: 1,
-    flexDirection: "row",
-    flexWrap: "wrap",
+    flexDirection: "column",
     gap: 10,
-    paddingHorizontal: 18,
-    paddingTop: 12
+    paddingHorizontal: 0,
+    paddingTop: 12,
+    paddingBottom: 6
   },
   modalBackdrop: {
-    backgroundColor: "rgba(15, 26, 43, 0.28)",
+    backgroundColor: colors.scrim,
     flex: 1,
-    justifyContent: "flex-end"
+    padding: 16,
+    justifyContent: "center"
   },
   modalCard: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    maxHeight: "92%",
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    width: "100%",
+    maxWidth: 560,
+    alignSelf: "center",
+    maxHeight: "100%",
     overflow: "hidden",
     padding: 0
   },
   modalScroll: {
+    flexShrink: 1,
     flexGrow: 0
   },
   modalScrollContent: {
@@ -273,15 +291,15 @@ export const workAccountingStyles = StyleSheet.create({
     paddingHorizontal: 18
   },
   modalTitle: {
-    color: "#0f1a2b",
+    color: colors.text,
     fontSize: 20,
     fontWeight: "900",
     margin: 18,
     marginBottom: 12
   },
   muted: {
-    fontSize: 13,
-    lineHeight: 18
+    fontSize: 14,
+    lineHeight: 20
   },
   optionWrap: {
     flexDirection: "row",
@@ -289,9 +307,9 @@ export const workAccountingStyles = StyleSheet.create({
     gap: 8
   },
   readOnlyValue: {
-    backgroundColor: "#f5f7fa",
+    backgroundColor: colors.background,
     borderRadius: 10,
-    color: "#6b7280",
+    color: colors.mutedText,
     fontSize: 14,
     fontWeight: "700",
     padding: 12
@@ -303,31 +321,33 @@ export const workAccountingStyles = StyleSheet.create({
     justifyContent: "space-between"
   },
   segment: {
-    backgroundColor: "#edf2f8",
+    backgroundColor: colors.backgroundAccent,
     borderRadius: 12,
     flexDirection: "row",
     padding: 4
   },
   segmentButton: {
+    minHeight: 48,
+    justifyContent: "center",
     alignItems: "center",
     borderRadius: 9,
     flex: 1,
     paddingVertical: 10
   },
   segmentButtonActive: {
-    backgroundColor: "#1e5bff"
+    backgroundColor: colors.primary
   },
   segmentText: {
-    color: "#42526b",
+    color: colors.mutedText,
     fontSize: 14,
     fontWeight: "900"
   },
   segmentTextActive: {
-    color: "#fff"
+    color: colors.onPrimary
   },
   text: {
-    color: "#6b7280",
-    fontSize: 15,
+    color: colors.mutedText,
+    fontSize: 16,
     lineHeight: 21
   },
   textarea: {

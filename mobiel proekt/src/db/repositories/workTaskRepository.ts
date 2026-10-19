@@ -6,6 +6,7 @@ import { currentContourId } from "@/core/environments";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { insertLocalFileInTransaction } from "@/db/repositories/filesRepository";
+import { withOwnerExclusiveTransactionAsync } from "@/db/ownerTransaction";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { MobileEmployeeDto, MobileEmuSectionDto, WorkItemDto, WorkTaskDto } from "@/domain/emu/emuTypes";
 import { emuTaskActionError } from "@/domain/emu/emuStateMachine";
@@ -106,7 +107,7 @@ export type LocalWorkItemsPage = {
   nextCursor: string | null;
 };
 
-export type LocalWorkItemsFilter = "all" | "mine" | "available" | "history";
+export type LocalWorkItemsFilter = "all" | "active" | "mine" | "available" | "history";
 
 export type LocalWorkItemBoundary = {
   itemId: string;
@@ -125,7 +126,7 @@ export async function listLocalWorkItemBoundaries(filter: LocalWorkItemsFilter =
   const values: (string | null)[] = [ownerUserId];
   let where = "";
   if (filter === "history") where = " AND status IN ('completedLocal','completedServer','cancelled')";
-  if (filter === "mine") where = " AND status NOT IN ('completedLocal','completedServer','cancelled')";
+  if (filter === "mine" || filter === "active") where = " AND status NOT IN ('completedLocal','completedServer','cancelled')";
   if (employeeId) {
     where += ` AND (employee_id = ? OR EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(assigned_employees_json) THEN assigned_employees_json ELSE '[]' END) p WHERE json_extract(p.value, '$.employeeId') = ?) OR EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(actual_participants_json) THEN actual_participants_json ELSE '[]' END) p WHERE json_extract(p.value, '$.employeeId') = ?))`;
     values.push(employeeId, employeeId, employeeId);
@@ -191,7 +192,11 @@ export async function listLocalWorkItemsPage(limit = 25, cursor: string | null =
     // work available while still excluding the selected employee's work.
     filterClause = ` AND status NOT IN ('completedLocal','completedServer','cancelled')${employeeId ? ` AND NOT COALESCE(${participantMatch}, 0)` : ""}`;
     if (employeeId) values.push(employeeId, employeeId, employeeId);
-  } else if (filter === "mine" || filter === "history") {
+  } else if (filter === "active") {
+    filterClause = " AND status NOT IN ('completedLocal','completedServer','cancelled')";
+  } else if (filter === "history") {
+    filterClause = " AND status IN ('completedLocal','completedServer','cancelled')";
+  } else if (filter === "mine") {
     filterClause = " AND 0";
   }
   let continuation = "";
@@ -267,7 +272,7 @@ export type CreateWorkTaskInput = {
   sectionId: string;
   sectionName: string;
   taskDescription: string;
-  draftEmployeeId?: string;
+  draftKey?: string;
 };
 
 export type UpdateWorkTaskInput = {
@@ -275,7 +280,7 @@ export type UpdateWorkTaskInput = {
   sectionId: string;
   sectionName: string;
   taskDescription: string;
-  draftEmployeeId?: string;
+  draftKey?: string;
 };
 
 export async function saveWorkTasks(tasks: WorkTaskDto[], context?: DataOwnerContext) {
@@ -472,7 +477,8 @@ export async function listEmuSections() {
 }
 
 export async function createWorkTaskLocally(input: CreateWorkTaskInput) {
-  const ownerUserId = await requireOwnerUserId();
+  const scope = await captureDataOwnerContext();
+  const ownerUserId = scope.ownerUserId;
   const taskId = Crypto.randomUUID();
   const createdAtLocal = new Date().toISOString();
   const title = input.taskDescription.trim();
@@ -497,7 +503,7 @@ export async function createWorkTaskLocally(input: CreateWorkTaskInput) {
   });
 
   await withSqliteBusyRetry(() =>
-    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    withOwnerExclusiveTransactionAsync(db, scope, async (tx) => {
       await tx.runAsync(
         `
           INSERT INTO work_tasks (
@@ -531,7 +537,7 @@ export async function createWorkTaskLocally(input: CreateWorkTaskInput) {
       );
 
       await insertOutboxCommandInTransaction(tx, command);
-      await deleteWorkDraftInTransaction(tx, ownerUserId, input.draftEmployeeId ?? input.employeeId, "task");
+      await deleteWorkDraftInTransaction(tx, ownerUserId, input.draftKey ?? input.employeeId, "task");
     })
   );
 
@@ -539,17 +545,20 @@ export async function createWorkTaskLocally(input: CreateWorkTaskInput) {
   return taskId;
 }
 
-export async function startPlannedWorkLocally(item: WorkItemDto, employee: MobileEmployeeDto) {
+type ParticipationDraft = { key: string; kind: "workStart" | "workJoin" | "workReplace"; entityId: string };
+
+export async function startPlannedWorkLocally(item: WorkItemDto, employee: MobileEmployeeDto, draft?: ParticipationDraft) {
   if (item.kind !== "planTask" || !item.planTaskId) {
     throw new Error("Плановая работа недоступна для запуска.");
   }
   assertEmuTaskAction("start", item.status);
 
-  const ownerUserId = await requireOwnerUserId();
+  const scope = await captureDataOwnerContext();
+  const ownerUserId = scope.ownerUserId;
   const taskId = Crypto.randomUUID();
   const startedAtLocal = new Date().toISOString();
   const db = await getDatabase();
-  const result = await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
+  const result = await withSqliteBusyRetry(() => withOwnerExclusiveTransactionAsync(db, scope, async (tx) => {
     const currentItem = await tx.getFirstAsync<{ taskId: string; status: WorkTaskDto["status"]; revision: number }>(
       "SELECT task_id AS taskId, status, revision FROM work_tasks WHERE task_id = ? AND owner_user_id = ? AND item_kind = 'planTask'",
       [item.itemId, ownerUserId]
@@ -589,6 +598,7 @@ export async function startPlannedWorkLocally(item: WorkItemDto, employee: Mobil
       throw new Error("Работа изменилась до запуска.");
     }
     if (existing) {
+      if (draft) await deleteWorkDraftInTransaction(tx, ownerUserId, draft.key, draft.kind, draft.entityId);
       return existing.taskId;
     }
 
@@ -621,21 +631,23 @@ export async function startPlannedWorkLocally(item: WorkItemDto, employee: Mobil
       ]
     );
     await insertOutboxCommandInTransaction(tx, command);
+    if (draft) await deleteWorkDraftInTransaction(tx, ownerUserId, draft.key, draft.kind, draft.entityId);
     return taskId;
   }));
   requestSyncAfterMutation();
   return result;
 }
 
-export async function joinWorkTaskLocally(item: WorkItemDto, employee: MobileEmployeeDto, comment: string) {
-  await enqueueParticipantChange(item, employee, "joinWorkTask", { comment: comment.trim() || "Присоединение к работе" });
+export async function joinWorkTaskLocally(item: WorkItemDto, employee: MobileEmployeeDto, comment: string, draft?: ParticipationDraft) {
+  await enqueueParticipantChange(item, employee, "joinWorkTask", { comment: comment.trim() || "Присоединение к работе" }, draft);
 }
 
 export async function replaceWorkTaskParticipantLocally(
   item: WorkItemDto,
   previousEmployeeId: string,
   employee: MobileEmployeeDto,
-  reason: string
+  reason: string,
+  draft?: ParticipationDraft
 ) {
   if (!reason.trim()) {
     throw new Error("Укажите причину замены исполнителя.");
@@ -643,21 +655,23 @@ export async function replaceWorkTaskParticipantLocally(
   await enqueueParticipantChange(item, employee, "replaceWorkTaskParticipant", {
     previousEmployeeId,
     reason: reason.trim()
-  });
+  }, draft);
 }
 
 async function enqueueParticipantChange(
   item: WorkItemDto,
   employee: MobileEmployeeDto,
   commandType: "joinWorkTask" | "replaceWorkTaskParticipant",
-  extraPayload: Record<string, unknown>
+  extraPayload: Record<string, unknown>,
+  draft?: ParticipationDraft
 ) {
   const taskId = item.workSessionId ?? item.itemId;
-  const ownerUserId = await requireOwnerUserId();
+  const scope = await captureDataOwnerContext();
+  const ownerUserId = scope.ownerUserId;
   assertEmuTaskAction(commandType === "joinWorkTask" ? "start" : "edit", item.status);
   const now = new Date().toISOString();
   const db = await getDatabase();
-  await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
+  await withSqliteBusyRetry(() => withOwnerExclusiveTransactionAsync(db, scope, async (tx) => {
     const currentTask = await getCurrentWorkTaskInTransaction(tx, ownerUserId, item.itemId);
     const action = commandType === "joinWorkTask" ? "start" : "edit";
     assertEmuTaskAction(action, currentTask.status);
@@ -683,6 +697,7 @@ async function enqueueParticipantChange(
       throw new Error("Работа изменилась до сохранения.");
     }
     await insertOutboxCommandInTransaction(tx, command);
+    if (draft) await deleteWorkDraftInTransaction(tx, ownerUserId, draft.key, draft.kind, draft.entityId);
   }));
   requestSyncAfterMutation();
 }
@@ -705,7 +720,8 @@ async function getCurrentWorkTaskInTransaction(tx: Pick<SQLite.SQLiteDatabase, "
 }
 
 export async function updateWorkTaskLocally(input: UpdateWorkTaskInput) {
-  const ownerUserId = await requireOwnerUserId();
+  const scope = await captureDataOwnerContext();
+  const ownerUserId = scope.ownerUserId;
   assertEmuTaskAction("edit", input.task.status);
   const updatedAtLocal = new Date().toISOString();
   const title = input.taskDescription.trim();
@@ -715,7 +731,7 @@ export async function updateWorkTaskLocally(input: UpdateWorkTaskInput) {
 
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
-    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    withOwnerExclusiveTransactionAsync(db, scope, async (tx) => {
       const currentTask = await getCurrentWorkTaskInTransaction(tx, ownerUserId, input.task.taskId);
       assertEmuTaskAction("edit", currentTask.status);
       const command = createWorkTaskOutboxCommand({
@@ -747,8 +763,8 @@ export async function updateWorkTaskLocally(input: UpdateWorkTaskInput) {
         throw new Error("Работа изменилась до сохранения.");
       }
       await insertOutboxCommandInTransaction(tx, command);
-      if (input.draftEmployeeId) {
-        await deleteWorkDraftInTransaction(tx, ownerUserId, input.draftEmployeeId, "task", currentTask.taskId);
+      if (input.draftKey) {
+        await deleteWorkDraftInTransaction(tx, ownerUserId, input.draftKey, "task", currentTask.taskId);
       }
     })
   );
@@ -756,12 +772,13 @@ export async function updateWorkTaskLocally(input: UpdateWorkTaskInput) {
 }
 
 export async function pauseWorkTaskLocally(task: WorkTaskDto, comment: string) {
-  const ownerUserId = await requireOwnerUserId();
+  const scope = await captureDataOwnerContext();
+  const ownerUserId = scope.ownerUserId;
   assertEmuTaskAction("pause", task.status);
   const pausedAtLocal = new Date().toISOString();
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
-    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    withOwnerExclusiveTransactionAsync(db, scope, async (tx) => {
       if (await hasActiveWorkTaskCommand(tx, ownerUserId, task.taskId, "pauseWorkTask")) {
         return;
       }
@@ -799,12 +816,13 @@ export async function pauseWorkTaskLocally(task: WorkTaskDto, comment: string) {
 }
 
 export async function resumeWorkTaskLocally(task: WorkTaskDto, comment: string) {
-  const ownerUserId = await requireOwnerUserId();
+  const scope = await captureDataOwnerContext();
+  const ownerUserId = scope.ownerUserId;
   assertEmuTaskAction("resume", task.status);
   const resumedAtLocal = new Date().toISOString();
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
-    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    withOwnerExclusiveTransactionAsync(db, scope, async (tx) => {
       if (await hasActiveWorkTaskCommand(tx, ownerUserId, task.taskId, "resumeWorkTask")) {
         return;
       }
@@ -841,8 +859,9 @@ export async function resumeWorkTaskLocally(task: WorkTaskDto, comment: string) 
   requestSyncAfterMutation();
 }
 
-export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: string, draftEmployeeId?: string) {
-  const ownerUserId = await requireOwnerUserId();
+export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: string, draftKey?: string) {
+  const scope = await captureDataOwnerContext();
+  const ownerUserId = scope.ownerUserId;
   assertEmuTaskAction("complete", task.status);
   const comment = resultComment.trim();
   if (!comment) {
@@ -852,7 +871,7 @@ export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: 
   const completedAtLocal = new Date().toISOString();
   const db = await getDatabase();
   await withSqliteBusyRetry(() =>
-    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    withOwnerExclusiveTransactionAsync(db, scope, async (tx) => {
       if (await hasActiveWorkTaskCommand(tx, ownerUserId, task.taskId, "completeWorkTask")) {
         return;
       }
@@ -886,18 +905,25 @@ export async function completeWorkTaskLocally(task: WorkTaskDto, resultComment: 
         throw new Error("Работа изменилась до сохранения.");
       }
       await insertOutboxCommandInTransaction(tx, command);
-      if (draftEmployeeId) {
-        await deleteWorkDraftInTransaction(tx, ownerUserId, draftEmployeeId, "taskCompletion", currentTask.taskId);
+      if (draftKey) {
+        await deleteWorkDraftInTransaction(tx, ownerUserId, draftKey, "taskCompletion", currentTask.taskId);
       }
     })
   );
   requestSyncAfterMutation();
 }
 
-export async function attachMediaToWorkTask(workTaskId: string, file: LocalMobileFile) {
-  const ownerUserId = await requireOwnerUserId();
+export async function attachMediaToWorkTask(workTaskId: string, file: LocalMobileFile, context?: DataOwnerContext) {
+  const scope = context ?? await captureDataOwnerContext();
+  await assertDataOwnerContext(scope);
+  const ownerUserId = scope.ownerUserId;
+  if (file.ownerUserId !== ownerUserId || (file.contourId && file.contourId !== scope.contourId)
+    || (file.workTaskId && file.workTaskId !== workTaskId)) {
+    throw new Error("Вложение относится к другому аккаунту или работе.");
+  }
   const db = await getDatabase();
   await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    await assertDataOwnerContext(scope);
     const task = await tx.getFirstAsync<{ task_id: string; status: WorkTaskDto["status"] }>(
       "SELECT task_id, status FROM work_tasks WHERE task_id = ? AND owner_user_id = ?",
       [workTaskId, ownerUserId]
@@ -907,6 +933,7 @@ export async function attachMediaToWorkTask(workTaskId: string, file: LocalMobil
     }
     assertEmuTaskAction("attach", task.status);
     await insertLocalFileInTransaction(tx, { ...file, status: "queued", workTaskId });
+    await assertDataOwnerContext(scope);
   }));
   requestSyncAfterMutation();
 }
@@ -941,13 +968,4 @@ function assertEmuTaskAction(action: Parameters<typeof emuTaskActionError>[0], s
   if (error) {
     throw new Error(error);
   }
-}
-
-async function requireOwnerUserId() {
-  const ownerUserId = await getStoredOwnerUserId();
-  if (!ownerUserId) {
-    throw new Error("Нужно войти в мобильный аккаунт.");
-  }
-
-  return ownerUserId;
 }

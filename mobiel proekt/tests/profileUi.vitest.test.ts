@@ -1,0 +1,48 @@
+import React from 'react';
+import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+const state = vi.hoisted(() => ({ signOut: vi.fn(), push: vi.fn(), replace: vi.fn(), save: vi.fn(), pending: 1 }));
+vi.mock('expo-router', () => ({ useRouter: () => ({ push: state.push, replace: state.replace }) }));
+vi.mock('react-native', async () => { const R = await import('react'); return { View: 'View', Text: 'Text', Pressable: 'Pressable', ScrollView: 'ScrollView', Modal: (p: any) => p.visible ? R.createElement('Modal', p, p.children) : null, StyleSheet: { create: (s: any) => s, hairlineWidth: 1 } }; });
+vi.mock('@expo/vector-icons', () => ({ Ionicons: 'Icon' }));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
+vi.mock('@/auth/authService', () => ({ signOut: state.signOut }));
+vi.mock('@/core/connectionStatus', () => ({ useConnectionStatus: () => 'offline' }));
+vi.mock('@/features/settings/themePreference', () => ({ useAppTheme: () => ({ colors: {}, preference: 'system', setPreference: state.save }) }));
+vi.mock('@/features/profile/useProfileSummary', () => ({ useProfileSummary: () => ({ summary: { pending: state.pending, files: 2, snapshotReady: false }, summaryError: null }) }));
+vi.mock('@/features/profile/useProfileIdentity', () => ({ useProfileIdentity: () => ({ account: 'test1', unread: 2 }) }));
+vi.mock('@/ui/Screen', () => ({ Screen: 'Screen' }));
+vi.mock('@/ui/PrimaryButton', () => ({ PrimaryButton: 'PrimaryButton' }));
+vi.mock('@/ui/StatusMessage', () => ({ StatusMessage: 'StatusMessage' }));
+import { ProfileScreen } from '@/features/profile/ProfileScreen';
+import { notificationDay, notificationPath } from '@/features/profile/notificationPresentation';
+let screen: ReactTestRenderer;
+beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; vi.clearAllMocks(); });
+afterEach(async () => { if (screen) await act(() => screen.unmount()); });
+const row = (label: string) => screen.root.findAllByType('Pressable' as any).find(n => n.props.accessibilityLabel === label)!;
+const button = (label: string) => screen.root.findAllByType('PrimaryButton' as any).find(n => n.props.label === label)!;
+it('profile opens the existing connection route and theme picker without navigating away', async () => {
+ await act(async () => { screen = create(React.createElement(ProfileScreen)); });
+ await act(async () => { row('Связь и отправка').props.onPress(); row('Оформление').props.onPress(); });
+ expect(state.push).toHaveBeenCalledWith('/settings/connection');
+ await act(async () => row('Тёмная').props.onPress());
+ expect(state.save).toHaveBeenCalledWith('dark');
+ expect(screen.root.findAllByType('Modal' as any)).toHaveLength(1);
+});
+it('logout requires confirmation, blocks duplicate taps and retains the modal on refusal', async () => {
+ let reject!: (e: Error) => void; state.signOut.mockImplementation(() => new Promise((_, no) => { reject = no; }));
+ await act(async () => { screen = create(React.createElement(ProfileScreen)); });
+ await act(async () => { row('Выйти').props.onPress(); });
+ expect(state.signOut).not.toHaveBeenCalled();
+ await act(async () => { button('Выйти').props.onPress(); button('Выйти').props.onPress(); });
+ expect(state.signOut).toHaveBeenCalledTimes(1);
+ await act(async () => reject(new Error('Есть неотправленные данные')));
+ expect(state.replace).not.toHaveBeenCalled(); expect(button('Открыть очередь')).toBeDefined();
+ expect(screen.root.findByType('StatusMessage' as any).props.message).toBe('Есть неотправленные данные');
+});
+it('notification grouping handles year boundary and report targets do not open an assignment', () => {
+ expect(notificationDay('2025-12-31T12:00:00', new Date('2026-01-01T12:00:00'))).toBe('Вчера');
+ expect(notificationDay('bad')).toBe('Дата неизвестна');
+ expect(notificationPath({ entityType: 'patrolReport', entityId: 'report-id' })).toBe('/settings/sync-queue');
+ expect(notificationPath({ entityType: 'patrolAssignment', entityId: 'id' })).toBe('/patrol/assignment/id');
+});

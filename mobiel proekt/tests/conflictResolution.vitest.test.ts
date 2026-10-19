@@ -6,8 +6,8 @@ import {
 } from "@/domain/sync/conflictResolutionPolicy";
 import { parsePatrolPointConflictIdentity } from "@/db/repositories/outboxPolicies";
 
-describe("Р»РѕРєР°Р»СЊРЅРѕРµ СЂР°Р·СЂРµС€РµРЅРёРµ serverWins", () => {
-  it("Р·Р°РєСЂС‹РІР°РµС‚ РєРѕРЅС„Р»РёРєС‚, Р·Р°РјРµРЅСЏРµС‚ assignment server state Рё СѓР±РёСЂР°РµС‚ logout blocker", () => {
+describe("Локальное разрешение serverWins", () => {
+  it("закрывает конфликт, применяет серверное состояние назначения и снимает блокировку выхода", () => {
     const serverState = {
       assignmentId: "assignment-A",
       requestId: "request-A",

@@ -41,6 +41,14 @@ async function readSessionEnvelope(): Promise<SessionEnvelopeRead> {
   try {
     const value = JSON.parse(raw) as Partial<StoredSessionEnvelope>;
     if (value.version !== sessionEnvelopeVersion) return { state: "invalid", value: null };
+    const stringFields = [value.accessToken, value.refreshToken, value.accessExpiresAt, value.refreshExpiresAt, value.ownerUserId, value.refreshOperationId];
+    if (stringFields.some(field => field != null && typeof field !== "string")) return { state: "invalid", value: null };
+    const offline = value.offlineSession;
+    if (offline != null && (typeof offline !== "object"
+      || [offline.userId, offline.fullName, offline.lastOnlineLoginAt, offline.expiresAt].some(field => typeof field !== "string")
+      || (value.ownerUserId && offline.userId !== value.ownerUserId))) {
+      return { state: "invalid", value: null };
+    }
     return { state: "valid", value: {
       version: sessionEnvelopeVersion,
       accessToken: value.accessToken ?? null,
@@ -56,17 +64,34 @@ async function readSessionEnvelope(): Promise<SessionEnvelopeRead> {
   }
 }
 
-export async function storeSessionEnvelope(snapshot: StoredSessionSnapshot) {
+async function writeSessionEnvelope(snapshot: StoredSessionSnapshot) {
   const envelope: StoredSessionEnvelope = { version: sessionEnvelopeVersion, ...snapshot };
   await SecureStore.setItemAsync(sessionEnvelopeKey, JSON.stringify(envelope));
 }
 
-async function updateSessionEnvelope(update: (current: StoredSessionSnapshot) => StoredSessionSnapshot) {
-  const mutation = envelopeMutationQueue.then(async () => {
-    await storeSessionEnvelope(update(await getStoredSessionSnapshot()));
+function enqueueSessionMutation<T>(operation: () => Promise<T>): Promise<T> {
+  const mutation = envelopeMutationQueue.then(operation);
+  envelopeMutationQueue = mutation.then(() => undefined, () => undefined);
+  return mutation;
+}
+
+export function storeSessionEnvelope(snapshot: StoredSessionSnapshot, assertCurrent?: () => void) {
+  return enqueueSessionMutation(async () => {
+    assertCurrent?.();
+    await writeSessionEnvelope(snapshot);
+    assertCurrent?.();
   });
-  envelopeMutationQueue = mutation.catch(() => undefined);
-  await mutation;
+}
+
+export function updateSessionEnvelope(update: (current: StoredSessionSnapshot) => StoredSessionSnapshot, assertCurrent?: () => void) {
+  return enqueueSessionMutation(() => applySessionUpdate(update, assertCurrent));
+}
+
+async function applySessionUpdate(update: (current: StoredSessionSnapshot) => StoredSessionSnapshot, assertCurrent?: () => void) {
+  const current = await getStoredSessionSnapshot();
+  assertCurrent?.();
+  await writeSessionEnvelope(update(current));
+  assertCurrent?.();
 }
 
 export async function setTokens(
@@ -148,15 +173,17 @@ async function readEnvelopeValue(key: keyof StoredSessionSnapshot, legacyKey: st
   return envelope.state === "missing" ? SecureStore.getItemAsync(legacyKey) : null;
 }
 
-export async function getOrCreateRefreshOperationId() {
-  const existing = await readEnvelopeValue("refreshOperationId", refreshOperationIdKey);
-  if (existing) {
-    return existing;
-  }
-
-  const operationId = Crypto.randomUUID();
-  await updateSessionEnvelope((current) => ({ ...current, refreshOperationId: operationId }));
-  return operationId;
+export async function getOrCreateRefreshOperationId(assertCurrent?: () => void) {
+  return enqueueSessionMutation(async () => {
+    assertCurrent?.();
+    const current = await getStoredSessionSnapshot();
+    assertCurrent?.();
+    if (current.refreshOperationId) return current.refreshOperationId;
+    const operationId = Crypto.randomUUID();
+    await writeSessionEnvelope({ ...current, refreshOperationId: operationId });
+    assertCurrent?.();
+    return operationId;
+  });
 }
 
 export function clearRefreshOperationId() {
@@ -193,110 +220,125 @@ export async function getStoredSessionSnapshot(): Promise<StoredSessionSnapshot>
   return { accessToken, refreshToken, accessExpiresAt, refreshExpiresAt, ownerUserId, offlineSession, refreshOperationId };
 }
 
-export async function restoreStoredSessionSnapshot(snapshot: StoredSessionSnapshot) {
-  await storeSessionEnvelope(snapshot);
+export async function restoreStoredSessionSnapshot(snapshot: StoredSessionSnapshot, assertCurrent?: () => void) {
+  await storeSessionEnvelope(snapshot, assertCurrent);
 }
 
 export async function clearVolatileTokens() {
-  await updateSessionEnvelope((current) => ({
-    ...current,
-    accessToken: null,
-    refreshToken: null,
-    accessExpiresAt: null,
-    refreshExpiresAt: null
-  }));
-  await Promise.all([
-    SecureStore.deleteItemAsync(accessTokenKey),
-    SecureStore.deleteItemAsync(refreshTokenKey),
-    SecureStore.deleteItemAsync(accessTokenExpiresAtKey),
-    SecureStore.deleteItemAsync(refreshTokenExpiresAtKey)
-  ]);
+  await enqueueSessionMutation(async () => {
+    await applySessionUpdate((current) => ({
+      ...current,
+      accessToken: null,
+      refreshToken: null,
+      accessExpiresAt: null,
+      refreshExpiresAt: null
+    }));
+    await Promise.all([
+      SecureStore.deleteItemAsync(accessTokenKey),
+      SecureStore.deleteItemAsync(refreshTokenKey),
+      SecureStore.deleteItemAsync(accessTokenExpiresAtKey),
+      SecureStore.deleteItemAsync(refreshTokenExpiresAtKey)
+    ]);
+  });
 }
 export async function clearAuthTokens() {
-  await updateSessionEnvelope((current) => ({
-    ...current,
-    accessToken: null,
-    refreshToken: null,
-    accessExpiresAt: null,
-    refreshExpiresAt: null,
-    refreshOperationId: null
-  }));
-  await Promise.all([
-    SecureStore.deleteItemAsync(accessTokenKey),
-    SecureStore.deleteItemAsync(refreshTokenKey),
-    SecureStore.deleteItemAsync(accessTokenExpiresAtKey),
-    SecureStore.deleteItemAsync(refreshTokenExpiresAtKey)
-  ]);
-  await clearRefreshOperationId();
-  lockSession();
+  await enqueueSessionMutation(async () => {
+    await applySessionUpdate((current) => ({
+      ...current,
+      accessToken: null,
+      refreshToken: null,
+      accessExpiresAt: null,
+      refreshExpiresAt: null,
+      refreshOperationId: null
+    }));
+    await Promise.all([
+      SecureStore.deleteItemAsync(accessTokenKey),
+      SecureStore.deleteItemAsync(refreshTokenKey),
+      SecureStore.deleteItemAsync(accessTokenExpiresAtKey),
+      SecureStore.deleteItemAsync(refreshTokenExpiresAtKey),
+      SecureStore.deleteItemAsync(refreshOperationIdKey)
+    ]);
+    lockSession();
+  });
 }
 
 export async function clearLocalSessionKeepingRefreshToken() {
-  await updateSessionEnvelope((current) => ({
-    ...current,
-    accessToken: null,
-    accessExpiresAt: null,
-    ownerUserId: null,
-    offlineSession: null,
-    refreshOperationId: null
-  }));
-  await Promise.all([
-    SecureStore.deleteItemAsync(accessTokenKey),
-    SecureStore.deleteItemAsync(accessTokenExpiresAtKey)
-  ]);
-  await clearRefreshOperationId();
-  await SecureStore.deleteItemAsync(ownerUserIdKey);
-  await SecureStore.deleteItemAsync(offlineSessionKey);
-  lockSession();
-
+  await enqueueSessionMutation(async () => {
+    await applySessionUpdate((current) => ({
+      ...current,
+      accessToken: null,
+      accessExpiresAt: null,
+      ownerUserId: null,
+      offlineSession: null,
+      refreshOperationId: null
+    }));
+    await Promise.all([
+      SecureStore.deleteItemAsync(accessTokenKey),
+      SecureStore.deleteItemAsync(accessTokenExpiresAtKey)
+    ]);
+    await SecureStore.deleteItemAsync(refreshOperationIdKey);
+    await SecureStore.deleteItemAsync(ownerUserIdKey);
+    await SecureStore.deleteItemAsync(offlineSessionKey);
+    lockSession();
+  });
 }
 export async function markSessionNeedsReenrollment(reason = "device_reenrollment_required") {
-  const offlineSession = await getOfflineSession();
-  if (offlineSession) {
-    await setOfflineSession({
-      ...offlineSession,
+  await enqueueSessionMutation(async () => {
+    await applySessionUpdate(current => ({
+      ...current,
+      accessToken: null, refreshToken: null, accessExpiresAt: null, refreshExpiresAt: null, refreshOperationId: null,
+      offlineSession: current.offlineSession ? {
+        ...current.offlineSession,
+        revokedAt: null,
+        revocationReason: reason,
+        requiresReenrollment: true
+      } : null
+    }));
+    lockSession();
+  });
+}
+
+export async function preserveOfflineSessionAfterRefreshFailure(reason: string, assertCurrent?: () => void) {
+  await updateSessionEnvelope(current => ({
+    ...current,
+    accessToken: null, refreshToken: null, accessExpiresAt: null, refreshExpiresAt: null, refreshOperationId: null,
+    offlineSession: current.offlineSession ? {
+      ...current.offlineSession,
       revokedAt: null,
       revocationReason: reason,
       requiresReenrollment: true
-    });
-  }
-  await clearAuthTokens();
+    } : null
+  }), assertCurrent);
 }
 
-export async function preserveOfflineSessionAfterRefreshFailure(reason: string) {
-  const offlineSession = await getOfflineSession();
-  if (offlineSession) {
-    await setOfflineSession({
-      ...offlineSession,
-      revokedAt: null,
-      revocationReason: reason,
-      requiresReenrollment: true
-    });
-  }
-}
-
-export async function revokeStoredSession(reason: string) {
-  const offlineSession = await getOfflineSession();
-  if (offlineSession) {
-    await setOfflineSession({
-      ...offlineSession,
-      revokedAt: new Date().toISOString(),
-      revocationReason: reason
-    });
-  }
-  await clearAuthTokens();
+export async function revokeStoredSession(reason: string, assertCurrent?: () => void) {
+  await enqueueSessionMutation(async () => {
+    await applySessionUpdate(current => ({
+      ...current,
+      accessToken: null, refreshToken: null, accessExpiresAt: null, refreshExpiresAt: null, refreshOperationId: null,
+      offlineSession: current.offlineSession ? {
+        ...current.offlineSession,
+        revokedAt: new Date().toISOString(),
+        revocationReason: reason
+      } : null
+    }), assertCurrent);
+    assertCurrent?.();
+    lockSession();
+  });
 }
 
 export async function clearTokens() {
-  await Promise.all([
-    SecureStore.deleteItemAsync(sessionEnvelopeKey),
-    SecureStore.deleteItemAsync(accessTokenKey),
-    SecureStore.deleteItemAsync(refreshTokenKey),
-    SecureStore.deleteItemAsync(accessTokenExpiresAtKey),
-    SecureStore.deleteItemAsync(refreshTokenExpiresAtKey),
-    SecureStore.deleteItemAsync(refreshOperationIdKey),
-    SecureStore.deleteItemAsync(ownerUserIdKey),
-    SecureStore.deleteItemAsync(offlineSessionKey)
-  ]);
-  lockSession();
+  await enqueueSessionMutation(async () => {
+    await Promise.all([
+      SecureStore.deleteItemAsync(sessionEnvelopeKey),
+      SecureStore.deleteItemAsync(accessTokenKey),
+      SecureStore.deleteItemAsync(refreshTokenKey),
+      SecureStore.deleteItemAsync(accessTokenExpiresAtKey),
+      SecureStore.deleteItemAsync(refreshTokenExpiresAtKey),
+      SecureStore.deleteItemAsync(refreshOperationIdKey),
+      SecureStore.deleteItemAsync(ownerUserIdKey),
+      SecureStore.deleteItemAsync(offlineSessionKey)
+    ]);
+    lockSession();
+  });
 }

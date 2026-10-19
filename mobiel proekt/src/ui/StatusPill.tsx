@@ -1,3 +1,6 @@
+import { Ionicons } from "@expo/vector-icons";
+import { useAppTheme } from "@/features/settings/themePreference";
+import { toneColors } from "./atomTheme";
 import { StyleSheet, Text, View } from "react-native";
 
 type StatusPillProps = {
@@ -5,20 +8,16 @@ type StatusPillProps = {
   tone?: "neutral" | "success" | "warning" | "danger";
 };
 
-const tones = {
-  neutral: { backgroundColor: "#f3f6fb", borderColor: "#e4eaf3", color: "#687280" },
-  success: { backgroundColor: "#eafaf1", borderColor: "#c9f1db", color: "#22c55e" },
-  warning: { backgroundColor: "#fff7ed", borderColor: "#fed7aa", color: "#f59e0b" },
-  danger: { backgroundColor: "#fff1f1", borderColor: "#fecaca", color: "#ef4444" }
-};
-
 export function StatusPill({ label, tone = "neutral" }: StatusPillProps) {
-  const colors = tones[tone];
+  const { colors: theme } = useAppTheme();
+  const palette = toneColors(theme, tone);
+  const colors = { backgroundColor: palette.background, borderColor: palette.background, color: palette.foreground };
+  const icons = { neutral: "information-circle-outline", success: "checkmark-circle-outline", warning: "time-outline", danger: "alert-circle-outline" } as const;
 
   return (
     <View style={[styles.pill, { backgroundColor: colors.backgroundColor, borderColor: colors.borderColor }]}>
-      <View style={[styles.dot, { backgroundColor: colors.color }]} />
-      <Text ellipsizeMode="tail" numberOfLines={1} style={[styles.label, { color: colors.color }]}>{label}</Text>
+      <Ionicons name={icons[tone]} size={18} color={colors.color} />
+      <Text style={[styles.label, { color: colors.color }]}>{label}</Text>
     </View>
   );
 }
@@ -42,8 +41,8 @@ const styles = StyleSheet.create({
   },
   label: {
     flexShrink: 1,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
-    lineHeight: 15
+    lineHeight: 20
   }
 });

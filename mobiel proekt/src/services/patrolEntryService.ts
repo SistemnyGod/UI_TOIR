@@ -1,6 +1,6 @@
 import { captureDataOwnerContext, assertDataOwnerContext, type DataOwnerContext } from '@/auth/dataOwnerContext';
 import { getDatabase } from '@/db/database';
-import { acceptRequestLocally, getAssignmentByRequestId, getRequestBoardItem, getAssignmentScanPolicy, startAssignmentLocally, resumeAssignmentLocally } from '@/db/repositories/patrolRepository';
+import { acceptRequestLocally, getAssignmentById, getAssignmentByRequestId, getRequestBoardItem, getAssignmentScanPolicy, startAssignmentLocally, resumeAssignmentLocally } from '@/db/repositories/patrolRepository';
 import { getPatrolDeviceContext, selectPatrolForContext } from '@/db/repositories/patrolContextRepository';
 import { switchPatrolLocally } from '@/db/repositories/patrolSwitchRepository';
 
@@ -31,6 +31,7 @@ async function enter(scope: DataOwnerContext, requestId: string, employeeId: str
   }
   if (assignment.status !== 'inProgress') {
     const context = await getPatrolDeviceContext();
+    const selected = context.assignmentId ? await getAssignmentById(context.assignmentId) : null;
     const db = await getDatabase();
     const competing = await db.getFirstAsync<{ assignmentId: string }>(
       `SELECT assignment_id AS assignmentId FROM patrol_assignments
@@ -38,7 +39,9 @@ async function enter(scope: DataOwnerContext, requestId: string, employeeId: str
          AND assignment_id <> ? AND status = 'inProgress' LIMIT 1`,
       [scope.ownerUserId, scope.contourId, assignment.employeeId ?? null, assignment.assignmentId]);
     await assertDataOwnerContext(scope);
-    if (competing && context.employeeId === assignment.employeeId) await switchPatrolLocally(competing.assignmentId, assignment.assignmentId, async () => {
+    // Derive the performer from actual assignments. A different selected
+    // employee must still go through normal start/conflict validation.
+    if (competing && (!selected || selected.employeeId === assignment.employeeId)) await switchPatrolLocally(competing.assignmentId, assignment.assignmentId, async () => {
       await assertDataOwnerContext(scope);
       if (!isCurrent()) throw new Error('Выбор заявки закрыт. Переключение не выполнено.');
     });
@@ -47,7 +50,7 @@ async function enter(scope: DataOwnerContext, requestId: string, employeeId: str
   }
   await assertDataOwnerContext(scope);
   if (!isCurrent()) throw new Error('Выбор заявки закрыт. Результат операции сохранён.');
-  await selectPatrolForContext(scope, assignment.assignmentId, assignment.employeeId ?? null, isCurrent);
+  await selectPatrolForContext(scope, assignment.assignmentId, isCurrent);
   const policy = await getAssignmentScanPolicy(assignment.assignmentId);
   await assertDataOwnerContext(scope);
   return patrolScanPath(assignment.assignmentId, policy);

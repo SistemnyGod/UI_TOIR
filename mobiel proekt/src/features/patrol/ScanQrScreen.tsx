@@ -1,17 +1,20 @@
 import { CameraView } from "expo-camera";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { Ionicons } from '@expo/vector-icons';
 
-import { scanPointByQr } from "@/db/repositories/patrolRepository";
+import { scanPointByQr, listAssignmentPoints, getAssignmentById, pauseAssignmentLocally, PointListItem } from "@/db/repositories/patrolRepository";
 import { assertDataOwnerContext, captureDataOwnerContext } from "@/auth/dataOwnerContext";
 import { ensureCameraPermission } from "@/services/cameraService";
 import { createQrScanResult } from "@/services/qrScannerService";
-import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
-import { StatusPill } from "@/ui/StatusPill";
 import { useAppTheme } from "@/features/settings/themePreference";
+import { ActionSheet } from '@/ui/ActionSheet';
+import { buildPatrolActionMenu } from './patrolActionMenu';
+import { ScanActionBar } from './ScanActionBar';
+import { ScanMessage, ScanProgress } from './ScanPresentation';
 
 export function ScanQrScreen() {
   const router = useRouter();
@@ -20,16 +23,37 @@ export function ScanQrScreen() {
   const [status, setStatus] = useState<"idle" | "reading" | "matched" | "error">("reading");
   const [hasPermission, setHasPermission] = useState(false);
   const [message, setMessage] = useState("Наведите камеру на QR-метку точки.");
+  const [points, setPoints] = useState<PointListItem[]>([]);
+  const [assignmentStatus, setAssignmentStatus] = useState<string | null>(null);
+  const [routeName, setRouteName] = useState<string | null>(null);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [cameraVisible, setCameraVisible] = useState(false);
   const isHandlingScanRef = useRef(false);
   const focusEpochRef = useRef(0);
+  const focused = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
       const epoch = ++focusEpochRef.current;
+      focused.current = true;
+      setCameraVisible(true);
+      isHandlingScanRef.current = false;
+      setStatus("reading");
+      void (async () => {
+        const scope = await captureDataOwnerContext();
+        const [rows, assignment] = await Promise.all([listAssignmentPoints(assignmentId, scope.ownerUserId, scope.contourId), getAssignmentById(assignmentId)]);
+        await assertDataOwnerContext(scope);
+        if (epoch !== focusEpochRef.current) return;
+        setPoints(rows);
+        setAssignmentStatus(assignment?.status ?? null);
+        setRouteName(assignment?.routeName ?? null);
+      })().catch(() => { if (epoch === focusEpochRef.current) { setPoints([]); setAssignmentStatus(null); } });
       return () => {
+        focused.current = false;
+        setCameraVisible(false);
         if (focusEpochRef.current === epoch) focusEpochRef.current++;
       };
-    }, [])
+    }, [assignmentId])
   );
 
   useEffect(() => {
@@ -51,7 +75,7 @@ export function ScanQrScreen() {
   }, []);
 
   async function handleBarcode(data: string) {
-    if (status !== "reading" || isHandlingScanRef.current) {
+    if (!focused.current || status !== "reading" || isHandlingScanRef.current) {
       return;
     }
 
@@ -80,30 +104,54 @@ export function ScanQrScreen() {
       if (epoch !== focusEpochRef.current) return;
       router.replace(`/patrol/assignment/${assignmentId}/point/${result.point.pointId}/fill`);
     } catch (error) {
+      if (epoch !== focusEpochRef.current) return;
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Не удалось обработать QR-метку. Проверьте подключение и попробуйте снова.");
     } finally {
-      isHandlingScanRef.current = false;
+      if (epoch === focusEpochRef.current) isHandlingScanRef.current = false;
     }
   }
 
   async function retryScan() {
+    const epoch = focusEpochRef.current;
     const granted = hasPermission || (await ensureCameraPermission());
+    if (!focused.current || epoch !== focusEpochRef.current) return;
     setHasPermission(granted);
     setStatus(granted ? "reading" : "error");
     setMessage(granted ? "Ожидание QR-метки..." : "Нет доступа к камере.");
   }
 
-  return (
-    <Screen title="Сканирование QR" subtitle="Резервное подтверждение точки, если NFC недоступен.">
-      <Card>
-        <StatusPill label={statusLabel(status)} tone={statusTone(status)} />
-        <Text style={[styles.title, { color: colors.text }]}>{message}</Text>
-        <Text style={[styles.text, { color: colors.mutedText }]}>QR засчитывается только если метка относится к активному маршруту.</Text>
-      </Card>
+  const pausePatrol = useCallback(async () => {
+    const epoch = focusEpochRef.current;
+    const isCurrent = () => focused.current && epoch === focusEpochRef.current;
+    try {
+      const scope = await captureDataOwnerContext();
+      if (!isCurrent()) return;
+      await pauseAssignmentLocally(assignmentId);
+      await assertDataOwnerContext(scope);
+      if (isCurrent()) router.replace(`/patrol/assignment/${assignmentId}` as never);
+    } catch (error) {
+      if (!isCurrent()) return;
+      setStatus('error');
+      setMessage(error instanceof Error ? error.message : 'Не удалось приостановить обход.');
+    }
+  }, [assignmentId, router]);
 
-      <View style={styles.cameraBox}>
-        {hasPermission ? (
+  const completed = points.filter(point => ["ok", "issue", "skipped"].includes(point.status)).length;
+  const nextPoint = points.find(point => !["ok", "issue", "skipped"].includes(point.status));
+
+  return (
+    <Screen compactHeader plainBackground title='' bottomActionBackground='transparent' bottomAction={<ScanActionBar
+      onPoints={() => router.push(`/patrol/assignment/${assignmentId}/all-points` as never)}
+      onManual={nextPoint && assignmentStatus === 'inProgress' ? () => router.push(`/patrol/assignment/${assignmentId}/point/${nextPoint.pointId}/fill?manual=1` as never) : undefined}
+      onMore={() => setActionsOpen(true)} />}>
+      <ScanProgress routeName={routeName || 'Сканирование QR'} completed={completed} total={points.length} nextPoint={nextPoint} />
+      <ScanMessage message={status === 'idle' ? 'Проверяем QR-метку…' : message}
+        icon={status === 'error' ? 'warning-outline' : status === 'matched' ? 'checkmark-circle-outline' : 'qr-code-outline'}
+        tone={status === 'error' ? 'error' : status === 'matched' ? 'success' : 'neutral'} busy={status === 'idle'} />
+
+      <View style={[styles.cameraBox, { backgroundColor: colors.backgroundAccent }]}>
+        {hasPermission && cameraVisible ? (
           <CameraView
             barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
             facing="back"
@@ -112,62 +160,37 @@ export function ScanQrScreen() {
           />
         ) : (
           <View style={styles.permissionBox}>
-            <Text style={[styles.permissionText, { color: colors.onDark }]}>Разрешите доступ к камере для сканирования QR.</Text>
+            <Ionicons name="camera-outline" size={48} color={colors.primary} />
           </View>
         )}
       </View>
 
-      {status === "reading" ? <ActivityIndicator /> : null}
       {status === "error" ? (
         <PrimaryButton
           icon="qr-code-outline"
-          label="Сканировать снова"
+          label={hasPermission ? 'Сканировать снова' : 'Разрешить камеру'}
           onPress={() => void retryScan()}
         />
       ) : null}
-      <PrimaryButton icon="list-outline" label="Все метки" onPress={() => router.push(`/patrol/assignment/${assignmentId}/all-points`)} variant="secondary" />
+      <ActionSheet title="Действия с обходом" visible={actionsOpen} onClose={() => setActionsOpen(false)}
+        actions={[
+          ...(assignmentStatus === 'inProgress' ? [{ label: 'Приостановить', icon: 'pause-outline' as const, onPress: pausePatrol }] : []),
+          ...buildPatrolActionMenu({
+          assignmentId,
+          status: assignmentStatus ?? 'unknown',
+          onSwitch: () => router.push(`/patrol/assignment/${assignmentId}/switch` as never),
+          onSubmit: () => router.push(`/patrol/assignment/${assignmentId}/submit` as never),
+          onAppeal: () => router.push(`/patrol/assignment/${assignmentId}/appeal` as never),
+          onCancel: () => router.push(`/patrol/assignment/${assignmentId}/appeal?kind=cancel` as never)
+        })]} />
     </Screen>
   );
 }
 
-function statusLabel(status: "idle" | "reading" | "matched" | "error") {
-  switch (status) {
-    case "reading":
-      return "Ожидание";
-    case "matched":
-      return "QR подтвержден";
-    case "error":
-      return "Ошибка QR";
-    default:
-      return "Готово";
-  }
-}
-
-function statusTone(status: "idle" | "reading" | "matched" | "error") {
-  if (status === "matched") {
-    return "success";
-  }
-
-  if (status === "error") {
-    return "danger";
-  }
-
-  return "neutral";
-}
-
 const styles = StyleSheet.create({
-  title: {
-    fontSize: 20,
-    fontWeight: "600"
-  },
-  text: {
-    fontSize: 15,
-    lineHeight: 21
-  },
   cameraBox: {
-    aspectRatio: 3 / 4,
-    backgroundColor: "#0b1220",
-    borderRadius: 8,
+    height: 240,
+    borderRadius: 16,
     overflow: "hidden"
   },
   camera: {
@@ -178,10 +201,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     padding: 16
-  },
-  permissionText: {
-    fontSize: 15,
-    lineHeight: 21,
-    textAlign: "center"
   }
 });

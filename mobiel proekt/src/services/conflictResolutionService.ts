@@ -1,5 +1,6 @@
 import { getBootstrap } from "@/api/mobileApi";
 import { getAccessToken } from "@/auth/tokenStorage";
+import { assertDataOwnerContext, captureDataOwnerContext } from "@/auth/dataOwnerContext";
 import { currentContourId } from "@/core/environments";
 import {
   cancelRejectedOutboxCommand,
@@ -22,6 +23,8 @@ export function canAcceptServerConflict(command: Pick<SyncQueueCommandItem, "com
 }
 
 export async function acceptServerConflict(ownerUserId: string, command: SyncQueueCommandItem) {
+  const context = await captureDataOwnerContext();
+  if (context.ownerUserId !== ownerUserId) throw new Error("Конфликт принадлежит другому аккаунту.");
   if (!canAcceptServerConflict(command)) {
     throw new Error("\u0421\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435 \u0441\u0435\u0440\u0432\u0435\u0440\u0430 \u043d\u0435\u043b\u044c\u0437\u044f \u043f\u0440\u0438\u043d\u044f\u0442\u044c \u0434\u043b\u044f \u044d\u0442\u043e\u0439 \u0441\u0443\u0449\u043d\u043e\u0441\u0442\u0438 \u0431\u0435\u0437 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438 \u0435\u0451 \u0430\u043a\u0442\u0443\u0430\u043b\u044c\u043d\u044b\u0445 \u0434\u0430\u043d\u043d\u044b\u0445. \u041f\u0435\u0440\u0435\u0434\u0430\u0439\u0442\u0435 \u043a\u043e\u043d\u0444\u043b\u0438\u043a\u0442 \u0434\u0438\u0441\u043f\u0435\u0442\u0447\u0435\u0440\u0443 \u0438\u043b\u0438 \u043e\u0442\u043c\u0435\u043d\u0438\u0442\u0435 \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435.");
   }
@@ -30,12 +33,13 @@ export async function acceptServerConflict(ownerUserId: string, command: SyncQue
     throw new Error("Сессия истекла. Сначала войдите повторно, затем повторите разрешение конфликта.");
   }
 
-  const bootstrap = await getBootstrap(accessToken);
+  const bootstrap = await getBootstrap();
+  await assertDataOwnerContext(context);
   if (bootstrap.contourId !== currentContourId || bootstrap.user.serverUserId !== ownerUserId) {
     throw new Error("Состояние сервера относится к другому контуру или пользователю. Локальные данные не изменены.");
   }
 
-  await saveBootstrap(bootstrap, { force: true });
+  await saveBootstrap(bootstrap, { force: true, context });
   const targetId = await getOutboxCommandEntityLocalId(ownerUserId, command.clientOperationId) ?? command.entityLocalId;
   const assignmentCommandInput = {
     commandType: command.commandType,
@@ -62,6 +66,7 @@ export async function acceptServerConflict(ownerUserId: string, command: SyncQue
     ? bootstrap.requestBoard.find((item) => item.requestId === assignment.requestId)
     : null;
 
+  await assertDataOwnerContext(context);
   await resolveOutboxConflictAsServerWins(ownerUserId, command.clientOperationId, {
     assignmentId: assignment?.assignmentId ?? assignmentId,
     requestId: assignment?.requestId ?? null,
@@ -73,6 +78,8 @@ export async function acceptServerConflict(ownerUserId: string, command: SyncQue
   });
 }
 export async function retryConflictWithLatestRevision(ownerUserId: string, command: SyncQueueCommandItem) {
+  const context = await captureDataOwnerContext();
+  if (context.ownerUserId !== ownerUserId) throw new Error("Конфликт принадлежит другому аккаунту.");
   const accessToken = await getAccessToken();
   if (!accessToken) {
     throw new Error("Сессия истекла. Сначала войдите повторно.");
@@ -81,7 +88,8 @@ export async function retryConflictWithLatestRevision(ownerUserId: string, comma
     throw new Error("Для этой конфликтной команды повтор с новой ревизией не поддерживается.");
   }
 
-  const bootstrap = await getBootstrap(accessToken);
+  const bootstrap = await getBootstrap();
+  await assertDataOwnerContext(context);
   if (bootstrap.contourId !== currentContourId || bootstrap.user.serverUserId !== ownerUserId) {
     throw new Error("Состояние сервера относится к другому контуру или пользователю.");
   }

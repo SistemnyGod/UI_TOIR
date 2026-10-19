@@ -47,6 +47,19 @@ it("filters before LIMIT so a page is not consumed by another employee", async (
   expect(page.items).toHaveLength(25);
   expect(page.items.every(item => item.assignedEmployees[0]?.employeeId === "alice")).toBe(true);
   expect(page.nextCursor).toBeNull();
+  // No device employee: all active records paginate across both performers.
+  const ids: string[] = [];
+  let cursor: string | null = null;
+  do {
+    const next = await listLocalWorkItemsPage(25, cursor, "active", null);
+    ids.push(...next.items.map(item => item.itemId)); cursor = next.nextCursor;
+  } while (cursor);
+  expect(ids).toHaveLength(55);
+  expect(new Set(ids).size).toBe(55);
+  state.db.exec("UPDATE work_tasks SET status='completedServer' WHERE task_id IN ('mine-0','other-0')");
+  const history = await listLocalWorkItemsPage(25, null, "history", null);
+  expect(history.items.map(item => item.itemId).sort()).toEqual(["mine-0", "other-0"]);
+  expect(history.nextCursor).toBeNull();
 });
 
 it("continues rows whose local created time is null", async () => {

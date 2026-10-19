@@ -8,10 +8,14 @@ it('proper manual inspection, fault and allowed skip do not require corrections'
     { ...point, status: 'skipped', confirmationType: 'manual', comment: 'Оборудование недоступно', photoClientFileIds: ['photo'] }
   ]) expect(evaluatePointEvidence([value])).toMatchObject({ ready: true, problems: [] });
 });
-it('attention exposes all missing fields and photos and identifies their point', () => {
+it('attention exposes missing inspection fields without enforcing legacy photo requirements', () => {
   const result = evaluatePointEvidence([{ ...point, status: 'issue', requiresPhoto: true, confirmationType: 'manual' }]);
-  expect(result.ready).toBe(false); expect(result.problems).toHaveLength(4);
+  expect(result.ready).toBe(false); expect(result.problems).toHaveLength(3);
   expect(result.problems.every(problem => problem.pointId === 'p')).toBe(true);
+});
+it('a legacy offline issue can be submitted with a comment and no photo', () => {
+  expect(evaluatePointEvidence([{ ...point, status: 'issue', requiresPhoto: true, comment: 'Шум', issueTypeId: 'noise' }]))
+    .toMatchObject({ ready: true, problems: [] });
 });
 it('an unfilled point requires attention even if its tag was scanned', () => {
   expect(evaluatePointEvidence([{ ...point, status: 'scanned' }])).toMatchObject({ ready: false, problems: [{ pointId: 'p' }] });

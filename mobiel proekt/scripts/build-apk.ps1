@@ -15,7 +15,7 @@ param(
 
   [string]$JavaHome = "",
 
-  [string]$ReactNativeArchitectures = "arm64-v8a",
+  [string]$ReactNativeArchitectures = "armeabi-v7a,arm64-v8a,x86,x86_64",
 
   [string]$ReleaseKeystore = $env:PATROL360_ANDROID_KEYSTORE,
 
@@ -69,6 +69,13 @@ function Remove-BuildRoot {
 
   if (-not (Test-Path -LiteralPath $Path)) {
     return
+  }
+  $cleanupTarget = [IO.Path]::GetFullPath($Path)
+  $expectedBuildRoot = [IO.Path]::GetFullPath($BuildRoot)
+  if ($cleanupTarget -ne $expectedBuildRoot -or
+      (Resolve-Path -LiteralPath $Path).Path -ne $expectedBuildRoot -or
+      (Split-Path -Leaf $cleanupTarget) -notmatch '^patrol360(?:[-_a-zA-Z0-9.]*)$') {
+    throw "Refusing cleanup outside the selected build root: $cleanupTarget"
   }
 
   for ($attempt = 1; $attempt -le $Retries; $attempt++) {
@@ -227,9 +234,13 @@ if ($Configuration -eq "Release") {
   }
 }
 
+$BuildRoot = [IO.Path]::GetFullPath($BuildRoot)
 $buildLeaf = Split-Path -Leaf $BuildRoot
 if ($buildLeaf -notmatch "patrol360" -or $BuildRoot.Length -lt 10) {
   throw "Refusing to clean unsafe build root: $BuildRoot"
+}
+if ($ProjectRoot -eq $BuildRoot -or $ProjectRoot.StartsWith($BuildRoot.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+  throw "Build root cannot contain the source project: $BuildRoot"
 }
 
 if (Test-Path -LiteralPath $BuildRoot) {
@@ -278,7 +289,12 @@ try {
   New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 
   Write-Host "Copying project to stable build path: $BuildRoot"
-  robocopy $ProjectRoot $BuildRoot /E /XD .expo .tmp build-output /NFL /NDL /NJH /NJS /NP | Out-Null
+  $excludedCopyDirectories = @('.expo', '.tmp', 'build-output') + @(
+    Get-ChildItem -LiteralPath $ProjectRoot -Directory -Force |
+      Where-Object { $_.Name.StartsWith('build-output', [StringComparison]::OrdinalIgnoreCase) } |
+      ForEach-Object { $_.FullName }
+  )
+  robocopy $ProjectRoot $BuildRoot /E /XD $excludedCopyDirectories /NFL /NDL /NJH /NJS /NP | Out-Null
   if ($LASTEXITCODE -gt 7) {
     throw "robocopy failed with exit code $LASTEXITCODE"
   }

@@ -9,6 +9,25 @@ function deferred<T>() {
 }
 
 describe('connection review regressions', () => {
+  it.each(['serverUnavailable', 'otherServer'] as const)('keeps %s stable during periodic failed probes and still detects recovery', async status => {
+    let now = 0;
+    const publish = vi.fn();
+    const request = vi.fn(async () => ({ ok: false, failureKind: status === 'otherServer' ? 'wrongContour' : 'unreachable' }));
+    const monitor = new ConnectionMonitor(request, publish, () => now);
+    monitor.setNetwork(true);
+    await monitor.check();
+    publish.mockClear();
+    now = 30_000;
+    await monitor.check();
+    now = 60_000;
+    await monitor.check();
+    expect(monitor.status).toBe(status);
+    expect(publish).not.toHaveBeenCalled();
+    request.mockResolvedValueOnce({ ok: true, failureKind: '' });
+    now = 90_000;
+    await monitor.check();
+    expect(publish).toHaveBeenCalledExactlyOnceWith('connected');
+  });
   it('shares a pending check and ignores its failure after a successful API response', async () => {
     const probe = deferred<{ ok: boolean }>();
     const request = vi.fn(() => probe.promise);

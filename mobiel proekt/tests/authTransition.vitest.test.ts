@@ -63,6 +63,8 @@ vi.mock("@/sync/outboxRetryScheduler", () => ({ cancelNextOutboxRetry: vi.fn(), 
 vi.mock("@/core/environments", () => ({ currentContourId: "test-contour" }));
 
 import { restoreSessionWithRefreshToken, signIn } from "@/auth/authService";
+import { login } from "@/api/authApi";
+import { getBootstrap } from "@/api/mobileApi";
 
 beforeEach(() => {
   state.blockingCount = 0; state.replacementCommitted = false; state.pendingTarget = null;
@@ -106,5 +108,31 @@ describe("durable account transition", () => {
     await expect(signIn("new", "password")).rejects.toThrow("Локальных незавершённых записей: 2");
     expect(state.replacementCommitted).toBe(false);
     expect(state.envelopeOwner).toBe("old-user");
+  });
+
+  it("serializes overlapping logins through database and session publication", async () => {
+    let finish!: () => void;
+    const normal = vi.mocked(login).getMockImplementation()!;
+    vi.mocked(login).mockClear().mockImplementationOnce(async (...args) => {
+      await new Promise<void>(resolve => { finish = resolve; });
+      return normal(...args);
+    });
+    const first = signIn("first", "password");
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    const second = signIn("second", "password");
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(login).toHaveBeenCalledTimes(1);
+    finish(); await first; await second;
+    expect(login).toHaveBeenCalledTimes(2);
+    expect(state.pendingTarget).toBeNull();
+    expect(state.envelopeOwner).toBe("new-user");
+  });
+
+  it("refuses a login bootstrap for another user before touching local data", async () => {
+    vi.mocked(getBootstrap).mockResolvedValueOnce({ contourId: "test-contour", user: { serverUserId: "unexpected-user" } } as any);
+    await expect(signIn("new", "password")).rejects.toThrow("другому пользователю");
+    expect(state.replacementCommitted).toBe(false);
+    expect(state.envelopeOwner).toBe("old-user");
+    await expect(signIn("new", "password")).resolves.toBeTruthy();
   });
 });

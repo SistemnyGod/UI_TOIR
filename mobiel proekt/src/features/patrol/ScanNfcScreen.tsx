@@ -1,13 +1,15 @@
+import { ScanActionBar } from "./ScanActionBar";
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
-import { AppState, AppStateStatus, ActivityIndicator, StyleSheet, Text, Vibration, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AppState, AppStateStatus, Vibration } from 'react-native';
+import { ScanMessage, ScanProgress } from './ScanPresentation';
 
-import { getStoredOwnerUserId } from '@/auth/tokenStorage';
-import { currentContourId } from '@/core/environments';
+import { captureDataOwnerContext, assertDataOwnerContext } from '@/auth/dataOwnerContext';
+import { shouldReloadAssignmentAfterSync, subscribeToSyncEvents } from '@/sync/syncEvents';
 import {
   AssignmentProgress,
   getAssignmentById,
+  getAssignmentScanPolicy,
   listAssignmentPoints,
   pauseAssignmentLocally,
   PointListItem,
@@ -15,22 +17,24 @@ import {
 } from '@/db/repositories/patrolRepository';
 import {
   getNfcCodes,
+  openNfcSettings,
+  subscribeNfcAdapterState,
   initializeNfc,
+  isNfcEnabled,
   startNfcReaderSession,
   stopNfcReaderSession
 } from '@/services/nfcService';
-import { useAppTheme } from '@/features/settings/themePreference';
 import { requestPatrolSync } from '@/sync/PatrolSyncCoordinator';
-import { Card } from '@/ui/Card';
 import { PrimaryButton } from '@/ui/PrimaryButton';
 import { Screen } from '@/ui/Screen';
-import { StatusPill } from '@/ui/StatusPill';
 import { ActionSheet } from '@/ui/ActionSheet';
 import { buildPatrolActionMenu } from '@/features/patrol/patrolActionMenu';
 
 type NfcStatus =
+  | 'completed'
   | 'idle'
   | 'reading'
+  | 'processing'
   | 'matched'
   | 'alreadyHandled'
   | 'unmatched'
@@ -47,17 +51,23 @@ type LastTag = {
 
 export function ScanNfcScreen() {
   const router = useRouter();
-  const { colors } = useAppTheme();
   const { assignmentId } = useLocalSearchParams<{ assignmentId: string }>();
   const screenActiveRef = useRef(false);
   const screenEpochRef = useRef(0);
   const appActiveRef = useRef(AppState.currentState === 'active');
   const scanInProgressRef = useRef(false);
-  const readerStartInProgressRef = useRef(false);
+  const readerStartInProgressRef = useRef<object | null>(null);
+  const readerEpochRef = useRef(0);
+  const readerRunningRef = useRef(false);
+  const readerWakeRequestedRef = useRef(false);
+  const armReaderRef = useRef<() => Promise<void>>(async () => undefined);
+  const progressReadRef = useRef(0);
+  const routeCanScanRef = useRef(false);
   const lastTagRef = useRef<LastTag | null>(null);
   const [status, setStatus] = useState<NfcStatus>('idle');
   const [routeName, setRouteName] = useState<string | null>(null);
   const [assignmentStatus, setAssignmentStatus] = useState<string | null>(null);
+  const [qrFallbackEnabled, setQrFallbackEnabled] = useState(false);
   const [progress, setProgress] = useState<AssignmentProgress | null>(null);
   const [nextPoint, setNextPoint] = useState<PointListItem | null>(null);
   const [progressError, setProgressError] = useState<string | null>(null);
@@ -68,6 +78,7 @@ export function ScanNfcScreen() {
     if (!screenActiveRef.current || !appActiveRef.current || scanInProgressRef.current) {
       return;
     }
+    if (!routeCanScanRef.current || !readerRunningRef.current) return;
 
     const nfcCodes = getNfcCodes(tag);
     if (nfcCodes.length === 0) {
@@ -85,9 +96,9 @@ export function ScanNfcScreen() {
     lastTagRef.current = { key: tagKey, at: Date.now() };
 
     const ownerEpoch = screenEpochRef.current;
-    const isCurrent = () => screenActiveRef.current && appActiveRef.current && screenEpochRef.current === ownerEpoch;
+    const isCurrent = () => screenActiveRef.current && appActiveRef.current && routeCanScanRef.current && screenEpochRef.current === ownerEpoch;
     scanInProgressRef.current = true;
-    setStatus('reading');
+    setStatus('processing');
     setMessage('Метка обнаружена. Проверяем…');
 
     try {
@@ -113,6 +124,8 @@ export function ScanNfcScreen() {
       setStatus('matched');
       setMessage('Метка подтверждена');
       Vibration.vibrate(80);
+      readerEpochRef.current++;
+      readerRunningRef.current = false;
       await stopNfcReaderSession();
       if (!isCurrent()) return;
       router.replace(`/patrol/assignment/${assignmentId}/point/${result.point.pointId}/fill`);
@@ -126,6 +139,10 @@ export function ScanNfcScreen() {
         : 'NFC недоступен или чтение отменено';
 
       if (isLifecycleScanBlock(errorMessage)) {
+        routeCanScanRef.current = false;
+        readerEpochRef.current++;
+        readerRunningRef.current = false;
+        void stopNfcReaderSession();
         setStatus('blocked');
         setMessage('Запуск обхода временно восстанавливается');
         void requestPatrolSync({ mode: 'normal' });
@@ -141,84 +158,96 @@ export function ScanNfcScreen() {
     }
   }, [assignmentId, router]);
 
-  const armReaderUnsafe = useCallback(async () => {
-    const nfc = await initializeNfc();
-    if (!screenActiveRef.current) {
+  const armReader = useCallback(async (): Promise<void> => {
+    if (!screenActiveRef.current || !appActiveRef.current || !routeCanScanRef.current || readerRunningRef.current || scanInProgressRef.current) return;
+    if (readerStartInProgressRef.current) {
+      // Keep an ON event that arrives while the disabled lookup is pending.
+      readerWakeRequestedRef.current = true;
       return;
     }
-
-    if (!nfc.supported) {
-      setStatus('unsupported');
-      setMessage('Телефон не поддерживает NFC');
-      return;
-    }
-
-    if (!nfc.enabled) {
-      setStatus('disabled');
-      setMessage('Включите NFC в настройках телефона');
-      return;
-    }
-
+    const operation = {};
+    const epoch = screenEpochRef.current;
+    const readerEpoch = readerEpochRef.current;
+    const isCurrent = () => screenActiveRef.current && appActiveRef.current && routeCanScanRef.current
+      && screenEpochRef.current === epoch && readerEpochRef.current === readerEpoch;
+    readerStartInProgressRef.current = operation;
+    readerWakeRequestedRef.current = false;
+    setStatus('idle');
+    setMessage('Подготавливаем сканирование…');
     try {
-      if (!screenActiveRef.current || !appActiveRef.current) {
-        return;
+      const nfc = await initializeNfc();
+      if (!isCurrent()) return;
+      if (!nfc.supported) {
+        setStatus('unsupported'); setMessage('Телефон не поддерживает NFC'); return;
       }
-
-      await startNfcReaderSession(handleTag);
-      if (screenActiveRef.current) {
-        setStatus('reading');
-        setMessage('Поднесите телефон к NFC-метке');
-      } else {
-        await stopNfcReaderSession();
+      if (!nfc.enabled) {
+        setStatus('disabled'); setMessage('NFC выключен. Включите NFC в настройках телефона'); return;
       }
+      const stopOwnReader = await startNfcReaderSession(handleTag);
+      if (!isCurrent()) { await stopOwnReader?.(); return; }
+      readerRunningRef.current = true;
+      setStatus('reading');
+      setMessage('Поднесите телефон к NFC-метке');
     } catch (error) {
-      if (screenActiveRef.current) {
+      if (isCurrent()) {
         setStatus('error');
         setMessage(error instanceof Error ? error.message : 'Не удалось включить сканирование NFC');
       }
+    } finally {
+      if (readerStartInProgressRef.current === operation) readerStartInProgressRef.current = null;
+      if (readerWakeRequestedRef.current) {
+        readerWakeRequestedRef.current = false;
+        void armReaderRef.current();
+      }
     }
   }, [handleTag]);
-
-  const armReader = useCallback(async () => {
-    if (readerStartInProgressRef.current || !screenActiveRef.current || !appActiveRef.current) {
-      return;
-    }
-
-    readerStartInProgressRef.current = true;
-    try {
-      await armReaderUnsafe();
-    } finally {
-      readerStartInProgressRef.current = false;
-    }
-  }, [armReaderUnsafe]);
+  useLayoutEffect(() => { armReaderRef.current = armReader; }, [armReader]);
 
   const loadRouteProgress = useCallback(async () => {
-    const ownerUserId = await getStoredOwnerUserId();
-    const [assignment, points] = await Promise.all([
+    const epoch = screenEpochRef.current;
+    const read = ++progressReadRef.current;
+    const scope = await captureDataOwnerContext();
+    const [assignment, points, scanPolicy] = await Promise.all([
       getAssignmentById(assignmentId),
-      ownerUserId
-        ? listAssignmentPoints(assignmentId, ownerUserId, currentContourId)
-        : Promise.resolve([])
+      listAssignmentPoints(assignmentId, scope.ownerUserId, scope.contourId),
+      getAssignmentScanPolicy(assignmentId)
     ]);
 
-    if (!screenActiveRef.current) {
+    await assertDataOwnerContext(scope);
+    if (!screenActiveRef.current || screenEpochRef.current !== epoch || read !== progressReadRef.current) {
       return;
     }
 
     const loadedProgress = buildProgress(points);
     setRouteName(assignment?.routeName ?? null);
     setAssignmentStatus(assignment?.status ?? null);
+    setQrFallbackEnabled(scanPolicy.qrFallbackEnabled);
     setProgress(loadedProgress);
     setNextPoint(points.find((point) => !['ok', 'issue', 'skipped'].includes(point.status)) ?? null);
     setProgressError(null);
 
+    const canScan = assignment?.status === 'inProgress' && scanPolicy.nfcEnabled && points.length > 0
+      && loadedProgress.completed < loadedProgress.total;
+    routeCanScanRef.current = canScan;
+    if (!canScan) {
+      readerEpochRef.current++;
+      readerRunningRef.current = false;
+      readerWakeRequestedRef.current = false;
+      void stopNfcReaderSession();
+    }
+    if (loadedProgress.total > 0 && loadedProgress.completed === loadedProgress.total) {
+      setStatus('completed'); setMessage('Все точки заполнены. Можно проверить отчёт'); return;
+    }
+    if (assignment?.status !== 'inProgress' || !scanPolicy.nfcEnabled) {
+      setStatus('blocked'); setMessage('Сканирование недоступно для текущего обхода'); return;
+    }
     if (loadedProgress.total === 0) {
       setStatus('routeUnavailable');
       setMessage('Точки маршрута ещё не загружены');
       return;
     }
 
-    await armReader();
+    if (appActiveRef.current) await armReader();
   }, [armReader, assignmentId]);
 
   useFocusEffect(
@@ -226,18 +255,47 @@ export function ScanNfcScreen() {
       let isMounted = true;
       screenEpochRef.current++;
       screenActiveRef.current = true;
+      routeCanScanRef.current = false;
+      setStatus('idle');
       appActiveRef.current = AppState.currentState === 'active';
       const appStateSubscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
         const isActive = nextState === 'active';
+        const wasActive = appActiveRef.current;
         appActiveRef.current = isActive;
 
         if (!isActive) {
+          screenEpochRef.current++;
+          readerEpochRef.current++;
+          readerRunningRef.current = false;
+          readerWakeRequestedRef.current = false;
+          scanInProgressRef.current = false;
+          setStatus('idle');
           void stopNfcReaderSession();
           return;
         }
 
-        if (screenActiveRef.current) {
-          void armReader();
+        if (screenActiveRef.current && !wasActive) {
+          void loadRouteProgress().catch(() => {
+            if (screenActiveRef.current) setProgressError('Не удалось обновить маршрут. Данные на телефоне сохранены.');
+          });
+        }
+      });
+      const removeAdapterListener = subscribeNfcAdapterState(enabled => {
+        if (!screenActiveRef.current || !routeCanScanRef.current) return;
+        if (!enabled) {
+          readerEpochRef.current++;
+          readerRunningRef.current = false;
+          readerWakeRequestedRef.current = false;
+          setStatus('disabled');
+          setMessage('NFC выключен. Включите NFC в настройках телефона');
+          void stopNfcReaderSession();
+        } else if (appActiveRef.current) void armReader();
+      });
+      const removeSyncListener = subscribeToSyncEvents(event => {
+        if (screenActiveRef.current && shouldReloadAssignmentAfterSync(event, assignmentId)) {
+          void loadRouteProgress().catch(() => {
+            if (isMounted) setProgressError('Не удалось обновить маршрут. Данные на телефоне сохранены.');
+          });
         }
       });
       void loadRouteProgress().catch(() => {
@@ -251,66 +309,55 @@ export function ScanNfcScreen() {
       return () => {
         isMounted = false;
         appStateSubscription.remove();
+        removeAdapterListener();
+        removeSyncListener();
+        readerEpochRef.current++;
+        readerRunningRef.current = false;
+        readerWakeRequestedRef.current = false;
+        progressReadRef.current++;
+        routeCanScanRef.current = false;
+        setStatus('idle');
         screenActiveRef.current = false;
         screenEpochRef.current++;
         appActiveRef.current = false;
         scanInProgressRef.current = false;
         void stopNfcReaderSession();
       };
-    }, [armReader, loadRouteProgress])
+    }, [armReader, assignmentId, loadRouteProgress])
   );
 
+  useEffect(() => {
+    if (status !== 'disabled') return;
+    let active = true;
+    let checking = false;
+    const timer = setInterval(() => {
+      if (!active || checking || !screenActiveRef.current || !appActiveRef.current || !routeCanScanRef.current) return;
+      checking = true;
+      void isNfcEnabled().then(enabled => {
+        if (active && enabled) void armReader();
+      }).catch(() => { /* Retain the disabled state and retry later. */ }).finally(() => { checking = false; });
+    }, 1000);
+    return () => { active = false; clearInterval(timer); };
+  }, [armReader, status]);
+
   return (
-    <Screen title='Сканирование NFC'>
-      {routeName ? <Text style={[styles.routeName, { color: colors.text }]}>{routeName}</Text> : null}
-      {progressError ? <StatusPill label='Прогресс маршрута временно недоступен' tone='warning' /> : null}
-
-      {progress && progress.total > 0 ? (
-        <Card>
-          <View style={styles.progressHeader}>
-            <Text style={[styles.progressLabel, { color: colors.text }]}>Прогресс маршрута</Text>
-            <Text style={[styles.progressLabel, { color: colors.text }]}>
-              Обработано {progress.completed} из {progress.total}
-            </Text>
-          </View>
-          <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
-            <View style={[styles.progressFill, { width: `${progressPercent(progress)}%` }]} />
-          </View>
-          <Text style={[styles.progressPercent, { color: colors.mutedText }]}>
-            {progressPercent(progress)}%
-          </Text>
-          <View style={[styles.nextPointBox, { backgroundColor: colors.backgroundAccent, borderColor: colors.border }]}>
-            <Text style={[styles.nextPointLabel, { color: colors.primary }]}>СЛЕДУЮЩАЯ МЕТКА</Text>
-            <Text style={[styles.nextPointName, { color: colors.text }]}>
-              {nextPoint ? `${nextPoint.orderIndex}. ${nextPoint.name}` : 'Все метки обработаны'}
-            </Text>
-          </View>
-        </Card>
-      ) : progress ? (
-        <Card>
-          <Text style={[styles.progressLabel, { color: colors.text }]}>Загружаем точки маршрута</Text>
-          <Text style={[styles.text, { color: colors.mutedText }]}>
-            Сканирование станет доступно после загрузки точек.
-          </Text>
-        </Card>
-      ) : null}
-
-      <Card>
-        <View style={[styles.scanIcon, { backgroundColor: colors.backgroundAccent }]}>
-          <Ionicons color={colors.primary} name={status === 'reading' ? 'scan-outline' : 'warning-outline'} size={44} />
-        </View>
-        <Text style={[styles.title, { color: colors.text }]}>{message}</Text>
-        <StatusPill label={statusLabel(status)} tone={statusTone(status)} />
-        {status === 'reading' ? <ActivityIndicator color={colors.primary} /> : null}
-        {status === 'unmatched' || status === 'error' || status === 'alreadyHandled' ? (
-          <Text style={[styles.text, { color: colors.mutedText }]}>
-            {status === 'alreadyHandled'
-              ? 'Повторное считывание не изменит результат.'
-              : 'Оставьте телефон в режиме ожидания и поднесите нужную метку.'}
-          </Text>
-        ) : null}
-      </Card>
-
+    <Screen compactHeader plainBackground title='' bottomActionBackground='transparent' bottomAction={<ScanActionBar
+      onPoints={() => router.push(`/patrol/assignment/${assignmentId}/all-points` as never)}
+      onManual={nextPoint && assignmentStatus === 'inProgress' ? () => router.push(`/patrol/assignment/${assignmentId}/point/${nextPoint.pointId}/fill?manual=1` as never) : undefined}
+      onMore={() => setActionsOpen(true)} />} >
+      {progress ? <ScanProgress routeName={routeName || 'Сканирование NFC'} completed={progress.completed} total={progress.total} nextPoint={nextPoint} /> : null}
+      <ScanMessage
+        hero
+        scanning={status === 'reading' && !actionsOpen}
+        message={progressError ?? message}
+        icon={progressError || ['error', 'unmatched', 'disabled'].includes(status) ? 'warning-outline' : ['matched', 'completed'].includes(status) ? 'checkmark-circle-outline' : ['reading', 'processing', 'idle'].includes(status) ? 'radio-outline' : 'information-circle-outline'}
+        tone={progressError || ['error', 'unmatched', 'disabled'].includes(status) ? 'error' : ['matched', 'completed'].includes(status) ? 'success' : 'neutral'}
+        busy={status === 'processing'}
+      />
+      {status === 'disabled' ? <PrimaryButton label='Включить NFC' icon='settings-outline' variant='secondary'
+        onPress={() => void openNfcSettings().catch(() => {
+          if (screenActiveRef.current) setMessage('Откройте настройки телефона → Подключения → NFC и включите NFC');
+        })} /> : null}
       {status === 'routeUnavailable' ? (
         <PrimaryButton
           icon='refresh-outline'
@@ -319,22 +366,18 @@ export function ScanNfcScreen() {
         />
       ) : null}
 
-      {nextPoint ? <PrimaryButton icon="lock-closed-outline" label="Метка недоступна" variant="secondary"
-        onPress={() => router.push(`/patrol/assignment/${assignmentId}/point/${nextPoint.pointId}/fill?manual=1` as never)} /> : null}
-      <PrimaryButton icon="ellipsis-horizontal" label="Действия с обходом" variant="secondary"
-        onPress={() => setActionsOpen(true)} />
       <ActionSheet
         title="Действия с обходом"
         visible={actionsOpen}
         onClose={() => setActionsOpen(false)}
         actions={buildPatrolActionMenu({
           assignmentId,
-          status: assignmentStatus ?? 'inProgress',
+          status: assignmentStatus ?? 'unknown',
           onPause: () => void pauseAssignmentLocally(assignmentId)
             .then(() => router.replace(`/patrol/assignment/${assignmentId}` as never))
             .catch((error) => setProgressError(error instanceof Error ? error.message : 'Не удалось приостановить обход.')),
           onSwitch: () => router.push(`/patrol/assignment/${assignmentId}/switch` as never),
-          onPoints: () => router.push(`/patrol/assignment/${assignmentId}/all-points` as never),
+          onQr: qrFallbackEnabled && assignmentStatus === 'inProgress' ? () => router.replace(`/patrol/assignment/${assignmentId}/scan-qr` as never) : undefined,
           onSubmit: () => router.push(`/patrol/assignment/${assignmentId}/submit` as never),
           onAppeal: () => router.push(`/patrol/assignment/${assignmentId}/appeal` as never),
           onCancel: () => router.push(`/patrol/assignment/${assignmentId}/appeal?kind=cancel` as never)
@@ -344,64 +387,11 @@ export function ScanNfcScreen() {
   );
 }
 
-function statusLabel(status: NfcStatus) {
-  switch (status) {
-    case 'reading':
-      return 'Ожидание метки';
-    case 'matched':
-      return 'NFC подтверждён';
-    case 'alreadyHandled':
-      return 'Уже обработана';
-    case 'unmatched':
-      return 'Метка другого маршрута';
-    case 'unsupported':
-      return 'NFC не поддерживается';
-    case 'disabled':
-      return 'NFC выключен';
-    case 'blocked':
-      return 'Ожидается восстановление обхода';
-    case 'routeUnavailable':
-      return 'Маршрут не загружен';
-    case 'error':
-      return 'Ошибка NFC';
-    default:
-      return 'Готово';
-  }
-}
-
-function statusTone(status: NfcStatus) {
-  if (status === 'matched') {
-    return 'success';
-  }
-
-  if (status === 'alreadyHandled') {
-    return 'neutral';
-  }
-
-  if (status === 'blocked' || status === 'routeUnavailable') {
-    return 'warning';
-  }
-
-  if (status === 'error' || status === 'unmatched' || status === 'unsupported' || status === 'disabled') {
-    return 'danger';
-  }
-
-  return 'neutral';
-}
-
 function isLifecycleScanBlock(message: string) {
   const normalized = message.toLowerCase();
   return normalized.includes('действие заблокировано текущим статусом назначения')
     || normalized.includes('действие недоступно для текущего статуса назначения')
     || normalized.includes('point action is unavailable after patrol completion');
-}
-
-function progressPercent(progress: AssignmentProgress) {
-  if (progress.total === 0) {
-    return 0;
-  }
-
-  return Math.min(100, Math.round((progress.completed / progress.total) * 100));
 }
 
 function buildProgress(points: PointListItem[]): AssignmentProgress {
@@ -414,68 +404,3 @@ function buildProgress(points: PointListItem[]): AssignmentProgress {
     skipped: points.filter((point) => point.status === 'skipped').length
   };
 }
-
-const styles = StyleSheet.create({
-  routeName: {
-    fontSize: 18,
-    fontWeight: '900',
-    lineHeight: 24
-  },
-  progressHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between'
-  },
-  progressLabel: {
-    fontSize: 15,
-    fontWeight: '900'
-  },
-  progressTrack: {
-    borderRadius: 999,
-    height: 10,
-    overflow: 'hidden'
-  },
-  progressFill: {
-    backgroundColor: '#1e5bff',
-    borderRadius: 999,
-    height: '100%'
-  },
-  progressPercent: {
-    fontSize: 13,
-    fontWeight: '800'
-  },
-  nextPointBox: {
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 4,
-    padding: 12
-  },
-  nextPointLabel: {
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.6
-  },
-  nextPointName: {
-    fontSize: 17,
-    fontWeight: '900',
-    lineHeight: 22
-  },
-  title: {
-    fontSize: 19,
-    fontWeight: '800',
-    lineHeight: 25,
-    textAlign: 'center'
-  },
-  scanIcon: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    borderRadius: 999,
-    height: 86,
-    justifyContent: 'center',
-    width: 86
-  },
-  text: {
-    fontSize: 15,
-    lineHeight: 21
-  }
-});

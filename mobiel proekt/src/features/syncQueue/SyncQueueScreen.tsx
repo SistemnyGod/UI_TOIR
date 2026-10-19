@@ -1,3 +1,5 @@
+import { useFocusedOwnerLoad } from '@/sync/useFocusedOwnerLoad';
+import { StaleDataOwnerContextError, type DataOwnerContext } from '@/auth/dataOwnerContext';
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -12,6 +14,7 @@ import { countWaitingAuthItems } from "@/features/syncQueue/syncQueueAuthPolicy"
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { requestMobileDataRefresh, triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
+import { retainEqualItems } from "@/sync/retainEqualItems";
 import { acceptServerConflict, canAcceptServerConflict, cancelRejectedCommand, retryConflictWithLatestRevision, sendConflictToDispatcher } from "@/services/conflictResolutionService";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -33,40 +36,30 @@ export function SyncQueueScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedErrorId, setExpandedErrorId] = useState<string | null>(null);
   const [actionInProgressId, setActionInProgressId] = useState<string | null>(null);
-  const hasLoadedRef = useRef(false);
+  const retryInFlight = useRef(false);
 
-  const load = useCallback(async () => {
-    if (!hasLoadedRef.current) {
-      setIsLoading(true);
-    }
-    try {
-      const ownerUserId = await getStoredOwnerUserId();
-      if (!ownerUserId) {
-        setLoadError(null);
-        setState({ commands: [], files: [] });
-        return;
-      }
-      const [commands, files] = await Promise.all([
-        listSyncQueueCommands(ownerUserId),
-        listSyncQueueFiles(ownerUserId)
-      ]);
-      setState({ commands, files });
-      setLoadError(null);
-    } catch (caught) {
-      setLoadError(caught instanceof Error ? caught.message : "Не удалось прочитать очередь отправки.");
-      void logMobileError("sync.queue.load.failed", caught);
-    } finally {
-      hasLoadedRef.current = true;
-      setIsLoading(false);
-    }
+  const readQueue = useCallback(async (scope: DataOwnerContext) => {
+    const [commands, files] = await Promise.all([
+      listSyncQueueCommands(scope.ownerUserId), listSyncQueueFiles(scope.ownerUserId)
+    ]);
+    return { commands, files };
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-      requestMobileDataRefresh("appActive");
-    }, [load])
-  );
+  const publishQueue = useCallback(({ commands, files }: SyncQueueState) => {
+    setState(previous => {
+      const nextCommands = retainEqualItems(previous.commands, commands, item => item.clientOperationId);
+      const nextFiles = retainEqualItems(previous.files, files, item => item.clientFileId);
+      return nextCommands === previous.commands && nextFiles === previous.files ? previous : { commands: nextCommands, files: nextFiles };
+    });
+    setLoadError(null);
+  }, []);
+  const loadFailed = useCallback((caught: unknown) => {
+    if (caught instanceof StaleDataOwnerContextError) setState({ commands: [], files: [] });
+    setLoadError(caught instanceof Error ? caught.message : "Не удалось прочитать очередь отправки.");
+    void logMobileError("sync.queue.load.failed", caught);
+  }, []);
+  const loadSettled = useCallback(() => setIsLoading(false), []);
+  const load = useFocusedOwnerLoad(readQueue, publishQueue, loadFailed, loadSettled);
+  useFocusEffect(useCallback(() => { requestMobileDataRefresh("appActive"); }, []));
 
   useFocusEffect(useCallback(() => subscribeToSyncEvents(() => {
     void load();
@@ -109,10 +102,10 @@ export function SyncQueueScreen() {
     }
   }
   async function retryNow() {
-    if (isSyncing) {
+    if (retryInFlight.current) {
       return;
     }
-
+    retryInFlight.current = true;
     setIsSyncing(true);
     setFeedback(null);
     try {
@@ -123,6 +116,7 @@ export function SyncQueueScreen() {
       setLoadError(caught instanceof Error ? caught.message : "Не удалось проверить очередь отправки.");
       void logMobileError("sync.queue.retry.failed", caught);
     } finally {
+      retryInFlight.current = false;
       setIsSyncing(false);
     }
   }
@@ -130,7 +124,7 @@ export function SyncQueueScreen() {
   const summary = useMemo(() => buildQueueSummary(state), [state]);
   const pendingCount = state.commands.length + state.files.length;
   const waitingAuthCount = countWaitingAuthItems(state.commands);
-  const retryableCount = state.commands.filter((command) => ["pending", "sending", "retryLater"].includes(command.status)).length
+  const retryableCount = state.commands.filter((command) => ["pending", "sending", "retryLater", "waiting_network"].includes(command.status)).length
     + state.files.filter((file) => file.status !== "failed").length;
 
   return (
@@ -152,7 +146,7 @@ export function SyncQueueScreen() {
         </Card>
       ) : null}
 
-      {!isLoading && !loadError && pendingCount > 0 ? (
+      {!isLoading && pendingCount > 0 ? (
         <Card>
         <View style={styles.headerRow}>
           <View style={styles.headerText}>

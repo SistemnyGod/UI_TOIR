@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { resolvePatrolStartPath } from '@/services/patrolNavigationService';
 import * as LocalAuthentication from "expo-local-authentication";
-import * as SecureStore from "expo-secure-store";
+import { forgetRememberedCredentials, prepareRememberedCredentialsSave, readRememberedCredentials } from "@/auth/rememberedCredentials";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { StatusBar } from "expo-status-bar";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,18 +20,14 @@ import {
   View
 } from "react-native";
 
-import { checkServerConnection } from "@/api/serverHealthApi";
 import { restoreSessionWithRefreshToken, signIn } from "@/auth/authService";
 import { isOfflineSessionValid } from "@/auth/offlineSession";
 import { currentContourId } from "@/core/environments";
 import { consumePendingSessionRoute, markSessionUnlocked } from "@/auth/sessionGateState";
 import { getOfflineSession, getRefreshToken, getStoredOwnerUserId } from "@/auth/tokenStorage";
-import { getServerBaseUrl, localLanServerBaseUrl } from "@/core/serverSettings";
+import { getServerBaseUrl } from "@/core/serverSettings";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 
-const rememberedLoginKey = "patrol360.rememberedLogin";
-const legacyRememberedPasswordKey = "patrol360.rememberedPassword";
-const rememberLoginKey = "patrol360.rememberLogin";
 const loginBackground = require("../../../assets/login-bg.png");
 
 export function LoginScreen() {
@@ -38,33 +35,37 @@ export function LoginScreen() {
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
+  const [rememberError, setRememberError] = useState<string | null>(null);
+  const credentialsEdited = useRef(false);
+  const rememberEdited = useRef(false);
+  const rememberChoice = useRef(true);
+  const rememberVersion = useRef(0);
+  const submitInFlight = useRef(false);
+  const mounted = useRef(true);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [serverBaseUrl, setServerBaseUrl] = useState("");
-  const [serverStatus, setServerStatus] = useState<string | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [offlineSessionName, setOfflineSessionName] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    async function loadRememberedLogin() {
-      const shouldRemember = await SecureStore.getItemAsync(rememberLoginKey);
-      const savedLogin = await SecureStore.getItemAsync(rememberedLoginKey);
-
-      if (!isMounted) {
-        return;
+    mounted.current = true;
+    void readRememberedCredentials().then(saved => {
+      if (!isMounted) return;
+      if (!rememberEdited.current) {
+        rememberChoice.current = saved.remember;
+        setRememberMe(saved.remember);
       }
-
-      setRememberMe(shouldRemember !== "false");
-
-      if (shouldRemember !== "false" && savedLogin) {
-        setLogin(savedLogin);
+      if (!credentialsEdited.current && rememberChoice.current) {
+        setLogin(saved.login);
+        setPassword(saved.password);
       }
-    }
-
-    void loadRememberedLogin();
+    }).catch(() => {
+      if (isMounted) setRememberError("Не удалось прочитать сохранённый вход. Введите данные вручную.");
+    });
     void getOfflineSession().then((session) => {
       if (isMounted && session && isOfflineSessionValid(session, currentContourId)) {
         setOfflineSessionName(session.fullName || session.userId);
@@ -85,6 +86,7 @@ export function LoginScreen() {
 
     return () => {
       isMounted = false;
+      mounted.current = false;
     };
   }, []);
 
@@ -104,21 +106,23 @@ export function LoginScreen() {
     }, [])
   );
 
-  async function saveRememberChoice(normalizedLogin: string) {
-    if (rememberMe) {
-      await SecureStore.setItemAsync(rememberLoginKey, "true");
-      await SecureStore.setItemAsync(rememberedLoginKey, normalizedLogin);
-      await SecureStore.deleteItemAsync(legacyRememberedPasswordKey);
-      return;
-    }
-
-    await SecureStore.setItemAsync(rememberLoginKey, "false");
-    await SecureStore.deleteItemAsync(rememberedLoginKey);
-    await SecureStore.deleteItemAsync(legacyRememberedPasswordKey);
+  function toggleRememberChoice() {
+    if (submitInFlight.current) return;
+    rememberEdited.current = true;
+    const next = !rememberChoice.current;
+    const version = ++rememberVersion.current;
+    rememberChoice.current = next;
+    setRememberMe(next);
+    setRememberError(null);
+    if (!next) void forgetRememberedCredentials().catch(() => {
+      if (mounted.current && version === rememberVersion.current) {
+        setRememberError("Не удалось убрать сохранённые данные. Повторите попытку.");
+      }
+    });
   }
 
   async function handleSubmit() {
-    if (isSubmitting) {
+    if (submitInFlight.current) {
       return;
     }
 
@@ -134,13 +138,25 @@ export function LoginScreen() {
       return;
     }
 
+    submitInFlight.current = true;
+    rememberEdited.current = true;
+    const saveCredentials = rememberChoice.current ? prepareRememberedCredentialsSave() : null;
     setError(null);
+    setRememberError(null);
     setIsSubmitting(true);
 
     try {
-      // Remember only the login, never the password; this also works after a temporary offline error.
-      await saveRememberChoice(normalizedLogin);
+      if (!saveCredentials) {
+        try { await forgetRememberedCredentials(); }
+        catch { throw new Error("Не удалось убрать сохранённые данные. Повторите вход."); }
+      }
       await signIn(normalizedLogin, password);
+      if (saveCredentials) {
+        try { await saveCredentials(normalizedLogin, password); }
+        catch {
+          Alert.alert("Данные для входа не сохранены", "Вход выполнен, но сохранить логин и пароль на телефоне не удалось. При следующем входе потребуется ввести их вручную.");
+        }
+      }
       markSessionUnlocked();
       router.replace((consumePendingSessionRoute() ?? await resolvePatrolStartPath()) as never);
     } catch (caughtError) {
@@ -150,33 +166,8 @@ export function LoginScreen() {
           : "Не удалось войти. Проверьте логин, пароль и подключение к серверу."
       );
     } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function handleUseLocalServer() {
-    if (isSubmitting) {
-      return;
-    }
-
-    setError(null);
-    setIsSubmitting(true);
-    setServerStatus("Проверяем локальный сервер...");
-
-    try {
-      const result = await checkServerConnection(localLanServerBaseUrl, { persist: true });
-      if (result.ok) setServerBaseUrl(await getServerBaseUrl());
-      setServerStatus(result.message);
-
-      if (!result.ok) {
-        setError(result.message);
-      }
-    } catch (caughtError) {
-      const message = caughtError instanceof Error ? caughtError.message : "Не удалось подключить локальный сервер.";
-      setServerStatus(message);
-      setError(message);
-    } finally {
-      setIsSubmitting(false);
+      submitInFlight.current = false;
+      if (mounted.current) setIsSubmitting(false);
     }
   }
 
@@ -189,7 +180,7 @@ export function LoginScreen() {
   }
 
   async function handleBiometricLogin() {
-    if (isSubmitting) {
+    if (submitInFlight.current) {
       return;
     }
 
@@ -198,24 +189,14 @@ export function LoginScreen() {
       return;
     }
 
-    const savedLogin = await SecureStore.getItemAsync(rememberedLoginKey);
-    const savedRefreshToken = await getRefreshToken();
-
-    const authResult = await LocalAuthentication.authenticateAsync({
-      cancelLabel: "Отмена",
-      fallbackLabel: "Ввести пароль",
-      promptMessage: "Вход в Patrol360"
-    });
-
-    if (!authResult.success) {
-      return;
-    }
-
+    submitInFlight.current = true;
     setError(null);
     setIsSubmitting(true);
-
     try {
-      await SecureStore.deleteItemAsync(legacyRememberedPasswordKey);
+      const authResult = await LocalAuthentication.authenticateAsync({
+        cancelLabel: "Отмена", fallbackLabel: "Ввести пароль", promptMessage: "Вход в Patrol360"
+      });
+      if (!authResult.success) return;
       const [offlineSession, ownerUserId] = await Promise.all([getOfflineSession(), getStoredOwnerUserId()]);
       if (offlineSession && ownerUserId === offlineSession.userId && isOfflineSessionValid(offlineSession, currentContourId)) {
         markSessionUnlocked();
@@ -227,8 +208,9 @@ export function LoginScreen() {
         return;
       }
 
-      if (!savedLogin || !savedRefreshToken) {
-                Alert.alert("Нет сохранённой сессии", "Для первого входа нужен сервер. После регистрации телефона повторный ввод пароля не потребуется.");
+      const savedRefreshToken = await getRefreshToken();
+      if (!savedRefreshToken) {
+        Alert.alert("Нет сохранённой сессии", "Для первого входа нужен сервер. После регистрации телефона повторный ввод пароля не потребуется.");
         return;
       }
 
@@ -242,12 +224,14 @@ export function LoginScreen() {
           : "Не удалось войти по отпечатку. Проверьте подключение к серверу."
       );
     } finally {
-      setIsSubmitting(false);
+      submitInFlight.current = false;
+      if (mounted.current) setIsSubmitting(false);
     }
   }
 
   return (
     <ImageBackground source={loginBackground} resizeMode="cover" style={styles.background}>
+      <StatusBar style="light" />
       <View style={styles.overlay}>
         <SafeAreaView style={styles.safe}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.keyboard}>
@@ -268,9 +252,9 @@ export function LoginScreen() {
                     autoCapitalize="none"
                     autoCorrect={false}
                     editable={!isSubmitting}
-                    onChangeText={setLogin}
+                    onChangeText={value => { credentialsEdited.current = true; setLogin(value); }}
                     placeholder="Введите логин"
-                    placeholderTextColor="rgba(198, 222, 247, 0.58)"
+                    placeholderTextColor="#b6cee8"
                     style={styles.input}
                     value={login}
                   />
@@ -284,9 +268,9 @@ export function LoginScreen() {
                     autoCapitalize="none"
                     autoCorrect={false}
                     editable={!isSubmitting}
-                    onChangeText={setPassword}
+                    onChangeText={value => { credentialsEdited.current = true; setPassword(value); }}
                     placeholder="Введите пароль"
-                    placeholderTextColor="rgba(198, 222, 247, 0.58)"
+                    placeholderTextColor="#b6cee8"
                     secureTextEntry={!passwordVisible}
                     style={styles.input}
                     value={password}
@@ -294,7 +278,7 @@ export function LoginScreen() {
                   <Pressable
                     accessibilityLabel={passwordVisible ? "Скрыть пароль" : "Показать пароль"}
                     accessibilityRole="button"
-                    hitSlop={12}
+                    style={{ minWidth: 48, minHeight: 48, alignItems: "center", justifyContent: "center" }}
                     onPress={() => setPasswordVisible((value) => !value)}
                   >
                     <Ionicons color="#c6def7" name={passwordVisible ? "eye-off-outline" : "eye-outline"} size={24} />
@@ -304,22 +288,24 @@ export function LoginScreen() {
                 <View style={styles.rowBetween}>
                   <Pressable
                     accessibilityRole="checkbox"
+                    accessibilityLabel="Запомнить логин и пароль"
                     accessibilityState={{ checked: rememberMe }}
                     disabled={isSubmitting}
-                    onPress={() => setRememberMe((value) => !value)}
+                    onPress={toggleRememberChoice}
                     style={styles.rememberRow}
                   >
                     <View style={[styles.checkbox, rememberMe ? styles.checkboxActive : null]}>
                       {rememberMe ? <Ionicons color="#ffffff" name="checkmark" size={16} /> : null}
                     </View>
-                    <Text style={styles.rememberText}>Запомнить логин</Text>
+                    <Text style={styles.rememberText}>Запомнить логин и пароль</Text>
                   </Pressable>
 
-                  <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={showPasswordRecovery}>
+                  <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={showPasswordRecovery} style={{ minHeight: 48, justifyContent: "center" }}>
                     <Text style={styles.link}>Забыли пароль?</Text>
                   </Pressable>
                 </View>
 
+                {rememberError ? <Text accessibilityLiveRegion="polite" style={styles.error}>{rememberError}</Text> : null}
                 {error ? <Text accessibilityLiveRegion="assertive" accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
 
                 <Pressable
@@ -332,29 +318,29 @@ export function LoginScreen() {
                     isSubmitting ? styles.loginButtonDisabled : null
                   ]}
                 >
-                  {isSubmitting ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.loginButtonText}>Войти</Text>}
+                  {isSubmitting ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.loginButtonText}>Войти на сервер</Text>}
                 </Pressable>
 
-                <View style={styles.quickLoginWrap}>
+                {offlineSessionName || biometricAvailable ? <View style={styles.quickLoginWrap}>
                   <View style={styles.line} />
-                  <Text style={styles.quickLoginText}>или быстро войти</Text>
+                  <Text style={styles.quickLoginText}>Сохранённый доступ</Text>
                   <View style={styles.line} />
-                </View>
+                </View> : null}
 
                 {offlineSessionName ? (
                   <>
-                    <Text style={styles.offlineSessionText}>Сохранённая смена: {offlineSessionName}</Text>
-                    <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push("/(auth)/offline-login")} style={[styles.loginButton, isSubmitting ? styles.loginButtonDisabled : null]}>
+                    <Text style={styles.offlineSessionText}>Аккаунт сохранённой смены: {offlineSessionName}</Text>
+                    <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push("/(auth)/offline-login")} style={[styles.loginButton, { backgroundColor: "transparent", borderWidth: 1, borderColor: "#c6def7" }, isSubmitting ? styles.loginButtonDisabled : null]}>
                       <Text style={styles.loginButtonText}>Открыть сохранённую смену</Text>
                     </Pressable>
                   </>
                 ) : null}
                 {biometricAvailable ? (
                   <>
-                    <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={handleBiometricLogin} style={styles.fingerprintButton}>
+                    <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={handleBiometricLogin} accessibilityLabel="Войти с биометрией" style={styles.fingerprintButton}>
                       <Ionicons color="#16a8ff" name="finger-print-outline" size={34} />
                     </Pressable>
-                    <Text style={styles.fingerprintText}>Войти по отпечатку</Text>
+                    <Text style={styles.fingerprintText}>Войти с биометрией</Text>
                   </>
                 ) : null}
               </View>
@@ -363,28 +349,13 @@ export function LoginScreen() {
                 accessibilityRole="button"
                 disabled={isSubmitting}
                 onPress={() => router.push("/(auth)/server-settings")}
+                accessibilityHint={serverBaseUrl ? `Текущий сервер: ${serverBaseUrl}` : undefined}
                 style={styles.serverQuickLink}
               >
                 <Text style={styles.serverQuickLinkText}>
-                  {serverBaseUrl ? `Настроить сервер: ${serverBaseUrl}` : "Настроить адрес сервера"}
+                  Настройки подключения
                 </Text>
               </Pressable>
-
-              <Pressable
-                accessibilityRole="button"
-                disabled={isSubmitting}
-                onPress={handleUseLocalServer}
-                style={({ pressed }) => [
-                  styles.localServerButton,
-                  pressed && !isSubmitting ? styles.localServerButtonPressed : null,
-                  isSubmitting ? styles.disabled : null
-                ]}
-              >
-                <Text style={styles.localServerButtonText}>Подключить локальный сервер</Text>
-                <Text style={styles.localServerButtonUrl}>{localLanServerBaseUrl}</Text>
-              </Pressable>
-
-              {serverStatus ? <Text style={styles.serverStatusText}>{serverStatus}</Text> : null}
 
               <View style={styles.secondaryCard}>
                 <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={showOtherDeviceLogin} style={styles.secondaryRow}>
@@ -438,7 +409,7 @@ const styles = StyleSheet.create({
   },
   logoSubText: {
     color: "#ffffff",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
     marginTop: -2,
     textAlign: "center"
@@ -453,7 +424,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     color: "#a9c5e7",
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 20,
     marginTop: 5,
     textAlign: "center"
@@ -472,7 +443,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: "#ffffff",
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
     marginBottom: 8
   },
@@ -486,22 +457,27 @@ const styles = StyleSheet.create({
     borderWidth: 1.2,
     flexDirection: "row",
     gap: 10,
-    height: 48,
+    minHeight: 48,
+    paddingVertical: 6,
     paddingHorizontal: 13
   },
   input: {
     color: "#ffffff",
     flex: 1,
     fontSize: 16,
-    height: "100%"
+    minHeight: 48,
+    paddingVertical: 8
   },
   rowBetween: {
+    flexWrap: "wrap",
+    gap: 8,
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 14
   },
   rememberRow: {
+    minHeight: 48,
     alignItems: "center",
     flexDirection: "row",
     gap: 8
@@ -520,7 +496,8 @@ const styles = StyleSheet.create({
   },
   rememberText: {
     color: "#ffffff",
-    fontSize: 14
+    fontSize: 14,
+    flexShrink: 1
   },
   link: {
     color: "#18aaff",
@@ -528,15 +505,17 @@ const styles = StyleSheet.create({
   },
   error: {
     color: "#fecaca",
-    fontSize: 13,
+    fontSize: 14,
     lineHeight: 18,
     marginTop: 10
   },
   loginButton: {
     alignItems: "center",
-    backgroundColor: "#129fff",
+    backgroundColor: "#1e5bff",
     borderRadius: 13,
-    height: 52,
+    minHeight: 52,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     justifyContent: "center",
     marginTop: 18
   },
@@ -548,7 +527,9 @@ const styles = StyleSheet.create({
   },
   loginButtonText: {
     color: "#ffffff",
-    fontSize: 20,
+    fontSize: 18,
+    lineHeight: 26,
+    textAlign: "center",
     fontWeight: "800"
   },
   quickLoginWrap: {
@@ -564,7 +545,8 @@ const styles = StyleSheet.create({
   },
   quickLoginText: {
     color: "#9db7d7",
-    fontSize: 13
+    fontSize: 14,
+    flexShrink: 1
   },
   fingerprintButton: {
     alignItems: "center",
@@ -580,24 +562,26 @@ const styles = StyleSheet.create({
   },
   fingerprintText: {
     color: "#c7dbf4",
-    fontSize: 13,
+    fontSize: 14,
     marginTop: 6,
     textAlign: "center"
   },
   offlineSessionText: {
     color: "#c7dbf4",
-    fontSize: 13,
+    fontSize: 14,
     marginTop: 10,
     textAlign: "center"
   },
   serverQuickLink: {
+    minHeight: 48,
+    justifyContent: "center",
     marginTop: 8,
     paddingVertical: 4
   },
   serverQuickLinkText: {
     color: "#9db7d7",
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 14,
+    lineHeight: 20,
     textAlign: "center"
   },
   localServerButton: {
@@ -616,18 +600,18 @@ const styles = StyleSheet.create({
   },
   localServerButtonText: {
     color: "#ffffff",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800"
   },
   localServerButtonUrl: {
     color: "#9db7d7",
-    fontSize: 11,
+    fontSize: 14,
     marginTop: 2
   },
   serverStatusText: {
     color: "#c7dbf4",
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 14,
+    lineHeight: 20,
     marginTop: 5,
     textAlign: "center"
   },
@@ -644,7 +628,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 12,
-    minHeight: 46
+    minHeight: 48
   },
   secondaryText: {
     color: "#ffffff",
@@ -658,7 +642,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     color: "#9db7d7",
-    fontSize: 11,
+    fontSize: 14,
     marginTop: 12,
     textAlign: "center"
   },

@@ -3,13 +3,39 @@ import * as TaskManager from "expo-task-manager";
 
 import { initializeDatabase } from "@/db/database";
 import { logMobileError } from "@/services/mobileErrorReporter";
-import { triggerDailyDiagnosticReportUpload, triggerPendingDiagnosticReportUpload } from "@/services/diagnosticReportService";
-import { recoverStaleSendingOutboxCommands, runForegroundSync } from "@/sync/syncEngine";
+import { recoverStaleSendingOutboxCommands, runBackgroundOutboxSync } from "@/sync/syncEngine";
 import { recordBackgroundSyncResult } from "@/sync/backgroundSyncState";
+import { captureDataOwnerContext, assertDataOwnerContext } from "@/auth/dataOwnerContext";
+import { getSessionGeneration } from "@/auth/sessionGeneration";
+import { getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { hasPendingOutboxCommands } from "@/db/repositories/outboxRepository";
 
 export const PATROL360_BACKGROUND_SYNC_TASK = "patrol360-background-sync";
 
-export async function runBackgroundSyncTask() {
+let activeRun: { generation: number; promise: Promise<BackgroundTask.BackgroundTaskResult> } | null = null;
+
+export function runBackgroundSyncTask() {
+  const generation = getSessionGeneration();
+  if (activeRun?.generation === generation) return activeRun.promise;
+  const promise = executeBackgroundSyncTask().finally(() => {
+    if (activeRun?.promise === promise) activeRun = null;
+  });
+  activeRun = { generation, promise };
+  return promise;
+}
+
+/** Best-effort handoff while JS is still alive. OS-scheduled recovery remains
+ * registered for process termination, Doze and connectivity returning later.
+ */
+export async function syncPendingReportsOnBackground() {
+  if (!await getStoredOwnerUserId()) return;
+  const scope = await captureDataOwnerContext();
+  const pending = await hasPendingOutboxCommands(scope.ownerUserId);
+  await assertDataOwnerContext(scope);
+  if (pending) await runBackgroundSyncTask();
+}
+
+async function executeBackgroundSyncTask() {
   const attemptAt = new Date().toISOString();
   await recordBackgroundSyncResult("failed", attemptAt).catch((error) => {
     void logMobileError("background.sync.state-save.failed", error);
@@ -18,18 +44,18 @@ export async function runBackgroundSyncTask() {
   try {
     await initializeDatabase();
     await recoverStaleSendingOutboxCommands();
-    const result = await runForegroundSync({ mode: "networkRecovered" });
+    const result = await runBackgroundOutboxSync();
 
     await recordBackgroundSyncResult(result, attemptAt).catch((error) => {
       void logMobileError("background.sync.state-save.failed", error);
     });
 
-    await triggerPendingDiagnosticReportUpload();
     if (result.skipped !== null) {
       return BackgroundTask.BackgroundTaskResult.Failed;
     }
 
-    await triggerDailyDiagnosticReportUpload();
+    // Diagnostic uploads run on the foreground path. Background time belongs
+    // to the user's reports; do not hold task completion for diagnostic media.
     return BackgroundTask.BackgroundTaskResult.Success;
   } catch (error) {
     await recordBackgroundSyncResult("failed", attemptAt).catch((stateError) => {

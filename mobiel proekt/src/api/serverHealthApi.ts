@@ -1,4 +1,4 @@
-import { classifyMobileNetworkError, fetchWithTimeout, withTimeout, MobileNetworkError, serverHealthTimeoutMs, serverUnavailableMessage, type NetworkErrorKind } from "@/api/networkTimeout";
+import { classifyMobileNetworkError, fetchAndReadWithTimeout, withTimeout, MobileNetworkError, serverHealthTimeoutMs, serverUnavailableMessage, type NetworkErrorKind } from "@/api/networkTimeout";
 import { ServerHealthCache } from "@/api/serverHealthCache";
 import { getServerBaseUrl, getServerCandidateBaseUrls, isAllowedServerBaseUrl, normalizeServerBaseUrl, setServerBaseUrl } from "@/core/serverSettings";
 import { currentContourId } from "@/core/environments";
@@ -47,7 +47,7 @@ export async function probeServerHealth(
   const healthUrl = `${serverBaseUrl}/api/v1/mobile/health`;
 
   try {
-    const response = await fetchWithTimeout(
+    return await fetchAndReadWithTimeout<ServerHealthProbe>(
       healthUrl,
       {
         headers: {
@@ -57,30 +57,31 @@ export async function probeServerHealth(
           "X-Patrol360-Contour": expectedContourId
         }
       },
-      timeoutMs
+      timeoutMs,
+      async response => {
+        if (!response.ok) {
+          return { ok: false, status: response.status, failureKind: "serverUnavailable", message: `Сервер ответил с ошибкой ${response.status}.` };
+        }
+
+        const body = await readMobileHealthResponse(response);
+        if (!body || body.status !== "ok" || body.syncProtocolVersion !== "1.0") {
+          return { ok: false, status: response.status, failureKind: "protocolMismatch", message: "Адрес не является совместимым mobile API Patrol360." };
+        }
+
+        if (body.contourId !== expectedContourId) {
+          return {
+            ok: false,
+            status: response.status,
+            contourId: body.contourId,
+            expectedContourId,
+            failureKind: "wrongContour",
+            message: `Сервер относится к другому контуру (${body.contourId ?? "неизвестный"}). Ожидался ${expectedContourId}.`
+          };
+        }
+
+        return { ok: true, status: response.status, contourId: body.contourId };
+      }
     );
-
-    if (!response.ok) {
-      return { ok: false, status: response.status, failureKind: "serverUnavailable", message: `Сервер ответил с ошибкой ${response.status}.` };
-    }
-
-    const body = await readMobileHealthResponse(response);
-    if (!body || body.status !== "ok" || body.syncProtocolVersion !== "1.0") {
-      return { ok: false, status: response.status, failureKind: "protocolMismatch", message: "Адрес не является совместимым mobile API Patrol360." };
-    }
-
-    if (body.contourId !== expectedContourId) {
-      return {
-        ok: false,
-        status: response.status,
-        contourId: body.contourId,
-        expectedContourId,
-        failureKind: "wrongContour",
-        message: `Сервер относится к другому контуру (${body.contourId ?? "неизвестный"}). Ожидался ${expectedContourId}.`
-      };
-    }
-
-    return { ok: true, status: response.status, contourId: body.contourId };
   } catch (error) {
     const networkAvailable = error instanceof MobileNetworkError && error.kind === "network"
       ? await hasUsableNetwork().catch(() => true)

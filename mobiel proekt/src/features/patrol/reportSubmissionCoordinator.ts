@@ -5,6 +5,8 @@ export type QueuedReportResult = {
   status: 'queued';
   alreadyQueued: boolean;
   clientOperationId: string;
+  /** Settles independently from the local commit; never rejects that commit. */
+  deliveryAttempt: Promise<unknown>;
 };
 
 /**
@@ -15,12 +17,13 @@ export type QueuedReportResult = {
 export async function queuePatrolReport(assignmentId: string): Promise<QueuedReportResult> {
   const completion = await completeAssignmentLocally(assignmentId);
 
-  void requestPatrolSync({ mode: 'manualReport', assignmentId }).catch(() => undefined);
+  const deliveryAttempt = requestPatrolSync({ mode: 'manualReport', assignmentId }).catch(() => undefined);
 
   return {
     status: 'queued',
     alreadyQueued: completion.alreadyQueued,
-    clientOperationId: completion.clientOperationId
+    clientOperationId: completion.clientOperationId,
+    deliveryAttempt
   };
 }
 

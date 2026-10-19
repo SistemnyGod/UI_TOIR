@@ -1,17 +1,18 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-const s = vi.hoisted(() => ({ employee: 'bob', assignment: null as any, competing: null as any, accept: vi.fn(), start: vi.fn(), resume: vi.fn(), select: vi.fn(), swap: vi.fn() }));
+const s = vi.hoisted(() => ({ selected: null as any, assignment: null as any, competing: null as any, accept: vi.fn(), start: vi.fn(), resume: vi.fn(), select: vi.fn(), swap: vi.fn() }));
 vi.mock('@/auth/dataOwnerContext', () => ({ captureDataOwnerContext: async () => ({ ownerUserId: 'o', contourId: 'c', generation: 0 }), assertDataOwnerContext: async () => {} }));
 vi.mock('@/db/database', () => ({ getDatabase: async () => ({ getFirstAsync: async () => s.competing }) }));
-vi.mock('@/db/repositories/patrolContextRepository', () => ({ selectPatrolForContext: s.select, getPatrolDeviceContext: async () => ({ employeeId: s.employee, assignmentId: null }) }));
+vi.mock('@/db/repositories/patrolContextRepository', () => ({ selectPatrolForContext: s.select, getPatrolDeviceContext: async () => ({ assignmentId: s.selected?.assignmentId ?? null }) }));
 vi.mock('@/db/repositories/patrolSwitchRepository', () => ({ switchPatrolLocally: s.swap }));
 vi.mock('@/db/repositories/patrolRepository', () => ({
+  getAssignmentById: async () => s.selected,
   getAssignmentByRequestId: async () => s.assignment,
   getRequestBoardItem: async () => ({ performerSelectionAvailable: true }),
   acceptRequestLocally: s.accept, startAssignmentLocally: s.start, resumeAssignmentLocally: s.resume,
   getAssignmentScanPolicy: async () => ({ nfcEnabled: true, qrFallbackEnabled: false })
 }));
 import { enterPatrolRequest } from '@/services/patrolEntryService';
-beforeEach(() => { vi.clearAllMocks(); s.employee = 'bob'; s.assignment = null; s.competing = null;
+beforeEach(() => { vi.clearAllMocks(); s.selected = null; s.assignment = null; s.competing = null;
   s.accept.mockImplementation(async () => { s.assignment = { assignmentId: 'b', status: 'accepted', employeeId: 'bob' }; return { assignment: s.assignment }; });
   s.start.mockImplementation(async () => ({ ...s.assignment, status: 'inProgress' }));
 });
@@ -21,7 +22,7 @@ it('retries only start after acceptance survived a failed start', async () => {
   expect(await enterPatrolRequest('request', 'bob')).toContain('/b/scan-nfc');
   expect(s.accept).toHaveBeenCalledTimes(1);
 });
-it('uses the atomic switch when the selected employee already has a running route', async () => {
+it('uses the atomic switch when the target employee already has a running route without a global selection', async () => {
   s.assignment = { assignmentId: 'b', status: 'accepted', employeeId: 'bob' };
   s.competing = { assignmentId: 'a' };
   await enterPatrolRequest('request', 'bob');
@@ -39,7 +40,7 @@ it('coalesces double taps', async () => {
   expect(s.start).toHaveBeenCalledTimes(1);
 });
 it('changing employees uses normal start validation and does not silently pause their other route', async () => {
-  s.employee = 'alice'; s.competing = { assignmentId: 'bob-running' };
+  s.selected = { assignmentId: 'alice-running', employeeId: 'alice' }; s.competing = { assignmentId: 'bob-running' };
   s.start.mockRejectedValueOnce(new Error('У сотрудника уже выполняется обход'));
   await expect(enterPatrolRequest('request', 'bob')).rejects.toThrow('уже выполняется');
   expect(s.swap).not.toHaveBeenCalled(); expect(s.select).not.toHaveBeenCalled();

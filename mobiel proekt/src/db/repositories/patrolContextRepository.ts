@@ -8,7 +8,6 @@ import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/databa
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 
 export type PatrolDeviceContext = {
-  employeeId: string | null;
   assignmentId: string | null;
 };
 
@@ -20,36 +19,35 @@ function storageKey(ownerUserId: string) {
 
 export async function getPatrolDeviceContext(): Promise<PatrolDeviceContext> {
   const ownerUserId = await getStoredOwnerUserId();
-  if (!ownerUserId) return { employeeId: null, assignmentId: null };
+  if (!ownerUserId) return { assignmentId: null };
   return readContext(ownerUserId);
 }
 
 async function readContext(ownerUserId: string): Promise<PatrolDeviceContext> {
   const db = await getDatabase();
-  const stored = await db.getFirstAsync<{ employeeId: string | null; assignmentId: string | null }>(
-    "SELECT employee_id AS employeeId, assignment_id AS assignmentId FROM patrol_device_context WHERE owner_user_id = ? AND contour_id = ?",
+  const stored = await db.getFirstAsync<{ assignmentId: string | null }>(
+    "SELECT assignment_id AS assignmentId FROM patrol_device_context WHERE owner_user_id = ? AND contour_id = ?",
     [ownerUserId, currentContourId]
   );
-  if (stored) return stored;
+  if (stored) return { assignmentId: stored.assignmentId };
 
   // One-time import for devices upgraded from the SecureStore-only context.
   const raw = await SecureStore.getItemAsync(storageKey(ownerUserId));
-  if (!raw) return { employeeId: null, assignmentId: null };
+  if (!raw) return { assignmentId: null };
   try {
     const parsed = JSON.parse(raw) as Partial<PatrolDeviceContext>;
     const imported = {
-      employeeId: typeof parsed.employeeId === "string" ? parsed.employeeId : null,
       assignmentId: typeof parsed.assignmentId === "string" ? parsed.assignmentId : null
     };
     await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async tx => {
       await tx.runAsync(`INSERT OR IGNORE INTO patrol_device_context
         (owner_user_id, contour_id, employee_id, assignment_id, updated_at) VALUES (?, ?, ?, ?, ?)`,
-        [ownerUserId, currentContourId, imported.employeeId, imported.assignmentId, new Date().toISOString()]);
+        [ownerUserId, currentContourId, null, imported.assignmentId, new Date().toISOString()]);
     }));
     return imported;
   } catch {
     await SecureStore.deleteItemAsync(storageKey(ownerUserId)).catch(() => undefined);
-    return { employeeId: null, assignmentId: null };
+    return { assignmentId: null };
   }
 }
 
@@ -59,7 +57,7 @@ export async function setPatrolDeviceContext(update: Partial<PatrolDeviceContext
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) return;
   // Capture the owner before queueing. A login change must not copy another
-  // account's selection into this key, or lose a concurrent employee selection.
+  // account's selection into this key.
   const write = pendingWrite.then(async () => {
     const db = await getDatabase();
     await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async tx => {
@@ -78,24 +76,20 @@ export async function setPatrolDeviceContextInTransaction(
   ownerUserId: string,
   update: Partial<PatrolDeviceContext>
 ) {
-  const current = await tx.getFirstAsync<{ employeeId: string | null; assignmentId: string | null }>(
-    "SELECT employee_id AS employeeId, assignment_id AS assignmentId FROM patrol_device_context WHERE owner_user_id = ? AND contour_id = ?",
+  const current = await tx.getFirstAsync<{ assignmentId: string | null }>(
+    "SELECT assignment_id AS assignmentId FROM patrol_device_context WHERE owner_user_id = ? AND contour_id = ?",
     [ownerUserId, currentContourId]
   );
-  const next = { employeeId: current?.employeeId ?? null, assignmentId: current?.assignmentId ?? null, ...update };
+  const next = { assignmentId: current?.assignmentId ?? null, ...update };
   await tx.runAsync(`INSERT INTO patrol_device_context
     (owner_user_id, contour_id, employee_id, assignment_id, updated_at) VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(owner_user_id, contour_id) DO UPDATE SET employee_id = excluded.employee_id,
       assignment_id = excluded.assignment_id, updated_at = excluded.updated_at`,
-    [ownerUserId, currentContourId, next.employeeId, next.assignmentId, new Date().toISOString()]);
+    [ownerUserId, currentContourId, null, next.assignmentId, new Date().toISOString()]);
 }
 
-export function selectPatrolEmployee(employeeId: string | null) {
-  return setPatrolDeviceContext({ employeeId, assignmentId: null });
-}
-
-export function selectCurrentPatrol(assignmentId: string | null, employeeId?: string | null) {
-  return setPatrolDeviceContext({ assignmentId, ...(employeeId === undefined ? {} : { employeeId }) });
+export function selectCurrentPatrol(assignmentId: string | null) {
+  return setPatrolDeviceContext({ assignmentId });
 }
 
 /** Clears only the assignment that is still selected on this device. */
@@ -125,13 +119,13 @@ export async function clearCurrentPatrolIfMatches(scope: DataOwnerContext, assig
   return cleared;
 }
 
-export async function selectPatrolForContext(scope: DataOwnerContext, assignmentId: string, employeeId: string | null, isCurrent: () => boolean = () => true) {
+export async function selectPatrolForContext(scope: DataOwnerContext, assignmentId: string, isCurrent: () => boolean = () => true) {
   await assertDataOwnerContext(scope);
   const db = await getDatabase();
   await withProtectedExclusiveTransactionAsync(db, async tx => {
     await assertDataOwnerContext(scope);
     if (!isCurrent()) throw new Error('Выбор заявки закрыт. Повторите выбор.');
-    await setPatrolDeviceContextInTransaction(tx, scope.ownerUserId, { assignmentId, employeeId });
+    await setPatrolDeviceContextInTransaction(tx, scope.ownerUserId, { assignmentId });
     await assertDataOwnerContext(scope);
     if (!isCurrent()) throw new Error('Выбор заявки закрыт. Повторите выбор.');
   });

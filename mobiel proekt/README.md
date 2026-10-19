@@ -34,7 +34,11 @@ $env:PATROL360_ENVIRONMENT = 'local-enterprise'
 .\scripts\build-release-apk.ps1
 ```
 
-Локальный адрес `http://192.168.2.194:5173` остаётся основным. При наличии белого IP можно встроить второй разрешённый адрес того же контура:
+Основной адрес контура `local-enterprise`: `https://192.168.2.194` (порт 443). APK включает публичный сертификат локального Root CA из `infra/docker/certs/patrol360.rootCA.crt`. Серверный сертификат должен содержать IP `192.168.2.194` в SAN. Старый HTTP-адрес `http://192.168.2.194:5173` поддерживается для ранее настроенных клиентов; операция, начатая по HTTPS, не переходит на HTTP при ошибке сертификата.
+
+Для телефона и сервера должны быть доступны друг другу адреса локальной сети; на Windows нужно разрешить входящий TCP 443 из `192.168.2.0/24` через `infra/scripts/allow-patrol360-mobile-lan.ps1`. Проверка: `https://192.168.2.194/api/v1/mobile/health`. Ожидаются `status: ok`, `syncProtocolVersion: 1.0` и `contourId: patrol360-local-enterprise`.
+
+При наличии внешнего сервера можно встроить второй разрешённый HTTPS-адрес того же контура:
 
 ```powershell
 $env:PATROL360_ENVIRONMENT = 'local-enterprise'
@@ -43,6 +47,8 @@ $env:PATROL360_PUBLIC_API_URL = 'https://<белый-ip>'
 ```
 
 Также адрес можно передать параметром `-PublicApiBaseUrl`. Приложение сначала проверяет локальный адрес, затем резервный. Публиковать mobile API в Интернет по незашифрованному HTTP нельзя; для белого IP требуется HTTPS, VPN либо другой защищённый канал. Проброс порта и правила внешнего firewall настраиваются отдельно от APK.
+
+По умолчанию оба скрипта собирают универсальный APK с архитектурами `armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64` для 32- и 64-битных устройств. Минимальная версия текущего приложения — Android 7.0 (API 24). Для сборки под одну архитектуру можно передать, например, `-ReactNativeArchitectures arm64-v8a`.
 
 Wrapper автоматически выбирает доступную DPAPI-копию существующего ключа и сверяет сертификат с публичным отпечатком из `release-signing.json`. Проверить ключ без сборки:
 
@@ -76,4 +82,4 @@ npm run build:android:debug
 
 После release-сборки скрипт выполняет zipalign, подписывает APK и проверяет подпись. Перед передачей зафиксируйте package/version, SHA-256 и certificate digest.
 
-Reserve fallback address (local-enterprise/dev): http://31.173.110.118. It is tried only after the local http://192.168.2.194:5173 candidate. The address is currently reserved and may remain unavailable until the server/NAT/firewall is configured.
+Внешний резервный адрес включается только через `PATROL360_PUBLIC_API_URL`; заранее заданный неработающий HTTP-адрес удалён.

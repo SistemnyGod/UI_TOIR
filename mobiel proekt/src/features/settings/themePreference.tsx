@@ -3,21 +3,9 @@ import * as SystemUI from "expo-system-ui";
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { ColorSchemeName, useColorScheme } from "react-native";
 
-export type ThemePreference = "system" | "light" | "dark";
+import { lightColors, darkColors, ThemeColors } from "@/ui/atomTheme";
 
-type ThemeColors = {
-  background: string;
-  backgroundAccent: string;
-  border: string;
-  card: string;
-  mutedText: string;
-  onDark: string;
-  navBackground: string;
-  navBorder: string;
-  primary: string;
-  primaryPressed: string;
-  text: string;
-};
+export type ThemePreference = "system" | "light" | "dark";
 
 type ThemeContextValue = {
   colors: ThemeColors;
@@ -28,34 +16,6 @@ type ThemeContextValue = {
 };
 
 const themePreferenceKey = "patrol360.themePreference";
-
-const lightColors: ThemeColors = {
-  background: "#f4f7fb",
-  backgroundAccent: "#e8f1ff",
-  border: "#dbe5f2",
-  card: "#ffffff",
-  mutedText: "#607089",
-  onDark: "#f5f7fa",
-  navBackground: "#ffffff",
-  navBorder: "#dbe5f2",
-  primary: "#1e5bff",
-  primaryPressed: "#1552e8",
-  text: "#0f1a2b"
-};
-
-const darkColors: ThemeColors = {
-  background: "#071426",
-  backgroundAccent: "#0b2342",
-  border: "#22324a",
-  card: "#0f1f35",
-  mutedText: "#b6c2d2",
-  onDark: "#f5f7fa",
-  navBackground: "#0d1d33",
-  navBorder: "#22324a",
-  primary: "#4b7cff",
-  primaryPressed: "#2f63f3",
-  text: "#f5f7fa"
-};
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
@@ -73,7 +33,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       if (stored === "light" || stored === "dark" || stored === "system") {
         setPreferenceState(stored);
       }
-    });
+    }).catch(() => undefined);
 
     return () => {
       isMounted = false;

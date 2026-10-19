@@ -48,6 +48,7 @@ export function mergeSyncEvents(events: SyncEvent[]): SyncEvent {
 
 export function shouldReloadReportAfterSync(event: SyncEvent, assignmentId: string) {
   return event.snapshotRefreshed === true
+    || event.refreshedZones?.includes("reportDelivery") === true
     || event.completedAssignmentIds.includes(assignmentId)
     || event.cancelledAssignmentIds?.includes(assignmentId) === true
     || event.deliveryChangedAssignmentIds?.includes(assignmentId) === true;

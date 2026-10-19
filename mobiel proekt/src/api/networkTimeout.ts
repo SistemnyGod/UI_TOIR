@@ -6,15 +6,20 @@ export const photoUploadTimeoutMs = 60_000;
 export const videoUploadTimeoutMs = 180_000;
 
 export async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = mobileRequestTimeoutMs) {
+  return fetchAndReadWithTimeout(input, init, timeoutMs, async response => response);
+}
+
+/** Keep timeout and abort active until the response body has been consumed. */
+export async function fetchAndReadWithTimeout<T>(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number,
+  read: (response: Response) => Promise<T>
+) {
   const controller = new AbortController();
   const externalSignal = init.signal;
   let timedOut = false;
   const abortFromCaller = () => controller.abort();
-  const timeoutId = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-
   if (externalSignal?.aborted) {
     controller.abort();
   } else {
@@ -22,9 +27,13 @@ export async function fetchWithTimeout(input: RequestInfo | URL, init: RequestIn
   }
 
   try {
-    return await fetch(input, {
+    const operation = fetch(input, {
       ...init,
       signal: controller.signal
+    }).then(read);
+    return await withTimeout(operation, timeoutMs, getNetworkErrorMessage("timeout"), () => {
+      timedOut = true;
+      controller.abort();
     });
   } catch (error) {
     const kind: NetworkErrorKind = timedOut
@@ -34,7 +43,6 @@ export async function fetchWithTimeout(input: RequestInfo | URL, init: RequestIn
         : "network";
     throw new MobileNetworkError(kind, error, getNetworkErrorMessage(kind));
   } finally {
-    clearTimeout(timeoutId);
     externalSignal?.removeEventListener("abort", abortFromCaller);
   }
 }

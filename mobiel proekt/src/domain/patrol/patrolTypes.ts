@@ -90,6 +90,7 @@ export type PatrolAssignmentDto = {
   completedAtLocal: string | null;
   revision: number;
   routeVersionNo: number;
+  routeSnapshot?: { route: PatrolRouteDto; points: PatrolPointDto[] } | null;
 };
 
 export type PatrolRouteDto = {

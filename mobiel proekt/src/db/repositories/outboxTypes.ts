@@ -18,3 +18,5 @@ export type SyncQueueCommandItem = {
   assignmentRouteName: string | null;
   sourceAssignmentId: string | null;
 };
+
+export type OutboxRetryReason = "network" | "timeout" | "server" | "rateLimit" | "authentication" | "unknown";

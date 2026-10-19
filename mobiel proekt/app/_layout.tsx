@@ -1,13 +1,13 @@
 import "react-native-gesture-handler";
 import "react-native-reanimated";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type * as Notifications from "expo-notifications";
 import { router, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { PrimaryButton } from "@/ui/PrimaryButton";
 import { startConnectionMonitor } from "@/core/connectionStatus";
 import { bootstrapApplication } from "@/core/bootstrap";
 import { classifyStartupError, StartupState } from "@/core/startupState";
@@ -15,10 +15,10 @@ import { SessionGateProvider, SessionGuard } from "@/auth/SessionGate";
 import { isSessionUnlocked, setPendingSessionRoute } from "@/auth/sessionGateState";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { ThemeProvider, useAppTheme } from "@/features/settings/themePreference";
-import { registerPushNotifications, refreshPushRegistrationIfAllowed, syncMobileNotifications, subscribeToMobilePushEvents } from "@/services/notificationService";
+import { registerPushNotifications, refreshPushRegistrationIfAllowed, subscribeToMobilePushEvents } from "@/services/notificationService";
 import { installMobileErrorReporter, logMobileError } from "@/services/mobileErrorReporter";
 import { sanitizeDiagnosticMessage } from "@/services/diagnosticReportPolicy";
-import { registerBackgroundSyncTask } from "@/sync/backgroundSyncTask";
+import { registerBackgroundSyncTask, syncPendingReportsOnBackground } from "@/sync/backgroundSyncTask";
 import { registerBackgroundNotificationTask } from "@/services/backgroundNotificationTask";
 import { runMobileRecoveryCycle } from "@/sync/syncTriggers";
 import { startPatrolSyncCoordinator } from "@/sync/PatrolSyncCoordinator";
@@ -26,8 +26,12 @@ import { cancelNextOutboxRetry, scheduleNextOutboxRetry } from "@/sync/outboxRet
 import { resolvePushNavigationTarget } from "@/services/pushNavigationResolver";
 
 export default function RootLayout() {
+  return <ThemeProvider><RootContent /></ThemeProvider>;
+}
+
+function RootContent() {
+  const { colors, statusBarStyle } = useAppTheme();
   useEffect(() => { startConnectionMonitor(); }, []);
-  const queryClient = useMemo(() => new QueryClient(), []);
   const [startupState, setStartupState] = useState<StartupState>({ status: "initializing" });
   const isReady = startupState.status === "ready";
   const bootstrapError = startupState.status === "recoverableError" || startupState.status === "fatalDatabaseError"
@@ -76,18 +80,15 @@ export default function RootLayout() {
     });
     const unsubscribePushEvents = subscribeToMobilePushEvents({
       onNotification: () => {
-        void syncMobileNotifications().catch(() => []);
         void runMobileRecoveryCycle("push", "normal");
       },
       onNotificationResponse: (response) => {
-        void syncMobileNotifications().catch(() => []);
         void runMobileRecoveryCycle("notificationResponse", "normal");
         openNotificationTarget(response);
       }
     });
 
     void registerPushNotifications()
-      .then(() => syncMobileNotifications())
       .then(() => runMobileRecoveryCycle("appActive", "normal"))
       .catch(() => undefined);
 
@@ -98,6 +99,10 @@ export default function RootLayout() {
           void logMobileError("sync.retry_schedule.failed", error);
         });
         void refreshPushRegistrationIfAllowed().catch(() => undefined);
+      } else if (state === "background") {
+        void syncPendingReportsOnBackground().catch((error) => {
+          void logMobileError("background.sync.handoff.failed", error);
+        });
       }
     });
 
@@ -125,25 +130,21 @@ export default function RootLayout() {
   if (!isReady) {
     return (
       <>
-        <StatusBar style="dark" />
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.loadingText}>Подготавливаем защищённое хранилище…</Text>
+        <StatusBar style={statusBarStyle} />
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: colors.background }}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.text }]}>Подготавливаем защищённое хранилище…</Text>
         </View>
       </>
     );
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <SessionGateProvider>
-          <SessionGuard>
-            <RootStack />
-          </SessionGuard>
-        </SessionGateProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <SessionGateProvider>
+      <SessionGuard>
+        <RootStack />
+      </SessionGuard>
+    </SessionGateProvider>
   );
 }
 
@@ -157,27 +158,25 @@ function BootstrapFailureScreen({
   onRetry: () => void;
 }) {
   const technicalMessage = bootstrapErrorMessage(error);
+  const { colors, statusBarStyle } = useAppTheme();
+  const [showDetails, setShowDetails] = useState(false);
 
   return (
     <>
-      <StatusBar style="dark" />
-      <View style={styles.failureScreen}>
-      <Text accessibilityRole="header" style={styles.failureTitle}>Не удалось подготовить приложение</Text>
-      <Text style={styles.failureMessage}>
+      <StatusBar style={statusBarStyle} />
+      <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={styles.failureScreen}>
+      <Text accessibilityRole="header" style={[styles.failureTitle, { color: colors.text }]}>Не удалось подготовить приложение</Text>
+      <Text style={[styles.failureMessage, { color: colors.mutedText }]}>
         Локальное хранилище не инициализировано. Рабочие данные не изменены. Повторите запуск или обратитесь к администратору.
       </Text>
-      <Text selectable style={styles.failureCode}>Код: P360-LOCAL-STORAGE · попытка {attempt}</Text>
-      {technicalMessage ? <Text selectable style={styles.failureDetails}>{technicalMessage}</Text> : null}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityHint="Повторно открыть защищённое локальное хранилище"
-        onPress={onRetry}
-        style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}
-      >
-        <Text style={styles.retryButtonText}>Повторить</Text>
-      </Pressable>
-      <Text style={styles.failureSupport}>Если ошибка повторяется, сообщите администратору код и текст выше.</Text>
+      <Text selectable style={[styles.failureCode, { color: colors.text }]}>Код: P360-LOCAL-STORAGE · попытка {attempt}</Text>
+      {showDetails && technicalMessage ? <Text selectable style={[styles.failureDetails, { color: colors.mutedText }]}>{technicalMessage}</Text> : null}
+      <View style={{ alignSelf: "stretch", gap: 12, marginTop: 24 }}>
+        <PrimaryButton label="Повторить" onPress={onRetry} icon="refresh-outline" />
+        {technicalMessage ? <PrimaryButton label={showDetails ? "Скрыть технические сведения" : "Технические сведения"} onPress={() => setShowDetails(value => !value)} variant="secondary" /> : null}
       </View>
+      <Text style={[styles.failureSupport, { color: colors.mutedText }]}>Если ошибка повторяется, сообщите администратору код и текст выше.</Text>
+      </ScrollView>
     </>
   );
 }
@@ -232,8 +231,7 @@ const styles = StyleSheet.create({
   },
   failureScreen: {
     alignItems: "center",
-    backgroundColor: "#f4f7fb",
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "center",
     padding: 28
   },
@@ -246,21 +244,21 @@ const styles = StyleSheet.create({
   },
   failureMessage: {
     color: "#53627b",
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 22,
     maxWidth: 420,
     textAlign: "center"
   },
   failureCode: {
     color: "#14233d",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     marginTop: 16,
     textAlign: "center"
   },
   failureDetails: {
     color: "#53627b",
-    fontSize: 12,
+    fontSize: 14,
     lineHeight: 18,
     marginTop: 8,
     maxWidth: 420,
@@ -279,13 +277,13 @@ const styles = StyleSheet.create({
   },
   retryButtonText: {
     color: "#ffffff",
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
     textAlign: "center"
   },
   failureSupport: {
     color: "#53627b",
-    fontSize: 12,
+    fontSize: 14,
     lineHeight: 18,
     marginTop: 14,
     maxWidth: 360,

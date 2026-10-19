@@ -1,4 +1,3 @@
-import { isPhotoEvidenceRequired } from './photoEvidencePolicy';
 import { evaluateReportPointReadiness } from './reportReadinessPolicy';
 
 export type EvidencePoint = {
@@ -16,8 +15,6 @@ export function evaluatePointEvidence(points: readonly EvidencePoint[]) {
     if (point.status === 'issue' && !point.comment?.trim()) add('Для неисправности нужен комментарий');
     if (point.status === 'issue' && !point.issueTypeId?.trim()) add('Для неисправности нужно указать тип');
     if (point.status === 'skipped' && !point.comment?.trim()) add('Укажите причину, почему осмотр невозможен');
-    const photoStatus = point.status === 'issue' || point.status === 'skipped' ? point.status : null;
-    if (isPhotoEvidenceRequired(point.requiresPhoto, photoStatus) && !point.photoClientFileIds.length) add('Для метки требуется фотофиксация');
   }
   return { ...result, ready: result.ready && result.problems.length === 0 };
 }

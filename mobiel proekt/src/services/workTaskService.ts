@@ -4,7 +4,6 @@ import { getWorkItemsPage } from "@/api/mobileApi";
 import { currentContourId } from "@/core/environments";
 import { getDatabase } from "@/db/database";
 import { listLocalWorkItemBoundaries, listLocalWorkItems, listLocalWorkItemsPage, listLocalWorkTasks, saveWorkItems, saveWorkTasks } from "@/db/repositories/workTaskRepository";
-import { getPatrolDeviceContext } from "@/db/repositories/patrolContextRepository";
 import { logMobileError } from "@/services/mobileErrorReporter";
 
 export async function syncWorkTasks() {
@@ -14,13 +13,12 @@ export async function syncWorkTasks() {
   return tasks;
 }
 
-export async function syncWorkItems(employeeId?: string | null) {
+export async function syncWorkItems(employeeId?: string | null, scope: "active" | "history" = "active") {
   const context = await captureDataOwnerContext();
   const db = await getDatabase();
   const capability = await db.getFirstAsync<{ paging: number }>("SELECT work_items_paging AS paging FROM mobile_capabilities WHERE owner_user_id = ? AND contour_id = ?", [context.ownerUserId, currentContourId]);
   if (capability?.paging) {
-    const deviceContext = await getPatrolDeviceContext();
-    await refreshWorkItemsHead("active", employeeId === undefined ? deviceContext.employeeId : employeeId);
+    await refreshWorkItemsHead(scope, employeeId ?? null);
     return (await listLocalWorkItemsPage(25)).items;
   }
   const items = await getWorkItemsV2();
@@ -204,13 +202,13 @@ export async function loadMoreWorkItems(scope: "active" | "history", employeeId?
   return row?.nextCursor ? syncWorkItemsPage(scope, employeeId, row.nextCursor) : null;
 }
 
-export async function loadWorkItemsOfflineFirst(onRefreshed?: () => void | Promise<void>, onRefreshFailed?: (error: unknown) => void | Promise<void>, employeeId?: string | null) {
+export async function loadWorkItemsOfflineFirst(onRefreshed?: () => void | Promise<void>, onRefreshFailed?: (error: unknown) => void | Promise<void>, employeeId?: string | null, scope: "active" | "history" = "active") {
   // The work screen starts with one local page and grows on demand. Keep the
   // full-read fallback for older callers and test doubles that predate paging.
   const localItems = typeof listLocalWorkItemsPage === "function"
     ? (await listLocalWorkItemsPage(25)).items
     : await listLocalWorkItems();
-  void syncWorkItems(employeeId)
+  void syncWorkItems(employeeId, scope)
     .then(() => onRefreshed?.())
     .catch((error) => {
       void logMobileError("emu.work-items.refresh.failed", error);

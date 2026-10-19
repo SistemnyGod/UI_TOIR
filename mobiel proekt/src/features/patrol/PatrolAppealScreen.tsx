@@ -1,7 +1,8 @@
+import { TextField as TextInput } from "@/ui/TextField";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { captureDataOwnerContext, assertDataOwnerContext, type DataOwnerContext } from "@/auth/dataOwnerContext";
-import { Text, TextInput, View } from "react-native";
+import { Text, View } from "react-native";
 import { createPatrolAppeal, loadMorePatrolAppeals, loadPatrolAppeals, readPatrolAppeals, readPatrolAppealsPage } from "@/db/repositories/patrolAppealRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
@@ -98,21 +99,21 @@ export function PatrolAppealScreen() {
   }
   return <ScreenList title={mode === "cancel" ? "Запрос отмены" : "Диспетчер"} subtitle="Ответ появится здесь после синхронизации."
     headerContent={<>
-    {mode === "cancel" ? <Text style={{ color: colors.mutedText }}>Пока запрос рассматривается, вы можете продолжать и завершить обход.</Text> : null}
-    {!data.enabled ? <Card><Text style={{ color: colors.text }}>Обновите данные: сервер должен поддерживать обращения.</Text></Card> : null}
-    {!existing && data.enabled ? <Card><Text style={{ color: colors.text }}>{mode === "cancel" ? "Причина отмены" : "Новое сообщение"}</Text>
+    {mode === "cancel" ? <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>Пока запрос рассматривается, вы можете продолжать и завершить обход.</Text> : null}
+    {!data.enabled ? <Card><Text style={{ color: colors.text, fontSize: 16, lineHeight: 24 }}>Обновите данные: сервер должен поддерживать обращения.</Text></Card> : null}
+    {!existing && data.enabled ? <Card><Text style={{ color: colors.text, fontSize: 16, lineHeight: 24 }}>{mode === "cancel" ? "Причина отмены" : "Новое сообщение"}</Text>
       <TextInput accessibilityLabel={mode === "cancel" ? "Причина отмены" : "Сообщение диспетчеру"} value={message} onChangeText={setMessage} multiline maxLength={2000} placeholder="Опишите ситуацию" placeholderTextColor={colors.mutedText} style={{ minHeight: 120, color: colors.text, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 12, textAlignVertical: "top" }} />
       <PrimaryButton label={busy ? "Сохранение…" : "Отправить обращение"} disabled={busy || !message.trim()} onPress={() => void send()} />
     </Card> : null}
-    {error ? <Text accessibilityRole="alert" style={{ color: "#b91c1c" }}>{error}</Text> : null}
+    {error ? <Text accessibilityRole="alert" style={{ color: colors.danger }}>{error}</Text> : null}
     </>}
     data={items}
     keyExtractor={item => item.id}
-    ListEmptyComponent={<Text style={{ color: colors.mutedText }}>Обращений пока нет.</Text>}
+    ListEmptyComponent={<Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>Обращений пока нет.</Text>}
     ListFooterComponent={hasMore ? <PrimaryButton label={loadingMore ? "Загрузка…" : "Загрузить ещё"} disabled={loadingMore} variant="secondary" onPress={() => void loadMore()} /> : null}
-    renderItem={({ item }) => <Card><Text style={{ color: colors.mutedText }}>Вы · {new Date(item.createdAt).toLocaleString("ru-RU")}</Text><Text style={{ color: colors.text, fontWeight: "700" }}>{statusLabels[item.status] ?? item.status}</Text>
-      <Text style={{ color: colors.text }}>{item.message}</Text>
-      {item.reply ? <View><Text style={{ color: colors.mutedText }}>Ответ диспетчера</Text><Text style={{ color: colors.text }}>{item.reply}</Text></View> : null}
-      {["rejected", "conflict", "blocked", "invalidPayload"].includes(item.delivery ?? "") ? <Text style={{ color: "#b91c1c" }}>Не доставлено. Проверьте очередь отправки в профиле.</Text> : null}
+    renderItem={({ item }) => <Card><Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>Вы · {new Date(item.createdAt).toLocaleString("ru-RU")}</Text><Text style={{ color: colors.text, fontWeight: "700" }}>{statusLabels[item.status] ?? item.status}</Text>
+      <Text style={{ color: colors.text, fontSize: 16, lineHeight: 24 }}>{item.message}</Text>
+      {item.reply ? <View><Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>Ответ диспетчера</Text><Text style={{ color: colors.text, fontSize: 16, lineHeight: 24 }}>{item.reply}</Text></View> : null}
+      {["rejected", "conflict", "blocked", "invalidPayload"].includes(item.delivery ?? "") ? <Text style={{ color: colors.danger }}>Не доставлено. Проверьте очередь отправки в профиле.</Text> : null}
     </Card>} />;
 }

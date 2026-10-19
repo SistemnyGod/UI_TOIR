@@ -3,8 +3,8 @@ import { relative, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
-const sourceRoot = join(projectRoot, "src");
-const extensions = new Set([".ts", ".tsx"]);
+const sourceRoots = ["src", "app", "tests", "scripts"].map(name => join(projectRoot, name));
+const extensions = new Set([".ts", ".tsx", ".js", ".mjs", ".json", ".md", ".ps1"]);
 const suspiciousPatterns = [
   /(?:Р.|С.){3,}/u,
   /в(?:Ђ|„|™|љ)/u,
@@ -26,8 +26,17 @@ async function walk(directory) {
 }
 
 const findings = [];
-for (const file of await walk(sourceRoot)) {
-  const text = await readFile(file, "utf8");
+const files = [...(await Promise.all(sourceRoots.map(walk))).flat(), ...[
+  "README.md", "app.config.js", "package.json", "tsconfig.json"
+].map(name => join(projectRoot, name))];
+for (const file of files) {
+  let text;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(await readFile(file));
+  } catch {
+    findings.push(`${relative(projectRoot, file)}: invalid UTF-8`);
+    continue;
+  }
   for (const [index, line] of text.split(/\r?\n/u).entries()) {
     if (suspiciousPatterns.some((pattern) => pattern.test(line))) {
       findings.push(`${relative(projectRoot, file)}:${index + 1}`);
@@ -41,4 +50,4 @@ if (findings.length > 0) {
   process.exit(1);
 }
 
-console.log("Encoding check passed: no suspicious mojibake sequences found.");
+console.log(`Encoding check passed: ${files.length} source, route, test, script and config files checked.`);

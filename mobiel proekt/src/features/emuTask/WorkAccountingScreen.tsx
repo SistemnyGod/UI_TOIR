@@ -1,97 +1,60 @@
+import { TaskModal, RemarkModal, CompleteTaskModal, ParticipationModal, type ParticipationAction, type RemarkAttachmentAfterSave } from './WorkAccountingForms';
+import { TaskMenu, getTaskPrimaryAction } from './WorkTaskActions';
+import { needsRetainedPage, compareWorkRows, compareRemarkRows } from '@/sync/retainedListWindow';
+import { TransientNotice } from "@/ui/TransientNotice";
+import { useStableListAnchor } from "@/ui/useStableListAnchor";
+import { createFormDraftController } from "@/services/pointDraftController";
+import { registerFormNavigationGuard } from "@/services/formNavigationGuard";
+
+import * as Crypto from "expo-crypto";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, AppState, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AppState, FlatList, Pressable, Text, View } from "react-native";
 
 import { createShiftRemarkLocally, listShiftRemarksPage, ShiftRemark } from "@/db/repositories/shiftRemarkRepository";
-import {
-  completeWorkTaskLocally,
-  createWorkTaskLocally,
-  joinWorkTaskLocally,
-  getWorkListVisibleLimit,
-  listEmuSections,
-  listLocalWorkItemsPage,
-  listMobileEmployees,
-  pauseWorkTaskLocally,
-  replaceWorkTaskParticipantLocally,
-  resumeWorkTaskLocally,
-  setWorkListVisibleLimit,
-  startPlannedWorkLocally,
-  updateWorkTaskLocally
-} from "@/db/repositories/workTaskRepository";
+import { completeWorkTaskLocally, createWorkTaskLocally, joinWorkTaskLocally, getWorkListVisibleLimit, listEmuSections, listLocalWorkItemsPage, listMobileEmployees, pauseWorkTaskLocally, replaceWorkTaskParticipantLocally, resumeWorkTaskLocally, setWorkListVisibleLimit, startPlannedWorkLocally, updateWorkTaskLocally } from "@/db/repositories/workTaskRepository";
 import { MobileEmployeeDto, MobileEmuSectionDto, WorkItemDto, WorkTaskDto } from "@/domain/emu/emuTypes";
 import type { LocalWorkItemsFilter } from "@/db/repositories/workTaskRepository";
-import { canAttachEmuMedia, canCompleteEmuTask, canEditEmuTask, canPauseEmuTask, canResumeEmuTask, canStartEmuTask } from "@/domain/emu/emuStateMachine";
-import {
-  formatDateTime,
-  formatParticipants,
-  formatShortName,
-  formatWorkAttachments,
-  workDeliveryPresentation,
-  remarkStatusLabel,
-  remarkStatusTone,
-  statusLabel,
-  statusTone,
-  workAccountingStyles as styles
-} from "@/features/emuTask/WorkAccountingPresentation";
+
+import { formatDateTime, formatParticipants, formatShortName, formatWorkAttachments, workDeliveryPresentation, remarkStatusLabel, remarkStatusTone, statusLabel, statusTone, useWorkAccountingStyles } from "@/features/emuTask/WorkAccountingPresentation";
 import { useAppTheme } from "@/features/settings/themePreference";
-import {
-  attachRemarkMediaFromGallery,
-  attachRemarkPhotoFromCamera,
-  attachRemarkVideoFromCamera,
-  attachWorkMediaFromGallery,
-  attachWorkPhotoFromCamera,
-  attachWorkVideoFromCamera
-} from "@/services/mediaAttachmentService";
+import { attachRemarkMediaFromGallery, attachRemarkPhotoFromCamera, attachRemarkVideoFromCamera, attachWorkMediaFromGallery, attachWorkPhotoFromCamera, attachWorkVideoFromCamera } from "@/services/mediaAttachmentService";
 import { loadMoreWorkItems, loadWorkItemsOfflineFirst } from "@/services/workTaskService";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
-import { assertDataOwnerContext, captureDataOwnerContext } from "@/auth/dataOwnerContext";
-import { getPatrolDeviceContext, selectPatrolEmployee } from "@/db/repositories/patrolContextRepository";
-import { captureWorkDraftWriteToken, deleteWorkDraftForContext, flushWorkDraftForContext, getWorkDraftContext, invalidateWorkDraftForContext, readWorkDraftForContext, saveWorkDraftForContext, waitForWorkDraftForContext, type WorkDraftContext } from "@/db/repositories/workDraftRepository";
-import { useSmoothRefreshIndicator } from "@/sync/useSmoothRefreshIndicator";
-import { ActionSheet } from "@/ui/ActionSheet";
+import { assertDataOwnerContext, captureDataOwnerContext, type DataOwnerContext } from "@/auth/dataOwnerContext";
+import { deleteWorkDraftForContext, invalidateWorkDraftForContext, listWorkDraftsForContext, type WorkDraftKind, saveWorkDraftForContext, waitForWorkDraftForContext } from "@/db/repositories/workDraftRepository";
+import { retainEqualItems } from "@/sync/retainEqualItems";
+import { ActionSheet, type ActionSheetItem } from "@/ui/ActionSheet";
+
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
 
 type WorkTab = "tasks" | "remarks";
-type TaskFilter = "mine" | "available" | "history";
-type ParticipationAction = { mode: "start" | "join" | "replace"; item: WorkItemDto };
-type RemarkAttachmentAfterSave = "later" | "now";
+type TaskFilter = "active" | "history";
+
 type RemarkAttachmentTarget = { remarkId: string; title: string } | null;
 
 function listScope(kind: "tasks" | "remarks", contextKey: string) {
   return `local:${kind}:${contextKey}`;
 }
 
-function requestModalClose(hasUnsavedChanges: boolean, loading: boolean, onClose: () => void) {
-  if (loading) {
-    return;
-  }
-  if (!hasUnsavedChanges) {
-    onClose();
-    return;
-  }
-  Alert.alert("Сохранить черновик и закрыть?", "Последние изменения будут сохранены на телефоне.", [
-    { text: "Продолжить редактирование", style: "cancel" },
-    { text: "Сохранить и закрыть", onPress: onClose }
-  ]);
-}
-
 export function WorkAccountingScreen() {
+  const styles = useWorkAccountingStyles();
   const { colors } = useAppTheme();
   const [tab, setTab] = useState<WorkTab>("tasks");
-  const [taskFilter, setTaskFilter] = useState<TaskFilter>("mine");
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [taskFilter, setTaskFilter] = useState<TaskFilter>("active");
   const [tasks, setTasks] = useState<WorkItemDto[]>([]);
   const [remarks, setRemarks] = useState<ShiftRemark[]>([]);
   const [taskHasMore, setTaskHasMore] = useState(true);
   const [remarkHasMore, setRemarkHasMore] = useState(true);
   const [employees, setEmployees] = useState<MobileEmployeeDto[]>([]);
   const [sections, setSections] = useState<MobileEmuSectionDto[]>([]);
-  const [currentEmployeeId, setCurrentEmployeeId] = useState("");
   const [draftNotice, setDraftNotice] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -102,12 +65,12 @@ export function WorkAccountingScreen() {
   const [menuTask, setMenuTask] = useState<WorkItemDto | null>(null);
   const [completeTask, setCompleteTask] = useState<WorkTaskDto | null>(null);
   const [completeComment, setCompleteComment] = useState("");
-  const [taskDraftEmployeeId, setTaskDraftEmployeeId] = useState("");
-  const [remarkDraftEmployeeId, setRemarkDraftEmployeeId] = useState("");
-  const [completionDraftEmployeeId, setCompletionDraftEmployeeId] = useState("");
-  const [taskDraftContext, setTaskDraftContext] = useState<WorkDraftContext | null>(null);
-  const [remarkDraftContext, setRemarkDraftContext] = useState<WorkDraftContext | null>(null);
-  const [completionDraftContext, setCompletionDraftContext] = useState<WorkDraftContext | null>(null);
+  const [taskDraftKey, setTaskDraftKey] = useState("");
+  const [remarkDraftKey, setRemarkDraftKey] = useState("");
+  const [completionDraftKey, setCompletionDraftKey] = useState("");
+  const [taskDraftContext, setTaskDraftContext] = useState<DataOwnerContext | null>(null);
+  const [remarkDraftContext, setRemarkDraftContext] = useState<DataOwnerContext | null>(null);
+  const [completionDraftContext, setCompletionDraftContext] = useState<DataOwnerContext | null>(null);
   const [taskEmployeeId, setTaskEmployeeId] = useState("");
   const [taskSectionId, setTaskSectionId] = useState("");
   const [taskText, setTaskText] = useState("");
@@ -127,140 +90,122 @@ export function WorkAccountingScreen() {
   const tasksRef = useRef<WorkItemDto[]>([]);
   const remarksRef = useRef<ShiftRemark[]>([]);
   const listGenerationRef = useRef(0);
+  const listFocusedRef = useRef(false);
   const loadingMoreRef = useRef(false);
-  const draftStateRef = useRef({
-    taskModal,
-    taskDraftEmployeeId,
-    taskDraftContext,
-    taskSectionId,
-    taskEmployeeId,
-    taskText,
-    remarkModalOpen,
-    remarkDraftEmployeeId,
-    remarkDraftContext,
-    remarkSectionId,
-    remarkEmployeeId,
-    remarkComment,
-    remarkAttachmentAfterSave,
-    completeTask,
-    completionDraftEmployeeId,
-    completionDraftContext,
-    completeComment
-  });
-  const taskSaveInFlightRef = useRef(false);
-  const remarkSaveInFlightRef = useRef(false);
-  const completionSaveInFlightRef = useRef(false);
-  useEffect(() => {
-    tasksRef.current = tasks;
-  }, [tasks]);
-  useEffect(() => {
-    remarksRef.current = remarks;
-  }, [remarks]);
-  useEffect(() => {
-    draftStateRef.current = {
-      taskModal,
-      taskDraftEmployeeId,
-      taskDraftContext,
-      taskSectionId,
-      taskEmployeeId,
-      taskText,
-      remarkModalOpen,
-      remarkDraftEmployeeId,
-      remarkDraftContext,
-      remarkSectionId,
-      remarkEmployeeId,
-      remarkComment,
-      remarkAttachmentAfterSave,
-      completeTask,
-      completionDraftEmployeeId,
-      completionDraftContext,
-      completeComment
-    };
-  }, [taskModal, taskDraftEmployeeId, taskDraftContext, taskSectionId, taskEmployeeId, taskText, remarkModalOpen, remarkDraftEmployeeId, remarkDraftContext, remarkSectionId, remarkEmployeeId, remarkComment, remarkAttachmentAfterSave, completeTask, completionDraftEmployeeId, completionDraftContext, completeComment]);
-  const { beginRefresh, endRefresh, showRefreshIndicator } = useSmoothRefreshIndicator();
+  const pendingReloadRef = useRef(false);
+  const hasLoadedListRef = useRef(false);
+  const localReloadRef = useRef<object | null>(null);
+  const reloadLocalRef = useRef<(reset?: boolean) => Promise<void>>(async () => undefined);
+  const drainReload = useCallback(() => {
+    if (!listFocusedRef.current || !pendingReloadRef.current) return;
+    pendingReloadRef.current = false;
+    void reloadLocalRef.current().catch(error => {
+      if (listFocusedRef.current) setRefreshError("Показаны сохранённые данные. Обновление с сервера не удалось.");
+      void logMobileError("emu.work-accounting.deferred-refresh.failed", error);
+    });
+  }, []);
 
   const reloadLocal = useCallback(async (reset = false) => {
-    const ownerContext = await captureDataOwnerContext();
-    const contextKey = `${ownerContext.ownerUserId}:${ownerContext.contourId}:${taskFilter}:${currentEmployeeId || "none"}`;
-    const contextChanged = listContextRef.current !== contextKey;
-    const shouldReset = reset || contextChanged;
-    const generation = ++listGenerationRef.current;
-    if (shouldReset) {
-      taskCursorRef.current = null;
-      remarkCursorRef.current = null;
-      listContextRef.current = contextKey;
+    if (!listFocusedRef.current) return;
+    if (!reset && (loadingMoreRef.current || localReloadRef.current)) {
+      pendingReloadRef.current = true;
+      return;
     }
-    const taskListScope = listScope("tasks", contextKey);
-    const remarkListScope = listScope("remarks", contextKey);
-    const [storedTaskLimit, storedRemarkLimit] = shouldReset
-      ? await Promise.all([getWorkListVisibleLimit(taskListScope), getWorkListVisibleLimit(remarkListScope)])
-      : [tasksRef.current.length, remarksRef.current.length];
-    const targetTaskCount = shouldReset ? storedTaskLimit : tasksRef.current.length;
-    const targetRemarkCount = shouldReset ? storedRemarkLimit : remarksRef.current.length;
-    const localFilter: LocalWorkItemsFilter = taskFilter;
-    const localEmployeeId = currentEmployeeId || null;
-    let taskPage = await listLocalWorkItemsPage(25, null, localFilter, localEmployeeId);
-    await assertDataOwnerContext(ownerContext);
-    const loadedTasks = [...taskPage.items];
-    while (loadedTasks.length < targetTaskCount && taskPage.nextCursor) {
-      taskPage = await listLocalWorkItemsPage(25, taskPage.nextCursor, localFilter, localEmployeeId);
+    const operation = {};
+    localReloadRef.current = operation;
+    try {
+      const generation = ++listGenerationRef.current;
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+      const ownerContext = await captureDataOwnerContext();
+      const contextKey = `${ownerContext.ownerUserId}:${ownerContext.contourId}:${taskFilter}:account`;
+      const contextChanged = listContextRef.current !== contextKey;
+      const shouldReset = reset || contextChanged;
+      if (!listFocusedRef.current || generation !== listGenerationRef.current) return;
+      if (shouldReset) {
+        taskCursorRef.current = null;
+        remarkCursorRef.current = null;
+        listContextRef.current = contextKey;
+      }
+      const taskListScope = listScope("tasks", contextKey);
+      const remarkListScope = listScope("remarks", contextKey);
+      const [storedTaskLimit, storedRemarkLimit] = shouldReset
+        ? await Promise.all([getWorkListVisibleLimit(taskListScope), getWorkListVisibleLimit(remarkListScope)])
+        : [tasksRef.current.length, remarksRef.current.length];
+      const targetTaskCount = shouldReset ? storedTaskLimit : tasksRef.current.length;
+      const targetRemarkCount = shouldReset ? storedRemarkLimit : remarksRef.current.length;
+      const taskBoundary = shouldReset ? undefined : tasksRef.current.at(-1);
+      const remarkBoundary = shouldReset ? undefined : remarksRef.current.at(-1);
+      const localFilter: LocalWorkItemsFilter = taskFilter;
+      const localEmployeeId = null;
+      let taskPage = await listLocalWorkItemsPage(25, null, localFilter, localEmployeeId);
       await assertDataOwnerContext(ownerContext);
-      loadedTasks.push(...taskPage.items);
-    }
-    let remarkPage = await listShiftRemarksPage(25, null);
-    await assertDataOwnerContext(ownerContext);
-    const loadedRemarks = [...remarkPage.items];
-    while (loadedRemarks.length < targetRemarkCount && remarkPage.nextCursor) {
-      remarkPage = await listShiftRemarksPage(25, remarkPage.nextCursor);
+      const loadedTasks = [...taskPage.items];
+      while (needsRetainedPage(loadedTasks, targetTaskCount, taskBoundary, compareWorkRows) && taskPage.nextCursor) {
+        taskPage = await listLocalWorkItemsPage(25, taskPage.nextCursor, localFilter, localEmployeeId);
+        await assertDataOwnerContext(ownerContext);
+        loadedTasks.push(...taskPage.items);
+      }
+      let remarkPage = await listShiftRemarksPage(25, null);
       await assertDataOwnerContext(ownerContext);
-      loadedRemarks.push(...remarkPage.items);
+      const loadedRemarks = [...remarkPage.items];
+      while (needsRetainedPage(loadedRemarks, targetRemarkCount, remarkBoundary, compareRemarkRows) && remarkPage.nextCursor) {
+        remarkPage = await listShiftRemarksPage(25, remarkPage.nextCursor);
+        await assertDataOwnerContext(ownerContext);
+        loadedRemarks.push(...remarkPage.items);
+      }
+      const [nextEmployees, nextSections] = await Promise.all([
+        listMobileEmployees(),
+        listEmuSections()
+      ]);
+      await assertDataOwnerContext(ownerContext);
+      if (!listFocusedRef.current || generation !== listGenerationRef.current) return;
+      hasLoadedListRef.current = true;
+      tasksRef.current = loadedTasks;
+      remarksRef.current = loadedRemarks;
+      setTasks(previous => retainEqualItems(previous, loadedTasks, item => item.itemId));
+      setRemarks(previous => retainEqualItems(previous, loadedRemarks, item => item.remarkId));
+      taskCursorRef.current = taskPage.nextCursor;
+      remarkCursorRef.current = remarkPage.nextCursor;
+      // A local page can end while the server still has an older page. Keep the
+      // continuation action available until that server boundary is checked.
+      setTaskHasMore(Boolean(taskPage.nextCursor) || loadedTasks.length === targetTaskCount);
+      setRemarkHasMore(Boolean(remarkPage.nextCursor));
+      await Promise.all([
+        setWorkListVisibleLimit(taskListScope, loadedTasks.length),
+        setWorkListVisibleLimit(remarkListScope, loadedRemarks.length)
+      ]);
+      await assertDataOwnerContext(ownerContext);
+      if (generation !== listGenerationRef.current) return;
+      setEmployees(previous => retainEqualItems(previous, nextEmployees, item => item.employeeId));
+      setSections(previous => retainEqualItems(previous, nextSections, item => item.sectionId));
+      setRefreshError(null);
+    } finally {
+      if (localReloadRef.current === operation) {
+        localReloadRef.current = null;
+        drainReload();
+      }
     }
-    const [nextEmployees, nextSections, context] = await Promise.all([
-      listMobileEmployees(),
-      listEmuSections(),
-      getPatrolDeviceContext()
-    ]);
-    await assertDataOwnerContext(ownerContext);
-    if (generation !== listGenerationRef.current) return;
-    setTasks(loadedTasks);
-    setRemarks(loadedRemarks);
-    taskCursorRef.current = taskPage.nextCursor;
-    remarkCursorRef.current = remarkPage.nextCursor;
-    // A local page can end while the server still has an older page. Keep the
-    // continuation action available until that server boundary is checked.
-    setTaskHasMore(Boolean(taskPage.nextCursor) || loadedTasks.length === targetTaskCount);
-    setRemarkHasMore(Boolean(remarkPage.nextCursor));
-    await Promise.all([
-      setWorkListVisibleLimit(taskListScope, loadedTasks.length),
-      setWorkListVisibleLimit(remarkListScope, loadedRemarks.length)
-    ]);
-    await assertDataOwnerContext(ownerContext);
-    if (generation !== listGenerationRef.current) return;
-    setEmployees(nextEmployees);
-    setSections(nextSections);
-    const selected = context.employeeId && nextEmployees.some(item => item.employeeId === context.employeeId)
-      ? context.employeeId : nextEmployees.length === 1 ? nextEmployees[0].employeeId : "";
-    setCurrentEmployeeId(selected);
-    if (selected && selected !== context.employeeId) await selectPatrolEmployee(selected);
-  }, [currentEmployeeId, taskFilter]);
+  }, [drainReload, taskFilter]);
+  useEffect(() => { reloadLocalRef.current = reloadLocal; }, [reloadLocal]);
 
   useFocusEffect(useCallback(() => subscribeToSyncEvents((event) => {
     if (!event.snapshotRefreshed && !event.refreshedZones?.includes("workItems")) {
       return;
     }
 
-    beginRefresh();
     void reloadLocal()
       .catch((error) => {
         void logMobileError("emu.work-accounting.sync-refresh.failed", error);
         setRefreshError("Показаны сохранённые данные. Обновление с сервера не удалось.");
-      })
-      .finally(endRefresh);
-  }), [reloadLocal, beginRefresh, endRefresh]));
+      });
+  }), [reloadLocal]));
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      setLoading(true);
+      listFocusedRef.current = true;
+      setLoadingMore(false);
+      setLoading(!hasLoadedListRef.current);
 
       const handleRefreshSuccess = async () => {
         if (!isMounted) return;
@@ -275,9 +220,8 @@ export function WorkAccountingScreen() {
         }
       };
 
-      const serverEmployeeId = taskFilter === "available" ? null : (currentEmployeeId || null);
-      void loadWorkItemsOfflineFirst(handleRefreshSuccess, handleRefreshFailure, serverEmployeeId)
-        .then(() => reloadLocal(true))
+      void loadWorkItemsOfflineFirst(handleRefreshSuccess, handleRefreshFailure, null, taskFilter)
+        .then(() => { if (isMounted) return reloadLocal(); })
         .then(() => {
           if (isMounted) setMessage(null);
         })
@@ -289,195 +233,167 @@ export function WorkAccountingScreen() {
 
       return () => {
         isMounted = false;
+        listFocusedRef.current = false;
+        listGenerationRef.current++;
+        loadingMoreRef.current = false;
+        pendingReloadRef.current = false;
       };
-    }, [reloadLocal, taskFilter, currentEmployeeId])
+    }, [reloadLocal, taskFilter])
   );
 
+  // New drafts belong to the account/form, not to a global employee selection.
+  // Existing employee-keyed drafts remain selectable and are never overwritten.
+  const [draftChoices, setDraftChoices] = useState<ActionSheetItem[] | null>(null);
+  const openingDraftRef = useRef(false);
+  const draftFocusRef = useRef(0);
+  useFocusEffect(useCallback(() => {
+    draftFocusRef.current++;
+    return () => { draftFocusRef.current++; openingDraftRef.current = false; setDraftChoices(null); };
+  }, []));
+
+  async function openDraft<T>(kind: WorkDraftKind, entityId: string, open: (context: DataOwnerContext, draftKey: string, payload: T | null) => void) {
+    if (openingDraftRef.current) return;
+    openingDraftRef.current = true;
+    const focus = draftFocusRef.current;
+    try {
+      const owner = await captureDataOwnerContext();
+      const context = owner;
+      const drafts = await listWorkDraftsForContext<T>(context, kind, entityId);
+      await assertDataOwnerContext(owner);
+      if (focus !== draftFocusRef.current) return;
+      const apply = async (draftKey: string, payload: T | null) => {
+        try {
+          await assertDataOwnerContext(owner);
+          if (focus !== draftFocusRef.current) return;
+          setDraftNotice(null);
+          open(context, draftKey, payload);
+        } catch (error) { if (focus === draftFocusRef.current) setMessage(error instanceof Error ? error.message : "Не удалось открыть черновик."); }
+      };
+      if (drafts.length <= 1) {
+        await apply(drafts[0]?.draftKey ?? `form:${Crypto.randomUUID()}`, drafts[0]?.payload ?? null);
+      } else {
+        setMenuTask(null);
+        setDraftChoices([
+          ...drafts.map((draft, index) => {
+            const fields = draft.payload as { text?: string; comment?: string; employeeId?: string };
+            const employeeName = employees.find(employee => employee.employeeId === fields.employeeId)?.fullName;
+            return { label: `${index + 1}. ${employeeName ? formatShortName(employeeName) + " · " : ""}${formatDateTime(draft.updatedAt)} — ${fields.text || fields.comment || "Без текста"}`,
+              icon: "document-text-outline" as const, onPress: () => { void apply(draft.draftKey, draft.payload); } };
+          }),
+          { label: "Открыть новую форму", icon: "add-outline", onPress: () => { void apply(`form:${Crypto.randomUUID()}`, null); } }
+        ]);
+      }
+    } catch (error) {
+      if (focus === draftFocusRef.current) setMessage(error instanceof Error ? error.message : "Не удалось прочитать черновики.");
+    } finally { if (focus === draftFocusRef.current) openingDraftRef.current = false; }
+  }
+
   async function openCreateTask() {
-    const employeeId = defaultEmployeeId();
-    const draftContext = await getWorkDraftContext();
-    const draft = employeeId && draftContext ? await readWorkDraftForContext<{ sectionId?: string; text?: string; employeeId?: string }>(draftContext, employeeId, "task") : null;
-    setTaskEmployeeId(draft?.employeeId ?? employeeId);
-    setTaskDraftEmployeeId(employeeId);
-    setTaskDraftContext(draftContext);
-    setTaskSectionId(defaultSectionId());
-    setTaskSectionId(draft?.sectionId ?? defaultSectionId());
-    setTaskText(draft?.text ?? "");
-    setTaskModal({ mode: "create" });
+    await openDraft<{ sectionId?: string; text?: string; employeeId?: string }>("task", "new", (context, key, draft) => {
+      setTaskEmployeeId(draft?.employeeId ?? defaultEmployeeId());
+      setTaskDraftKey(key); setTaskDraftContext(context);
+      setTaskSectionId(draft?.sectionId ?? defaultSectionId());
+      setTaskText(draft?.text ?? ""); setTaskModal({ mode: "create" });
+      installDraft("task", "new", key, context, { employeeId: draft?.employeeId ?? defaultEmployeeId(), sectionId: draft?.sectionId ?? defaultSectionId(), text: draft?.text ?? "" });
+    });
   }
 
   async function openEditTask(task: WorkTaskDto) {
-    // The draft owner is the employee selected on this device. The employee
-    // stored inside the form remains independent and may belong to the task.
-    const draftOwnerEmployeeId = defaultEmployeeId();
-    const draftContext = await getWorkDraftContext();
-    const draft = draftOwnerEmployeeId && draftContext ? await readWorkDraftForContext<{ sectionId?: string; text?: string; employeeId?: string }>(draftContext, draftOwnerEmployeeId, "task", task.taskId) : null;
-    setTaskEmployeeId(draft?.employeeId ?? task.employeeId ?? draftOwnerEmployeeId);
-    setTaskDraftEmployeeId(draftOwnerEmployeeId);
-    setTaskDraftContext(draftContext);
-    setTaskSectionId(draft?.sectionId ?? task.sectionId ?? defaultSectionId());
-    setTaskText(draft?.text ?? task.title);
-    setMenuTask(null);
-    setTaskModal({ mode: "edit", task });
+    await openDraft<{ sectionId?: string; text?: string; employeeId?: string }>("task", task.taskId, (context, key, draft) => {
+      setTaskEmployeeId(draft?.employeeId ?? task.employeeId ?? defaultEmployeeId());
+      setTaskDraftKey(key); setTaskDraftContext(context);
+      setTaskSectionId(draft?.sectionId ?? task.sectionId ?? defaultSectionId());
+      setTaskText(draft?.text ?? task.title); setMenuTask(null); setTaskModal({ mode: "edit", task });
+      installDraft("task", task.taskId, key, context, { employeeId: draft?.employeeId ?? task.employeeId ?? defaultEmployeeId(), sectionId: draft?.sectionId ?? task.sectionId ?? defaultSectionId(), text: draft?.text ?? task.title });
+    });
   }
 
   async function openCompleteTask(task: WorkTaskDto) {
-    const draftOwnerEmployeeId = defaultEmployeeId();
-    const draftContext = await getWorkDraftContext();
-    const draft = draftOwnerEmployeeId && draftContext ? await readWorkDraftForContext<{ comment?: string }>(draftContext, draftOwnerEmployeeId, "taskCompletion", task.taskId) : null;
-    setMenuTask(null);
-    setCompleteTask(task);
-    setCompletionDraftEmployeeId(draftOwnerEmployeeId);
-    setCompletionDraftContext(draftContext);
-    setCompleteComment(draft?.comment ?? "");
+    await openDraft<{ comment?: string }>("taskCompletion", task.taskId, (context, key, draft) => {
+      setMenuTask(null); setCompleteTask(task);
+      setCompletionDraftKey(key); setCompletionDraftContext(context); setCompleteComment(draft?.comment ?? "");
+      installDraft("taskCompletion", task.taskId, key, context, { comment: draft?.comment ?? "" });
+    });
   }
 
   async function openCreateRemark() {
-    const employeeId = defaultEmployeeId();
-    const draftContext = await getWorkDraftContext();
-    const draft = employeeId && draftContext ? await readWorkDraftForContext<{ sectionId?: string; comment?: string; employeeId?: string; attachmentAfterSave?: RemarkAttachmentAfterSave }>(draftContext, employeeId, "remark") : null;
-    setRemarkEmployeeId(draft?.employeeId ?? employeeId);
-    setRemarkDraftEmployeeId(employeeId);
-    setRemarkDraftContext(draftContext);
-    setRemarkSectionId(draft?.sectionId ?? defaultSectionId());
-    setRemarkComment(draft?.comment ?? "");
-    setRemarkAttachmentAfterSave(draft?.attachmentAfterSave ?? "later");
-    setRemarkModalOpen(true);
-  }
-
-  useEffect(() => {
-    if (!taskModal || !taskDraftEmployeeId) return;
-    const entityId = taskModal.mode === "edit" ? taskModal.task?.taskId ?? "new" : "new";
-    const token = taskDraftContext ? captureWorkDraftWriteToken(taskDraftContext, taskDraftEmployeeId, "task", entityId) : null;
-    const timer = setTimeout(() => {
-      if (!taskDraftContext) return;
-      void saveWorkDraftForContext(taskDraftContext, taskDraftEmployeeId, "task", { sectionId: taskSectionId, employeeId: taskEmployeeId, text: taskText }, entityId, token ?? undefined)
-        .then((saved) => { if (saved) setDraftNotice("Черновик сохранён"); })
-        .catch(() => setDraftNotice("Не удалось сохранить черновик"));
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [taskModal, taskDraftEmployeeId, taskDraftContext, taskSectionId, taskEmployeeId, taskText]);
-
-  useEffect(() => {
-    if (!remarkModalOpen || !remarkDraftEmployeeId) return;
-    const token = remarkDraftContext ? captureWorkDraftWriteToken(remarkDraftContext, remarkDraftEmployeeId, "remark") : null;
-    const timer = setTimeout(() => {
-      if (!remarkDraftContext) return;
-      void saveWorkDraftForContext(remarkDraftContext, remarkDraftEmployeeId, "remark", { sectionId: remarkSectionId, employeeId: remarkEmployeeId, comment: remarkComment, attachmentAfterSave: remarkAttachmentAfterSave }, "new", token ?? undefined)
-        .then((saved) => { if (saved) setDraftNotice("Черновик сохранён"); })
-        .catch(() => setDraftNotice("Не удалось сохранить черновик"));
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [remarkModalOpen, remarkDraftEmployeeId, remarkDraftContext, remarkSectionId, remarkEmployeeId, remarkComment, remarkAttachmentAfterSave]);
-
-  useEffect(() => {
-    if (!completeTask || !completionDraftEmployeeId) return;
-    const token = completionDraftContext ? captureWorkDraftWriteToken(completionDraftContext, completionDraftEmployeeId, "taskCompletion", completeTask.taskId) : null;
-    const timer = setTimeout(() => {
-      if (!completionDraftContext) return;
-      void saveWorkDraftForContext(completionDraftContext, completionDraftEmployeeId, "taskCompletion", { comment: completeComment }, completeTask.taskId, token ?? undefined)
-        .then((saved) => { if (saved) setDraftNotice("Черновик сохранён"); })
-        .catch(() => setDraftNotice("Не удалось сохранить черновик"));
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [completeTask, completionDraftEmployeeId, completionDraftContext, completeComment]);
-
-  async function flushTaskDraft() {
-    if (!taskModal || !taskDraftEmployeeId || !taskDraftContext) return;
-    await flushWorkDraftForContext(taskDraftContext, taskDraftEmployeeId, "task", { sectionId: taskSectionId, employeeId: taskEmployeeId, text: taskText }, taskModal.mode === "edit" ? taskModal.task?.taskId : "new");
-    setDraftNotice("Черновик сохранён");
-  }
-
-  async function flushRemarkDraft() {
-    if (!remarkModalOpen || !remarkDraftEmployeeId || !remarkDraftContext) return;
-    await flushWorkDraftForContext(remarkDraftContext, remarkDraftEmployeeId, "remark", { sectionId: remarkSectionId, employeeId: remarkEmployeeId, comment: remarkComment, attachmentAfterSave: remarkAttachmentAfterSave });
-    setDraftNotice("Черновик сохранён");
-  }
-
-  async function flushCompletionDraft() {
-    if (!completeTask || !completionDraftEmployeeId || !completionDraftContext) return;
-    await flushWorkDraftForContext(completionDraftContext, completionDraftEmployeeId, "taskCompletion", { comment: completeComment }, completeTask.taskId);
-    setDraftNotice("Черновик сохранён");
-  }
-
-  async function closeWithDraft(flush: () => Promise<void>, close: () => void) {
-    try {
-      await flush();
-      close();
-    } catch {
-      setMessage("Черновик не сохранён. Повторите попытку или удалите черновик явно.");
-    }
-  }
-
-  async function clearTaskDraft() {
-    if (!taskModal || !taskDraftEmployeeId || !taskDraftContext) return;
-    try {
-      invalidateWorkDraftForContext(taskDraftContext, taskDraftEmployeeId, "task", taskModal.mode === "edit" ? taskModal.task?.taskId : "new");
-      await deleteWorkDraftForContext(taskDraftContext, taskDraftEmployeeId, "task", taskModal.mode === "edit" ? taskModal.task?.taskId : "new");
-      setTaskModal(null);
-      setTaskText("");
-      setDraftNotice("Черновик удалён");
-    } catch {
-      setMessage("Не удалось удалить черновик. Повторите попытку.");
-    }
-  }
-
-  async function clearRemarkDraft() {
-    if (!remarkDraftEmployeeId || !remarkDraftContext) return;
-    try {
-      invalidateWorkDraftForContext(remarkDraftContext, remarkDraftEmployeeId, "remark");
-      await deleteWorkDraftForContext(remarkDraftContext, remarkDraftEmployeeId, "remark");
-      setRemarkModalOpen(false);
-      setRemarkComment("");
-      setDraftNotice("Черновик удалён");
-    } catch {
-      setMessage("Не удалось удалить черновик. Повторите попытку.");
-    }
-  }
-
-  async function clearCompletionDraft() {
-    if (!completeTask || !completionDraftEmployeeId || !completionDraftContext) return;
-    try {
-      invalidateWorkDraftForContext(completionDraftContext, completionDraftEmployeeId, "taskCompletion", completeTask.taskId);
-      await deleteWorkDraftForContext(completionDraftContext, completionDraftEmployeeId, "taskCompletion", completeTask.taskId);
-      setCompleteTask(null);
-      setCompleteComment("");
-      setDraftNotice("Черновик удалён");
-    } catch {
-      setMessage("Не удалось удалить черновик. Повторите попытку.");
-    }
-  }
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state !== "background" && state !== "inactive") return;
-      const snapshot = draftStateRef.current;
-      const writes: Promise<void>[] = [];
-      if (snapshot.taskModal && snapshot.taskDraftEmployeeId && snapshot.taskDraftContext) {
-        writes.push(flushWorkDraftForContext(snapshot.taskDraftContext, snapshot.taskDraftEmployeeId, "task", {
-          sectionId: snapshot.taskSectionId,
-          employeeId: snapshot.taskEmployeeId,
-          text: snapshot.taskText
-        }, snapshot.taskModal.mode === "edit" ? snapshot.taskModal.task?.taskId : "new"));
-      }
-      if (snapshot.remarkModalOpen && snapshot.remarkDraftEmployeeId && snapshot.remarkDraftContext) {
-        writes.push(flushWorkDraftForContext(snapshot.remarkDraftContext, snapshot.remarkDraftEmployeeId, "remark", {
-          sectionId: snapshot.remarkSectionId,
-          employeeId: snapshot.remarkEmployeeId,
-          comment: snapshot.remarkComment,
-          attachmentAfterSave: snapshot.remarkAttachmentAfterSave
-        }));
-      }
-      if (snapshot.completeTask && snapshot.completionDraftEmployeeId && snapshot.completionDraftContext) {
-        writes.push(flushWorkDraftForContext(snapshot.completionDraftContext, snapshot.completionDraftEmployeeId, "taskCompletion", {
-          comment: snapshot.completeComment
-        }, snapshot.completeTask.taskId));
-      }
-      void Promise.all(writes).catch(() => {
-        setDraftNotice("Не удалось сохранить черновик перед сворачиванием приложения");
-      });
+    await openDraft<{ sectionId?: string; comment?: string; employeeId?: string; attachmentAfterSave?: RemarkAttachmentAfterSave }>("remark", "new", (context, key, draft) => {
+      setRemarkEmployeeId(draft?.employeeId ?? defaultEmployeeId());
+      setRemarkDraftKey(key); setRemarkDraftContext(context);
+      setRemarkSectionId(draft?.sectionId ?? defaultSectionId()); setRemarkComment(draft?.comment ?? "");
+      setRemarkAttachmentAfterSave(draft?.attachmentAfterSave ?? "later"); setRemarkModalOpen(true);
+      installDraft("remark", "new", key, context, { employeeId: draft?.employeeId ?? defaultEmployeeId(), sectionId: draft?.sectionId ?? defaultSectionId(), comment: draft?.comment ?? "", attachmentAfterSave: draft?.attachmentAfterSave ?? "later" });
     });
-    return () => subscription.remove();
+  }
+
+  type FormValue = Record<string, unknown>;
+  const workForm = useRef<{ kind: WorkDraftKind; entityId: string; key: string; scope: DataOwnerContext; value: FormValue; controller: ReturnType<typeof createFormDraftController<FormValue>> } | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [leaveFailed, setLeaveFailed] = useState(false);
+  const participationSaving = useRef(false);
+  const taskSaveInFlightRef = useRef(false);
+  const remarkSaveInFlightRef = useRef(false);
+  const completionSaveInFlightRef = useRef(false);
+
+  function installDraft(kind: WorkDraftKind, entityId: string, key: string, scope: DataOwnerContext, value: FormValue) {
+    workForm.current?.controller.close();
+    setMessage(null); setDraftNotice(null); setLeaveFailed(false);
+    const controller = createFormDraftController<FormValue>(async payload => {
+      await assertDataOwnerContext(scope);
+      await saveWorkDraftForContext(scope, key, kind, payload, entityId);
+      setDraftNotice("Черновик сохранён");
+    }, error => { setMessage(error instanceof Error ? error.message : "Не удалось сохранить черновик"); });
+    workForm.current = { kind, entityId, key, scope, value, controller };
+  }
+  function editDraft(field: string, value: unknown) {
+    const form = workForm.current;
+    if (!form) return;
+    form.value = { ...form.value, [field]: value };
+    form.controller.update(form.value);
+    setDraftNotice("Сохраняем…");
+  }
+  function closeModal() {
+    setTaskModal(null); setRemarkModalOpen(false); setCompleteTask(null); setParticipationAction(null);
+  }
+  async function closeWithDraft(_flush: unknown, close: () => void) {
+    const form = workForm.current;
+    if (!form) { close(); return; }
+    setSavingDraft(true); setLeaveFailed(false); setMessage(null);
+    try {
+      await form.controller.requestLeave(() => { close(); if (workForm.current === form) workForm.current = null; });
+    } catch (error) {
+      setLeaveFailed(true);
+      setMessage(error instanceof Error ? error.message : "Черновик не сохранён. Повторите сохранение.");
+    } finally { setSavingDraft(false); }
+  }
+  const flushTaskDraft = () => workForm.current?.controller.flushUntilSettled();
+  const flushRemarkDraft = flushTaskDraft;
+  const flushCompletionDraft = flushTaskDraft;
+  async function clearDraft() {
+    const form = workForm.current;
+    if (!form) return;
+    setLoading(true);
+    try {
+      await form.controller.pause();
+      await assertDataOwnerContext(form.scope);
+      await deleteWorkDraftForContext(form.scope, form.key, form.kind, form.entityId);
+      form.controller.close(); workForm.current = null; closeModal(); setDraftNotice(null);
+    } catch (error) {
+      form.controller.resume(); setMessage(error instanceof Error ? error.message : "Не удалось удалить черновик.");
+    } finally { setLoading(false); }
+  }
+  const clearTaskDraft = clearDraft;
+  const clearRemarkDraft = clearDraft;
+  const clearCompletionDraft = clearDraft;
+  useFocusEffect(useCallback(() => registerFormNavigationGuard(action => {
+    if (!workForm.current) { action(); return; }
+    void closeWithDraft(null, () => { closeModal(); action(); });
+  }), []));
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", state => {
+      if (state === "background" || state === "inactive") void workForm.current?.controller.flushUntilSettled().catch(error => setMessage(String(error)));
+    });
+    return () => { subscription.remove(); workForm.current?.controller.close(); };
   }, []);
 
   async function handleSaveTask() {
@@ -493,17 +409,20 @@ export function WorkAccountingScreen() {
     setLoading(true);
     setMessage(null);
     try {
-      if (taskDraftContext && taskDraftEmployeeId) {
-        invalidateWorkDraftForContext(taskDraftContext, taskDraftEmployeeId, "task", taskModal?.mode === "edit" ? taskModal.task?.taskId : "new");
-        await waitForWorkDraftForContext(taskDraftContext, taskDraftEmployeeId, "task", taskModal?.mode === "edit" ? taskModal.task?.taskId : "new");
+      await workForm.current?.controller.pause();
+      if (taskDraftContext && taskDraftKey) {
+        invalidateWorkDraftForContext(taskDraftContext, taskDraftKey, "task", taskModal?.mode === "edit" ? taskModal.task?.taskId : "new");
+        await waitForWorkDraftForContext(taskDraftContext, taskDraftKey, "task", taskModal?.mode === "edit" ? taskModal.task?.taskId : "new");
       }
+      if (!taskDraftContext || !taskDraftKey) throw new Error("Форма закрыта. Откройте её заново.");
+      await assertDataOwnerContext(taskDraftContext);
       if (taskModal?.mode === "edit" && taskModal.task) {
         await updateWorkTaskLocally({
           task: taskModal.task,
           sectionId: section.sectionId,
           sectionName: section.name,
           taskDescription: taskText,
-          draftEmployeeId: taskDraftEmployeeId
+          draftKey: taskDraftKey
         });
         setMessage("Изменение работы сохранено на телефоне и будет отправлено на сервер.");
       } else {
@@ -513,23 +432,26 @@ export function WorkAccountingScreen() {
           sectionId: section.sectionId,
           sectionName: section.name,
           taskDescription: taskText,
-          draftEmployeeId: taskDraftEmployeeId
+          draftKey: taskDraftKey
         });
-        setMessage("Работа создана на телефоне и появится в ЭМУ после синхронизации.");
+        setTab("tasks"); setTaskFilter("active");
+        setMessage("Работа создана на телефоне");
       }
 
+      workForm.current?.controller.close(); workForm.current = null;
       setTaskModal(null);
       await reloadLocal();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Не удалось сохранить работу.");
     } finally {
+      workForm.current?.controller.resume();
       taskSaveInFlightRef.current = false;
       setLoading(false);
     }
   }
 
   async function handleLoadMore() {
-    if (loadingMoreRef.current || loadingMore) return;
+    if (!listFocusedRef.current || loadingMoreRef.current || loadingMore || localReloadRef.current) return;
     if (tab === "remarks" && !remarkHasMore) return;
     if (tab === "tasks" && !taskHasMore && !taskCursorRef.current) return;
     loadingMoreRef.current = true;
@@ -539,23 +461,25 @@ export function WorkAccountingScreen() {
       try {
         const page = await listShiftRemarksPage(25, remarkCursorRef.current);
         if (generation !== listGenerationRef.current) return;
-        setRemarks(previous => [...previous, ...page.items]);
+        const existingIds = new Set(remarksRef.current.map(item => item.remarkId));
+        const additions = page.items.filter(item => !existingIds.has(item.remarkId));
+        remarksRef.current = [...remarksRef.current, ...additions];
+        setRemarks(remarksRef.current);
         const contextKey = listContextRef.current;
-        if (contextKey) void setWorkListVisibleLimit(listScope("remarks", contextKey), remarksRef.current.length + page.items.length);
+        if (contextKey) void setWorkListVisibleLimit(listScope("remarks", contextKey), remarksRef.current.length);
         remarkCursorRef.current = page.nextCursor;
         setRemarkHasMore(Boolean(page.nextCursor));
       } catch (error) {
-        setRefreshError(error instanceof Error ? error.message : "Не удалось загрузить следующие замечания.");
+        if (generation === listGenerationRef.current) setRefreshError(error instanceof Error ? error.message : "Не удалось загрузить следующие замечания.");
       } finally {
-        loadingMoreRef.current = false;
-        if (generation === listGenerationRef.current) setLoadingMore(false);
+        if (generation === listGenerationRef.current) { loadingMoreRef.current = false; setLoadingMore(false); drainReload(); }
       }
       return;
     }
     setLoadingMore(true);
     try {
       const scope = taskFilter === "history" ? "history" : "active";
-      const employeeId = currentEmployeeId || null;
+      const employeeId = null;
       const localFilter: LocalWorkItemsFilter = taskFilter;
       // Consume already cached rows first. Offline mode must never wait for
       // the network before exposing a page that is already on the device.
@@ -578,24 +502,24 @@ export function WorkAccountingScreen() {
           cursor = page.nextCursor;
         } while (collected.length < 25 && cursor);
         added = collected.slice(0, 25);
-        if (!added.length && !serverNext) setMessage("Больше работ в этой истории нет.");
+        // A confirmed end is list state, never a form error or a notification.
       }
       if (added.length > 0) {
         const known = new Set(tasksRef.current.map(item => item.itemId));
         const unique = added.filter(item => !known.has(item.itemId));
         if (unique.length) {
-          setTasks(previous => [...previous, ...unique]);
+          tasksRef.current = [...tasksRef.current, ...unique];
+          setTasks(tasksRef.current);
           const contextKey = listContextRef.current;
-          if (contextKey) void setWorkListVisibleLimit(listScope("tasks", contextKey), tasksRef.current.length + unique.length);
+          if (contextKey) void setWorkListVisibleLimit(listScope("tasks", contextKey), tasksRef.current.length);
         }
       }
       taskCursorRef.current = page.nextCursor;
       setTaskHasMore(Boolean(page.nextCursor) || added.length > 0 || Boolean(serverNext));
     } catch (error) {
-      setRefreshError(error instanceof Error ? error.message : "Не удалось загрузить следующую страницу работ.");
+      if (generation === listGenerationRef.current) setRefreshError(error instanceof Error ? error.message : "Не удалось загрузить следующую страницу работ.");
     } finally {
-      loadingMoreRef.current = false;
-      if (generation === listGenerationRef.current) setLoadingMore(false);
+      if (generation === listGenerationRef.current) { loadingMoreRef.current = false; setLoadingMore(false); drainReload(); }
     }
   }
 
@@ -612,21 +536,26 @@ export function WorkAccountingScreen() {
     setLoading(true);
     setMessage(null);
     try {
-      if (remarkDraftContext && remarkDraftEmployeeId) {
-        invalidateWorkDraftForContext(remarkDraftContext, remarkDraftEmployeeId, "remark");
-        await waitForWorkDraftForContext(remarkDraftContext, remarkDraftEmployeeId, "remark");
+      await workForm.current?.controller.pause();
+      if (remarkDraftContext && remarkDraftKey) {
+        invalidateWorkDraftForContext(remarkDraftContext, remarkDraftKey, "remark");
+        await waitForWorkDraftForContext(remarkDraftContext, remarkDraftKey, "remark");
       }
+      if (!remarkDraftContext || !remarkDraftKey) throw new Error("Форма закрыта. Откройте её заново.");
+      await assertDataOwnerContext(remarkDraftContext);
       const remarkId = await createShiftRemarkLocally({
         comment: remarkComment,
         sectionId: section.sectionId,
         sectionName: section.name,
         employeeId: employee.employeeId,
         employeeName: employee.fullName,
-        draftEmployeeId: remarkDraftEmployeeId
+        draftKey: remarkDraftKey
       });
+      workForm.current?.controller.close(); workForm.current = null;
       setRemarkModalOpen(false);
       await reloadLocal();
-      setMessage("Замечание сохранено на телефоне и будет отправлено на сервер.");
+      setTab("remarks");
+      setMessage("Замечание сохранено на телефоне");
 
       if (remarkAttachmentAfterSave === "now") {
         setAttachmentRemark({ remarkId, title: section.name });
@@ -634,6 +563,7 @@ export function WorkAccountingScreen() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Не удалось сохранить замечание.");
     } finally {
+      workForm.current?.controller.resume();
       remarkSaveInFlightRef.current = false;
       setLoading(false);
     }
@@ -669,11 +599,15 @@ export function WorkAccountingScreen() {
     setLoading(true);
     setMessage(null);
     try {
-      if (completionDraftContext && completionDraftEmployeeId) {
-        invalidateWorkDraftForContext(completionDraftContext, completionDraftEmployeeId, "taskCompletion", completeTask.taskId);
-        await waitForWorkDraftForContext(completionDraftContext, completionDraftEmployeeId, "taskCompletion", completeTask.taskId);
+      await workForm.current?.controller.pause();
+      if (completionDraftContext && completionDraftKey) {
+        invalidateWorkDraftForContext(completionDraftContext, completionDraftKey, "taskCompletion", completeTask.taskId);
+        await waitForWorkDraftForContext(completionDraftContext, completionDraftKey, "taskCompletion", completeTask.taskId);
       }
-      await completeWorkTaskLocally(completeTask, completeComment.trim(), completionDraftEmployeeId);
+      if (!completionDraftContext || !completionDraftKey) throw new Error("Форма закрыта. Откройте её заново.");
+      await assertDataOwnerContext(completionDraftContext);
+      await completeWorkTaskLocally(completeTask, completeComment.trim(), completionDraftKey);
+      workForm.current?.controller.close(); workForm.current = null;
       setCompleteTask(null);
       setCompleteComment("");
       await reloadLocal();
@@ -681,58 +615,38 @@ export function WorkAccountingScreen() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Не удалось завершить работу.");
     } finally {
+      workForm.current?.controller.resume();
       completionSaveInFlightRef.current = false;
       setLoading(false);
     }
   }
 
   function defaultEmployeeId() {
-    return currentEmployeeId || (employees.length === 1 ? employees[0].employeeId : "");
+    return employees.length === 1 ? employees[0].employeeId : "";
   }
 
   function defaultSectionId() {
     return sections[0]?.sectionId ?? "";
   }
 
-  async function changeSelectedEmployee(employeeId: string) {
-    try {
-      // A form belongs to the employee selected when it was opened. Finish its
-      // local write before changing the device-wide executor.
-      if (taskModal) await flushTaskDraft();
-      if (remarkModalOpen) await flushRemarkDraft();
-      if (completeTask) await flushCompletionDraft();
-      setCurrentEmployeeId(employeeId);
-      await selectPatrolEmployee(employeeId);
-    } catch {
-      setMessage("Не удалось сохранить черновик перед сменой исполнителя.");
-    }
-  }
-
-  const filteredTasks = tasks.filter((task) => {
-    const belongsToCurrentEmployee = Boolean(currentEmployeeId) && (task.actualParticipants.some((item) => item.employeeId === currentEmployeeId)
-      || task.assignedEmployees.some((item) => item.employeeId === currentEmployeeId));
-    const completed = task.status === "completedLocal" || task.status === "completedServer" || task.status === "cancelled";
-    if (taskFilter === "history") {
-      return completed && belongsToCurrentEmployee;
-    }
-    if (taskFilter === "available") {
-      return !completed && !belongsToCurrentEmployee;
-    }
-    return !completed && belongsToCurrentEmployee;
-  });
+  const filteredTasks = tasks;
   const visibleRemarks = remarks;
+  const listAnchor = useStableListAnchor(tab === 'tasks' ? tasks.map(item => item.itemId) : remarks.map(item => item.remarkId));
 
-  function openParticipationAction(mode: ParticipationAction["mode"], item: WorkItemDto) {
-    const defaultEmployee = employees.length === 1 ? employees[0].employeeId : "";
-    const previous = item.actualParticipants.find((participant) => !participant.isCurrentMobileEmployee && !participant.finishedAt);
-    setParticipationEmployeeId(defaultEmployee);
-    setParticipationPreviousEmployeeId(previous?.employeeId ?? "");
-    setParticipationReason("");
-    setMenuTask(null);
-    setParticipationAction({ mode, item });
+  async function openParticipationAction(mode: ParticipationAction["mode"], item: WorkItemDto) {
+    const kind = mode === "start" ? "workStart" : mode === "join" ? "workJoin" : "workReplace";
+    await openDraft<{ employeeId?: string; previousEmployeeId?: string; reason?: string }>(kind, item.itemId, (context, key, draft) => {
+      const employeeId = draft?.employeeId ?? defaultEmployeeId();
+      const previousEmployeeId = draft?.previousEmployeeId ?? "";
+      const reason = draft?.reason ?? "";
+      setParticipationEmployeeId(employeeId); setParticipationPreviousEmployeeId(previousEmployeeId); setParticipationReason(reason);
+      setMenuTask(null); setParticipationAction({ mode, item });
+      installDraft(kind, item.itemId, key, context, { employeeId, previousEmployeeId, reason });
+    });
   }
 
   async function handleParticipationAction() {
+    if (participationSaving.current) return;
     if (!participationAction) {
       return;
     }
@@ -746,28 +660,37 @@ export function WorkAccountingScreen() {
       return;
     }
 
+    participationSaving.current = true;
     setLoading(true);
     setMessage(null);
     try {
+      const form = workForm.current;
+      if (!form) throw new Error("Откройте форму заново.");
+      await form.controller.pause();
+      await assertDataOwnerContext(form.scope);
+      if (form.kind !== "workStart" && form.kind !== "workJoin" && form.kind !== "workReplace") throw new Error("Форма изменилась. Откройте её заново.");
+      const draft = { key: form.key, kind: form.kind, entityId: form.entityId };
       if (participationAction.mode === "start") {
-        await startPlannedWorkLocally(participationAction.item, employee);
+        await startPlannedWorkLocally(participationAction.item, employee, draft);
       } else if (participationAction.mode === "join") {
-        await joinWorkTaskLocally(participationAction.item, employee, participationReason);
+        await joinWorkTaskLocally(participationAction.item, employee, participationReason, draft);
       } else {
         await replaceWorkTaskParticipantLocally(
           participationAction.item,
           participationPreviousEmployeeId,
           employee,
-          participationReason
+          participationReason, draft
         );
       }
+      form.controller.close(); workForm.current = null;
       setParticipationAction(null);
       await reloadLocal();
-      setTaskFilter("mine");
+      setTaskFilter("active");
       setMessage("Действие сохранено на телефоне и будет отправлено в ЭМУ.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Не удалось изменить исполнителя работы.");
     } finally {
+      participationSaving.current = false; workForm.current?.controller.resume();
       setLoading(false);
     }
   }
@@ -835,66 +758,68 @@ export function WorkAccountingScreen() {
   }
 
   return (
-    <Screen scroll={false} title="Работы" subtitle="Учет работ и замечания по смене доступны оффлайн.">
+    <Screen compactHeader plainBackground scroll={false} title="" bottomActionBackground="transparent"
+      floatingNotice={<TransientNotice message={taskModal || remarkModalOpen || completeTask || participationAction ? null : message ?? refreshError} />}
+      bottomAction={<View style={{ alignItems: "center" }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Создать работу или замечание"
+          accessibilityState={{ disabled: loading }} disabled={loading} onPress={() => setCreateMenuOpen(true)}
+          style={({ pressed }) => ({ width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center",
+            backgroundColor: loading ? colors.disabled : pressed ? colors.primaryPressed : colors.primary })}>
+          <Ionicons name="add" size={28} color={loading ? colors.disabledText : colors.onPrimary} />
+        </Pressable>
+      </View>}>
+      <View style={{ paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <Text style={styles.helperText}>{tab === "remarks" ? "Замечания" : taskFilter === "history" ? "История работ" : "Активные работы"}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Настроить фильтр" onPress={() => setFilterMenuOpen(true)}
+          style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
+          <Ionicons name="options-outline" size={24} color={colors.primary} />
+        </Pressable>
+      </View>
       <FlatList<WorkItemDto | ShiftRemark>
-        contentContainerStyle={{ padding: 16, paddingBottom: 104, gap: 13 }}
+        maintainVisibleContentPosition={listAnchor}
+        contentContainerStyle={{ padding: 16, paddingBottom: 24, gap: 13 }}
         data={tab === "tasks" ? filteredTasks : visibleRemarks}
         keyExtractor={(item) => tab === "tasks" ? (item as WorkItemDto).itemId : (item as ShiftRemark).remarkId}
-        ListHeaderComponent={<>
-      <View style={styles.segment}>
-        <SegmentButton active={tab === "tasks"} label="Учет работ" onPress={() => setTab("tasks")} />
-        <SegmentButton active={tab === "remarks"} label="Замечания" onPress={() => setTab("remarks")} />
-      </View>
-
-      <View style={styles.field}>
-        <Text style={styles.label}>Исполнитель работ</Text>
-        {employees.length === 0 ? <Text style={styles.readOnlyValue}>Справочник сотрудников загружается</Text> : (
-          <OptionPicker
-            label="Исполнитель работ"
-            options={employees.map(employee => ({ id: employee.employeeId, label: formatShortName(employee.fullName) }))}
-            selectedId={currentEmployeeId}
-            onSelect={(employeeId) => {
-              void changeSelectedEmployee(employeeId);
-            }}
-          />
-        )}
-      </View>
-
-      {message ? <Text style={[styles.message, { color: colors.primary }]}>{message}</Text> : null}
-      {draftNotice ? <Text style={[styles.muted, { color: colors.mutedText }]}>{draftNotice}</Text> : null}
-      {showRefreshIndicator ? <StatusPill label="Обновляем данные…" tone="neutral" /> : null}
-      {refreshError ? <StatusPill label={refreshError} tone="warning" /> : null}
-
-      {tab === "tasks" ? (
-        <>
-          <PrimaryButton disabled={loading} icon="add-circle-outline" label="Создать и начать" onPress={openCreateTask} />
-          <View style={styles.segment}>
-            <SegmentButton active={taskFilter === "mine"} label="Мои" onPress={() => setTaskFilter("mine")} />
-            <SegmentButton active={taskFilter === "available"} label="Доступные" onPress={() => setTaskFilter("available")} />
-            <SegmentButton active={taskFilter === "history"} label="История" onPress={() => setTaskFilter("history")} />
-          </View>
-        </>
-      ) : (
-        <>
-          <PrimaryButton disabled={loading} icon="add-circle-outline" label="Создать замечание" onPress={openCreateRemark} />
-        </>
-      )}
-        </>}
         ListEmptyComponent={<EmptyCard title={tab === "tasks" ? "Работ нет" : "Замечаний нет"} text={tab === "tasks" ? "Создайте работу на телефоне или дождитесь назначения из ЭМУ." : "Добавьте замечание по смене, участку и приложите фото при необходимости."} />}
         ListFooterComponent={(tab === "tasks" ? filteredTasks.length : visibleRemarks.length) > 0 && (tab === "tasks" ? taskHasMore : remarkHasMore) ? <PrimaryButton disabled={loadingMore} icon="chevron-down-outline" label={loadingMore ? "Загружаем…" : "Загрузить ещё"} onPress={handleLoadMore} variant="secondary" /> : null}
-        onEndReached={() => { if (tab === "tasks") void handleLoadMore(); }}
+        onEndReached={() => { if (tab === "tasks" && !workForm.current) void handleLoadMore(); }}
         onEndReachedThreshold={0.4}
-        removeClippedSubviews
+        removeClippedSubviews={false}
         renderItem={({ item }) => tab === "tasks" ? (() => {
           const task = item as WorkItemDto;
-          return <Card><View style={styles.row}><View style={styles.titleBox}><Text style={[styles.cardTitle, { color: colors.text }]}>{task.title}</Text><Text style={[styles.text, { color: colors.mutedText }]}>{task.sectionName ?? "Участок не указан"}</Text></View><Pressable accessibilityRole="button" onPress={() => setMenuTask(task)} style={styles.iconButton}><Ionicons color={colors.mutedText} name="ellipsis-horizontal" size={22} /></Pressable></View><View style={styles.metaRow}><StatusPill label={statusLabel(task.status)} tone={statusTone(task.status)} /><StatusPill {...workDeliveryPresentation(task.syncStatus)} /></View><Text style={[styles.text, { color: colors.mutedText }]}>Исполнители: {formatParticipants(task)}</Text><Text style={[styles.muted, { color: colors.mutedText }]}>{formatWorkAttachments(task)}</Text>{task.deliveryError ? <Text style={[styles.muted, { color: "#b91c1c" }]}>{task.deliveryError}</Text> : null}<Text style={[styles.muted, { color: colors.mutedText }]}>Создано: {formatDateTime(task.createdAtLocal)}</Text></Card>;
+          const primary = getTaskPrimaryAction(task, { onStart: item => void openParticipationAction("start", item), onJoin: item => void openParticipationAction("join", item), onResume: task => void applyTaskAction(() => resumeWorkTaskLocally(task as WorkTaskDto, "Продолжение работы"), "Работа продолжена", "Не удалось продолжить"), onComplete: task => void openCompleteTask(task as WorkTaskDto) });
+          return <Card style={{ borderRadius: 12, padding: 14, gap: 8, elevation: 0, shadowOpacity: 0 }}>
+            <View style={styles.row}>
+              <View style={styles.titleBox}>
+                <Text style={styles.cardTitle}>{task.title}</Text>
+                <View style={styles.detailRow}><Ionicons name="location-outline" size={16} color={colors.mutedText} /><Text style={[styles.helperText, { flex: 1 }]}>{task.sectionName ?? "Участок не указан"}</Text></View>
+                <View style={styles.detailRow}><Ionicons name="person-outline" size={16} color={colors.mutedText} /><Text style={[styles.helperText, { flex: 1 }]}>{formatParticipants(task)}</Text></View>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Действия: ${task.title}`} onPress={() => setMenuTask(task)} style={styles.iconButton}><Ionicons color={colors.mutedText} name="ellipsis-vertical" size={22} /></Pressable>
+            </View>
+            <View style={styles.cardActions}><StatusPill label={statusLabel(task.status)} tone={statusTone(task.status)} />{primary ? <View style={{ flexShrink: 1 }}><PrimaryButton disabled={loading} label={primary.label} icon={primary.icon} onPress={primary.onPress} /></View> : null}</View>
+            <View style={styles.metaRow}><Text style={styles.helperText}>{formatDateTime(task.createdAtLocal)}</Text><Text style={styles.helperText}>{formatWorkAttachments(task)}</Text></View>
+            <Text style={styles.helperText}>{workDeliveryPresentation(task.syncStatus).label}</Text>
+            {task.deliveryError ? <Text style={[styles.helperText, { color: colors.danger }]}>{task.deliveryError}</Text> : null}
+          </Card>;
         })() : (() => {
           const remark = item as ShiftRemark;
           return <Card><View style={styles.row}><View style={styles.titleBox}><Text style={[styles.cardTitle, { color: colors.text }]}>{remark.sectionName ?? "Замечание"}</Text><Text style={[styles.text, { color: colors.mutedText }]} numberOfLines={4}>{remark.comment}</Text></View><StatusPill label={remarkStatusLabel(remark.status)} tone={remarkStatusTone(remark.status)} /></View><Text style={[styles.text, { color: colors.mutedText }]}>Исполнитель: {remark.employeeName ? formatShortName(remark.employeeName) : "не указан"}</Text><Text style={[styles.muted, { color: colors.mutedText }]}>Дата: {formatDateTime(remark.createdAtLocal)}</Text><Text style={[styles.muted, { color: colors.mutedText }]}>Вложения: {remark.mediaClientFileIds.length}</Text><PrimaryButton disabled={loading} icon="attach-outline" label="Добавить вложение" onPress={() => setAttachmentRemark({ remarkId: remark.remarkId, title: remark.sectionName ?? "Замечание" })} variant="secondary" /></Card>;
         })()}
       />
 
+      <ActionSheet title="Что создать?" visible={createMenuOpen} onClose={() => setCreateMenuOpen(false)} actions={[
+        { label: "Создать работу", icon: "construct-outline", onPress: openCreateTask },
+        { label: "Создать замечание", icon: "chatbox-ellipses-outline", onPress: openCreateRemark }
+      ]} />
+      <ActionSheet title="Показать" visible={filterMenuOpen} onClose={() => setFilterMenuOpen(false)} actions={[
+        { label: "Активные работы", icon: tab === "tasks" && taskFilter === "active" ? "checkmark-circle" : "construct-outline", onPress: () => { setTab("tasks"); setTaskFilter("active"); } },
+        { label: "История работ", icon: tab === "tasks" && taskFilter === "history" ? "checkmark-circle" : "time-outline", onPress: () => { setTab("tasks"); setTaskFilter("history"); } },
+        { label: "Замечания", icon: tab === "remarks" ? "checkmark-circle" : "chatbox-ellipses-outline", onPress: () => setTab("remarks") }
+      ]} />
       <TaskModal
+        draftNotice={savingDraft ? "Сохраняем…" : draftNotice}
+        onRetry={leaveFailed ? () => void closeWithDraft(null, closeModal) : undefined}
         employees={employees}
         error={taskModal ? message : null}
         loading={loading}
@@ -903,15 +828,17 @@ export function WorkAccountingScreen() {
         onDeleteDraft={() => void clearTaskDraft()}
         onSave={handleSaveTask}
         sections={sections}
-        setTaskEmployeeId={setTaskEmployeeId}
-        setTaskSectionId={setTaskSectionId}
-        setTaskText={setTaskText}
+        setTaskEmployeeId={value => { editDraft("employeeId", value); setTaskEmployeeId(value); }}
+        setTaskSectionId={value => { editDraft("sectionId", value); setTaskSectionId(value); }}
+        setTaskText={value => { editDraft("text", value); setTaskText(value); }}
         taskEmployeeId={taskEmployeeId}
         taskSectionId={taskSectionId}
         taskText={taskText}
       />
 
       <RemarkModal
+        draftNotice={savingDraft ? "Сохраняем…" : draftNotice}
+        onRetry={leaveFailed ? () => void closeWithDraft(null, closeModal) : undefined}
         employees={employees}
         error={remarkModalOpen ? message : null}
         loading={loading}
@@ -924,10 +851,10 @@ export function WorkAccountingScreen() {
         remarkAttachmentAfterSave={remarkAttachmentAfterSave}
         remarkSectionId={remarkSectionId}
         sections={sections}
-        setRemarkComment={setRemarkComment}
-        setRemarkEmployeeId={setRemarkEmployeeId}
-        setRemarkAttachmentAfterSave={setRemarkAttachmentAfterSave}
-        setRemarkSectionId={setRemarkSectionId}
+        setRemarkComment={value => { editDraft("comment", value); setRemarkComment(value); }}
+        setRemarkEmployeeId={value => { editDraft("employeeId", value); setRemarkEmployeeId(value); }}
+        setRemarkAttachmentAfterSave={value => { editDraft("attachmentAfterSave", value); setRemarkAttachmentAfterSave(value); }}
+        setRemarkSectionId={value => { editDraft("sectionId", value); setRemarkSectionId(value); }}
       />
 
       <TaskMenu
@@ -960,29 +887,36 @@ export function WorkAccountingScreen() {
       />
 
       <ParticipationModal
+        error={message}
+        draftNotice={savingDraft ? "Сохраняем…" : draftNotice}
+        onRetry={leaveFailed ? () => void closeWithDraft(null, closeModal) : undefined}
+        onDeleteDraft={() => void clearDraft()}
         action={participationAction}
         employeeId={participationEmployeeId}
         employees={employees}
         loading={loading}
-        onClose={() => setParticipationAction(null)}
+        onClose={() => void closeWithDraft(null, () => setParticipationAction(null))}
         onSave={handleParticipationAction}
         previousEmployeeId={participationPreviousEmployeeId}
         reason={participationReason}
-        setEmployeeId={setParticipationEmployeeId}
-        setPreviousEmployeeId={setParticipationPreviousEmployeeId}
-        setReason={setParticipationReason}
+        setEmployeeId={value => { editDraft("employeeId", value); setParticipationEmployeeId(value); }}
+        setPreviousEmployeeId={value => { editDraft("previousEmployeeId", value); setParticipationPreviousEmployeeId(value); }}
+        setReason={value => { editDraft("reason", value); setParticipationReason(value); }}
       />
 
       <CompleteTaskModal
+        draftNotice={savingDraft ? "Сохраняем…" : draftNotice}
+        onRetry={leaveFailed ? () => void closeWithDraft(null, closeModal) : undefined}
         comment={completeComment}
         error={completeTask ? message : null}
         loading={loading}
-        onChangeComment={setCompleteComment}
+        onChangeComment={value => { editDraft("comment", value); setCompleteComment(value); }}
         onClose={() => void closeWithDraft(flushCompletionDraft, () => setCompleteTask(null))}
         onDeleteDraft={() => void clearCompletionDraft()}
         onSave={handleCompleteTask}
         task={completeTask}
       />
+      <ActionSheet title="Сохранённые черновики" visible={draftChoices !== null} actions={draftChoices ?? []} onClose={() => setDraftChoices(null)} />
       <ActionSheet
         actions={[
           { icon: "camera-outline", label: "Сделать фото", onPress: () => void handleAttachWorkMedia("photo") },
@@ -1007,489 +941,8 @@ export function WorkAccountingScreen() {
   );
 }
 
-function SegmentButton({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={[styles.segmentButton, active ? styles.segmentButtonActive : null]}>
-      <Text style={[styles.segmentText, active ? styles.segmentTextActive : null]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function TaskModal({
-  error,
-  employees,
-  loading,
-  modal,
-  onClose,
-  onDeleteDraft,
-  onSave,
-  sections,
-  setTaskEmployeeId,
-  setTaskSectionId,
-  setTaskText,
-  taskEmployeeId,
-  taskSectionId,
-  taskText
-}: {
-  error: string | null;
-  employees: MobileEmployeeDto[];
-  loading: boolean;
-  modal: { mode: "create" | "edit"; task?: WorkTaskDto } | null;
-  onClose: () => void;
-  onDeleteDraft: () => void;
-  onSave: () => void;
-  sections: MobileEmuSectionDto[];
-  setTaskEmployeeId: (value: string) => void;
-  setTaskSectionId: (value: string) => void;
-  setTaskText: (value: string) => void;
-  taskEmployeeId: string;
-  taskSectionId: string;
-  taskText: string;
-}) {
-  const insets = useSafeAreaInsets();
-  const hasUnsavedChanges = modal?.mode === "create" ? taskText.trim().length > 0 : Boolean(modal?.task && (taskText !== modal.task.title || taskEmployeeId !== (modal.task.employeeId ?? "") || taskSectionId !== (modal.task.sectionId ?? "")));
-
-  return (
-    <Modal animationType="slide" onRequestClose={() => requestModalClose(hasUnsavedChanges, loading, onClose)} transparent visible={Boolean(modal)}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 18}
-        style={styles.modalBackdrop}
-      >
-        <View accessibilityViewIsModal style={styles.modalCard}>
-          <Text accessibilityRole="header" style={styles.modalTitle}>{modal?.mode === "edit" ? "Изменить работу" : "Создать работу"}</Text>
-          {error ? <Text style={[styles.message, { color: "#b91c1c" }]}>{error}</Text> : null}
-          <ScrollView
-            contentContainerStyle={styles.modalScrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            style={styles.modalScroll}
-          >
-            <OptionPicker label="Исполнитель" options={employees.map((item) => ({ id: item.employeeId, label: formatShortName(item.fullName) }))} selectedId={taskEmployeeId} onSelect={setTaskEmployeeId} />
-            <OptionPicker label="Участок" options={sections.map((item) => ({ id: item.sectionId, label: item.name }))} selectedId={taskSectionId} onSelect={setTaskSectionId} />
-            <Text style={styles.label}>Дата и время</Text>
-            <Text style={styles.readOnlyValue}>Автоматически при сохранении</Text>
-            <Text style={styles.label}>Задача</Text>
-            <TextInput accessibilityLabel="Задача" multiline onChangeText={setTaskText} placeholder="Что нужно выполнить?" placeholderTextColor="#9ca3af" style={[styles.input, styles.textarea]} textAlignVertical="top" value={taskText} />
-          </ScrollView>
-          <View style={[styles.modalActions, { paddingBottom: Math.max(insets.bottom + 12, 22) }]}>
-            <PrimaryButton disabled={loading} label="Удалить черновик" onPress={onDeleteDraft} variant="secondary" />
-            <PrimaryButton disabled={loading} label="Отмена" onPress={() => requestModalClose(hasUnsavedChanges, loading, onClose)} variant="secondary" />
-            <PrimaryButton disabled={loading} label="Сохранить" onPress={onSave} />
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-function RemarkModal({
-  error,
-  employees,
-  loading,
-  onClose,
-  onDeleteDraft,
-  onSave,
-  open,
-  remarkAttachmentAfterSave,
-  remarkComment,
-  remarkEmployeeId,
-  remarkSectionId,
-  sections,
-  setRemarkAttachmentAfterSave,
-  setRemarkComment,
-  setRemarkEmployeeId,
-  setRemarkSectionId
-}: {
-  error: string | null;
-  employees: MobileEmployeeDto[];
-  loading: boolean;
-  onClose: () => void;
-  onDeleteDraft: () => void;
-  onSave: () => void;
-  open: boolean;
-  remarkAttachmentAfterSave: RemarkAttachmentAfterSave;
-  remarkComment: string;
-  remarkEmployeeId: string;
-  remarkSectionId: string;
-  sections: MobileEmuSectionDto[];
-  setRemarkAttachmentAfterSave: (value: RemarkAttachmentAfterSave) => void;
-  setRemarkComment: (value: string) => void;
-  setRemarkEmployeeId: (value: string) => void;
-  setRemarkSectionId: (value: string) => void;
-}) {
-  const insets = useSafeAreaInsets();
-  const hasUnsavedChanges = remarkComment.trim().length > 0 || remarkAttachmentAfterSave !== "later";
-
-  return (
-    <Modal animationType="slide" onRequestClose={() => requestModalClose(hasUnsavedChanges, loading, onClose)} transparent visible={open}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 18}
-        style={styles.modalBackdrop}
-      >
-        <View accessibilityViewIsModal style={styles.modalCard}>
-          <Text accessibilityRole="header" style={styles.modalTitle}>Новое замечание</Text>
-          {error ? <Text style={[styles.message, { color: "#b91c1c" }]}>{error}</Text> : null}
-          <ScrollView
-            contentContainerStyle={styles.modalScrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            style={styles.modalScroll}
-          >
-            <OptionPicker label="Исполнитель" options={employees.map((item) => ({ id: item.employeeId, label: formatShortName(item.fullName) }))} selectedId={remarkEmployeeId} onSelect={setRemarkEmployeeId} />
-            <OptionPicker label="Участок" options={sections.map((item) => ({ id: item.sectionId, label: item.name }))} selectedId={remarkSectionId} onSelect={setRemarkSectionId} />
-            <Text style={styles.label}>Дата</Text>
-            <Text style={styles.readOnlyValue}>Автоматически при сохранении</Text>
-            <Text style={styles.label}>Описание замечания</Text>
-            <TextInput accessibilityLabel="Описание замечания" multiline onChangeText={setRemarkComment} placeholder="Опишите замечание" placeholderTextColor="#9ca3af" style={[styles.input, styles.textarea]} textAlignVertical="top" value={remarkComment} />
-            <Text style={styles.label}>Вложения</Text>
-            <View style={styles.inlineActions}>
-              <ChoiceButton active={remarkAttachmentAfterSave === "later"} label="Добавить позже" onPress={() => setRemarkAttachmentAfterSave("later")} />
-              <ChoiceButton active={remarkAttachmentAfterSave === "now"} label="Добавить сейчас" onPress={() => setRemarkAttachmentAfterSave("now")} />
-            </View>
-            <Text style={styles.helperText}>После сохранения можно добавить фото, видео или выбрать несколько файлов из галереи.</Text>
-          </ScrollView>
-          <View style={[styles.modalActions, { paddingBottom: Math.max(insets.bottom + 12, 22) }]}>
-            <PrimaryButton disabled={loading} label="Удалить черновик" onPress={onDeleteDraft} variant="secondary" />
-            <PrimaryButton disabled={loading} label="Отмена" onPress={() => requestModalClose(hasUnsavedChanges, loading, onClose)} variant="secondary" />
-            <PrimaryButton disabled={loading} label="Сохранить" onPress={onSave} />
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-function CompleteTaskModal({
-  comment,
-  error,
-  loading,
-  onChangeComment,
-  onClose,
-  onDeleteDraft,
-  onSave,
-  task
-}: {
-  comment: string;
-  error: string | null;
-  loading: boolean;
-  onChangeComment: (value: string) => void;
-  onClose: () => void;
-  onDeleteDraft: () => void;
-  onSave: () => void;
-  task: WorkTaskDto | null;
-}) {
-  const insets = useSafeAreaInsets();
-
-  const hasUnsavedChanges = comment.trim().length > 0;
-  return (
-    <Modal animationType="slide" onRequestClose={() => requestModalClose(hasUnsavedChanges, loading, onClose)} transparent visible={Boolean(task)}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 18}
-        style={styles.modalBackdrop}
-      >
-        <View accessibilityViewIsModal style={styles.modalCard}>
-          <Text accessibilityRole="header" style={styles.modalTitle}>Завершить работу</Text>
-          {error ? <Text style={[styles.message, { color: "#b91c1c" }]}>{error}</Text> : null}
-          <ScrollView
-            contentContainerStyle={styles.modalScrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            style={styles.modalScroll}
-          >
-            <Text style={styles.label}>Работа</Text>
-            <Text style={styles.readOnlyValue}>{task?.title ?? "-"}</Text>
-            <Text style={styles.label}>Участок</Text>
-            <Text style={styles.readOnlyValue}>{task?.sectionName ?? "Участок не указан"}</Text>
-            <Text style={styles.label}>Результат выполнения</Text>
-            <TextInput
-              multiline
-              onChangeText={onChangeComment}
-              accessibilityLabel="Результат выполнения"
-              placeholder="Что выполнено?"
-              placeholderTextColor="#9ca3af"
-              style={[styles.input, styles.textarea]}
-              textAlignVertical="top"
-              value={comment}
-            />
-          </ScrollView>
-          <View style={[styles.modalActions, { paddingBottom: Math.max(insets.bottom + 12, 22) }]}>
-            <PrimaryButton disabled={loading} label="Удалить черновик" onPress={onDeleteDraft} variant="secondary" />
-            <PrimaryButton disabled={loading} label="Отмена" onPress={() => requestModalClose(hasUnsavedChanges, loading, onClose)} variant="secondary" />
-            <PrimaryButton disabled={loading} icon="checkmark-circle-outline" label="Завершить" onPress={onSave} />
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-function TaskMenu({
-  loading,
-  onClose,
-  onComplete,
-  onEdit,
-  onPause,
-  onResume,
-  onJoin,
-  onAttach,
-  onReplace,
-  onStart,
-  task
-}: {
-  loading: boolean;
-  onClose: () => void;
-  onComplete: (task: WorkItemDto) => void;
-  onEdit: (task: WorkItemDto) => void;
-  onPause: (task: WorkItemDto) => void;
-  onResume: (task: WorkItemDto) => void;
-  onJoin: (task: WorkItemDto) => void;
-  onAttach: (task: WorkItemDto) => void;
-  onReplace: (task: WorkItemDto) => void;
-  onStart: (task: WorkItemDto) => void;
-  task: WorkItemDto | null;
-}) {
-  const insets = useSafeAreaInsets();
-  const primaryAction = task ? getTaskPrimaryAction(task, {
-    onComplete,
-    onJoin,
-    onResume,
-    onStart
-  }) : null;
-  const secondaryActions = task ? getTaskSecondaryActions(task, {
-    onAttach,
-    onEdit,
-    onPause,
-    onReplace
-  }) : [];
-
-  return (
-    <Modal animationType="fade" onRequestClose={() => requestModalClose(false, loading, onClose)} transparent visible={Boolean(task)}>
-      <View style={[styles.menuBackdrop, { paddingBottom: Math.max(insets.bottom + 12, 22) }]}>
-        <View accessibilityLabel={task?.title ?? "Действия с работой"} accessibilityViewIsModal style={styles.menuCard}>
-          <Text accessibilityRole="header" style={styles.modalTitle}>{task?.title ?? "Работа"}</Text>
-          {task ? <Text style={styles.menuSubtitle}>{task.sectionName ?? "Участок не указан"} · {statusLabel(task.status)}</Text> : null}
-          {primaryAction ? (
-            <PrimaryButton disabled={loading} icon={primaryAction.icon} label={primaryAction.label} onPress={primaryAction.onPress} />
-          ) : null}
-          {secondaryActions.length > 0 ? (
-            <View style={styles.menuSecondaryList}>
-              {secondaryActions.map((action) => (
-                <MenuSecondaryAction
-                  disabled={loading}
-                  icon={action.icon}
-                  key={action.label}
-                  label={action.label}
-                  onPress={action.onPress}
-                  danger={action.danger}
-                />
-              ))}
-            </View>
-          ) : null}
-          <PrimaryButton disabled={loading} label="Закрыть" onPress={onClose} variant="ghost" />
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-type TaskMenuCallbackMap = {
-  onAttach: (task: WorkItemDto) => void;
-  onComplete: (task: WorkItemDto) => void;
-  onEdit: (task: WorkItemDto) => void;
-  onJoin: (task: WorkItemDto) => void;
-  onPause: (task: WorkItemDto) => void;
-  onReplace: (task: WorkItemDto) => void;
-  onResume: (task: WorkItemDto) => void;
-  onStart: (task: WorkItemDto) => void;
-};
-
-function getTaskPrimaryAction(
-  task: WorkItemDto,
-  handlers: Pick<TaskMenuCallbackMap, "onComplete" | "onJoin" | "onResume" | "onStart">
-) {
-  if (task.capabilities.canStart && canStartEmuTask(task.status)) {
-    return { icon: "play-outline" as const, label: "Начать работу", onPress: () => handlers.onStart(task) };
-  }
-  if (task.capabilities.canJoin && canStartEmuTask(task.status)) {
-    return { icon: "person-add-outline" as const, label: "Присоединиться", onPress: () => handlers.onJoin(task) };
-  }
-  if (task.capabilities.canResume && canResumeEmuTask(task.status)) {
-    return { icon: "play-outline" as const, label: "Продолжить", onPress: () => handlers.onResume(task) };
-  }
-  if (task.capabilities.canComplete && canCompleteEmuTask(task.status)) {
-    return { icon: "checkmark-circle-outline" as const, label: "Завершить", onPress: () => handlers.onComplete(task) };
-  }
-  return null;
-}
-
-function getTaskSecondaryActions(
-  task: WorkItemDto,
-  handlers: Pick<TaskMenuCallbackMap, "onAttach" | "onEdit" | "onPause" | "onReplace">
-) {
-  const actions: {
-    danger?: boolean;
-    icon: keyof typeof Ionicons.glyphMap;
-    label: string;
-    onPress: () => void;
-  }[] = [];
-
-  if (task.capabilities.canReplace && canStartEmuTask(task.status)) {
-    actions.push({ icon: "swap-horizontal-outline", label: "Принять вместо исполнителя", onPress: () => handlers.onReplace(task) });
-  }
-  if (task.capabilities.canPause && canPauseEmuTask(task.status)) {
-    actions.push({ icon: "pause-outline", label: "Остановить", onPress: () => handlers.onPause(task), danger: true });
-  }
-  if (task.capabilities.canComplete && canEditEmuTask(task.status)) {
-    actions.push({ icon: "create-outline", label: "Изменить", onPress: () => handlers.onEdit(task) });
-  }
-  if (task.kind === "workSession" && canAttachEmuMedia(task.status)) {
-    actions.push({ icon: "attach-outline", label: "Добавить вложение", onPress: () => handlers.onAttach(task) });
-  }
-  return actions;
-}
-
-function MenuSecondaryAction({
-  danger,
-  disabled,
-  icon,
-  label,
-  onPress
-}: {
-  danger?: boolean;
-  disabled?: boolean;
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.menuSecondaryAction,
-        disabled ? styles.disabledAction : null,
-        pressed && !disabled ? styles.menuSecondaryPressed : null
-      ]}
-    >
-      <Ionicons color={danger ? "#ef4444" : "#1e5bff"} name={icon} size={18} />
-      <Text style={[styles.menuSecondaryText, danger ? styles.menuSecondaryDanger : null]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function ParticipationModal({
-  action,
-  employeeId,
-  employees,
-  loading,
-  onClose,
-  onSave,
-  previousEmployeeId,
-  reason,
-  setEmployeeId,
-  setPreviousEmployeeId,
-  setReason
-}: {
-  action: ParticipationAction | null;
-  employeeId: string;
-  employees: MobileEmployeeDto[];
-  loading: boolean;
-  onClose: () => void;
-  onSave: () => void;
-  previousEmployeeId: string;
-  reason: string;
-  setEmployeeId: (value: string) => void;
-  setPreviousEmployeeId: (value: string) => void;
-  setReason: (value: string) => void;
-}) {
-  const insets = useSafeAreaInsets();
-  const previousOptions = action?.item.actualParticipants
-    .filter((participant) => !participant.finishedAt && !participant.isCurrentMobileEmployee)
-    .map((participant) => ({ id: participant.employeeId, label: formatShortName(participant.fullName) })) ?? [];
-  const title = action?.mode === "replace"
-    ? "Принять вместо исполнителя"
-    : action?.mode === "join"
-      ? "Присоединиться к работе"
-      : "Начать работу";
-  const hasUnsavedChanges = Boolean(reason.trim() || previousEmployeeId);
-
-  return (
-    <Modal animationType="slide" onRequestClose={() => requestModalClose(hasUnsavedChanges, loading, onClose)} transparent visible={Boolean(action)}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalBackdrop}>
-        <View accessibilityViewIsModal style={styles.modalCard}>
-          <Text accessibilityRole="header" style={styles.modalTitle}>{title}</Text>
-          <ScrollView contentContainerStyle={styles.modalScrollContent} keyboardShouldPersistTaps="handled">
-            <Text style={styles.readOnlyValue}>{action?.item.title ?? "-"}</Text>
-            <OptionPicker
-              label="Фактический исполнитель"
-              onSelect={setEmployeeId}
-              options={employees.map((employee) => ({ id: employee.employeeId, label: formatShortName(employee.fullName) }))}
-              selectedId={employeeId}
-            />
-            {action?.mode === "replace" ? (
-              <OptionPicker label="Прежний исполнитель" onSelect={setPreviousEmployeeId} options={previousOptions} selectedId={previousEmployeeId} />
-            ) : null}
-            {action?.mode !== "start" ? (
-              <>
-                <Text style={styles.label}>{action?.mode === "replace" ? "Причина замены" : "Примечание"}</Text>
-                <TextInput
-                  multiline
-                  onChangeText={setReason}
-                  placeholder={action?.mode === "replace" ? "Почему меняется исполнитель?" : "Что будете выполнять?"}
-                  placeholderTextColor="#9ca3af"
-                  accessibilityLabel={action?.mode === "replace" ? "Причина замены" : "Примечание"}
-                  style={[styles.input, styles.textarea]}
-                  value={reason}
-                />
-              </>
-            ) : null}
-          </ScrollView>
-          <View style={[styles.modalActions, { paddingBottom: Math.max(insets.bottom + 12, 22) }]}>
-            <PrimaryButton disabled={loading} label="Отмена" onPress={() => requestModalClose(hasUnsavedChanges, loading, onClose)} variant="secondary" />
-            <PrimaryButton disabled={loading} label={action?.mode === "replace" ? "Подтвердить замену" : "Продолжить"} onPress={onSave} />
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-function OptionPicker({
-  label,
-  onSelect,
-  options,
-  selectedId
-}: {
-  label: string;
-  onSelect: (value: string) => void;
-  options: { id: string; label: string }[];
-  selectedId: string;
-}) {
-  return (
-    <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
-      <View accessibilityLabel={label} accessibilityRole="radiogroup" style={styles.optionWrap}>
-        {options.map((option) => (
-          <ChoiceButton active={option.id === selectedId} key={option.id} label={option.label} onPress={() => onSelect(option.id)} />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function ChoiceButton({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
-  return (
-    <Pressable accessibilityRole="radio" accessibilityState={{ checked: active }} onPress={onPress} style={[styles.choice, active ? styles.choiceActive : null]}>
-      <Text style={[styles.choiceText, active ? styles.choiceTextActive : null]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 function EmptyCard({ text, title }: { text: string; title: string }) {
+  const styles = useWorkAccountingStyles();
   return (
     <Card>
       <Text style={styles.cardTitle}>{title}</Text>

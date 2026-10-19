@@ -1,4 +1,4 @@
-import * as FileSystem from "expo-file-system/legacy";
+import { deletePreparedMedia } from "./fileStorageService";
 
 import { hasUnfinishedFileCommand, listLinkedLocalFiles, markFileDeletedAfterRetention } from "@/db/repositories/filesRepository";
 import { canReclaimLocalMedia } from "@/domain/files/localMediaRetention";
@@ -13,7 +13,7 @@ export async function reclaimAcceptedLocalMedia(ownerUserId: string, clientFileI
     }
 
     try {
-      await FileSystem.deleteAsync(file.localPath, { idempotent: true });
+      await deletePreparedMedia(file.localPath);
       await markFileDeletedAfterRetention(ownerUserId, file.clientFileId);
       reclaimed += 1;
     } catch {

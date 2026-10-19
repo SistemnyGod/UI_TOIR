@@ -13,7 +13,8 @@ import { requestMobileDataRefresh } from "@/sync/syncTriggers";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { ScreenList } from "@/ui/Screen";
-import { SelectionTabs, SelectionTransition } from "@/ui/SelectionTabs";
+import { SelectionTabs } from "@/ui/SelectionTabs";
+import { retainEqualItems } from "@/sync/retainEqualItems";
 import { StatusPill } from "@/ui/StatusPill";
 
 type Filter = "all" | "attention" | "pending" | "deferred" | "issue" | "skipped";
@@ -48,7 +49,7 @@ export function AllPointsScreen() {
 
       async function load() {
         const context = routeAssignmentId ? null : await getPatrolDeviceContext();
-        const active = context?.employeeId && context.assignmentId ? await getActiveAssignment(context) : null;
+        const active = context?.assignmentId ? await getActiveAssignment({ assignmentId: context.assignmentId }) : null;
         const ownerUserId = await getStoredOwnerUserId();
         const targetAssignmentId = routeAssignmentId ?? active?.assignmentId ?? null;
         const targetAssignment = targetAssignmentId && routeAssignmentId
@@ -67,7 +68,7 @@ export function AllPointsScreen() {
           setAssignmentId(targetAssignmentId);
           setAssignmentStatus(targetAssignment?.status ?? null);
           setNfcEnabled(scanPolicy.nfcEnabled);
-          setPoints(rows);
+          setPoints(previous => retainEqualItems(previous, rows, point => point.pointId));
           setReadiness(loadedReadiness);
         }
       }
@@ -110,13 +111,11 @@ export function AllPointsScreen() {
   }, [filter, points, reasonsByPoint]);
 
   const renderItem: ListRenderItem<PointListItem> = ({ item }) => (
-    <SelectionTransition selectionKey={filter}>
       <PointRow
         onPress={() => assignmentId && router.push(`/patrol/assignment/${assignmentId}/point/${item.pointId}${filter === 'attention' && assignmentStatus === 'inProgress' ? '/fill' : ''}` as never)}
         point={item}
         reasons={reasonsByPoint.get(item.pointId)}
       />
-    </SelectionTransition>
   );
 
   return (
@@ -150,12 +149,12 @@ export function AllPointsScreen() {
       }
       renderItem={renderItem}
       title="Метки"
-      subtitle="Обзор точек активного маршрута."
+      compactHeader
       headerContent={
         <>
           {loadError ? (
             <Card>
-              <Text style={[styles.text, { color: "#b91c1c" }]}>{loadError}</Text>
+              <Text style={[styles.text, { color: colors.danger }]}>{loadError}</Text>
               <PrimaryButton
                 icon="refresh-outline"
                 label="Повторить загрузку"
@@ -173,13 +172,12 @@ export function AllPointsScreen() {
               <View style={styles.progressHeader}>
                 <Text style={[styles.title, { color: colors.text }]}>Прогресс маршрута</Text>
                 <Text style={[styles.meta, { color: colors.mutedText }]}>
-                  {summary.total === 0 ? "Загружаем метки" : `Обработано ${summary.completed} из ${summary.total}`}
+                  {summary.total === 0 ? "Загружаем метки" : `${summary.completed} из ${summary.total}`}
                 </Text>
               </View>
               <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
-                <View style={[styles.progressFill, { width: `${percent}%` }]} />
+                <View style={[styles.progressFill, { width: `${percent}%`, backgroundColor: colors.primary }]} />
               </View>
-              {summary.total > 0 ? <Text style={[styles.meta, { color: colors.mutedText }]}>{percent}% обработано · Осмотрено: {summary.inspected} · Не осмотрено: {summary.skipped}</Text> : null}
             </Card>
 
             {assignmentStatus !== "inProgress" ? (
@@ -223,17 +221,15 @@ function PointRow({ point, onPress, reasons }: { point: PointListItem; onPress: 
     >
       <Card style={styles.pointCard}>
         <View style={styles.pointRow}>
-          <View style={styles.pointIndex}>
-            <Text style={styles.pointIndexText}>{point.orderIndex}</Text>
+          <View style={[styles.pointIndex, { backgroundColor: colors.backgroundAccent }]}>
+            <Text style={[styles.pointIndexText, { color: colors.primary }]}>{point.orderIndex}</Text>
           </View>
           <View style={styles.pointTitleBox}>
-            <Text style={[styles.pointTitle, { color: colors.text }]} numberOfLines={2}>{point.name}</Text>
-            {reasons?.map(reason => <Text key={reason} style={{ color: colors.mutedText }}>{reason}</Text>)}
-          </View>
-          <View style={styles.pointStatusBox}>
+            <Text style={[styles.pointTitle, { color: colors.text }]}>{point.name}</Text>
             <StatusPill label={pointStatusLabel(point.status)} tone={pointStatusTone(point.status)} />
-            <Text style={[styles.chevron, { color: colors.mutedText }]}>›</Text>
+            {reasons?.filter(reason => reason !== "Обязательная метка не заполнена.").map(reason => <Text key={reason} style={[styles.text, { color: colors.mutedText }]}>{reason}</Text>)}
           </View>
+          <Text style={[styles.chevron, { color: colors.mutedText }]}>›</Text>
         </View>
       </Card>
     </Pressable>
@@ -316,6 +312,7 @@ const styles = StyleSheet.create({
   progressHeader: {
     alignItems: "center",
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     justifyContent: "space-between"
   },
@@ -325,7 +322,6 @@ const styles = StyleSheet.create({
     overflow: "hidden"
   },
   progressFill: {
-    backgroundColor: "#1e5bff",
     height: 9
   },
 
@@ -333,37 +329,30 @@ const styles = StyleSheet.create({
     padding: 12
   },
   pointRow: {
-    alignItems: "center",
+    alignItems: "flex-start",
     flexDirection: "row",
     gap: 12
   },
   pointIndex: {
     alignItems: "center",
-    backgroundColor: "#eef4ff",
     borderRadius: 999,
     height: 36,
     justifyContent: "center",
     width: 36
   },
   pointIndexText: {
-    color: "#1e5bff",
     fontSize: 14,
     fontWeight: "800"
   },
   pointTitleBox: {
     flex: 1,
-    gap: 3
+    alignItems: "flex-start",
+    gap: 6
   },
   pointTitle: {
     fontSize: 16,
     fontWeight: "800",
     lineHeight: 21
-  },
-  pointStatusBox: {
-    alignItems: "flex-end",
-    flexShrink: 1,
-    gap: 6,
-    maxWidth: 132
   },
   title: {
     flex: 1,
@@ -375,7 +364,7 @@ const styles = StyleSheet.create({
     lineHeight: 20
   },
   meta: {
-    fontSize: 13,
+    fontSize: 14,
     lineHeight: 18
   },
   chevron: {

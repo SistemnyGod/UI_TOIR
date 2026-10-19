@@ -17,29 +17,6 @@ import {
 const legacyDatabaseName = "patrol360-mobile.db";
 const encryptedDatabaseName = "patrol360-mobile-encrypted.db";
 const databaseEncryptionKeyName = "patrol360.databaseEncryptionKey.v1";
-const protectedTables = [
-  "users",
-  "devices",
-  "patrol_request_board",
-  "patrol_assignments",
-  "assignment_route_points",
-  "routes",
-  "route_points",
-  "point_results",
-  "files",
-  "outbox_commands",
-  "sync_cursors",
-  "sync_conflicts",
-  "mobile_notifications",
-  "mobile_diagnostic_state",
-  "mobile_employees",
-  "emu_sections",
-  "work_tasks",
-  "shift_remarks",
-  "mobile_logout_queue",
-  "mobile_action_log",
-  "mobile_diagnostic_reports"
-] as const;
 
 export async function openProtectedDatabase() {
   const encryptedPath = databasePath(encryptedDatabaseName);
@@ -145,47 +122,53 @@ async function migratePlaintextDatabase(key: string) {
   const encryptedPath = databasePath(encryptedDatabaseName);
   try {
     await legacyDatabase.execAsync("PRAGMA wal_checkpoint(TRUNCATE);");
-    const expectedCounts = await readProtectedTableCounts(legacyDatabase);
+    const expectedCounts = await readApplicationTableCounts(legacyDatabase);
     await deleteDatabaseFiles(encryptedDatabaseName);
     await legacyDatabase.execAsync(`
       ATTACH DATABASE '${escapeSqliteString(encryptedPath)}' AS encrypted KEY "x'${key}'";
       SELECT sqlcipher_export('encrypted');
       DETACH DATABASE encrypted;
     `);
-    await legacyDatabase.closeAsync();
-
     const encryptedDatabase = await openEncryptedDatabase(key);
     try {
-      const actualCounts = await readProtectedTableCounts(encryptedDatabase);
-      if (!haveMatchingTableCounts(protectedTables, expectedCounts, actualCounts)) {
+      const actualCounts = await readApplicationTableCounts(encryptedDatabase);
+      if (!haveMatchingTableCounts(Object.keys(expectedCounts), expectedCounts, actualCounts)) {
         throw new Error("Encrypted database row-count verification failed.");
+      }
+      if (!await haveMatchingApplicationRows(legacyDatabase, encryptedDatabase, Object.keys(expectedCounts))) {
+        throw new Error("Encrypted database content verification failed.");
       }
     } finally {
       await encryptedDatabase.closeAsync();
     }
 
-    await deleteDatabaseFiles(legacyDatabaseName);
+    await legacyDatabase.closeAsync();
   } catch (error) {
     await legacyDatabase.closeAsync().catch(() => undefined);
     await deleteDatabaseFiles(encryptedDatabaseName);
     throw new Error("Не удалось безопасно зашифровать локальную базу. Исходная база сохранена без изменений.", { cause: error });
   }
+  // Verification succeeded. A partial legacy cleanup can already have removed
+  // the source .db; it must never roll back the only verified surviving copy.
+  await deleteDatabaseFiles(legacyDatabaseName).catch(error => {
+    console.warn("Legacy cleanup after migration was skipped; the verified encrypted database is preserved.", error);
+  });
 }
 
-async function readProtectedTableCounts(database: SQLite.SQLiteDatabase) {
-  const counts = {} as Record<(typeof protectedTables)[number], number>;
-  for (const table of protectedTables) {
-    const tableExists = await database.getFirstAsync<{ count: number }>(
-      "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = ?;",
-      [table]
-    );
-    if ((tableExists?.count ?? 0) === 0) {
-      counts[table] = 0;
-      continue;
+async function readApplicationTableCounts(database: SQLite.SQLiteDatabase) {
+  // Discover every application table so newly added drafts and cursors cannot
+  // silently fall outside the migration/legacy-cleanup verification.
+  const tables = await database.getAllAsync<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT GLOB 'sqlite_*' ORDER BY name;"
+  );
+  const counts: Record<string, number> = Object.create(null);
+  for (const { name } of tables) {
+    const identifier = '"' + name.replaceAll('"', '""') + '"';
+    const row = await database.getFirstAsync<{ count: number }>(`SELECT COUNT(*) AS count FROM ${identifier};`);
+    if (!row || !Number.isSafeInteger(row.count) || row.count < 0) {
+      throw new Error("Не удалось проверить число строк локальной таблицы.");
     }
-
-    const row = await database.getFirstAsync<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table};`);
-    counts[table] = row?.count ?? 0;
+    counts[name] = row.count;
   }
   return counts;
 }
@@ -202,13 +185,57 @@ async function hasSameProtectedTableCountsAsLegacy(encryptedDatabase: SQLite.SQL
   try {
     await legacyDatabase.execAsync("PRAGMA wal_checkpoint(TRUNCATE);");
     const [encryptedCounts, legacyCounts] = await Promise.all([
-      readProtectedTableCounts(encryptedDatabase),
-      readProtectedTableCounts(legacyDatabase)
+      readApplicationTableCounts(encryptedDatabase),
+      readApplicationTableCounts(legacyDatabase)
     ]);
-    return haveMatchingTableCounts(protectedTables, legacyCounts, encryptedCounts);
+    return haveMatchingTableCounts(Object.keys(legacyCounts), legacyCounts, encryptedCounts)
+      && await haveMatchingApplicationRows(legacyDatabase, encryptedDatabase, Object.keys(legacyCounts));
   } finally {
     await legacyDatabase.closeAsync();
   }
+}
+
+function quoteIdentifier(value: string) {
+  return '"' + value.replaceAll('"', '""') + '"';
+}
+
+async function haveMatchingApplicationRows(source: SQLite.SQLiteDatabase, target: SQLite.SQLiteDatabase, tables: string[]) {
+  for (const name of tables) {
+    const table = quoteIdentifier(name);
+    const [sourceColumns, targetColumns] = await Promise.all([
+      source.getAllAsync<{ name: string; type: string }>(`PRAGMA table_info(${table});`),
+      target.getAllAsync<{ name: string; type: string }>(`PRAGMA table_info(${table});`)
+    ]);
+    if (!sourceColumns.length || sourceColumns.some(column => !targetColumns.some(other => other.name === column.name && other.type === column.type))) {
+      return false;
+    }
+    const projection = sourceColumns.map(column => quoteIdentifier(column.name)).join(', ');
+    const order = sourceColumns.map(column => `${quoteIdentifier(column.name)} COLLATE BINARY`).join(', ');
+    const sql = `SELECT ${projection} FROM ${table} ORDER BY ${order};`;
+    // Stream one row at a time without repeated sorting/OFFSET scans or
+    // materializing a large database in JS. Always finalize both cursors.
+    const left = source.getEachAsync<Record<string, unknown>>(sql)[Symbol.asyncIterator]();
+    const right = target.getEachAsync<Record<string, unknown>>(sql)[Symbol.asyncIterator]();
+    const serialize = (row: Record<string, unknown>) => JSON.stringify(sourceColumns.map(column => {
+      const value = row[column.name];
+      return value instanceof Uint8Array
+        ? ["blob", Array.from(value)]
+        : [typeof value, typeof value === "number" || typeof value === "bigint" ? String(value) : value];
+    }));
+    try {
+      while (true) {
+        const [a, b] = await Promise.all([left.next(), right.next()]);
+        if (a.done || b.done) {
+          if (Boolean(a.done) !== Boolean(b.done)) return false;
+          break;
+        }
+        if (serialize(a.value) !== serialize(b.value)) return false;
+      }
+    } finally {
+      await Promise.all([left.return?.(), right.return?.()]);
+    }
+  }
+  return true;
 }
 
 function databasePath(databaseName: string) {

@@ -46,7 +46,6 @@ const allowLocalCleartext = configuredDefaultEnvironment === "dev"
 const localCleartextHosts = allowLocalCleartext
   ? uniqueValues([
       "192.168.2.194",
-      "31.173.110.118",
       "localhost",
       "127.0.0.1",
       configuredPublicApiBaseUrl.startsWith("http://")
@@ -57,7 +56,7 @@ const localCleartextHosts = allowLocalCleartext
 
 const androidConfig = {
   package: "ru.patrol360.mobile",
-  versionCode: 32,
+  versionCode: 52,
   usesCleartextTraffic: false,
   adaptiveIcon: {
     foregroundImage: appIconFile,
@@ -215,6 +214,14 @@ function withPatrol360AndroidNetwork(config) {
   return withPilotCleartextTraffic(config);
 }
 
+function withPatrol360ActivityResultFix(config) {
+  return withDangerousMod(config, ["android", async (modConfig) => {
+    const { patchExpoActivityResult } = require("./scripts/patch-expo-activity-result.cjs");
+    patchExpoActivityResult(modConfig.modRequest.projectRoot);
+    return modConfig;
+  }]);
+}
+
 function withConsistentAndroidNdk(config) {
   return withProjectBuildGradle(config, (modConfig) => {
     const marker = "// patrol360-consistent-ndk";
@@ -250,6 +257,7 @@ module.exports = {
     android: androidConfig,
     plugins: [
       withPatrol360AndroidNetwork,
+      withPatrol360ActivityResultFix,
       withConsistentAndroidNdk,
       "expo-router",
       "expo-notifications",

@@ -1,5 +1,5 @@
 /** Owns one form session. Timers retain their session epoch. */
-export function createPointDraftController<T>(write: (value: T) => Promise<void>, onError: (error: unknown) => void, delay = 400) {
+export function createFormDraftController<T>(write: (value: T) => Promise<void>, onError: (error: unknown) => void, delay = 400) {
   let value: T;
   let dirty = false;
   let epoch = 0;
@@ -8,6 +8,8 @@ export function createPointDraftController<T>(write: (value: T) => Promise<void>
   let timer: ReturnType<typeof setTimeout> | undefined;
   let chain = Promise.resolve();
   let revision = 0;
+  let destination: (() => void) | undefined;
+  let leavePromise: Promise<void> | undefined;
   function cancel() { if (timer) clearTimeout(timer); timer = undefined; }
   async function flush() {
     cancel();
@@ -28,12 +30,20 @@ export function createPointDraftController<T>(write: (value: T) => Promise<void>
    * accepted while the chain is running; a newer revision schedules another
    * write before the caller is allowed to leave the screen.
    */
-  async function flushUntilSettled() {
+  async function flushUntilSettled(afterSaved?: () => void) {
     cancel();
     while (!closed && !paused) {
       const expected = revision;
       await flush();
-      if (expected === revision && !dirty) return;
+      if (expected === revision && !dirty) {
+        if (afterSaved) {
+          // Do not yield between checking the latest input and handing off navigation.
+          cancel(); closed = true; epoch++;
+          try { afterSaved(); }
+          catch (error) { closed = false; throw error; }
+        }
+        return;
+      }
       // A callback may have supplied a newer value while the previous write
       // was in flight. The next iteration captures that value.
     }
@@ -47,9 +57,22 @@ export function createPointDraftController<T>(write: (value: T) => Promise<void>
     },
     flush,
     flushUntilSettled,
-    async pause() { cancel(); paused = true; await chain; },
+    requestLeave(action: () => void) {
+      destination ??= action;
+      if (leavePromise) return leavePromise;
+      const operation = flushUntilSettled(() => {
+        destination?.();
+        destination = undefined;
+      });
+      leavePromise = operation;
+      void operation.then(() => { if (leavePromise === operation) leavePromise = undefined; }, () => { if (leavePromise === operation) leavePromise = undefined; });
+      return operation;
+    },
+    async pause() { cancel(); paused = true; await chain.catch(() => undefined); },
     resume() { if (!closed) paused = false; },
     close() { cancel(); closed = true; epoch++; },
     get dirty() { return dirty; }
   };
 }
+
+export const createPointDraftController = createFormDraftController;

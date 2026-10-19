@@ -1,62 +1,83 @@
-import { Ionicons } from "@expo/vector-icons";
+import { TextField as TextInput } from "@/ui/TextField";
 import { useFocusEffect, useRouter, useLocalSearchParams } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
-import { ListRenderItem, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { FlatList, ListRenderItem, StyleSheet, Text, View } from "react-native";
 
-import { listRequestBoard, RequestBoardItem } from "@/db/repositories/patrolRepository";
+import { listRequestBoard, getAssignmentById, getAssignmentProgress, RequestBoardItem } from "@/db/repositories/patrolRepository";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { refreshMobileData } from "@/services/mobileDataRefreshService";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { requestMobileDataRefresh } from "@/sync/syncTriggers";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
 import { useSmoothRefreshIndicator } from "@/sync/useSmoothRefreshIndicator";
+import { enterPatrolRequest } from "@/services/patrolEntryService";
+import { TransientNotice } from "@/ui/TransientNotice";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { ScreenList } from "@/ui/Screen";
-import { SelectionTabs, SelectionTransition } from "@/ui/SelectionTabs";
+import { SelectionTabs } from "@/ui/SelectionTabs";
 import { StatusPill } from "@/ui/StatusPill";
 import { captureDataOwnerContext, assertDataOwnerContext } from '@/auth/dataOwnerContext';
-import { clearCurrentPatrolIfMatches, getPatrolDeviceContext } from '@/db/repositories/patrolContextRepository';
+import { getPatrolDeviceContext } from '@/db/repositories/patrolContextRepository';
 
-type RequestTab = "all" | "assigned" | "inProgress" | "history";
+import { compareRequestDatesNewestFirst } from "./requestDateOrder";
+import { retainEqualItems } from "@/sync/retainEqualItems";
+
+type RequestTab = "all" | "inProgress" | "history";
+
+const boardViews = new Map<string, { query: string; tab: RequestTab; offset: number }>();
 
 const historyStatuses = new Set(["completed", "completedServer", "cancelled", "cancelledServer"]);
 
-function requestStatusRank(status: string) {
-  if (status === "inProgress") return 0;
-  if (status === "accepted" || status === "paused") return 1;
-  if (status === "assigned") return 2;
-  if (status === "available") return 3;
-  if (status === "completedLocal" || status === "syncing" || status === "retryLater") return 4;
-  return 5;
-}
-
 export function RequestBoardScreen() {
   const router = useRouter();
+  const listRef = useRef<FlatList<RequestBoardItem>>(null);
+  const viewKey = useRef<string | null>(null);
+  const restoreOffset = useRef<number | null>(null);
   const { notice } = useLocalSearchParams<{ notice?: string }>();
   const { colors } = useAppTheme();
+  const focused = useRef(false);
+  const focusVersion = useRef(0);
+  const loadVersion = useRef(0);
+  const manualRefresh = useRef(false);
+  const starting = useRef(false);
+  const [startingId, setStartingId] = useState<string | null>(null);
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [progressLabel, setProgressLabel] = useState("");
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<RequestBoardItem[]>([]);
   const [activeTab, setActiveTab] = useState<RequestTab>("all");
-  const { beginRefresh, endRefresh, showRefreshIndicator } = useSmoothRefreshIndicator();
+  const { beginRefresh, endRefresh, isRefreshing } = useSmoothRefreshIndicator();
   const [message, setMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadLocal = useCallback(async () => {
-    const rows = await listRequestBoard();
-    setItems(rows);
+    const version = focusVersion.current;
+    const readVersion = ++loadVersion.current;
+    const scope = await captureDataOwnerContext();
+    const [rows, context] = await Promise.all([listRequestBoard(), getPatrolDeviceContext()]);
+    const assignment = context.assignmentId ? await getAssignmentById(context.assignmentId) : null;
+    const progress = assignment ? await getAssignmentProgress(assignment.assignmentId) : null;
+    await assertDataOwnerContext(scope);
+    if (!focused.current || version !== focusVersion.current || readVersion !== loadVersion.current) return;
+    const key = `${scope.ownerUserId}:${scope.contourId}:${scope.generation}`;
+    if (viewKey.current !== key) {
+      viewKey.current = key;
+      const saved = boardViews.get(key) ?? { query: "", tab: "all" as const, offset: 0 };
+      setQuery(saved.query); setActiveTab(saved.tab); restoreOffset.current = saved.offset;
+      boardViews.set(key, saved);
+    }
+    setItems(previous => retainEqualItems(previous, rows, item => item.requestId));
+    setSelectedRequestId(assignment?.requestId ?? null);
+    setProgressLabel(progress ? `${progress.completed} из ${progress.total}` : "");
     setLoadError(null);
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      void (async () => {
-        const scope = await captureDataOwnerContext();
-        const context = await getPatrolDeviceContext();
-        await assertDataOwnerContext(scope);
-        if (context.assignmentId) await clearCurrentPatrolIfMatches(scope, context.assignmentId, () => isMounted);
-      })().catch(caught => { if (isMounted) setLoadError(String(caught)); });
+      focused.current = true;
+      focusVersion.current++;
       void loadLocal().catch((caught) => {
         void logMobileError("patrol.request-board.load.failed", caught);
         if (isMounted) {
@@ -66,6 +87,8 @@ export function RequestBoardScreen() {
       requestMobileDataRefresh("appActive");
       return () => {
         isMounted = false;
+        focused.current = false;
+        focusVersion.current++;
       };
     }, [loadLocal])
   );
@@ -80,28 +103,58 @@ export function RequestBoardScreen() {
       return;
     }
 
-    beginRefresh();
+    const version = focusVersion.current;
     void loadLocal()
       .catch((caught) => {
         void logMobileError("patrol.request-board.refresh-load.failed", caught);
-        setLoadError(caught instanceof Error ? caught.message : "Не удалось обновить заявки.");
-      })
-      .finally(endRefresh);
-  }), [loadLocal, beginRefresh, endRefresh]));
+        if (focused.current && version === focusVersion.current) setLoadError(caught instanceof Error ? caught.message : "Не удалось обновить заявки.");
+      });
+  }), [loadLocal]));
 
   async function handleRefresh() {
+    if (manualRefresh.current) return;
+    manualRefresh.current = true;
+    const version = focusVersion.current;
+    const isCurrent = () => focused.current && version === focusVersion.current;
     beginRefresh();
     setMessage(null);
     try {
       const updated = await refreshMobileData();
+      if (!isCurrent()) return;
       await loadLocal();
-      setMessage(updated ? "Заявки обновлены." : "Нет связи. Показаны заявки, сохраненные на телефоне.");
+      if (isCurrent()) setMessage(updated ? "Заявки обновлены." : "Нет связи. Показаны заявки, сохраненные на телефоне.");
     } catch (error) {
       void logMobileError("patrol.request-board.refresh.failed", error);
-      setLoadError(error instanceof Error ? error.message : "Не удалось обновить заявки.");
+      if (!isCurrent()) return;
       setMessage(error instanceof Error ? error.message : "Не удалось обновить заявки. Показаны локальные данные.");
     } finally {
+      manualRefresh.current = false;
       endRefresh();
+    }
+  }
+
+  async function openRequest(item: RequestBoardItem) {
+    if (starting.current) return;
+    if (!['available', 'assigned', 'accepted', 'inProgress', 'paused'].includes(item.status)
+      || ((item.status === 'available' || item.status === 'assigned') && (!item.assignedEmployeeId || item.performerSelectionAvailable))) {
+      router.push(`/patrol/request/${item.requestId}`);
+      return;
+    }
+    starting.current = true;
+    setStartingId(item.requestId);
+    setLoadError(null);
+    const version = focusVersion.current;
+    const isCurrent = () => focused.current && version === focusVersion.current;
+    try {
+      const scope = await captureDataOwnerContext();
+      const path = await enterPatrolRequest(item.requestId, item.assignedEmployeeId ?? undefined, isCurrent);
+      await assertDataOwnerContext(scope);
+      if (isCurrent()) router.push(path as never);
+    } catch (error) {
+      if (isCurrent()) setLoadError(error instanceof Error ? error.message : 'Не удалось начать обход. Повторите попытку.');
+    } finally {
+      starting.current = false;
+      setStartingId(null);
     }
   }
 
@@ -117,30 +170,32 @@ export function RequestBoardScreen() {
 
   const filteredItems = useMemo(() => {
     const source = activeTab === "history" ? items.filter((item) => historyStatuses.has(item.status))
-      : activeTab === "assigned" ? items.filter((item) => item.status === "assigned" || item.status === "accepted")
       : activeTab === "inProgress" ? items.filter((item) => item.status === "inProgress" || item.status === "paused")
       : items.filter((item) => !historyStatuses.has(item.status));
-    return source.filter((item) => `${item.routeName} ${item.assignedFullName ?? ""}`.toLocaleLowerCase("ru-RU").includes(query.trim().toLocaleLowerCase("ru-RU"))).sort((left, right) => requestStatusRank(left.status) - requestStatusRank(right.status)
-      || left.plannedStartAt.localeCompare(right.plannedStartAt)
-      || left.requestId.localeCompare(right.requestId));
-  }, [activeTab, items, query]);
+    return source.filter(item => item.requestId !== selectedRequestId).filter((item) => `${item.routeName} ${item.assignedFullName ?? ""}`.toLocaleLowerCase("ru-RU").includes(query.trim().toLocaleLowerCase("ru-RU"))).sort(compareRequestDatesNewestFirst);
+  }, [activeTab, items, query, selectedRequestId]);
 
   const renderItem: ListRenderItem<RequestBoardItem> = ({ item }) => (
-    <SelectionTransition selectionKey={activeTab}>
-      <RequestCard item={item} onPress={() => router.push(`/patrol/request/${item.requestId}`)} />
-    </SelectionTransition>
+    <RequestCard item={item} busy={startingId === item.requestId} disabled={startingId !== null} onPress={() => void openRequest(item)} />
   );
 
   return (
     <ScreenList
+      compactHeader
+      maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+      listRef={listRef}
       data={filteredItems}
+      onScroll={event => { const key = viewKey.current; const saved = key ? boardViews.get(key) : undefined; if (key && saved && restoreOffset.current === null) boardViews.set(key, { ...saved, offset: event.nativeEvent.contentOffset.y }); }}
+      scrollEventThrottle={100}
+      onContentSizeChange={() => { if (restoreOffset.current !== null && listRef.current) { const offset = restoreOffset.current; restoreOffset.current = null; listRef.current.scrollToOffset({ offset, animated: false }); } }}
       keyExtractor={(item) => item.requestId}
       onRefresh={() => void handleRefresh()}
-      refreshing={showRefreshIndicator}
+      refreshing={isRefreshing}
+      floatingNotice={<TransientNotice message={message ?? loadError ?? notice ?? null} />}
       ListEmptyComponent={loadError ? (
         <Card>
-          <Text style={[styles.text, { color: "#b91c1c" }]}>{loadError}</Text>
-          <PrimaryButton icon="refresh-outline" label="Повторить загрузку" onPress={() => void loadLocal()} variant="secondary" />
+          <Text style={[styles.text, { color: colors.danger }]}>Не удалось загрузить заявки.</Text>
+          <PrimaryButton icon="refresh-outline" label="Повторить загрузку" onPress={() => void handleRefresh()} variant="secondary" />
         </Card>
       ) : (
         <Card>
@@ -149,55 +204,63 @@ export function RequestBoardScreen() {
         </Card>
       )}
       renderItem={renderItem}
-      title="Маршруты обходов"
-      subtitle="Откройте заявку, чтобы проверить маршрут."
+      title={selectedRequestId ? "" : "Обход"}
       headerContent={
         <>
-          <TextInput accessibilityLabel="Найти маршрут или сотрудника" placeholder="Найти маршрут или сотрудника" value={query} onChangeText={setQuery} style={{ color: colors.text, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 14, minHeight: 48 }} />
+          {items.find(item => item.requestId === selectedRequestId) ? <View style={{ gap: 8 }}>
+            <RequestCard progressLabel={progressLabel} item={items.find(item => item.requestId === selectedRequestId)!} busy={startingId === selectedRequestId} disabled={startingId !== null} onPress={() => void openRequest(items.find(item => item.requestId === selectedRequestId)!)} />
+          </View> : null}
+
           <SelectionTabs<RequestTab>
+            compact
             accessibilityLabel="Разделы заявок"
             items={[
-              { count: summary.all, icon: "file-tray-full-outline", label: "Все", value: "all" },
-              { count: summary.assigned, icon: "person-outline", label: "Назначены", value: "assigned" },
-              { count: summary.inProgress, icon: "play-outline", label: "Незавершённые", value: "inProgress" },
-              { count: summary.history, icon: "time-outline", label: "История", value: "history" }
+              { count: summary.all, label: "Активные", value: "all" },
+              { count: summary.inProgress, label: "В работе", value: "inProgress" },
+              { count: summary.history, label: "История", value: "history" }
             ]}
-            onChange={setActiveTab}
+            onChange={value => { setActiveTab(value); const key = viewKey.current; const saved = key ? boardViews.get(key) : undefined; if (key && saved) { boardViews.set(key, { ...saved, tab: value, offset: 0 }); } listRef.current?.scrollToOffset({ offset: 0, animated: false }); }}
             value={activeTab}
           />
+          <TextInput accessibilityLabel="Найти маршрут или сотрудника" placeholder="Найти маршрут или сотрудника" value={query} onChangeText={value => { setQuery(value); const key = viewKey.current; const saved = key ? boardViews.get(key) : undefined; if (key && saved) { boardViews.set(key, { ...saved, query: value, offset: 0 }); } }} style={{ color: colors.text, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 14, minHeight: 48 }} />
+          <Text style={[styles.title, { color: colors.text }]}>{activeTab === "history" ? "История заявок" : activeTab === "inProgress" ? "Незавершённые обходы" : "Заявки на обход"}</Text>
 
-          {showRefreshIndicator ? <Text style={[styles.message, { color: colors.mutedText }]}>Обновляем данные…</Text> : null}
-          {message ? <Text style={[styles.message, { color: colors.mutedText }]}>{message}</Text> : null}
-          {notice ? <Text accessibilityLiveRegion="polite" style={[styles.message, { color: colors.mutedText }]}>{notice}</Text> : null}
         </>
       }
     />
   );
 }
 
-function RequestCard({ item, onPress }: { item: RequestBoardItem; onPress: () => void }) {
+function RequestCard({ item, onPress, busy, disabled, progressLabel }: { item: RequestBoardItem; onPress: () => void; busy: boolean; disabled: boolean; progressLabel?: string }) {
   const { colors } = useAppTheme();
 
   return (
-    <Pressable accessibilityHint={`Открыть заявку ${item.routeName}`} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [pressed ? { opacity: 0.88 } : null]}>
+    <View>
       <Card style={styles.requestCard}>
-        <View style={[styles.statusLine, statusLineStyle(item.status)]} />
-        <View style={styles.requestContent}>
+
+        <View style={[styles.requestContent, progressLabel ? { padding: 8 } : null]}>
           <View style={styles.row}>
             <View style={styles.titleBox}>
-              {item.displayNumber ? <Text style={[styles.displayNumber, { color: colors.mutedText }]}>{item.displayNumber}</Text> : null}
-              <Text numberOfLines={2} style={[styles.title, { color: colors.text }]}>{item.routeName}</Text>
+              {item.displayNumber && !progressLabel ? <Text style={[styles.displayNumber, { color: colors.mutedText }]}>{item.displayNumber}</Text> : null}
+              <Text style={[styles.title, { color: colors.text }]}>{item.routeName}</Text>
             </View>
             <StatusPill label={statusLabel(item.status)} tone={statusTone(item.status)} />
           </View>
-          <Text style={[styles.text, { color: colors.mutedText }]}>{item.assignedFullName ?? "Свободная заявка"}</Text>
-          <View style={styles.metaRow}>
+          <Text style={[styles.text, { color: colors.mutedText }]}>{item.assignedFullName ?? "сотрудник не выбран"}</Text>
+          <View style={styles.actionRow}>
+          <View style={{ flex: 1, minWidth: 100, gap: 6 }}>
+            {progressLabel ? <Text style={[styles.meta, { color: colors.primary }]}>{progressLabel}</Text> : null}
             <Text style={[styles.meta, { color: colors.mutedText }]}>План: {formatDateTime(item.plannedStartAt)}</Text>
-            <Ionicons color={colors.primary} name="chevron-forward" size={20} />
+          </View>
+          <View style={{ flexShrink: 1, maxWidth: "60%" }}>
+          <PrimaryButton variant={progressLabel ? "primary" : "ghost"} loading={busy} disabled={disabled} icon={['inProgress', 'paused'].includes(item.status) ? 'play-outline' : 'arrow-forward-outline'}
+            label={['inProgress', 'paused'].includes(item.status) ? 'Продолжить' : ['assigned', 'accepted', 'available'].includes(item.status) ? 'Начать обход' : 'Открыть результаты'}
+            onPress={onPress} />
+          </View>
           </View>
         </View>
       </Card>
-    </Pressable>
+    </View>
   );
 }
 
@@ -245,18 +308,6 @@ function statusTone(status: string) {
   return "neutral";
 }
 
-function statusLineStyle(status: string) {
-  if (status === "available" || status === "assigned") {
-    return styles.statusLineSuccess;
-  }
-  if (status === "syncError" || status === "authRequired" || status === "cancelledServer" || status === "cancelled") {
-    return styles.statusLineDanger;
-  }
-  if (status === "completedLocal" || status === "syncing" || status === "retryLater" || status === "paused" || status === "needsDispatcherDecision") {
-    return styles.statusLineWarning;
-  }
-  return styles.statusLineNeutral;
-}
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("ru-RU", {
@@ -269,6 +320,7 @@ function formatDateTime(value: string) {
 
 const styles = StyleSheet.create({
 
+  actionRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8, justifyContent: "space-between" },
   requestCard: {
     overflow: "hidden",
     padding: 0
@@ -276,7 +328,7 @@ const styles = StyleSheet.create({
   requestContent: {
     gap: 8,
     padding: 14,
-    paddingLeft: 18
+    paddingLeft: 14
   },
   statusLine: {
     bottom: 0,
@@ -300,15 +352,17 @@ const styles = StyleSheet.create({
   row: {
     alignItems: "flex-start",
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
     justifyContent: "space-between"
   },
   titleBox: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: "55%",
     gap: 3
   },
   displayNumber: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900"
   },
   title: {
@@ -318,7 +372,7 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 14,
-    lineHeight: 19
+    lineHeight: 20
   },
   metaRow: {
     alignItems: "center",
@@ -326,11 +380,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between"
   },
   meta: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800"
   },
   message: {
-    fontSize: 13,
-    lineHeight: 18
+    fontSize: 14,
+    lineHeight: 20
   }
 });

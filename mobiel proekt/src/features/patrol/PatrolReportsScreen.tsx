@@ -8,6 +8,7 @@ import { useAppTheme } from '@/features/settings/themePreference';
 import { Card } from '@/ui/Card';
 import { PrimaryButton } from '@/ui/PrimaryButton';
 import { ScreenList } from '@/ui/Screen';
+import { TransientNotice } from '@/ui/TransientNotice';
 import { StatusPill } from '@/ui/StatusPill';
 
 export function PatrolReportsScreen() {
@@ -50,21 +51,22 @@ export function PatrolReportsScreen() {
   if (detail) return <ScreenList title="Отчёт обхода" subtitle={detail.title} data={detail.points} keyExtractor={point => point.id}
     headerContent={<>
       <PrimaryButton label="К отчётам" variant="secondary" onPress={() => setDetail(null)} />
-      {detail.cached ? <Text style={{ color: colors.mutedText }}>Сохранённая копия. Фото не загружены для просмотра офлайн.</Text> : null}
+      {detail.cached ? <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>Сохранённая копия. Фото не загружены для просмотра офлайн.</Text> : null}
     </>}
     renderItem={({ item: point }) => <Card>
       <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>{point.pointName}</Text>
-      <Text style={{ color: colors.text }}>{point.status === 'skipped' ? 'Не осмотрена' : point.status === 'ok' ? 'Исправно' : point.status === 'issue' ? 'Неисправно' : point.status}</Text>
-      <Text style={{ color: colors.mutedText }}>{point.comment}</Text>
-      <Text style={{ color: colors.mutedText }}>Фото: {point.photos}</Text>
+      <Text style={{ color: colors.text, fontSize: 16, lineHeight: 24 }}>{point.status === 'skipped' ? 'Не осмотрена' : point.status === 'ok' ? 'Исправно' : point.status === 'issue' ? 'Неисправно' : point.status === 'manual' ? 'Без NFC — ручной осмотр' : 'Состояние требует проверки'}</Text>
+      <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>{point.comment}</Text>
+      <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>Фото: {point.photos}</Text>
     </Card>} />;
   return <ScreenList title="Отчёты" subtitle="Итоги обходов и состояние доставки" data={feed.rows} keyExtractor={row => row.assignmentId}
+    maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+    floatingNotice={<TransientNotice message={error ?? feed.notice} />}
     headerContent={<>
-      {feed.notice || error ? <Text accessibilityLiveRegion="polite" style={{ color: colors.mutedText }}>{error ?? feed.notice}</Text> : null}
       <PrimaryButton label="Обновить" disabled={feed.busy} variant="secondary" onPress={feed.refresh} />
     </>}
-    ListEmptyComponent={<Text style={{ color: colors.mutedText }}>{feed.busy ? 'Загружаем отчёты…' : 'Отчётов пока нет'}</Text>}
-    ListFooterComponent={feed.hasMore ? <PrimaryButton label="Загрузить ещё" disabled={feed.busy} variant="secondary" onPress={feed.loadMore} /> : null}
+    ListEmptyComponent={<Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>{feed.busy ? 'Загружаем отчёты…' : 'Отчётов пока нет'}</Text>}
+    ListFooterComponent={feed.rows.length > 0 && feed.hasMore ? <PrimaryButton label="Загрузить ещё" disabled={feed.busy} variant="secondary" onPress={feed.loadMore} /> : null}
     renderItem={({ item: row }) => {
       const presentation = getReportDeliveryPresentation(row.delivery ?? null);
       const requiresAction = ['repair', 'signIn', 'serverSettings'].includes(presentation.action);
@@ -72,11 +74,11 @@ export function PatrolReportsScreen() {
       const label = requiresAction ? 'Требуется действие' : delivered ? 'Получен сервером' : row.delivery?.status === 'sending' ? 'Отправляется' : 'Сохранён на телефоне';
       return <Card>
         <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700' }}>{row.routeName}</Text>
-        <Text style={{ color: colors.mutedText }}>{row.employeeName}</Text>
-        <Text style={{ color: colors.mutedText }}>{row.completedAt ? new Date(row.completedAt).toLocaleString('ru-RU') : 'Дата не указана'}</Text>
-        {row.needsReview ? <Text accessibilityRole="alert" style={{ color: '#b45309' }}>Завершение не подтверждено. Проверьте отчёт вручную.</Text> : null}
+        <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>{row.employeeName}</Text>
+        <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>{row.completedAt ? new Date(row.completedAt).toLocaleString('ru-RU') : 'Дата не указана'}</Text>
+        {row.needsReview ? <Text accessibilityRole="alert" style={{ color: colors.warning }}>Завершение не подтверждено. Проверьте отчёт вручную.</Text> : null}
         <StatusPill tone={requiresAction ? 'danger' : delivered ? 'success' : 'warning'} label={label} />
-        {requiresAction ? <Text style={{ color: colors.mutedText }}>{presentation.detail}</Text> : null}
+        {requiresAction ? <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20 }}>{presentation.detail}</Text> : null}
         <PrimaryButton label="Открыть отчёт" variant="secondary" disabled={opening} onPress={() => void open(row)} />
       </Card>;
     }} />;

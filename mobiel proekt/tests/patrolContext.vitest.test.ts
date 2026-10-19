@@ -31,18 +31,31 @@ vi.mock('@/db/database', () => {
   };
 });
 vi.mock('@/db/sqliteBusyRetry', () => ({ withSqliteBusyRetry: async <T>(operation: () => Promise<T>) => operation() }));
-import { getPatrolDeviceContext, selectCurrentPatrol, selectPatrolEmployee } from '@/db/repositories/patrolContextRepository';
+import { getPatrolDeviceContext, selectCurrentPatrol } from '@/db/repositories/patrolContextRepository';
 beforeEach(() => { state.owner = 'account-a'; state.storage.clear(); state.contexts.clear(); });
-it('serializes concurrent selection updates without losing the performer', async () => {
-  await Promise.all([selectPatrolEmployee('alice'), selectCurrentPatrol('route-a')]);
-  expect(await getPatrolDeviceContext()).toEqual({ employeeId: 'alice', assignmentId: 'route-a' });
+it('ignores the legacy device performer and restores only the selected route', async () => {
+  state.contexts.set('account-a:test', { employeeId: 'unavailable-person', assignmentId: 'route-a' });
+  expect(await getPatrolDeviceContext()).toEqual({ assignmentId: 'route-a' });
+  await selectCurrentPatrol(null);
+  expect(await getPatrolDeviceContext()).toEqual({ assignmentId: null });
+  expect(state.contexts.get('account-a:test')?.employeeId).toBeNull();
 });
 it('keeps selections isolated during an account change', async () => {
-  const first = selectCurrentPatrol('route-a', 'alice');
+  const first = selectCurrentPatrol('route-a');
   state.owner = 'account-b';
-  const second = selectCurrentPatrol('route-b', 'bob');
+  const second = selectCurrentPatrol('route-b');
   await Promise.all([first, second]);
-  expect(await getPatrolDeviceContext()).toEqual({ employeeId: 'bob', assignmentId: 'route-b' });
+  expect(await getPatrolDeviceContext()).toEqual({ assignmentId: 'route-b' });
   state.owner = 'account-a';
-  expect(await getPatrolDeviceContext()).toEqual({ employeeId: 'alice', assignmentId: 'route-a' });
+  expect(await getPatrolDeviceContext()).toEqual({ assignmentId: 'route-a' });
+});
+
+it('imports only the assignment from an older SecureStore context', async () => {
+  state.storage.set('patrol360.patrol-context.test.account-a', JSON.stringify({ employeeId: 'alice', assignmentId: 'route-a' }));
+  expect(await getPatrolDeviceContext()).toEqual({ assignmentId: 'route-a' });
+  expect(state.contexts.get('account-a:test')?.employeeId).toBeNull();
+});
+it('a legacy employee alone never selects a route', async () => {
+  state.storage.set('patrol360.patrol-context.test.account-a', JSON.stringify({ employeeId: 'alice' }));
+  expect(await getPatrolDeviceContext()).toEqual({ assignmentId: null });
 });

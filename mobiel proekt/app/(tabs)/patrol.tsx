@@ -1,3 +1,1 @@
-import { PatrolHomeScreen } from "@/features/patrolHome/PatrolHomeScreen";
-
-export default PatrolHomeScreen;
+export { RequestBoardScreen as default } from "@/features/patrol/RequestBoardScreen";

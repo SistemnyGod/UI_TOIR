@@ -1,5 +1,6 @@
 export type PhotoEvidenceStatus = "pending" | "scanned" | "ok" | "issue" | "deferred" | "skipped" | null;
 
-export function isPhotoEvidenceRequired(requiresPhoto: boolean, status: PhotoEvidenceStatus) {
-  return requiresPhoto && (status === "issue" || status === "skipped");
+export function isPhotoEvidenceRequired(_requiresPhoto: boolean, _status: PhotoEvidenceStatus) {
+  // Photos are voluntary, including offline assignments with a legacy true flag.
+  return false;
 }

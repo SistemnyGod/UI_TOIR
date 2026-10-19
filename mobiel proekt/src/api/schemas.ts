@@ -100,7 +100,7 @@ const patrolRequestBoardItemSchema = z.object({
   revision: z.number().int()
 }).passthrough();
 
-const patrolAssignmentSchema = z.object({
+const patrolAssignmentBaseSchema = z.object({
   employeeId: nullableString.optional(),
   assignmentId: identifier,
   requestId: identifier,
@@ -133,6 +133,10 @@ const patrolPointSchema = z.object({
   description: nullableString,
   instruction: nullableString,
   revision: z.number().int()
+}).passthrough();
+
+const patrolAssignmentSchema = patrolAssignmentBaseSchema.extend({
+  routeSnapshot: z.object({ route: patrolRouteSchema, points: z.array(patrolPointSchema) }).nullable().optional()
 }).passthrough();
 
 const bootstrapConflictResolutionSchema = z.object({

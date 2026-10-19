@@ -11,6 +11,7 @@ export async function withSqliteBusyRetry<T>(operation: () => Promise<T>, attemp
       lastError = error;
 
       if (!isSqliteBusyError(error) || attempt === attempts - 1) {
+        if (!isSqliteBusyError(error)) throw error;
         break;
       }
 

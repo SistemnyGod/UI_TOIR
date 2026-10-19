@@ -12,6 +12,7 @@ import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { requestMobileDataRefresh } from "@/sync/syncTriggers";
 import { shouldReloadAssignmentAfterSync, subscribeToSyncEvents } from "@/sync/syncEvents";
+import { StatusMessage } from "@/ui/StatusMessage";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -30,6 +31,9 @@ export function PointDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [reloadRevision, setReloadRevision] = useState(0);
 
+  // A local delivery event must not start another network refresh cycle.
+  useFocusEffect(useCallback(() => { requestMobileDataRefresh("appActive"); }, []));
+
 
   useFocusEffect(
     useCallback(() => {
@@ -40,7 +44,6 @@ export function PointDetailScreen() {
         }
       });
       void reloadRevision;
-      requestMobileDataRefresh("appActive");
       void (async () => {
         try {
         const ownerUserId = await getStoredOwnerUserId();
@@ -90,11 +93,11 @@ export function PointDetailScreen() {
     );
   }
 
-  if (loadError) {
+  if (loadError && !point) {
     return (
       <Screen title="Точка маршрута" subtitle="Карточка точки, текущий статус и действия.">
         <Card>
-          <Text style={[styles.text, { color: "#b91c1c" }]}>{loadError}</Text>
+          <Text style={[styles.text, { color: colors.danger }]}>{loadError}</Text>
           <PrimaryButton icon="refresh-outline" label="Повторить загрузку" onPress={() => router.replace(`/patrol/assignment/${assignmentId}/point/${pointId}`)} variant="secondary" />
         </Card>
       </Screen>
@@ -114,7 +117,17 @@ export function PointDetailScreen() {
   const canRestoreMissing = assignment?.status === "completedLocal" && missingAttachmentIds.length > 0;
 
   return (
-    <Screen title="Точка маршрута" subtitle="Проверьте состояние точки, вложения и подтверждение метки.">
+    <Screen title="Точка маршрута" floatingNotice={loadError ? <StatusMessage message={loadError} tone="warning" /> : undefined} bottomAction={canEdit ? (<PrimaryButton
+            icon="create-outline"
+            label={point.status === "pending" ? "Заполнить метку" : "Изменить результат"}
+            onPress={() => {
+              void assertPointCanBeOpened(assignmentId, pointId).then(() => {
+                router.push(`/patrol/assignment/${assignmentId}/point/${pointId}/fill`);
+              }).catch((caught) => {
+                Alert.alert("\u0422\u043e\u0447\u043a\u0430 \u043f\u043e\u043a\u0430 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430", caught instanceof Error ? caught.message : "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0435 \u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0438\u0435 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u044b\u0435 \u0442\u043e\u0447\u043a\u0438.");
+              });
+            }}
+          />) : undefined}>
       <Card>
         <View style={styles.headerRow}>
           <View style={styles.titleBox}>
@@ -150,41 +163,30 @@ export function PointDetailScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Вложения</Text>
           <StatusPill label={attachments.length > 0 ? `${attachments.length}` : "Нет"} tone={attachments.length > 0 ? "success" : "neutral"} />
         </View>
-        <Text style={[styles.text, { color: colors.mutedText }]}>{point.requiresPhoto ? "\u0424\u043e\u0442\u043e \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e \u0434\u043b\u044f \u044d\u0442\u043e\u0439 \u0442\u043e\u0447\u043a\u0438." : "\u0424\u043e\u0442\u043e \u043d\u0435\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e \u0434\u043b\u044f \u044d\u0442\u043e\u0439 \u0442\u043e\u0447\u043a\u0438."}</Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>Фото необязательное.</Text>
         {attachments.length > 0 ? (
           <View style={styles.photoGrid}>
             {attachments.map((attachment) => (
               <View key={attachment.clientFileId} style={styles.photoTile}>
                 {attachment.mediaKind === "video" ? (
-                  <View style={styles.videoTile}>
-                    <Ionicons color="#2563eb" name="videocam-outline" size={24} />
-                    <Text style={styles.videoLabel}>Видео</Text>
+                  <View style={[styles.videoTile, { backgroundColor: colors.backgroundAccent, borderColor: colors.border }]}>
+                    <Ionicons color={colors.primary} name="videocam-outline" size={24} />
+                    <Text style={[styles.videoLabel, { color: colors.primary }]}>Видео</Text>
                   </View>
                 ) : (
-                  <Image source={{ uri: attachment.localPath }} style={styles.photo} />
+                  <Image source={{ uri: attachment.localPath }} style={[styles.photo, { backgroundColor: colors.backgroundAccent }]} />
                 )}
                 <Text style={[styles.photoStatus, { color: colors.mutedText }]}>{fileStatusLabel(attachment.status)}</Text>
               </View>
             ))}
           </View>
         ) : (
-          <Text style={[styles.text, { color: colors.mutedText }]}>Вложения не обязательны. Их можно добавить при исправности, неисправности или недоступной метке.</Text>
+          <Text style={[styles.text, { color: colors.mutedText }]}>Фото и видео пока не добавлены.</Text>
         )}
       </Card>
 
       {canEdit ? (
         <>
-          <PrimaryButton
-            icon="create-outline"
-            label={point.status === "pending" ? "Заполнить метку" : "Изменить результат"}
-            onPress={() => {
-              void assertPointCanBeOpened(assignmentId, pointId).then(() => {
-                router.push(`/patrol/assignment/${assignmentId}/point/${pointId}/fill`);
-              }).catch((caught) => {
-                Alert.alert("\u0422\u043e\u0447\u043a\u0430 \u043f\u043e\u043a\u0430 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430", caught instanceof Error ? caught.message : "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0435 \u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0438\u0435 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u044b\u0435 \u0442\u043e\u0447\u043a\u0438.");
-              });
-            }}
-          />
           <View style={styles.actionRow}>
             {scanPolicy.nfcEnabled ? <SecondaryAction label="NFC" onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-nfc`)} /> : null}
             {scanPolicy.qrFallbackEnabled ? <SecondaryAction label="QR" onPress={() => router.push(`/patrol/assignment/${assignmentId}/scan-qr`)} /> : null}
@@ -379,8 +381,8 @@ const styles = StyleSheet.create({
     gap: 10
   },
   photoStatus: {
-    fontSize: 11,
-    lineHeight: 14
+    fontSize: 14,
+    lineHeight: 20
   },
   photoTile: {
     gap: 6,

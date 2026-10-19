@@ -21,6 +21,22 @@ export type ReportDeliveryAction = "submit" | "retry" | "repair" | "signIn" | "s
 
 type ReportPresentationInput = ReportDeliveryState | ReportDeliveryStatus | null;
 
+/** One source for the visible label, availability and the action dispatched by the screen. */
+export function getReportPrimaryAction(input: ReportPresentationInput, readiness: { ready: boolean; hasPointProblems: boolean; pointProblemCount?: number; awaitingAttachments?: boolean }, busy = false) {
+  const presentation = getReportDeliveryPresentation(input);
+  if (presentation.action === "submit" && !readiness.ready) {
+    return { ...presentation, tone: "warning" as const, icon: "alert-circle-outline" as const, title: "Нужно заполнить результаты", detail: readiness.hasPointProblems ? (readiness.pointProblemCount === undefined ? "Проверьте незаполненные точки и обязательные сведения." : `Точек, требующих внимания: ${readiness.pointProblemCount}. Проверьте результаты и обязательные сведения.`) : "Устраните указанную проблему маршрута.", action: "openProblems" as const, buttonLabel: "Открыть незаполненные",
+      disabled: busy || !readiness.hasPointProblems,
+      disabledReason: readiness.hasPointProblems ? undefined : "Устраните указанную выше проблему маршрута перед отправкой." };
+  }
+  if (presentation.action === "wait" && readiness.awaitingAttachments) {
+    return { ...presentation, icon: "images-outline" as const, title: "Ожидаем вложения", detail: "Отчёт сохранён. Доставка завершится после подтверждения обязательных файлов.", disabled: true,
+      disabledReason: "Дождитесь подтверждения файлов или перейдите к выбору заявок." };
+  }
+  return { ...presentation, buttonLabel: presentation.action === "submit" ? "Отправить отчёт" : presentation.buttonLabel,
+    disabled: busy || presentation.action === "wait", disabledReason: presentation.action === "wait" ? presentation.detail : undefined };
+}
+
 export function getReportDeliveryPresentation(input: ReportPresentationInput, legacyLastError: string | null = null) {
   const delivery = typeof input === "string" || input === null
     ? fromLegacyStatus(input, legacyLastError)
@@ -28,15 +44,15 @@ export function getReportDeliveryPresentation(input: ReportPresentationInput, le
 
   switch (delivery.status) {
     case "notQueued":
-      return neutral("submit", "Завершить обход и отправить", "Готов к отправке", "Сначала отчёт сохранится на телефоне, затем приложение отправит его на сервер.");
+      return success("submit", "Отправить отчёт", "Всё готово к отправке отчёта", "");
     case "delivered":
-      return success("done", "К списку обходов", "Отчёт доставлен", "Сервер подтвердил получение. Повторная отправка не требуется.");
+      return success("done", "К выбору заявок", "Отчёт доставлен", "Сервер подтвердил получение. Повторная отправка не требуется.");
     case "sending":
       return neutral("wait", "Отправка уже выполняется", "Идёт отправка", "Подождите завершения текущей попытки. Второй запрос не будет создан.");
     case "waitingAuth":
       return warning("signIn", "Войти и продолжить отправку", "Требуется вход", "Отчёт сохранён на телефоне. После входа отправка продолжится без повторного заполнения.");
     case "waitingNetwork":
-      return warning("retry", "Проверить отправку", "Отчёт сохранён на телефоне", "Очередь доставит его после подключения к серверу.");
+      return neutral("retry", "Проверить отправку", "Отчёт сохранён на телефоне", "Отправим при появлении связи. Можно перейти к следующей заявке.");
     case "retryScheduled":
       return warning("retry", "Проверить отправку", "Отчёт сохранён, восстанавливаем отправку", delivery.lastError ?? "Очередь продолжит доставку после появления сети.");
     case "wrongContour":
@@ -48,7 +64,7 @@ export function getReportDeliveryPresentation(input: ReportPresentationInput, le
     case "blockedByDependency":
       return danger("repair", "Проверить блокирующую операцию", "Отправка отчёта остановлена", delivery.lastError ?? "Более ранняя операция этого обхода требует обработки.");
     case "queued":
-      return warning("retry", "Проверить отправку", "Отчёт сохранён", "Отчёт сохранён на телефоне и ожидает отправки.");
+      return neutral("retry", "Проверить отправку", "Отчёт сохранён на телефоне", "Ожидает отправки. Можно перейти к следующей заявке.");
   }
 }
 
@@ -67,19 +83,24 @@ function fromLegacyStatus(status: ReportDeliveryStatus | null, lastError: string
 }
 
 function neutral(action: ReportDeliveryAction, buttonLabel: string, title: string, detail: string) {
-  return { action, buttonLabel, title, detail, tone: "neutral" as const };
+  return { action, buttonLabel, title, detail, icon: actionIcon(action), tone: "neutral" as const };
 }
 
 function success(action: ReportDeliveryAction, buttonLabel: string, title: string, detail: string) {
-  return { action, buttonLabel, title, detail, tone: "success" as const };
+  return { action, buttonLabel, title, detail, icon: actionIcon(action), tone: "success" as const };
 }
 
 function warning(action: ReportDeliveryAction, buttonLabel: string, title: string, detail: string) {
-  return { action, buttonLabel, title, detail, tone: "warning" as const };
+  return { action, buttonLabel, title, detail, icon: actionIcon(action), tone: "warning" as const };
 }
 
 function danger(action: ReportDeliveryAction, buttonLabel: string, title: string, detail: string) {
-  return { action, buttonLabel, title, detail, tone: "danger" as const };
+  return { action, buttonLabel, title, detail, icon: actionIcon(action), tone: "danger" as const };
+}
+
+function actionIcon(action: ReportDeliveryAction) {
+  const icons = { submit: "checkmark-circle-outline", retry: "cloud-upload-outline", repair: "alert-circle-outline", signIn: "log-in-outline", serverSettings: "settings-outline", done: "checkmark-circle-outline", wait: "cloud-upload-outline" } as const;
+  return icons[action];
 }
 
 export function isAuthenticationError(message: string | null) {

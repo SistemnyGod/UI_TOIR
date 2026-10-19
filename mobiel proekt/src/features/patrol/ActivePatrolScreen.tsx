@@ -1,9 +1,11 @@
+import { useFocusedOwnerLoad } from '@/sync/useFocusedOwnerLoad';
+import { StaleDataOwnerContextError, captureDataOwnerContext, assertDataOwnerContext } from '@/auth/dataOwnerContext';
 import { Ionicons } from "@expo/vector-icons";
 import { enterPatrolRequest } from '@/services/patrolEntryService';
 
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -53,13 +55,18 @@ import { buildPatrolActionMenu } from "@/features/patrol/patrolActionMenu";
 
 
 export function ActivePatrolScreen() {
+  const { assignmentId } = useLocalSearchParams<{ assignmentId: string }>();
+  return <ActivePatrolContent key={assignmentId} assignmentId={assignmentId} />;
+}
+
+function ActivePatrolContent({ assignmentId }: { assignmentId: string }) {
   const screenActive = useRef(false);
 
   const router = useRouter();
 
   const { colors } = useAppTheme();
 
-  const { assignmentId } = useLocalSearchParams<{ assignmentId: string }>();
+
 
   const [assignment, setAssignment] = useState<ActiveAssignment | null>(null);
 
@@ -81,79 +88,32 @@ export function ActivePatrolScreen() {
 
 
 
-  const loadAssignment = useCallback(async (options: { showLoader?: boolean } = {}) => {
-
-    if (options.showLoader) {
-
-      setIsLoading(true);
-
-    }
-
-    try {
-
-      const [loadedAssignment, loadedProgress, loadedScanPolicy] = await Promise.all([
-
-        getAssignmentById(assignmentId),
-
-        getAssignmentProgress(assignmentId),
-
-        getAssignmentScanPolicy(assignmentId)
-
-      ]);
-
-      setAssignment(loadedAssignment);
-
-      setScanPolicy(loadedScanPolicy);
-
-      setProgress(loadedAssignment ? loadedProgress : null);
-
-      setLoadError(null);
-
-    } finally {
-
-      setIsLoading(false);
-
-    }
-
+  const readAssignment = useCallback(async () => {
+    const [assignment, progress, scanPolicy] = await Promise.all([
+      getAssignmentById(assignmentId), getAssignmentProgress(assignmentId), getAssignmentScanPolicy(assignmentId)
+    ]);
+    return { assignment, progress, scanPolicy };
   }, [assignmentId]);
-
-
-
-  useFocusEffect(
-
-    useCallback(() => {
-
-      let isMounted = true;
-      screenActive.current = true;
-
-      void loadAssignment({ showLoader: true }).catch((caught) => {
-
-        void logMobileError("patrol.active-load.failed", caught);
-
-        if (isMounted) {
-
-          setLoadError(caught instanceof Error ? caught.message : "Не удалось прочитать текущий обход.");
-
-          setIsLoading(false);
-
-        }
-
-      });
-
-      requestMobileDataRefresh("appActive");
-
-      return () => {
-
-        isMounted = false;
-        screenActive.current = false;
-
-      };
-
-    }, [loadAssignment])
-
-  );
-
-
+  const publishAssignment = useCallback((value: Awaited<ReturnType<typeof readAssignment>>) => {
+    setAssignment(value.assignment);
+    setProgress(value.assignment ? value.progress : null);
+    setScanPolicy(value.scanPolicy);
+    setLoadError(null);
+  }, []);
+  const loadFailed = useCallback((caught: unknown) => {
+    if (caught instanceof StaleDataOwnerContextError) {
+      setAssignment(null); setProgress(null);
+    }
+    setLoadError(caught instanceof Error ? caught.message : "Не удалось прочитать текущий обход.");
+    void logMobileError("patrol.active-load.failed", caught);
+  }, []);
+  const loadSettled = useCallback(() => setIsLoading(false), []);
+  const loadAssignment = useFocusedOwnerLoad(readAssignment, publishAssignment, loadFailed, loadSettled);
+  useFocusEffect(useCallback(() => {
+    screenActive.current = true;
+    requestMobileDataRefresh("appActive");
+    return () => { screenActive.current = false; };
+  }, []));
 
   useFocusEffect(useCallback(() => subscribeToSyncEvents((event) => {
 
@@ -173,29 +133,24 @@ export function ActivePatrolScreen() {
 
 
 
-  useEffect(() => {
-
-    if (assignment?.status === "completedLocal") {
-
-      void reconcileAcceptedCompleteReports(assignment.assignmentId)
-
-        .then(() => loadAssignment())
-
-        .catch((caught) => {
-
-          void logMobileError("patrol.active-reconcile.failed", caught);
-
+  const completedAssignmentId = assignment?.status === "completedLocal" ? assignment.assignmentId : null;
+  useFocusEffect(useCallback(() => {
+    let current = true;
+    if (completedAssignmentId) {
+      void (async () => {
+        const scope = await captureDataOwnerContext();
+        await reconcileAcceptedCompleteReports(completedAssignmentId);
+        await assertDataOwnerContext(scope);
+        if (current) await loadAssignment();
+      })().catch(caught => {
+        void logMobileError("patrol.active-reconcile.failed", caught);
+        if (current && !(caught instanceof StaleDataOwnerContextError)) {
           setLoadError(caught instanceof Error ? caught.message : "Не удалось проверить доставку отчёта.");
-
-        })
-
-        .finally(() => { void requestPatrolSync({ mode: "normal" }); });
-
+        }
+      }).finally(() => { if (current) void requestPatrolSync({ mode: "normal" }); });
     }
-
-  }, [assignment?.assignmentId, assignment?.status, loadAssignment]);
-
-
+    return () => { current = false; };
+  }, [completedAssignmentId, loadAssignment]));
 
   async function runAction(action: () => Promise<void>) {
 
@@ -213,19 +168,21 @@ export function ActivePatrolScreen() {
 
     try {
 
+      const scope = await captureDataOwnerContext();
       await action();
+      await assertDataOwnerContext(scope);
 
       await loadAssignment();
 
     } catch (caughtError) {
 
-      setError(caughtError instanceof Error ? caughtError.message : "Не удалось выполнить действие.");
+      if (screenActive.current) setError(caughtError instanceof Error ? caughtError.message : "Не удалось выполнить действие.");
 
     } finally {
 
       actionInProgressRef.current = false;
 
-      setIsActing(false);
+      if (screenActive.current) setIsActing(false);
 
     }
 
@@ -403,7 +360,7 @@ export function ActivePatrolScreen() {
 
           <Text style={[styles.progressLabel, { color: colors.text }]}>Прогресс</Text>
 
-          <Text style={[styles.progressLabel, { color: colors.text }]}>{progress.total === 0 ? "Загружаем точки маршрута" : `Обработано ${progress.completed} из ${progress.total}`}</Text>
+          <Text style={[styles.progressLabel, { color: colors.text }]}>{progress.total === 0 ? "Загружаем точки маршрута" : `${progress.completed} из ${progress.total}`}</Text>
 
         </View>
 
