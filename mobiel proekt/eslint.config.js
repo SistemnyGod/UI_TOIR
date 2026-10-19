@@ -16,8 +16,13 @@ module.exports = defineConfig([
     // light-theme hex values that become unreadable in dark mode.
     files: [
       "src/features/patrol/ActivePatrolScreen.tsx",
+      "src/features/patrol/activePatrol/**/*.{ts,tsx}",
       "src/features/camera/CameraCaptureScreen.tsx",
-      "src/features/syncQueue/SyncQueueScreen.tsx"
+      "src/features/syncQueue/SyncQueueScreen.tsx",
+      "src/features/syncQueue/SyncQueueCards.tsx",
+      "src/features/syncQueue/SyncQueueBanners.tsx",
+      "src/features/syncQueue/syncQueuePresentation.ts",
+      "src/features/syncQueue/syncQueueStyles.ts"
     ],
     rules: {
       "no-restricted-syntax": ["error", {

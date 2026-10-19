@@ -114,9 +114,9 @@ Maestro selects these with `id:`. They are the e2e contract, so keep them when r
 | `patrol-start` | «Начать обход» / «Продолжить обход», `ActivePatrolScreen.tsx` |
 | `patrol-primary-action` | Bottom action of an in-progress patrol (scan / all points / submit), `ActivePatrolScreen.tsx` |
 | `scan-all-points`, `scan-tag-unavailable` | `ScanActionBar.tsx` (NFC and QR scan screens) |
-| `point-manual-continue` | «Продолжить» on the «Метка недоступна» sheet, `PointFillScreen.tsx` |
-| `point-status-ok`, `point-status-issue` | Result buttons, `PointFillScreen.tsx` (`point-status-<status>`) |
-| `point-comment` | «Результат осмотра» text field, `PointFillScreen.tsx` |
+| `point-manual-continue` | «Продолжить» on the «Метка недоступна» sheet, `PointManualSheet.tsx` |
+| `point-status-ok`, `point-status-issue` | Result buttons, `PointStatusTiles.tsx` (`point-status-<status>`) |
+| `point-comment` | «Результат осмотра» text field, `PointCommentField.tsx` (its microphone is `point-comment-voice`) |
 | `point-save` | «Сохранить и продолжить», `PointFillScreen.tsx` |
 | `report-primary-action` | Bottom button of the report check screen, `SubmitReportScreen.tsx` |
 | `report-delivery-title` | Delivery state title («Отчёт сохранён…», «Отчёт доставлен»), `SubmitReportScreen.tsx` |

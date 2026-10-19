@@ -17,7 +17,8 @@ vi.mock('@/services/mobileErrorReporter', () => ({ logMobileError: vi.fn() }));
 vi.mock('@/services/patrolContinuationService', () => ({ continuePatrolWithReconciliation: vi.fn() }));
 vi.mock('@/services/conflictResolutionService', () => ({ acceptServerConflict: vi.fn(), canAcceptServerConflict: () => false, cancelRejectedCommand: vi.fn(), retryConflictWithLatestRevision: vi.fn(), sendConflictToDispatcher: vi.fn() }));
 vi.mock('@/ui/Card', () => ({ Card: 'Card' }));
-vi.mock('@/ui/Screen', () => ({ Screen: 'Screen' }));
+vi.mock('@/ui/Screen', async () => { const R = await import('react'); return { Screen: 'Screen',
+  ScreenList: (p: any) => R.createElement('ScreenList', null, p.headerContent, ...(p.data ?? []).map((item: any, index: number) => R.createElement(R.Fragment, { key: p.keyExtractor(item, index) }, p.renderItem({ item, index })))) }; });
 vi.mock('@/ui/PrimaryButton', () => ({ PrimaryButton: 'PrimaryButton' }));
 vi.mock('@/ui/StatusPill', () => ({ StatusPill: 'StatusPill' }));
 vi.mock('@/ui/ActionSheet', () => ({ ActionSheet: 'ActionSheet' }));

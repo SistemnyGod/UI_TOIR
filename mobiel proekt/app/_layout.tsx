@@ -11,7 +11,8 @@ import { useFonts, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold, Manr
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { BootSplash } from "@/ui/BootSplash";
 import { startConnectionMonitor } from "@/core/connectionStatus";
-import { bootstrapApplication } from "@/core/bootstrap";
+import { bootstrapApplication, runDeferredStartupMaintenance } from "@/core/bootstrap";
+import { runAfterFirstRender } from "@/core/afterFirstRender";
 import { classifyStartupError, StartupState } from "@/core/startupState";
 import { SessionGateProvider, SessionGuard } from "@/auth/SessionGate";
 import { AppUpdateGate } from "@/features/appUpdate/AppUpdateGate";
@@ -92,11 +93,20 @@ function RootContent() {
     const stopPatrolSync = startPatrolSyncCoordinator();
     const stopReportAutoSubmit = startReportAutoSubmit();
     void runMobileRecoveryCycle("appActive", "normal");
-    void registerBackgroundSyncTask().catch((error) => {
-      void logMobileError("background.sync.registration.failed", error);
-    });
-    void registerBackgroundNotificationTask().catch((error) => {
-      void logMobileError("background.notification.registration.failed", error);
+    // Registrations and housekeeping wait until the first screen has drawn.
+    const cancelDeferredStartup = runAfterFirstRender(() => {
+      void runDeferredStartupMaintenance().catch((error) => {
+        void logMobileError("app.startup.maintenance.failed", error);
+      });
+      void registerBackgroundSyncTask().catch((error) => {
+        void logMobileError("background.sync.registration.failed", error);
+      });
+      void registerBackgroundNotificationTask().catch((error) => {
+        void logMobileError("background.notification.registration.failed", error);
+      });
+      void registerPushNotifications()
+        .then(() => runMobileRecoveryCycle("appActive", "normal"))
+        .catch(() => undefined);
     });
     const unsubscribePushEvents = subscribeToMobilePushEvents({
       onNotification: () => {
@@ -107,10 +117,6 @@ function RootContent() {
         openNotificationTarget(response);
       }
     });
-
-    void registerPushNotifications()
-      .then(() => runMobileRecoveryCycle("appActive", "normal"))
-      .catch(() => undefined);
 
     const appStateSubscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
@@ -127,6 +133,7 @@ function RootContent() {
     });
 
     return () => {
+      cancelDeferredStartup();
       stopPatrolSync();
       stopReportAutoSubmit();
       unsubscribePushEvents();
