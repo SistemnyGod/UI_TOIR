@@ -29,9 +29,11 @@ export function ScanProgress({ completed, total, nextPoint, routeName = 'Обх�
   </View>;
 }
 
-export function ScanMessage({ message, icon, busy = false, tone = 'neutral', hero = false, scanning = false }: {
+export function ScanMessage({ message, hint = null, icon, busy = false, tone = 'neutral', hero = false, scanning = false }: {
   scanning?: boolean;
   message: string;
+  /** What to do next, shown under the message (e.g. after a wrong tag or a failed read). */
+  hint?: string | null;
   icon: keyof typeof Ionicons.glyphMap;
   busy?: boolean;
   tone?: 'neutral' | 'success' | 'error';
@@ -41,7 +43,10 @@ export function ScanMessage({ message, icon, busy = false, tone = 'neutral', her
   const color = tone === 'success' ? colors.success : tone === 'error' ? colors.danger : colors.primary;
   return <View style={[styles.message, hero && styles.hero]} accessibilityLiveRegion="polite">
     {hero ? <ScanPulse active={scanning} color={color} icon={icon} /> : <Ionicons name={icon} color={color} size={24} />}
-    <Text style={[styles.messageText, !hero && styles.inlineMessage, { color: colors.text }]}>{message}</Text>
+    <View style={[styles.messageBody, !hero && styles.inlineMessage]}>
+      <Text style={[styles.messageText, !hero && styles.inlineText, { color: colors.text }]}>{message}</Text>
+      {hint ? <Text style={[styles.hintText, !hero && styles.inlineText, { color: colors.mutedText }]}>{hint}</Text> : null}
+    </View>
     {busy ? <ActivityIndicator accessibilityLabel="Проверяем метку" color={color} /> : null}
   </View>;
 }
@@ -57,6 +62,9 @@ const styles = StyleSheet.create({
   pointName: { fontSize: 18, lineHeight: 24, fontWeight: '700' },
   message: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
   hero: { flexDirection: 'column', gap: 16, paddingVertical: 28 },
+  messageBody: { gap: 6 },
   messageText: { fontSize: 16, lineHeight: 22, fontWeight: '600', textAlign: 'center' },
-  inlineMessage: { flex: 1, textAlign: 'left' }
+  hintText: { fontSize: 15, lineHeight: 21, textAlign: 'center' },
+  inlineMessage: { flex: 1 },
+  inlineText: { textAlign: 'left' }
 });

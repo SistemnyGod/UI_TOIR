@@ -193,6 +193,22 @@ export function getNfcCodeCandidates(value: string) {
   return Array.from(candidates);
 }
 
+/**
+ * Reader mode reports a tag that left the field before its NDEF data was read as an
+ * NDEF tag without records; only the UID is usable then. The screen still tries the
+ * UID, and treats a miss as an unstable read worth retrying rather than a foreign tag.
+ */
+export function isIncompleteNdefRead(tag: unknown) {
+  if (!tag || typeof tag !== 'object') {
+    return false;
+  }
+
+  const techTypes = 'techTypes' in tag ? (tag as { techTypes?: unknown }).techTypes : null;
+  const hasNdefTech = Array.isArray(techTypes) && techTypes.some((tech) => tech === 'android.nfc.tech.Ndef');
+  const records = 'ndefMessage' in tag ? (tag as { ndefMessage?: unknown }).ndefMessage : null;
+  return hasNdefTech && (!Array.isArray(records) || records.length === 0);
+}
+
 function getNdefTextCode(tag: object) {
   const records = 'ndefMessage' in tag ? (tag as { ndefMessage?: unknown }).ndefMessage : null;
   if (!Array.isArray(records)) {
