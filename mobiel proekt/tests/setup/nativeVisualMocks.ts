@@ -5,7 +5,7 @@ import { vi } from "vitest";
 vi.mock("expo-linear-gradient", () => ({ LinearGradient: "LinearGradient" }));
 
 vi.mock("react-native-svg", () => {
-  const host = (name: string) => (props: { children?: React.ReactNode }) => React.createElement(name, null, props.children);
+  const host = (name: string) => (props: Record<string, unknown>) => React.createElement(name, props);
   const Svg = host("Svg");
   return {
     __esModule: true,
