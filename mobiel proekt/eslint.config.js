@@ -17,7 +17,11 @@ module.exports = defineConfig([
     files: [
       "src/features/patrol/ActivePatrolScreen.tsx",
       "src/features/camera/CameraCaptureScreen.tsx",
-      "src/features/syncQueue/SyncQueueScreen.tsx"
+      "src/features/syncQueue/SyncQueueScreen.tsx",
+      "src/features/syncQueue/SyncQueueCards.tsx",
+      "src/features/syncQueue/SyncQueueBanners.tsx",
+      "src/features/syncQueue/syncQueuePresentation.ts",
+      "src/features/syncQueue/syncQueueStyles.ts"
     ],
     rules: {
       "no-restricted-syntax": ["error", {

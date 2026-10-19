@@ -28,7 +28,8 @@ vi.mock('@/services/mobileErrorReporter', () => ({ logMobileError: vi.fn() }));
 vi.mock('@/sync/syncTriggers', () => ({ requestMobileDataRefresh: vi.fn(), triggerForegroundSyncWithRetry: vi.fn() }));
 vi.mock('@/sync/syncEngine', () => ({ reconcileAcceptedCompleteReports: vi.fn() }));
 vi.mock('@/sync/PatrolSyncCoordinator', () => ({ requestPatrolSync: vi.fn() }));
-vi.mock('@/ui/Screen', () => ({ Screen: 'Screen' }));
+vi.mock('@/ui/Screen', async () => { const R = await import('react'); return { Screen: 'Screen',
+  ScreenList: (p: any) => R.createElement('ScreenList', null, p.headerContent, ...(p.data ?? []).map((item: any, index: number) => R.createElement(R.Fragment, { key: p.keyExtractor(item, index) }, p.renderItem({ item, index })))) }; });
 vi.mock('@/ui/Card', () => ({ Card: 'Card' }));
 vi.mock('@/ui/PrimaryButton', () => ({ PrimaryButton: 'PrimaryButton' }));
 vi.mock('@/ui/StatusPill', () => ({ StatusPill: 'StatusPill' }));
