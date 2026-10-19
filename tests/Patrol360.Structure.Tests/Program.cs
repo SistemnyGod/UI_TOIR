@@ -167,6 +167,8 @@ AssertGitIgnoreContains("node_modules/");
 AssertGitIgnoreContains("dist/");
 AssertGitIgnoreContains(".tmp/");
 AssertGitIgnoreContains("apk-check/");
+AssertGitIgnoreContains("*.apk");
+AssertGitIgnoreContains("mobile-releases/");
 AssertGitIgnoreContains("artifacts/");
 AssertGitIgnoreContains("output/");
 AssertGitIgnoreContains("TestResults/");

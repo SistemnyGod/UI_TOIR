@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Patrol360.Api.Authorization;
+using Patrol360.Api.MobileAppUpdates;
 using Patrol360.Api.Services;
 using Patrol360.Application;
 using Patrol360.Contracts;
@@ -18,6 +19,7 @@ public sealed class MobileController(
     IApplicationReadinessProbe readinessProbe) : MobileApiControllerBase
 {
     [HttpGet("health")]
+    [AllowOutdatedMobileApp]
     [AllowAnonymous]
     public async Task<IActionResult> Health(CancellationToken cancellationToken)
     {
@@ -36,6 +38,7 @@ public sealed class MobileController(
     }
 
     [HttpPost("auth/login")]
+    [AllowOutdatedMobileApp]
     [AllowAnonymous]
     [EnableRateLimiting("mobile-auth")]
     public ActionResult<MobileAuthSessionDto> Login(MobileLoginRequestDto request)
@@ -57,6 +60,7 @@ public sealed class MobileController(
     }
 
     [HttpPost("auth/refresh")]
+    [AllowOutdatedMobileApp]
     [AllowAnonymous]
     [EnableRateLimiting("mobile-auth")]
     public ActionResult<MobileAuthSessionDto> Refresh(MobileRefreshRequestDto request)
@@ -78,6 +82,7 @@ public sealed class MobileController(
     }
 
     [HttpPost("auth/logout")]
+    [AllowOutdatedMobileApp]
     public IActionResult Logout()
     {
         mobileAppService.Logout(MobileAccessToken);
@@ -175,6 +180,7 @@ public sealed class MobileController(
     }
 
     [HttpPost("outbox")]
+    [AllowOutdatedMobileApp]
     [RequestSizeLimit(1024 * 1024)]
     public ActionResult<IReadOnlyList<MobileOutboxResponseDto>> Outbox(MobileOutboxBatchDto request)
     {
@@ -193,6 +199,7 @@ public sealed class MobileController(
     }
 
     [HttpPost("files")]
+    [AllowOutdatedMobileApp]
     [RequestSizeLimit(32 * 1024 * 1024)]
     public async Task<ActionResult<MobileFileUploadResponseDto>> UploadFile(
         [FromForm] string? contourId,
@@ -237,6 +244,7 @@ public sealed class MobileController(
     }
 
     [HttpGet("outbox/{clientOperationId}")]
+    [AllowOutdatedMobileApp]
     public ActionResult<MobileOutboxResponseDto> OutboxResult(string clientOperationId)
     {
         var result = mobileAppService.GetOutboxResult(MobileAccessToken, clientOperationId);
