@@ -2,7 +2,7 @@ import { uploadMobileFile } from "@/api/fileApi";
 import { refreshStoredAccessToken, refreshStoredAccessTokenIfNeeded } from "@/api/httpClient";
 import { getOutboxResult, postOutbox } from "@/api/mobileApi";
 import { MobileNetworkError } from "@/api/networkTimeout";
-import { checkServerConnection } from "@/api/serverHealthApi";
+import { checkServerConnection, invalidateServerHealthFailures } from "@/api/serverHealthApi";
 import { getAccessToken, getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getSessionGeneration } from "@/auth/sessionGeneration";
 import { assertDataOwnerContext, captureDataOwnerContext, StaleDataOwnerContextError, type DataOwnerContext } from "@/auth/dataOwnerContext";
@@ -25,6 +25,7 @@ import {
   activateRetryableReportCommands,
   applyOutboxResponses,
   activateWaitingAuthOutboxCommands,
+  activateWaitingNetworkOutboxCommands,
   activateWrongContourOutboxCommands,
   countRetryableOutboxCommands,
   countOutboxDeliveryProblems,
@@ -47,6 +48,7 @@ import {
   resetStaleSendingOutboxCommands
 } from "@/db/repositories/outboxRepository";
 import type { OutboxRetryReason } from "@/db/repositories/outboxRepository";
+import { classifySyncFailure, classifyHttpStatus, TransientSyncError } from "@/sync/syncErrorClassification";
 import { OutboxCommand, OutboxResponse } from "@/domain/sync/syncTypes";
 import { resolvePatrolAssignmentIdentity } from "@/db/repositories/outboxPolicies";
 import type { LocalMobileFile } from "@/domain/files/fileTypes";
@@ -61,7 +63,7 @@ import { scheduleNextOutboxRetry } from "@/sync/outboxRetryScheduler";
 import { emitSyncEvent, mergeSyncEvents, type RefreshZone, type SyncEvent } from "@/sync/syncEvents";
 import { extractUploadClientFileIds, extractUploadFileReferences } from "@/sync/uploadCandidatePolicy";
 import type { UploadFileReference } from "@/sync/uploadCandidatePolicy";
-import { FileUploadFailureDisposition, PermanentFileUploadError, getFileUploadFailureDisposition } from "@/domain/files/fileUploadPolicy";
+import { FileUploadFailureDisposition, FileUploadHttpError, PermanentFileUploadError, getFileUploadFailureDisposition } from "@/domain/files/fileUploadPolicy";
 
 export type SyncOutcome = "complete" | "partial" | "skipped" | "failed";
 
@@ -85,6 +87,9 @@ type SyncResultBase = Omit<ForegroundSyncResult, "nextRetryAt" | "retryableCount
 type InternalForegroundSyncOptions = Required<Pick<ForegroundSyncOptions, "mode">> & ForegroundSyncOptions & { skipPreparation?: boolean; deferContinuation?: boolean };
 
 const staleSendingTimeoutMs = 5 * 60 * 1000;
+// After a reconnect the health check must answer fast: Wi-Fi without Internet
+// should not hold the queue for the full multi-server budget.
+const reconnectHealthCheckBudgetMs = 3_000;
 const maxSyncBatchesPerRun = 4;
 const reconciliationPageSize = 24;
 const reconciliationConcurrency = 4;
@@ -199,7 +204,15 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions,
     return buildForegroundSyncResult(ownerUserId, { sent: 0, skipped: "offline", hasMore: false });
   }
 
-  const serverCheck = await checkServerConnection(undefined, { useCache: true });
+  if (options.mode === "networkRecovered") {
+    // A reconnect (new route, server reachable again, OS background run) makes
+    // an earlier "server unreachable" meaningless; probe again right away.
+    invalidateServerHealthFailures();
+  }
+  const serverCheck = await checkServerConnection(undefined, {
+    useCache: true,
+    timeoutMs: options.mode === "networkRecovered" ? reconnectHealthCheckBudgetMs : undefined
+  });
   if (!serverCheck.ok) {
     if (serverCheck.failureKind === "wrongContour") {
       await markPendingOutboxCommandsWrongContour(ownerUserId, serverCheck.message, aggregateKey);
@@ -215,6 +228,9 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions,
     return buildForegroundSyncResult(ownerUserId, { sent: 0, skipped: "serverUnavailable", hasMore: false });
   }
 
+  // The server answered, so anything parked as "no network" can go now. This
+  // also covers the foreground timer and app resume, not only NetInfo events.
+  await activateWaitingNetworkOutboxCommands(ownerUserId, aggregateKey);
   await activateWrongContourOutboxCommands(ownerUserId, aggregateKey);
 
   const accessTokenState = await ensureAccessTokenForSync(ownerUserId, aggregateKey);
@@ -269,7 +285,7 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions,
         try {
           await uploadFilesForCompleteCommands(ownerUserId, [command], ownerContext);
           await assertDataOwnerContext(ownerContext);
-          const responses = await postOutboxWithServerReconciliation(ownerUserId, [command], ownerContext);
+          const responses = await postOutboxWithServerReconciliation(ownerUserId, [command], ownerContext, aggregateKey);
           await assertDataOwnerContext(ownerContext);
           await applyOutboxResponses(ownerUserId, responses, ownerContext);
           // The receipt is durable now. A slow operation elsewhere in this
@@ -280,18 +296,9 @@ async function runForegroundSyncInternal(options: InternalForegroundSyncOptions,
           batchEvents.push(buildSyncEvent([command], responses));
           sent += responses.length;
         } catch (error) {
-          const readableError = getReadableSyncError(error);
           void logMobileError("sync.failed", error);
-          if (isWrongContourError(error)) {
-            await markOutboxCommandsWrongContour(ownerUserId, commandIds, readableError);
-          } else if (isAuthRequiredError(error)) {
-            await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError, aggregateKey);
-          } else if (isOfflineNetworkError(error)) {
-            await markPendingOutboxCommandsWaitingNetwork(ownerUserId, readableError, aggregateKey);
-          } else if (error instanceof PermanentFileUploadError) {
-            await markOutboxCommandsRejected(ownerUserId, commandIds, readableError);
-          } else {
-            await markOutboxCommandsRetryLater(ownerUserId, commandIds, readableError, null, getRetryReason(error));
+          const outcome = await markCommandsAfterSendFailure(ownerUserId, commandIds, error, aggregateKey);
+          if (outcome === "retry") {
             void maybeTriggerReportDeliveryDiagnostic(ownerUserId, command);
           }
           notifyReportDeliveryChanged(command);
@@ -396,7 +403,7 @@ function getCommandDependencyKey(command: OutboxCommand) {
   return getCommandAggregateKey(command) ?? `${command.entityType}:${command.entityLocalId ?? command.entityServerId ?? command.clientOperationId}`;
 }
 
-async function postOutboxWithServerReconciliation(ownerUserId: string, commands: OutboxCommand[], context: DataOwnerContext) {
+async function postOutboxWithServerReconciliation(ownerUserId: string, commands: OutboxCommand[], context: DataOwnerContext, aggregateKey?: string) {
   try {
     await assertDataOwnerContext(context);
     return await postOutbox(commands);
@@ -420,8 +427,8 @@ async function postOutboxWithServerReconciliation(ownerUserId: string, commands:
       logAcceptedReports(commands, reconciledResponses);
     }
 
-    await markOutboxCommandsRetryLater(ownerUserId, remainingCommandIds, getReadableSyncError(error), null, getRetryReason(error));
-    await Promise.all(commands.filter((command) => remainingCommandIds.includes(command.clientOperationId)).map((command) => maybeTriggerReportDeliveryDiagnostic(ownerUserId, command)));
+    const outcome = await markCommandsAfterSendFailure(ownerUserId, remainingCommandIds, error, aggregateKey);
+    if (outcome === "retry") await Promise.all(commands.filter((command) => remainingCommandIds.includes(command.clientOperationId)).map((command) => maybeTriggerReportDeliveryDiagnostic(ownerUserId, command)));
 
     throw error;
   }
@@ -694,7 +701,9 @@ async function uploadFilesForCompleteCommands(ownerUserId: string, commands: Out
       if (disposition === "failed") {
         throw new PermanentFileUploadError(message, file.clientFileId);
       }
-      throw new Error(message);
+      // The upload policy already decided to retry (5xx, 408, 429 or a bounded
+      // ambiguous 404/409); keep that decision instead of a terminal 4xx.
+      throw new TransientSyncError(message, getFileUploadRetryReason(error));
     }
   }
 }
@@ -784,20 +793,62 @@ function getReadableSyncError(error: unknown) {
   return "Не удалось отправить данные. Приложение повторит отправку автоматически.";
 }
 
+/** Reason for a retry decided by HTTP status / error type, never by message text. */
 function getRetryReason(error: unknown): OutboxRetryReason {
-  if (error instanceof MobileNetworkError) {
-    return error.kind === "timeout" ? "timeout" : "network";
+  const disposition = classifySyncFailure(error);
+  return disposition.kind === "retry" ? disposition.reason : "unknown";
+}
+
+function getFileUploadRetryReason(error: unknown): OutboxRetryReason {
+  if (!(error instanceof FileUploadHttpError)) return getRetryReason(error);
+  const disposition = classifyHttpStatus(error.status);
+  return disposition.kind === "retry" ? disposition.reason : "unknown";
+}
+
+type SendFailureOutcome = "wrongContour" | "authentication" | "offline" | "terminal" | "retry";
+
+/**
+ * One place decides what a failed send means for the durable queue. Repeated
+ * calls are harmless: per-command updates only touch rows still in `sending`.
+ */
+async function markCommandsAfterSendFailure(
+  ownerUserId: string,
+  commandIds: string[],
+  error: unknown,
+  aggregateKey?: string
+): Promise<SendFailureOutcome> {
+  const readableError = getReadableSyncError(error);
+  if (isWrongContourError(error)) {
+    await markOutboxCommandsWrongContour(ownerUserId, commandIds, readableError);
+    return "wrongContour";
+  }
+  if (isAuthRequiredError(error)) {
+    await markPendingOutboxCommandsAuthRequired(ownerUserId, readableError, aggregateKey);
+    return "authentication";
+  }
+  if (isOfflineNetworkError(error)) {
+    await markPendingOutboxCommandsWaitingNetwork(ownerUserId, readableError, aggregateKey);
+    return "offline";
+  }
+  if (error instanceof PermanentFileUploadError) {
+    await markOutboxCommandsRejected(ownerUserId, commandIds, readableError);
+    return "terminal";
   }
 
-  const message = error instanceof Error ? error.message : String(error);
-  if (/\b429\b|too many requests|rate.?limit/i.test(message)) {
-    return "rateLimit";
+  const disposition = classifySyncFailure(error);
+  if (disposition.kind === "terminal") {
+    await markOutboxCommandsRejected(
+      ownerUserId,
+      commandIds,
+      `Сервер отклонил отправку (HTTP ${disposition.status}). Нужно решение: автоматический повтор не поможет. ${readableError}`
+    );
+    return "terminal";
   }
-  if (/\b5\d\d\b|server unavailable|сервер/i.test(message)) {
-    return "server";
-  }
-  return "unknown";
+
+  await markOutboxCommandsRetryLater(ownerUserId, commandIds, readableError, disposition.retryAfterSeconds, disposition.reason);
+  return "retry";
 }
+
 function isAuthRequiredError(error: unknown) {
   return error instanceof Error && isReauthenticationRequiredError(error.message);
 }

@@ -18,6 +18,9 @@ import { resolveRemappedAssignmentStatus } from "@/domain/patrol/assignmentIdent
 
 import type { OutboxRetryReason } from './outboxTypes';
 
+const maxRecoverableLifecycleAttempts = 6;
+const exhaustedLifecycleMessage = "Сервер не принимает действие: обход уже закрыт или изменён на сервере. Нужно решение диспетчера, локальные данные сохранены.";
+
 function recoverableLifecycleMessage(commandType: string) {
   if (commandType === "startPatrolAssignment") {
     return "Запуск обхода сохранён. Восстанавливаем принятие заявки в фоне.";
@@ -318,15 +321,15 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
             [ownerUserId, currentContourId, response.clientOperationId]
           )
         : null;
-      const nextAttemptAt = response.status === "retryLater"
-        ? new Date(
-            Date.now() + resolveRetryDelaySeconds(response.retryAfterSeconds, attemptRow?.attempt_count ?? 1) * 1000
-          ).toISOString()
-        : null;
-      const isSuccessful = response.status === "accepted" || response.status === "duplicate";
       const retryReason: OutboxRetryReason | null = response.status === "retryLater"
         ? response.retryAfterSeconds !== null ? "rateLimit" : "server"
         : null;
+      const nextAttemptAt = response.status === "retryLater"
+        ? new Date(
+            Date.now() + resolveRetryDelaySeconds(response.retryAfterSeconds, attemptRow?.attempt_count ?? 1, retryReason) * 1000
+          ).toISOString()
+        : null;
+      const isSuccessful = response.status === "accepted" || response.status === "duplicate";
       const updatedAtLocal = new Date().toISOString();
       await tx.runAsync(
         `
@@ -708,9 +711,10 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
             entity_type: string;
             entity_local_id: string | null;
             payload_json: string;
+            attempt_count: number | null;
         }>(
           `
-            SELECT owner_user_id, command_type, entity_type, entity_local_id, payload_json
+            SELECT owner_user_id, command_type, entity_type, entity_local_id, payload_json, attempt_count
             FROM outbox_commands
             WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?
           `,
@@ -718,9 +722,20 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
         );
 
         if (command) {
-          const recoverableLifecycleRejection =
+          const lifecycleRejection =
             response.status === "rejected"
             && isRecoverableLifecycleRejection(command.command_type, response.message);
+          // An ordering race clears within a few passes. The same answer after
+          // that means the server closed the patrol: stop retrying, ask for a decision.
+          const recoverableLifecycleRejection = lifecycleRejection
+            && Number(command.attempt_count ?? 0) < maxRecoverableLifecycleAttempts;
+          if (lifecycleRejection && !recoverableLifecycleRejection) {
+            await tx.runAsync(
+              `UPDATE outbox_commands SET last_error = ?, updated_at_local = ?
+                WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ?`,
+              [exhaustedLifecycleMessage, updatedAtLocal, command.owner_user_id, currentContourId, response.clientOperationId]
+            );
+          }
           if (!recoverableLifecycleRejection) {
             const conflictId = response.conflictId ?? `${response.status}-${response.clientOperationId}`;
             await tx.runAsync(

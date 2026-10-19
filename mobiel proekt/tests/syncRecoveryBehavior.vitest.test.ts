@@ -27,7 +27,7 @@ vi.mock('@/core/environments', () => ({ currentContourId: 'test' }));
 vi.mock('@/core/network', () => ({ hasUsableNetwork: async () => s.online }));
 vi.mock('@/core/serverSettings', () => ({ getMobileRuntimeConfig: async () => ({ apiBaseUrl: 'https://test', contourId: 'test', syncProtocolVersion: '1.0' }), getServerCandidateBaseUrls: async () => ['https://test'], setServerBaseUrl: vi.fn() }));
 vi.mock('@/core/connectionStateEvents', () => ({ getMobileConnectionContextGeneration: () => 1, invalidateMobileConnectionContext: vi.fn(), recordMobileConnectionOutcome: vi.fn() }));
-vi.mock('@/api/serverHealthApi', () => ({ checkServerConnection: s.health, probeServerHealthCached: async () => ({ ok: true }), invalidateServerHealthCache: vi.fn() }));
+vi.mock('@/api/serverHealthApi', () => ({ invalidateServerHealthFailures: vi.fn(), checkServerConnection: s.health, probeServerHealthCached: async () => ({ ok: true }), invalidateServerHealthCache: vi.fn() }));
 vi.mock('@/api/mobileApi', () => ({ postOutbox: s.post, getOutboxResult: async () => null }));
 vi.mock('@/api/fileApi', () => ({ uploadMobileFile: vi.fn() }));
 vi.mock('@/sync/mutationSyncRequest', () => ({ requestSyncAfterMutation: vi.fn() }));
@@ -82,27 +82,26 @@ function seedDormantQueue() {
   seed('foreign', { status: 'waiting_network', reason: 'network', owner: 'bob' });
 }
 
-it('network recovery makes offline, timed-out and server-unreachable commands due, but keeps rate-limit and unknown delays', async () => {
+it('network recovery makes offline, timed-out, server-unreachable and unclassified commands due, but keeps a server rate limit', async () => {
   seedDormantQueue();
   const { activateNetworkRecoveredOutboxCommands } = await import('@/db/repositories/outboxRepository');
 
   await activateNetworkRecoveredOutboxCommands('alice');
 
-  for (const id of ['offline', 'network', 'timeout', 'server']) expect(row(id)).toEqual({ status: 'pending', reason: null, next: null });
+  for (const id of ['offline', 'network', 'timeout', 'server', 'unknown']) expect(row(id)).toEqual({ status: 'pending', reason: null, next: null });
   expect(row('throttled')).toEqual({ status: 'retryLater', reason: 'rateLimit', next: future });
-  expect(row('unknown')).toEqual({ status: 'retryLater', reason: 'unknown', next: future });
   expect(row('foreign').status).toBe('waiting_network');
 });
 
-it('a reconnect sync delivers offline reports at once, while a normal sync waits for their schedule', async () => {
+it('a normal sync with a healthy server sends offline-parked reports but keeps backoff; a reconnect sends the rest', async () => {
   seedDormantQueue();
   const { runForegroundSync } = await import('@/sync/syncEngine');
 
   await runForegroundSync({ mode: 'normal' });
-  expect(posted()).toEqual([]);
+  expect(posted()).toEqual(['offline']);
 
   await runForegroundSync({ mode: 'networkRecovered' });
-  expect(posted()).toEqual(['network', 'offline', 'server', 'timeout']);
+  expect(posted()).toEqual(['network', 'offline', 'server', 'timeout', 'unknown']);
   expect(row('offline').status).toBe('accepted');
   expect(row('throttled').status).toBe('retryLater');
 });

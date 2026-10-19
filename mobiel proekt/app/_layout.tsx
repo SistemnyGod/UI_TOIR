@@ -28,6 +28,7 @@ import { registerBackgroundSyncTask, syncPendingReportsOnBackground } from "@/sy
 import { registerBackgroundNotificationTask } from "@/services/backgroundNotificationTask";
 import { runMobileRecoveryCycle } from "@/sync/syncTriggers";
 import { startPatrolSyncCoordinator } from "@/sync/PatrolSyncCoordinator";
+import { startReportAutoSubmit } from "@/services/reportAutoSubmitLifecycle";
 import { cancelNextOutboxRetry, scheduleNextOutboxRetry } from "@/sync/outboxRetryScheduler";
 import { resolvePushNavigationTarget } from "@/services/pushNavigationResolver";
 
@@ -89,6 +90,7 @@ function RootContent() {
     }
 
     const stopPatrolSync = startPatrolSyncCoordinator();
+    const stopReportAutoSubmit = startReportAutoSubmit();
     void runMobileRecoveryCycle("appActive", "normal");
     void registerBackgroundSyncTask().catch((error) => {
       void logMobileError("background.sync.registration.failed", error);
@@ -126,6 +128,7 @@ function RootContent() {
 
     return () => {
       stopPatrolSync();
+      stopReportAutoSubmit();
       unsubscribePushEvents();
       appStateSubscription.remove();
       cancelNextOutboxRetry();

@@ -688,6 +688,26 @@ async function initializeDatabaseOnce() {
         { name: "attempt_count", sql: "ALTER TABLE mobile_diagnostic_reports ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0" }
       ]);
     });
+    // Durable auto-submit timers survive app kills, reboots and APK updates.
+    await runLocalMigration(tx, "20261019_report_auto_submit", async () => {
+      await tx.execAsync(`
+        CREATE TABLE IF NOT EXISTS report_auto_submit (
+          owner_user_id TEXT NOT NULL,
+          contour_id TEXT NOT NULL,
+          assignment_id TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'armed',
+          fingerprint TEXT NOT NULL,
+          delay_ms INTEGER NOT NULL,
+          elapsed_ms INTEGER NOT NULL DEFAULT 0,
+          checkpoint_wall_ms INTEGER NOT NULL,
+          armed_at TEXT NOT NULL,
+          client_operation_id TEXT,
+          submitted_at TEXT,
+          delivery_notified INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (owner_user_id, contour_id, assignment_id)
+        );
+      `);
+    });
   });
 }
 

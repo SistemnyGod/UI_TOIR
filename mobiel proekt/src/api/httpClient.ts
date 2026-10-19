@@ -32,6 +32,7 @@ import { MobileApiProtocolError, parseMobileResponse } from "@/api/protocolValid
 import { shouldRefreshAccessToken } from "@/auth/tokenExpiryPolicy";
 import { getMobileConnectionContextGeneration, invalidateMobileConnectionContext, recordMobileConnectionOutcome } from "@/core/connectionStateEvents";
 import { CLIENT_NOW_HEADER, observeServerClock } from "@/core/clockOffset";
+import { parseRetryAfterHeader } from "@/sync/syncErrorClassification";
 import type { ZodType } from "zod";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -65,7 +66,7 @@ class StaleAuthResponseError extends Error {
 }
 
 export class MobileHttpError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly retryAfterSeconds: number | null = null) {
     super(message);
     this.name = "MobileHttpError";
   }
@@ -159,7 +160,8 @@ async function mobileRequestWithinDeadline<TResponse>(path: string, schema: ZodT
     }
     const message = await readErrorMessage(response);
     await assertRequestSession();
-    throw new MobileHttpError(message ?? `Ошибка mobile API: ${response.status}`, response.status);
+    throw new MobileHttpError(message ?? `Ошибка mobile API: ${response.status}`, response.status,
+      parseRetryAfterHeader(response.headers.get("retry-after")));
   }
 
   if (response.status === 204) {

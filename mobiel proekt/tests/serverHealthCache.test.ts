@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ServerHealthCache } from "../src/api/serverHealthCache.ts";
+import { ServerHealthCache, serverHealthFailureTtlMs } from "../src/api/serverHealthCache.ts";
 
 test("health cache reuses a successful probe within its short TTL", async () => {
   const cache = new ServerHealthCache<{ ok: boolean; status: number }>();
@@ -50,5 +50,31 @@ test("invalidating a server health entry forces the next probe", async () => {
   cache.invalidate("server");
   await cache.getOrProbe("server", probe);
 
+  assert.equal(probes, 2);
+});
+
+test("a failed probe is remembered for at most five seconds", async () => {
+  assert.equal(serverHealthFailureTtlMs, 5_000);
+  const cache = new ServerHealthCache<{ ok: boolean }>();
+  let probes = 0;
+  const probe = async () => { probes += 1; return { ok: false }; };
+
+  await cache.getOrProbe("server", probe);
+  await cache.getOrProbe("server", probe);
+  assert.equal(probes, 1);
+  await cache.getOrProbe("server", probe, Date.now() + serverHealthFailureTtlMs + 1);
+  assert.equal(probes, 2);
+});
+
+test("a reconnect drops cached failures but keeps fresh successes", async () => {
+  const cache = new ServerHealthCache<{ ok: boolean }>();
+  let probes = 0;
+  await cache.getOrProbe("down", async () => { probes += 1; return { ok: false }; });
+  await cache.getOrProbe("up", async () => { probes += 1; return { ok: true }; });
+
+  cache.invalidateFailures();
+
+  assert.equal(cache.get("down"), undefined);
+  assert.deepEqual(cache.get("up"), { ok: true });
   assert.equal(probes, 2);
 });

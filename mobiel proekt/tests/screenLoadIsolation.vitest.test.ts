@@ -8,6 +8,7 @@ vi.mock('expo-router', async () => { const R = await import('react'); return {
 }; });
 vi.mock('react-native', () => ({ View: 'View', Text: 'Text', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', StyleSheet: { create: (s: any) => s } }));
 vi.mock('@expo/vector-icons', () => ({ Ionicons: 'Icon' }));
+vi.mock('@/features/patrol/AutoSubmitCountdown', () => ({ AutoSubmitCountdown: () => null }));
 vi.mock('@/features/settings/themePreference', () => ({ useAppTheme: () => ({ colors: {} }) }));
 vi.mock('@/auth/dataOwnerContext', () => ({ StaleDataOwnerContextError: state.Stale,
   captureDataOwnerContext: async () => ({ ownerUserId: state.owner, contourId: 'test', generation: 1 }),
