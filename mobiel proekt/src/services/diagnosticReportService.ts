@@ -15,6 +15,7 @@ import { hasUsableNetwork } from "@/core/network";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { collectDiagnosticContext } from "@/services/diagnosticContextService";
 import { isPermanentDiagnosticRejection } from "@/services/diagnosticReportPolicy";
+import { clearDeliveredCrashRecords } from "@/services/crashRecordStore";
 
 type DiagnosticUploadKind = "daily" | "pending" | "manual";
 type QueuedDiagnosticUpload = {
@@ -204,6 +205,7 @@ async function sendPendingDiagnosticReport(report: MobileDiagnosticReport): Prom
   try {
     await postDailyDiagnosticReport(report);
     await markDiagnosticReportSent(report);
+    clearDeliveredCrashRecords(report);
     return { status: "sent", reportId: report.reportId };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -5,6 +5,7 @@ using Patrol360.Api.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Threading.RateLimiting;
 
 var migrateOnly = args.Any(argument => argument.Equals("--migrate", StringComparison.OrdinalIgnoreCase));
@@ -26,6 +27,7 @@ builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogL
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddScoped<IApplicationReadinessProbe, ApplicationReadinessProbe>();
+builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IAuthenticatedSiteUserContext, AuthenticatedSiteUserContext>();
 builder.Services
     .AddAuthentication(options =>
@@ -124,6 +126,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseForwardedHeaders();
+app.UseMiddleware<MobileClockHeadersMiddleware>();
 app.UseCors(WebCorsPolicy);
 app.UseRateLimiter();
 app.UseAuthentication();

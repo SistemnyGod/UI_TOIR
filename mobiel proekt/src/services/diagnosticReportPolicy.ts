@@ -54,3 +54,23 @@ export function isPermanentDiagnosticRejection(error: unknown) {
   const status = typeof error === "object" && error !== null && "status" in error ? (error as { status?: unknown }).status : null;
   return typeof status === "number" && status >= 400 && status < 500 && status !== 401 && status !== 408 && status !== 429;
 }
+
+/**
+ * Median and maximum of save-to-acknowledgement times. Negative or unreadable
+ * durations (a phone clock changed in between) are left out.
+ */
+export function summarizeDeliveryLatencies(durationsSeconds: number[]) {
+  const valid = durationsSeconds
+    .filter((value) => Number.isFinite(value) && value >= 0)
+    .sort((left, right) => left - right);
+  if (valid.length === 0) {
+    return { count: 0, medianSeconds: null, maxSeconds: null };
+  }
+  const middle = Math.floor(valid.length / 2);
+  const median = valid.length % 2 === 1 ? valid[middle] : (valid[middle - 1] + valid[middle]) / 2;
+  return {
+    count: valid.length,
+    medianSeconds: Math.round(median),
+    maxSeconds: Math.round(valid[valid.length - 1])
+  };
+}
