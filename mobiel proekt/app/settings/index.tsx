@@ -7,5 +7,6 @@ export default function SettingsRoute() { const router = useRouter(); return <Sc
   <ProfileRow icon="cloud-upload-outline" title="Связь и отправка" onPress={() => router.push("/settings/connection" as never)} />
   <ProfileRow icon="cloud-outline" title="Офлайн-доступ" onPress={() => router.push("/settings/offline" as never)} />
   <ProfileRow icon="list-outline" title="Очередь синхронизации" onPress={() => router.push("/settings/sync-queue" as never)} />
+  <ProfileRow icon="cloud-download-outline" title="Обновление приложения" detail="Проверить обновления" onPress={() => router.push("/settings/app-update" as never)} />
   <ProfileRow icon="bug-outline" title="Ошибки и логи" detail="Диагностика для поддержки" onPress={() => router.push("/settings/diagnostics" as never)} last />
 </ProfileGroup></Screen>; }

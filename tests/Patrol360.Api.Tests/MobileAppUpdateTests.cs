@@ -184,6 +184,7 @@ public sealed class MobileAppUpdateTests : IDisposable
         Assert.Equal(53, body.GetProperty("latestVersionCode").GetInt32());
         Assert.Equal("0.1.53", body.GetProperty("latestVersionName").GetString());
         Assert.Contains("Требуется обновление", body.GetProperty("message").GetString());
+        Assert.Equal(body.GetProperty("message").GetString(), body.GetProperty("detail").GetString());
     }
 
     [Theory]
@@ -260,6 +261,25 @@ public sealed class MobileAppUpdateTests : IDisposable
         Assert.NotNull(typeof(MobileAppUpdateController).GetCustomAttribute<AllowAnonymousAttribute>());
     }
 
+    [Fact]
+    public async Task ResponsesMatchTheContractTheMobileAppIsTestedAgainst()
+    {
+        // mobiel proekt/tests/support/appUpdateContract.json feeds the app's Vitest suite.
+        var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(), "mobiel proekt", "tests", "support", "appUpdateContract.json"))).RootElement;
+        Publish(versionCode: 53, minimumVersionCode: 50);
+        await using var server = await UpdateServer.StartAsync(releaseDirectory);
+
+        var manifest = await server.GetManifestAsync();
+        using var rejected = await server.SendAsync(HttpMethod.Get, "/api/v1/mobile/bootstrap", versionCode: 49);
+        var updateRequired = await rejected.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(PropertyNames(contract.GetProperty("manifest")), PropertyNames(manifest));
+        Assert.Equal(PropertyNames(contract.GetProperty("updateRequired")), PropertyNames(updateRequired));
+        Assert.Equal(contract.GetProperty("updateRequired").GetProperty("message").GetString(), updateRequired.GetProperty("message").GetString());
+        Assert.Equal(contract.GetProperty("manifest").GetProperty("downloadUrl").GetString(), manifest.GetProperty("downloadUrl").GetString());
+    }
+
     [Theory]
     [InlineData("53", 53)]
     [InlineData(" 7 ", 7)]
@@ -292,6 +312,19 @@ public sealed class MobileAppUpdateTests : IDisposable
                 sha256,
                 releaseNotes = "Исправлена отправка фото."
             }));
+    }
+
+    private static string[] PropertyNames(JsonElement element) =>
+        element.EnumerateObject().Select(property => property.Name).Order(StringComparer.Ordinal).ToArray();
+
+    private static string FindRepositoryRoot()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "Patrol360.slnx"))) return directory.FullName;
+        }
+
+        throw new InvalidOperationException("Patrol360.slnx not found above the test output folder.");
     }
 
     private static string Sha256(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));

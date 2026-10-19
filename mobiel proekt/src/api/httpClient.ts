@@ -26,6 +26,8 @@ import { getMobileRuntimeConfig, getServerCandidateBaseUrls, setServerBaseUrl } 
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { markPendingOutboxCommandsAuthRequired } from "@/db/repositories/outboxRepository";
 import { logMobileError } from "@/services/mobileErrorReporter";
+import { reportServerAppUpdateRequired } from "@/services/appUpdate/appUpdateEvents";
+import { appVersionCodeHeader } from "@/domain/appUpdate/appUpdatePolicy";
 import { MobileApiProtocolError, parseMobileResponse } from "@/api/protocolValidation";
 import { shouldRefreshAccessToken } from "@/auth/tokenExpiryPolicy";
 import { getMobileConnectionContextGeneration, invalidateMobileConnectionContext, recordMobileConnectionOutcome } from "@/core/connectionStateEvents";
@@ -149,6 +151,11 @@ async function mobileRequestWithinDeadline<TResponse>(path: string, schema: ZodT
       );
     }
 
+    if (response.status === 426) {
+      // The server no longer supports this build; the update gate re-reads
+      // the published release and shows the blocking update screen.
+      reportServerAppUpdateRequired();
+    }
     const message = await readErrorMessage(response);
     await assertRequestSession();
     throw new MobileHttpError(message ?? `Ошибка mobile API: ${response.status}`, response.status);
@@ -276,6 +283,7 @@ async function sendMobileRequest(apiBaseUrl: string, path: string, options: Requ
         "X-Patrol360-Client": "mobile-app",
         "X-Mobile-Sync-Protocol": runtimeConfig.syncProtocolVersion,
         "X-Patrol360-Contour": runtimeConfig.contourId,
+        ...(runtimeConfig.appVersionCode ? { [appVersionCodeHeader]: String(runtimeConfig.appVersionCode) } : {}),
         ...(options.headers ?? {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {})
       },

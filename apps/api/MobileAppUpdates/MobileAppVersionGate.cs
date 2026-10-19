@@ -52,10 +52,14 @@ public sealed class MobileAppVersionGateMiddleware(RequestDelegate next, IMobile
 
         context.Response.StatusCode = StatusCodes.Status426UpgradeRequired;
         context.Response.Headers.CacheControl = "no-store";
+        var message = $"Требуется обновление приложения Patrol360 до версии {release.VersionName}. "
+            + "Неотправленные данные на телефоне сохранены: установите обновление, и они будут отправлены.";
+        // title/detail: builds released before this gate show only these fields.
         await context.Response.WriteAsJsonAsync(new MobileAppUpdateRequiredDto(
             UpdateRequiredCode,
-            $"Требуется обновление приложения Patrol360 до версии {release.VersionName}. "
-                + "Неотправленные данные на телефоне сохранены: установите обновление, и они будут отправлены.",
+            message,
+            "Требуется обновление приложения",
+            message,
             installedVersionCode,
             release.MinimumVersionCode,
             release.VersionCode,
@@ -75,6 +79,8 @@ public sealed class MobileAppVersionGateMiddleware(RequestDelegate next, IMobile
 public sealed record MobileAppUpdateRequiredDto(
     string Code,
     string Message,
+    string Title,
+    string Detail,
     int? InstalledVersionCode,
     int MinimumVersionCode,
     int LatestVersionCode,

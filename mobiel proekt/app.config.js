@@ -67,7 +67,10 @@ const androidConfig = {
     "android.permission.ACCESS_NETWORK_STATE",
     "android.permission.ACCESS_WIFI_STATE",
     "android.permission.POST_NOTIFICATIONS",
-    "android.permission.NFC"
+    "android.permission.NFC",
+    // In-app updates: the APK is downloaded from the Patrol360 server and
+    // handed to the system installer (expo-file-system FileProvider).
+    "android.permission.REQUEST_INSTALL_PACKAGES"
   ],
   blockedPermissions: [
     "android.permission.RECORD_AUDIO",
