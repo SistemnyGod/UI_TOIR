@@ -18,6 +18,7 @@
     "test:file": "vitest run"
   },
   "dependencies": {
+    "@expo-google-fonts/manrope": "0.4.2",
     "@expo/vector-icons": "15.1.1",
     "@react-native-community/netinfo": "12.0.1",
     "expo": "~56.0.8",

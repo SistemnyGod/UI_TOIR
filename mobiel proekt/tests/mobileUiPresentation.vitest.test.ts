@@ -34,7 +34,7 @@ it.each([['light', lightColors], ['dark', darkColors]] as const)('%s semantic te
     const pair = toneColors(colors, tone);
     expect(contrast(pair.foreground, pair.background), tone).toBeGreaterThanOrEqual(4.5);
   }
-  for (const [foreground, background] of [[colors.text, colors.card], [colors.mutedText, colors.card], [colors.placeholder, colors.field], [colors.onPrimary, colors.primary], [colors.primary, colors.navBackground], [colors.primary, colors.backgroundAccent], [colors.disabledText, colors.disabled]]) {
+  for (const [foreground, background] of [[colors.text, colors.card], [colors.mutedText, colors.card], [colors.placeholder, colors.field], [colors.onPrimary, colors.primary], [colors.primary, colors.navBackground], [colors.primary, colors.backgroundAccent], [colors.disabledText, colors.disabled], [colors.onAccent, colors.accent], [colors.onAccent, colors.successFill], [colors.onAccent, colors.dangerFill], [colors.faintText, colors.card]]) {
     expect(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5);
   }
 });

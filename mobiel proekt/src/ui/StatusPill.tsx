@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { toneColors } from "./atomTheme";
+import { font } from "./typography";
 import { StyleSheet, Text, View } from "react-native";
 
 type StatusPillProps = {
@@ -16,8 +17,8 @@ export function StatusPill({ label, tone = "neutral" }: StatusPillProps) {
 
   return (
     <View style={[styles.pill, { backgroundColor: colors.backgroundColor, borderColor: colors.borderColor }]}>
-      <Ionicons name={icons[tone]} size={18} color={colors.color} />
-      <Text style={[styles.label, { color: colors.color }]}>{label}</Text>
+      <Ionicons name={icons[tone]} size={15} color={colors.color} />
+      <Text style={[styles.label, font(800), { color: colors.color }]}>{label}</Text>
     </View>
   );
 }
@@ -32,7 +33,7 @@ const styles = StyleSheet.create({
     gap: 6,
     maxWidth: "100%",
     paddingHorizontal: 10,
-    paddingVertical: 5
+    paddingVertical: 4
   },
   dot: {
     borderRadius: 999,
@@ -41,8 +42,7 @@ const styles = StyleSheet.create({
   },
   label: {
     flexShrink: 1,
-    fontSize: 14,
-    fontWeight: "800",
-    lineHeight: 20
+    fontSize: 13,
+    lineHeight: 18
   }
 });

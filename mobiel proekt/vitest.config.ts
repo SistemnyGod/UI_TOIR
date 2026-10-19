@@ -13,5 +13,6 @@ export default defineConfig({
     environment: "node",
     globals: false,
     include: ["tests/**/*.vitest.test.ts"],
+    setupFiles: ["tests/setup/uiMotionMock.ts"],
   },
 });

@@ -4,6 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAppTheme } from "@/features/settings/themePreference";
+import { font } from "@/ui/typography";
 
 export type ActionSheetItem = {
   label: string;
@@ -31,14 +32,14 @@ export function ActionSheet({
   const reducedMotion = useReducedMotion();
 
   return (
-    <Modal statusBarTranslucent navigationBarTranslucent animationType={reducedMotion ? "none" : "fade"} onRequestClose={onClose} transparent visible={visible}>
+    <Modal statusBarTranslucent navigationBarTranslucent animationType={reducedMotion ? "none" : "slide"} onRequestClose={onClose} transparent visible={visible}>
       <View style={[styles.backdrop, { backgroundColor: colors.scrim }]}>
         <Pressable accessibilityLabel="Закрыть меню" accessibilityRole="button" onPress={onClose} style={StyleSheet.absoluteFill} />
         <View accessibilityLabel={title} accessibilityViewIsModal style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={[styles.handle, { backgroundColor: colors.border }]} />
           <View style={styles.header}>
-            <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{title}</Text>
-            <Pressable accessibilityLabel="Закрыть" accessibilityRole="button" hitSlop={8} onPress={onClose} style={styles.closeButton}>
+            <Text accessibilityRole="header" style={[styles.title, font(800), { color: colors.text }]}>{title}</Text>
+            <Pressable accessibilityLabel="Закрыть" accessibilityRole="button" hitSlop={8} onPress={onClose} style={[styles.closeButton, { backgroundColor: colors.backgroundAccent }]}>
               <Ionicons color={colors.mutedText} name="close" size={22} />
             </Pressable>
           </View>
@@ -56,7 +57,7 @@ export function ActionSheet({
                 }}
                 style={({ pressed }) => [
                   styles.action,
-                  { borderColor: colors.border },
+                  { borderColor: colors.cardBorder, backgroundColor: colors.card },
                   pressed && !action.disabled ? { backgroundColor: colors.backgroundAccent } : null,
                   action.disabled ? styles.disabled : null
                 ]}
@@ -64,7 +65,7 @@ export function ActionSheet({
                 <View style={[styles.iconBox, { backgroundColor: action.danger ? colors.dangerSurface : colors.backgroundAccent }]}>
                   <Ionicons color={action.danger ? colors.danger : colors.primary} name={action.icon} size={21} />
                 </View>
-                <Text style={[styles.actionLabel, { color: action.danger ? colors.danger : colors.text }]}>{action.label}</Text>
+                <Text style={[styles.actionLabel, font(800), { color: action.danger ? colors.danger : colors.text }]}>{action.label}</Text>
                 <Ionicons color={colors.mutedText} name="chevron-forward" size={18} />
               </Pressable>
             ))}
@@ -83,8 +84,8 @@ const styles = StyleSheet.create({
   },
   sheet: {
     maxHeight: "90%",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     gap: 12,
     paddingHorizontal: 16,
     paddingTop: 10
@@ -93,8 +94,8 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     backgroundColor: "#cbd5e1",
     borderRadius: 999,
-    height: 4,
-    width: 42
+    height: 5,
+    width: 40
   },
   header: {
     alignItems: "center",
@@ -104,26 +105,26 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontSize: 19,
-    fontWeight: "900",
+    fontSize: 20,
     lineHeight: 24
   },
   closeButton: {
     alignItems: "center",
-    height: 48,
+    borderRadius: 14,
+    height: 44,
     justifyContent: "center",
-    width: 48
+    width: 44
   },
   actions: {
     gap: 8
   },
   action: {
     alignItems: "center",
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
     gap: 12,
-    minHeight: 56,
+    minHeight: 58,
     paddingHorizontal: 12,
     paddingVertical: 8
   },
@@ -135,7 +136,7 @@ const styles = StyleSheet.create({
   },
   iconBox: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: 12,
     height: 40,
     justifyContent: "center",
     width: 40
@@ -143,7 +144,6 @@ const styles = StyleSheet.create({
   actionLabel: {
     flex: 1,
     fontSize: 16,
-    fontWeight: "800",
     lineHeight: 21
   }
 });

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAppTheme } from "@/features/settings/themePreference";
+import { font, softShadow } from "@/ui/typography";
 
 type PrimaryButtonProps = {
   label: string;
@@ -19,7 +20,7 @@ export function PrimaryButton({ label, onPress, disabled, disabledReason, loadin
   const isPrimary = variant === "primary";
   const isDanger = variant === "danger";
   const blocked = disabled || loading;
-  const labelColor = blocked ? colors.disabledText : isPrimary ? colors.onPrimary : isDanger ? colors.danger : colors.primary;
+  const labelColor = blocked ? colors.disabledText : isPrimary ? colors.onAccent : isDanger ? colors.danger : variant === "ghost" ? colors.text : colors.primary;
 
   return (
     <View style={{ gap: 6, minWidth: 0 }}>
@@ -32,12 +33,12 @@ export function PrimaryButton({ label, onPress, disabled, disabledReason, loadin
       style={({ pressed }) => [
         styles.button,
         size === "large" ? styles.largeButton : null,
-        isPrimary ? { backgroundColor: colors.primary, borderColor: colors.primary } : null,
-        variant === "secondary" ? { backgroundColor: "transparent", borderColor: colors.primary } : null,
-        variant === "ghost" ? { backgroundColor: "transparent", borderColor: colors.border } : null,
-        isDanger ? { backgroundColor: "transparent", borderColor: colors.danger } : null,
+        isPrimary ? [{ backgroundColor: colors.accent, borderColor: colors.accent }, blocked ? null : { shadowColor: colors.accent, shadowOpacity: 0.32, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 5 }] : null,
+        variant === "secondary" ? { backgroundColor: colors.backgroundAccent, borderColor: colors.backgroundAccent } : null,
+        variant === "ghost" ? [{ backgroundColor: colors.card, borderColor: colors.cardBorder }, softShadow(colors.shadow, 1)] : null,
+        isDanger ? { backgroundColor: colors.dangerSurface, borderColor: colors.dangerSurface } : null,
         blocked ? { backgroundColor: colors.disabled, borderColor: colors.disabled } : null,
-        pressed && !blocked && isPrimary ? [styles.pressed, { backgroundColor: colors.primaryPressed }] : null,
+        pressed && !blocked && isPrimary ? [styles.pressed, { backgroundColor: colors.accentPressed }] : null,
         pressed && !blocked && !isPrimary ? styles.outlinePressed : null
       ]}
     >
@@ -46,6 +47,7 @@ export function PrimaryButton({ label, onPress, disabled, disabledReason, loadin
         <Text
           style={[
             styles.label,
+            font(800),
             size === "large" ? styles.largeLabel : null,
             { color: labelColor }
           ]}
@@ -63,10 +65,10 @@ const styles = StyleSheet.create({
   button: {
     alignItems: "center",
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 16,
     backgroundColor: "#1e5bff",
     minWidth: 0,
-    minHeight: 52,
+    minHeight: 54,
     justifyContent: "center",
     paddingHorizontal: 15,
     paddingVertical: 12
@@ -79,7 +81,8 @@ const styles = StyleSheet.create({
     maxWidth: "100%"
   },
   largeButton: {
-    minHeight: 64,
+    borderRadius: 18,
+    minHeight: 60,
     paddingHorizontal: 18,
     paddingVertical: 16
   },
@@ -92,16 +95,16 @@ const styles = StyleSheet.create({
     borderColor: "#d8dee8"
   },
   pressed: {
-    opacity: 0.86
+    transform: [{ scale: 0.97 }]
   },
   outlinePressed: {
-    opacity: 0.72
+    opacity: 0.85,
+    transform: [{ scale: 0.97 }]
   },
   label: {
     flexShrink: 1,
     fontSize: 16,
-    fontWeight: "700",
-    lineHeight: 24,
+    lineHeight: 22,
     textAlign: "center"
   },
   disabledLabel: {

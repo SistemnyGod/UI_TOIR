@@ -5,9 +5,11 @@ import type * as Notifications from "expo-notifications";
 import { router, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AppState, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useFonts, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold } from "@expo-google-fonts/manrope";
 
 import { PrimaryButton } from "@/ui/PrimaryButton";
+import { BootSplash } from "@/ui/BootSplash";
 import { startConnectionMonitor } from "@/core/connectionStatus";
 import { bootstrapApplication } from "@/core/bootstrap";
 import { classifyStartupError, StartupState } from "@/core/startupState";
@@ -41,7 +43,7 @@ export default function RootLayout() {
 }
 
 function RootContent() {
-  const { colors, statusBarStyle } = useAppTheme();
+  const { statusBarStyle } = useAppTheme();
   useEffect(() => { startConnectionMonitor(); }, []);
   const [startupState, setStartupState] = useState<StartupState>({ status: "initializing" });
   const isReady = startupState.status === "ready";
@@ -49,6 +51,11 @@ function RootContent() {
     ? startupState.error
     : null;
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
+  const [fontsLoaded, fontError] = useFonts({ Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold });
+  const [fontWaitOver, setFontWaitOver] = useState(false);
+  // Never hold startup on fonts: after a short wait the system font is used.
+  useEffect(() => { const timer = setTimeout(() => setFontWaitOver(true), 2500); return () => clearTimeout(timer); }, []);
+  const fontsReady = fontsLoaded || !!fontError || fontWaitOver;
 
   useEffect(() => {
     let isMounted = true;
@@ -137,14 +144,11 @@ function RootContent() {
     );
   }
 
-  if (!isReady) {
+  if (!isReady || !fontsReady) {
     return (
       <>
         <StatusBar style={statusBarStyle} />
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: colors.background }}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.text }]}>Подготавливаем защищённое хранилище…</Text>
-        </View>
+        <BootSplash />
       </>
     );
   }

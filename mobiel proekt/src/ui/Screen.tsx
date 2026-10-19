@@ -21,6 +21,8 @@ import { NavigationBar, navigationItems, useKeyboardVisible } from "./Navigation
 import { useConnectionStatus } from "@/core/connectionStatus";
 import { useStableListAnchor } from './useStableListAnchor';
 import { ClockSkewNotice } from './ClockSkewNotice';
+import { BrandLogo } from './BrandMark';
+import { font, softShadow } from './typography';
 
 type ScreenProps = {
   title: string;
@@ -75,7 +77,7 @@ export function Screen({ title, subtitle, children, floatingNotice, bottomAction
         </View>
       )}
       {floatingNotice ? <View pointerEvents="box-none" style={{ flexShrink: 0, paddingHorizontal: 16 }}>{floatingNotice}</View> : null}
-      <View style={{ flexShrink: 0, backgroundColor: bottomActionBackground === 'transparent' ? 'transparent' : shell.colors.navBackground }}>
+      <View style={{ flexShrink: 0, backgroundColor: bottomActionBackground === 'transparent' ? 'transparent' : shell.colors.background }}>
         {bottomAction ? <View style={{ padding: 16, paddingBottom: shell.showNestedNavigation && !shell.keyboard ? 12 : Math.max(shell.insets.bottom, 12) }}>{bottomAction}</View> : null}
         <NestedNavigation shell={shell} />
       </View>
@@ -122,7 +124,7 @@ export function ScreenList<T>({
           showsVerticalScrollIndicator={false}
       />
       {floatingNotice ? <View pointerEvents="box-none" style={{ flexShrink: 0, paddingHorizontal: 16 }}>{floatingNotice}</View> : null}
-      <View style={{ flexShrink: 0, backgroundColor: shell.colors.navBackground }}>
+      <View style={{ flexShrink: 0, backgroundColor: shell.colors.background }}>
         {bottomAction ? <View style={{ padding: 16, paddingBottom: shell.showNestedNavigation && !shell.keyboard ? 12 : Math.max(shell.insets.bottom, 12) }}>{bottomAction}</View> : null}
         <NestedNavigation shell={shell} />
       </View>
@@ -150,8 +152,9 @@ function ScreenBackground() {
 
   return (
     <View pointerEvents="none" style={styles.backgroundLayer}>
-      <View style={[styles.topWash, { backgroundColor: colors.backgroundAccent }]} />
-      <View style={[styles.headerLine, { backgroundColor: colors.border }]} />
+      <View style={[styles.topWash, { backgroundColor: colors.header }]} />
+      <View style={[styles.topWashFade, { backgroundColor: colors.header }]} />
+      <View style={[styles.topGlow, { backgroundColor: colors.brand }]} />
     </View>
   );
 }
@@ -161,23 +164,29 @@ type NetworkStatus = "offline" | "checking" | "connected" | "serverUnavailable" 
 function ScreenHeader({ title, subtitle, networkStatus, compact = false, onBack }: { title: string; subtitle?: string; networkStatus: NetworkStatus; compact?: boolean; onBack?: () => void }) {
   const { colors } = useAppTheme();
 
-  if (onBack) return <><View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
-    <Pressable accessibilityRole="button" accessibilityLabel="Назад" onPress={onBack} style={{ minWidth: 48, minHeight: 48, alignItems: "center", justifyContent: "center" }}><Ionicons name="arrow-back" size={24} color={colors.text} /></Pressable>
-    <Text accessibilityRole="header" style={{ flex: 1, color: colors.text, fontSize: 20, fontWeight: "700" }}>{title}</Text>
+  if (onBack) return <><View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 6 }}>
+    <Pressable accessibilityRole="button" accessibilityLabel="Назад" onPress={onBack} hitSlop={4}
+      style={({ pressed }) => [{ width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, transform: [{ scale: pressed ? 0.94 : 1 }] }, softShadow(colors.shadow, 1)]}>
+      <Ionicons name="chevron-back" size={22} color={colors.text} />
+    </Pressable>
+    <View style={{ flex: 1, minWidth: 0 }}>
+      <Text accessibilityRole="header" style={[font(800), { color: colors.text, fontSize: 21, lineHeight: 27, letterSpacing: -0.3 }]}>{title}</Text>
+      {subtitle ? <Text style={[font(600), { color: colors.mutedText, fontSize: 13, lineHeight: 18 }]}>{subtitle}</Text> : null}
+    </View>
   </View><ClockSkewNotice /></>;
   return (
     <>
       <View style={styles.topBar}>
-        <Text accessibilityLabel="ATOM" style={{ color: colors.brand, fontSize: 22, fontWeight: "900", letterSpacing: -1 }}>ATOM</Text>
-        <View style={styles.networkBadge}>
-          <Text style={[styles.networkText, { color: colors.mutedText }]}>{networkStatusLabel(networkStatus)}</Text>
+        <BrandLogo size={30} />
+        <View style={[styles.networkBadge, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
           <View style={[styles.networkDot, { backgroundColor: networkStatus === "connected" ? colors.success : networkStatus === "checking" ? colors.warning : networkStatus === "offline" ? colors.mutedText : colors.danger }]} />
+          <Text style={[styles.networkText, font(700), { color: colors.mutedText }]}>{networkStatusLabel(networkStatus)}</Text>
         </View>
       </View>
       <ClockSkewNotice />
       {title || subtitle ? <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }, compact ? { fontSize: 22, lineHeight: 28 } : null]}>{title}</Text>
-        {subtitle ? <Text style={[styles.subtitle, { color: colors.mutedText }]}>{subtitle}</Text> : null}
+        <Text accessibilityRole="header" style={[styles.title, font(800), { color: colors.text }, compact ? { fontSize: 23, lineHeight: 29 } : null]}>{title}</Text>
+        {subtitle ? <Text style={[styles.subtitle, font(600), { color: colors.mutedText }]}>{subtitle}</Text> : null}
       </View> : null}
     </>
   );
@@ -223,17 +232,25 @@ const styles = StyleSheet.create({
     top: 0
   },
   topWash: {
-    height: 152,
-    opacity: 0.5,
+    height: 120,
     width: "100%"
   },
-  headerLine: {
-    height: 1,
-    opacity: 0.55,
+  topWashFade: {
+    height: 80,
+    opacity: 0.45,
     width: "100%"
+  },
+  topGlow: {
+    borderRadius: 999,
+    height: 240,
+    opacity: 0.08,
+    position: "absolute",
+    right: -80,
+    top: -110,
+    width: 240
   },
   content: {
-    gap: 10,
+    gap: 12,
     padding: 16,
     paddingBottom: 28
   },
@@ -279,8 +296,12 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     marginLeft: 16,
     alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
     flexDirection: "row",
-    gap: 7
+    gap: 7,
+    paddingHorizontal: 11,
+    paddingVertical: 6
   },
   networkDot: {
     borderRadius: 999,
@@ -289,17 +310,16 @@ const styles = StyleSheet.create({
   },
   networkText: {
     flexShrink: 1,
-    fontSize: 14,
-    fontWeight: "600"
+    fontSize: 13
   },
   header: {
     gap: 6
   },
   title: {
     color: "#0f1a2b",
-    fontSize: 26,
-    fontWeight: "800",
-    lineHeight: 31
+    fontSize: 30,
+    letterSpacing: -0.6,
+    lineHeight: 36
   },
   subtitle: {
     color: "#6b7280",
