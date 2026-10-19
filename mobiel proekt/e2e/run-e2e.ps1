@@ -101,6 +101,14 @@ if ($Apk) {
   Invoke-Native $Adb @("-s", $Device, "uninstall", $AppId) | Out-Null
   Invoke-Adb install -r -g $apkPath | Out-Null
 }
+$startsFromLogin = $Only.Count -eq 0 -or $Only -contains "01-login.yaml"
+if ($startsFromLogin) {
+  # Wipe the app while the network may still be off: a report queued by a
+  # previous run would otherwise reach the freshly reset mock as soon as the
+  # network returns and complete the seeded request before flow 01 starts.
+  Invoke-Adb shell am force-stop $AppId | Out-Null
+  Invoke-Adb shell pm clear $AppId | Out-Null
+}
 Set-DeviceNetwork -Online $true
 # Gboard on API 34+ treats Maestro taps as stylus input and opens its
 # handwriting onboarding over the form, eating the typed text.
