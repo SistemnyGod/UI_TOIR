@@ -64,7 +64,16 @@ public sealed record MobileDiagnosticContextDto(
     DateTimeOffset? LastServerContactAt,
     DateTimeOffset? LastCompleteQueueSyncAt,
     DateTimeOffset? LastReportDeliveredAt,
-    int? SchemaMigrationCount);
+    int? SchemaMigrationCount,
+    // Server clock minus phone clock. Optional: older app versions omit it.
+    int? ClockOffsetSeconds = null,
+    DateTimeOffset? ClockOffsetMeasuredAt = null);
+
+public sealed record MobileDiagnosticDeliveryDto(
+    int? OldestUndeliveredCommandAgeSeconds,
+    int DeliveredReportCount,
+    int? ReportDeliveryMedianSeconds,
+    int? ReportDeliveryMaxSeconds);
 
 public sealed record MobileDiagnosticReportDto(
     Guid ReportId,
@@ -75,7 +84,8 @@ public sealed record MobileDiagnosticReportDto(
     DateTimeOffset GeneratedAt,
     int PendingOutboxCount,
     IReadOnlyList<MobileDiagnosticEntryDto> Entries,
-    MobileDiagnosticContextDto? Context = null);
+    MobileDiagnosticContextDto? Context = null,
+    MobileDiagnosticDeliveryDto? Delivery = null);
 
 public sealed record MobileDiagnosticReportReceiptDto(
     Guid ReportId,

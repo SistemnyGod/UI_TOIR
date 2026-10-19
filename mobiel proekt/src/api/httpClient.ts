@@ -29,6 +29,7 @@ import { logMobileError } from "@/services/mobileErrorReporter";
 import { MobileApiProtocolError, parseMobileResponse } from "@/api/protocolValidation";
 import { shouldRefreshAccessToken } from "@/auth/tokenExpiryPolicy";
 import { getMobileConnectionContextGeneration, invalidateMobileConnectionContext, recordMobileConnectionOutcome } from "@/core/connectionStateEvents";
+import { CLIENT_NOW_HEADER, observeServerClock } from "@/core/clockOffset";
 import type { ZodType } from "zod";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -267,7 +268,8 @@ async function sendMobileRequest(apiBaseUrl: string, path: string, options: Requ
 
   try {
     const timeoutMs = Math.min(10_000, options.deadline!.remaining());
-    return await fetchWithTimeout(`${apiBaseUrl}${path}`, {
+    const requestStartedAt = Date.now();
+    const response = await fetchWithTimeout(`${apiBaseUrl}${path}`, {
       signal: options.deadline!.signal,
       method: options.method ?? "GET",
       headers: {
@@ -276,11 +278,14 @@ async function sendMobileRequest(apiBaseUrl: string, path: string, options: Requ
         "X-Patrol360-Client": "mobile-app",
         "X-Mobile-Sync-Protocol": runtimeConfig.syncProtocolVersion,
         "X-Patrol360-Contour": runtimeConfig.contourId,
+        [CLIENT_NOW_HEADER]: new Date(requestStartedAt).toISOString(),
         ...(options.headers ?? {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {})
       },
       body: options.body ? JSON.stringify(options.body) : undefined
     }, timeoutMs);
+    observeServerClock((name) => response.headers?.get?.(name), requestStartedAt, Date.now());
+    return response;
   } catch (error) {
     throw await appendRequestFailureContext(error, `Адрес: ${apiBaseUrl}`);
   }

@@ -6,18 +6,22 @@ import { getServerBaseUrl } from "@/core/serverSettings";
 import { getDatabase } from "@/db/database";
 import type { MobileDiagnosticContext } from "@/db/repositories/diagnosticReportRepository";
 import { canAttemptServerConnection } from "@/core/networkPolicy";
+import { getClockOffsetSnapshot, restoreClockOffset } from "@/core/clockOffset";
 import { readBackgroundSyncState } from "@/sync/backgroundSyncState";
 
 export async function collectDiagnosticContext(): Promise<MobileDiagnosticContext> {
   const [networkState, backgroundSync, schemaMigrationCount] = await Promise.all([
     NetInfo.fetch().catch(() => null),
     readBackgroundSyncState().catch(() => null),
-    readSchemaMigrationCount()
+    readSchemaMigrationCount(),
+    restoreClockOffset()
   ]);
   const canProbeHealth = networkState ? canAttemptServerConnection(networkState) : false;
   const health = canProbeHealth
     ? await probeCurrentServerHealth()
     : { status: "notChecked" as const, failureKind: null };
+  // Sampled from the latest mobile API response (or restored after a restart).
+  const clockOffset = getClockOffsetSnapshot();
 
   return {
     environment: defaultEnvironment.name,
@@ -30,7 +34,9 @@ export async function collectDiagnosticContext(): Promise<MobileDiagnosticContex
     lastServerContactAt: backgroundSync?.lastServerContactAt ?? null,
     lastCompleteQueueSyncAt: backgroundSync?.lastCompleteQueueSyncAt ?? null,
     lastReportDeliveredAt: backgroundSync?.lastReportDeliveredAt ?? null,
-    schemaMigrationCount
+    schemaMigrationCount,
+    clockOffsetSeconds: clockOffset ? Math.round(clockOffset.offsetMs / 1000) : null,
+    clockOffsetMeasuredAt: clockOffset?.measuredAt ?? null
   };
 }
 

@@ -1,6 +1,7 @@
 import * as Crypto from "expo-crypto";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
+import { currentContourId } from "@/core/environments";
 import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { countPendingOutboxCommands, listSyncQueueCommands } from "@/db/repositories/outboxRepository";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
@@ -9,8 +10,10 @@ import {
   isDailyDiagnosticReportDue,
   getDiagnosticEventMessage,
   sanitizeDiagnosticMessage,
+  summarizeDeliveryLatencies,
   truncateDiagnosticValue
 } from "@/services/diagnosticReportPolicy";
+import { buildCrashDiagnosticEntries, readCrashRecords } from "@/services/crashRecordStore";
 
 export type MobileDiagnosticEntry = {
   eventType: string;
@@ -32,6 +35,16 @@ export type MobileDiagnosticContext = {
   lastCompleteQueueSyncAt: string | null;
   lastReportDeliveredAt: string | null;
   schemaMigrationCount: number | null;
+  /** Server clock minus phone clock, from the latest API response. */
+  clockOffsetSeconds?: number | null;
+  clockOffsetMeasuredAt?: string | null;
+};
+
+export type MobileDiagnosticDelivery = {
+  oldestUndeliveredCommandAgeSeconds: number | null;
+  deliveredReportCount: number;
+  reportDeliveryMedianSeconds: number | null;
+  reportDeliveryMaxSeconds: number | null;
 };
 
 export type MobileDiagnosticReport = {
@@ -44,6 +57,7 @@ export type MobileDiagnosticReport = {
   pendingOutboxCount: number;
   entries: MobileDiagnosticEntry[];
   context?: MobileDiagnosticContext;
+  delivery?: MobileDiagnosticDelivery;
 };
 
 export type MobileDiagnosticReportStatus = "pending" | "sent" | "abandoned";
@@ -95,7 +109,8 @@ export async function getOrCreatePendingDiagnosticReport(
 
   const queueCommands = await listSyncQueueCommands(ownerUserId, 100);
   const queueEntries = buildQueueDiagnosticEntries(queueCommands);
-  const actionLogLimit = Math.max(1, 100 - queueEntries.length);
+  const crashEntries = buildCrashDiagnosticEntries(readCrashRecords(), now.toISOString());
+  const actionLogLimit = Math.max(1, 100 - queueEntries.length - crashEntries.length);
   const rows = await db.getAllAsync<{
     event_type: string;
     message: string;
@@ -132,7 +147,7 @@ export async function getOrCreatePendingDiagnosticReport(
     [periodStart.toISOString(), now.toISOString(), ownerUserId, actionLogLimit]
   );
 
-  if (rows.length === 0 && queueEntries.length === 0 && !options.includeEmpty) {
+  if (rows.length === 0 && queueEntries.length === 0 && crashEntries.length === 0 && !options.includeEmpty) {
     await advanceDiagnosticPeriod(ownerUserId, now.toISOString());
     return null;
   }
@@ -144,7 +159,7 @@ export async function getOrCreatePendingDiagnosticReport(
     firstSeenAt: row.first_seen_at,
     lastSeenAt: row.last_seen_at
   }));
-  const entries = [...queueEntries, ...actionLogEntries];
+  const entries = [...crashEntries, ...queueEntries, ...actionLogEntries];
   const report: MobileDiagnosticReport = {
     reportId: Crypto.randomUUID(),
     appVersion: device.appVersion,
@@ -154,6 +169,7 @@ export async function getOrCreatePendingDiagnosticReport(
     generatedAt: now.toISOString(),
     pendingOutboxCount: await countPendingOutboxCommands(ownerUserId),
     context: options.context,
+    delivery: await readDeliveryMetrics(ownerUserId, periodStart, now),
     entries: entries.length > 0
       ? entries
       : [{
@@ -227,6 +243,52 @@ export async function getOrCreatePendingDiagnosticReport(
 
     return stored ? JSON.parse(stored.payload_json) as MobileDiagnosticReport : report;
   });
+}
+
+/**
+ * Delivery health for the period, read from the outbox itself (nothing extra
+ * is stored): how long the oldest command has waited, and how long completed
+ * patrol reports took from local save to the server's acknowledgement.
+ */
+export async function readDeliveryMetrics(ownerUserId: string, periodStart: Date, now: Date): Promise<MobileDiagnosticDelivery> {
+  const db = await getDatabase();
+  const oldest = await db.getFirstAsync<{ created_at_local: string | null }>(
+    `
+      SELECT MIN(created_at_local) AS created_at_local
+      FROM outbox_commands
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND status IN ('pending', 'sending', 'retryLater', 'waiting_auth', 'waiting_network', 'wrong_contour', 'blocked')
+    `,
+    [ownerUserId, currentContourId]
+  );
+  const delivered = await db.getAllAsync<{ created_at_local: string; updated_at_local: string }>(
+    `
+      SELECT created_at_local, updated_at_local
+      FROM outbox_commands
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND command_type = 'completePatrolAssignment'
+        AND status IN ('accepted', 'duplicate')
+        AND updated_at_local > ?
+        AND updated_at_local <= ?
+      LIMIT 1000
+    `,
+    [ownerUserId, currentContourId, periodStart.toISOString(), now.toISOString()]
+  );
+  const oldestCreatedAt = oldest?.created_at_local ? Date.parse(oldest.created_at_local) : Number.NaN;
+  const latencies = summarizeDeliveryLatencies(
+    delivered.map((row) => (Date.parse(row.updated_at_local) - Date.parse(row.created_at_local)) / 1000)
+  );
+
+  return {
+    oldestUndeliveredCommandAgeSeconds: Number.isFinite(oldestCreatedAt)
+      ? Math.max(0, Math.round((now.getTime() - oldestCreatedAt) / 1000))
+      : null,
+    deliveredReportCount: latencies.count,
+    reportDeliveryMedianSeconds: latencies.medianSeconds,
+    reportDeliveryMaxSeconds: latencies.maxSeconds
+  };
 }
 
 function buildQueueDiagnosticEntries(

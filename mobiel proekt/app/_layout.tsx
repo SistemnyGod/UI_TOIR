@@ -16,7 +16,9 @@ import { isSessionUnlocked, setPendingSessionRoute } from "@/auth/sessionGateSta
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { ThemeProvider, useAppTheme } from "@/features/settings/themePreference";
 import { registerPushNotifications, refreshPushRegistrationIfAllowed, subscribeToMobilePushEvents } from "@/services/notificationService";
-import { installMobileErrorReporter, logMobileError } from "@/services/mobileErrorReporter";
+import { logMobileError } from "@/services/mobileErrorReporter";
+import { installCrashCapture } from "@/services/crashCapture";
+import { AppErrorBoundary } from "@/ui/AppErrorBoundary";
 import { sanitizeDiagnosticMessage } from "@/services/diagnosticReportPolicy";
 import { registerBackgroundSyncTask, syncPendingReportsOnBackground } from "@/sync/backgroundSyncTask";
 import { registerBackgroundNotificationTask } from "@/services/backgroundNotificationTask";
@@ -25,8 +27,16 @@ import { startPatrolSyncCoordinator } from "@/sync/PatrolSyncCoordinator";
 import { cancelNextOutboxRetry, scheduleNextOutboxRetry } from "@/sync/outboxRetryScheduler";
 import { resolvePushNavigationTarget } from "@/services/pushNavigationResolver";
 
+// Installed at module load, before bootstrap, so a crash while the database
+// starts is still written to the crash file.
+installCrashCapture();
+
 export default function RootLayout() {
-  return <ThemeProvider><RootContent /></ThemeProvider>;
+  return (
+    <AppErrorBoundary onRecover={() => router.replace("/")}>
+      <ThemeProvider><RootContent /></ThemeProvider>
+    </AppErrorBoundary>
+  );
 }
 
 function RootContent() {
@@ -48,7 +58,6 @@ function RootContent() {
           return;
         }
         setStartupState({ status: "ready" });
-        installMobileErrorReporter();
         void getStoredOwnerUserId().then(scheduleNextOutboxRetry).catch((error) => {
           void logMobileError("sync.retry_schedule.failed", error);
         });

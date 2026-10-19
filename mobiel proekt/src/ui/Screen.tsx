@@ -20,6 +20,7 @@ import { useAppTheme } from "@/features/settings/themePreference";
 import { NavigationBar, navigationItems, useKeyboardVisible } from "./NavigationBar";
 import { useConnectionStatus } from "@/core/connectionStatus";
 import { useStableListAnchor } from './useStableListAnchor';
+import { ClockSkewNotice } from './ClockSkewNotice';
 
 type ScreenProps = {
   title: string;
@@ -160,10 +161,10 @@ type NetworkStatus = "offline" | "checking" | "connected" | "serverUnavailable" 
 function ScreenHeader({ title, subtitle, networkStatus, compact = false, onBack }: { title: string; subtitle?: string; networkStatus: NetworkStatus; compact?: boolean; onBack?: () => void }) {
   const { colors } = useAppTheme();
 
-  if (onBack) return <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+  if (onBack) return <><View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
     <Pressable accessibilityRole="button" accessibilityLabel="Назад" onPress={onBack} style={{ minWidth: 48, minHeight: 48, alignItems: "center", justifyContent: "center" }}><Ionicons name="arrow-back" size={24} color={colors.text} /></Pressable>
     <Text accessibilityRole="header" style={{ flex: 1, color: colors.text, fontSize: 20, fontWeight: "700" }}>{title}</Text>
-  </View>;
+  </View><ClockSkewNotice /></>;
   return (
     <>
       <View style={styles.topBar}>
@@ -173,6 +174,7 @@ function ScreenHeader({ title, subtitle, networkStatus, compact = false, onBack 
           <View style={[styles.networkDot, { backgroundColor: networkStatus === "connected" ? colors.success : networkStatus === "checking" ? colors.warning : networkStatus === "offline" ? colors.mutedText : colors.danger }]} />
         </View>
       </View>
+      <ClockSkewNotice />
       {title || subtitle ? <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }, compact ? { fontSize: 22, lineHeight: 28 } : null]}>{title}</Text>
         {subtitle ? <Text style={[styles.subtitle, { color: colors.mutedText }]}>{subtitle}</Text> : null}
