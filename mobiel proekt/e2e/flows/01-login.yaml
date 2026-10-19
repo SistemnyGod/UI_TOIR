@@ -1,0 +1,33 @@
+# Step 1: fresh install state -> sign in with the mock's test account.
+# Credentials are test-only values from e2e/mock-server/fixture.mjs.
+appId: ru.patrol360.mobile
+name: 01 Login with test credentials
+env:
+  E2E_LOGIN: e2e.patrol
+  E2E_PASSWORD: e2e-patrol-pass
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible:
+      id: login-username
+    timeout: 60000
+- tapOn:
+    id: login-username
+- inputText: ${E2E_LOGIN}
+- tapOn:
+    id: login-password
+- inputText: ${E2E_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: login-submit
+# After login the app routes to the request board with our seeded request.
+- extendedWaitUntil:
+    visible: "E2E маршрут"
+    timeout: 60000
+- assertVisible:
+    id: request-card-action
+- takeScreenshot: 01-request-board

@@ -1,0 +1,29 @@
+# Step 4: point 2 via the manual path, result «Неисправно» with a description.
+# Text is ASCII on purpose: Maestro's Android inputText does not type Cyrillic.
+appId: ru.patrol360.mobile
+name: 04 Faulty point with description
+---
+- runFlow: subflows/manual-entry.yaml
+- assertVisible: "Метка — E2E щит 2"
+- tapOn:
+    id: point-status-issue
+- tapOn:
+    id: point-comment
+- inputText: "E2E fault: oil leak on flange"
+- hideKeyboard
+- tapOn:
+    id: point-save
+# Last point filled -> the app opens the report check screen.
+# Either the report screen or the battery Alert on top of it.
+- extendedWaitUntil:
+    visible: "Проверка отчёта|Позже|ПОЗЖЕ"
+    timeout: 20000
+- runFlow: subflows/dismiss-battery-prompt.yaml
+- extendedWaitUntil:
+    visible:
+      id: report-primary-action
+    timeout: 20000
+- assertVisible:
+    id: report-delivery-title
+    text: "Всё готово к отправке отчёта"
+- takeScreenshot: 04-report-ready

@@ -267,7 +267,7 @@ function RequestCard({ item, onPress, busy, disabled, progressLabel }: { item: R
               </RingChart>
             </View>
           </View>
-          <PrimaryButton variant="inverse" loading={busy} disabled={disabled} icon={actionIcon} label={actionLabel} onPress={onPress} />
+          <PrimaryButton testID="request-card-action" variant="inverse" loading={busy} disabled={disabled} icon={actionIcon} label={actionLabel} onPress={onPress} />
         </View>
       </Rise>
     );
@@ -291,7 +291,7 @@ function RequestCard({ item, onPress, busy, disabled, progressLabel }: { item: R
               {item.displayNumber ? <Text style={[font(600), styles.displayNumber, { color: colors.faintText }]}>№ {item.displayNumber}</Text> : null}
             </View>
             <View style={{ flexShrink: 1, maxWidth: "60%" }}>
-              <PrimaryButton variant="secondary" loading={busy} disabled={disabled} icon={actionIcon} label={actionLabel} onPress={onPress} />
+              <PrimaryButton testID="request-card-action" variant="secondary" loading={busy} disabled={disabled} icon={actionIcon} label={actionLabel} onPress={onPress} />
             </View>
           </View>
         </View>

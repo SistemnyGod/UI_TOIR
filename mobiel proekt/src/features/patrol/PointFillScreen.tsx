@@ -586,7 +586,7 @@ export function PointFillScreen() {
           {!manualReasonOptions.some(option => option.id === manualReason) ? <TextInput accessibilityLabel="Причина недоступности NFC" value={manualReason} onChangeText={value => { recordDraft({ manualReason: value }); setManualReason(value); }}
             placeholder="Опишите причину" maxLength={120} style={[styles.input, { color: colors.text }]} /> : null}
         {error ? <StatusMessage message={error} tone="danger" /> : null}
-        <PrimaryButton label="Продолжить" loading={isSubmitting} disabled={!manualReason.trim() || isSubmitting} onPress={() => {
+        <PrimaryButton testID="point-manual-continue" label="Продолжить" loading={isSubmitting} disabled={!manualReason.trim() || isSubmitting} onPress={() => {
           if (finalizingRef.current) return;
           finalizingRef.current = true;
           setIsSubmitting(true);
@@ -613,7 +613,7 @@ export function PointFillScreen() {
         <TransientNotice key={noticeRevision} message={mediaNotice} />
       </View>}
       bottomActionBackground="transparent"
-      bottomAction={detailsOpen ? <PrimaryButton disabled={isSubmitting || isMediaBusy || hasPendingLeave || (!selectedStatus && !transitionPending)} disabledReason={!selectedStatus ? "Выберите результат осмотра" : undefined} icon="save-outline" loading={isSubmitting} label={transitionPending ? "Повторить переход" : "Сохранить и продолжить"} onPress={transitionPending ? () => void retrySavedTransition() : handleSave} size="large" /> : undefined}
+      bottomAction={detailsOpen ? <PrimaryButton testID="point-save" disabled={isSubmitting || isMediaBusy || hasPendingLeave || (!selectedStatus && !transitionPending)} disabledReason={!selectedStatus ? "Выберите результат осмотра" : undefined} icon="save-outline" loading={isSubmitting} label={transitionPending ? "Повторить переход" : "Сохранить и продолжить"} onPress={transitionPending ? () => void retrySavedTransition() : handleSave} size="large" /> : undefined}
       title=""
     >
       <View style={styles.row}>
@@ -621,7 +621,7 @@ export function PointFillScreen() {
         <Text accessibilityLabel={`Метка номер ${point.orderIndex}`} style={{ color: colors.mutedText, fontSize: 18 }}>{point.orderIndex}</Text>
       </View>
       {!detailsOpen ? <View style={styles.statusCenter}><View accessibilityRole="radiogroup" accessibilityLabel="Результат осмотра" style={[styles.statusGrid, (fontScale > 1.3 || width < 350) && styles.statusStack]}>
-        {inspectionChoices.filter(choice => choice.status !== "skipped").map(choice => <StatusButton key={choice.status} label={choice.label}
+        {inspectionChoices.filter(choice => choice.status !== "skipped").map(choice => <StatusButton key={choice.status} testID={`point-status-${choice.status}`} label={choice.label}
           tone={choice.tone} selected={selectedStatus === choice.status} disabled={isSubmitting || transitionPending}
           stacked={fontScale > 1.3 || width < 350} wrap={false} onPress={() => selectStatus(choice.status)} />)}
       </View></View> : <>
@@ -642,6 +642,7 @@ export function PointFillScreen() {
         <View style={styles.field}>
           <Text style={{ color: colors.mutedText, fontSize: 14 }}>Результат осмотра</Text>
           <TextInput
+            testID="point-comment"
             accessibilityLabel="Результат осмотра"
             editable={!isSubmitting && !transitionPending} multiline
             onBlur={() => void flushDraft().catch(() => showDraftError("Не удалось сохранить черновик точки."))}
@@ -764,12 +765,12 @@ function PointGuidanceCard({
   );
 }
 
-function StatusButton({ label, tone, selected, disabled, stacked, wrap, onPress }: {
-  label: string; tone: "success" | "danger" | "warning"; selected: boolean; disabled: boolean; stacked: boolean; wrap: boolean; onPress: () => void;
+function StatusButton({ testID, label, tone, selected, disabled, stacked, wrap, onPress }: {
+  testID?: string; label: string; tone: "success" | "danger" | "warning"; selected: boolean; disabled: boolean; stacked: boolean; wrap: boolean; onPress: () => void;
 }) {
   const styles = usePointStyles();
   const { colors } = useAppTheme();
-  return <Pressable accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{ checked: selected, disabled }}
+  return <Pressable testID={testID} accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{ checked: selected, disabled }}
     disabled={disabled} onPress={onPress}
     style={({ pressed }) => [styles.statusButton, stacked && styles.statusButtonStack,
       wrap && { flexGrow: 1, flexBasis: tone === 'warning' ? '100%' : '45%' },

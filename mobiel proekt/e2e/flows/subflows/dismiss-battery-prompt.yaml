@@ -1,0 +1,10 @@
+# When a report becomes ready the app asks (native Alert) to disable battery
+# optimisation. While the Alert is up, Maestro sees only the dialog, so tap
+# «Позже» if it is there. Java regex (?i) is ASCII-only, hence both spellings.
+appId: ru.patrol360.mobile
+---
+- runFlow:
+    when:
+      visible: "Позже|ПОЗЖЕ"
+    commands:
+      - tapOn: "Позже|ПОЗЖЕ"

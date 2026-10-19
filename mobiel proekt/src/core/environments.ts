@@ -1,6 +1,6 @@
 import Constants from "expo-constants";
 
-export type EnvironmentName = "dev" | "test" | "local-enterprise" | "production";
+export type EnvironmentName = "dev" | "test" | "local-enterprise" | "production" | "e2e";
 
 const configuredProductionApiBaseUrl = typeof Constants.expoConfig?.extra?.productionApiBaseUrl === "string"
   ? Constants.expoConfig.extra.productionApiBaseUrl.trim()
@@ -46,6 +46,16 @@ export const environments: Record<EnvironmentName, MobileEnvironment> = {
     allowedBaseUrls: localEnterpriseAllowedBaseUrls,
     syncProtocolVersion: "1.0"
   },
+  // Emulator e2e builds only (app.config.js refuses it for Release): the
+  // single allowed server is the mock from PATROL360_PUBLIC_API_URL, so a
+  // failing mock can never fail over to the LAN pilot server.
+  e2e: {
+    name: "e2e",
+    apiBaseUrl: configuredPublicApiBaseUrl,
+    contourId: "patrol360-e2e",
+    allowedBaseUrls: configuredPublicApiBaseUrl ? [configuredPublicApiBaseUrl] : [],
+    syncProtocolVersion: "1.0"
+  },
   production: {
     name: "production",
     apiBaseUrl: configuredProductionApiBaseUrl,
@@ -67,7 +77,8 @@ function isEnvironmentName(value: string): value is EnvironmentName {
   return value === "dev"
     || value === "test"
     || value === "local-enterprise"
-    || value === "production";
+    || value === "production"
+    || value === "e2e";
 }
 
 function uniqueValues(values: string[]) {

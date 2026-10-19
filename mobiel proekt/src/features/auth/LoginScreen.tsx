@@ -271,6 +271,7 @@ export function LoginScreen() {
                 <View style={[styles.inputBox, skin.inputBox]}>
                   <Ionicons color={colors.primary} name="person-outline" size={21} />
                   <TextInput
+                    testID="login-username"
                     accessibilityLabel="Логин"
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -287,6 +288,7 @@ export function LoginScreen() {
                 <View style={[styles.inputBox, skin.inputBox]}>
                   <Ionicons color={colors.placeholder} name="lock-closed-outline" size={21} />
                   <TextInput
+                    testID="login-password"
                     accessibilityLabel="Пароль"
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -325,6 +327,7 @@ export function LoginScreen() {
                 {error ? <Text accessibilityLiveRegion="assertive" accessibilityRole="alert" style={[styles.error, skin.error]}>{error}</Text> : null}
 
                 <Pressable
+                  testID="login-submit"
                   accessibilityRole="button"
                   disabled={isSubmitting}
                   onPress={handleSubmit}

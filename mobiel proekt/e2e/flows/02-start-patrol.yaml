@@ -1,0 +1,33 @@
+# Step 2: open the seeded (accepted) patrol and start it.
+appId: ru.patrol360.mobile
+name: 02 Open active patrol and start it
+---
+- extendedWaitUntil:
+    visible:
+      id: request-card-action
+    timeout: 30000
+- tapOn:
+    id: request-card-action
+# Depending on the entry path the app either starts at once (scan screen) or
+# shows the patrol card with a start button first.
+- runFlow:
+    when:
+      visible:
+        id: patrol-start
+    commands:
+      - tapOn:
+          id: patrol-start
+- runFlow:
+    when:
+      visible:
+        id: patrol-primary-action
+    commands:
+      - tapOn:
+          id: patrol-primary-action
+# Route has nfcEnabled=true, so the NFC scan screen opens. The emulator has no
+# NFC, which is fine: the manual path is what we test.
+- extendedWaitUntil:
+    visible:
+      id: scan-tag-unavailable
+    timeout: 30000
+- takeScreenshot: 02-scan-screen

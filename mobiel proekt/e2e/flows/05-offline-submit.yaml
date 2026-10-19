@@ -1,0 +1,28 @@
+# Step 5: run-e2e.ps1 has cut the network (airplane mode, wifi and data off).
+# Submitting must keep the report on the phone in the queued/offline state.
+appId: ru.patrol360.mobile
+name: 05 Submit report while offline
+---
+- runFlow: subflows/dismiss-battery-prompt.yaml
+- assertVisible:
+    id: report-primary-action
+    text: ".*Отправить отчёт.*"
+- tapOn:
+    id: report-primary-action
+# Send dialog: saved on the phone, waiting for the network, not delivered.
+- extendedWaitUntil:
+    visible: "Отправим автоматически, когда появится связь.|Повторим отправку автоматически."
+    timeout: 45000
+- assertVisible: "Отчёт сохранён"
+- assertNotVisible: "Отчёт отправлен"
+- takeScreenshot: 05-offline-dialog
+# Close the dialog but stay on the report screen («Продолжить работу» would
+# leave for the request board).
+- tapOn: "Скрыть окно отправки"
+- extendedWaitUntil:
+    visible:
+      id: report-delivery-title
+      text: "Отчёт сохранён.*"
+    timeout: 20000
+- assertNotVisible: "Отчёт доставлен"
+- takeScreenshot: 05-offline-queued

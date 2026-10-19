@@ -1,0 +1,11 @@
+# Step 6: run-e2e.ps1 has restored the network. Without any tap, the app's
+# connectivity trigger must flush the outbox and show the report as delivered.
+appId: ru.patrol360.mobile
+name: 06 Network back, report delivered
+---
+- extendedWaitUntil:
+    visible:
+      id: report-delivery-title
+      text: "Отчёт доставлен"
+    timeout: 120000
+- takeScreenshot: 06-delivered
