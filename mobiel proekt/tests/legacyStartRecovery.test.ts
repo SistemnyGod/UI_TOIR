@@ -10,10 +10,15 @@ const repositorySource = readFileSync(
   new URL("../src/db/repositories/outboxRepository.ts", import.meta.url),
   "utf8"
 );
+const responseRepositorySource = readFileSync(
+  new URL("../src/db/repositories/outboxResponseRepository.ts", import.meta.url),
+  "utf8"
+);
 const databaseSource = readFileSync(
   new URL("../src/db/database.ts", import.meta.url),
   "utf8"
-);const syncEngineSource = readFileSync(
+);
+const syncEngineSource = readFileSync(
   new URL("../src/sync/syncEngine.ts", import.meta.url),
   "utf8"
 );
@@ -47,7 +52,8 @@ test("requires explicit acceptance before starting a legacy rejected request", (
   assert.match(databaseSource, /repairMisorderedPatrolOutbox/);
   assert.match(databaseSource, /20260728_repair_misordered_patrol_outbox/);
   assert.match(repositorySource, /reactivateRecoverableRejectedPointCommands/);
-  assert.match(repositorySource, /recoverableLifecycleRejection/);
+  assert.match(responseRepositorySource, /const recoverableLifecycleRejection =\s*response\.status === "rejected"\s*&& isRecoverableLifecycleRejection\(/);
+  assert.match(responseRepositorySource, /if \(recoverableLifecycleRejection\) \{[\s\S]*CASE WHEN status = 'completedLocal' THEN status ELSE 'inProgress' END/);
   assert.match(repositorySource, /CASE WHEN status = 'completedLocal' THEN status ELSE 'inProgress' END/);
   assert.match(queueScreenSource, /completePatrolAssignment.*Отчёт.*Маршрут/);
   assert.doesNotMatch(queueScreenSource, /Boolean\(command\.lastError\)/);

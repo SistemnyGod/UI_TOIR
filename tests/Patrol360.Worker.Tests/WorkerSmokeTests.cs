@@ -15,11 +15,12 @@ public class WorkerSmokeTests
     {
         var repositoryRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
         var script = File.ReadAllText(Path.Combine(repositoryRoot, "infra", "scripts", "update-patrol360-web-only.ps1"));
-        var build = script.LastIndexOf("Invoke-ReleaseNative npm run build", StringComparison.Ordinal);
-        var merge = script.IndexOf("Merge-PreviousWebAssets", build, StringComparison.Ordinal);
-        var imageBuild = script.IndexOf("docker compose @composeArgs build web", build, StringComparison.Ordinal);
+        var build = script.LastIndexOf("Invoke-ReleaseNative -FilePath 'npm' -Arguments @('run', 'build'", StringComparison.Ordinal);
+        Assert.True(build >= 0, "Web-only release must build through Invoke-ReleaseNative.");
+        var merge = script.IndexOf("Merge-PreviousWebAssets -ContainerName", build, StringComparison.Ordinal);
+        var imageBuild = script.IndexOf("@('build', 'web')", build, StringComparison.Ordinal);
 
-        Assert.True(build >= 0 && build < merge && build < imageBuild);
+        Assert.True(build < merge && build < imageBuild);
     }
 
     [Fact]
@@ -86,12 +87,22 @@ public class WorkerSmokeTests
     [Fact]
     public void DiagnosticsIoFailureDoesNotEscapeIntoWorkerCycle()
     {
-        var directoryAsFile = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
-        var diagnostics = new WorkerDiagnostics(directoryAsFile);
-        Exception? logged = null;
-        var exception = Record.Exception(() => WorkerAttempt.RunDiagnostic(
-            () => diagnostics.RecordSuccess("push", "sent=0"), ex => logged = ex));
-        Assert.Null(exception);
-        Assert.NotNull(logged);
+        // Use a dedicated directory as the heartbeat path; the shared temp root may be virtualized.
+        var directoryAsFile = Path.Combine(Path.GetTempPath(), $"worker-heartbeat-dir-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directoryAsFile);
+        try
+        {
+            var diagnostics = new WorkerDiagnostics(directoryAsFile);
+            Exception? logged = null;
+            var exception = Record.Exception(() => WorkerAttempt.RunDiagnostic(
+                () => diagnostics.RecordSuccess("push", "sent=0"), ex => logged = ex));
+            Assert.Null(exception);
+            Assert.NotNull(logged);
+        }
+        finally
+        {
+            File.Delete(directoryAsFile + ".tmp");
+            Directory.Delete(directoryAsFile, true);
+        }
     }
 }

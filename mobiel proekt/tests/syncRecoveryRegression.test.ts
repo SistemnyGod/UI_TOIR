@@ -9,6 +9,7 @@ const repositorySource = read("../src/db/repositories/outboxRepository.ts");
 const backgroundSource = read("../src/sync/backgroundSyncTask.ts");
 const syncTypesSource = read("../src/domain/sync/syncTypes.ts");
 const bootstrapSource = read("../src/core/bootstrap.ts");
+const eligibilitySource = read("../src/db/repositories/outboxEligibilitySql.ts");
 
 test("network events coalesce sync and only recover on a real transition", () => {
   assert.match(triggerSource, /const activeSyncRequests = new Map/);
@@ -30,7 +31,9 @@ test("background and corrected contour reactivate dormant report commands", () =
 test("recovers interrupted sending commands on bootstrap and releases cancelled FIFO heads", () => {
   assert.equal(syncTypesSource.includes("cancelledLocal"), true);
   assert.equal(repositorySource.includes("resetSendingOutboxCommandsForProcessRestart"), true);
-  assert.equal(repositorySource.includes("status NOT IN ('accepted', 'duplicate', 'superseded', 'cancelled', 'cancelledLocal')"), true);
+  // FIFO heads are released by the shared eligibility barrier once the previous command is settled.
+  assert.equal(eligibilitySource.includes("previous.status NOT IN ('accepted', 'duplicate', 'superseded', 'cancelled', 'cancelledLocal')"), true);
+  assert.match(repositorySource, /outboxAcknowledgementBarriersSql/);
   assert.equal(bootstrapSource.includes("recoverSendingOutboxCommandsAfterProcessRestart"), true);
   assert.equal(repositorySource.includes("status = 'sending'"), true);
 });

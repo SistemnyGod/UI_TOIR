@@ -3,27 +3,36 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 
-test("taking a request is blocked when another patrol is active", async () => {
+// "Take request" was retired in favour of accept + start; the single-active-patrol rule now lives in the
+// lifecycle update (start/resume) and in patrolEntryService, which switches patrols instead of starting a second one.
+test("starting or resuming is blocked while the employee has another active patrol", async () => {
   const repositorySource = await readFile(
     join(process.cwd(), "src/db/repositories/patrolRepository.ts"),
     "utf8"
   );
-  const takeStart = repositorySource.indexOf("export async function takeRequestLocally");
-  const takeEnd = repositorySource.indexOf("export async function acceptRequestLocally", takeStart);
-  assert.ok(takeStart >= 0 && takeEnd > takeStart);
+  const lifecycleStart = repositorySource.indexOf("async function updateAssignmentLifecycleLocally");
+  const lifecycleEnd = repositorySource.indexOf("\nexport async function ", lifecycleStart);
+  assert.ok(lifecycleStart >= 0 && lifecycleEnd > lifecycleStart);
 
-  const takeSource = repositorySource.slice(takeStart, takeEnd);
-  const precheck = takeSource.indexOf("assertNoOtherActivePatrol(db, ownerUserId)");
-  const transactionCheck = takeSource.indexOf("assertNoOtherActivePatrol(tx, ownerUserId, assignmentId)");
-  const assignmentInsert = takeSource.indexOf("INSERT INTO patrol_assignments");
+  const lifecycle = repositorySource.slice(lifecycleStart, lifecycleEnd);
+  const activeConflict = "У сотрудника уже есть выполняемый обход. Используйте смену маршрута.";
+  const precheck = lifecycle.indexOf(activeConflict);
+  const transaction = lifecycle.indexOf("withProtectedExclusiveTransactionAsync(db, async (tx)");
+  const transactionCheck = lifecycle.indexOf(activeConflict, transaction);
+  const assignmentUpdate = lifecycle.indexOf("UPDATE patrol_assignments", transaction);
 
-  assert.ok(precheck >= 0);
-  assert.ok(transactionCheck > precheck);
-  assert.ok(assignmentInsert > transactionCheck);
-  assert.match(repositorySource, /status IN \('inProgress', 'paused'\)/);
+  assert.ok(precheck >= 0 && precheck < transaction, "active patrol must be rejected before opening the transaction");
+  assert.ok(transactionCheck > transaction, "active patrol must be re-checked inside the transaction");
+  assert.ok(assignmentUpdate > transactionCheck, "re-check must precede the status update");
+  assert.match(lifecycle, /commandType === "startPatrolAssignment" \|\| commandType === "resumePatrolAssignment"/);
+  assert.match(lifecycle, /AND status = 'inProgress'/);
 });
 
-test("paused request resumes instead of starting a new patrol", async () => {
+test("entering a request resumes a paused patrol or switches instead of starting a second one", async () => {
+  const serviceSource = await readFile(
+    join(process.cwd(), "src/services/patrolEntryService.ts"),
+    "utf8"
+  );
   const screenSource = await readFile(
     join(process.cwd(), "src/features/patrol/PatrolRequestScreen.tsx"),
     "utf8"
@@ -33,7 +42,8 @@ test("paused request resumes instead of starting a new patrol", async () => {
     screenSource.indexOf("  function handleRelease()")
   );
 
-  assert.match(handleStart, /assignment\.status === "paused"/);
-  assert.match(handleStart, /resumeAssignmentLocally\(assignment\.assignmentId\)/);
-  assert.match(handleStart, /startAssignmentLocally\(assignment\.assignmentId\)/);
+  assert.match(handleStart, /enterPatrolRequest\(requestId, employeeId,/);
+  assert.match(serviceSource, /if \(competing && [^)]*\)\)? await switchPatrolLocally\(competing\.assignmentId, assignment\.assignmentId/);
+  assert.match(serviceSource, /else if \(assignment\.status === 'paused'\) await resumeAssignmentLocally\(assignment\.assignmentId\)/);
+  assert.match(serviceSource, /else await startAssignmentLocally\(assignment\.assignmentId\)/);
 });

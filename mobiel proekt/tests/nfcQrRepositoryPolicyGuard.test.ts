@@ -42,10 +42,14 @@ test("repository enforces assignment scan policy before local point/outbox write
     assert.match(handler, /point\.route_id = assignment\.route_id/);
   }
 
-  const policyStart = repositorySource.indexOf("export async function getAssignmentScanPolicy");
-  const policyEnd = repositorySource.indexOf("export async function getAssignmentById", policyStart);
+  const assignmentRepositorySource = await readFile(
+    join(process.cwd(), "src/db/repositories/patrolAssignmentRepository.ts"),
+    "utf8"
+  );
+  const policyStart = assignmentRepositorySource.indexOf("export async function getAssignmentScanPolicy");
+  const policyEnd = assignmentRepositorySource.indexOf("export async function getAssignmentById", policyStart);
   assert.ok(policyStart >= 0 && policyEnd > policyStart);
-  const policy = repositorySource.slice(policyStart, policyEnd);
+  const policy = assignmentRepositorySource.slice(policyStart, policyEnd);
   assert.match(policy, /assignment\.owner_user_id = \?/);
   assert.match(policy, /assignment\.contour_id = \?/);
 });

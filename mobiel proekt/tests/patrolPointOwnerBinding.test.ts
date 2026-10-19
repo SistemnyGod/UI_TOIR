@@ -44,7 +44,8 @@ test("point metadata and results are hidden from another local owner", () => {
       scanned_at_local TEXT,
       completed_at_local TEXT,
       deferred_reason TEXT,
-      photo_client_file_ids_json TEXT
+      photo_client_file_ids_json TEXT,
+      manual_reason TEXT
     );
 
     INSERT INTO users VALUES ('user-a', 'patrol360-test');
@@ -56,7 +57,7 @@ test("point metadata and results are hidden from another local owner", () => {
     );
     INSERT INTO point_results VALUES (
       'user-a', 'patrol360-test', 'assignment-a', 'point-a', 'issue', 'private result',
-      'issue-a', 'nfc', '2026-07-22T10:00:00Z', '2026-07-22T10:01:00Z', NULL, '[]'
+      'issue-a', 'nfc', '2026-07-22T10:00:00Z', '2026-07-22T10:01:00Z', NULL, '[]', NULL
     );
   `);
 
@@ -64,7 +65,10 @@ test("point metadata and results are hidden from another local owner", () => {
   const foreignList = db.prepare(listAssignmentPointsOwnedSql).all("assignment-a", "user-b", "patrol360-test");
   const foreignPoint = db.prepare(getPointForFillOwnedSql).get("assignment-a", "point-a", "user-b", "patrol360-test");
 
+  const ownPoint = db.prepare(getPointForFillOwnedSql).get("assignment-a", "point-a", "user-a", "patrol360-test") as { comment?: string } | undefined;
+
   assert.equal(ownList.length, 1, "fixture must be readable by its owner");
+  assert.equal(ownPoint?.comment, "private result", "owner must see their own result");
   assert.deepEqual(foreignList, []);
   assert.equal(foreignPoint, undefined);
 

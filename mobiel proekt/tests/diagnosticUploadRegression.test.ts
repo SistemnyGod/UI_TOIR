@@ -13,7 +13,9 @@ const screenSource = readFileSync(
 
 test("manual diagnostics wait for an active background upload and then run forced", () => {
   assert.match(serviceSource, /triggerManualDiagnosticReportUpload\(\)[\s\S]*scheduleDiagnosticUpload\("manual"/);
-  assert.match(serviceSource, /const previousUpload = activeUpload;[\s\S]*await previousUpload\.catch/);
+  // A manual request arriving during a background upload is queued and started once the active one settles.
+  assert.match(serviceSource, /queuedUpload = \{ kind, upload, promise, resolve, reject \}/);
+  assert.match(serviceSource, /\.finally\(\(\) => \{[\s\S]*const nextUpload = queuedUpload;[\s\S]*scheduleDiagnosticUpload\(nextUpload\.kind, nextUpload\.upload\)/);
   assert.match(serviceSource, /kind !== "manual" \|\| activeUploadKind === "manual"/);
   assert.match(serviceSource, /force: true, includeEmpty: true, respectAutomaticSetting: false/);
 });
