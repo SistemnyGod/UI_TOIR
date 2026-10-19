@@ -538,33 +538,52 @@ export async function completePendingAuthTransition(targetOwnerUserId: string) {
   );
 }
 
-export async function cleanupPreviousUserPhotos() {
-  await deletePatrolPhotoDirectory();
-}
+/**
+ * Every table that holds data of the signed-in account, cleared on sign-out
+ * and on account replacement. Only schema_migrations and mobile_logout_queue
+ * (the pending server-side revoke of the previous session) stay; a test checks
+ * that every other table in the schema is listed here.
+ */
+export const ownerDataTableNames = [
+  "auth_transition",
+  "sync_conflicts",
+  "outbox_commands",
+  "files",
+  "point_results",
+  "report_auto_submit",
+  "assignment_route_points",
+  "patrol_snapshot_manifests",
+  "patrol_report_detail_cache",
+  "patrol_report_cache",
+  "patrol_device_context",
+  "patrol_appeals",
+  "patrol_appeal_cursors",
+  "patrol_appeal_refresh_state",
+  "patrol_assignments",
+  "patrol_request_board",
+  "route_points",
+  "routes",
+  "devices",
+  "users",
+  "sync_cursors",
+  "mobile_capabilities",
+  "mobile_employees",
+  "emu_sections",
+  "work_form_drafts",
+  "work_item_cursors",
+  "work_item_refresh_state",
+  "work_tasks",
+  "mobile_notifications",
+  "shift_remarks",
+  "mobile_action_log",
+  "mobile_diagnostic_reports",
+  "mobile_diagnostic_state"
+] as const;
 
 async function clearLocalUserTablesInTransaction(executor: SqlExecutor) {
-  await executor.runAsync("DELETE FROM auth_transition");
-  await executor.runAsync("DELETE FROM sync_conflicts");
-  await executor.runAsync("DELETE FROM outbox_commands");
-  await executor.runAsync("DELETE FROM files");
-  await executor.runAsync("DELETE FROM point_results");
-  await executor.runAsync("DELETE FROM report_auto_submit");
-  await executor.runAsync("DELETE FROM assignment_route_points");
-  await executor.runAsync("DELETE FROM patrol_assignments");
-  await executor.runAsync("DELETE FROM patrol_request_board");
-  await executor.runAsync("DELETE FROM route_points");
-  await executor.runAsync("DELETE FROM routes");
-  await executor.runAsync("DELETE FROM devices");
-  await executor.runAsync("DELETE FROM users");
-  await executor.runAsync("DELETE FROM sync_cursors");
-  await executor.runAsync("DELETE FROM mobile_employees");
-  await executor.runAsync("DELETE FROM emu_sections");
-  await executor.runAsync("DELETE FROM work_tasks");
-  await executor.runAsync("DELETE FROM mobile_notifications");
-  await executor.runAsync("DELETE FROM shift_remarks");
-    await executor.runAsync("DELETE FROM mobile_action_log");
-    await executor.runAsync("DELETE FROM mobile_diagnostic_reports");
-    await executor.runAsync("DELETE FROM mobile_diagnostic_state");
+  for (const tableName of ownerDataTableNames) {
+    await executor.runAsync(`DELETE FROM ${tableName}`);
+  }
 }
 
 function conflictSnapshotRecord(value: unknown): Record<string, unknown> | null {

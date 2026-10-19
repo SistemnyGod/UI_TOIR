@@ -9,7 +9,9 @@ const state = vi.hoisted(() => ({
   failCleanup: false,
   restoredOldSession: false
   , retryOwner: undefined as string | null | undefined,
-  wipes: 0
+  wipes: 0,
+  signOutWipes: [] as (string | null)[],
+  traceWipes: [] as (string | null)[]
 }));
 
 vi.mock("@/api/authApi", () => ({
@@ -52,8 +54,15 @@ vi.mock("@/db/repositories/bootstrapRepository", () => ({
   } : null),
   replaceLocalUserDataWithBootstrap: vi.fn(async () => { state.replacementCommitted = true; state.pendingTarget = "new-user"; }),
   saveBootstrap: vi.fn(),
-  completePendingAuthTransition: vi.fn(async () => { state.pendingTarget = null; }),
-  cleanupPreviousUserPhotos: vi.fn(async () => { if (state.failCleanup) throw new Error("cleanup failed"); })
+  completePendingAuthTransition: vi.fn(async () => { state.pendingTarget = null; })
+}));
+vi.mock("@/services/accountDataWipe", () => ({
+  wipeSignedOutAccountData: vi.fn(async (owner: string | null) => { state.signOutWipes.push(owner); return []; }),
+  wipeAccountDeviceTraces: vi.fn(async (owner: string | null) => {
+    if (state.failCleanup) throw new Error("cleanup failed");
+    state.traceWipes.push(owner);
+    return [];
+  })
 }));
 vi.mock("@/db/repositories/mobileActionLogRepository", () => ({ logMobileAction: vi.fn(async () => undefined) }));
 vi.mock("@/db/repositories/logoutQueueRepository", () => ({ completePendingLogoutIntents: vi.fn(), enqueueLogoutIntent: vi.fn(), getPendingLogoutContourId: vi.fn(async () => undefined) }));
@@ -72,7 +81,7 @@ import { syncWorkItems, syncWorkTasks } from "@/services/workTaskService";
 beforeEach(() => {
   state.blockingCount = 0; state.replacementCommitted = false; state.pendingTarget = null;
   state.envelopeOwner = "old-user"; state.failEnvelope = false; state.failCleanup = false; state.restoredOldSession = false;
-  state.retryOwner = undefined; state.wipes = 0;
+  state.retryOwner = undefined; state.wipes = 0; state.signOutWipes = []; state.traceWipes = [];
 });
 
 describe("durable account transition", () => {
@@ -157,13 +166,29 @@ describe("remembered credentials lifecycle", () => {
     expect(state.wipes).toBe(1);
   });
 
-  it("wipes the saved pair on sign-out but not when sign-out is refused", async () => {
+  it("keeps a ticked saved pair on sign-out for the next shift login", async () => {
+    await signOut();
+    expect(state.wipes).toBe(0);
+  });
+});
+
+describe("sign-out data wipe", () => {
+  it("wipes the signed-out owner's data, but nothing while unsent work blocks sign-out", async () => {
     state.blockingCount = 1;
     await expect(signOut()).rejects.toThrow("Нельзя выйти");
-    expect(state.wipes).toBe(0);
+    expect(state.signOutWipes).toEqual([]);
     state.blockingCount = 0;
-    await signOut();
-    expect(state.wipes).toBe(1);
+    await expect(signOut()).resolves.toBe(true);
+    expect(state.signOutWipes).toEqual(["old-user"]);
+  });
+
+  it("removes the previous owner's files and notices when another account replaces local data", async () => {
+    await expect(signIn("new", "password")).resolves.toBeTruthy();
+    expect(state.traceWipes).toEqual(["old-user"]);
+    state.traceWipes = [];
+    state.envelopeOwner = "new-user";
+    await expect(signIn("new", "password")).resolves.toBeTruthy();
+    expect(state.traceWipes).toEqual([]);
   });
 });
 

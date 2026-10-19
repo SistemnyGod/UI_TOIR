@@ -19,6 +19,7 @@ import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { getLocalMediaStorageWarning } from "@/services/fileStorageService";
+import { videoLimitHint } from "@/domain/files/fileUploadLimits";
 
 export function CameraCaptureScreen() {
   const router = useRouter();
@@ -131,7 +132,9 @@ export function CameraCaptureScreen() {
       <Card>
         <Text style={[styles.title, { color: colors.text }]}>{captureKind === "video" ? "Добавить видео" : "Добавить фото"}</Text>
         <Text style={[styles.text, { color: colors.mutedText }]}>
-          Используйте камеру Android или выберите файл из галереи. Видео ограничено по размеру, чтобы отчет можно было стабильно отправить через мобильную сеть.
+          {captureKind === "video"
+            ? `Снимите видео камерой или выберите его в галерее. ${videoLimitHint}`
+            : "Сделайте фото камерой или выберите его в галерее."}
         </Text>
       </Card>
 

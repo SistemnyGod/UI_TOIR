@@ -73,6 +73,14 @@ export async function readBackgroundSyncState(): Promise<BackgroundSyncSnapshot>
   };
 }
 
+/** Sign-out: these times describe the previous account's deliveries. */
+export async function clearBackgroundSyncState() {
+  await Promise.all([
+    lastBackgroundSyncAtKey, lastSuccessfulSyncAtKey, lastServerContactAtKey,
+    lastCompleteQueueSyncAtKey, lastReportDeliveredAtKey, lastSkippedReasonKey
+  ].map(key => SecureStore.deleteItemAsync(key)));
+}
+
 function isBackgroundSyncSkipReason(value: string | null): value is BackgroundSyncSkipReason {
   return value === "offline"
     || value === "serverUnavailable"
