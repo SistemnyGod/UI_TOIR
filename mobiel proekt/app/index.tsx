@@ -2,8 +2,9 @@ import { Redirect, type Href } from "expo-router";
 import { resolvePatrolStartPath } from '@/services/patrolNavigationService';
 import { consumePendingSessionRoute, markSessionUnlocked } from '@/auth/sessionGateState';
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
+import { recoveryScreenStyles as styles } from "@/ui/recoveryScreenStyles";
 import { resolveSessionRestoreDecision } from "@/auth/sessionRestorePolicy";
 import { clearAuthTokens, getAccessToken, getOfflineSession, getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
@@ -102,48 +103,3 @@ export default function IndexRoute() {
 
   return <Redirect href={state.target as Href} />;
 }
-
-const styles = StyleSheet.create({
-  loadingScreen: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center"
-  },
-  errorScreen: {
-    alignItems: "center",
-    backgroundColor: "#f4f7fb",
-    flex: 1,
-    justifyContent: "center",
-    padding: 28
-  },
-  errorTitle: {
-    color: "#14233d",
-    fontSize: 22,
-    fontFamily: "Manrope_800ExtraBold",
-    textAlign: "center"
-  },
-  errorMessage: {
-    color: "#53627b",
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 12,
-    maxWidth: 420,
-    textAlign: "center"
-  },
-  retryButton: {
-    backgroundColor: "#1769e0",
-    borderRadius: 12,
-    marginTop: 24,
-    minWidth: 144,
-    paddingHorizontal: 22,
-    paddingVertical: 13
-  },
-  retryButtonPressed: {
-    opacity: 0.78
-  },
-  retryButtonText: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontFamily: "Manrope_800ExtraBold"
-  }
-});

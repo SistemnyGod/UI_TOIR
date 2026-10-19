@@ -6,6 +6,7 @@ import { formatDateTime, formatShortName, remarkStatusLabel, remarkStatusTone, u
 import type { MediaSource, WorkTab } from "@/features/emuTask/workAccountingModel";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { ActionSheet } from "@/ui/ActionSheet";
+import { createButtonGlow } from "@/ui/brandPalette";
 import { Card } from "@/ui/Card";
 import { EmptyState } from "@/ui/EmptyState";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -38,7 +39,7 @@ export function CreateWorkButton({ disabled, onPress }: { disabled: boolean; onP
         accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
         style={({ pressed }) => ({ height: 56, paddingHorizontal: 22, borderRadius: 20, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center",
           backgroundColor: disabled ? colors.disabled : pressed ? colors.accentPressed : colors.accent, transform: [{ scale: pressed ? 0.96 : 1 }],
-          boxShadow: disabled ? undefined : "0px 10px 22px rgba(36, 87, 245, 0.38)" })}>
+          boxShadow: disabled ? undefined : createButtonGlow })}>
         <Ionicons name="add" size={24} color={disabled ? colors.disabledText : colors.onAccent} />
         <Text style={{ fontFamily: "Manrope_800ExtraBold", fontSize: 16, color: disabled ? colors.disabledText : colors.onAccent }}>Создать</Text>
       </Pressable>

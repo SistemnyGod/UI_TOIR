@@ -12,6 +12,7 @@ import {
   setAutomaticDiagnosticUploadEnabled,
   triggerManualDiagnosticReportUpload
 } from "@/services/diagnosticReportService";
+import { fixedLight } from "@/ui/brandPalette";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -259,11 +260,11 @@ function formatDate(value: string) {
 
 const styles = StyleSheet.create({
   errorText: {
-    backgroundColor: "#fff1f1",
-    borderColor: "#fecaca",
+    backgroundColor: fixedLight.errorCallout.background,
+    borderColor: fixedLight.errorCallout.border,
     borderRadius: 10,
     borderWidth: 1,
-    color: "#991b1b",
+    color: fixedLight.errorCallout.text,
     fontSize: 13,
     lineHeight: 18,
     padding: 10
@@ -275,11 +276,11 @@ const styles = StyleSheet.create({
     padding: 12
   },
   feedback: {
-    backgroundColor: "#eff6ff",
-    borderColor: "#bfdbfe",
+    backgroundColor: fixedLight.infoCallout.background,
+    borderColor: fixedLight.infoCallout.border,
     borderRadius: 10,
     borderWidth: 1,
-    color: "#1d4ed8",
+    color: fixedLight.infoCallout.text,
     fontSize: 13,
     fontFamily: "Manrope_700Bold",
     lineHeight: 18,

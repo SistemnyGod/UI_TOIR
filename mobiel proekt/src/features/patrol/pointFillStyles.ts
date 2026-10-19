@@ -1,14 +1,10 @@
-import { useMemo } from "react";
-import { StyleSheet } from "react-native";
-import type { ThemeColors } from "@/ui/atomTheme";
-import { useAppTheme } from "@/features/settings/themePreference";
+import { createThemedStyles, useThemedStyles } from "@/ui/useThemedStyles";
 
 export function usePointStyles() {
-  const { colors } = useAppTheme();
-  return useMemo(() => createStyles(colors), [colors]);
+  return useThemedStyles(createStyles);
 }
 
-const createStyles = (colors: ThemeColors) => StyleSheet.create({
+const createStyles = createThemedStyles((colors) => ({
   row: {
     alignItems: "center",
     flexDirection: "row",
@@ -148,4 +144,4 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 14,
     lineHeight: 20
   }
-});
+}));

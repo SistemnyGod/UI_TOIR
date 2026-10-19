@@ -1,7 +1,4 @@
-import { useMemo } from "react";
-import { useAppTheme } from "@/features/settings/themePreference";
-import type { ThemeColors } from "@/ui/atomTheme";
-import { StyleSheet } from "react-native";
+import { createThemedStyles, useThemedStyles } from "@/ui/useThemedStyles";
 
 import { ShiftRemark } from "@/db/repositories/shiftRemarkRepository";
 import { WorkItemDto, WorkTaskStatus } from "@/domain/emu/emuTypes";
@@ -122,10 +119,9 @@ export function formatDateTime(value: string | null) {
 }
 
 export function useWorkAccountingStyles() {
-  const { colors } = useAppTheme();
-  return useMemo(() => createStyles(colors), [colors]);
+  return useThemedStyles(createStyles);
 }
-const createStyles = (colors: ThemeColors) => StyleSheet.create({
+const createStyles = createThemedStyles((colors) => ({
   detailRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   cardActions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 },
   actions: {
@@ -357,4 +353,4 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     flex: 1,
     gap: 5
   }
-});
+}));

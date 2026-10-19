@@ -83,7 +83,7 @@ export function QueueIconTile({ icon, tone }: { icon: keyof typeof Ionicons.glyp
   const kind: GradientKind = tone === "danger" ? "danger" : tone === "success" ? "success" : tone === "warning" ? "warning" : "accent";
   return <View style={[styles.tile, { backgroundColor: filled ? colors.dangerFill : soft.background }]}>
     {filled ? <GradientFill colors={colors} kind={kind} radius={14} /> : null}
-    <Ionicons color={filled ? "#ffffff" : soft.foreground} name={icon} size={22} />
+    <Ionicons color={filled ? colors.onAccent : soft.foreground} name={icon} size={22} />
   </View>;
 }
 

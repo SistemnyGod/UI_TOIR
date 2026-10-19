@@ -1,8 +1,8 @@
 import { ReactNode } from "react";
-import { StyleProp, StyleSheet, View, ViewStyle } from "react-native";
+import { StyleProp, View, ViewStyle } from "react-native";
 
-import { useAppTheme } from "@/features/settings/themePreference";
 import { softShadow } from "@/ui/typography";
+import { createThemedStyles, useThemedStyles } from "@/ui/useThemedStyles";
 
 type CardProps = {
   children: ReactNode;
@@ -10,18 +10,19 @@ type CardProps = {
 };
 
 export function Card({ children, style }: CardProps) {
-  const { colors } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
 
-  return <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }, softShadow(colors.shadow, 1), style]}>{children}</View>;
+  return <View style={[styles.card, style]}>{children}</View>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = createThemedStyles((colors, { spacing }) => ({
   card: {
-    gap: 12,
-    borderColor: "#dbe5f2",
+    gap: spacing.md,
+    borderColor: colors.cardBorder,
     borderRadius: 20,
     borderWidth: 1,
-    backgroundColor: "#ffffff",
-    padding: 16,
+    backgroundColor: colors.card,
+    padding: spacing.lg,
+    ...softShadow(colors.shadow, 1)
   }
-});
+}));

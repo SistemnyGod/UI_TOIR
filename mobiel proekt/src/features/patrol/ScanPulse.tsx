@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { onHero } from '@/ui/brandPalette';
 import { useReducedMotion } from '@/ui/useReducedMotion';
 
 const RING_PHASES = [0, 1 / 3, 2 / 3];
@@ -44,9 +45,9 @@ export function ScanPulse({ active, color, icon, gradient, sweep = false }: {
     {animate && sweep ? <Animated.View pointerEvents='none' style={[styles.sweep, {
       transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [-SWEEP_HEIGHT * 1.2, 124 + SWEEP_HEIGHT * 0.2] }) }]
     }]}>
-      <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.32)', 'rgba(255,255,255,0)']} style={styles.fill} />
+      <LinearGradient colors={onHero.sheen} style={styles.fill} />
     </Animated.View> : null}
-    <Ionicons name={icon} color='#ffffff' size={56} />
+    <Ionicons name={icon} color={onHero.ink} size={56} />
   </View>;
   return <View style={styles.container}>
     <View pointerEvents='none' style={[styles.halo, { backgroundColor: color }]} />
@@ -68,5 +69,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.45, shadowRadius: 22, shadowOffset: { width: 0, height: 12 }, elevation: 10 },
   fill: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 },
   sweep: { position: 'absolute', left: 0, right: 0, top: 0, height: SWEEP_HEIGHT },
-  gloss: { position: 'absolute', left: 10, top: 8, width: 70, height: 46, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.22)', transform: [{ rotate: '-20deg' }] }
+  gloss: { position: 'absolute', left: 10, top: 8, width: 70, height: 46, borderRadius: 35, backgroundColor: onHero.glass, transform: [{ rotate: '-20deg' }] }
 });

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAppTheme } from "@/features/settings/themePreference";
 import { font } from "@/ui/typography";
+import { createThemedStyles, useThemedStyles } from "@/ui/useThemedStyles";
 
 export type ActionSheetItem = {
   label: string;
@@ -28,18 +29,19 @@ export function ActionSheet({
   visible: boolean;
 }) {
   const { colors } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
 
   return (
     <Modal statusBarTranslucent navigationBarTranslucent animationType={reducedMotion ? "none" : "slide"} onRequestClose={onClose} transparent visible={visible}>
-      <View style={[styles.backdrop, { backgroundColor: colors.scrim }]}>
+      <View style={styles.backdrop}>
         <Pressable accessibilityLabel="Закрыть меню" accessibilityRole="button" onPress={onClose} style={StyleSheet.absoluteFill} />
-        <View accessibilityLabel={title} accessibilityViewIsModal style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <View style={[styles.handle, { backgroundColor: colors.border }]} />
+        <View accessibilityLabel={title} accessibilityViewIsModal style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <View style={styles.handle} />
           <View style={styles.header}>
-            <Text accessibilityRole="header" style={[styles.title, font(800), { color: colors.text }]}>{title}</Text>
-            <Pressable accessibilityLabel="Закрыть" accessibilityRole="button" hitSlop={8} onPress={onClose} style={[styles.closeButton, { backgroundColor: colors.backgroundAccent }]}>
+            <Text accessibilityRole="header" style={[styles.title, font(800)]}>{title}</Text>
+            <Pressable accessibilityLabel="Закрыть" accessibilityRole="button" hitSlop={8} onPress={onClose} style={styles.closeButton}>
               <Ionicons color={colors.mutedText} name="close" size={22} />
             </Pressable>
           </View>
@@ -57,8 +59,7 @@ export function ActionSheet({
                 }}
                 style={({ pressed }) => [
                   styles.action,
-                  { borderColor: colors.cardBorder, backgroundColor: colors.card },
-                  pressed && !action.disabled ? { backgroundColor: colors.backgroundAccent } : null,
+                  pressed && !action.disabled ? styles.actionPressed : null,
                   action.disabled ? styles.disabled : null
                 ]}
               >
@@ -76,9 +77,9 @@ export function ActionSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = createThemedStyles((colors) => ({
   backdrop: {
-    backgroundColor: "rgba(15, 23, 42, 0.42)",
+    backgroundColor: colors.scrim,
     flex: 1,
     justifyContent: "flex-end"
   },
@@ -86,13 +87,14 @@ const styles = StyleSheet.create({
     maxHeight: "90%",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
+    backgroundColor: colors.card,
     gap: 12,
     paddingHorizontal: 16,
     paddingTop: 10
   },
   handle: {
     alignSelf: "center",
-    backgroundColor: "#cbd5e1",
+    backgroundColor: colors.border,
     borderRadius: 999,
     height: 5,
     width: 40
@@ -106,9 +108,11 @@ const styles = StyleSheet.create({
   title: {
     flex: 1,
     fontSize: 20,
-    lineHeight: 24
+    lineHeight: 24,
+    color: colors.text
   },
   closeButton: {
+    backgroundColor: colors.backgroundAccent,
     alignItems: "center",
     borderRadius: 14,
     height: 44,
@@ -122,6 +126,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 16,
     borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: colors.card,
     flexDirection: "row",
     gap: 12,
     minHeight: 58,
@@ -129,7 +135,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8
   },
   actionPressed: {
-    backgroundColor: "#f8fafc"
+    backgroundColor: colors.backgroundAccent
   },
   disabled: {
     opacity: 0.45
@@ -146,4 +152,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 21
   }
-});
+}));

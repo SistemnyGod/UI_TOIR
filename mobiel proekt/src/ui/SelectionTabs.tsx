@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import { useAppTheme } from "@/features/settings/themePreference";
+import { onHero } from "@/ui/brandPalette";
 import { GradientFill } from "@/ui/GradientFill";
 import { font } from "@/ui/typography";
 
@@ -153,7 +154,7 @@ function SelectionTabButton<T extends string>({
           {item.label}
         </Text>
         {typeof item.count === "number" ? (
-          <View style={[styles.countBadge, { backgroundColor: selected ? "rgba(255,255,255,0.22)" : colors.backgroundAccent }]}>
+          <View style={[styles.countBadge, { backgroundColor: selected ? onHero.glass : colors.backgroundAccent }]}>
             <Text style={[styles.countText, font(800), compact ? styles.countTextCompact : null, { color: selected ? colors.onAccent : colors.mutedText }]}>{item.count}</Text>
           </View>
         ) : null}

@@ -9,7 +9,6 @@ import {
   FlatListProps,
   ScrollView,
   StyleProp,
-  StyleSheet,
   Text,
   View,
   ViewStyle
@@ -24,6 +23,7 @@ import { ClockSkewNotice } from './ClockSkewNotice';
 import { BrandLogo } from './BrandMark';
 import { GradientFill } from './GradientFill';
 import { font, softShadow } from './typography';
+import { createThemedStyles, useThemedStyles } from './useThemedStyles';
 
 type ScreenProps = {
   title: string;
@@ -53,9 +53,10 @@ type ScreenListProps<T> = Omit<FlatListProps<T>, "ListHeaderComponent" | "conten
 
 export function Screen({ title, subtitle, children, floatingNotice, bottomAction, bottomActionBackground = 'surface', plainBackground = false, scroll = true, compactHeader = false, onBack, contentContainerStyle }: ScreenProps) {
   const shell = useScreenShell();
+  const { styles } = shell;
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} style={[styles.safeArea, { backgroundColor: shell.colors.background }]}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       {plainBackground ? null : <ScreenBackground />}
       {scroll ? (
         <ScrollView
@@ -99,10 +100,11 @@ export function ScreenList<T>({
   ...listProps
 }: ScreenListProps<T>) {
   const shell = useScreenShell();
+  const { styles } = shell;
   const stableAnchor = useStableListAnchor(Array.from(listProps.data ?? []).map((item, index) => listProps.keyExtractor?.(item, index) ?? String(index)));
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} style={[styles.safeArea, { backgroundColor: shell.colors.background }]}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScreenBackground />
       <FlatList
         ref={listRef}
@@ -143,18 +145,19 @@ function useScreenShell() {
   const showNestedNavigation =
     pathname.startsWith("/patrol/") || pathname.startsWith("/camera/") || pathname === "/settings" || pathname.startsWith("/settings/");
   const bottomInset = Math.max(insets.bottom, 8);
+  const styles = useThemedStyles(createStyles);
 
-
-  return { bottomInset, colors, insets, keyboard, networkStatus, pathname, router, showNestedNavigation };
+  return { bottomInset, colors, styles, insets, keyboard, networkStatus, pathname, router, showNestedNavigation };
 }
 
 function ScreenBackground() {
   const { colors } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
 
   return (
     <View pointerEvents="none" style={styles.backgroundLayer}>
       <GradientFill colors={colors} kind="header" style={styles.topWash} />
-      <View style={[styles.topGlow, { backgroundColor: colors.brand }]} />
+      <View style={styles.topGlow} />
     </View>
   );
 }
@@ -163,6 +166,7 @@ type NetworkStatus = "offline" | "checking" | "connected" | "serverUnavailable" 
 
 function ScreenHeader({ title, subtitle, networkStatus, compact = false, onBack }: { title: string; subtitle?: string; networkStatus: NetworkStatus; compact?: boolean; onBack?: () => void }) {
   const { colors } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
 
   if (onBack) return <><View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 6 }}>
     <Pressable accessibilityRole="button" accessibilityLabel="Назад" onPress={onBack} hitSlop={4}
@@ -178,15 +182,15 @@ function ScreenHeader({ title, subtitle, networkStatus, compact = false, onBack 
     <>
       <View style={styles.topBar}>
         <BrandLogo size={30} />
-        <View style={[styles.networkBadge, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <View style={styles.networkBadge}>
           <View style={[styles.networkDot, { backgroundColor: networkStatus === "connected" ? colors.success : networkStatus === "checking" ? colors.warning : networkStatus === "offline" ? colors.mutedText : colors.danger }]} />
-          <Text style={[styles.networkText, font(700), { color: colors.mutedText }]}>{networkStatusLabel(networkStatus)}</Text>
+          <Text style={[styles.networkText, font(700)]}>{networkStatusLabel(networkStatus)}</Text>
         </View>
       </View>
       <ClockSkewNotice />
       {title || subtitle ? <View style={styles.header}>
-        <Text accessibilityRole="header" style={[styles.title, font(800), { color: colors.text }, compact ? { fontSize: 23, lineHeight: 29 } : null]}>{title}</Text>
-        {subtitle ? <Text style={[styles.subtitle, font(600), { color: colors.mutedText }]}>{subtitle}</Text> : null}
+        <Text accessibilityRole="header" style={[styles.title, font(800), compact ? { fontSize: 23, lineHeight: 29 } : null]}>{title}</Text>
+        {subtitle ? <Text style={[styles.subtitle, font(600)]}>{subtitle}</Text> : null}
       </View> : null}
     </>
   );
@@ -210,18 +214,10 @@ function NestedNavigation({ shell }: { shell: ReturnType<typeof useScreenShell> 
     shell.router.replace(item.path as never);
   }} />;
 }
-const styles = StyleSheet.create({
-  bottomAction: {
-    bottom: 0,
-    left: 16,
-    position: "absolute",
-    right: 16,
-    zIndex: 20
-  },
-
+const createStyles = createThemedStyles((colors, { spacing }) => ({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f5f7fa"
+    backgroundColor: colors.background
   },
   backgroundLayer: {
     bottom: 0,
@@ -237,6 +233,7 @@ const styles = StyleSheet.create({
     height: 260
   },
   topGlow: {
+    backgroundColor: colors.brand,
     borderRadius: 999,
     height: 240,
     opacity: 0.08,
@@ -246,12 +243,12 @@ const styles = StyleSheet.create({
     width: 240
   },
   content: {
-    gap: 12,
-    padding: 16,
+    gap: spacing.md,
+    padding: spacing.lg,
     paddingBottom: 28
   },
   nonScrollingContent: { flex: 1 },
-  nonScrollingHeader: { paddingHorizontal: 16, paddingTop: 16 },
+  nonScrollingHeader: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   listHeader: {
     gap: 10
   },
@@ -259,39 +256,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 4
-  },
-  brandRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8
-  },
-  brandMark: {
-    alignItems: "center",
-    backgroundColor: "#1e5bff",
-    borderRadius: 9,
-    height: 34,
-    justifyContent: "center",
-    shadowColor: "#1e5bff",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    width: 34
-  },
-  brandMarkText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontFamily: "Manrope_800ExtraBold"
-  },
-  brandText: {
-    fontSize: 11,
-    fontFamily: "Manrope_800ExtraBold",
-    lineHeight: 12
+    marginBottom: spacing.xs
   },
   networkBadge: {
     flexShrink: 1,
-    marginLeft: 16,
+    marginLeft: spacing.lg,
     alignItems: "center",
+    backgroundColor: colors.card,
+    borderColor: colors.cardBorder,
     borderRadius: 999,
     borderWidth: 1,
     flexDirection: "row",
@@ -305,6 +277,7 @@ const styles = StyleSheet.create({
     width: 8
   },
   networkText: {
+    color: colors.mutedText,
     flexShrink: 1,
     fontSize: 13
   },
@@ -312,57 +285,14 @@ const styles = StyleSheet.create({
     gap: 6
   },
   title: {
-    color: "#0f1a2b",
+    color: colors.text,
     fontSize: 30,
     letterSpacing: -0.6,
     lineHeight: 36
   },
   subtitle: {
-    color: "#6b7280",
+    color: colors.mutedText,
     fontSize: 14,
     lineHeight: 20
-  },
-  nestedNav: {
-    alignItems: "center",
-    borderTopWidth: 1,
-    bottom: 0,
-    elevation: 16,
-    flexDirection: "row",
-    justifyContent: "space-around",
-    left: 0,
-    paddingTop: 8,
-    position: "absolute",
-    right: 0,
-    shadowColor: "#0f1a2b",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14
-  },
-  nestedNavItem: {
-    alignItems: "center",
-    borderRadius: 16,
-    flex: 1,
-    justifyContent: "center",
-    marginHorizontal: 3,
-    minHeight: 56,
-    overflow: "hidden"
-  },
-  nestedNavItemPressed: {
-    opacity: 0.82
-  },
-  nestedNavActiveBackground: {
-    ...StyleSheet.absoluteFill,
-    borderRadius: 16
-  },
-  nestedNavContent: {
-    alignItems: "center",
-    gap: 3,
-    justifyContent: "center",
-    zIndex: 1
-  },
-  nestedNavLabel: {
-    fontSize: 10,
-    fontFamily: "Manrope_800ExtraBold",
-    lineHeight: 12
   }
-});
+}));

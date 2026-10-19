@@ -12,6 +12,7 @@ import {
   resetServerBaseUrl,
 } from "@/core/serverSettings";
 import { useAppTheme } from "@/features/settings/themePreference";
+import { fixedLight } from "@/ui/brandPalette";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -203,10 +204,10 @@ const styles = StyleSheet.create({
     padding: 12
   },
   statusSuccess: {
-    backgroundColor: "#ecfdf3"
+    backgroundColor: fixedLight.statusSuccess
   },
   statusError: {
-    backgroundColor: "#fef2f2"
+    backgroundColor: fixedLight.statusError
   },
   statusText: {
     fontSize: 14,

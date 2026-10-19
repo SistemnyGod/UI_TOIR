@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAppTheme } from "@/features/settings/themePreference";
+import { inverseButton } from "@/ui/brandPalette";
 import { GradientFill } from "@/ui/GradientFill";
 import { font, softShadow } from "@/ui/typography";
 
@@ -41,7 +42,7 @@ export function PrimaryButton({ label, onPress, disabled, disabledReason, loadin
         variant === "secondary" ? { backgroundColor: colors.backgroundAccent, borderColor: colors.backgroundAccent } : null,
         variant === "ghost" ? [{ backgroundColor: colors.card, borderColor: colors.cardBorder }, softShadow(colors.shadow, 1)] : null,
         isDanger ? { backgroundColor: colors.dangerSurface, borderColor: colors.dangerSurface } : null,
-        variant === "inverse" ? { backgroundColor: "#ffffff", borderColor: "#ffffff", shadowColor: "#06143c", shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4 } : null,
+        variant === "inverse" ? { backgroundColor: inverseButton.background, borderColor: inverseButton.background, shadowColor: inverseButton.shadow, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4 } : null,
         blocked ? { backgroundColor: colors.disabled, borderColor: colors.disabled } : null,
         pressed && !blocked && isPrimary ? [styles.pressed, { backgroundColor: colors.accentPressed }] : null,
         pressed && !blocked && !isPrimary ? styles.outlinePressed : null
@@ -72,7 +73,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderRadius: 16,
-    backgroundColor: "#1e5bff",
     minWidth: 0,
     minHeight: 54,
     justifyContent: "center",
@@ -103,10 +103,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 21
   },
-  disabled: {
-    backgroundColor: "#d8dee8",
-    borderColor: "#d8dee8"
-  },
   pressed: {
     transform: [{ scale: 0.97 }]
   },
@@ -119,8 +115,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
     textAlign: "center"
-  },
-  disabledLabel: {
-    color: "#ffffff"
   }
 });

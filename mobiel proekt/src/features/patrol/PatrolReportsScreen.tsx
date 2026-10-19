@@ -7,6 +7,7 @@ import { getReportDeliveryPresentation } from '@/features/patrol/reportDeliveryP
 import { usePatrolReports } from '@/features/patrol/usePatrolReports';
 import { useAppTheme } from '@/features/settings/themePreference';
 import { Card } from '@/ui/Card';
+import { onHero } from '@/ui/brandPalette';
 import { PrimaryButton } from '@/ui/PrimaryButton';
 import { ScreenList } from '@/ui/Screen';
 import { TransientNotice } from '@/ui/TransientNotice';
@@ -63,7 +64,7 @@ export function PatrolReportsScreen() {
             <GradientFill colors={colors} kind="success" radius={24} />
             <View pointerEvents="none" style={styles.heroBubble} />
             <View style={styles.heroTop}>
-              <View style={styles.heroIcon}><Ionicons name="checkmark" size={26} color="#ffffff" /></View>
+              <View style={styles.heroIcon}><Ionicons name="checkmark" size={26} color={onHero.ink} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={[font(800), styles.heroTitle]}>{detail.title}</Text>
                 <Text style={[font(600), styles.heroText]}>{detail.points.length} точек в отчёте</Text>
@@ -137,15 +138,15 @@ export function PatrolReportsScreen() {
 
 const styles = StyleSheet.create({
   hero: { borderRadius: 24, gap: 14, overflow: 'hidden', padding: 16, shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 8 },
-  heroBubble: { backgroundColor: 'rgba(255,255,255,0.10)', borderRadius: 999, height: 170, position: 'absolute', right: -50, top: -60, width: 170 },
+  heroBubble: { backgroundColor: onHero.bubble, borderRadius: 999, height: 170, position: 'absolute', right: -50, top: -60, width: 170 },
   heroTop: { alignItems: 'center', flexDirection: 'row', gap: 12 },
-  heroIcon: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 16, height: 48, justifyContent: 'center', width: 48 },
-  heroTitle: { color: '#ffffff', fontSize: 18, lineHeight: 24 },
-  heroText: { color: 'rgba(255,255,255,0.85)', fontSize: 13 },
+  heroIcon: { alignItems: 'center', backgroundColor: onHero.glass, borderRadius: 16, height: 48, justifyContent: 'center', width: 48 },
+  heroTitle: { color: onHero.ink, fontSize: 18, lineHeight: 24 },
+  heroText: { color: onHero.soft, fontSize: 13 },
   heroStats: { flexDirection: 'row', gap: 6 },
-  heroStat: { backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 12, flex: 1, paddingHorizontal: 10, paddingVertical: 7 },
-  heroStatValue: { color: '#ffffff', fontSize: 18 },
-  heroStatLabel: { color: 'rgba(255,255,255,0.85)', fontSize: 11 },
+  heroStat: { backgroundColor: onHero.chip, borderRadius: 12, flex: 1, paddingHorizontal: 10, paddingVertical: 7 },
+  heroStatValue: { color: onHero.ink, fontSize: 18 },
+  heroStatLabel: { color: onHero.soft, fontSize: 11 },
   cardTop: { alignItems: 'center', flexDirection: 'row', gap: 12 },
   tile: { alignItems: 'center', borderRadius: 14, height: 44, justifyContent: 'center', width: 44 },
   pointCard: { borderRadius: 18, gap: 8, paddingHorizontal: 12, paddingVertical: 10 },

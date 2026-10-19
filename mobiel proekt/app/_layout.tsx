@@ -5,7 +5,7 @@ import type * as Notifications from "expo-notifications";
 import { router, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { AppState, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AppState, ScrollView, Text, View } from "react-native";
 import { useFonts, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold } from "@expo-google-fonts/manrope";
 
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -24,6 +24,7 @@ import { registerPushNotifications, refreshPushRegistrationIfAllowed, subscribeT
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { installCrashCapture } from "@/services/crashCapture";
 import { AppErrorBoundary } from "@/ui/AppErrorBoundary";
+import { createThemedStyles, useThemedStyles } from "@/ui/useThemedStyles";
 import { sanitizeDiagnosticMessage } from "@/services/diagnosticReportPolicy";
 import { registerBackgroundSyncTask, syncPendingReportsOnBackground } from "@/sync/backgroundSyncTask";
 import { registerBackgroundNotificationTask } from "@/services/backgroundNotificationTask";
@@ -186,24 +187,25 @@ function BootstrapFailureScreen({
   onRetry: () => void;
 }) {
   const technicalMessage = bootstrapErrorMessage(error);
-  const { colors, statusBarStyle } = useAppTheme();
+  const { statusBarStyle } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const [showDetails, setShowDetails] = useState(false);
 
   return (
     <>
       <StatusBar style={statusBarStyle} />
-      <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={styles.failureScreen}>
-      <Text accessibilityRole="header" style={[styles.failureTitle, { color: colors.text }]}>Не удалось подготовить приложение</Text>
-      <Text style={[styles.failureMessage, { color: colors.mutedText }]}>
+      <ScrollView style={styles.failureScroll} contentContainerStyle={styles.failureScreen}>
+      <Text accessibilityRole="header" style={styles.failureTitle}>Не удалось подготовить приложение</Text>
+      <Text style={styles.failureMessage}>
         Локальное хранилище не инициализировано. Рабочие данные не изменены. Повторите запуск или обратитесь к администратору.
       </Text>
-      <Text selectable style={[styles.failureCode, { color: colors.text }]}>Код: P360-LOCAL-STORAGE · попытка {attempt}</Text>
-      {showDetails && technicalMessage ? <Text selectable style={[styles.failureDetails, { color: colors.mutedText }]}>{technicalMessage}</Text> : null}
-      <View style={{ alignSelf: "stretch", gap: 12, marginTop: 24 }}>
+      <Text selectable style={styles.failureCode}>Код: P360-LOCAL-STORAGE · попытка {attempt}</Text>
+      {showDetails && technicalMessage ? <Text selectable style={styles.failureDetails}>{technicalMessage}</Text> : null}
+      <View style={styles.failureActions}>
         <PrimaryButton label="Повторить" onPress={onRetry} icon="refresh-outline" />
         {technicalMessage ? <PrimaryButton label={showDetails ? "Скрыть технические сведения" : "Технические сведения"} onPress={() => setShowDetails(value => !value)} variant="secondary" /> : null}
       </View>
-      <Text style={[styles.failureSupport, { color: colors.mutedText }]}>Если ошибка повторяется, сообщите администратору код и текст выше.</Text>
+      <Text style={styles.failureSupport}>Если ошибка повторяется, сообщите администратору код и текст выше.</Text>
       </ScrollView>
     </>
   );
@@ -251,11 +253,10 @@ function RootStack() {
   );
 }
 
-const styles = StyleSheet.create({
-  loadingText: {
-    color: "#53627b",
-    fontSize: 14,
-    marginTop: 14
+const createStyles = createThemedStyles((colors) => ({
+  failureScroll: {
+    flex: 1,
+    backgroundColor: colors.background
   },
   failureScreen: {
     alignItems: "center",
@@ -264,57 +265,45 @@ const styles = StyleSheet.create({
     padding: 28
   },
   failureTitle: {
-    color: "#14233d",
+    color: colors.text,
     fontSize: 22,
     fontFamily: "Manrope_800ExtraBold",
     marginBottom: 12,
     textAlign: "center"
   },
   failureMessage: {
-    color: "#53627b",
+    color: colors.mutedText,
     fontSize: 16,
     lineHeight: 22,
     maxWidth: 420,
     textAlign: "center"
   },
   failureCode: {
-    color: "#14233d",
+    color: colors.text,
     fontSize: 14,
     fontFamily: "Manrope_700Bold",
     marginTop: 16,
     textAlign: "center"
   },
   failureDetails: {
-    color: "#53627b",
+    color: colors.mutedText,
     fontSize: 14,
     lineHeight: 18,
     marginTop: 8,
     maxWidth: 420,
     textAlign: "center"
   },
-  retryButton: {
-    backgroundColor: "#1769e0",
-    borderRadius: 12,
-    marginTop: 24,
-    minWidth: 144,
-    paddingHorizontal: 22,
-    paddingVertical: 13
-  },
-  retryButtonPressed: {
-    opacity: 0.78
-  },
-  retryButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontFamily: "Manrope_800ExtraBold",
-    textAlign: "center"
+  failureActions: {
+    alignSelf: "stretch",
+    gap: 12,
+    marginTop: 24
   },
   failureSupport: {
-    color: "#53627b",
+    color: colors.mutedText,
     fontSize: 14,
     lineHeight: 18,
     marginTop: 14,
     maxWidth: 360,
     textAlign: "center"
   }
-});
+}));

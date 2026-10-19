@@ -42,7 +42,7 @@ export function ReportRejectedState({ title, detail }: { title: string; detail: 
     <View style={[styles.halo, { backgroundColor: colors.dangerSurface }]}>
       <View style={[styles.rejectTile, { backgroundColor: colors.dangerFill, shadowColor: colors.dangerFill }]}>
         <GradientFill colors={colors} kind="danger" radius={26} />
-        <Ionicons color="#ffffff" name="document-text-outline" size={38} />
+        <Ionicons color={colors.onAccent} name="document-text-outline" size={38} />
       </View>
       <View style={[styles.badge, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
         <Ionicons color={colors.danger} name="close" size={16} />

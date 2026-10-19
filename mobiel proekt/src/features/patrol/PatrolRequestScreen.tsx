@@ -16,6 +16,7 @@ import { logMobileError } from "@/services/mobileErrorReporter";
 import { listMobileEmployees } from "@/db/repositories/workTaskRepository";
 import type { MobileEmployeeDto } from "@/domain/patrol/patrolTypes";
 import { ActionSheet } from "@/ui/ActionSheet";
+import { fixedLight } from "@/ui/brandPalette";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -373,8 +374,6 @@ const styles = StyleSheet.create({
     gap: 8
   },
   infoCell: {
-    backgroundColor: "#f8fafc",
-    borderColor: "#dbe5f2",
     borderRadius: 12,
     borderWidth: 1,
     flexBasis: "30%",
@@ -392,13 +391,11 @@ const styles = StyleSheet.create({
     fontFamily: "Manrope_800ExtraBold"
   },
   nextStepBox: {
-    backgroundColor: "#eef4ff",
     borderRadius: 12,
     gap: 4,
     padding: 12
   },
   nextStepLabel: {
-    color: "#1e5bff",
     fontSize: 14,
     fontFamily: "Manrope_800ExtraBold",
     textTransform: "uppercase"
@@ -421,7 +418,7 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     alignItems: "center",
-    borderColor: "#dbe5f2",
+    borderColor: fixedLight.outline,
     borderRadius: 12,
     borderWidth: 1,
     height: 48,
@@ -429,7 +426,6 @@ const styles = StyleSheet.create({
     width: 48
   },
   error: {
-    color: "#ef4444",
     fontSize: 14,
     lineHeight: 20
   }

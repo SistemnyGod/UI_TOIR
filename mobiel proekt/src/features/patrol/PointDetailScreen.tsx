@@ -382,7 +382,6 @@ const styles = StyleSheet.create({
   },
   photo: {
     aspectRatio: 1,
-    backgroundColor: "#e2e8f0",
     borderRadius: 8,
     width: "100%"
   },
@@ -402,15 +401,12 @@ const styles = StyleSheet.create({
   videoTile: {
     alignItems: "center",
     aspectRatio: 1,
-    backgroundColor: "#eff6ff",
-    borderColor: "#bfdbfe",
     borderRadius: 8,
     borderWidth: 1,
     justifyContent: "center",
     width: "100%"
   },
   videoLabel: {
-    color: "#1d4ed8",
     fontSize: 12,
     fontFamily: "Manrope_800ExtraBold",
     marginTop: 4

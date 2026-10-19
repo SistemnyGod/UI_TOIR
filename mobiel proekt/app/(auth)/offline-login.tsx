@@ -2,7 +2,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { resolvePatrolStartPath } from '@/services/patrolNavigationService';
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text } from "react-native";
+import { ActivityIndicator, Text } from "react-native";
 
 import { isOfflineSessionValid } from "@/auth/offlineSession";
 import { evaluateOfflineAccess } from "@/auth/offlineAccessPolicy";
@@ -11,11 +11,10 @@ import { getOfflineSession, getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { currentContourId } from "@/core/environments";
 import { getLocalUserProfile } from "@/db/repositories/bootstrapRepository";
 import { runMobileRecoveryCycle } from "@/sync/syncTriggers";
-import { useAppTheme } from "@/features/settings/themePreference";
-import { ThemeColors } from "@/ui/atomTheme";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
+import { createThemedStyles, useThemedStyles } from "@/ui/useThemedStyles";
 
 type LocalUserProfile = {
   serverUserId: string;
@@ -24,8 +23,7 @@ type LocalUserProfile = {
 
 export default function OfflineLoginRoute() {
   const router = useRouter();
-  const { colors } = useAppTheme();
-  const styles = createStyles(colors);
+  const styles = useThemedStyles(createStyles);
   const [profile, setProfile] = useState<LocalUserProfile | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -173,7 +171,7 @@ export default function OfflineLoginRoute() {
   );
 }
 
-const createStyles = (colors: ThemeColors) => StyleSheet.create({
+const createStyles = createThemedStyles((colors) => ({
   label: {
     color: colors.mutedText,
     fontSize: 14,
@@ -195,4 +193,4 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 14,
     lineHeight: 20
   }
-});
+}));

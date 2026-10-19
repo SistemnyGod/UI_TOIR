@@ -13,6 +13,7 @@ import { useSmoothRefreshIndicator } from "@/sync/useSmoothRefreshIndicator";
 import { enterPatrolRequest } from "@/services/patrolEntryService";
 import { TransientNotice } from "@/ui/TransientNotice";
 import { Card } from "@/ui/Card";
+import { onHero } from "@/ui/brandPalette";
 import { GradientFill } from "@/ui/GradientFill";
 import { RingChart } from "@/ui/RingChart";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -267,7 +268,7 @@ const RequestCard = memo(function RequestCard({ item, onOpen, busy, disabled, pr
               <Text style={[font(600), styles.heroText]}>{item.assignedFullName ?? "сотрудник не выбран"} · План: {formatDateTime(item.plannedStartAt)}</Text>
             </View>
             <View accessible accessibilityRole="progressbar" accessibilityLabel={`Пройдено ${progressLabel}`}>
-              <RingChart size={68} stroke={7} track="rgba(255,255,255,0.22)" total={1} segments={[{ value: share, color: "#ffffff" }]}>
+              <RingChart size={68} stroke={7} track={onHero.glass} total={1} segments={[{ value: share, color: onHero.ink }]}>
                 <Text style={[font(800), styles.heroRingValue]}>{Number.isFinite(done) ? done : 0}</Text>
                 <Text style={[font(700), styles.heroRingTotal]}>из {Number.isFinite(total) ? total : 0}</Text>
               </RingChart>
@@ -365,16 +366,16 @@ function formatDateTime(value: string) {
 
 const styles = StyleSheet.create({
   hero: { borderRadius: 24, gap: 12, overflow: "hidden", padding: 16, shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 8 },
-  heroBubble: { backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 999, position: "absolute" },
-  heroChip: { alignItems: "center", alignSelf: "flex-start", backgroundColor: "rgba(255,255,255,0.16)", borderRadius: 999, flexDirection: "row", gap: 6, paddingHorizontal: 10, paddingVertical: 4 },
-  heroDot: { backgroundColor: "#7dffc0", borderRadius: 3, height: 6, width: 6 },
-  heroChipText: { color: "#ffffff", fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase" },
+  heroBubble: { backgroundColor: onHero.faintBubble, borderRadius: 999, position: "absolute" },
+  heroChip: { alignItems: "center", alignSelf: "flex-start", backgroundColor: onHero.chip, borderRadius: 999, flexDirection: "row", gap: 6, paddingHorizontal: 10, paddingVertical: 4 },
+  heroDot: { backgroundColor: onHero.liveDot, borderRadius: 3, height: 6, width: 6 },
+  heroChipText: { color: onHero.ink, fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase" },
   heroMain: { alignItems: "center", flexDirection: "row", gap: 14 },
   heroCopy: { flex: 1, gap: 6, minWidth: 0 },
-  heroRingValue: { color: "#ffffff", fontSize: 17, lineHeight: 19 },
-  heroRingTotal: { color: "rgba(255,255,255,0.8)", fontSize: 10, lineHeight: 12 },
-  heroTitle: { color: "#ffffff", flexShrink: 1, fontSize: 22, letterSpacing: -0.3, lineHeight: 28 },
-  heroText: { color: "rgba(255,255,255,0.8)", fontSize: 13, lineHeight: 18 },
+  heroRingValue: { color: onHero.ink, fontSize: 17, lineHeight: 19 },
+  heroRingTotal: { color: onHero.muted, fontSize: 10, lineHeight: 12 },
+  heroTitle: { color: onHero.ink, flexShrink: 1, fontSize: 22, letterSpacing: -0.3, lineHeight: 28 },
+  heroText: { color: onHero.muted, fontSize: 13, lineHeight: 18 },
   actionRow: { alignItems: "center", borderStyle: "dashed", borderTopWidth: 1, flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "space-between", paddingTop: 12 },
   requestCard: { overflow: "hidden", padding: 0 },
   requestContent: { gap: 12, padding: 14 },

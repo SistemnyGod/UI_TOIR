@@ -4,6 +4,7 @@ import { ActivityIndicator, StyleSheet, Text } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { getLocalUserProfile } from "@/db/repositories/bootstrapRepository";
+import { fixedLight } from "@/ui/brandPalette";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -53,7 +54,7 @@ export default function OfflineEmergencyRoute() {
 }
 
 const styles = StyleSheet.create({
-  label: { color: "#64748b", fontSize: 13, fontFamily: "Manrope_700Bold", textTransform: "uppercase" },
-  title: { color: "#0f172a", fontSize: 20, fontFamily: "Manrope_800ExtraBold", marginTop: 4 },
-  text: { color: "#475569", fontSize: 15, lineHeight: 21, marginTop: 12 }
+  label: { color: fixedLight.emergencyLabel, fontSize: 13, fontFamily: "Manrope_700Bold", textTransform: "uppercase" },
+  title: { color: fixedLight.emergencyTitle, fontSize: 20, fontFamily: "Manrope_800ExtraBold", marginTop: 4 },
+  text: { color: fixedLight.emergencyText, fontSize: 15, lineHeight: 21, marginTop: 12 }
 });

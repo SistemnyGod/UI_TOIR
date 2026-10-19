@@ -3,8 +3,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import { useAppTheme } from '@/features/settings/themePreference';
-import { darkColors } from '@/ui/atomTheme';
+import { scanMatrix } from '@/ui/brandPalette';
 import { useReducedMotion } from '@/ui/useReducedMotion';
+import { isDarkTheme } from '@/ui/useThemedStyles';
 
 import { blinkRange, buildMatrix, cyclicRange, MATRIX_LOOP_MS } from './scanMatrixModel';
 
@@ -14,10 +15,7 @@ const RING_DOTS = 28;
 const RING_RADIUS = 78;
 const mono = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
-const tones = {
-  dark: { rain: 'rgba(110,170,255,0.9)', head: '#e3eeff', glow: 'rgba(110,170,255,0.9)', dot: 'rgba(140,190,255,0.85)', cell: 'rgba(110,170,255,0.45)' },
-  light: { rain: 'rgba(30,91,255,0.55)', head: '#1e5bff', glow: 'rgba(30,91,255,0.45)', dot: 'rgba(30,91,255,0.55)', cell: 'rgba(30,91,255,0.22)' }
-} as const;
+const tones = { dark: scanMatrix.dark, light: scanMatrix.light } as const;
 
 /** One linear native loop shared by every moving part; stops when inactive or under reduced motion. */
 function useMatrixClock(active: boolean, duration: number) {
@@ -49,7 +47,7 @@ export function ScanMatrix({ active, centerY, background }: {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const running = active && !reduced && size.width > 0;
   const clock = useMatrixClock(running, MATRIX_LOOP_MS);
-  const tone = tones[colors.background === darkColors.background ? 'dark' : 'light'];
+  const tone = tones[isDarkTheme(colors) ? 'dark' : 'light'];
   const matrix = useMemo(() => buildMatrix(size.width, size.height), [size.width, size.height]);
   const ringDots = useMemo(() => Array.from({ length: RING_DOTS }, (_, index) => {
     const angle = index / RING_DOTS * Math.PI * 2;
@@ -98,7 +96,7 @@ export function ScanTerminalLine({ text }: { text: string }) {
   const clock = useMatrixClock(!reduced, 1000);
   const caretOpacity = reduced ? 1 : clock.interpolate({ inputRange: [0, 0.49, 0.5, 1], outputRange: [1, 1, 0, 0] });
   return <View accessibilityElementsHidden importantForAccessibility='no-hide-descendants'
-    style={[styles.terminal, { backgroundColor: colors.background === darkColors.background ? 'rgba(4,14,30,0.55)' : 'rgba(255,255,255,0.85)', borderColor: colors.cardBorder }]}>
+    style={[styles.terminal, { backgroundColor: isDarkTheme(colors) ? scanMatrix.terminal.dark : scanMatrix.terminal.light, borderColor: colors.cardBorder }]}>
     <Text style={[styles.terminalText, { color: colors.primary }]}>{text}</Text>
     <Animated.Text style={[styles.terminalText, { color: colors.primary, opacity: caretOpacity }]}>_</Animated.Text>
   </View>;

@@ -6,6 +6,7 @@ import type { WorkItemDto } from "@/domain/emu/emuTypes";
 import { formatDateTime, formatParticipants, formatWorkAttachments, statusLabel, statusTone, workDeliveryPresentation } from "@/features/emuTask/WorkAccountingPresentation";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { toneColors } from "@/ui/atomTheme";
+import { avatar } from "@/ui/brandPalette";
 import { Card } from "@/ui/Card";
 import { GradientFill, type GradientKind } from "@/ui/GradientFill";
 import { PrimaryButton } from "@/ui/PrimaryButton";
@@ -13,8 +14,6 @@ import { StatusPill } from "@/ui/StatusPill";
 import { font } from "@/ui/typography";
 
 type PrimaryAction = { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void } | null;
-
-const avatarStops = ["#8b6cff", "#5b3fd6"] as const;
 
 /** Initials of the first participant (surname and name), shown in the avatar. */
 export function participantInitials(task: Pick<WorkItemDto, "actualParticipants" | "assignedEmployees">) {
@@ -39,7 +38,7 @@ export function WorkTaskCard({ task, primary, loading, onMenu }: { task: WorkIte
     <View style={styles.header}>
       <View style={[styles.tile, { backgroundColor: active ? colors.accent : soft.background, shadowColor: colors.accent }, active ? styles.tileRaised : null]}>
         {active ? <GradientFill colors={colors} kind="accent" radius={15} /> : null}
-        <Ionicons color={active ? "#ffffff" : soft.foreground} name={tone === "success" ? "checkmark-done-outline" : "construct-outline"} size={22} />
+        <Ionicons color={active ? colors.onAccent : soft.foreground} name={tone === "success" ? "checkmark-done-outline" : "construct-outline"} size={22} />
       </View>
       <View style={styles.titleBox}>
         <Text style={[font(800), styles.title, { color: colors.text }]}>{task.title}</Text>
@@ -54,8 +53,8 @@ export function WorkTaskCard({ task, primary, loading, onMenu }: { task: WorkIte
     </View>
     <View style={[styles.people, { backgroundColor: colors.backgroundAccent }]}>
       <View style={styles.avatar}>
-        <LinearGradient colors={avatarStops} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatarFill} />
-        {initials ? <Text style={[font(800), styles.initials]}>{initials}</Text> : <Ionicons color="#ffffff" name="person-outline" size={14} />}
+        <LinearGradient colors={avatar.stops} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatarFill} />
+        {initials ? <Text style={[font(800), styles.initials]}>{initials}</Text> : <Ionicons color={avatar.ink} name="person-outline" size={14} />}
       </View>
       <View style={styles.peopleText}>
         <Text style={[font(800), styles.peopleName, { color: colors.text }]} numberOfLines={2}>{formatParticipants(task)}</Text>
@@ -90,7 +89,7 @@ const styles = {
   people: { alignItems: "center", borderRadius: 14, flexDirection: "row", gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
   avatar: { alignItems: "center", borderRadius: 14, height: 28, justifyContent: "center", overflow: "hidden", width: 28 },
   avatarFill: { bottom: 0, left: 0, position: "absolute", right: 0, top: 0 },
-  initials: { color: "#ffffff", fontSize: 11, lineHeight: 14 },
+  initials: { color: avatar.ink, fontSize: 11, lineHeight: 14 },
   peopleText: { flex: 1, minWidth: 0 },
   peopleName: { fontSize: 13, lineHeight: 18 },
   peopleMeta: { fontSize: 11, lineHeight: 15 },

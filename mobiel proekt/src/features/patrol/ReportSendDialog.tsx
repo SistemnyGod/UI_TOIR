@@ -46,8 +46,8 @@ export function ReportSendDialog({ visible, delivery, busy, error, onClose, onCo
             <View style={[styles.halo, { backgroundColor: delivered ? colors.successSurface : needsAttention ? colors.warningSurface : colors.backgroundAccent }]}>
               <View style={[styles.symbol, { backgroundColor: tint, shadowColor: tint }]}>
                 <GradientFill colors={colors} kind={delivered ? 'success' : needsAttention ? 'warning' : 'accent'} radius={24} />
-                {sending ? <ActivityIndicator size='large' color='#ffffff' /> : <Ionicons
-                  name={delivered ? 'checkmark-circle-outline' : needsAttention ? 'alert-circle-outline' : 'cloud-upload-outline'} size={36} color='#ffffff' />}
+                {sending ? <ActivityIndicator size='large' color={colors.onAccent} /> : <Ionicons
+                  name={delivered ? 'checkmark-circle-outline' : needsAttention ? 'alert-circle-outline' : 'cloud-upload-outline'} size={36} color={colors.onAccent} />}
               </View>
             </View>
             <View accessibilityLiveRegion='polite' style={styles.copy}>
