@@ -302,7 +302,8 @@ export async function getReportReadiness(assignmentId: string): Promise<ReportRe
     });
   }
 
-  const progress = await getAssignmentProgress(assignmentId);
+  // Same points as above: reading them again would repeat the whole route query.
+  const progress = summarizeAssignmentProgress(points);
   const reportPointReadiness = evaluatePointEvidence(points);
 
   for (const problem of reportPointReadiness.problems) {
@@ -350,8 +351,10 @@ export async function getReportPreviewPoints(assignmentId: string): Promise<Repo
 
 export async function getAssignmentProgress(assignmentId: string): Promise<AssignmentProgress> {
   const ownerUserId = await requireOwnerUserId();
-  const points = await listAssignmentPoints(assignmentId, ownerUserId, currentContourId);
+  return summarizeAssignmentProgress(await listAssignmentPoints(assignmentId, ownerUserId, currentContourId));
+}
 
+function summarizeAssignmentProgress(points: PointListItem[]): AssignmentProgress {
   return {
     total: points.length,
     inspected: points.filter((point) => point.status === "ok" || point.status === "issue").length,

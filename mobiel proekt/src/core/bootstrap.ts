@@ -32,7 +32,22 @@ export async function bootstrapApplication() {
     return;
   }
 
+  // Stays before the first screen: once the camera can run, a photo copied to
+  // disk but not yet recorded in SQLite would look like an orphan.
+  await deleteOrphanPatrolPhotos(await listKnownLocalFilePaths());
+}
+
+/**
+ * Housekeeping that the first screen does not depend on. The sync engine
+ * already reclaims accepted media while the app is in use, so running it
+ * after the first render is equally safe.
+ */
+export async function runDeferredStartupMaintenance() {
+  const ownerUserId = await getStoredOwnerUserId();
+  if (!ownerUserId) {
+    return;
+  }
+
   await pruneMobileActionLog(ownerUserId);
   await reclaimAcceptedLocalMedia(ownerUserId);
-  await deleteOrphanPatrolPhotos(await listKnownLocalFilePaths());
 }

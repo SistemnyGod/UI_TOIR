@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { ListRenderItem, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
@@ -113,13 +113,13 @@ export function AllPointsScreen() {
       : filtered;
   }, [filter, points, reasonsByPoint]);
 
-  const renderItem: ListRenderItem<PointListItem> = ({ item, index }) => (
-      <Rise index={index}><PointRow
-        onPress={() => assignmentId && router.push(`/patrol/assignment/${assignmentId}/point/${item.pointId}${filter === 'attention' && assignmentStatus === 'inProgress' ? '/fill' : ''}` as never)}
-        point={item}
-        reasons={reasonsByPoint.get(item.pointId)}
-      /></Rise>
-  );
+  const openPoint = useCallback((pointId: string) => {
+    if (assignmentId) router.push(`/patrol/assignment/${assignmentId}/point/${pointId}${filter === 'attention' && assignmentStatus === 'inProgress' ? '/fill' : ''}` as never);
+  }, [assignmentId, assignmentStatus, filter, router]);
+
+  const renderItem = useCallback<ListRenderItem<PointListItem>>(({ item, index }) => (
+    <PointRow index={index} onOpen={openPoint} point={item} reasons={reasonsByPoint.get(item.pointId)} />
+  ), [openPoint, reasonsByPoint]);
 
   return (
     <ScreenList
@@ -151,6 +151,9 @@ export function AllPointsScreen() {
         )
       }
       renderItem={renderItem}
+      initialNumToRender={8}
+      maxToRenderPerBatch={8}
+      windowSize={7}
       title="Метки"
       compactHeader
       headerContent={
@@ -212,7 +215,11 @@ export function AllPointsScreen() {
   );
 }
 
-function PointRow({ point, onPress, reasons }: { point: PointListItem; onPress: () => void; reasons?: string[] }) {
+type PointRowProps = { point: PointListItem; index: number; onOpen: (pointId: string) => void; reasons?: string[] };
+
+// A sync pass reloads every point; retainEqualItems keeps unchanged ones, so
+// only rows whose point or readiness reasons changed render again.
+const PointRow = memo(function PointRow({ point, index, onOpen, reasons }: PointRowProps) {
   const { colors } = useAppTheme();
   const tone = pointStatusTone(point.status);
   const badge = tone === "success" ? { bg: colors.successSurface, fg: colors.success, icon: "checkmark" as const }
@@ -221,10 +228,10 @@ function PointRow({ point, onPress, reasons }: { point: PointListItem; onPress: 
     : { bg: colors.backgroundAccent, fg: colors.mutedText, icon: null };
 
   return (
-    <Pressable
+    <Rise index={index}><Pressable
       accessibilityHint={`Открыть точку ${point.name}`}
       accessibilityRole="button"
-      onPress={onPress}
+      onPress={() => onOpen(point.pointId)}
       style={({ pressed }) => [pressed ? { opacity: 0.9, transform: [{ scale: 0.985 }] } : null]}
     >
       <Card style={styles.pointCard}>
@@ -240,8 +247,13 @@ function PointRow({ point, onPress, reasons }: { point: PointListItem; onPress: 
           <Ionicons name="chevron-forward" size={18} color={colors.faintText} />
         </View>
       </Card>
-    </Pressable>
+    </Pressable></Rise>
   );
+}, (previous, next) => previous.point === next.point && previous.index === next.index && previous.onOpen === next.onOpen
+  && sameReasons(previous.reasons, next.reasons));
+
+function sameReasons(left: string[] | undefined, right: string[] | undefined) {
+  return left === right || (left?.length === right?.length && (left ?? []).every((reason, index) => reason === right?.[index]));
 }
 
 function attentionRank(point: PointListItem) {

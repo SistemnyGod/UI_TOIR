@@ -22,6 +22,8 @@ vi.mock('react-native', () => ({
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 vi.mock('@expo/vector-icons', () => ({ Ionicons: 'Icon' }));
 vi.mock('expo-router', () => ({ useRouter: () => ({ back: vi.fn(), push: vi.fn() }) }));
+// The start check waits for the first screen in the app; here it runs on mount.
+vi.mock('@/core/afterFirstRender', () => ({ runAfterFirstRender: (task: () => void) => { task(); return () => {}; } }));
 vi.mock('@/features/settings/themePreference', () => ({ useAppTheme: () => ({ colors: {} }) }));
 vi.mock('@/ui/atomTheme', () => ({ toneColors: () => ({ foreground: 'fg', background: 'bg' }) }));
 vi.mock('@/ui/PrimaryButton', () => ({ PrimaryButton: 'PrimaryButton' }));

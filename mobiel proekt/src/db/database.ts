@@ -1,4 +1,5 @@
 import { ensureChronologicalListIndexes } from './listIndexes';
+import { ensureHotQueryIndexes } from './hotQueryIndexes';
 import * as SQLite from "expo-sqlite";
 
 import { openProtectedDatabase, openProtectedDatabaseConnection } from "@/db/encryptedDatabase";
@@ -60,6 +61,14 @@ async function initializeDatabaseOnce() {
     PRAGMA foreign_keys = ON;
   `);
 
+  try {
+    await migrateInTransaction(db);
+  } finally {
+    appliedMigrationIds = null;
+  }
+}
+
+async function migrateInTransaction(db: SQLite.SQLiteDatabase) {
   await withProtectedExclusiveTransactionAsync(db, async (tx) => {
     await tx.execAsync("PRAGMA busy_timeout = 5000;");
     await tx.execAsync(`
@@ -339,6 +348,9 @@ async function initializeDatabaseOnce() {
       sync_status TEXT NOT NULL DEFAULT 'pending'
     );
     `);
+
+    const appliedRows = await tx.getAllAsync<{ id: string }>("SELECT id FROM schema_migrations");
+    appliedMigrationIds = new Set(appliedRows.map((row) => row.id));
 
     await runLocalMigration(tx, "20260526_safe_mobile_columns", async () => {
       await ensureMobileColumns(tx);
@@ -708,14 +720,19 @@ async function initializeDatabaseOnce() {
         );
       `);
     });
+    await runLocalMigration(tx, "20261019_hot_query_indexes", async () => {
+      await ensureHotQueryIndexes(tx);
+    });
   });
 }
 
+// Filled once per startup transaction: one read instead of one per migration.
+let appliedMigrationIds: Set<string> | null = null;
+
 async function runLocalMigration(db: SqlExecutor, id: string, action: () => Promise<void>) {
-  const existing = await db.getFirstAsync<{ id: string }>(
-    "SELECT id FROM schema_migrations WHERE id = ?",
-    [id]
-  );
+  const existing = appliedMigrationIds
+    ? appliedMigrationIds.has(id)
+    : await db.getFirstAsync<{ id: string }>("SELECT id FROM schema_migrations WHERE id = ?", [id]);
   if (existing) {
     return;
   }
@@ -725,6 +742,7 @@ async function runLocalMigration(db: SqlExecutor, id: string, action: () => Prom
     "INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?)",
     [id, new Date().toISOString()]
   );
+  appliedMigrationIds?.add(id);
 }
 
 async function ensureAssignmentSnapshotPolicy(db: SqlExecutor) {
