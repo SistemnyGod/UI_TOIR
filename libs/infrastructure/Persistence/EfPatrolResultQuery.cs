@@ -35,7 +35,7 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
             .Select((group, index) => new { Key = BuildResultGroupKey(group.AssignmentId, group.ResultId), Index = index })
             .ToDictionary(group => group.Key, group => group.Index);
 
-        return dbContext.PatrolResults
+        return WithPendingPhotos(dbContext.PatrolResults
             .AsNoTracking()
             .Include(result => result.Assignment)
             .Where(result => result.ArchivedAt == null)
@@ -47,7 +47,43 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
             .ThenBy(result => result.ActualAt)
             .ThenBy(result => result.Id)
             .Select(MapListItem)
-            .ToList();
+            .ToList());
+    }
+
+    // Photos of an accepted report that the phone has not uploaded yet
+    // (completePatrolAssignment with photoUploadMode = "deferred").
+    private List<ResultListItemDto> WithPendingPhotos(List<ResultListItemDto> items)
+    {
+        var counts = GetPendingPhotoCounts(items
+            .Where(item => item.AssignmentId is not null)
+            .Select(item => item.AssignmentId!.Value)
+            .Distinct()
+            .ToArray());
+        return counts.Count == 0
+            ? items
+            : items.Select(item => item.AssignmentId is { } assignmentId && item.PointId is { } pointId
+                    && counts.TryGetValue((assignmentId, pointId), out var pending)
+                    ? item with { PendingPhotos = pending }
+                    : item)
+                .ToList();
+    }
+
+    private Dictionary<(Guid AssignmentId, Guid PointId), int> GetPendingPhotoCounts(Guid[] assignmentIds)
+    {
+        if (assignmentIds.Length == 0)
+        {
+            return [];
+        }
+
+        return dbContext.PatrolReportPendingPhotos
+            .AsNoTracking()
+            .Where(item => assignmentIds.Contains(item.AssignmentId)
+                && item.LateReportId == null
+                && item.LinkedAt == null)
+            .GroupBy(item => new { item.AssignmentId, item.PointId })
+            .Select(group => new { group.Key.AssignmentId, group.Key.PointId, Count = group.Count() })
+            .AsEnumerable()
+            .ToDictionary(item => (item.AssignmentId, item.PointId), item => item.Count);
     }
 
     public ResultPageDto GetResultsPage(ResultFilterDto filter, int page = DefaultPage, int pageSize = DefaultPageSize)
@@ -92,6 +128,7 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
             .ToListAsync(cancellationToken);
         var items = rows.OrderBy(result => groupOrder[BuildResultGroupKey(result.AssignmentId, result.Id)])
             .ThenBy(result => result.ActualAt).ThenBy(result => result.Id).Select(MapListItem).ToList();
+        items = WithPendingPhotos(items);
 
         return new ResultPageDto(items, paging.Page, paging.PageSize, total, totalPages, paging.Page < totalPages);
     }
@@ -106,7 +143,16 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
             .AsSplitQuery()
             .FirstOrDefault(item => item.Id == id && item.ArchivedAt == null);
 
-        return result is null ? null : MapDetail(result);
+        if (result is null)
+        {
+            return null;
+        }
+
+        var detail = MapDetail(result);
+        return result.AssignmentId is { } assignmentId && result.RoutePointId is { } pointId
+            && GetPendingPhotoCounts([assignmentId]).TryGetValue((assignmentId, pointId), out var pending)
+            ? detail with { PendingPhotos = pending }
+            : detail;
     }
 
     public ResultExportFileDto ExportResults(ResultFilterDto filter)
@@ -587,7 +633,11 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
             result.Comment,
             result.Photos,
             result.IssueType,
-            result.Severity);
+            result.Severity)
+        {
+            SubmissionMode = result.Assignment?.ReportSubmissionMode,
+            LateReport = result.Assignment?.ReportLateAppliedAt is not null
+        };
 
     private static ResultDetailDto MapDetail(PatrolResultEntity result)
     {
@@ -613,6 +663,15 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
         };
 
         chronology.AddRange(issues.Select(issue => issue.Message));
+        if (result.Assignment?.ReportSubmissionMode == "auto")
+        {
+            chronology.Add("Отчёт отправлен телефоном автоматически");
+        }
+
+        if (result.Assignment?.ReportLateAppliedAt is { } lateAppliedAt)
+        {
+            chronology.Add($"Поздний отчёт принят диспетчером: {lateAppliedAt:dd.MM.yyyy HH:mm}");
+        }
 
         return new ResultDetailDto(
             result.Id,
@@ -637,7 +696,11 @@ internal sealed class EfPatrolResultQuery(Patrol360DbContext dbContext, IPatrolT
             result.Severity,
             issues,
             attachments,
-            chronology);
+            chronology)
+        {
+            SubmissionMode = result.Assignment?.ReportSubmissionMode,
+            LateReport = result.Assignment?.ReportLateAppliedAt is not null
+        };
     }
 
     private static string EscapeCsv(string value) =>

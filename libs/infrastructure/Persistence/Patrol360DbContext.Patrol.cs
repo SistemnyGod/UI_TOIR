@@ -407,6 +407,8 @@ public sealed partial class Patrol360DbContext
             entity.Property(assignment => assignment.FinishedAt).HasColumnName("finished_at");
             entity.Property(assignment => assignment.ProgressPercent).HasColumnName("progress_percent");
             entity.Property(assignment => assignment.LockVersion).HasColumnName("lock_version").IsConcurrencyToken();
+            entity.Property(assignment => assignment.ReportSubmissionMode).HasColumnName("report_submission_mode").HasMaxLength(20);
+            entity.Property(assignment => assignment.ReportLateAppliedAt).HasColumnName("report_late_applied_at");
 
             entity.HasOne(assignment => assignment.PatrolRequest)
                 .WithOne(request => request.Assignment)

@@ -116,6 +116,9 @@ internal sealed partial class EfMobileAppService
 
         syncCursor += ":atom1:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(appeals))));
+        var reportAutoSubmitDelayMinutes = ReportAutoSubmitDelayMinutes;
+        // A changed delay must reach phones whose data is otherwise unchanged.
+        syncCursor += $":ras{reportAutoSubmitDelayMinutes}";
         return new MobileBootstrapDto(
             user,
             device,
@@ -139,7 +142,11 @@ internal sealed partial class EfMobileAppService
             PatrolPointResultStatusExtension = true,
             BoundEmployeesComplete = true,
             PatrolSnapshotManifests = snapshotManifests,
-            PatrolAppeals = patrolAppealsPaging ? [] : appeals
+            PatrolAppeals = patrolAppealsPaging ? [] : appeals,
+            ReportAutoSubmitDelayMinutes = reportAutoSubmitDelayMinutes,
+            LateReportReview = true,
+            DeferredReportPhotos = true,
+            OutboxHeartbeat = true
         };
     }
 
@@ -708,6 +715,21 @@ internal sealed partial class EfMobileAppService
                 && assignment.PatrolRequest.Status != AssignmentStatusValues.Completed
                 && assignment.PatrolRequest.Status != AssignmentStatusValues.Cancelled)
             .OrderBy(assignment => assignment.PlannedAt)
+            .Select(assignment => new
+            {
+                assignment.Id,
+                assignment.PatrolRequestId,
+                assignment.RouteId,
+                assignment.Status,
+                assignment.StartedAt,
+                assignment.FinishedAt,
+                assignment.LockVersion,
+                assignment.RouteVersionNo,
+                assignment.EmployeeId,
+                assignment.PlannedAt,
+                RouteDuration = assignment.Route == null ? null : assignment.Route.Duration
+            })
+            .AsEnumerable()
             .Select(assignment => new MobilePatrolAssignmentDto(
                 assignment.Id,
                 assignment.PatrolRequestId,
@@ -716,7 +738,12 @@ internal sealed partial class EfMobileAppService
                 assignment.StartedAt,
                 assignment.FinishedAt,
                 assignment.LockVersion,
-                assignment.RouteVersionNo) { EmployeeId = assignment.EmployeeId })
+                assignment.RouteVersionNo)
+            {
+                EmployeeId = assignment.EmployeeId,
+                PlannedAt = assignment.PlannedAt,
+                DueAt = ComputePatrolDueAt(assignment.PlannedAt, assignment.RouteDuration)
+            })
             .ToArray();
     }
 

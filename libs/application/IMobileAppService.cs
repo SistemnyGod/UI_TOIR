@@ -45,6 +45,8 @@ public interface IMobileAppService
 
     MobileOutboxResponseDto? GetOutboxResult(string accessToken, string clientOperationId);
 
+    MobileHeartbeatReceiptDto? SaveHeartbeat(string accessToken, MobileHeartbeatRequestDto request) => null;
+
     MobileFileUploadResponseDto? UploadFile(string accessToken, MobileFileUploadCommand command);
 
     Task<MobileFileUploadResponseDto?> UploadFileAsync(
@@ -66,6 +68,18 @@ public sealed record MobileFileUploadCommand(
     string FileName,
     string ContentType,
     Stream Content);
+
+// Dispatcher review queue for patrol reports that reached the server after
+// the assignment was closed (see lateReportPolicy in completePatrolAssignment).
+public interface IPatrolLateReportService
+{
+    IReadOnlyList<PatrolLateReportDto> GetLateReports(string? status, int limit);
+
+    PatrolLateReportResolutionResult ResolveLateReport(
+        Guid lateReportId,
+        PatrolLateReportResolutionRequestDto request,
+        string actor);
+}
 
 public interface IMobileDiagnosticReportStore
 {

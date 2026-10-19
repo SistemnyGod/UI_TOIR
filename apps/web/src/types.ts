@@ -143,6 +143,9 @@ export interface PatrolResult {
   chronology: string[];
   source?: "mobile" | "web";
   attachments?: PatrolResultAttachment[];
+  submissionMode?: "auto" | "manual";
+  lateReport?: boolean;
+  pendingPhotos?: number;
 }
 
 export interface ServiceRequest {
