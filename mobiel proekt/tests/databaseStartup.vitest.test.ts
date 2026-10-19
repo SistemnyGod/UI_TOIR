@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("expo-sqlite", () => ({}));
@@ -63,6 +63,7 @@ describe("actual startup migrations", () => {
     const after = { plans: plans(), requestMedianMs: measure() };
     for (const plan of after.plans) expect(plan.map(row => row.detail).join(' ')).not.toContain('TEMP B-TREE');
     expect(raw.prepare('SELECT COUNT(*) AS n FROM work_tasks').get()).toMatchObject({ n: 30_000 });
+    mkdirSync('output/selected-optimizations-audit', { recursive: true });
     writeFileSync('output/selected-optimizations-audit/database-benchmark.json', JSON.stringify({ rowsPerTable: 30_000, before, after }, null, 2));
     await start();
     expect(raw.prepare("SELECT COUNT(*) AS n FROM schema_migrations WHERE id='20260930_chronological_list_indexes'").get()).toMatchObject({ n: 1 });

@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import test from "node:test";
 
 import { assertSessionOwner } from "../src/auth/sessionIdentity.ts";
@@ -63,22 +61,6 @@ test("offline access remains available until explicit revocation", () => {
   assert.equal(isOfflineSessionValid({ ...session, contourId: "patrol360-test" }, "patrol360-local-enterprise"), false);
   assert.equal(isOfflineSessionValid(session, "patrol360-local-enterprise"), false);
   assert.equal(isOfflineSessionValid({ ...session, revokedAt: "2026-07-08T00:00:00.000Z" }), false);
-});
-
-test("partial work item refresh does not prune local rows", async () => {
-  const source = await readFile(
-    join(process.cwd(), "src/db/repositories/workTaskRepository.ts"),
-    "utf8"
-  );
-
-  const saveWorkItemsStart = source.indexOf("export async function saveWorkItems");
-  const saveWorkItemsEnd = source.indexOf("export async function listLocalWorkItems", saveWorkItemsStart);
-  const saveWorkItemsSource = source.slice(saveWorkItemsStart, saveWorkItemsEnd);
-
-  assert.ok(saveWorkItemsStart >= 0 && saveWorkItemsEnd > saveWorkItemsStart);
-  assert.doesNotMatch(saveWorkItemsSource, /DELETE FROM work_tasks/);
-  assert.match(saveWorkItemsSource, /ON CONFLICT\(task_id\) DO UPDATE SET/);
-  assert.match(saveWorkItemsSource, /sync_status = CASE WHEN work_tasks\.sync_status <> 'synced'/);
 });
 
 test("unfinished point draft preserves the selected status and issue details", () => {

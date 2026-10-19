@@ -1,110 +1,27 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import ts from 'typescript';
 import { getSnapshotRefreshPlan } from '../src/domain/patrol/snapshotPolicy.ts';
 
-const repositorySource = readFileSync(new URL('../src/db/repositories/patrolRepository.ts', import.meta.url), 'utf8');
+// Local commit before delivery, acceptance/repair races, idempotent lifecycle and completion commands,
+// completion-time preservation and manual retry are behavior-tested in patrolReportBehavior and
+// outboxRecoveryBehavior. Screen wiring and wording stay here.
 const reportScreenSource = readFileSync(new URL('../src/features/patrol/SubmitReportScreen.tsx', import.meta.url), 'utf8');
-const reportCoordinatorSource = readFileSync(new URL('../src/features/patrol/reportSubmissionCoordinator.ts', import.meta.url), 'utf8');
 const requestScreenSource = readFileSync(new URL('../src/features/patrol/PatrolRequestScreen.tsx', import.meta.url), 'utf8');
-const outboxRepositorySource = readFileSync(new URL('../src/db/repositories/outboxRepository.ts', import.meta.url), 'utf8');
 const activePatrolScreenSource = readFileSync(new URL('../src/features/patrol/ActivePatrolScreen.tsx', import.meta.url), 'utf8');
 const scanNfcScreenSource = readFileSync(new URL('../src/features/patrol/ScanNfcScreen.tsx', import.meta.url), 'utf8');
 const nfcServiceSource = readFileSync(new URL('../src/services/nfcService.ts', import.meta.url), 'utf8');
 const attachmentPolicySource = readFileSync(new URL('../src/domain/files/completionAttachmentPolicy.ts', import.meta.url), 'utf8');
 
-const outboxResponseSource = readFileSync(new URL('../src/db/repositories/outboxResponseRepository.ts', import.meta.url), 'utf8');
-function functionSource(source: string, name: string) {
-  const parsed = ts.createSourceFile('repository.ts', source, ts.ScriptTarget.Latest, true);
-  const declaration = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
-  assert.ok(declaration, name + ' must exist');
-  return declaration.getText(parsed);
-}
-
 const has = (source: string, value: string) => assert.ok(source.includes(value), value);
 
-test('report submission commits locally before background delivery', () => {
-  const completion = functionSource(repositorySource, 'completeAssignmentLocally');
-
-  assert.ok(!completion.includes('requestSyncAfterMutation()'));
-  has(reportCoordinatorSource, 'await completeAssignmentLocally(assignmentId)');
-  has(reportCoordinatorSource, "const deliveryAttempt = requestPatrolSync({ mode: 'manualReport', assignmentId }).catch");
+test('report screen queues the report without a blocking alert', () => {
   has(reportScreenSource, 'queuePatrolReport(assignmentId)');
   assert.ok(!reportScreenSource.includes('Alert.alert'));
 });
-test('request acceptance and report repair cannot regress concurrently', () => {
-  const acceptance = repositorySource.slice(
-    repositorySource.indexOf('export async function acceptRequestLocally'),
-    repositorySource.indexOf('export async function releaseAcceptedRequestLocally')
-  );
-  const repair = repositorySource.slice(
-    repositorySource.indexOf('export async function reopenInvalidCompletionReportLocally'),
-    repositorySource.indexOf('export async function completeAssignmentLocally')
-  );
-  const completion = functionSource(repositorySource, 'completeAssignmentLocally');
 
+test('request screen serializes acceptance actions', () => {
   has(requestScreenSource, 'actionInProgressRef.current');
-  has(acceptance, 'request_id = ?');
-  has(acceptance, 'assignment_id <> ?');
-  has(acceptance, 'status NOT IN');
-  has(repair, 'if (assignmentUpdate.changes === 1)');
-  has(repair, "SET status = 'inProgress'");
-  has(completion, 'WHERE owner_user_id = ?');
-  has(completion, 'AND contour_id = ?');
-  has(completion, 'AND assignment_id = ?');
-});
-
-test('lifecycle and completed report commands are idempotent', () => {
-  const lifecycle = repositorySource.slice(
-    repositorySource.indexOf('async function updateAssignmentLifecycleLocally'),
-    repositorySource.indexOf('async function snapshotRoutePointsInTransaction')
-  );
-  const completeLookup = repositorySource.slice(
-    repositorySource.indexOf('async function getQueuedCompleteAssignmentCommand'),
-    repositorySource.indexOf('async function requireOwnerUserId')
-  );
-
-  has(lifecycle, 'current.status === "inProgress"');
-  has(lifecycle, 'lifecycleChanged = true');
-  has(lifecycle, 'if (lifecycleChanged) {');
-  has(lifecycle, 'requestSyncAfterMutation()');
-  has(completeLookup, "'waiting_network'");
-  has(completeLookup, "'waiting_auth'");
-  has(completeLookup, "'wrong_contour'");
-  has(completeLookup, "'conflict'");
-  assert.ok(!completeLookup.includes("'rejected'"));
-});
-
-test('automatic outbox recovery never erases a locally completed report', () => {
-  const quarantine = outboxRepositorySource.slice(
-    outboxRepositorySource.indexOf('export async function quarantineInvalidPatrolCompletionCommands'),
-    outboxRepositorySource.indexOf('export async function hasPendingOutboxCommands')
-  );
-  const responseTransition = functionSource(outboxResponseSource, 'applyOutboxResponses');
-  const rejectedTransition = outboxRepositorySource.slice(
-    outboxRepositorySource.indexOf('export async function cancelRejectedOutboxCommand'),
-    outboxRepositorySource.length
-  );
-  const explicitRepair = repositorySource.slice(
-    repositorySource.indexOf('export async function reopenInvalidCompletionReportLocally'),
-    repositorySource.indexOf('export async function completeAssignmentLocally')
-  );
-
-  assert.ok(!quarantine.includes('completed_at_local = NULL'));
-  assert.ok(!responseTransition.includes('completed_at_local ='));
-  assert.ok(!rejectedTransition.includes('completed_at_local ='));
-  has(explicitRepair, "completed_at_local = NULL");
-});
-
-test('manual retry reactivates server failures without bypassing rate limits', () => {
-  const activation = outboxRepositorySource.slice(
-    outboxRepositorySource.indexOf('export async function activateRetryableReportCommands'),
-    outboxRepositorySource.indexOf('export async function activateRetryableOutboxCommandsForImmediateRetry')
-  );
-
-  has(activation, "status IN ('waiting_network', 'retryLater') THEN 'pending'");
-  has(activation, "COALESCE(retry_reason, 'unknown') <> 'rateLimit'");
 });
 
 test('NFC waits for a non-empty route snapshot and arms automatically', () => {
