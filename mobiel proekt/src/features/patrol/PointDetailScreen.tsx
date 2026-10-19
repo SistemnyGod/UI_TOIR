@@ -17,6 +17,8 @@ import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
 import { StatusPill } from "@/ui/StatusPill";
+import { AttachmentViewer } from "./AttachmentViewer";
+import { PointPhotoInstructionSlot } from "./PointPhotoInstructionSlot";
 
 export function PointDetailScreen() {
   const router = useRouter();
@@ -30,6 +32,7 @@ export function PointDetailScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reloadRevision, setReloadRevision] = useState(0);
+  const [viewerFileId, setViewerFileId] = useState<string | null>(null);
 
   // A local delivery event must not start another network refresh cycle.
   useFocusEffect(useCallback(() => { requestMobileDataRefresh("appActive"); }, []));
@@ -115,6 +118,7 @@ export function PointDetailScreen() {
 
   const canEdit = assignment?.status === "inProgress";
   const canRestoreMissing = assignment?.status === "completedLocal" && missingAttachmentIds.length > 0;
+  const viewerAttachment = attachments.find(attachment => attachment.clientFileId === viewerFileId) ?? null;
 
   return (
     <Screen title="Точка маршрута" floatingNotice={loadError ? <StatusMessage message={loadError} tone="warning" /> : undefined} bottomAction={canEdit ? (<PrimaryButton
@@ -138,6 +142,7 @@ export function PointDetailScreen() {
           <StatusPill label={pointStatusLabel(point.status)} tone={pointStatusTone(point.status)} />
         </View>
       </Card>
+      <PointPhotoInstructionSlot instruction={point.photoInstruction} />
 
       <Card>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Подтверждение</Text>
@@ -167,7 +172,8 @@ export function PointDetailScreen() {
         {attachments.length > 0 ? (
           <View style={styles.photoGrid}>
             {attachments.map((attachment) => (
-              <View key={attachment.clientFileId} style={styles.photoTile}>
+              <Pressable key={attachment.clientFileId} style={styles.photoTile} accessibilityRole="button" accessibilityHint="Открыть на весь экран"
+                accessibilityLabel={attachment.mediaKind === "video" ? "Видео" : "Фото"} onPress={() => setViewerFileId(attachment.clientFileId)}>
                 {attachment.mediaKind === "video" ? (
                   <View style={[styles.videoTile, { backgroundColor: colors.backgroundAccent, borderColor: colors.border }]}>
                     <Ionicons color={colors.primary} name="videocam-outline" size={24} />
@@ -177,7 +183,7 @@ export function PointDetailScreen() {
                   <Image source={{ uri: attachment.localPath }} style={[styles.photo, { backgroundColor: colors.backgroundAccent }]} />
                 )}
                 <Text style={[styles.photoStatus, { color: colors.mutedText }]}>{fileStatusLabel(attachment.status)}</Text>
-              </View>
+              </Pressable>
             ))}
           </View>
         ) : (
@@ -211,6 +217,11 @@ export function PointDetailScreen() {
           </Card>
         </>
       )}
+      {viewerAttachment ? <AttachmentViewer
+        attachment={{ ...viewerAttachment, mediaKind: viewerAttachment.mediaKind ?? "photo" }}
+        blockReason={canEdit ? "Удалить или заменить вложение можно в форме метки до отправки." : "Точка только для просмотра. Вложения изменить нельзя."}
+        onClose={() => setViewerFileId(null)}
+      /> : null}
     </Screen>
   );
 }

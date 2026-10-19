@@ -93,6 +93,13 @@ export function isOwnedTemporaryMediaUri(
   return uri.startsWith(cacheRoot) && uri.length > cacheRoot.length && !uri.startsWith(`${managedDirectory}/`);
 }
 
+/** Only copies inside the managed attachment directory belong to a files row. */
+export function isManagedMediaUri(uri: string | null | undefined, managedDirectory: string = getPatrolPhotoDirectory()): uri is string {
+  if (!uri || !managedDirectory || uri.includes("/../") || uri.includes("/./")) return false;
+  const root = `${managedDirectory}/`;
+  return uri.startsWith(root) && uri.length > root.length && !uri.slice(root.length).includes("/");
+}
+
 /** Best effort: a leftover cache file must never fail an attachment that is already saved. */
 export async function deleteOwnedTemporaryMedia(...uris: (string | null | undefined)[]) {
   const owned = Array.from(new Set(uris.filter((uri): uri is string => isOwnedTemporaryMediaUri(uri))));

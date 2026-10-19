@@ -26,8 +26,8 @@ import { OutboxCommand } from "@/domain/sync/syncTypes";
 import { getNfcCodeCandidates, normalizeNfcCode } from "@/services/nfcService";
 import { getLocalFileInfo } from "@/services/fileStorageService";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
-export { getAssignmentById, listAssignmentPoints, getAssignmentProgress, getReportReadiness, getActiveAssignment, getAssignmentByRequestId, getActiveAssignmentWithProgress, getNextPendingAssignmentPoint, getAssignmentScanPolicy } from './patrolAssignmentRepository';
-export type { AssignmentScanPolicy, RequestBoardItem, ActiveAssignment, PointListItem, PointForFill, AssignmentProgress, ReportProblem, ReportReadiness, DeferPointInput } from './patrolRepositoryTypes';
+export { getAssignmentById, listAssignmentPoints, getAssignmentProgress, getReportReadiness, getReportPreviewPoints, getActiveAssignment, getAssignmentByRequestId, getActiveAssignmentWithProgress, getNextPendingAssignmentPoint, getAssignmentScanPolicy } from './patrolAssignmentRepository';
+export type { AssignmentScanPolicy, RequestBoardItem, ActiveAssignment, PointListItem, PointForFill, AssignmentProgress, ReportPreviewPoint, ReportProblem, ReportReadiness, DeferPointInput } from './patrolRepositoryTypes';
 export { listRequestBoard, getRequestBoardItem } from './patrolRequestBoardRepository';
 
 type SqlExecutor = Pick<SQLite.SQLiteDatabase, "getAllAsync" | "getFirstAsync" | "runAsync">;
@@ -1098,6 +1098,203 @@ export async function attachPhotoToPoint(assignmentId: string, pointId: string, 
     message: file.mediaKind === "video" ? "Видео добавлено к метке." : "Фото добавлено к метке.",
     payload: { assignmentId, clientFileId: file.clientFileId }
   }).catch(() => undefined);
+}
+
+/** Files that left the phone, or are leaving it, are evidence and stay read-only. */
+const sentAttachmentStatuses = new Set(["uploading", "uploaded", "linked", "deletedAfterRetention"]);
+const attachmentSentMessage = "Вложение уже отправлено. Изменить или удалить его нельзя.";
+const attachmentQueuedMessage = "Вложение уже передано в очередь отправки. Изменить или удалить его нельзя.";
+const attachmentReadOnlyMessage = "Отчёт завершён. Вложения доступны только для просмотра.";
+
+type AttachmentReference = { clientOperationId: string; commandType: string; status: string; attemptCount: number; payloadJson: string };
+
+/**
+ * A point command that was never attempted can still be rewritten: the sync
+ * engine re-reads its payload before claiming it. Anything attempted, sent or
+ * accepted may already be on the server under its clientOperationId.
+ */
+function isRewritablePointCommand(reference: AttachmentReference, assignmentId: string, pointId: string) {
+  if (reference.status !== "pending" || Number(reference.attemptCount) !== 0) return false;
+  if (reference.commandType !== "markPatrolPointOk" && reference.commandType !== "markPatrolPointIssue") return false;
+  try {
+    const payload = JSON.parse(reference.payloadJson) as Record<string, unknown>;
+    return payload.assignmentId === assignmentId && payload.pointId === pointId;
+  } catch {
+    return false;
+  }
+}
+
+async function listAttachmentReferences(executor: SqlExecutor, ownerUserId: string, clientFileId: string) {
+  return executor.getAllAsync<AttachmentReference>(
+    `
+      SELECT client_operation_id AS clientOperationId, command_type AS commandType, status,
+        attempt_count AS attemptCount, payload_json AS payloadJson
+      FROM outbox_commands
+      WHERE owner_user_id = ?
+        AND contour_id = ?
+        AND status NOT IN ('superseded', 'cancelled', 'cancelledLocal')
+        AND (entity_local_id = ? OR instr(payload_json, ?) > 0)
+    `,
+    [ownerUserId, currentContourId, clientFileId, `"${clientFileId}"`]
+  );
+}
+
+async function findAttachmentEditBlock(
+  executor: SqlExecutor,
+  ownerUserId: string,
+  assignmentId: string,
+  pointId: string,
+  file: { clientFileId: string; status: string }
+) {
+  if (sentAttachmentStatuses.has(file.status)) return attachmentSentMessage;
+  const references = await listAttachmentReferences(executor, ownerUserId, file.clientFileId);
+  return references.some((reference) => !isRewritablePointCommand(reference, assignmentId, pointId))
+    ? attachmentQueuedMessage
+    : null;
+}
+
+/**
+ * Why each attachment of a point cannot be changed. Attachments missing from
+ * the result can be deleted or replaced while the point is not yet sent.
+ */
+export async function listPointAttachmentEditBlocks(assignmentId: string, pointId: string): Promise<Record<string, string>> {
+  const ownerUserId = await requireOwnerUserId();
+  const db = await getDatabase();
+  const assignment = await db.getFirstAsync<{ status: string }>(
+    "SELECT status FROM patrol_assignments WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?",
+    [ownerUserId, currentContourId, assignmentId]
+  );
+  const files = await db.getAllAsync<{ clientFileId: string; status: string }>(
+    `SELECT client_file_id AS clientFileId, status FROM files
+      WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ? AND point_id = ?`,
+    [ownerUserId, currentContourId, assignmentId, pointId]
+  );
+  const editable = canPatrolAction("attachMedia", assignment?.status ?? "missing");
+  const blocks: Record<string, string> = {};
+  for (const file of files) {
+    const block = editable
+      ? await findAttachmentEditBlock(db, ownerUserId, assignmentId, pointId, file)
+      : attachmentReadOnlyMessage;
+    if (block) blocks[file.clientFileId] = block;
+  }
+  return blocks;
+}
+
+/** Remove one unsent attachment from a point. The caller deletes the managed file after commit. */
+export async function deletePointAttachment(assignmentId: string, pointId: string, clientFileId: string, context?: DataOwnerContext) {
+  return detachPointAttachment(assignmentId, pointId, clientFileId, null, context);
+}
+
+/** Swap an unsent attachment for a new one in the same position of the point result. */
+export async function replacePointAttachment(
+  assignmentId: string,
+  pointId: string,
+  clientFileId: string,
+  replacement: LocalMobileFile,
+  context?: DataOwnerContext
+) {
+  return detachPointAttachment(assignmentId, pointId, clientFileId, replacement, context);
+}
+
+async function detachPointAttachment(
+  assignmentId: string,
+  pointId: string,
+  clientFileId: string,
+  replacement: LocalMobileFile | null,
+  context?: DataOwnerContext
+) {
+  const scope = context ?? await captureDataOwnerContext();
+  await assertDataOwnerContext(scope);
+  const ownerUserId = scope.ownerUserId;
+  if (replacement && (replacement.ownerUserId !== ownerUserId || (replacement.contourId && replacement.contourId !== scope.contourId)
+    || (replacement.assignmentId && replacement.assignmentId !== assignmentId) || (replacement.pointId && replacement.pointId !== pointId))) {
+    throw new Error("Вложение относится к другому аккаунту или метке.");
+  }
+  if (replacement?.clientFileId === clientFileId) {
+    throw new Error("Для замены требуется новый файл.");
+  }
+
+  const db = await getDatabase();
+  const outcome: { removedLocalPath: string | null; mediaKind: string | null } = { removedLocalPath: null, mediaKind: null };
+  await withSqliteBusyRetry(() =>
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      await assertDataOwnerContext(scope);
+      const assignment = await tx.getFirstAsync<{ status: string }>(
+        "SELECT status FROM patrol_assignments WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ?",
+        [ownerUserId, currentContourId, assignmentId]
+      );
+      if (!assignment) throw new Error("Назначение не найдено на телефоне.");
+      if (!canPatrolAction("attachMedia", assignment.status)) throw new Error(attachmentReadOnlyMessage);
+
+      const file = await tx.getFirstAsync<{ clientFileId: string; status: string; localPath: string; assignmentId: string | null; pointId: string | null; mediaKind: string | null }>(
+        `SELECT client_file_id AS clientFileId, status, local_path AS localPath, assignment_id AS assignmentId,
+            point_id AS pointId, media_kind AS mediaKind
+          FROM files WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ? LIMIT 1`,
+        [ownerUserId, currentContourId, clientFileId]
+      );
+      if (!file || file.assignmentId !== assignmentId || file.pointId !== pointId) {
+        throw new Error("Вложение относится к другому аккаунту или метке.");
+      }
+      const block = await findAttachmentEditBlock(tx, ownerUserId, assignmentId, pointId, file);
+      if (block) throw new Error(block);
+
+      const swap = (ids: string[]) => Array.from(new Set(replacement
+        ? ids.map((id) => (id === clientFileId ? replacement.clientFileId : id))
+        : ids.filter((id) => id !== clientFileId)));
+
+      // Only never-attempted point commands are left after the guard above; a
+      // command claimed in the meantime fails the conditional update and rolls back.
+      for (const reference of await listAttachmentReferences(tx, ownerUserId, clientFileId)) {
+        if (!isRewritablePointCommand(reference, assignmentId, pointId)) throw new Error(attachmentQueuedMessage);
+        const payload = JSON.parse(reference.payloadJson) as Record<string, unknown>;
+        const ids = Array.isArray(payload.photoClientFileIds) ? payload.photoClientFileIds.filter((id): id is string => typeof id === "string") : [];
+        const rewrite = await tx.runAsync(
+          `UPDATE outbox_commands SET payload_json = ?, updated_at_local = ?
+            WHERE owner_user_id = ? AND contour_id = ? AND client_operation_id = ? AND status = 'pending' AND attempt_count = 0`,
+          [JSON.stringify({ ...payload, photoClientFileIds: swap(ids) }), new Date().toISOString(), ownerUserId, currentContourId, reference.clientOperationId]
+        );
+        if (rewrite.changes !== 1) throw new Error(attachmentQueuedMessage);
+      }
+
+      const result = await tx.getFirstAsync<{ photoClientFileIdsJson: string | null }>(
+        `SELECT photo_client_file_ids_json AS photoClientFileIdsJson FROM point_results
+          WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ? AND point_id = ? LIMIT 1`,
+        [ownerUserId, currentContourId, assignmentId, pointId]
+      );
+      if (result) {
+        const ids = parseStringArray(result.photoClientFileIdsJson);
+        const nextIds = replacement && !ids.includes(clientFileId) ? [...ids, replacement.clientFileId] : swap(ids);
+        await tx.runAsync(
+          `UPDATE point_results SET photo_client_file_ids_json = ?
+            WHERE owner_user_id = ? AND contour_id = ? AND assignment_id = ? AND point_id = ?`,
+          [JSON.stringify(nextIds), ownerUserId, currentContourId, assignmentId, pointId]
+        );
+      }
+      if (replacement) {
+        await insertLocalFileInTransaction(tx, { ...replacement, ownerUserId, contourId: currentContourId, assignmentId, pointId, status: "queued" });
+      }
+      await tx.runAsync(
+        "DELETE FROM files WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ?",
+        [ownerUserId, currentContourId, clientFileId]
+      );
+      const sharedPath = await tx.getFirstAsync<{ count: number }>(
+        "SELECT COUNT(*) AS count FROM files WHERE local_path = ?",
+        [file.localPath]
+      );
+      outcome.removedLocalPath = file.localPath && Number(sharedPath?.count ?? 0) === 0 ? file.localPath : null;
+      outcome.mediaKind = file.mediaKind;
+      await assertDataOwnerContext(scope);
+    })
+  );
+
+  void logMobileAction({
+    eventType: replacement ? "patrol.attachment.replaced" : "patrol.attachment.deleted",
+    entityType: "patrolPoint",
+    entityId: pointId,
+    message: replacement ? "Вложение метки заменено до отправки." : "Вложение удалено из метки до отправки.",
+    payload: { assignmentId, clientFileId, replacementClientFileId: replacement?.clientFileId ?? null }
+  }).catch(() => undefined);
+  return outcome;
 }
 
 export async function reopenInvalidCompletionReportLocally(assignmentId: string) {

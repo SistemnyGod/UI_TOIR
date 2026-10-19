@@ -16,17 +16,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, AppState, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import { listPointFiles } from "@/db/repositories/filesRepository";
-import { beginManualPointInspection, assertPointCanBeOpened, deferPoint, getAssignmentScanPolicy, getPointForFill, getReportReadiness, PointForFill, savePointDraft, savePointIssue, savePointOk, skipPoint } from "@/db/repositories/patrolRepository";
+import { beginManualPointInspection, assertPointCanBeOpened, deferPoint, getAssignmentScanPolicy, getPointForFill, getReportReadiness, listPointAttachmentEditBlocks, PointForFill, savePointDraft, savePointIssue, savePointOk, skipPoint } from "@/db/repositories/patrolRepository";
 import { pointSubmissionError } from "@/domain/patrol/patrolRules";
 import { restoreDeferredPointSelection } from "@/domain/patrol/pointDraftPolicy";
 import { useAppTheme } from "@/features/settings/themePreference";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import {
   attachPointPhotoFromCamera,
+  attachPointPhotoSeriesFromCamera,
   attachPointMediaFromGallery,
   attachPointVideoFromCamera,
+  deletePointAttachmentFile,
+  replacePointPhotoFromCamera,
 } from "@/services/mediaAttachmentService";
 import { ActionSheet } from "@/ui/ActionSheet";
+import { PersistentNotice } from "@/ui/PersistentNotice";
+import { AttachmentViewer } from "./AttachmentViewer";
+import { PointPhotoInstructionSlot } from "./PointPhotoInstructionSlot";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -61,6 +67,10 @@ export function PointFillScreen() {
   const [validationAttempted, setValidationAttempted] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<"attachments" | "more" | null>(null);
+  const [viewerFileId, setViewerFileId] = useState<string | null>(null);
+  // Shown in the viewer only; the repository re-checks on every delete or replace.
+  const [editBlocks, setEditBlocks] = useState<Record<string, string> | "loading" | "failed">("loading");
+  const draftErrorRef = useRef<string | null>(null);
   const draftReadyRef = useRef(false);
   const finalizingRef = useRef(false);
   const savedRef = useRef(false);
@@ -83,6 +93,27 @@ export function PointFillScreen() {
     if (!finalizingRef.current) await draftController.current?.flushUntilSettled();
   }, []);
   const flushDraft = persistDraft;
+  // A draft error stays visible until it is dismissed or a later draft write succeeds.
+  const showDraftError = useCallback((message: string) => { draftErrorRef.current = message; setError(message); }, []);
+  const clearDraftError = useCallback(() => {
+    const message = draftErrorRef.current;
+    if (!message) return;
+    draftErrorRef.current = null;
+    setError(current => current === message ? null : current);
+  }, []);
+  const dismissError = useCallback(() => { draftErrorRef.current = null; setError(null); }, []);
+  const refreshEditBlocks = useCallback(async (version: number) => {
+    const scope = scopeRef.current;
+    if (!scope) return;
+    let blocks: Record<string, string> | "failed";
+    try {
+      blocks = await listPointAttachmentEditBlocks(assignmentId, pointId);
+      await assertDataOwnerContext(scope);
+    } catch {
+      blocks = "failed";
+    }
+    if (focused.current && version === loadVersion.current && scopeRef.current === scope) setEditBlocks(blocks);
+  }, [assignmentId, pointId]);
   const retryPendingLeave = useCallback(() => {
     const action = pendingLeaveAction.current;
     if (!action || leaving.current) return;
@@ -128,6 +159,8 @@ export function PointFillScreen() {
     setValidationAttempted(false);
     mediaOperation.current = null;
     setIsMediaBusy(false);
+    setViewerFileId(null);
+    setEditBlocks("loading");
     const scope = await captureDataOwnerContext();
     if (!focused.current || version !== loadVersion.current) return;
     scopeRef.current = scope;
@@ -160,9 +193,11 @@ export function PointFillScreen() {
     draftController.current = createPointDraftController(async draft => {
       await assertDataOwnerContext(scope);
       await savePointDraft(assignmentId, pointId, draft, scope);
-    }, caught => setError(caught instanceof Error ? caught.message : 'Не удалось сохранить черновик точки.'));
+      clearDraftError();
+    }, caught => showDraftError(caught instanceof Error ? caught.message : 'Не удалось сохранить черновик точки.'));
     draftReadyRef.current = Boolean(loaded);
-  }, [assignmentId, pointId]);
+    void refreshEditBlocks(version);
+  }, [assignmentId, pointId, clearDraftError, refreshEditBlocks, showDraftError]);
 
   useFocusEffect(
     useCallback(() => {
@@ -345,7 +380,9 @@ export function PointFillScreen() {
       if (isCurrent()) { finalizingRef.current = false; setIsSubmitting(false); }
     }
   }
-  async function addMedia(kind: "photo" | "video" | "gallery") {
+  type MediaContext = { scope: DataOwnerContext; version: number; isCurrent: () => boolean; progress: (value: MediaPreparationProgress) => void };
+  /** One media operation at a time: the latest draft is saved first and stale sessions never publish results. */
+  async function runMediaOperation(run: (context: MediaContext) => Promise<void>, failure: string) {
     if (mediaOperation.current || finalizingRef.current || savedRef.current || pendingLeaveAction.current) return;
     const scope = scopeRef.current;
     if (!scope) return;
@@ -363,6 +400,16 @@ export function PointFillScreen() {
       await flushDraft();
       await assertDataOwnerContext(scope);
       if (!isCurrent()) return;
+      await run({ scope, version, isCurrent, progress });
+    } catch (caught) {
+      if (isCurrent()) setError(caught instanceof Error ? caught.message : failure);
+    } finally {
+      if (isCurrent()) { setIsMediaBusy(false); setMediaProgress(null); }
+      if (mediaOperation.current === operation) mediaOperation.current = null;
+    }
+  }
+  async function addMedia(kind: "photo" | "video" | "gallery") {
+    await runMediaOperation(async ({ scope, version, isCurrent, progress }) => {
       const result = kind === "photo" ? await attachPointPhotoFromCamera(assignmentId, pointId, progress)
         : kind === "video" ? await attachPointVideoFromCamera(assignmentId, pointId, progress)
         : await attachPointMediaFromGallery(assignmentId, pointId, progress);
@@ -373,12 +420,45 @@ export function PointFillScreen() {
         if (isCurrent()) setMediaNotice(typeof result === "object" ? `Прикреплено: фото ${result.photoCount}, видео ${result.videoCount}` : kind === "video" ? "Видео прикреплено" : "Фото прикреплено");
       }
       if (isCurrent() && typeof result === "object" && result.errors.length) setError(`Добавлено: ${result.attachedCount}. Не удалось: ${result.errors.length}. ${result.errors[0]}`);
-    } catch (caught) {
-      if (isCurrent()) setError(caught instanceof Error ? caught.message : "Не удалось добавить вложение.");
-    } finally {
-      if (isCurrent()) { setIsMediaBusy(false); setMediaProgress(null); }
-      if (mediaOperation.current === operation) mediaOperation.current = null;
-    }
+    }, "Не удалось добавить вложение.");
+  }
+  async function addPhotoSeries() {
+    await runMediaOperation(async ({ scope, version, isCurrent, progress }) => {
+      const series = await attachPointPhotoSeriesFromCamera(assignmentId, pointId, {
+        shouldContinue: isCurrent,
+        onProgress: progress,
+        // Each photo is shown before the camera opens again.
+        onPhotoAttached: async () => {
+          if (!isCurrent()) return;
+          await reloadPointAndAttachments(scope, version);
+          await flushDraft();
+        }
+      });
+      await assertDataOwnerContext(scope);
+      if (!isCurrent()) return;
+      if (series.attachedCount > 0) setMediaNotice(`Серия: добавлено фото ${series.attachedCount}`);
+      if (series.error) setError(`Добавлено фото: ${series.attachedCount}. Следующее не сохранено: ${series.error}`);
+    }, "Не удалось добавить фото.");
+  }
+  async function deleteAttachment(attachment: PointAttachment) {
+    await runMediaOperation(async ({ scope, version, isCurrent }) => {
+      await deletePointAttachmentFile(assignmentId, pointId, attachment.clientFileId);
+      await assertDataOwnerContext(scope);
+      if (!isCurrent()) return;
+      setViewerFileId(null);
+      await reloadPointAndAttachments(scope, version);
+      if (isCurrent()) setMediaNotice(attachment.mediaKind === "video" ? "Видео удалено" : "Фото удалено");
+    }, "Не удалось удалить вложение.");
+  }
+  async function replaceAttachment(attachment: PointAttachment) {
+    await runMediaOperation(async ({ scope, version, isCurrent, progress }) => {
+      const result = await replacePointPhotoFromCamera(assignmentId, pointId, attachment.clientFileId, progress);
+      await assertDataOwnerContext(scope);
+      if (!isCurrent() || result !== "attached") return;
+      setViewerFileId(null);
+      await reloadPointAndAttachments(scope, version);
+      if (isCurrent()) setMediaNotice("Фото заменено");
+    }, "Не удалось заменить фото.");
   }
   const handleAddPhoto = () => addMedia("photo");
   const handleAddVideo = () => addMedia("video");
@@ -412,6 +492,7 @@ export function PointFillScreen() {
     setPoint(updatedPoint);
     setAttachments(files.map(toPointAttachment));
     recordDraft({ photoClientFileIds: files.map(file => file.clientFileId) });
+    await refreshEditBlocks(version);
   }
 
   useFocusEffect(useCallback(() => {
@@ -432,7 +513,11 @@ export function PointFillScreen() {
         await assertDataOwnerContext(scope);
         const files = await listPointFiles(assignmentId, pointId);
         await assertDataOwnerContext(scope);
-        if (active && focused.current && currentRequest === request && version === loadVersion.current) setAttachments(files.map(toPointAttachment));
+        if (active && focused.current && currentRequest === request && version === loadVersion.current) {
+          setAttachments(files.map(toPointAttachment));
+          // An upload that started meanwhile makes its attachment read-only.
+          await refreshEditBlocks(version);
+        }
       }).catch(() => { /* A later event or focus retries a failed local read. */ }).finally(() => {
         running = false;
         if (active && dirty) refresh();
@@ -445,7 +530,14 @@ export function PointFillScreen() {
       refresh();
     });
     return () => { active = false; unsubscribe(); };
-  }, [assignmentId, pointId]));
+  }, [assignmentId, pointId, refreshEditBlocks]));
+
+  const viewerAttachment = attachments.find(attachment => attachment.clientFileId === viewerFileId) ?? null;
+  const viewerBlockReason = (clientFileId: string) => transitionPending || isSubmitting
+    ? "Метка сохраняется. Вложения можно изменить после сохранения."
+    : editBlocks === "loading" ? "Проверяем, отправлено ли вложение…"
+      : editBlocks === "failed" ? "Не удалось проверить, отправлено ли вложение. Закройте просмотр и откройте снова."
+        : editBlocks[clientFileId] ?? null;
 
   if (loadError) {
     return (
@@ -514,7 +606,10 @@ export function PointFillScreen() {
     <Screen
       compactHeader
       contentContainerStyle={!detailsOpen ? styles.statusScreen : undefined}
-      floatingNotice={<TransientNotice key={noticeRevision} message={error ?? mediaNotice} />}
+      floatingNotice={<View pointerEvents="box-none" style={styles.notices}>
+        <PersistentNotice message={error} onDismiss={dismissError} />
+        <TransientNotice key={noticeRevision} message={mediaNotice} />
+      </View>}
       bottomActionBackground="transparent"
       bottomAction={detailsOpen ? <PrimaryButton disabled={isSubmitting || isMediaBusy || hasPendingLeave || (!selectedStatus && !transitionPending)} disabledReason={!selectedStatus ? "Выберите результат осмотра" : undefined} icon="save-outline" loading={isSubmitting} label={transitionPending ? "Повторить переход" : "Сохранить и продолжить"} onPress={transitionPending ? () => void retrySavedTransition() : handleSave} size="large" /> : undefined}
       title=""
@@ -539,6 +634,7 @@ export function PointFillScreen() {
         mutedColor={colors.mutedText}
         textColor={colors.text}
       />
+      <PointPhotoInstructionSlot instruction={point.photoInstruction} />
 
       <Card>
         <View style={styles.field}>
@@ -546,7 +642,7 @@ export function PointFillScreen() {
           <TextInput
             accessibilityLabel="Результат осмотра"
             editable={!isSubmitting && !transitionPending} multiline
-            onBlur={() => void flushDraft().catch(() => setError("Не удалось сохранить черновик точки."))}
+            onBlur={() => void flushDraft().catch(() => showDraftError("Не удалось сохранить черновик точки."))}
             onChangeText={value => { recordDraft({ comment: value }); setComment(value); }}
             placeholder="Описание результатов осмотра оборудования" style={[styles.input, styles.textArea]} textAlignVertical="top" value={comment} />
           {validationAttempted && (selectedStatus === "issue" || selectedStatus === "skipped") && !comment.trim() ? <Text accessibilityRole="alert" style={styles.error}>{selectedStatus === "issue" ? "Опишите неисправность." : "Укажите, почему осмотр невозможен."}</Text> : null}
@@ -561,7 +657,9 @@ export function PointFillScreen() {
         {attachments.length > 0 ? (
           <View style={styles.photoGrid}>
             {attachments.map((attachment) => (
-              <View key={attachment.clientFileId} style={styles.photoTile} accessible accessibilityLabel={`${attachment.mediaKind === 'video' ? 'Видео' : 'Фото'}. ${fileStatusLabel(attachment.status)}`}>
+              <Pressable key={attachment.clientFileId} style={styles.photoTile} accessibilityRole="button" accessibilityHint="Открыть на весь экран"
+                accessibilityLabel={`${attachment.mediaKind === 'video' ? 'Видео' : 'Фото'}. ${fileStatusLabel(attachment.status)}`}
+                disabled={isMediaBusy} onPress={() => { setViewerFileId(attachment.clientFileId); void refreshEditBlocks(loadVersion.current); }}>
                 {attachment.mediaKind === "video" ? (
                   <View style={styles.videoTile}>
                     <Ionicons color={colors.primary} name="videocam-outline" size={24} />
@@ -573,7 +671,7 @@ export function PointFillScreen() {
                 {attachment.status === 'failed' || attachment.status === 'retryLater' ? (
                   <Text style={[styles.photoStatus, { color: colors.danger }]}>Не отправлено</Text>
                 ) : null}
-              </View>
+              </Pressable>
             ))}
           </View>
         ) : (
@@ -605,6 +703,7 @@ export function PointFillScreen() {
       <ActionSheet
         actions={openMenu === "attachments" ? [
           { label: "Сделать фото", icon: "camera-outline", onPress: () => void handleAddPhoto() },
+          { label: "Серия фото подряд", icon: "albums-outline", onPress: () => void addPhotoSeries() },
           { label: "Снять видео", icon: "videocam-outline", onPress: () => void handleAddVideo() },
           { label: "Выбрать фото и видео с телефона", icon: "images-outline", onPress: () => void handleAddFromGallery() }
         ] : [
@@ -615,6 +714,16 @@ export function PointFillScreen() {
         title={openMenu === "attachments" ? "Добавить фото или видео" : "Действия с точкой"}
         visible={openMenu !== null}
       />
+      {viewerAttachment ? <AttachmentViewer
+        attachment={viewerAttachment}
+        blockReason={viewerBlockReason(viewerAttachment.clientFileId)}
+        busy={isMediaBusy}
+        error={error}
+        onDismissError={dismissError}
+        onClose={() => setViewerFileId(null)}
+        onDelete={attachment => void deleteAttachment(attachment)}
+        onReplace={attachment => void replaceAttachment(attachment)}
+      /> : null}
     </Screen>
   );
 }
@@ -855,6 +964,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: "center",
     width: 48
   },
+  notices: { gap: 8 },
   error: {
     color: colors.danger,
     fontSize: 14,

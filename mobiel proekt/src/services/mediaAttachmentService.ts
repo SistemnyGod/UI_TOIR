@@ -4,10 +4,10 @@ import * as ImagePicker from "expo-image-picker";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { logMobileError } from "@/services/mobileErrorReporter";
-import { attachPhotoToPoint, restoreMissingPointAttachment } from "@/db/repositories/patrolRepository";
+import { attachPhotoToPoint, deletePointAttachment, replacePointAttachment, restoreMissingPointAttachment } from "@/db/repositories/patrolRepository";
 import { attachMediaToShiftRemark } from "@/db/repositories/shiftRemarkRepository";
 import { attachMediaToWorkTask } from "@/db/repositories/workTaskRepository";
-import { deletePreparedMedia, deleteOwnedTemporaryMedia, assertStorageForMedia, getLocalFileInfo, hasEnoughStorageForPhoto } from "@/services/fileStorageService";
+import { deletePreparedMedia, deleteOwnedTemporaryMedia, assertStorageForMedia, getLocalFileInfo, hasEnoughStorageForPhoto, isManagedMediaUri } from "@/services/fileStorageService";
 import { MediaPreparationProgressCallback, prepareLocalMedia, prepareLocalPhoto } from "@/sync/fileUploadQueue";
 import { MAX_VIDEO_BYTES } from "@/domain/files/fileUploadLimits";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
@@ -73,6 +73,79 @@ export async function restoreMissingPointPhotoFromGallery(assignmentId: string, 
   requestSyncAfterMutation();
   return "attached" satisfies MediaAttachResult;
 }
+export type PhotoSeriesResult = { attachedCount: number; error: string | null };
+
+/** Upper bound for one series, so a misbehaving camera result can never loop forever. */
+export const maxPhotoSeriesLength = 20;
+
+/**
+ * Take photos one after another: the camera reopens after each saved photo
+ * until the employee closes it. Every photo is committed before the next shot,
+ * so a later failure keeps the photos already taken.
+ */
+export async function attachPointPhotoSeriesFromCamera(
+  assignmentId: string,
+  pointId: string,
+  options: { shouldContinue?: () => boolean; onPhotoAttached?: (attachedCount: number) => Promise<void> | void; onProgress?: MediaPreparationProgressCallback } = {}
+): Promise<PhotoSeriesResult> {
+  let attachedCount = 0;
+  while (attachedCount < maxPhotoSeriesLength && (options.shouldContinue?.() ?? true)) {
+    let result: MediaAttachResult;
+    try {
+      result = await attachPointPhotoFromCamera(assignmentId, pointId, options.onProgress);
+    } catch (error) {
+      if (attachedCount === 0) throw error;
+      return { attachedCount, error: error instanceof Error ? error.message : "Не удалось добавить фото." };
+    }
+    if (result !== "attached") break;
+    attachedCount += 1;
+    await options.onPhotoAttached?.(attachedCount);
+  }
+  return { attachedCount, error: null };
+}
+
+/** Delete an unsent point attachment: the files row first, then its managed copy. */
+export async function deletePointAttachmentFile(assignmentId: string, pointId: string, clientFileId: string) {
+  const scope = await captureDataOwnerContext();
+  const { removedLocalPath } = await deletePointAttachment(assignmentId, pointId, clientFileId, scope);
+  await deleteManagedCopy(removedLocalPath);
+}
+
+/** Replace an unsent point attachment with a new camera photo in the same position. */
+export async function replacePointPhotoFromCamera(assignmentId: string, pointId: string, clientFileId: string, onProgress?: MediaPreparationProgressCallback) {
+  const scope = await captureDataOwnerContext();
+  const ownerUserId = await prepareOwnerAndStorage();
+  await assertDataOwnerContext(scope);
+  const assets = await pickImages("camera");
+  await assertDataOwnerContext(scope);
+  if (!assets?.length) return "cancelled" satisfies MediaAttachResult;
+
+  const file = await preparePhotoAsset(assets[0], { ownerUserId, assignmentId, pointId, onProgress }, scope);
+  let removedLocalPath: string | null;
+  try {
+    await assertDataOwnerContext(scope);
+    ({ removedLocalPath } = await replacePointAttachment(assignmentId, pointId, clientFileId, file, scope));
+  } catch (error) {
+    await deletePreparedMedia(file.localPath).catch((cleanupError) => {
+      void logMobileError("media.replace.cleanup.failed", cleanupError);
+    });
+    throw error;
+  } finally {
+    await deleteOwnedTemporaryMedia(...assets.map(asset => asset.uri));
+  }
+  await deleteManagedCopy(removedLocalPath);
+  requestSyncAfterMutation();
+  return "attached" satisfies MediaAttachResult;
+}
+
+/** The row is already gone; a leftover copy is reclaimed later by orphan cleanup. */
+async function deleteManagedCopy(localPath: string | null) {
+  if (!isManagedMediaUri(localPath)) return;
+  await deletePreparedMedia(localPath).catch((error) => {
+    void logMobileError("media.delete.cleanup.failed", error);
+  });
+}
+
 export async function attachPointVideoFromCamera(assignmentId: string, pointId: string, onProgress?: MediaPreparationProgressCallback) {
   const scope = await captureDataOwnerContext();
   const ownerUserId = await prepareOwnerAndStorage();

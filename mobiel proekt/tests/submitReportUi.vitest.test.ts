@@ -6,7 +6,7 @@ import { SubmitReportScreen } from '@/features/patrol/SubmitReportScreen';
 const state = vi.hoisted(() => ({
   params: { assignmentId: 'assignment-a', mode: undefined as string | undefined }, focused: true,
   owner: 'account-a', completed: false, sync: null as null | (() => void),
-  readiness: {} as any, delivery: {} as any,
+  readiness: {} as any, delivery: {} as any, preview: undefined as any,
   push: vi.fn(), replace: vi.fn(), queue: vi.fn(), repair: vi.fn(), retry: vi.fn(),
   fullyDelivered: vi.fn(), finishNavigation: vi.fn(), clear: vi.fn(), log: vi.fn()
 }));
@@ -39,7 +39,8 @@ vi.mock('@/auth/dataOwnerContext', () => ({
   assertDataOwnerContext: async (scope: any) => { if (scope.ownerUserId !== state.owner) throw new Error('Сессия изменена'); }
 }));
 vi.mock('@/db/repositories/outboxRepository', () => ({ getReportDeliveryState: async () => state.delivery }));
-vi.mock('@/db/repositories/patrolRepository', () => ({ getReportReadiness: async () => state.readiness, reopenInvalidCompletionReportLocally: state.repair }));
+vi.mock('@/db/repositories/patrolRepository', () => ({ getReportReadiness: async () => state.readiness, reopenInvalidCompletionReportLocally: state.repair,
+  getReportPreviewPoints: async () => { if (state.preview instanceof Error) throw state.preview; return state.preview; } }));
 vi.mock('@/db/repositories/patrolContextRepository', () => ({ clearCurrentPatrolIfMatches: state.clear, getPatrolDeviceContext: async () => ({ assignmentId: null }) }));
 vi.mock('@/services/patrolNavigationService', () => ({ getPatrolReportState: async () => ({ completedLocally: state.completed }), isReportFullyDelivered: state.fullyDelivered, finishDeliveredNavigation: state.finishNavigation, deliveredBoardPath: '/patrol/request-board?notice=delivered' }));
 vi.mock('@/services/mobileErrorReporter', () => ({ logMobileError: state.log }));
@@ -62,6 +63,7 @@ beforeEach(() => {
   state.focused = true; state.owner = 'account-a'; state.completed = false;
   state.readiness = { ready: true, assignment: { routeName: 'Длинное название маршрута' }, progress: { completed: 20, total: 20, inspected: 20, issues: 0, skipped: 0, deferred: 0 }, problems: [] };
   state.delivery = { status: 'notQueued' };
+  state.preview = undefined;
   state.queue.mockResolvedValue({ clientOperationId: 'completion-a' });
   state.fullyDelivered.mockResolvedValue(true);
   state.finishNavigation.mockResolvedValue(true);
@@ -265,4 +267,51 @@ it('offline retry updates the dialog without claiming success or requiring scree
   expect(screen.root.findByType('ReportSendDialog' as any).props.delivery.status).toBe('waitingNetwork');
   expect(state.queue).not.toHaveBeenCalled();
   expect(state.replace).not.toHaveBeenCalled();
+});
+
+const previewPoint = (pointId: string, orderIndex: number, extra: Record<string, unknown> = {}) => ({
+  pointId, name: `Точка ${orderIndex}`, orderIndex, status: 'ok', comment: null, requiresPhoto: false, confirmationType: 'nfc',
+  photoCount: 0, videoCount: 0, missingAttachmentCount: 0, required: true, routeId: 'route', photoClientFileIds: [], ...extra
+});
+const previewRows = () => screen.root.findAllByType('Pressable' as any).filter(n => n.props.accessibilityHint?.startsWith('Открыть точку'));
+
+it('previews every point before sending: result, comment start, photos and how it was confirmed', async () => {
+  state.preview = [
+    previewPoint('p2', 2, { status: 'issue', comment: 'Течь у фланца', confirmationType: 'qr', photoCount: 3 }),
+    previewPoint('p1', 1, { confirmationType: 'manual', photoCount: 1 })
+  ];
+  await mount();
+  expect(text()).toContain('Состав отчёта');
+  expect(previewRows().map(n => n.props.accessibilityLabel)).toEqual([
+    '1. Точка 1. Исправно. Вручную · Фото: 1',
+    '2. Точка 2. Неисправно. QR · Фото: 3. Течь у фланца'
+  ]);
+  expect(button('Отправить отчёт').props.disabled).toBe(false);
+  await act(async () => previewRows()[1].props.onPress());
+  expect(state.push).toHaveBeenCalledWith('/patrol/assignment/assignment-a/point/p2');
+  expect(state.queue).not.toHaveBeenCalled();
+});
+
+it('highlights a point with missing required data and jumps straight to its form', async () => {
+  state.readiness = { ...state.readiness, ready: false, assignment: { routeName: 'Маршрут', status: 'inProgress' },
+    problems: [{ pointId: 'p2', pointName: 'Точка 2', orderIndex: 2, reason: 'Обязательная метка не заполнена.' }] };
+  state.preview = [previewPoint('p1', 1), previewPoint('p2', 2, { status: 'pending', confirmationType: null })];
+  await mount();
+  await act(async () => screen.root.findByType('ActionSheet' as any).props.onClose());
+  const [ready, missing] = previewRows();
+  expect(ready.props.accessibilityHint).toBe('Открыть точку');
+  expect(missing.props.accessibilityHint).toBe('Открыть точку и заполнить недостающие данные');
+  expect(missing.props.accessibilityLabel).toContain('Обязательная метка не заполнена.');
+  expect(text()).toContain('Требуют внимания: 1');
+  await act(async () => missing.props.onPress());
+  expect(state.push).toHaveBeenCalledWith('/patrol/assignment/assignment-a/point/p2/fill');
+});
+
+it('a preview that cannot be read keeps the readiness list and sending available', async () => {
+  state.preview = new Error('SQLite busy');
+  state.readiness = { ...state.readiness, ready: false, problems: [{ pointId: 'p1', pointName: 'Точка 1', orderIndex: 1, reason: 'Нужен комментарий' }] };
+  await mount();
+  expect(text()).not.toContain('Состав отчёта');
+  expect(text()).toContain('Требуют внимания');
+  expect(state.log).toHaveBeenCalledWith('report.preview.load.failed', expect.any(Error));
 });

@@ -1,4 +1,5 @@
 import { PointDraftSelectedStatus } from "@/domain/patrol/pointDraftPolicy";
+import type { PointPhotoInstruction } from "@/domain/patrol/pointPhotoInstruction";
 
 export type RequestBoardItem = {
   assignedEmployeeId?: string | null;
@@ -39,6 +40,8 @@ export type PointListItem = {
   name: string;
   description?: string | null;
   instruction?: string | null;
+  /** Reserved for a future server field; never populated today. */
+  photoInstruction?: PointPhotoInstruction | null;
   orderIndex: number;
   required: boolean;
   requiresPhoto: boolean;
@@ -77,6 +80,14 @@ export type ReportProblem = {
   pointName: string;
   orderIndex: number;
   reason: string;
+};
+
+/** One point as it will appear in the completion report, with its local attachments counted. */
+export type ReportPreviewPoint = PointListItem & {
+  photoCount: number;
+  videoCount: number;
+  /** Referenced by the result but without a files row on this phone. */
+  missingAttachmentCount: number;
 };
 
 export type ReportReadiness = {
