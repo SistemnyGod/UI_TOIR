@@ -63,7 +63,7 @@ function PreviewRow({ row, onPress }: { row: ReportPreviewRow; onPress: () => vo
 const styles = StyleSheet.create({
   header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 },
   title: { fontSize: 16, lineHeight: 22, fontFamily: "Manrope_800ExtraBold" },
-  row: { borderRadius: 12, borderWidth: 1, gap: 6, minHeight: 56, padding: 12 },
+  row: { borderRadius: 16, borderWidth: 1, gap: 6, minHeight: 56, padding: 12 },
   rowHeader: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   name: { flex: 1, fontSize: 16, lineHeight: 22, fontFamily: "Manrope_700Bold" },
   meta: { fontSize: 14, lineHeight: 20 },

@@ -46,7 +46,6 @@ export function LoginScreen() {
   const rememberVersion = useRef(0);
   const submitInFlight = useRef(false);
   const mounted = useRef(true);
-  const [passwordVisible, setPasswordVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [serverBaseUrl, setServerBaseUrl] = useState("");
@@ -252,8 +251,13 @@ export function LoginScreen() {
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.keyboard}>
             <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <View style={styles.logoBlock}>
-                <Text style={styles.logoText}>AM</Text>
-                <Text style={styles.logoSubText}>ATOM MINERALS</Text>
+                <View accessible accessibilityRole="image" accessibilityLabel="ATOM Minerals" style={styles.mark}>
+                  <View style={styles.markTop} />
+                  <View style={styles.markOrbit} />
+                  <View style={styles.markCore} />
+                </View>
+                <Text style={styles.logoText}>ATOM</Text>
+                <Text style={styles.logoSubText}>MINERALS</Text>
                 <Text style={styles.title}>Система обхода территории</Text>
                 <Text style={styles.subtitle}>Вход в мобильное приложение</Text>
               </View>
@@ -261,7 +265,7 @@ export function LoginScreen() {
               <View style={styles.card}>
                 <Text style={styles.label}>Логин</Text>
                 <View style={styles.inputBox}>
-                  <Ionicons color="#c6def7" name="person-outline" size={22} />
+                  <Ionicons color="#2457f5" name="person-outline" size={21} />
                   <TextInput
                     accessibilityLabel="Логин"
                     autoCapitalize="none"
@@ -269,7 +273,7 @@ export function LoginScreen() {
                     editable={!isSubmitting}
                     onChangeText={value => { credentialsEdited.current = true; discardSavedPassword(); setLogin(value); }}
                     placeholder="Введите логин"
-                    placeholderTextColor="#b6cee8"
+                    placeholderTextColor="#8494aa"
                     style={styles.input}
                     value={login}
                   />
@@ -277,7 +281,7 @@ export function LoginScreen() {
 
                 <Text style={[styles.label, styles.passwordLabel]}>Пароль</Text>
                 <View style={styles.inputBox}>
-                  <Ionicons color="#c6def7" name="lock-closed-outline" size={22} />
+                  <Ionicons color="#8494aa" name="lock-closed-outline" size={21} />
                   <TextInput
                     accessibilityLabel="Пароль"
                     autoCapitalize="none"
@@ -285,19 +289,12 @@ export function LoginScreen() {
                     editable={!isSubmitting}
                     onChangeText={value => { credentialsEdited.current = true; if (value) discardSavedPassword(); setPassword(value); }}
                     placeholder={hasSavedPassword ? "Пароль сохранён на телефоне" : "Введите пароль"}
-                    placeholderTextColor="#b6cee8"
-                    secureTextEntry={!passwordVisible}
+                    placeholderTextColor="#8494aa"
+                    secureTextEntry
                     style={styles.input}
                     value={password}
                   />
-                  <Pressable
-                    accessibilityLabel={passwordVisible ? "Скрыть пароль" : "Показать пароль"}
-                    accessibilityRole="button"
-                    style={{ minWidth: 48, minHeight: 48, alignItems: "center", justifyContent: "center" }}
-                    onPress={() => setPasswordVisible((value) => !value)}
-                  >
-                    <Ionicons color="#c6def7" name={passwordVisible ? "eye-off-outline" : "eye-outline"} size={24} />
-                  </Pressable>
+                  <Ionicons accessibilityLabel="Пароль скрыт" color="#8494aa" name="eye-off-outline" size={20} />
                 </View>
 
                 <View style={styles.rowBetween}>
@@ -345,15 +342,15 @@ export function LoginScreen() {
                 {offlineSessionName ? (
                   <>
                     <Text style={styles.offlineSessionText}>Аккаунт сохранённой смены: {offlineSessionName}</Text>
-                    <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push("/(auth)/offline-login")} style={[styles.loginButton, { backgroundColor: "transparent", borderWidth: 1, borderColor: "#c6def7" }, isSubmitting ? styles.loginButtonDisabled : null]}>
-                      <Text style={styles.loginButtonText}>Открыть сохранённую смену</Text>
+                    <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={() => router.push("/(auth)/offline-login")} style={[styles.loginButton, { backgroundColor: "#edf3ff", shadowOpacity: 0, elevation: 0 }, isSubmitting ? styles.loginButtonDisabled : null]}>
+                      <Text style={[styles.loginButtonText, { color: "#1e5bff" }]}>Открыть сохранённую смену</Text>
                     </Pressable>
                   </>
                 ) : null}
                 {biometricAvailable ? (
                   <>
                     <Pressable accessibilityRole="button" disabled={isSubmitting} onPress={handleBiometricLogin} accessibilityLabel="Войти с биометрией" style={styles.fingerprintButton}>
-                      <Ionicons color="#16a8ff" name="finger-print-outline" size={34} />
+                      <Ionicons color="#2457f5" name="finger-print-outline" size={32} />
                     </Pressable>
                     <Text style={styles.fingerprintText}>Войти с биометрией</Text>
                   </>
@@ -396,7 +393,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   overlay: {
-    backgroundColor: "rgba(2, 18, 38, 0.28)",
+    backgroundColor: "rgba(9, 32, 92, 0.55)",
     flex: 1
   },
   safe: {
@@ -415,18 +412,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 14
   },
+  mark: { alignItems: "center", backgroundColor: "#ffffff", borderRadius: 20, height: 64, justifyContent: "center", marginBottom: 12, overflow: "hidden", width: 64,
+    elevation: 10, shadowColor: "#000000", shadowOffset: { height: 10, width: 0 }, shadowOpacity: 0.3, shadowRadius: 18 },
+  markTop: { backgroundColor: "#dbe7ff", height: 32, left: 0, position: "absolute", right: 0, top: 0 },
+  markOrbit: { borderColor: "#2457f5", borderRadius: 24, borderWidth: 2.4, height: 18, position: "absolute", transform: [{ rotate: "-30deg" }], width: 48 },
+  markCore: { backgroundColor: "#2457f5", borderRadius: 6, height: 12, width: 12 },
   logoText: {
     color: "#ffffff",
-    fontSize: 44,
+    fontSize: 34,
     fontFamily: "Manrope_800ExtraBold",
-    lineHeight: 48,
+    letterSpacing: 5,
+    lineHeight: 40,
     textAlign: "center"
   },
   logoSubText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontFamily: "Manrope_800ExtraBold",
-    marginTop: -2,
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 11,
+    fontFamily: "Manrope_700Bold",
+    letterSpacing: 6,
     textAlign: "center"
   },
   title: {
@@ -445,40 +448,42 @@ const styles = StyleSheet.create({
     textAlign: "center"
   },
   card: {
-    backgroundColor: "rgba(5, 31, 58, 0.78)",
-    borderColor: "rgba(122, 177, 232, 0.36)",
-    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    borderColor: "#e6edf6",
+    borderRadius: 28,
     borderWidth: 1,
     elevation: 12,
-    padding: 16,
+    padding: 20,
     shadowColor: "#000000",
     shadowOffset: { height: 8, width: 0 },
     shadowOpacity: 0.32,
     shadowRadius: 16
   },
   label: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontFamily: "Manrope_800ExtraBold",
-    marginBottom: 8
+    color: "#52637b",
+    fontSize: 13,
+    fontFamily: "Manrope_700Bold",
+    marginBottom: 6
   },
   passwordLabel: {
     marginTop: 14
   },
   inputBox: {
     alignItems: "center",
-    borderColor: "rgba(190, 221, 250, 0.48)",
-    borderRadius: 13,
-    borderWidth: 1.2,
+    backgroundColor: "#f7f9fc",
+    borderColor: "#dfe7f2",
+    borderRadius: 16,
+    borderWidth: 1.5,
     flexDirection: "row",
     gap: 10,
-    minHeight: 48,
+    minHeight: 54,
     paddingVertical: 6,
     paddingHorizontal: 13
   },
   input: {
-    color: "#ffffff",
+    color: "#0f1a2b",
     flex: 1,
+    fontFamily: "Manrope_600SemiBold",
     fontSize: 16,
     minHeight: 48,
     paddingVertical: 8
@@ -499,43 +504,51 @@ const styles = StyleSheet.create({
   },
   checkbox: {
     alignItems: "center",
-    borderColor: "#16a8ff",
-    borderRadius: 6,
-    borderWidth: 1.5,
-    height: 22,
+    borderColor: "#2457f5",
+    borderRadius: 8,
+    borderWidth: 1.8,
+    height: 24,
     justifyContent: "center",
-    width: 22
+    width: 24
   },
   checkboxActive: {
-    backgroundColor: "#16a8ff"
+    backgroundColor: "#2457f5"
   },
   rememberText: {
-    color: "#ffffff",
+    color: "#0f1a2b",
+    fontFamily: "Manrope_700Bold",
     fontSize: 14,
     flexShrink: 1
   },
   link: {
-    color: "#18aaff",
+    color: "#1e5bff",
+    fontFamily: "Manrope_700Bold",
     fontSize: 14
   },
   error: {
-    color: "#fecaca",
+    color: "#b42336",
     fontSize: 14,
     lineHeight: 18,
     marginTop: 10
   },
   loginButton: {
     alignItems: "center",
-    backgroundColor: "#1e5bff",
-    borderRadius: 13,
-    minHeight: 52,
+    backgroundColor: "#2457f5",
+    borderRadius: 18,
+    elevation: 6,
+    minHeight: 56,
+    shadowColor: "#2457f5",
+    shadowOffset: { height: 8, width: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
     paddingVertical: 14,
     paddingHorizontal: 12,
     justifyContent: "center",
     marginTop: 18
   },
   loginButtonPressed: {
-    backgroundColor: "#007ee8"
+    backgroundColor: "#1846d8",
+    transform: [{ scale: 0.97 }]
   },
   loginButtonDisabled: {
     opacity: 0.68
@@ -554,20 +567,20 @@ const styles = StyleSheet.create({
     marginTop: 18
   },
   line: {
-    backgroundColor: "rgba(191, 216, 245, 0.28)",
+    backgroundColor: "#e3eaf4",
     flex: 1,
     height: 1
   },
   quickLoginText: {
-    color: "#9db7d7",
+    color: "#66768c",
     fontSize: 14,
     flexShrink: 1
   },
   fingerprintButton: {
     alignItems: "center",
     alignSelf: "center",
-    backgroundColor: "rgba(19, 157, 255, 0.08)",
-    borderColor: "rgba(19, 157, 255, 0.35)",
+    backgroundColor: "#edf3ff",
+    borderColor: "#c9d9ff",
     borderRadius: 27,
     borderWidth: 1.5,
     height: 54,
@@ -576,13 +589,13 @@ const styles = StyleSheet.create({
     width: 54
   },
   fingerprintText: {
-    color: "#c7dbf4",
+    color: "#52637b",
     fontSize: 14,
     marginTop: 6,
     textAlign: "center"
   },
   offlineSessionText: {
-    color: "#c7dbf4",
+    color: "#52637b",
     fontSize: 14,
     marginTop: 10,
     textAlign: "center"

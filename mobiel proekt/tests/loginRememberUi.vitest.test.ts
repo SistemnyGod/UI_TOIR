@@ -58,7 +58,6 @@ it('an opted-in login restores the login but never puts the saved password into 
   await unmount(); await mount();
   expect(field('Логин').props.value).toBe('operator'); expect(field('Пароль').props.value).toBe('');
   expect(field('Пароль').props.placeholder).toBe('Пароль сохранён на телефоне');
-  await act(async () => field('Показать пароль').props.onPress());
   expect(field('Пароль').props.value).toBe(''); expect(checkbox().props.accessibilityState.checked).toBe(true);
   await act(async () => submit().props.onPress());
   expect(state.signIn).toHaveBeenLastCalledWith('operator', '  sample пароль  ');
