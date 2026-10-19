@@ -15,6 +15,11 @@ After flow 06, `run-e2e.ps1` also asks the mock (`GET /__e2e/state`) whether the
 
 The flows depend on each other's state, so run them in order through `run-e2e.ps1`.
 
+**Last verified:** 2026-10-19 on `claude/mobile-e2e-maestro-ce60ff`, which includes the `claude/dreamy-turing-7fa3a3` merge at 16523a4.
+- Setup: AVD `Patrol360_API36` (API 36.1, x86_64, Google Play image) with Maestro 2.11.0.
+- Result: flows 01–06 and the server-side check all passed.
+- The mock received `startPatrolAssignment`, `markPatrolPointOk`, `markPatrolPointIssue` and `completePatrolAssignment`. The last one arrived about 1.5 s after the network came back.
+
 ## Why a mock backend, and the `e2e` build environment
 
 - **No real server is involved.** `mock-server/server.mjs` is a small stateful Node server.
@@ -58,6 +63,7 @@ The flows depend on each other's state, so run them in order through `run-e2e.ps
    ```
    - The separate `-BuildRoot` keeps the build away from other people's builds in `~\.tmp\patrol360`.
    - The JS bundle is embedded (`debuggableVariants = []`), so Metro is not needed.
+   - For `e2e` only, the script leaves `expo-dev-client` out of autolinking in the temporary build copy. Otherwise the APK opens the Expo dev launcher instead of the app. Without dev-client, `viewbinding:8.5.2` (requested by the image cropper) does not resolve, so the script pins it to 8.12.0.
 
 ## Run
 
@@ -69,6 +75,11 @@ powershell -ExecutionPolicy Bypass -File e2e\run-e2e.ps1 -Device emulator-5556 -
 
 - Omit `-Apk` to keep the installed build. Flow 01 still clears app data.
 - `-Only 01-login.yaml,02-start-patrol.yaml` runs a subset. Flows after 01 expect the state the previous flow left.
+- Before flow 01, the app is force-stopped and its data cleared while the network is still off. A report queued by an earlier run would otherwise reach the fresh mock and complete the seeded request.
+- The device is prepared for the run:
+  - Gboard stylus handwriting is turned off, because its onboarding popup swallows typed text.
+  - The app is whitelisted from battery optimisation.
+  - The flows still dismiss the «Отправка отчётов в фоне» Alert with «Позже».
 - Results go to `e2e/reports/` (git-ignored): JUnit XML per flow, Maestro debug output and screenshots, `mock-server.log` and `mock-state.json`.
 - The script always restores the emulator network and stops the mock, even when a flow fails.
 
@@ -87,6 +98,8 @@ maestro --device emulator-5556 test e2e\flows\01-login.yaml
   - Scanning would need the emulator's virtual-scene camera showing a QR image. That is possible (Extended controls → Camera → virtual scene posters), but too flaky for CI. No test hook was added to the app.
 - **Cyrillic input:** Maestro's Android `inputText` does not type non-ASCII text, so the fault description is ASCII. Russian UI text is still asserted.
 - **The network is toggled by `adb`**, not by Maestro: `svc wifi/data` plus `cmd connectivity airplane-mode`. The script waits 3 s for NetInfo to notice the change.
+- **Java regex `(?i)` is ASCII-only** in Maestro selectors. Match Cyrillic case variants explicitly, for example `"Позже|ПОЗЖЕ"`.
+- **Native Alerts hide the screen behind them** from Maestro. Wait for «screen title OR alert button» before you assert on the screen.
 - **Photos are not attached.** The app never requires them (`isPhotoEvidenceRequired` is `false`), and camera e2e is out of scope.
 - **Server-side behaviour is only as real as the mock.** Contract details are noted inline in `server.mjs`. If the mobile API changes, update the mock together with `src/api/schemas.ts`.
 
