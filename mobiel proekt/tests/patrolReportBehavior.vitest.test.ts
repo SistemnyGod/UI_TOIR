@@ -388,9 +388,7 @@ function seedRepairableReport(assignmentStatus = 'completedLocal', commandStatus
 }
 const completePayload = () => JSON.parse(row("SELECT payload_json FROM outbox_commands WHERE client_operation_id = 'complete'").payload_json as string);
 
-// Defect: the repair reads assignment_route_points.status and writes outbox_commands.sent_at_local;
-// neither column exists in the schema, so every repair fails with "no such column".
-it.fails('restoring a missing attachment rewrites the report and requeues its rejected command', async () => {
+it('restoring a missing attachment rewrites the report and requeues its rejected command', async () => {
   seedRepairableReport();
   const patrol = await import('@/db/repositories/patrolRepository');
 
@@ -434,8 +432,7 @@ it('refuses attachment repair when the local point result no longer references t
   expect(commands()).toEqual([{ id: 'complete', type: 'completePatrolAssignment', status: 'rejected' }]);
 });
 
-// Same defect: the missing status column fails before the replacement file is checked.
-it.fails('refuses attachment repair when the replacement file is physically missing', async () => {
+it('refuses attachment repair when the replacement file is physically missing', async () => {
   seedRepairableReport();
   const absent = replacement('absent');
   disk.files[absent.localPath] = { exists: false };

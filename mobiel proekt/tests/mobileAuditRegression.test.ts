@@ -57,15 +57,3 @@ test("server wins is offered only for assignment conflicts", async () => {
   assert.ok(screenSource.includes("canAcceptServerConflict(command) ?"));
 });
 
-// restoreMissingPointAttachment fails on the real schema (it reads assignment_route_points.status
-// and writes outbox_commands.sent_at_local, neither of which exists), so the successful repair is an
-// it.fails case in patrolReportBehavior. Until that is fixed these lines keep its requeue guards.
-test("completed report attachment repair requeues the command only when both rows change", async () => {
-  const source = await readSource("src/db/repositories/patrolRepository.ts");
-  const repairSource = source.slice(source.indexOf("export async function restoreMissingPointAttachment"));
-
-  assert.match(repairSource, /getCompletionAttachmentFailure/);
-  assert.match(repairSource, /status = 'pending'/);
-  assert.match(repairSource, /pointUpdate.changes !== 1/);
-  assert.match(repairSource, /commandUpdate.changes !== 1/);
-});

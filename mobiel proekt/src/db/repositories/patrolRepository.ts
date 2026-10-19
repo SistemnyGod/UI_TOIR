@@ -1975,9 +1975,9 @@ export async function restoreMissingPointAttachment(
         throw new Error("Указанное отсутствующее вложение не относится к этой точке.");
       }
 
-      const pointRow = await tx.getFirstAsync<{ photoClientFileIdsJson: string | null }>(
+      const pointRow = await tx.getFirstAsync<{ photoClientFileIdsJson: string | null; status: PhotoEvidenceStatus }>(
         `
-          SELECT photo_client_file_ids_json AS photoClientFileIdsJson
+          SELECT photo_client_file_ids_json AS photoClientFileIdsJson, status
           FROM point_results
           WHERE owner_user_id = ?
             AND contour_id = ?
@@ -1999,9 +1999,10 @@ export async function restoreMissingPointAttachment(
           .map((id) => (id === missingClientFileId ? file.clientFileId : id))
       ));
 
-      const pointMetadata = await tx.getFirstAsync<{ requiresPhoto: number; status: PhotoEvidenceStatus }>(
+      // The point status lives in point_results; the route snapshot only says whether a photo is required.
+      const pointMetadata = await tx.getFirstAsync<{ requiresPhoto: number }>(
         `
-          SELECT requires_photo AS requiresPhoto, status
+          SELECT requires_photo AS requiresPhoto
           FROM assignment_route_points
           WHERE assignment_id = ?
             AND point_id = ?
@@ -2028,7 +2029,7 @@ export async function restoreMissingPointAttachment(
           contourId: currentContourId,
           assignmentId,
           pointId,
-          requiredPhoto: isPhotoEvidenceRequired(pointMetadata.requiresPhoto === 1, pointMetadata.status)
+          requiredPhoto: isPhotoEvidenceRequired(pointMetadata.requiresPhoto === 1, pointRow.status)
         }
       );
       if (replacementFailure) {
@@ -2064,7 +2065,6 @@ export async function restoreMissingPointAttachment(
               status = 'pending',
               last_error = NULL,
               next_attempt_at = NULL,
-              sent_at_local = NULL,
               updated_at_local = ?
           WHERE client_operation_id = ?
             AND owner_user_id = ?
