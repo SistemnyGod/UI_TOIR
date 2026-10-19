@@ -39,6 +39,14 @@ internal sealed partial class EfMobileAppService
             return Conflict(command.ClientOperationId, "Assignment does not belong to this mobile account.");
         }
 
+        // Points filled before a handover keep their performer, and points
+        // carried from another phone come from the handover record.
+        var transferredPoints = LoadTransferredPoints(assignment.Id);
+        var submittedPointResults = pointResults;
+        pointResults = MergeTransferredPointResults(pointResults, transferredPoints, account.Id);
+        var photoAccountIds = transferredPoints.Select(item => item.SourceAccountId).Append(account.Id).ToHashSet();
+        var pointPerformers = transferredPoints.ToDictionary(item => item.Result.PointId, item => (item.PerformerEmployeeId, item.PerformerName));
+
         var reportedRouteVersion = ReadLong(command.Payload, "routeVersionNo");
         if (reportedRouteVersion is not null && reportedRouteVersion != assignment.RouteVersionNo)
         {
@@ -104,7 +112,7 @@ internal sealed partial class EfMobileAppService
             : dbContext.MobileUploadedFiles
                 .AsNoTracking()
                 .Where(file =>
-                    file.MobileAccountId == account.Id
+                    photoAccountIds.Contains(file.MobileAccountId)
                     && file.AssignmentId == assignment.Id
                     && file.PointId.HasValue
                     && requestedPointIds.Contains(file.PointId.Value)
@@ -176,7 +184,7 @@ internal sealed partial class EfMobileAppService
             }
         }
 
-        var existingReportCheck = ValidateExistingCompleteReport(account, assignment, pointResults);
+        var existingReportCheck = ValidateExistingCompleteReport(account, assignment, submittedPointResults);
         if (existingReportCheck.HasExistingReport)
         {
             if (!existingReportCheck.PayloadMatches)
@@ -237,7 +245,8 @@ internal sealed partial class EfMobileAppService
             pointResults,
             completedAtLocal,
             now,
-            uploadedFilesByPoint.SelectMany(pair => pair.Value).ToArray());
+            uploadedFilesByPoint.SelectMany(pair => pair.Value).ToArray(),
+            pointPerformers);
         RegisterPendingReportPhotos(account.Id, assignment.Id, missingPhotos, null, now);
         MarkAssignmentReportCompleted(assignment, pointResults, completedAtLocal, submissionMode, now);
 
@@ -443,7 +452,8 @@ internal sealed partial class EfMobileAppService
         IReadOnlyList<MobilePointResultPayload> pointResults,
         DateTimeOffset completedAtLocal,
         DateTimeOffset operationAt,
-        IReadOnlyList<MobileUploadedFileEntity> uploadedFiles)
+        IReadOnlyList<MobileUploadedFileEntity> uploadedFiles,
+        IReadOnlyDictionary<Guid, (Guid EmployeeId, string Name)>? pointPerformers = null)
     {
         var existingResults = dbContext.PatrolResults
             .Include(item => item.Issues)
@@ -486,16 +496,19 @@ internal sealed partial class EfMobileAppService
                 : string.IsNullOrWhiteSpace(comment)
                     ? "-"
                     : comment;
+            var performer = pointPerformers is not null && pointPerformers.TryGetValue(pointResult.PointId, out var transferred)
+                ? transferred
+                : (assignment.EmployeeId, assignment.Employee?.FullName ?? assignment.PatrolRequest?.EmployeeName ?? string.Empty);
             var resultEntity = new PatrolResultEntity
             {
                 Id = Guid.NewGuid(),
                 AssignmentId = assignment.Id,
-                EmployeeId = assignment.EmployeeId,
+                EmployeeId = performer.EmployeeId,
                 RouteId = assignment.RouteId,
                 RoutePointId = routePoint is not null && currentRoutePointIds.Contains(routePoint.Id) ? routePoint.Id : null,
                 Status = BuildMobilePointResultStatus(pointResult),
                 PointName = routePoint?.Name ?? pointResult.PointId.ToString(),
-                EmployeeName = assignment.Employee?.FullName ?? assignment.PatrolRequest?.EmployeeName ?? string.Empty,
+                EmployeeName = performer.Item2,
                 RouteName = assignment.Route?.Name ?? assignment.PatrolRequest?.RouteName ?? string.Empty,
                 Territory = assignment.Route?.Territory ?? string.Empty,
                 Shift = assignment.Shift,

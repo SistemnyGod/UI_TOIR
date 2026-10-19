@@ -47,6 +47,9 @@ public interface IMobileAppService
 
     MobileHeartbeatReceiptDto? SaveHeartbeat(string accessToken, MobileHeartbeatRequestDto request) => null;
 
+    // Colleagues the current performer can hand an unfinished patrol to.
+    IReadOnlyList<MobileTransferCandidateDto>? GetPatrolTransferCandidates(string accessToken) => null;
+
     MobileFileUploadResponseDto? UploadFile(string accessToken, MobileFileUploadCommand command);
 
     Task<MobileFileUploadResponseDto?> UploadFileAsync(
@@ -79,6 +82,12 @@ public interface IPatrolLateReportService
         Guid lateReportId,
         PatrolLateReportResolutionRequestDto request,
         string actor);
+}
+
+// Dispatcher journal of patrol handovers between employees of a shift.
+public interface IPatrolTransferService
+{
+    IReadOnlyList<PatrolAssignmentTransferDto> GetPatrolTransfers(Guid? assignmentId, int limit);
 }
 
 public interface IMobileDiagnosticReportStore

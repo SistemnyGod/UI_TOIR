@@ -30,6 +30,7 @@ internal sealed partial class EfMobileAppService
         var requestBoard = BuildRequestBoard(boundEmployeeIds);
         var assignments = BuildAssignments(boundEmployeeIds);
         assignments = AttachAssignmentSnapshots(assignments);
+        assignments = AttachTransferredPointResults(assignments, account.Id);
         var cancelledAssignmentIds = BuildCancelledAssignmentIds(boundEmployeeIds);
         var conflictResolutions = BuildConflictResolutions(account.Id);
         var routeIds = requestBoard.Select(item => item.RouteId)
@@ -146,7 +147,8 @@ internal sealed partial class EfMobileAppService
             ReportAutoSubmitDelayMinutes = reportAutoSubmitDelayMinutes,
             LateReportReview = true,
             DeferredReportPhotos = true,
-            OutboxHeartbeat = true
+            OutboxHeartbeat = true,
+            PatrolTransfer = true
         };
     }
 

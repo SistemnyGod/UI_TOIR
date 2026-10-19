@@ -210,6 +210,9 @@ public sealed record MobileBootstrapDto(
     public bool DeferredReportPhotos { get; init; }
     // POST api/v1/mobile/heartbeat is available.
     public bool OutboxHeartbeat { get; init; }
+    // transferPatrolAssignment outbox command and
+    // GET api/v1/mobile/patrol/transfer-candidates are available.
+    public bool PatrolTransfer { get; init; }
 }
 
 public sealed record MobilePatrolSnapshotPointDto(Guid PointId, long Revision);
@@ -260,7 +263,32 @@ public sealed record MobilePatrolAssignmentDto(
     // Time by which the patrol is expected to be finished: planned start +
     // route duration + Patrol360:Mobile:PatrolDueGraceMinutes.
     public DateTimeOffset? DueAt { get; init; }
+    // Points filled by an earlier performer on another phone before the patrol
+    // was handed over to this account. Empty for every other assignment.
+    public IReadOnlyList<MobileTransferredPointResultDto> TransferredPointResults { get; init; } = [];
 }
+
+public sealed record MobileTransferredPointResultDto(
+    Guid PointId,
+    string Status,
+    string? Comment,
+    string? IssueTypeId,
+    string? ConfirmationType,
+    string? ManualReason,
+    DateTimeOffset? CompletedAtLocal,
+    Guid PerformerEmployeeId,
+    string PerformerName,
+    int PhotoCount);
+
+// A colleague the current performer can hand an unfinished patrol to.
+// SameAccount = the colleague signs in on this phone (shared shift account).
+public sealed record MobileTransferCandidateDto(
+    Guid EmployeeId,
+    string FullName,
+    string? Position,
+    string? Department,
+    bool SameAccount,
+    bool HasPatrolInProgress);
 
 public sealed record MobilePatrolAssignmentSnapshotDto(
     MobilePatrolRouteDto Route,

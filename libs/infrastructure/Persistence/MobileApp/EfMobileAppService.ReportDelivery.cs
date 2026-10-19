@@ -374,7 +374,9 @@ internal sealed partial class EfMobileAppService
             .First(item => item.Id == lateReport.AssignmentId);
         var account = dbContext.MobileAccounts.First(item => item.Id == lateReport.MobileAccountId);
         var payload = JsonSerializer.Deserialize<Dictionary<string, object?>>(lateReport.PayloadJson, JsonOptions) ?? [];
-        var pointResults = ReadPointResults(payload);
+        var transferredPoints = LoadTransferredPoints(assignment.Id);
+        var pointResults = MergeTransferredPointResults(ReadPointResults(payload), transferredPoints, account.Id);
+        var photoAccountIds = transferredPoints.Select(item => item.SourceAccountId).Append(account.Id).ToHashSet();
         var requestedFileIds = pointResults
             .SelectMany(result => result.PhotoClientFileIds)
             .Select(fileId => NormalizeOptionalText(fileId))
@@ -384,13 +386,14 @@ internal sealed partial class EfMobileAppService
             ? []
             : dbContext.MobileUploadedFiles
                 .AsNoTracking()
-                .Where(file => file.MobileAccountId == account.Id
+                .Where(file => photoAccountIds.Contains(file.MobileAccountId)
                     && file.AssignmentId == assignment.Id
                     && file.PointId.HasValue
                     && requestedFileIds.Contains(file.ClientFileId))
                 .ToArray();
 
-        SaveMobilePointResults(account, assignment, pointResults, lateReport.CompletedAtLocal, now, uploadedFiles);
+        SaveMobilePointResults(account, assignment, pointResults, lateReport.CompletedAtLocal, now, uploadedFiles,
+            transferredPoints.ToDictionary(item => item.Result.PointId, item => (item.PerformerEmployeeId, item.PerformerName)));
         MarkAssignmentReportCompleted(assignment, pointResults, lateReport.CompletedAtLocal, lateReport.SubmissionMode, now);
         assignment.ReportLateAppliedAt = now;
         lateReport.Status = "applied";

@@ -129,6 +129,13 @@ public sealed class MobileController(
         return result is null ? NotFound() : Ok(result);
     }
 
+    [HttpGet("patrol/transfer-candidates")]
+    public ActionResult<IReadOnlyList<MobileTransferCandidateDto>> PatrolTransferCandidates()
+    {
+        var result = mobileAppService.GetPatrolTransferCandidates(MobileAccessToken);
+        return result is null ? Unauthorized() : Ok(result);
+    }
+
     [HttpPost("devices/push-token")]
     public ActionResult<MobileDeviceRegistrationDto> RegisterPushToken(MobilePushTokenRegistrationDto request)
     {

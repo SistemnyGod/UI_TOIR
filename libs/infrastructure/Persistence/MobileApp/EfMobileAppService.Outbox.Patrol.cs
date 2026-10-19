@@ -118,6 +118,8 @@ internal sealed partial class EfMobileAppService
                 ProcessResumePatrolAssignment(account, command),
             var type when type.Equals("handoffPatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
                 ProcessHandoffPatrolAssignment(account, command),
+            var type when type.Equals("transferPatrolAssignment", StringComparison.OrdinalIgnoreCase) =>
+                ProcessTransferPatrolAssignment(account, command),
             var type when type.Equals("scanPatrolPointNfc", StringComparison.OrdinalIgnoreCase) =>
                 ProcessScanPatrolPointNfc(account, command),
             var type when type.Equals("scanPatrolPointQr", StringComparison.OrdinalIgnoreCase) =>

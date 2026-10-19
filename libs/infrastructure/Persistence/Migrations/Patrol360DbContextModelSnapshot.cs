@@ -4687,6 +4687,107 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.ToTable("mobile_uploaded_files", (string)null);
                 });
 
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolAssignmentTransferEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AssignmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assignment_id");
+
+                    b.Property<int>("CarriedPointCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("carried_point_count");
+
+                    b.Property<string>("CarriedPointResultsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("carried_point_results_json");
+
+                    b.Property<string>("ClientOperationId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("client_operation_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("FromEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_employee_id");
+
+                    b.Property<string>("FromEmployeeName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("from_employee_name");
+
+                    b.Property<Guid>("FromMobileAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_mobile_account_id");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("mode");
+
+                    b.Property<Guid>("PatrolRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patrol_request_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("StatusAfter")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("status_after");
+
+                    b.Property<string>("StatusBefore")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("status_before");
+
+                    b.Property<Guid>("ToEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_employee_id");
+
+                    b.Property<string>("ToEmployeeName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("to_employee_name");
+
+                    b.Property<DateTimeOffset>("TransferredAtLocal")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("transferred_at_local");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_patrol_assignment_transfers_created");
+
+                    b.HasIndex("AssignmentId", "CreatedAt")
+                        .HasDatabaseName("ix_patrol_assignment_transfers_assignment_created");
+
+                    b.HasIndex("FromMobileAccountId", "ClientOperationId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_patrol_assignment_transfers_account_operation");
+
+                    b.ToTable("patrol_assignment_transfers", (string)null);
+                });
+
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolLateReportEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7364,6 +7465,25 @@ namespace Patrol360.Infrastructure.Persistence.Migrations
                     b.Navigation("MobileAccount");
 
                     b.Navigation("Point");
+                });
+
+            modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolAssignmentTransferEntity", b =>
+                {
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.AssignmentEntity", "Assignment")
+                        .WithMany()
+                        .HasForeignKey("AssignmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Patrol360.Infrastructure.Persistence.Entities.MobileAccountEntity", "FromMobileAccount")
+                        .WithMany()
+                        .HasForeignKey("FromMobileAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Assignment");
+
+                    b.Navigation("FromMobileAccount");
                 });
 
             modelBuilder.Entity("Patrol360.Infrastructure.Persistence.Entities.PatrolLateReportEntity", b =>
