@@ -12,7 +12,7 @@ type PrimaryButtonProps = {
   loading?: boolean;
   icon?: keyof typeof Ionicons.glyphMap;
   size?: "normal" | "large";
-  variant?: "primary" | "secondary" | "danger" | "ghost";
+  variant?: "primary" | "secondary" | "danger" | "ghost" | "inverse";
 };
 
 export function PrimaryButton({ label, onPress, disabled, disabledReason, loading = false, icon, size = "normal", variant = "primary" }: PrimaryButtonProps) {
@@ -20,7 +20,7 @@ export function PrimaryButton({ label, onPress, disabled, disabledReason, loadin
   const isPrimary = variant === "primary";
   const isDanger = variant === "danger";
   const blocked = disabled || loading;
-  const labelColor = blocked ? colors.disabledText : isPrimary ? colors.onAccent : isDanger ? colors.danger : variant === "ghost" ? colors.text : colors.primary;
+  const labelColor = blocked ? colors.disabledText : variant === "inverse" ? colors.accent : isPrimary ? colors.onAccent : isDanger ? colors.danger : variant === "ghost" ? colors.text : colors.primary;
 
   return (
     <View style={{ gap: 6, minWidth: 0 }}>
@@ -37,6 +37,7 @@ export function PrimaryButton({ label, onPress, disabled, disabledReason, loadin
         variant === "secondary" ? { backgroundColor: colors.backgroundAccent, borderColor: colors.backgroundAccent } : null,
         variant === "ghost" ? [{ backgroundColor: colors.card, borderColor: colors.cardBorder }, softShadow(colors.shadow, 1)] : null,
         isDanger ? { backgroundColor: colors.dangerSurface, borderColor: colors.dangerSurface } : null,
+        variant === "inverse" ? { backgroundColor: "#ffffff", borderColor: "#ffffff", shadowColor: "#06143c", shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4 } : null,
         blocked ? { backgroundColor: colors.disabled, borderColor: colors.disabled } : null,
         pressed && !blocked && isPrimary ? [styles.pressed, { backgroundColor: colors.accentPressed }] : null,
         pressed && !blocked && !isPrimary ? styles.outlinePressed : null

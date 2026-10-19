@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { ListRenderItem, Pressable, StyleSheet, Text, View } from "react-native";
@@ -16,6 +17,7 @@ import { ScreenList } from "@/ui/Screen";
 import { SelectionTabs } from "@/ui/SelectionTabs";
 import { retainEqualItems } from "@/sync/retainEqualItems";
 import { StatusPill } from "@/ui/StatusPill";
+import { font } from "@/ui/typography";
 
 type Filter = "all" | "attention" | "pending" | "deferred" | "issue" | "skipped";
 
@@ -211,25 +213,30 @@ export function AllPointsScreen() {
 
 function PointRow({ point, onPress, reasons }: { point: PointListItem; onPress: () => void; reasons?: string[] }) {
   const { colors } = useAppTheme();
+  const tone = pointStatusTone(point.status);
+  const badge = tone === "success" ? { bg: colors.successSurface, fg: colors.success, icon: "checkmark" as const }
+    : tone === "danger" ? { bg: colors.dangerSurface, fg: colors.danger, icon: "alert" as const }
+    : tone === "warning" ? { bg: colors.warningSurface, fg: colors.warning, icon: null }
+    : { bg: colors.backgroundAccent, fg: colors.mutedText, icon: null };
 
   return (
     <Pressable
       accessibilityHint={`Открыть точку ${point.name}`}
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => [pressed ? { opacity: 0.88 } : null]}
+      style={({ pressed }) => [pressed ? { opacity: 0.9, transform: [{ scale: 0.985 }] } : null]}
     >
       <Card style={styles.pointCard}>
         <View style={styles.pointRow}>
-          <View style={[styles.pointIndex, { backgroundColor: colors.backgroundAccent }]}>
-            <Text style={[styles.pointIndexText, { color: colors.primary }]}>{point.orderIndex}</Text>
+          <View style={[styles.pointIndex, { backgroundColor: badge.bg }]}>
+            {badge.icon ? <Ionicons name={badge.icon} size={16} color={badge.fg} /> : <Text style={[styles.pointIndexText, font(800), { color: badge.fg }]}>{point.orderIndex}</Text>}
           </View>
           <View style={styles.pointTitleBox}>
-            <Text style={[styles.pointTitle, { color: colors.text }]}>{point.name}</Text>
-            <StatusPill label={pointStatusLabel(point.status)} tone={pointStatusTone(point.status)} />
-            {reasons?.filter(reason => reason !== "Обязательная метка не заполнена.").map(reason => <Text key={reason} style={[styles.text, { color: colors.mutedText }]}>{reason}</Text>)}
+            <Text style={[styles.pointTitle, font(800), { color: colors.text }]}>{point.orderIndex}. {point.name}</Text>
+            {reasons?.filter(reason => reason !== "Обязательная метка не заполнена.").map(reason => <Text key={reason} style={[styles.text, font(600), { color: colors.mutedText }]}>{reason}</Text>)}
           </View>
-          <Text style={[styles.chevron, { color: colors.mutedText }]}>›</Text>
+          <StatusPill label={pointStatusLabel(point.status)} tone={tone} />
+          <Ionicons name="chevron-forward" size={18} color={colors.faintText} />
         </View>
       </Card>
     </Pressable>
@@ -326,19 +333,21 @@ const styles = StyleSheet.create({
   },
 
   pointCard: {
-    padding: 12
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 10
   },
   pointRow: {
-    alignItems: "flex-start",
+    alignItems: "center",
     flexDirection: "row",
     gap: 12
   },
   pointIndex: {
     alignItems: "center",
     borderRadius: 999,
-    height: 36,
+    height: 32,
     justifyContent: "center",
-    width: 36
+    width: 32
   },
   pointIndexText: {
     fontSize: 14,
@@ -347,12 +356,12 @@ const styles = StyleSheet.create({
   pointTitleBox: {
     flex: 1,
     alignItems: "flex-start",
-    gap: 6
+    gap: 2,
+    minWidth: 0
   },
   pointTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    lineHeight: 21
+    fontSize: 15,
+    lineHeight: 20
   },
   title: {
     flex: 1,

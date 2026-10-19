@@ -17,6 +17,9 @@ import { PrimaryButton } from "@/ui/PrimaryButton";
 import { ScreenList } from "@/ui/Screen";
 import { SelectionTabs } from "@/ui/SelectionTabs";
 import { StatusPill } from "@/ui/StatusPill";
+import { Rise } from "@/ui/motion";
+import { font } from "@/ui/typography";
+import { Ionicons } from "@expo/vector-icons";
 import { captureDataOwnerContext, assertDataOwnerContext } from '@/auth/dataOwnerContext';
 import { getPatrolDeviceContext } from '@/db/repositories/patrolContextRepository';
 
@@ -199,8 +202,8 @@ export function RequestBoardScreen() {
         </Card>
       ) : (
         <Card>
-          <Text style={[styles.title, { color: colors.text }]}>В этой вкладке пока пусто</Text>
-          <Text style={[styles.text, { color: colors.mutedText }]}>Потяните экран вниз для обновления или выберите другую вкладку.</Text>
+          <Text style={[font(800), styles.title, { color: colors.text }]}>В этой вкладке пока пусто</Text>
+          <Text style={[font(600), styles.text, { color: colors.mutedText }]}>Потяните экран вниз для обновления или выберите другую вкладку.</Text>
         </Card>
       )}
       renderItem={renderItem}
@@ -222,8 +225,8 @@ export function RequestBoardScreen() {
             onChange={value => { setActiveTab(value); const key = viewKey.current; const saved = key ? boardViews.get(key) : undefined; if (key && saved) { boardViews.set(key, { ...saved, tab: value, offset: 0 }); } listRef.current?.scrollToOffset({ offset: 0, animated: false }); }}
             value={activeTab}
           />
-          <TextInput accessibilityLabel="Найти маршрут или сотрудника" placeholder="Найти маршрут или сотрудника" value={query} onChangeText={value => { setQuery(value); const key = viewKey.current; const saved = key ? boardViews.get(key) : undefined; if (key && saved) { boardViews.set(key, { ...saved, query: value, offset: 0 }); } }} style={{ color: colors.text, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 14, minHeight: 48 }} />
-          <Text style={[styles.title, { color: colors.text }]}>{activeTab === "history" ? "История заявок" : activeTab === "inProgress" ? "Незавершённые обходы" : "Заявки на обход"}</Text>
+          <TextInput accessibilityLabel="Найти маршрут или сотрудника" placeholder="Найти маршрут или сотрудника" value={query} onChangeText={value => { setQuery(value); const key = viewKey.current; const saved = key ? boardViews.get(key) : undefined; if (key && saved) { boardViews.set(key, { ...saved, query: value, offset: 0 }); } }} style={{ color: colors.text, backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: 1, borderRadius: 16, paddingHorizontal: 16, minHeight: 50 }} />
+          <Text style={[font(800), styles.title, { color: colors.text }]}>{activeTab === "history" ? "История заявок" : activeTab === "inProgress" ? "Незавершённые обходы" : "Заявки на обход"}</Text>
 
         </>
       }
@@ -233,37 +236,60 @@ export function RequestBoardScreen() {
 
 function RequestCard({ item, onPress, busy, disabled, progressLabel }: { item: RequestBoardItem; onPress: () => void; busy: boolean; disabled: boolean; progressLabel?: string }) {
   const { colors } = useAppTheme();
+  const active = ['inProgress', 'paused'].includes(item.status);
+  const actionLabel = active ? 'Продолжить' : ['assigned', 'accepted', 'available'].includes(item.status) ? 'Начать обход' : 'Открыть результаты';
+  const actionIcon = active ? 'play-outline' : 'arrow-forward-outline';
+
+  if (progressLabel) {
+    const [done, total] = progressLabel.split(" из ").map(Number);
+    const share = total > 0 ? Math.min(1, Math.max(0, done / total)) : 0;
+    return (
+      <Rise>
+        <View style={[styles.hero, { backgroundColor: colors.accent, shadowColor: colors.accent }]}>
+          <View pointerEvents="none" style={[styles.heroBubble, { right: -40, bottom: -70, width: 190, height: 190 }]} />
+          <View pointerEvents="none" style={[styles.heroBubble, { right: 70, top: -50, width: 110, height: 110 }]} />
+          <View style={styles.heroChip}>
+            <View style={styles.heroDot} />
+            <Text style={[font(800), styles.heroChipText]}>Сейчас в работе</Text>
+          </View>
+          <View style={styles.row}>
+            <Text style={[font(800), styles.heroTitle]}>{item.routeName}</Text>
+            <Text style={[font(800), styles.heroCount]}>{progressLabel}</Text>
+          </View>
+          <Text style={[font(600), styles.heroText]}>{item.assignedFullName ?? "сотрудник не выбран"} · План: {formatDateTime(item.plannedStartAt)}</Text>
+          <View accessibilityLabel={`Пройдено ${progressLabel}`} style={styles.heroTrack}><View style={[styles.heroFill, { width: `${Math.round(share * 100)}%` }]} /></View>
+          <PrimaryButton variant="inverse" loading={busy} disabled={disabled} icon={actionIcon} label={actionLabel} onPress={onPress} />
+        </View>
+      </Rise>
+    );
+  }
 
   return (
-    <View>
+    <Rise>
       <Card style={styles.requestCard}>
-
-        <View style={[styles.requestContent, progressLabel ? { padding: 8 } : null]}>
-          <View style={styles.row}>
+        <View style={styles.requestContent}>
+          <View style={styles.cardTop}>
+            <View style={[styles.tile, { backgroundColor: colors.tile }]}><Ionicons name="git-branch-outline" size={21} color={colors.primary} /></View>
             <View style={styles.titleBox}>
-              {item.displayNumber && !progressLabel ? <Text style={[styles.displayNumber, { color: colors.mutedText }]}>{item.displayNumber}</Text> : null}
-              <Text style={[styles.title, { color: colors.text }]}>{item.routeName}</Text>
+              <Text style={[font(800), styles.title, { color: colors.text }]}>{item.routeName}</Text>
+              <Text style={[font(600), styles.text, { color: colors.mutedText }]}>{item.assignedFullName ?? "сотрудник не выбран"}</Text>
             </View>
             <StatusPill label={statusLabel(item.status)} tone={statusTone(item.status)} />
           </View>
-          <Text style={[styles.text, { color: colors.mutedText }]}>{item.assignedFullName ?? "сотрудник не выбран"}</Text>
-          <View style={styles.actionRow}>
-          <View style={{ flex: 1, minWidth: 100, gap: 6 }}>
-            {progressLabel ? <Text style={[styles.meta, { color: colors.primary }]}>{progressLabel}</Text> : null}
-            <Text style={[styles.meta, { color: colors.mutedText }]}>План: {formatDateTime(item.plannedStartAt)}</Text>
-          </View>
-          <View style={{ flexShrink: 1, maxWidth: "60%" }}>
-          <PrimaryButton variant={progressLabel ? "primary" : "ghost"} loading={busy} disabled={disabled} icon={['inProgress', 'paused'].includes(item.status) ? 'play-outline' : 'arrow-forward-outline'}
-            label={['inProgress', 'paused'].includes(item.status) ? 'Продолжить' : ['assigned', 'accepted', 'available'].includes(item.status) ? 'Начать обход' : 'Открыть результаты'}
-            onPress={onPress} />
-          </View>
+          <View style={[styles.actionRow, { borderTopColor: colors.cardBorder }]}>
+            <View style={{ flex: 1, minWidth: 100, gap: 2 }}>
+              <Text style={[font(700), styles.meta, { color: colors.mutedText }]}>План: {formatDateTime(item.plannedStartAt)}</Text>
+              {item.displayNumber ? <Text style={[font(600), styles.displayNumber, { color: colors.faintText }]}>№ {item.displayNumber}</Text> : null}
+            </View>
+            <View style={{ flexShrink: 1, maxWidth: "60%" }}>
+              <PrimaryButton variant="secondary" loading={busy} disabled={disabled} icon={actionIcon} label={actionLabel} onPress={onPress} />
+            </View>
           </View>
         </View>
       </Card>
-    </View>
+    </Rise>
   );
 }
-
 
 function statusLabel(status: string) {
   switch (status) {
@@ -319,72 +345,26 @@ function formatDateTime(value: string) {
 }
 
 const styles = StyleSheet.create({
-
-  actionRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8, justifyContent: "space-between" },
-  requestCard: {
-    overflow: "hidden",
-    padding: 0
-  },
-  requestContent: {
-    gap: 8,
-    padding: 14,
-    paddingLeft: 14
-  },
-  statusLine: {
-    bottom: 0,
-    left: 0,
-    position: "absolute",
-    top: 0,
-    width: 5
-  },
-  statusLineSuccess: {
-    backgroundColor: "#16a34a"
-  },
-  statusLineWarning: {
-    backgroundColor: "#f59e0b"
-  },
-  statusLineDanger: {
-    backgroundColor: "#ef4444"
-  },
-  statusLineNeutral: {
-    backgroundColor: "#64748b"
-  },
-  row: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    justifyContent: "space-between"
-  },
-  titleBox: {
-    flexGrow: 1,
-    flexBasis: "55%",
-    gap: 3
-  },
-  displayNumber: {
-    fontSize: 14,
-    fontWeight: "900"
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "800",
-    lineHeight: 23
-  },
-  text: {
-    fontSize: 14,
-    lineHeight: 20
-  },
-  metaRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between"
-  },
-  meta: {
-    fontSize: 14,
-    fontWeight: "800"
-  },
-  message: {
-    fontSize: 14,
-    lineHeight: 20
-  }
+  hero: { borderRadius: 24, gap: 12, overflow: "hidden", padding: 16, shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 8 },
+  heroBubble: { backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 999, position: "absolute" },
+  heroChip: { alignItems: "center", alignSelf: "flex-start", backgroundColor: "rgba(255,255,255,0.16)", borderRadius: 999, flexDirection: "row", gap: 6, paddingHorizontal: 10, paddingVertical: 4 },
+  heroDot: { backgroundColor: "#7dffc0", borderRadius: 3, height: 6, width: 6 },
+  heroChipText: { color: "#ffffff", fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase" },
+  heroTitle: { color: "#ffffff", flexShrink: 1, fontSize: 22, letterSpacing: -0.3, lineHeight: 28 },
+  heroCount: { color: "rgba(255,255,255,0.85)", fontSize: 14 },
+  heroText: { color: "rgba(255,255,255,0.8)", fontSize: 13, lineHeight: 18 },
+  heroTrack: { backgroundColor: "rgba(255,255,255,0.25)", borderRadius: 4, height: 8, overflow: "hidden" },
+  heroFill: { backgroundColor: "#ffffff", borderRadius: 4, height: 8 },
+  actionRow: { alignItems: "center", borderStyle: "dashed", borderTopWidth: 1, flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "space-between", paddingTop: 12 },
+  requestCard: { overflow: "hidden", padding: 0 },
+  requestContent: { gap: 12, padding: 14 },
+  cardTop: { alignItems: "center", flexDirection: "row", gap: 12 },
+  tile: { alignItems: "center", borderRadius: 14, height: 44, justifyContent: "center", width: 44 },
+  row: { alignItems: "baseline", flexDirection: "row", flexWrap: "wrap", gap: 10, justifyContent: "space-between" },
+  titleBox: { flex: 1, gap: 2, minWidth: 0 },
+  displayNumber: { fontSize: 12 },
+  title: { fontSize: 17, lineHeight: 22 },
+  text: { fontSize: 13, lineHeight: 18 },
+  meta: { fontSize: 13 },
+  message: { fontSize: 14, lineHeight: 20 }
 });

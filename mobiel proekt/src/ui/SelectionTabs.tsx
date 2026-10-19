@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import { useAppTheme } from "@/features/settings/themePreference";
+import { font } from "@/ui/typography";
 
 export type SelectionTab<T extends string> = {
   value: T;
@@ -41,7 +42,7 @@ export function SelectionTabs<T extends string>({
         styles.track,
         horizontal ? styles.scrollTrack : styles.fixedTrack,
         wrapped ? { flexWrap: "wrap" } : null,
-        { backgroundColor: colors.backgroundAccent, borderColor: colors.border }
+        { backgroundColor: colors.card, borderColor: colors.cardBorder }
       ]}
     >
       {items.map((item) => (
@@ -132,7 +133,7 @@ function SelectionTabButton<T extends string>({
     >
       <Animated.View
         pointerEvents="none"
-        style={[styles.selectedBackground, { backgroundColor: colors.card }, animatedStyle]}
+        style={[styles.selectedBackground, { backgroundColor: colors.backgroundAccent }, animatedStyle]}
       />
       <View style={[styles.labelRow, compact ? styles.labelRowCompact : null, compact && stretch ? styles.stackedLabelRow : null]}>
         {item.icon ? (
@@ -141,6 +142,7 @@ function SelectionTabButton<T extends string>({
         <Text
           style={[
             styles.label,
+            font(800),
             compact ? styles.labelCompact : null,
             { color: selected ? colors.primary : colors.mutedText }
           ]}
@@ -148,8 +150,8 @@ function SelectionTabButton<T extends string>({
           {item.label}
         </Text>
         {typeof item.count === "number" ? (
-          <View style={[styles.countBadge, { backgroundColor: selected ? colors.primary : colors.border }]}>
-            <Text style={[styles.countText, compact ? styles.countTextCompact : null, { color: selected ? colors.onPrimary : colors.text }]}>{item.count}</Text>
+          <View style={[styles.countBadge, { backgroundColor: selected ? colors.accent : colors.backgroundAccent }]}>
+            <Text style={[styles.countText, font(800), compact ? styles.countTextCompact : null, { color: selected ? colors.onAccent : colors.mutedText }]}>{item.count}</Text>
           </View>
         ) : null}
       </View>
@@ -210,7 +212,8 @@ const styles = StyleSheet.create({
     flex: 1
   },
   buttonPressed: {
-    opacity: 0.82
+    opacity: 0.85,
+    transform: [{ scale: 0.97 }]
   },
   selectedBackground: {
     ...StyleSheet.absoluteFill,
@@ -236,8 +239,7 @@ const styles = StyleSheet.create({
   label: {
     flexShrink: 1,
     textAlign: "center",
-    fontSize: 14,
-    fontWeight: "800"
+    fontSize: 14
   },
   labelCompact: {
     fontSize: 13
@@ -252,9 +254,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6
   },
   countText: {
-    fontSize: 14,
-    fontWeight: "900",
-    lineHeight: 20
+    fontSize: 12,
+    lineHeight: 18
   },
   countTextCompact: {
     fontSize: 12,
