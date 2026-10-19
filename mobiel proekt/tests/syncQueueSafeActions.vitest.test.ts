@@ -2,7 +2,7 @@ import { SyncQueueScreen } from '@/features/syncQueue/SyncQueueScreen';
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-const s = vi.hoisted(() => ({ sync: vi.fn(), accept: vi.fn(), cancel: vi.fn(), retryFile: vi.fn(), commands: [] as any[], files: [] as any[] }));
+const s = vi.hoisted(() => ({ canAccept: vi.fn(), sync: vi.fn(), accept: vi.fn(), cancel: vi.fn(), retryFile: vi.fn(), commands: [] as any[], files: [] as any[] }));
 vi.mock('react-native', () => ({ Text: 'Text', View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', StyleSheet: { create: (x: any) => x } }));
 vi.mock('@expo/vector-icons', () => ({ Ionicons: 'Icon' }));
 vi.mock('expo-router', async () => { const R = await import('react'); return { useRouter: () => ({ push: vi.fn() }), useFocusEffect: (fn: any) => R.useEffect(fn, [fn]) }; });
@@ -15,7 +15,7 @@ vi.mock('@/sync/syncTriggers', () => ({ requestMobileDataRefresh: vi.fn(), trigg
 vi.mock('@/sync/syncEvents', () => ({ subscribeToSyncEvents: () => () => {} }));
 vi.mock('@/services/mobileErrorReporter', () => ({ logMobileError: vi.fn() }));
 vi.mock('@/services/patrolContinuationService', () => ({ continuePatrolWithReconciliation: vi.fn() }));
-vi.mock('@/services/conflictResolutionService', () => ({ acceptServerConflict: s.accept, canAcceptServerConflict: () => true, cancelRejectedCommand: s.cancel, retryConflictWithLatestRevision: vi.fn(), sendConflictToDispatcher: vi.fn() }));
+vi.mock('@/services/conflictResolutionService', () => ({ acceptServerConflict: s.accept, canAcceptServerConflict: s.canAccept, cancelRejectedCommand: s.cancel, retryConflictWithLatestRevision: vi.fn(), sendConflictToDispatcher: vi.fn() }));
 vi.mock('@/ui/Card', () => ({ Card: 'Card' }));
 vi.mock('@/ui/Screen', () => ({ Screen: 'Screen' }));
 vi.mock('@/ui/PrimaryButton', () => ({ PrimaryButton: 'PrimaryButton' }));
@@ -30,6 +30,7 @@ const mount = async () => { await act(async () => { screen = create(React.create
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   s.sync.mockReset().mockResolvedValue({ skipped: null }); s.accept.mockReset().mockResolvedValue(undefined); s.cancel.mockReset().mockResolvedValue(undefined); s.retryFile.mockReset().mockResolvedValue({ reactivatedCommands: 1 });
+  s.canAccept.mockReset().mockReturnValue(true);
   s.commands = []; s.files = [];
 });
 afterEach(async () => { await act(() => screen?.unmount()); });
@@ -90,4 +91,30 @@ it('queue tiles take their colours from the theme', async () => {
   expect(metaViews.length).toBeGreaterThan(0);
   const error = screen.root.findAllByType('Text' as any).find(node => node.children.includes('gave up'))!;
   expect(error.props.style).toEqual(expect.arrayContaining([expect.objectContaining({ backgroundColor: 'warn-bg', color: 'warn' })]));
+});
+
+it('offers the server state only for conflicts the conflict service says it can resolve', async () => {
+  s.canAccept.mockImplementation((command: any) => command.entityType === 'patrolAssignment');
+  s.commands = [{ ...base, clientOperationId: 'point-op', commandType: 'savePatrolPointResult', entityType: 'patrolPoint', entityLocalId: 'p-1', status: 'conflict', assignmentRouteName: 'Помол' }];
+  await mount();
+  expect(s.canAccept).toHaveBeenCalledWith(expect.objectContaining({ clientOperationId: 'point-op' }));
+  expect(button('Принять состояние сервера')).toBeUndefined();
+  expect(button('Передать диспетчеру')).toBeDefined();
+});
+
+it('labels a report by its route and counts only real problems as needing a check', async () => {
+  s.commands = [
+    { ...base, clientOperationId: 'report', commandType: 'completePatrolAssignment', entityType: 'patrolAssignment', entityLocalId: 'a-1', status: 'retryLater', lastError: 'Сервер не ответил', assignmentRouteName: 'Помол' },
+    { ...base, clientOperationId: 'start', commandType: 'startPatrolAssignment', entityType: 'patrolAssignment', entityLocalId: 'a-2', status: 'pending', lastError: 'Временная ошибка', assignmentRouteName: 'Дробление' }
+  ];
+  await mount();
+  const visible = texts();
+  expect(visible).toMatch(/Отчёт\s+Помол/);
+  expect(visible).toMatch(/Маршрут\s+Дробление/);
+  expect(visible).not.toContain('Требуют проверки');
+
+  s.commands = [{ ...s.commands[0], status: 'rejected' }];
+  await act(async () => screen.unmount());
+  await mount();
+  expect(texts()).toMatch(/Требуют проверки:\s*1\b/);
 });

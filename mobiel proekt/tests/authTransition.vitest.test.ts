@@ -58,7 +58,7 @@ vi.mock("@/db/repositories/bootstrapRepository", () => ({
 vi.mock("@/db/repositories/mobileActionLogRepository", () => ({ logMobileAction: vi.fn(async () => undefined) }));
 vi.mock("@/db/repositories/logoutQueueRepository", () => ({ completePendingLogoutIntents: vi.fn(), enqueueLogoutIntent: vi.fn(), getPendingLogoutContourId: vi.fn(async () => undefined) }));
 vi.mock("@/services/notificationService", () => ({ registerPushNotifications: vi.fn(async () => null), syncMobileNotifications: vi.fn(async () => []) }));
-vi.mock("@/services/workTaskService", () => ({ syncWorkItems: vi.fn(async () => []) }));
+vi.mock("@/services/workTaskService", () => ({ syncWorkItems: vi.fn(async () => []), syncWorkTasks: vi.fn(async () => []) }));
 vi.mock("@/sync/syncTriggers", () => ({ triggerForegroundSyncWithRetry: vi.fn() }));
 vi.mock("@/sync/outboxRetryScheduler", () => ({ cancelNextOutboxRetry: vi.fn(), scheduleNextOutboxRetry: vi.fn(async (owner) => { state.retryOwner = owner; }) }));
 vi.mock("@/core/environments", () => ({ currentContourId: "test-contour" }));
@@ -67,6 +67,7 @@ vi.mock("@/auth/rememberedCredentials", () => ({ wipeRememberedCredentials: vi.f
 import { restoreSessionWithRefreshToken, signIn, signOut } from "@/auth/authService";
 import { login } from "@/api/authApi";
 import { getBootstrap } from "@/api/mobileApi";
+import { syncWorkItems, syncWorkTasks } from "@/services/workTaskService";
 
 beforeEach(() => {
   state.blockingCount = 0; state.replacementCommitted = false; state.pendingTarget = null;
@@ -163,5 +164,17 @@ describe("remembered credentials lifecycle", () => {
     state.blockingCount = 0;
     await signOut();
     expect(state.wipes).toBe(1);
+  });
+});
+
+describe("work items after authorization", () => {
+  it("sign-in and refresh recovery download work items through the v2 work item sync", async () => {
+    vi.mocked(syncWorkItems).mockClear(); vi.mocked(syncWorkTasks).mockClear();
+    await signIn("new", "password");
+    expect(syncWorkItems).toHaveBeenCalledWith();
+    vi.mocked(syncWorkItems).mockClear();
+    await restoreSessionWithRefreshToken();
+    expect(syncWorkItems).toHaveBeenCalledWith();
+    expect(syncWorkTasks).not.toHaveBeenCalled();
   });
 });

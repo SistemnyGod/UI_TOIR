@@ -90,6 +90,7 @@ import { ScanQrScreen } from '@/features/patrol/ScanQrScreen';
 import { ScanMessage } from '@/features/patrol/ScanPresentation';
 import { holdStillHint } from '@/features/patrol/scanOutcome';
 import { scanVibrationPatterns } from '@/services/scanFeedback';
+import { requestPatrolSync } from '@/sync/PatrolSyncCoordinator';
 
 const gate = { pointId: 'gate', name: 'Ворота', orderIndex: 1 };
 const store = { pointId: 'store', name: 'Склад', orderIndex: 2 };
@@ -398,4 +399,32 @@ it('releases the keep-awake lock on unmount, and a failing lock does not break s
   await act(async () => screen!.unmount());
   screen = undefined;
   expect(state.deactivate).toHaveBeenCalledWith('patrol-scan-nfc');
+});
+
+it('NFC: arms the reader on opening without a scan button and stops it when the screen is left', async () => {
+  await mount(ScanNfcScreen);
+  expect(state.startReader).toHaveBeenCalledOnce();
+  expect(buttons().some(node => /Сканировать/.test(node.props.label))).toBe(false);
+  await act(async () => state.blur());
+  expect(state.stopReader).toHaveBeenCalled();
+});
+
+it('NFC: every code of the tag (NDEF text and UID) is matched against the route', async () => {
+  state.codes = ['POINT-7', '04D4E5F6'];
+  state.scanNfc.mockResolvedValue({ matched: true, point: { ...gate, status: 'scanned' } });
+  await mount(ScanNfcScreen);
+  await tapTag();
+  expect(state.scanNfc).toHaveBeenCalledExactlyOnceWith('a1', ['POINT-7', '04D4E5F6']);
+});
+
+it('NFC: a scan refused by the patrol status stops the reader and asks for a sync instead of showing an error', async () => {
+  state.scanNfc.mockRejectedValue(new Error('Действие заблокировано текущим статусом назначения.'));
+  await mount(ScanNfcScreen);
+  state.stopReader.mockClear();
+  await tapTag();
+  expect(scanMessage()).toMatchObject({ message: 'Запуск обхода временно восстанавливается' });
+  expect(scanMessage().tone).not.toBe('error');
+  expect(state.stopReader).toHaveBeenCalled();
+  expect(requestPatrolSync).toHaveBeenCalledWith({ mode: 'normal' });
+  expect(state.vibrate).not.toHaveBeenCalledWith(scanVibrationPatterns.readError);
 });

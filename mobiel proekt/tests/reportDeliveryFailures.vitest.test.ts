@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-import { openRealDatabase } from './support/realDatabase';
+import { openRealDatabase, selectAll } from './support/realDatabase';
 
 // How the real sync engine and outbox treat failed report deliveries, on the
 // real schema and real session storage (network mocked):
@@ -10,11 +10,12 @@ import { openRealDatabase } from './support/realDatabase';
 // - a reconnect forgets cached health failures, probes fast and revives
 //   unexplained failures, but never a server rate limit or a terminal 4xx;
 // - an expired session parks the report and a new sign-in resumes it;
-// - "patrol not in progress" is retried only as a short ordering race.
+// - "patrol not in progress" is retried only as a short ordering race;
+// - an attachment upload that finds no network parks the whole queue for the network.
 vi.mock('expo-sqlite', () => ({}));
 const s = vi.hoisted(() => ({
   values: new Map<string, string>(), uuid: 0, online: true,
-  health: vi.fn(), post: vi.fn(), fetch: vi.fn(), invalidateFailures: vi.fn()
+  health: vi.fn(), post: vi.fn(), upload: vi.fn(), fetch: vi.fn(), invalidateFailures: vi.fn()
 }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => `uuid-${++s.uuid}` }));
 vi.mock('expo-secure-store', () => ({
@@ -29,7 +30,7 @@ vi.mock('@/core/serverSettings', () => ({ getMobileRuntimeConfig: async () => ({
 vi.mock('@/core/connectionStateEvents', () => ({ getMobileConnectionContextGeneration: () => 1, invalidateMobileConnectionContext: vi.fn(), recordMobileConnectionOutcome: vi.fn() }));
 vi.mock('@/api/serverHealthApi', () => ({ invalidateServerHealthFailures: s.invalidateFailures, checkServerConnection: s.health, probeServerHealthCached: async () => ({ ok: true }), invalidateServerHealthCache: vi.fn() }));
 vi.mock('@/api/mobileApi', () => ({ postOutbox: s.post, getOutboxResult: async () => null }));
-vi.mock('@/api/fileApi', () => ({ uploadMobileFile: vi.fn() }));
+vi.mock('@/api/fileApi', () => ({ uploadMobileFile: s.upload }));
 vi.mock('@/sync/mutationSyncRequest', () => ({ requestSyncAfterMutation: vi.fn() }));
 vi.mock('@/sync/outboxRetryScheduler', () => ({ scheduleNextOutboxRetry: async () => {}, registerOutboxRetrySchedulerRunner: vi.fn() }));
 vi.mock('@/services/fileStorageService', () => ({ deletePatrolPhotoDirectory: vi.fn(), deleteOrphanPatrolPhotos: vi.fn(), getLocalFileInfo: vi.fn() }));
@@ -55,7 +56,7 @@ beforeEach(async () => {
   vi.resetModules();
   s.values.clear(); s.uuid = 0; s.online = true;
   s.health.mockReset().mockResolvedValue({ ok: true });
-  s.invalidateFailures.mockReset();
+  s.invalidateFailures.mockReset(); s.upload.mockReset();
   s.post.mockReset().mockImplementation(async (commands: { clientOperationId: string }[]) =>
     commands.map(command => ({ clientOperationId: command.clientOperationId, status: 'accepted', serverEntityId: null, message: '', serverRevision: null, conflictId: null, retryAfterSeconds: null })));
   s.fetch.mockReset(); vi.stubGlobal('fetch', s.fetch);
@@ -231,4 +232,50 @@ it('"patrol not in progress" is retried as an ordering race only a few times, th
   expect(await getReportDeliveryState('alice', 'a')).toMatchObject({ status: 'repairRequired' });
   const conflicts = raw.prepare("SELECT status FROM sync_conflicts WHERE client_operation_id = 'report'").all();
   expect(conflicts).toEqual([{ status: 'open' }]);
+});
+
+it('a photo upload that finds no network stops the pass: the report and the rest of the queue wait for the network', async () => {
+  seedReport();
+  const payload = JSON.parse(reportPayload);
+  payload.pointResults[0].photoClientFileIds = ['photo-1'];
+  raw.prepare("UPDATE outbox_commands SET payload_json = ? WHERE client_operation_id = 'report'").run(JSON.stringify(payload));
+  raw.prepare(`INSERT INTO files(client_file_id, owner_user_id, contour_id, local_path, status, sha256, size_bytes, content_type, media_kind,
+      assignment_id, point_id, created_at_local) VALUES ('photo-1', 'alice', 'test', 'file:///photo-1.jpg', 'localOnly', 'hash', 100, 'image/jpeg', 'photo', 'a', 'p1', ?)`).run(stamp);
+  raw.prepare(`INSERT INTO outbox_commands(client_operation_id, owner_user_id, contour_id, command_type, entity_type, entity_local_id,
+      payload_json, created_at_local, status, attempt_count, aggregate_key, sequence_no)
+    VALUES ('other', 'alice', 'test', 'createShiftRemark', 'shiftRemark', 'r1', '{"remarkId":"r1","text":"x","mediaClientFileIds":[]}', '2026-10-20', 'pending', 0, 'shiftRemark:r1', 1)`).run();
+  const { MobileNetworkError } = await import('@/api/networkTimeout');
+  s.upload.mockRejectedValueOnce(new MobileNetworkError('offline', null, 'Нет сети.'));
+  const { runForegroundSync } = await import('@/sync/syncEngine');
+
+  // The pass ends with the network error itself, so callers see "offline", not a generic failure.
+  await expect(runForegroundSync()).rejects.toMatchObject({ name: 'MobileNetworkError', kind: 'offline' });
+
+  expect(s.upload).toHaveBeenCalledOnce();
+  expect(s.post).not.toHaveBeenCalled();
+  expect(report().status).toBe('waiting_network');
+  expect(raw.prepare("SELECT status FROM files WHERE client_file_id = 'photo-1'").get()).toEqual({ status: 'retryLater' });
+  expect(raw.prepare("SELECT status FROM outbox_commands WHERE client_operation_id = 'other'").get()).toEqual({ status: 'waiting_network' });
+});
+
+it('a sync pass revives legacy-rejected start and point commands and sends them in their original order', async () => {
+  raw.prepare(`INSERT INTO patrol_request_board(request_id, owner_user_id, route_id, route_name, planned_start_at, status, revision)
+    VALUES ('request-a', 'alice', 'route', 'Route', '2026-10-19', 'inProgress', 1)`).run();
+  raw.prepare(`INSERT INTO patrol_assignments(assignment_id, owner_user_id, contour_id, request_id, route_id, status, revision)
+    VALUES ('a', 'alice', 'test', 'request-a', 'route', 'syncError', 1)`).run();
+  const insert = raw.prepare(`INSERT INTO outbox_commands(client_operation_id, owner_user_id, contour_id, command_type, entity_type, entity_local_id,
+      payload_json, created_at_local, status, last_error, aggregate_key, sequence_no)
+    VALUES (?, 'alice', 'test', ?, ?, ?, ?, '2026-10-19', 'rejected', ?, 'patrolAssignment:a', ?)`);
+  insert.run('start', 'startPatrolAssignment', 'patrolAssignment', 'a', JSON.stringify({ assignmentId: 'a', startedAtLocal: stamp }), 'Only an accepted patrol assignment can be started.', 1);
+  insert.run('scan', 'scanPatrolPointNfc', 'patrolPoint', 'p1', JSON.stringify({ assignmentId: 'a', pointId: 'p1', nfcUidHash: '04A1B2C3', scannedAtLocal: stamp }),
+    'Patrol point actions are allowed only while patrol is in progress.', 2);
+  const { runForegroundSync } = await import('@/sync/syncEngine');
+
+  await runForegroundSync();
+
+  expect(s.post.mock.calls.flatMap(([commands]) => commands.map((command: { clientOperationId: string }) => command.clientOperationId))).toEqual(['start', 'scan']);
+  expect(selectAll(raw, 'SELECT client_operation_id AS id, status, sequence_no AS seq FROM outbox_commands ORDER BY seq')).toEqual([
+    { id: 'start', status: 'accepted', seq: 1 },
+    { id: 'scan', status: 'accepted', seq: 2 }
+  ]);
 });

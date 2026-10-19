@@ -144,3 +144,13 @@ it('a free-order route still confirms any point of the route directly', async ()
 
   expect(await scan('qr', 'qr-store')).toMatchObject({ kind: 'confirmed', point: { pointId: 'store' } });
 });
+
+it('a tag whose NDEF text matches no point is still confirmed by its physical UID', async () => {
+  seedStrictRoute();
+  const patrol = await import('@/db/repositories/patrolRepository');
+
+  const result = await patrol.scanPointByNfc('assignment', ['ANOTHER-TEXT', '04a1b2c3']);
+
+  expect(result).toMatchObject({ matched: true, point: { pointId: 'gate' } });
+  expect(writes().commands).toEqual([{ command_type: 'scanPatrolPointNfc', entity_local_id: 'gate' }]);
+});
