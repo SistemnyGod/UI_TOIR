@@ -9,7 +9,7 @@ const state = vi.hoisted(() => ({
   preventRemove: null as null | ((event: any) => void), appState: null as null | ((value: string) => void),
   dispatch: vi.fn(), push: vi.fn(), replace: vi.fn(), back: vi.fn(),
   saveDraft: vi.fn(), saveOk: vi.fn(), saveIssue: vi.fn(), skip: vi.fn(), camera: vi.fn(), gallery: vi.fn(), readiness: vi.fn(), load: vi.fn(), getPoint: vi.fn(), fileReads: 0,
-  scanPolicy: { nfcEnabled: true, qrFallbackEnabled: true }, series: vi.fn(), deleteFile: vi.fn(), replacePhoto: vi.fn(), editBlocks: {} as Record<string, string>,
+  scanPolicy: { nfcEnabled: true, qrFallbackEnabled: true }, speech: null as any, series: vi.fn(), deleteFile: vi.fn(), replacePhoto: vi.fn(), editBlocks: {} as Record<string, string>,
 }));
 vi.mock('expo-router', async () => {
   const R = await import('react');
@@ -67,6 +67,11 @@ vi.mock('@/services/mobileErrorReporter', () => ({ logMobileError: vi.fn() }));
 vi.mock('@/services/mediaAttachmentService', () => ({ attachPointPhotoFromCamera: state.camera,
   attachPointVideoFromCamera: vi.fn(), attachPointMediaFromGallery: state.gallery,
   attachPointPhotoSeriesFromCamera: state.series, deletePointAttachmentFile: state.deleteFile, replacePointPhotoFromCamera: state.replacePhoto }));
+// Dictation hints and recognizer choice are covered in pointVoiceDictation.vitest.test.ts.
+vi.mock('@/services/speechRecognitionService', () => ({ isSpeechRecognitionAvailable: () => true, requestSpeechMicrophonePermission: async () => ({ granted: true, canAskAgain: true }),
+  listOfflineSpeechLocales: async () => ['ru-RU'], startSpeechRecognition: (_options: unknown, handlers: any) => { state.speech = handlers; return () => undefined; },
+  stopSpeechRecognition: vi.fn(), abortSpeechRecognition: vi.fn() }));
+vi.mock('@/core/network', () => ({ hasUsableNetwork: async () => true }));
 vi.mock('@/db/repositories/filesRepository', () => ({ listPointFiles: async () => { state.fileReads++; return state.files; } }));
 // The mounted screen and draft controller are real. Repository boundaries are
 // controlled here; SQLite records draft writes and lets tests delay/fail storage.
@@ -175,6 +180,19 @@ it('changing result preserves comments and attachments, and creates a result onl
   expect(state.saveIssue).toHaveBeenCalledTimes(1);
   expect(state.saveIssue).toHaveBeenCalledWith('assignment', 'point', 'Последние символы', 'Неисправность');
   expect(state.replace).toHaveBeenCalledWith('/patrol/assignment/assignment/scan-nfc');
+});
+
+it('a dictated phrase is appended to the newest comment and autosaved with the draft', async () => {
+  await mount();
+  await choose('Неисправно');
+  await act(async () => { comment().props.onChangeText('Фланец:'); });
+  await act(async () => { screen!.root.findByProps({ testID: 'point-comment-voice' }).props.onPress(); });
+  await act(async () => { state.speech.onStart(); comment().props.onChangeText('Фланец насоса:'); });
+  await act(async () => { state.speech.onResult('течь масла', true); state.speech.onEnd(); });
+  expect(comment().props.value).toBe('Фланец насоса: течь масла');
+  await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+  expect(draft()).toMatchObject({ selectedStatus: 'issue', comment: 'Фланец насоса: течь масла' });
+  expect(state.saveIssue).not.toHaveBeenCalled();
 });
 
 it('validation requires a comment but accepts an old required-photo point without attachments', async () => {

@@ -82,8 +82,10 @@ const androidConfig = {
     // handed to the system installer (expo-file-system FileProvider).
     "android.permission.REQUEST_INSTALL_PACKAGES"
   ],
+  // RECORD_AUDIO is requested at runtime only for dictating a point
+  // description (expo-speech-recognition). Video is recorded by the system
+  // camera app, and expo-camera keeps recordAudioAndroid: false.
   blockedPermissions: [
-    "android.permission.RECORD_AUDIO",
     "android.permission.SYSTEM_ALERT_WINDOW"
   ]
 };
@@ -294,6 +296,15 @@ module.exports = {
         {
           cameraPermission: "Камера нужна для фото- и видеофиксации обходов и замечаний.",
           photosPermission: "Галерея нужна для выбора фото и видео к обходам и замечаниям."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          microphonePermission: "Микрофон нужен, чтобы диктовать описание результата осмотра.",
+          speechRecognitionPermission: "Распознавание речи нужно, чтобы диктовать описание результата осмотра.",
+          // Speech Services by Google (on-device packs), Google TTS and the Google app.
+          androidSpeechServicePackages: ["com.google.android.as", "com.google.android.tts", "com.google.android.googlequicksearchbox"]
         }
       ]
     ],
