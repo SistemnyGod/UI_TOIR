@@ -8,7 +8,8 @@ const state = vi.hoisted(() => ({
   failEnvelope: false,
   failCleanup: false,
   restoredOldSession: false
-  , retryOwner: undefined as string | null | undefined
+  , retryOwner: undefined as string | null | undefined,
+  wipes: 0
 }));
 
 vi.mock("@/api/authApi", () => ({
@@ -61,15 +62,16 @@ vi.mock("@/services/workTaskService", () => ({ syncWorkItems: vi.fn(async () => 
 vi.mock("@/sync/syncTriggers", () => ({ triggerForegroundSyncWithRetry: vi.fn() }));
 vi.mock("@/sync/outboxRetryScheduler", () => ({ cancelNextOutboxRetry: vi.fn(), scheduleNextOutboxRetry: vi.fn(async (owner) => { state.retryOwner = owner; }) }));
 vi.mock("@/core/environments", () => ({ currentContourId: "test-contour" }));
+vi.mock("@/auth/rememberedCredentials", () => ({ wipeRememberedCredentials: vi.fn(async () => { state.wipes += 1; }) }));
 
-import { restoreSessionWithRefreshToken, signIn } from "@/auth/authService";
+import { restoreSessionWithRefreshToken, signIn, signOut } from "@/auth/authService";
 import { login } from "@/api/authApi";
 import { getBootstrap } from "@/api/mobileApi";
 
 beforeEach(() => {
   state.blockingCount = 0; state.replacementCommitted = false; state.pendingTarget = null;
   state.envelopeOwner = "old-user"; state.failEnvelope = false; state.failCleanup = false; state.restoredOldSession = false;
-  state.retryOwner = undefined;
+  state.retryOwner = undefined; state.wipes = 0;
 });
 
 describe("durable account transition", () => {
@@ -134,5 +136,32 @@ describe("durable account transition", () => {
     expect(state.replacementCommitted).toBe(false);
     expect(state.envelopeOwner).toBe("old-user");
     await expect(signIn("new", "password")).resolves.toBeTruthy();
+  });
+});
+
+describe("remembered credentials lifecycle", () => {
+  it("wipes the saved pair when another account replaces local data", async () => {
+    await expect(signIn("new", "password")).resolves.toBeTruthy();
+    expect(state.wipes).toBe(1);
+  });
+
+  it("keeps the saved pair when the same account signs in again", async () => {
+    state.envelopeOwner = "new-user";
+    await expect(signIn("new", "password")).resolves.toBeTruthy();
+    expect(state.wipes).toBe(0);
+  });
+
+  it("wipes the saved pair when refresh recovery switches the account", async () => {
+    await expect(restoreSessionWithRefreshToken()).resolves.toBeTruthy();
+    expect(state.wipes).toBe(1);
+  });
+
+  it("wipes the saved pair on sign-out but not when sign-out is refused", async () => {
+    state.blockingCount = 1;
+    await expect(signOut()).rejects.toThrow("Нельзя выйти");
+    expect(state.wipes).toBe(0);
+    state.blockingCount = 0;
+    await signOut();
+    expect(state.wipes).toBe(1);
   });
 });

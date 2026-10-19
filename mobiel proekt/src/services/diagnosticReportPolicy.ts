@@ -48,3 +48,9 @@ export function truncateDiagnosticValue(value: string, maxLength: number) {
 function truncate(value: string, maxLength: number) {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`;
 }
+
+/** A 4xx other than auth, timeout or rate limit means resending the same report cannot succeed. */
+export function isPermanentDiagnosticRejection(error: unknown) {
+  const status = typeof error === "object" && error !== null && "status" in error ? (error as { status?: unknown }).status : null;
+  return typeof status === "number" && status >= 400 && status < 500 && status !== 401 && status !== 408 && status !== 429;
+}

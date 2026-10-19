@@ -178,7 +178,7 @@ export function DiagnosticsSettingsScreen() {
                 </Text>
                 {report.lastError ? <Text style={styles.errorText}>{report.lastError}</Text> : null}
               </View>
-              <StatusPill label={report.status === "sent" ? "Отправлен" : "Ждёт"} tone={report.status === "sent" ? "success" : "warning"} />
+              <StatusPill label={report.status === "sent" ? "Отправлен" : report.status === "abandoned" ? "Не отправлен" : "Ждёт"} tone={report.status === "sent" ? "success" : report.status === "abandoned" ? "danger" : "warning"} />
             </View>
           </View>
         ))}

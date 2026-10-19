@@ -10,7 +10,7 @@ vi.mock('@/db/repositories/patrolRepository', () => ({ attachPhotoToPoint: s.att
 vi.mock('@/db/repositories/shiftRemarkRepository', () => ({ attachMediaToShiftRemark: vi.fn() }));
 vi.mock('@/db/repositories/workTaskRepository', () => ({ attachMediaToWorkTask: vi.fn() }));
 vi.mock('@/sync/mutationSyncRequest', () => ({ requestSyncAfterMutation: vi.fn() }));
-vi.mock('@/services/fileStorageService', () => ({ hasEnoughStorageForPhoto: async () => true, assertStorageForMedia: async () => {}, getLocalFileInfo: async () => ({ exists: true, size: 100 }) }));
+vi.mock('@/services/fileStorageService', () => ({ deleteOwnedTemporaryMedia: async () => {}, hasEnoughStorageForPhoto: async () => true, assertStorageForMedia: async () => {}, getLocalFileInfo: async () => ({ exists: true, size: 100 }) }));
 vi.mock('@/sync/fileUploadQueue', () => {
   const prepare = async (input: any) => {
     input.onProgress?.({ processedBytes: 50, totalBytes: 100, progress: 0.5 });

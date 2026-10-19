@@ -36,3 +36,15 @@ export function subscribeToMobileConnectionOutcomes(listener: (event: MobileConn
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
+
+const reachabilityListeners = new Set<() => void>();
+
+/** Raised once when the server answers again after it was unreachable on a usable network. */
+export function publishServerReachabilityRestored() {
+  reachabilityListeners.forEach((listener) => listener());
+}
+
+export function subscribeToServerReachabilityRestored(listener: () => void) {
+  reachabilityListeners.add(listener);
+  return () => { reachabilityListeners.delete(listener); };
+}

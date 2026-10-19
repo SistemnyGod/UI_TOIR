@@ -14,6 +14,7 @@ vi.mock('expo-file-system/legacy', () => ({
   createUploadTask: (url: string, path: string, options: any) => { s.calls.push({ url, path, options }); return { uploadAsync: s.upload, cancelAsync: s.cancel }; }
 }));
 import { uploadMobileFile } from '@/api/fileApi';
+import { FileUploadHttpError, getFileUploadFailureDisposition } from '@/domain/files/fileUploadPolicy';
 const file = { clientFileId: '11111111-1111-4111-8111-111111111111', ownerUserId: 'alice', contourId: 'test', assignmentId: 'assignment', pointId: 'point', localPath: 'file:///photo.jpg', sizeBytes: 100, sha256: 'hash', contentType: 'image/jpeg', mediaKind: 'photo', createdAtLocal: '2026-09-29T00:00:00Z', status: 'queued' } as const;
 beforeEach(() => { s.generation = 1; s.calls = []; s.urls = ['https://test']; s.size = 100; s.upload.mockReset(); s.cancel.mockReset().mockResolvedValue(undefined); s.health.mockReset().mockResolvedValue({ ok: true }); s.refresh.mockReset().mockResolvedValue('alice-new-token'); });
 afterEach(() => vi.useRealTimers());
@@ -66,4 +67,15 @@ it('changed file size is rejected locally before the multipart request', async (
   s.size = 120;
   await expect(uploadMobileFile(file)).rejects.toThrow(/размер/i);
   expect(s.calls).toHaveLength(0);
+});
+it('a 401 after a successful refresh is a retryable HTTP failure, not a permanent rejection', async () => {
+  s.upload.mockResolvedValue({ status: 401, body: '' });
+  const error = await uploadMobileFile(file).catch(caught => caught);
+  expect(error).toBeInstanceOf(FileUploadHttpError); expect(error.status).toBe(401);
+  expect(getFileUploadFailureDisposition(error, 1)).toBe('retryLater');
+});
+it('a non-JSON upload response is retryable within the attempt cap', async () => {
+  s.upload.mockResolvedValue({ status: 200, body: '<html>proxy</html>' });
+  const error = await uploadMobileFile(file).catch(caught => caught);
+  expect(getFileUploadFailureDisposition(error, 1)).toBe('retryLater');
 });

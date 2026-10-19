@@ -6,7 +6,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
-import { listSyncQueueFiles, SyncQueueFileItem } from "@/db/repositories/filesRepository";
+import { listSyncQueueFiles, retryFailedFileUpload, SyncQueueFileItem } from "@/db/repositories/filesRepository";
 import { listSyncQueueCommands, SyncQueueCommandItem } from "@/db/repositories/outboxRepository";
 import { continuePatrolWithReconciliation } from "@/services/patrolContinuationService";
 import { useAppTheme } from "@/features/settings/themePreference";
@@ -16,6 +16,8 @@ import { requestMobileDataRefresh, triggerForegroundSyncWithRetry } from "@/sync
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
 import { retainEqualItems } from "@/sync/retainEqualItems";
 import { acceptServerConflict, canAcceptServerConflict, cancelRejectedCommand, retryConflictWithLatestRevision, sendConflictToDispatcher } from "@/services/conflictResolutionService";
+import { ActionSheet } from "@/ui/ActionSheet";
+import type { ThemeColors } from "@/ui/atomTheme";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -25,6 +27,9 @@ type SyncQueueState = {
   commands: SyncQueueCommandItem[];
   files: SyncQueueFileItem[];
 };
+
+type CommandResolution = "serverWins" | "dispatcher" | "retryRevision" | "cancelRejected" | "continueSwitch";
+type DestructiveResolution = Extract<CommandResolution, "serverWins" | "cancelRejected">;
 
 export function SyncQueueScreen() {
   const router = useRouter();
@@ -36,7 +41,9 @@ export function SyncQueueScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedErrorId, setExpandedErrorId] = useState<string | null>(null);
   const [actionInProgressId, setActionInProgressId] = useState<string | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<{ command: SyncQueueCommandItem; action: DestructiveResolution } | null>(null);
   const retryInFlight = useRef(false);
+  const fileRetryInFlight = useRef(false);
 
   const readQueue = useCallback(async (scope: DataOwnerContext) => {
     const [commands, files] = await Promise.all([
@@ -65,7 +72,7 @@ export function SyncQueueScreen() {
     void load();
   }), [load]));
 
-  async function resolveCommand(command: SyncQueueCommandItem, action: "serverWins" | "dispatcher" | "retryRevision" | "cancelRejected" | "continueSwitch") {
+  async function resolveCommand(command: SyncQueueCommandItem, action: CommandResolution) {
     if (actionInProgressId) {
       return;
     }
@@ -88,7 +95,7 @@ export function SyncQueueScreen() {
         setFeedback("Конфликт закрыт, команда создана с актуальной ревизией.");
       } else if (action === "continueSwitch") {
         await continuePatrolWithReconciliation(ownerUserId, command.clientOperationId);
-        setFeedback("Целевой обход B поставлен на отдельный запуск. Результаты сохранены.");
+        setFeedback("Новый обход поставлен на отдельный запуск. Результаты сохранены.");
       } else {
         await cancelRejectedCommand(ownerUserId, command);
         setFeedback("Отклонённое локальное действие отменено. Запись сохранена в журнале действий.");
@@ -101,6 +108,32 @@ export function SyncQueueScreen() {
       setActionInProgressId(null);
     }
   }
+  async function retryFailedFile(file: SyncQueueFileItem) {
+    if (actionInProgressId || fileRetryInFlight.current) {
+      return;
+    }
+    fileRetryInFlight.current = true;
+    setActionInProgressId(file.clientFileId);
+    setFeedback(null);
+    try {
+      const ownerUserId = await getStoredOwnerUserId();
+      if (!ownerUserId) {
+        throw new Error("Не удалось определить пользователя устройства.");
+      }
+      await retryFailedFileUpload(ownerUserId, file.clientFileId);
+      await load();
+      const result = await triggerForegroundSyncWithRetry({ mode: "manualAll" });
+      await load();
+      setFeedback(result.skipped ? syncResultMessage(result.skipped) : "Вложение снова поставлено в очередь отправки.");
+    } catch (caught) {
+      setLoadError(caught instanceof Error ? caught.message : "Не удалось повторить загрузку вложения.");
+      void logMobileError("sync.queue.file_retry.failed", caught);
+    } finally {
+      fileRetryInFlight.current = false;
+      setActionInProgressId(null);
+    }
+  }
+
   async function retryNow() {
     if (retryInFlight.current) {
       return;
@@ -133,7 +166,7 @@ export function SyncQueueScreen() {
 
       {!isLoading && loadError ? (
         <Card>
-          <Text style={styles.errorText}>{loadError}</Text>
+          <Text style={[styles.errorText, dangerBox(colors)]}>{loadError}</Text>
           <PrimaryButton icon="refresh-outline" label="\u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0443" onPress={() => void load()} variant="secondary" />
         </Card>
       ) : null}
@@ -159,14 +192,14 @@ export function SyncQueueScreen() {
         </View>
 
         {summary.errors > 0 ? (
-          <Text style={styles.notice}>
+          <Text style={[styles.notice, { backgroundColor: colors.backgroundAccent, borderColor: colors.border, color: colors.primary }]}>
             Требуют проверки: {summary.errors}. Откройте запись ниже, чтобы увидеть причину и исправить данные.
           </Text>
         ) : null}
 
         {waitingAuthCount > 0 ? (
-          <View accessibilityLiveRegion="polite" style={styles.authNotice}>
-            <Text style={styles.authNoticeTitle}>Нужно подтвердить вход</Text>
+          <View accessibilityLiveRegion="polite" style={[styles.authNotice, { backgroundColor: colors.warningSurface, borderColor: colors.warning }]}>
+            <Text style={[styles.authNoticeTitle, { color: colors.warning }]}>Нужно подтвердить вход</Text>
             <Text style={[styles.text, { color: colors.mutedText }]}>
               Локальные данные сохранены. После подтверждения приложение автоматически отправит {waitingAuthCount} ожидающих операций.
             </Text>
@@ -180,7 +213,7 @@ export function SyncQueueScreen() {
           </View>
         ) : null}
 
-        {feedback ? <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text> : null}
+        {feedback ? <Text accessibilityLiveRegion="polite" style={[styles.feedback, { backgroundColor: colors.backgroundAccent, borderColor: colors.border, color: colors.text }]}>{feedback}</Text> : null}
 
         {retryableCount > 0 ? (
           <PrimaryButton
@@ -206,7 +239,7 @@ export function SyncQueueScreen() {
                 <View style={styles.itemTitleBox}>
                   <Text style={[styles.itemTitle, { color: colors.text }]}>{commandTitle(command)}</Text>
                   <Text style={[styles.text, { color: colors.mutedText }]}>
-                    {command.assignmentRouteName ?? command.entityLocalId ?? command.clientOperationId}
+                    {commandSubject(command)}
                   </Text>
                 </View>
                 <StatusPill label={statusLabel(command.status, command.resolutionStatus)} tone={statusTone(command.status, command.resolutionStatus)} />
@@ -215,7 +248,7 @@ export function SyncQueueScreen() {
                 <Meta label="Попытки" value={String(command.attemptCount)} />
                 <Meta label="Последняя попытка" value={formatDateTime(command.lastAttemptAt)} />
                 <Meta label="Следующая попытка" value={formatDateTime(command.nextAttemptAt)} />
-                <Meta label={command.commandType === "completePatrolAssignment" ? "Отчёт" : "Маршрут"} value={command.assignmentRouteName ?? command.entityLocalId ?? "-"} />
+                <Meta label={command.commandType === "completePatrolAssignment" ? "Отчёт" : "Маршрут"} value={command.assignmentRouteName || "-"} />
                 <Meta label="Действие" value={commandActionLabel(command.status)} />
               </View>
               {command.lastError ? (
@@ -225,7 +258,7 @@ export function SyncQueueScreen() {
                   onPress={() => setExpandedErrorId((current) => (current === command.clientOperationId ? null : command.clientOperationId))}
                 >
                   <Text
-                    style={expandedErrorId === command.clientOperationId ? styles.errorText : styles.errorPreview}
+                    style={expandedErrorId === command.clientOperationId ? [styles.errorText, dangerBox(colors)] : [styles.errorPreview, warningBox(colors)]}
                     numberOfLines={expandedErrorId === command.clientOperationId ? undefined : 2}
                   >
                     {command.lastError}
@@ -236,11 +269,11 @@ export function SyncQueueScreen() {
                 <View style={styles.actionGroup}>
                 {command.commandType === "switchPatrolAssignment" && command.sourceAssignmentId ? (
                   <>
-                    <Text style={[styles.text, { color: colors.mutedText }]}>Переключение не принято: {command.lastError ?? "сервер отменил исходный обход"}</Text>
+                    <Text style={[styles.text, { color: colors.mutedText }]}>Переход на другой обход не принят: {command.lastError ?? "сервер отменил исходный обход"}</Text>
                     <PrimaryButton
                       disabled={actionInProgressId === command.clientOperationId}
                       icon="play-circle-outline"
-                      label="Продолжить B"
+                      label="Продолжить новый обход"
                       onPress={() => void resolveCommand(command, "continueSwitch")}
                       size="large"
                       variant="secondary"
@@ -252,7 +285,7 @@ export function SyncQueueScreen() {
                     disabled={actionInProgressId === command.clientOperationId}
                     icon="cloud-done-outline"
                     label="Принять состояние сервера"
-                    onPress={() => void resolveCommand(command, "serverWins")}
+                    onPress={() => setPendingConfirmation({ command, action: "serverWins" })}
                     size="large"
                     variant="secondary"
                   />
@@ -283,7 +316,7 @@ export function SyncQueueScreen() {
                     <PrimaryButton
                       disabled={actionInProgressId === command.clientOperationId}
                       icon="play-circle-outline"
-                      label="Продолжить B"
+                      label="Продолжить новый обход"
                       onPress={() => void resolveCommand(command, "continueSwitch")}
                       size="large"
                       variant="secondary"
@@ -293,7 +326,7 @@ export function SyncQueueScreen() {
                     disabled={actionInProgressId === command.clientOperationId}
                     icon="close-circle-outline"
                     label="Отменить локальное действие"
-                    onPress={() => void resolveCommand(command, "cancelRejected")}
+                    onPress={() => setPendingConfirmation({ command, action: "cancelRejected" })}
                     size="large"
                     variant="ghost"
                   />
@@ -322,13 +355,13 @@ export function SyncQueueScreen() {
           {state.files.map((file) => (
             <View key={file.clientFileId} style={[styles.queueItem, { borderColor: colors.border }]}>
               <View style={styles.itemTop}>
-                <View style={styles.fileIconBox}>
-                  <Ionicons color="#1e5bff" name={file.mediaKind === "video" ? "videocam-outline" : "image-outline"} size={22} />
+                <View style={[styles.fileIconBox, { backgroundColor: colors.backgroundAccent }]}>
+                  <Ionicons color={colors.primary} name={file.mediaKind === "video" ? "videocam-outline" : "image-outline"} size={22} />
                 </View>
                 <View style={styles.itemTitleBox}>
                   <Text style={[styles.itemTitle, { color: colors.text }]}>{file.mediaKind === "video" ? "Видео" : "Фото"}</Text>
                   <Text style={[styles.text, { color: colors.mutedText }]} numberOfLines={2}>
-                    {file.assignmentRouteName ?? file.localPath}
+                    {fileSubject(file)}
                   </Text>
                 </View>
                 <StatusPill label={fileStatusLabel(file.status)} tone={statusTone(file.status)} />
@@ -337,24 +370,92 @@ export function SyncQueueScreen() {
                 <Meta label="Попытки" value={String(file.attemptCount ?? 0)} />
                 <Meta label="Последняя попытка" value={formatDateTime(file.lastAttemptAt ?? null)} />
                 <Meta label="Следующая попытка" value={formatDateTime(file.nextAttemptAt ?? null)} />
-                <Meta label="Отчёт" value={file.assignmentRouteName ?? file.assignmentId ?? "-"} />
-                <Meta label="Точка" value={file.pointId ?? "-"} />
-                <Meta label="Действие" value={file.status === "failed" ? "Повторить загрузку" : "Ожидает отправки"} />
+                <Meta label="Отчёт" value={file.assignmentRouteName || "-"} />
+                <Meta label="Точка" value={file.pointName || (file.pointId ? "Точка маршрута" : "-")} />
+                <Meta label="Действие" value={file.status === "failed" ? "Повторите загрузку" : "Ожидает отправки"} />
               </View>
-              {file.lastError ? <Text style={styles.errorPreview} numberOfLines={2}>{file.lastError}</Text> : null}
+              {file.lastError ? <Text style={[styles.errorPreview, warningBox(colors)]} numberOfLines={2}>{file.lastError}</Text> : null}
+              {file.status === "failed" ? (
+                <PrimaryButton
+                  disabled={actionInProgressId !== null}
+                  icon="cloud-upload-outline"
+                  label="Повторить загрузку"
+                  onPress={() => void retryFailedFile(file)}
+                  size="large"
+                  variant="secondary"
+                />
+              ) : null}
             </View>
           ))}
         </Card>
       ) : null}
+
+      <ActionSheet
+        visible={pendingConfirmation !== null}
+        title={pendingConfirmation ? confirmationTitle(pendingConfirmation.action) : ""}
+        message={pendingConfirmation ? confirmationMessage(pendingConfirmation.command, pendingConfirmation.action) : undefined}
+        onClose={() => setPendingConfirmation(null)}
+        actions={pendingConfirmation ? [
+          {
+            danger: true,
+            icon: pendingConfirmation.action === "serverWins" ? "cloud-done-outline" : "close-circle-outline",
+            label: pendingConfirmation.action === "serverWins" ? "Да, принять состояние сервера" : "Да, отменить действие",
+            onPress: () => void resolveCommand(pendingConfirmation.command, pendingConfirmation.action)
+          },
+          { icon: "arrow-undo-outline", label: "Оставить как есть", onPress: () => undefined }
+        ] : []}
+      />
     </Screen>
   );
 }
 
+function confirmationTitle(action: DestructiveResolution) {
+  return action === "serverWins" ? "Принять состояние сервера?" : "Отменить локальное действие?";
+}
+
+function confirmationMessage(command: Pick<SyncQueueCommandItem, "commandType" | "assignmentRouteName">, action: DestructiveResolution) {
+  const subject = `«${commandTitle(command)}»${command.assignmentRouteName ? ` (${command.assignmentRouteName})` : ""}`;
+  if (action === "serverWins") {
+    return `Телефон заменит локальное состояние данными сервера. Действие ${subject} не будет отправлено, а локальные изменения по этому обходу, которых нет на сервере, будут потеряны.`;
+  }
+  return `Действие ${subject} не будет отправлено на сервер и уйдёт из очереди. Вернуть его в очередь будет нельзя. Запись останется в журнале действий.`;
+}
+
+function commandSubject(command: SyncQueueCommandItem) {
+  if (command.assignmentRouteName) return command.assignmentRouteName;
+  switch (command.entityType) {
+    case "workTask":
+      return "Работа ЭМУ";
+    case "shiftRemark":
+      return "Замечание по смене";
+    case "patrolPoint":
+      return "Точка обхода";
+    default:
+      return "Обход";
+  }
+}
+
+function fileSubject(file: SyncQueueFileItem) {
+  if (file.assignmentRouteName) return file.pointName ? `${file.assignmentRouteName} · ${file.pointName}` : file.assignmentRouteName;
+  if (file.workTaskId) return "Вложение к работе";
+  if (file.remarkId) return "Вложение к замечанию";
+  return "Вложение к отчёту";
+}
+
+function warningBox(colors: Partial<ThemeColors>) {
+  return { backgroundColor: colors.warningSurface, borderColor: colors.warning, color: colors.warning };
+}
+
+function dangerBox(colors: Partial<ThemeColors>) {
+  return { backgroundColor: colors.dangerSurface, borderColor: colors.danger, color: colors.danger };
+}
+
 function Meta({ label, value }: { label: string; value: string }) {
+  const { colors } = useAppTheme();
   return (
-    <View style={styles.meta}>
-      <Text style={styles.metaLabel}>{label}</Text>
-      <Text style={styles.metaValue}>{value}</Text>
+    <View style={[styles.meta, { backgroundColor: colors.backgroundAccent }]}>
+      <Text style={[styles.metaLabel, { color: colors.mutedText }]}>{label}</Text>
+      <Text style={[styles.metaValue, { color: colors.text }]}>{value}</Text>
     </View>
   );
 }
@@ -366,7 +467,7 @@ function buildQueueSummary(state: SyncQueueState) {
   return { errors };
 }
 
-function commandTitle(command: SyncQueueCommandItem) {
+function commandTitle(command: Pick<SyncQueueCommandItem, "commandType">) {
   switch (command.commandType) {
     case "completePatrolAssignment":
       return "Отчет обхода";
@@ -396,8 +497,30 @@ function commandTitle(command: SyncQueueCommandItem) {
       return "Замечание по смене";
     case "attachShiftRemarkMedia":
       return "Вложение замечания";
+    case "switchPatrolAssignment":
+      return "Переход на другой обход";
+    case "createPatrolAppeal":
+      return "Обращение";
+    case "uploadPatrolPhoto":
+      return "Фото точки";
+    case "createWorkTask":
+      return "Новая работа";
+    case "updateWorkTask":
+      return "Изменение работы";
+    case "pauseWorkTask":
+      return "Приостановка работы";
+    case "resumeWorkTask":
+      return "Продолжение работы";
+    case "completeWorkTask":
+      return "Завершение работы";
+    case "startPlannedWork":
+      return "Начало плановой работы";
+    case "joinWorkTask":
+      return "Участие в работе";
+    case "replaceWorkTaskParticipant":
+      return "Замена участника работы";
     default:
-      return command.commandType;
+      return "Операция синхронизации";
   }
 }
 
@@ -448,8 +571,16 @@ function statusLabel(status: string, resolutionStatus: string | null = null) {
       return "Отклонено";
     case "invalidPayload":
       return "Повреждённые данные";
+    case "waiting_network":
+      return "Ждёт сети";
+    case "waiting_auth":
+      return "Нужен вход";
+    case "wrong_contour":
+      return "Другой сервер";
+    case "blocked":
+      return "Ждёт предыдущих действий";
     default:
-      return status;
+      return "Ожидает отправки";
   }
 }
 function fileStatusLabel(status: string) {
@@ -527,39 +658,29 @@ const styles = StyleSheet.create({
     gap: 8
   },
   errorPreview: {
-    backgroundColor: "#fff7ed",
-    borderColor: "#fed7aa",
     borderRadius: 10,
     borderWidth: 1,
-    color: "#9a3412",
     fontSize: 13,
     lineHeight: 18,
     padding: 10
   },
   errorText: {
-    backgroundColor: "#fff1f1",
-    borderColor: "#fecaca",
     borderRadius: 10,
     borderWidth: 1,
-    color: "#991b1b",
     fontSize: 13,
     lineHeight: 18,
     padding: 10
   },
   fileIconBox: {
     alignItems: "center",
-    backgroundColor: "#eef5ff",
     borderRadius: 12,
     height: 42,
     justifyContent: "center",
     width: 42
   },
   feedback: {
-    backgroundColor: "#f8fafc",
-    borderColor: "#cbd5e1",
     borderRadius: 10,
     borderWidth: 1,
-    color: "#334155",
     fontSize: 13,
     lineHeight: 18,
     padding: 10
@@ -588,7 +709,6 @@ const styles = StyleSheet.create({
     gap: 10
   },
   meta: {
-    backgroundColor: "#f6f9fe",
     borderRadius: 10,
     flex: 1,
     gap: 2,
@@ -602,13 +722,11 @@ const styles = StyleSheet.create({
     gap: 8
   },
   metaLabel: {
-    color: "#65758b",
     fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase"
   },
   metaValue: {
-    color: "#0b1f3f",
     fontSize: 13,
     fontWeight: "700"
   },
@@ -616,21 +734,15 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
     borderRadius: 14,
-    backgroundColor: "#fff7ed",
-    borderWidth: 1,
-    borderColor: "#fdba74"
+    borderWidth: 1
   },
   authNoticeTitle: {
-    color: "#9a3412",
     fontSize: 16,
     fontWeight: "800"
   },
   notice: {
-    backgroundColor: "#eff6ff",
-    borderColor: "#bfdbfe",
     borderRadius: 12,
     borderWidth: 1,
-    color: "#1d4ed8",
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 18,

@@ -34,11 +34,15 @@ export function LoginScreen() {
   const router = useRouter();
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(true);
+  const [rememberMe, setRememberMe] = useState(false);
   const [rememberError, setRememberError] = useState<string | null>(null);
   const credentialsEdited = useRef(false);
   const rememberEdited = useRef(false);
-  const rememberChoice = useRef(true);
+  const rememberChoice = useRef(false);
+  // The saved password never enters the revealable field: it is kept here and
+  // used only when the field is left empty for the same saved login.
+  const savedPassword = useRef<{ login: string; password: string } | null>(null);
+  const [hasSavedPassword, setHasSavedPassword] = useState(false);
   const rememberVersion = useRef(0);
   const submitInFlight = useRef(false);
   const mounted = useRef(true);
@@ -61,7 +65,10 @@ export function LoginScreen() {
       }
       if (!credentialsEdited.current && rememberChoice.current) {
         setLogin(saved.login);
-        setPassword(saved.password);
+        if (saved.login && saved.password) {
+          savedPassword.current = { login: saved.login, password: saved.password };
+          setHasSavedPassword(true);
+        }
       }
     }).catch(() => {
       if (isMounted) setRememberError("Не удалось прочитать сохранённый вход. Введите данные вручную.");
@@ -106,6 +113,11 @@ export function LoginScreen() {
     }, [])
   );
 
+  function discardSavedPassword() {
+    savedPassword.current = null;
+    setHasSavedPassword(false);
+  }
+
   function toggleRememberChoice() {
     if (submitInFlight.current) return;
     rememberEdited.current = true;
@@ -114,6 +126,7 @@ export function LoginScreen() {
     rememberChoice.current = next;
     setRememberMe(next);
     setRememberError(null);
+    if (!next) discardSavedPassword();
     if (!next) void forgetRememberedCredentials().catch(() => {
       if (mounted.current && version === rememberVersion.current) {
         setRememberError("Не удалось убрать сохранённые данные. Повторите попытку.");
@@ -133,7 +146,9 @@ export function LoginScreen() {
       return;
     }
 
-    if (!password) {
+    const saved = savedPassword.current;
+    const effectivePassword = password || (saved && saved.login.trim() === normalizedLogin ? saved.password : "");
+    if (!effectivePassword) {
       setError("Введите пароль.");
       return;
     }
@@ -150,9 +165,9 @@ export function LoginScreen() {
         try { await forgetRememberedCredentials(); }
         catch { throw new Error("Не удалось убрать сохранённые данные. Повторите вход."); }
       }
-      await signIn(normalizedLogin, password);
+      await signIn(normalizedLogin, effectivePassword);
       if (saveCredentials) {
-        try { await saveCredentials(normalizedLogin, password); }
+        try { await saveCredentials(normalizedLogin, effectivePassword); }
         catch {
           Alert.alert("Данные для входа не сохранены", "Вход выполнен, но сохранить логин и пароль на телефоне не удалось. При следующем входе потребуется ввести их вручную.");
         }
@@ -252,7 +267,7 @@ export function LoginScreen() {
                     autoCapitalize="none"
                     autoCorrect={false}
                     editable={!isSubmitting}
-                    onChangeText={value => { credentialsEdited.current = true; setLogin(value); }}
+                    onChangeText={value => { credentialsEdited.current = true; discardSavedPassword(); setLogin(value); }}
                     placeholder="Введите логин"
                     placeholderTextColor="#b6cee8"
                     style={styles.input}
@@ -268,8 +283,8 @@ export function LoginScreen() {
                     autoCapitalize="none"
                     autoCorrect={false}
                     editable={!isSubmitting}
-                    onChangeText={value => { credentialsEdited.current = true; setPassword(value); }}
-                    placeholder="Введите пароль"
+                    onChangeText={value => { credentialsEdited.current = true; if (value) discardSavedPassword(); setPassword(value); }}
+                    placeholder={hasSavedPassword ? "Пароль сохранён на телефоне" : "Введите пароль"}
                     placeholderTextColor="#b6cee8"
                     secureTextEntry={!passwordVisible}
                     style={styles.input}

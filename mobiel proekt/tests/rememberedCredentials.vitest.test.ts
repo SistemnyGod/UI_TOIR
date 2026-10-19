@@ -32,7 +32,7 @@ it('an unchecked legacy preference cannot restore stale fields', async () => {
 });
 it('does not offer another contour credentials', async () => {
   const api = await service(); await api.prepareRememberedCredentialsSave()('operator', 'sample');
-  state.contour = 'other'; expect(await api.readRememberedCredentials()).toEqual({ remember: true, login: '', password: '' });
+  state.contour = 'other'; expect(await api.readRememberedCredentials()).toEqual({ remember: false, login: '', password: '' });
   state.contour = 'test'; expect(await api.readRememberedCredentials()).toMatchObject({ login: 'operator', password: 'sample' });
 });
 it('forgetting prevents restoration even if cleanup of legacy entries fails', async () => {
@@ -63,4 +63,16 @@ it('malformed data produces a generic error and does not poison subsequent stora
   const key = state.write.mock.calls[0][0]; state.values.set(key, 'broken password private-sample');
   await expect(api.readRememberedCredentials()).rejects.toThrow('Не удалось прочитать сохранённые данные для входа.');
   await api.forgetRememberedCredentials(); expect(await api.readRememberedCredentials()).toMatchObject({ remember: false });
+});
+it('remembering is opt-in when nothing has been saved yet', async () => {
+  expect(await (await service()).readRememberedCredentials()).toEqual({ remember: false, login: '', password: '' });
+});
+it('a wipe removes the pair without superseding a save prepared for the next account', async () => {
+  const api = await service(); await api.prepareRememberedCredentialsSave()('previous', 'previous-sample');
+  const next = api.prepareRememberedCredentialsSave();
+  await api.wipeRememberedCredentials();
+  expect(await api.readRememberedCredentials()).toEqual({ remember: false, login: '', password: '' });
+  expect([...state.values.values()].some(value => value.includes('previous-sample'))).toBe(false);
+  await next('next', 'next-sample');
+  expect(await api.readRememberedCredentials()).toEqual({ remember: true, login: 'next', password: 'next-sample' });
 });

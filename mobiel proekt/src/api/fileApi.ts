@@ -43,7 +43,8 @@ export async function uploadMobileFile(file: LocalMobileFile) {
   }
 
   if (result.status === 401) {
-    throw new Error(
+    throw new FileUploadHttpError(
+      401,
       `Сервер временно не принял обновлённую сессию при загрузке файла. Файл и отчёт сохранены для автоматического повтора. Адрес: ${apiBaseUrl}`
     );
   }

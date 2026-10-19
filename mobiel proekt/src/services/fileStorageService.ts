@@ -77,6 +77,28 @@ export async function persistMobileMedia(tempUri: string, clientFileId: string, 
   return targetUri;
 }
 
+/**
+ * Temporary camera, picker and resize outputs live in the app cache. Only
+ * those copies are ours to delete: gallery originals, content:// URIs and the
+ * managed attachment directory are never touched.
+ */
+export function isOwnedTemporaryMediaUri(
+  uri: string | null | undefined,
+  cacheDirectory: string | null = FileSystem.cacheDirectory,
+  managedDirectory: string = getPatrolPhotoDirectory()
+): uri is string {
+  if (!uri || !cacheDirectory || !uri.startsWith("file://")) return false;
+  if (uri.includes("/../") || uri.includes("/./")) return false;
+  const cacheRoot = cacheDirectory.endsWith("/") ? cacheDirectory : `${cacheDirectory}/`;
+  return uri.startsWith(cacheRoot) && uri.length > cacheRoot.length && !uri.startsWith(`${managedDirectory}/`);
+}
+
+/** Best effort: a leftover cache file must never fail an attachment that is already saved. */
+export async function deleteOwnedTemporaryMedia(...uris: (string | null | undefined)[]) {
+  const owned = Array.from(new Set(uris.filter((uri): uri is string => isOwnedTemporaryMediaUri(uri))));
+  await Promise.all(owned.map(uri => FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => undefined)));
+}
+
 export async function getLocalFileInfo(uri: string) {
   return FileSystem.getInfoAsync(uri, { md5: false });
 }

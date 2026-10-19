@@ -35,6 +35,7 @@ const checkbox = () => field('Запомнить логин и пароль');
 const submit = () => screen!.root.findAllByType('Pressable' as any).find(node => node.findAllByType('Text' as any).some(text => text.children.includes('Войти на сервер')))!;
 const mount = async () => { await act(async () => { screen = create(React.createElement(LoginScreen)); }); };
 const unmount = async () => { if (screen) await act(() => screen!.unmount()); screen = undefined; };
+const optIn = async () => { await act(async () => checkbox().props.onPress()); };
 const fill = async (login = ' operator ', password = '  sample пароль  ') => { await act(async () => { field('Логин').props.onChangeText(login); field('Пароль').props.onChangeText(password); }); };
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; vi.clearAllMocks(); state.values.clear(); state.offline = null; state.refresh = 'refresh';
@@ -44,12 +45,37 @@ beforeEach(() => {
   state.signIn.mockReset().mockResolvedValue(undefined); state.restore.mockResolvedValue(undefined); state.biometric.mockReset().mockResolvedValue({ success: true });
 });
 afterEach(unmount);
-it('a successful checked login restores both fields when the screen is reopened', async () => {
-  await mount(); await fill(); await act(async () => submit().props.onPress());
+it('remember is off by default and a plain login stores nothing', async () => {
+  await mount(); expect(checkbox().props.accessibilityState.checked).toBe(false);
+  await fill(); await act(async () => submit().props.onPress());
+  expect(state.signIn).toHaveBeenCalledOnce();
+  expect(await readRememberedCredentials()).toEqual({ remember: false, login: '', password: '' });
+  expect([...state.values.values()].some(value => value.includes('sample'))).toBe(false);
+});
+it('an opted-in login restores the login but never puts the saved password into the field', async () => {
+  await mount(); await optIn(); await fill(); await act(async () => submit().props.onPress());
   expect(state.signIn).toHaveBeenCalledExactlyOnceWith('operator', '  sample пароль  '); expect(state.replace).toHaveBeenCalledOnce();
   await unmount(); await mount();
-  expect(field('Логин').props.value).toBe('operator'); expect(field('Пароль').props.value).toBe('  sample пароль  ');
-  expect(field('Пароль').props.secureTextEntry).toBe(true); expect(checkbox().props.accessibilityState.checked).toBe(true);
+  expect(field('Логин').props.value).toBe('operator'); expect(field('Пароль').props.value).toBe('');
+  expect(field('Пароль').props.placeholder).toBe('Пароль сохранён на телефоне');
+  await act(async () => field('Показать пароль').props.onPress());
+  expect(field('Пароль').props.value).toBe(''); expect(checkbox().props.accessibilityState.checked).toBe(true);
+  await act(async () => submit().props.onPress());
+  expect(state.signIn).toHaveBeenLastCalledWith('operator', '  sample пароль  ');
+});
+it('editing the saved login drops the saved password instead of pairing it with another account', async () => {
+  await prepareRememberedCredentialsSave()('operator', 'sample'); await mount();
+  await act(async () => field('Логин').props.onChangeText('other'));
+  expect(field('Пароль').props.placeholder).toBe('Введите пароль');
+  await act(async () => submit().props.onPress());
+  expect(state.signIn).not.toHaveBeenCalled();
+  expect(screen!.root.findAllByProps({ accessibilityRole: 'alert' })[0].children).toContain('Введите пароль.');
+});
+it('a typed password replaces the saved one', async () => {
+  await prepareRememberedCredentialsSave()('operator', 'sample'); await mount();
+  await act(async () => field('Пароль').props.onChangeText('typed-sample')); await act(async () => submit().props.onPress());
+  expect(state.signIn).toHaveBeenCalledExactlyOnceWith('operator', 'typed-sample');
+  expect(await readRememberedCredentials()).toEqual({ remember: true, login: 'operator', password: 'typed-sample' });
 });
 it('unchecking forgets both fields even without another successful login', async () => {
   await prepareRememberedCredentialsSave()('operator', 'sample'); await mount();
@@ -62,7 +88,8 @@ it('failed authentication cannot overwrite the previous working credentials', as
   await prepareRememberedCredentialsSave()('previous', 'previous-sample'); state.signIn.mockRejectedValue(new Error('Неверный пароль'));
   await mount(); await fill('new', 'wrong-sample'); await act(async () => submit().props.onPress());
   expect(state.replace).not.toHaveBeenCalled(); await unmount(); await mount();
-  expect(field('Логин').props.value).toBe('previous'); expect(field('Пароль').props.value).toBe('previous-sample');
+  expect(field('Логин').props.value).toBe('previous'); expect(field('Пароль').props.value).toBe('');
+  expect(await readRememberedCredentials()).toEqual({ remember: true, login: 'previous', password: 'previous-sample' });
 });
 it('a late restore does not overwrite credentials already being typed', async () => {
   await prepareRememberedCredentialsSave()('previous', 'previous-sample');
@@ -73,12 +100,12 @@ it('a late restore does not overwrite credentials already being typed', async ()
 it('a late restore cannot re-enable an unchecked preference or repopulate forgotten fields', async () => {
   await prepareRememberedCredentialsSave()('previous', 'previous-sample');
   const raw = [...state.values.values()][0], slow = deferred<string>(); state.read.mockReturnValueOnce(slow.promise);
-  await mount(); await act(async () => checkbox().props.onPress()); await act(async () => slow.resolve(raw));
+  await mount(); await optIn(); await act(async () => checkbox().props.onPress()); await act(async () => slow.resolve(raw));
   expect(checkbox().props.accessibilityState.checked).toBe(false); expect(field('Пароль').props.value).toBe('');
   expect(await readRememberedCredentials()).toMatchObject({ remember: false });
 });
 it('storage failure is reported separately and cannot turn a successful login into an authentication failure', async () => {
-  await mount(); await fill(); state.write.mockRejectedValueOnce(new Error('native storage unavailable'));
+  await mount(); await optIn(); await fill(); state.write.mockRejectedValueOnce(new Error('native storage unavailable'));
   await act(async () => submit().props.onPress());
   expect(Alert.alert).toHaveBeenCalledExactlyOnceWith('Данные для входа не сохранены', expect.any(String));
   expect(state.unlock).toHaveBeenCalledOnce(); expect(state.replace).toHaveBeenCalledOnce();
@@ -88,7 +115,7 @@ it('read failure leaves the fields editable and manual login available', async (
   expect(field('Логин').props.editable).toBe(true); await act(async () => submit().props.onPress()); expect(state.replace).toHaveBeenCalledOnce();
 });
 it('duplicate submit taps issue one login and save only after it succeeds', async () => {
-  const slow = deferred<void>(); state.signIn.mockReturnValueOnce(slow.promise); await mount(); await fill();
+  const slow = deferred<void>(); state.signIn.mockReturnValueOnce(slow.promise); await mount(); await optIn(); await fill();
   const button = submit(); await act(async () => { void button.props.onPress(); void button.props.onPress(); });
   expect(state.signIn).toHaveBeenCalledOnce(); expect(state.write).not.toHaveBeenCalled();
   await act(async () => slow.resolve()); expect(state.write).toHaveBeenCalledOnce();
@@ -99,7 +126,8 @@ it('biometric login preserves the saved pair and prevents duplicate authenticati
   const before = state.remove.mock.calls.length, button = field('Войти с биометрией');
   await act(async () => { void button.props.onPress(); void button.props.onPress(); }); expect(state.biometric).toHaveBeenCalledOnce();
   await act(async () => slow.resolve({ success: true })); expect(state.remove).toHaveBeenCalledTimes(before);
-  await unmount(); await mount(); expect(field('Пароль').props.value).toBe('sample');
+  await unmount(); await mount(); expect(field('Пароль').props.value).toBe('');
+  expect(await readRememberedCredentials()).toEqual({ remember: true, login: 'operator', password: 'sample' });
 });
 it('biometric refresh does not depend on the remember checkbox', async () => {
   await forgetRememberedCredentials(); await mount(); await act(async () => field('Войти с биометрией').props.onPress());
@@ -119,12 +147,13 @@ it('a native biometric failure allows retry', async () => {
   expect(state.biometric).toHaveBeenCalledTimes(2); expect(state.replace).toHaveBeenCalledOnce();
 });
 it('a late preference restore cannot change the choice already submitted', async () => {
-  await forgetRememberedCredentials();
+  await prepareRememberedCredentialsSave()('previous', 'previous-sample');
   const raw = [...state.values.values()][0], slow = deferred<string>(); state.read.mockReturnValueOnce(slow.promise);
   await mount(); await fill();
   let attempt!: Promise<void>;
   await act(async () => { attempt = submit().props.onPress(); });
   await act(async () => { slow.resolve(raw); await attempt; });
-  expect(checkbox().props.accessibilityState.checked).toBe(true);
-  expect(await readRememberedCredentials()).toEqual({ remember: true, login: 'operator', password: '  sample пароль  ' });
+  expect(checkbox().props.accessibilityState.checked).toBe(false);
+  expect(field('Логин').props.value).toBe(' operator ');
+  expect(await readRememberedCredentials()).toEqual({ remember: false, login: '', password: '' });
 });

@@ -682,6 +682,12 @@ async function initializeDatabaseOnce() {
     await runLocalMigration(tx, "20260726_file_retry_metadata", async () => {
       await ensureFileRetryMetadata(tx);
     });
+
+    await runLocalMigration(tx, "20261019_diagnostic_report_attempts", async () => {
+      await ensureColumns(tx, "mobile_diagnostic_reports", [
+        { name: "attempt_count", sql: "ALTER TABLE mobile_diagnostic_reports ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0" }
+      ]);
+    });
   });
 }
 

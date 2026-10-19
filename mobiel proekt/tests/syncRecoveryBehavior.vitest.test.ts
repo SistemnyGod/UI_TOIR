@@ -78,18 +78,19 @@ function seedDormantQueue() {
   seed('timeout', { status: 'retryLater', reason: 'timeout', next: future });
   seed('server', { status: 'retryLater', reason: 'server', next: future });
   seed('throttled', { status: 'retryLater', reason: 'rateLimit', next: future });
+  seed('unknown', { status: 'retryLater', reason: 'unknown', next: future });
   seed('foreign', { status: 'waiting_network', reason: 'network', owner: 'bob' });
 }
 
-it('network recovery makes offline and timed-out commands immediately due, but keeps server delays', async () => {
+it('network recovery makes offline, timed-out and server-unreachable commands due, but keeps rate-limit and unknown delays', async () => {
   seedDormantQueue();
   const { activateNetworkRecoveredOutboxCommands } = await import('@/db/repositories/outboxRepository');
 
   await activateNetworkRecoveredOutboxCommands('alice');
 
-  for (const id of ['offline', 'network', 'timeout']) expect(row(id)).toEqual({ status: 'pending', reason: null, next: null });
-  expect(row('server')).toEqual({ status: 'retryLater', reason: 'server', next: future });
+  for (const id of ['offline', 'network', 'timeout', 'server']) expect(row(id)).toEqual({ status: 'pending', reason: null, next: null });
   expect(row('throttled')).toEqual({ status: 'retryLater', reason: 'rateLimit', next: future });
+  expect(row('unknown')).toEqual({ status: 'retryLater', reason: 'unknown', next: future });
   expect(row('foreign').status).toBe('waiting_network');
 });
 
@@ -101,9 +102,9 @@ it('a reconnect sync delivers offline reports at once, while a normal sync waits
   expect(posted()).toEqual([]);
 
   await runForegroundSync({ mode: 'networkRecovered' });
-  expect(posted()).toEqual(['network', 'offline', 'timeout']);
+  expect(posted()).toEqual(['network', 'offline', 'server', 'timeout']);
   expect(row('offline').status).toBe('accepted');
-  expect(row('server').status).toBe('retryLater');
+  expect(row('throttled').status).toBe('retryLater');
 });
 
 it('the background task treats its pass as a network recovery', async () => {

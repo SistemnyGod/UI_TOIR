@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 
 const s = vi.hoisted(() => ({ bytes: new Uint8Array([1, 2, 3, 4, 5]), exists: true, shortRead: false, close: vi.fn(), remove: vi.fn() }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'media' }));
-vi.mock('@/services/fileStorageService', () => ({
+vi.mock('@/services/fileStorageService', () => ({ deleteOwnedTemporaryMedia: async () => {},
   persistPatrolPhoto: async () => 'saved.jpg', persistMobileMedia: async () => 'saved.mp4',
   getLocalFileInfo: async () => ({ exists: s.exists, size: s.bytes.length }), deletePreparedMedia: s.remove
 }));

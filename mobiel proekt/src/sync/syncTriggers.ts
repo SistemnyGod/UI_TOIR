@@ -6,6 +6,7 @@ import { refreshStoredAccessTokenIfNeeded } from "@/api/httpClient";
 import { isReauthenticationRequiredError } from "@/auth/sessionErrors";
 import { getSessionGeneration } from "@/auth/sessionGeneration";
 import { canAttemptServerConnection, networkRouteKey } from "@/core/networkPolicy";
+import { subscribeToServerReachabilityRestored } from "@/core/connectionStateEvents";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { logMobileError } from "@/services/mobileErrorReporter";
 import { triggerDailyDiagnosticReportUpload, triggerPendingDiagnosticReportUpload } from "@/services/diagnosticReportService";
@@ -67,9 +68,13 @@ export function subscribeToNetworkSync() {
       void runMobileRecoveryCycle("network", "networkRecovered");
     }
   });
+  const unsubscribeReachability = subscribeToServerReachabilityRestored(() => {
+    void runMobileRecoveryCycle("network", "networkRecovered");
+  });
 
   return () => {
     unsubscribeNetInfo();
+    unsubscribeReachability();
     if (fallbackRefreshInterval) {
       clearInterval(fallbackRefreshInterval);
       fallbackRefreshInterval = null;

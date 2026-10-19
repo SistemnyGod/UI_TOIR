@@ -7,7 +7,7 @@ import { logMobileError } from "@/services/mobileErrorReporter";
 import { attachPhotoToPoint, restoreMissingPointAttachment } from "@/db/repositories/patrolRepository";
 import { attachMediaToShiftRemark } from "@/db/repositories/shiftRemarkRepository";
 import { attachMediaToWorkTask } from "@/db/repositories/workTaskRepository";
-import { deletePreparedMedia, assertStorageForMedia, getLocalFileInfo, hasEnoughStorageForPhoto } from "@/services/fileStorageService";
+import { deletePreparedMedia, deleteOwnedTemporaryMedia, assertStorageForMedia, getLocalFileInfo, hasEnoughStorageForPhoto } from "@/services/fileStorageService";
 import { MediaPreparationProgressCallback, prepareLocalMedia, prepareLocalPhoto } from "@/sync/fileUploadQueue";
 import { MAX_VIDEO_BYTES } from "@/domain/files/fileUploadLimits";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
@@ -258,19 +258,23 @@ async function attachMixedMediaAssets(
   let videoCount = 0;
   const errors: string[] = [];
 
-  for (const [index, asset] of assets.entries()) {
-    await assertActive?.();
-    try {
-      const kind = await attachAsset(asset, index, assets.length);
-      if (kind === "video") {
-        videoCount += 1;
-      } else {
-        photoCount += 1;
-      }
-    } catch (error) {
+  try {
+    for (const [index, asset] of assets.entries()) {
       await assertActive?.();
-      errors.push(`Файл ${index + 1}: ${error instanceof Error ? error.message : "не удалось подготовить"}`);
+      try {
+        const kind = await attachAsset(asset, index, assets.length);
+        if (kind === "video") {
+          videoCount += 1;
+        } else {
+          photoCount += 1;
+        }
+      } catch (error) {
+        await assertActive?.();
+        errors.push(`Файл ${index + 1}: ${error instanceof Error ? error.message : "не удалось подготовить"}`);
+      }
     }
+  } finally {
+    await deleteOwnedTemporaryMedia(...assets.map(asset => asset.uri));
   }
 
   const attachedCount = photoCount + videoCount;
@@ -387,6 +391,39 @@ async function optimizePhoto(asset: ImagePicker.ImagePickerAsset) {
   });
 }
 
+/**
+ * Resize a picked photo and copy it into managed storage. The picker/camera
+ * file and the resized copy are app-cache temporaries: both are deleted once
+ * the managed copy exists (or preparation failed), so they never accumulate.
+ */
+async function preparePhotoAsset(
+  asset: ImagePicker.ImagePickerAsset,
+  input: Omit<Parameters<typeof prepareLocalPhoto>[0], "localPath">,
+  scope?: DataOwnerContext
+) {
+  let optimizedUri: string | null = null;
+  try {
+    const optimizedPhoto = await optimizePhoto(asset);
+    optimizedUri = optimizedPhoto.uri;
+    if (scope) await assertDataOwnerContext(scope);
+    return await prepareLocalPhoto({ ...input, localPath: optimizedPhoto.uri });
+  } finally {
+    await deleteOwnedTemporaryMedia(asset.uri, optimizedUri);
+  }
+}
+
+async function attachPhotoAssets(
+  assets: ImagePicker.ImagePickerAsset[],
+  attachOne: (asset: ImagePicker.ImagePickerAsset) => Promise<void>
+) {
+  try {
+    for (const asset of assets) await attachOne(asset);
+  } finally {
+    // Assets after a failure were never prepared; their temporaries go too.
+    await deleteOwnedTemporaryMedia(...assets.map(asset => asset.uri));
+  }
+}
+
 async function attachPointPhotoAssets(
   ownerUserId: string,
   assignmentId: string,
@@ -395,20 +432,12 @@ async function attachPointPhotoAssets(
   onProgress?: MediaPreparationProgressCallback,
   scope?: DataOwnerContext
 ) {
-  for (const asset of assets) {
+  await attachPhotoAssets(assets, async asset => {
     if (scope) await assertDataOwnerContext(scope);
-    const optimizedPhoto = await optimizePhoto(asset);
-    if (scope) await assertDataOwnerContext(scope);
-    const file = await prepareLocalPhoto({
-      ownerUserId,
-      localPath: optimizedPhoto.uri,
-      assignmentId,
-      pointId,
-      onProgress
-    });
+    const file = await preparePhotoAsset(asset, { ownerUserId, assignmentId, pointId, onProgress }, scope);
     if (scope) await assertDataOwnerContext(scope);
     await attachPhotoToPoint(assignmentId, pointId, file, scope);
-  }
+  });
 }
 
 async function restorePointPhotoAsset(
@@ -419,13 +448,7 @@ async function restorePointPhotoAsset(
   asset: ImagePicker.ImagePickerAsset,
   scope?: DataOwnerContext
 ) {
-  const optimizedPhoto = await optimizePhoto(asset);
-  const file = await prepareLocalPhoto({
-    ownerUserId,
-    localPath: optimizedPhoto.uri,
-    assignmentId,
-    pointId
-  });
+  const file = await preparePhotoAsset(asset, { ownerUserId, assignmentId, pointId });
   try {
     if (scope) await assertDataOwnerContext(scope);
     await restoreMissingPointAttachment(assignmentId, pointId, missingClientFileId, file, scope);
@@ -437,31 +460,19 @@ async function restorePointPhotoAsset(
   }
 }
 async function attachRemarkPhotoAssets(ownerUserId: string, remarkId: string, assets: ImagePicker.ImagePickerAsset[], onProgress?: MediaPreparationProgressCallback, scope?: DataOwnerContext) {
-  for (const asset of assets) {
+  await attachPhotoAssets(assets, async asset => {
     if (scope) await assertDataOwnerContext(scope);
-    const optimizedPhoto = await optimizePhoto(asset);
-    const file = await prepareLocalPhoto({
-      ownerUserId,
-      localPath: optimizedPhoto.uri,
-      remarkId,
-      onProgress
-    });
+    const file = await preparePhotoAsset(asset, { ownerUserId, remarkId, onProgress });
     await attachMediaToShiftRemark(remarkId, file, scope);
-  }
+  });
 }
 
 async function attachWorkPhotoAssets(ownerUserId: string, workTaskId: string, assets: ImagePicker.ImagePickerAsset[], onProgress?: MediaPreparationProgressCallback, scope?: DataOwnerContext) {
-  for (const asset of assets) {
+  await attachPhotoAssets(assets, async asset => {
     if (scope) await assertDataOwnerContext(scope);
-    const optimizedPhoto = await optimizePhoto(asset);
-    const file = await prepareLocalPhoto({
-      ownerUserId,
-      localPath: optimizedPhoto.uri,
-      workTaskId,
-      onProgress
-    });
+    const file = await preparePhotoAsset(asset, { ownerUserId, workTaskId, onProgress });
     await attachMediaToWorkTask(workTaskId, file, scope);
-  }
+  });
 }
 
 async function preparePointVideo(
@@ -471,43 +482,55 @@ async function preparePointVideo(
   asset: ImagePicker.ImagePickerAsset,
   onProgress?: MediaPreparationProgressCallback
 ) {
-  const sizeBytes = await getValidatedVideoSize(asset);
-  return prepareLocalMedia({
-    ownerUserId,
-    localPath: asset.uri,
-    assignmentId,
-    pointId,
-    contentType: "video/mp4",
-    mediaKind: "video",
-    sizeBytes,
-    onProgress
-  });
+  try {
+    const sizeBytes = await getValidatedVideoSize(asset);
+    return await prepareLocalMedia({
+      ownerUserId,
+      localPath: asset.uri,
+      assignmentId,
+      pointId,
+      contentType: "video/mp4",
+      mediaKind: "video",
+      sizeBytes,
+      onProgress
+    });
+  } finally {
+    await deleteOwnedTemporaryMedia(asset.uri);
+  }
 }
 
 async function prepareRemarkVideo(ownerUserId: string, remarkId: string, asset: ImagePicker.ImagePickerAsset, onProgress?: MediaPreparationProgressCallback) {
-  const sizeBytes = await getValidatedVideoSize(asset);
-  return prepareLocalMedia({
-    ownerUserId,
-    localPath: asset.uri,
-    remarkId,
-    contentType: "video/mp4",
-    mediaKind: "video",
-    sizeBytes,
-    onProgress
-  });
+  try {
+    const sizeBytes = await getValidatedVideoSize(asset);
+    return await prepareLocalMedia({
+      ownerUserId,
+      localPath: asset.uri,
+      remarkId,
+      contentType: "video/mp4",
+      mediaKind: "video",
+      sizeBytes,
+      onProgress
+    });
+  } finally {
+    await deleteOwnedTemporaryMedia(asset.uri);
+  }
 }
 
 async function prepareWorkVideo(ownerUserId: string, workTaskId: string, asset: ImagePicker.ImagePickerAsset, onProgress?: MediaPreparationProgressCallback) {
-  const sizeBytes = await getValidatedVideoSize(asset);
-  return prepareLocalMedia({
-    ownerUserId,
-    localPath: asset.uri,
-    workTaskId,
-    contentType: "video/mp4",
-    mediaKind: "video",
-    sizeBytes,
-    onProgress
-  });
+  try {
+    const sizeBytes = await getValidatedVideoSize(asset);
+    return await prepareLocalMedia({
+      ownerUserId,
+      localPath: asset.uri,
+      workTaskId,
+      contentType: "video/mp4",
+      mediaKind: "video",
+      sizeBytes,
+      onProgress
+    });
+  } finally {
+    await deleteOwnedTemporaryMedia(asset.uri);
+  }
 }
 
 function buildResizeActions(width?: number, height?: number): ImageManipulator.Action[] {

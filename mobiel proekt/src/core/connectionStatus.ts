@@ -3,18 +3,31 @@ import { AppState } from 'react-native';
 import { useSyncExternalStore } from 'react';
 import { checkServerConnection, invalidateServerHealthCache } from '@/api/serverHealthApi';
 import { canAttemptServerConnection, networkRouteKey } from '@/core/networkPolicy';
-import { getMobileConnectionContextGeneration, invalidateMobileConnectionContext, subscribeToMobileConnectionContext, subscribeToMobileConnectionOutcomes } from '@/core/connectionStateEvents';
+import { getMobileConnectionContextGeneration, invalidateMobileConnectionContext, publishServerReachabilityRestored, subscribeToMobileConnectionContext, subscribeToMobileConnectionOutcomes } from '@/core/connectionStateEvents';
 import { subscribeToServerSettings } from '@/core/serverSettings';
 import { ConnectionMonitor, type ConnectionStatus } from '@/core/connectionMonitor';
 export type { ConnectionStatus } from '@/core/connectionMonitor';
 
 let status: ConnectionStatus = 'checking';
+let lastSettledStatus: ConnectionStatus = 'checking';
 let stop: (() => void) | undefined;
 const listeners = new Set<() => void>();
 function publish(value: ConnectionStatus) {
   if (status === value) return;
   status = value;
+  if (value !== 'checking') {
+    const restored = isServerReachabilityRestored(lastSettledStatus, value);
+    lastSettledStatus = value;
+    // Retries scheduled while the server was unreachable can run now instead
+    // of waiting out a backoff of up to 15 minutes.
+    if (restored) publishServerReachabilityRestored();
+  }
   listeners.forEach(listener => listener());
+}
+
+/** `previous` is the last non-"checking" status. */
+export function isServerReachabilityRestored(previous: ConnectionStatus, next: ConnectionStatus) {
+  return next === 'connected' && (previous === 'serverUnavailable' || previous === 'otherServer');
 }
 export function startConnectionMonitor() {
   if (!stop) {

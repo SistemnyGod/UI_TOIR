@@ -41,7 +41,8 @@ export function readRememberedCredentials(): Promise<RememberedCredentials> {
     const [preference, login, password] = await Promise.all([
       SecureStore.getItemAsync(legacyPreferenceKey), SecureStore.getItemAsync(legacyLoginKey), SecureStore.getItemAsync(legacyPasswordKey)
     ]);
-    if (preference === 'false') return { remember: false, login: '', password: '' };
+    // Nothing saved yet (or an explicit legacy opt-out): remembering is opt-in.
+    if (preference === 'false' || (preference !== 'true' && !login)) return { remember: false, login: '', password: '' };
     return { remember: true, login: login ?? '', password: preference === 'true' && login ? password ?? '' : '' };
   });
 }
@@ -65,8 +66,17 @@ export function prepareRememberedCredentialsSave() {
 }
 
 export function forgetRememberedCredentials() {
-  const contour = currentContourId;
   ++choiceRevision;
+  return wipeRememberedCredentials();
+}
+
+/**
+ * Remove the saved pair on sign-out or account switch. Unlike an explicit
+ * uncheck this does not supersede a login save prepared before the call:
+ * that save is enqueued after the wipe and belongs to the new account.
+ */
+export function wipeRememberedCredentials() {
+  const contour = currentContourId;
   return enqueue(async () => {
     await SecureStore.setItemAsync(keyFor(contour), JSON.stringify({ version: 1, contourId: contour, remember: false }), options);
     await removeLegacyEntries();

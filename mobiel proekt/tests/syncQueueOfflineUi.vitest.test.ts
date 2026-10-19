@@ -20,6 +20,7 @@ vi.mock('@/ui/Card', () => ({ Card: 'Card' }));
 vi.mock('@/ui/Screen', () => ({ Screen: 'Screen' }));
 vi.mock('@/ui/PrimaryButton', () => ({ PrimaryButton: 'PrimaryButton' }));
 vi.mock('@/ui/StatusPill', () => ({ StatusPill: 'StatusPill' }));
+vi.mock('@/ui/ActionSheet', () => ({ ActionSheet: 'ActionSheet' }));
 let screen: ReactTestRenderer;
 beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; s.sync.mockReset(); });
 afterEach(async () => { await act(() => screen?.unmount()); });

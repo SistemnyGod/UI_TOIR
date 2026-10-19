@@ -123,3 +123,15 @@ it.each(['manualReport', 'manualAll', 'networkRecovered'] as const)('%s delivers
   await delivery;
   expect(calls).toEqual([[{ mode, assignmentId: 'assignment' }]]);
 });
+
+it('the server answering again after being unreachable starts a recovery pass', async () => {
+  const { subscribeToNetworkSync } = await import('@/sync/syncTriggers');
+  const events = await import('@/core/connectionStateEvents');
+  stop = subscribeToNetworkSync(); network(true); await tick();
+  s.sync.mockClear();
+  events.publishServerReachabilityRestored(); await tick();
+  expect(s.sync).toHaveBeenCalledExactlyOnceWith({ mode: 'networkRecovered', assignmentId: undefined });
+  stop(); stop = undefined;
+  events.publishServerReachabilityRestored(); await tick();
+  expect(s.sync).toHaveBeenCalledTimes(1);
+});

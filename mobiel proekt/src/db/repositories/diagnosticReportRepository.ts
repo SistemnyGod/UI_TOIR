@@ -46,9 +46,14 @@ export type MobileDiagnosticReport = {
   context?: MobileDiagnosticContext;
 };
 
+export type MobileDiagnosticReportStatus = "pending" | "sent" | "abandoned";
+
+/** After this many failed sends a report stops being retried. */
+export const MAX_DIAGNOSTIC_REPORT_ATTEMPTS = 5;
+
 export type MobileDiagnosticReportRow = {
   reportId: string;
-  status: "pending" | "sent";
+  status: MobileDiagnosticReportStatus;
   periodStart: string;
   periodEnd: string;
   createdAtLocal: string;
@@ -278,7 +283,7 @@ export async function listDiagnosticReports(limit = 10): Promise<MobileDiagnosti
 
   const rows = await db.getAllAsync<{
     report_id: string;
-    status: "pending" | "sent";
+    status: MobileDiagnosticReportStatus;
     period_start: string;
     period_end: string;
     created_at_local: string;
@@ -345,14 +350,19 @@ export async function markDiagnosticReportSent(report: MobileDiagnosticReport) {
         [row.owner_user_id, report.periodEnd]
       );
       await tx.runAsync(
-        "DELETE FROM mobile_diagnostic_reports WHERE owner_user_id = ? AND status = 'sent' AND sent_at_local < ?",
+        "DELETE FROM mobile_diagnostic_reports WHERE owner_user_id = ? AND status IN ('sent', 'abandoned') AND COALESCE(sent_at_local, created_at_local) < ?",
         [ownerUserId, new Date(Date.now() - 30 * diagnosticReportIntervalMs).toISOString()]
       );
     })
   );
 }
 
-export async function markDiagnosticReportFailed(reportId: string, error: string) {
+/**
+ * Record a failed send. A report is abandoned (terminal, never retried) after
+ * MAX_DIAGNOSTIC_REPORT_ATTEMPTS failures or when the server rejected it
+ * permanently, so one bad report cannot occupy the diagnostic slot forever.
+ */
+export async function markDiagnosticReportFailed(reportId: string, error: string, options: { permanent?: boolean } = {}) {
   const db = await getDatabase();
   const ownerUserId = await getStoredOwnerUserId();
   if (!ownerUserId) {
@@ -360,10 +370,29 @@ export async function markDiagnosticReportFailed(reportId: string, error: string
   }
 
   await withSqliteBusyRetry(() =>
-    db.runAsync(
-      "UPDATE mobile_diagnostic_reports SET last_error = ? WHERE owner_user_id = ? AND report_id = ? AND status = 'pending'",
-      [sanitizeDiagnosticMessage(error), ownerUserId, reportId]
-    )
+    withProtectedExclusiveTransactionAsync(db, async (tx) => {
+      const row = await tx.getFirstAsync<{ attempt_count: number | null; period_end: string }>(
+        "SELECT attempt_count, period_end FROM mobile_diagnostic_reports WHERE owner_user_id = ? AND report_id = ? AND status = 'pending'",
+        [ownerUserId, reportId]
+      );
+      if (!row) {
+        return;
+      }
+      const attempts = Number(row.attempt_count ?? 0) + 1;
+      const abandon = options.permanent === true || attempts >= MAX_DIAGNOSTIC_REPORT_ATTEMPTS;
+      await tx.runAsync(
+        "UPDATE mobile_diagnostic_reports SET last_error = ?, attempt_count = ?, status = ? WHERE owner_user_id = ? AND report_id = ? AND status = 'pending'",
+        [sanitizeDiagnosticMessage(error), attempts, abandon ? "abandoned" : "pending", ownerUserId, reportId]
+      );
+      if (abandon) {
+        // The next report starts after the abandoned period instead of rebuilding it.
+        await tx.runAsync(
+          `INSERT INTO mobile_diagnostic_state (owner_user_id, last_period_end) VALUES (?, ?)
+           ON CONFLICT(owner_user_id) DO UPDATE SET last_period_end = excluded.last_period_end`,
+          [ownerUserId, row.period_end]
+        );
+      }
+    })
   );
 }
 

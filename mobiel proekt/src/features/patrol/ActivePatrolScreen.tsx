@@ -228,7 +228,7 @@ function ActivePatrolContent({ assignmentId }: { assignmentId: string }) {
 
         <Card>
 
-          <Text style={[styles.text, { color: "#b91c1c" }]}>{loadError}</Text>
+          <Text style={[styles.text, { color: colors.danger }]}>{loadError}</Text>
 
           <PrimaryButton icon="refresh-outline" label="Повторить загрузку" onPress={() => void loadAssignment()} variant="secondary" />
 
@@ -366,15 +366,15 @@ function ActivePatrolContent({ assignmentId }: { assignmentId: string }) {
 
         <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
 
-          <View style={[styles.progressFill, { width: `${percent}%` }]} />
+          <View style={[styles.progressFill, { backgroundColor: colors.success, width: `${percent}%` }]} />
 
         </View>
 
         <Text style={[styles.percentText, { color: colors.mutedText }]}>{percent}%</Text>
 
-        <View style={styles.nextStepBox}>
+        <View style={[styles.nextStepBox, { backgroundColor: colors.backgroundAccent }]}>
 
-          <Text style={styles.nextStepLabel}>Следующий шаг</Text>
+          <Text style={[styles.nextStepLabel, { color: colors.primary }]}>Следующий шаг</Text>
 
           <Text style={[styles.nextStepText, { color: colors.text }]}>{nextStepText(assignment.status, progress)}</Text>
 
@@ -390,7 +390,7 @@ function ActivePatrolContent({ assignmentId }: { assignmentId: string }) {
 
 
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
 
 
 
@@ -495,7 +495,7 @@ function ActivePatrolContent({ assignmentId }: { assignmentId: string }) {
 
         {isInProgress ? (
 
-          <Pressable accessibilityLabel="Дополнительные действия" accessibilityRole="button" onPress={() => setIsMenuOpen(true)} style={styles.iconButton}>
+          <Pressable accessibilityLabel="Дополнительные действия" accessibilityRole="button" onPress={() => setIsMenuOpen(true)} style={[styles.iconButton, { borderColor: colors.border }]}>
 
             <Ionicons color={colors.primary} name="ellipsis-horizontal" size={22} />
 
@@ -797,8 +797,6 @@ const styles = StyleSheet.create({
 
   progressFill: {
 
-    backgroundColor: "#22c55e",
-
     borderRadius: 999,
 
     height: "100%"
@@ -815,8 +813,6 @@ const styles = StyleSheet.create({
 
   nextStepBox: {
 
-    backgroundColor: "#eef4ff",
-
     borderRadius: 14,
 
     gap: 4,
@@ -828,8 +824,6 @@ const styles = StyleSheet.create({
   },
 
   nextStepLabel: {
-
-    color: "#1e5bff",
 
     fontSize: 11,
 
@@ -891,8 +885,6 @@ const styles = StyleSheet.create({
 
     alignItems: "center",
 
-    borderColor: "#dbe5f2",
-
     borderRadius: 12,
 
     borderWidth: 1,
@@ -906,8 +898,6 @@ const styles = StyleSheet.create({
   },
 
   error: {
-
-    color: "#ef4444",
 
     fontSize: 14,
 

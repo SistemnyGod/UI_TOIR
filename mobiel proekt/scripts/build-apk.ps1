@@ -15,7 +15,11 @@ param(
 
   [string]$JavaHome = "",
 
-  [string]$ReactNativeArchitectures = "armeabi-v7a,arm64-v8a,x86,x86_64",
+  # Field phones are ARM. x86/x86_64 add ~63 MiB and are only for emulators:
+  # pass -IncludeEmulatorAbis (or an explicit -ReactNativeArchitectures list).
+  [string]$ReactNativeArchitectures = "armeabi-v7a,arm64-v8a",
+
+  [switch]$IncludeEmulatorAbis,
 
   [string]$ReleaseKeystore = $env:PATROL360_ANDROID_KEYSTORE,
 
@@ -27,6 +31,15 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($IncludeEmulatorAbis) {
+  $abiList = @($ReactNativeArchitectures.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+  foreach ($emulatorAbi in @("x86", "x86_64")) {
+    if ($abiList -notcontains $emulatorAbi) { $abiList += $emulatorAbi }
+  }
+  $ReactNativeArchitectures = $abiList -join ','
+}
+Write-Host "Android ABIs: $ReactNativeArchitectures"
 
 if ($Configuration -eq "Release" -and [string]::IsNullOrWhiteSpace($Patrol360Environment)) {
   throw "Release environment is required. Pass -Patrol360Environment production (or another approved contour)."
@@ -55,6 +68,25 @@ function Invoke-Checked {
   if ($LASTEXITCODE -ne 0) {
     throw "Command failed: $FilePath $($Arguments -join ' ')"
   }
+}
+
+# Signing material must never stay in the temporary build copy, whether the
+# build succeeded, failed or -KeepBuildRoot was requested.
+function Remove-BuildRootSecrets {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path
+  )
+
+  $secretCopy = Join-Path $Path "secrets"
+  if (-not (Test-Path -LiteralPath $secretCopy)) {
+    return
+  }
+  $resolvedSecretCopy = [IO.Path]::GetFullPath($secretCopy)
+  if (-not $resolvedSecretCopy.StartsWith(([IO.Path]::GetFullPath($Path)).TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing secret cleanup outside the build root: $resolvedSecretCopy"
+  }
+  Remove-Item -LiteralPath $resolvedSecretCopy -Recurse -Force -ErrorAction Stop
 }
 
 function Remove-BuildRoot {
@@ -232,6 +264,8 @@ if ($Configuration -eq "Release") {
   if ($missingReleaseSigning) {
     throw "Release signing is required. Set PATROL360_ANDROID_KEYSTORE, PATROL360_ANDROID_KEY_ALIAS, PATROL360_ANDROID_KEYSTORE_PASSWORD and PATROL360_ANDROID_KEY_PASSWORD."
   }
+  # Signing runs from inside the build root, which never receives secrets/.
+  $ReleaseKeystore = (Resolve-Path -LiteralPath $ReleaseKeystore).Path
 }
 
 $BuildRoot = [IO.Path]::GetFullPath($BuildRoot)
@@ -289,7 +323,9 @@ try {
   New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 
   Write-Host "Copying project to stable build path: $BuildRoot"
-  $excludedCopyDirectories = @('.expo', '.tmp', 'build-output') + @(
+  # secrets/ (keystores, DPAPI metadata) is excluded by full path: signing
+  # uses the resolved keystore path and the build copy must hold no secrets.
+  $excludedCopyDirectories = @('.expo', '.tmp', 'build-output', (Join-Path $ProjectRoot 'secrets')) + @(
     Get-ChildItem -LiteralPath $ProjectRoot -Directory -Force |
       Where-Object { $_.Name.StartsWith('build-output', [StringComparison]::OrdinalIgnoreCase) } |
       ForEach-Object { $_.FullName }
@@ -299,11 +335,16 @@ try {
     throw "robocopy failed with exit code $LASTEXITCODE"
   }
 
+  Remove-BuildRootSecrets -Path $BuildRoot
+
   Push-Location $BuildRoot
 }
 catch {
-  if ((Test-Path -LiteralPath $BuildRoot) -and -not $KeepBuildRoot) {
-    Remove-BuildRoot -Path $BuildRoot
+  if (Test-Path -LiteralPath $BuildRoot) {
+    Remove-BuildRootSecrets -Path $BuildRoot
+    if (-not $KeepBuildRoot) {
+      Remove-BuildRoot -Path $BuildRoot
+    }
   }
   throw
 }
@@ -434,6 +475,9 @@ try {
 }
 finally {
   Pop-Location
+  if (Test-Path -LiteralPath $BuildRoot) {
+    Remove-BuildRootSecrets -Path $BuildRoot
+  }
   if ($buildSucceeded -and -not $KeepBuildRoot -and (Test-Path -LiteralPath $BuildRoot)) {
     $gradlew = Join-Path $BuildRoot "android\gradlew.bat"
     if (Test-Path -LiteralPath $gradlew) {

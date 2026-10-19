@@ -421,9 +421,9 @@ export async function countBlockingLocalUserData() {
           WHERE status IN ('inProgress', 'paused', 'completedLocal', 'syncError')
              OR sync_status NOT IN ('synced', 'cancelled')) +
         (SELECT COUNT(*) FROM shift_remarks
-          WHERE sync_status NOT IN ('synced', 'cancelled')) +
-        (SELECT COUNT(*) FROM mobile_diagnostic_reports
-          WHERE status = 'pending')
+          WHERE sync_status NOT IN ('synced', 'cancelled'))
+        -- Diagnostic reports are telemetry, not field data: an unsent report
+        -- must never stop an employee from signing out and handing over the phone.
       ) AS count
   `);
 

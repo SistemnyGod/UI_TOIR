@@ -1,5 +1,5 @@
 import { currentContourId } from "@/core/environments";
-import { getDatabase } from "@/db/database";
+import { getDatabase, withProtectedExclusiveTransactionAsync } from "@/db/database";
 import { withSqliteBusyRetry } from "@/db/sqliteBusyRetry";
 import { getStoredOwnerUserId } from "@/auth/tokenStorage";
 import { LocalMobileFile } from "@/domain/files/fileTypes";
@@ -9,6 +9,7 @@ export type SyncQueueFileItem = Pick<
   "clientFileId" | "localPath" | "previewPath" | "serverFileId" | "status" | "sha256" | "sizeBytes" | "contentType" | "mediaKind" | "assignmentId" | "pointId" | "remarkId" | "workTaskId" | "createdAtLocal" | "contourId" | "linkedAt" | "attemptCount" | "lastError" | "nextAttemptAt" | "lastAttemptAt"
 > & {
   assignmentRouteName: string | null;
+  pointName: string | null;
 };
 
 export async function insertLocalFile(file: LocalMobileFile) {
@@ -134,7 +135,8 @@ export async function listFilesByClientIds(clientFileIds: string[]) {
         point_id AS pointId,
         remark_id AS remarkId,
         work_task_id AS workTaskId,
-        created_at_local AS createdAtLocal
+        created_at_local AS createdAtLocal,
+        attempt_count AS attemptCount
       FROM files
       WHERE owner_user_id = ?
         AND contour_id = '${currentContourId}'
@@ -208,7 +210,8 @@ export async function listWorkTaskFiles(workTaskId: string) {
         point_id AS pointId,
         remark_id AS remarkId,
         work_task_id AS workTaskId,
-        created_at_local AS createdAtLocal
+        created_at_local AS createdAtLocal,
+        attempt_count AS attemptCount
       FROM files
       WHERE owner_user_id = ?
         AND contour_id = '${currentContourId}'
@@ -262,7 +265,8 @@ export async function listSyncQueueFiles(ownerUserId: string, limit = 100) {
           file.last_error AS lastError,
           file.next_attempt_at AS nextAttemptAt,
           file.last_attempt_at AS lastAttemptAt,
-          COALESCE(route.name, request.route_name, '') AS assignmentRouteName
+          COALESCE(route.name, request.route_name, '') AS assignmentRouteName,
+          COALESCE(assignment_point.name, route_point.name) AS pointName
         FROM files file
         LEFT JOIN patrol_assignments assignment
           ON assignment.assignment_id = file.assignment_id
@@ -272,6 +276,11 @@ export async function listSyncQueueFiles(ownerUserId: string, limit = 100) {
         LEFT JOIN patrol_request_board request
           ON request.request_id = assignment.request_id
           AND request.owner_user_id = file.owner_user_id
+        LEFT JOIN assignment_route_points assignment_point
+          ON assignment_point.assignment_id = file.assignment_id
+          AND assignment_point.point_id = file.point_id
+        LEFT JOIN route_points route_point
+          ON route_point.point_id = file.point_id
         WHERE file.owner_user_id = ?
           AND file.contour_id = '${currentContourId}'
           AND file.status NOT IN ('uploaded', 'linked', 'deletedAfterRetention')
@@ -395,4 +404,42 @@ export async function deleteLinkedLocalFileRecord(ownerUserId: string, clientFil
     "DELETE FROM files WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ? AND status = 'linked'",
     [ownerUserId, currentContourId, clientFileId]
   ));
+}
+
+/**
+ * Manual "retry" for an attachment whose upload was given up. The file gets a
+ * fresh attempt budget, and commands that were rejected locally only because
+ * of this file go back to the queue under their original clientOperationId.
+ * Commands with a server decision (a sync_conflicts row) are left untouched.
+ */
+export async function retryFailedFileUpload(ownerUserId: string, clientFileId: string) {
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+  let reactivatedCommands = 0;
+  await withSqliteBusyRetry(() => withProtectedExclusiveTransactionAsync(db, async (tx) => {
+    const file = await tx.runAsync(
+      `UPDATE files
+          SET status = 'retryLater', attempt_count = 0, last_error = NULL, next_attempt_at = NULL
+        WHERE owner_user_id = ? AND contour_id = ? AND client_file_id = ? AND status = 'failed'`,
+      [ownerUserId, currentContourId, clientFileId]
+    );
+    if (file.changes !== 1) {
+      throw new Error("Повторить можно только вложение с ошибкой загрузки.");
+    }
+    const commands = await tx.runAsync(
+      `UPDATE outbox_commands
+          SET status = 'pending', last_error = NULL, retry_reason = NULL, next_attempt_at = NULL, updated_at_local = ?
+        WHERE owner_user_id = ? AND contour_id = ? AND status = 'rejected'
+          AND (entity_local_id = ? OR payload_json LIKE '%' || ? || '%')
+          AND NOT EXISTS (
+            SELECT 1 FROM sync_conflicts conflict
+            WHERE conflict.owner_user_id = outbox_commands.owner_user_id
+              AND conflict.contour_id = outbox_commands.contour_id
+              AND conflict.client_operation_id = outbox_commands.client_operation_id
+          )`,
+      [now, ownerUserId, currentContourId, clientFileId, clientFileId]
+    );
+    reactivatedCommands = commands.changes;
+  }));
+  return { reactivatedCommands };
 }

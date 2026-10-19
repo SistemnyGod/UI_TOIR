@@ -14,6 +14,7 @@ import {
 import { hasUsableNetwork } from "@/core/network";
 import { logMobileAction } from "@/db/repositories/mobileActionLogRepository";
 import { collectDiagnosticContext } from "@/services/diagnosticContextService";
+import { isPermanentDiagnosticRejection } from "@/services/diagnosticReportPolicy";
 
 type DiagnosticUploadKind = "daily" | "pending" | "manual";
 type QueuedDiagnosticUpload = {
@@ -206,7 +207,7 @@ async function sendPendingDiagnosticReport(report: MobileDiagnosticReport): Prom
     return { status: "sent", reportId: report.reportId };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await markDiagnosticReportFailed(report.reportId, message);
+    await markDiagnosticReportFailed(report.reportId, message, { permanent: isPermanentDiagnosticRejection(error) });
     return { status: "failed", message };
   }
 }

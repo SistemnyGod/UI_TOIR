@@ -451,6 +451,11 @@ export async function activateWaitingNetworkOutboxCommands(ownerUserId: string) 
   ));
 }
 
+/**
+ * A new network route or a server that answers again is a fresh chance to
+ * deliver: commands parked because the server was unreachable or slow run now.
+ * Server-directed Retry-After (rateLimit) and unknown failures keep their backoff.
+ */
 export async function activateNetworkRecoveredOutboxCommands(ownerUserId: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
@@ -465,7 +470,7 @@ export async function activateNetworkRecoveredOutboxCommands(ownerUserId: string
         AND contour_id = ?
         AND (
           status = 'waiting_network'
-          OR (status = 'retryLater' AND retry_reason IN ('network', 'timeout'))
+          OR (status = 'retryLater' AND retry_reason IN ('network', 'timeout', 'server'))
         )
     `,
     [updatedAtLocal, ownerUserId, currentContourId]
@@ -1291,7 +1296,8 @@ export async function listUnconfirmedCompleteReportCommands(
   const db = await getDatabase();
   const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
   const assignmentFilter = assignmentId ? "AND entity_local_id = ?" : "";
-  const params = assignmentId ? [ownerUserId, currentContourId, assignmentId] : [ownerUserId, currentContourId];
+  const nowIso = new Date().toISOString();
+  const params = assignmentId ? [ownerUserId, currentContourId, nowIso, assignmentId] : [ownerUserId, currentContourId, nowIso];
   const rows = await db.getAllAsync<{
     client_operation_id: string;
     owner_user_id: string;
@@ -1314,6 +1320,10 @@ export async function listUnconfirmedCompleteReportCommands(
                 AND contour_id = ?
                 AND command_type = 'completePatrolAssignment'
         AND status IN ('pending', 'sending', 'retryLater')
+        -- Only a report that reached the network can have a server receipt,
+        -- and a scheduled retry is not checked again before its time.
+        AND attempt_count > 0
+        AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
         ${assignmentFilter}
       ORDER BY updated_at_local ASC, created_at_local ASC
       LIMIT ?

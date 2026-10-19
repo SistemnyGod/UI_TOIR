@@ -33,6 +33,7 @@ import { syncWorkItems } from "@/services/workTaskService";
 import { triggerForegroundSyncWithRetry } from "@/sync/syncTriggers";
 import { cancelNextOutboxRetry, scheduleNextOutboxRetry } from "@/sync/outboxRetryScheduler";
 import { currentContourId } from "@/core/environments";
+import { wipeRememberedCredentials } from "@/auth/rememberedCredentials";
 
 // SQLite account replacement and SecureStore publication form one logical
 // transition. Serialize startup recovery, login and logout around both stores.
@@ -136,6 +137,9 @@ async function signInInternal(loginName: string, password: string) {
       await assertNoPendingLocalChanges("Нельзя сменить пользователя: на телефоне есть неотправленные отчеты или действия. Сначала выполните синхронизацию.");
       await replaceLocalUserDataWithBootstrap(bootstrap);
       replacementCommitted = true;
+      // The saved pair may belong to the previous account; the login screen
+      // re-saves the new pair after this transition when the user asked to.
+      await wipeRememberedCredentials().catch(() => undefined);
     } else {
       await saveBootstrap(bootstrap);
     }
@@ -223,6 +227,7 @@ async function restoreSessionWithRefreshTokenInternal() {
     await assertNoPendingLocalChanges("Нельзя восстановить другую сессию: на телефоне есть неотправленные отчеты или действия.");
     await replaceLocalUserDataWithBootstrap(bootstrap);
     replacementCommitted = true;
+    await wipeRememberedCredentials().catch(() => undefined);
   } else {
     await saveBootstrap(bootstrap);
   }
@@ -294,6 +299,8 @@ async function signOutInternal() {
     await clearLocalSessionKeepingRefreshToken();
   }
 
+  // A shared phone must not offer the previous employee's password.
+  await wipeRememberedCredentials().catch(() => undefined);
   await clearLocalUserData();
   return serverRevoked;
 }

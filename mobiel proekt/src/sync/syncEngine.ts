@@ -683,7 +683,9 @@ async function uploadFilesForCompleteCommands(ownerUserId: string, commands: Out
         }
         throw error;
       }
-      const disposition: FileUploadFailureDisposition = error instanceof MobileNetworkError ? "retryLater" : getFileUploadFailureDisposition(error);
+      // markFileUploading counted this attempt in the database row only.
+      const attemptNumber = (file.attemptCount ?? 0) + 1;
+      const disposition: FileUploadFailureDisposition = error instanceof MobileNetworkError ? "retryLater" : getFileUploadFailureDisposition(error, attemptNumber);
       await markFileUploadFailed(file.clientFileId, disposition, error instanceof Error ? error.message : "Неизвестная ошибка загрузки файла.");
       const message = "Не удалось отправить файл на сервер. Отчет останется в очереди восстановления.";
       if (error instanceof MobileNetworkError) {

@@ -3,7 +3,9 @@ param(
   [string]$BuildRoot = '',
   [string]$OutputDirectory = '',
   [string]$JavaHome = $env:JAVA_HOME,
-  [string]$ReactNativeArchitectures = 'armeabi-v7a,arm64-v8a,x86,x86_64',
+  # Field releases ship ARM only; add emulator ABIs with -IncludeEmulatorAbis.
+  [string]$ReactNativeArchitectures = 'armeabi-v7a,arm64-v8a',
+  [switch]$IncludeEmulatorAbis,
   [switch]$KeepBuildRoot,
   [switch]$ValidateOnly,
 
@@ -191,6 +193,7 @@ try {
       Patrol360Environment = $Patrol360Environment
       PublicApiBaseUrl = $PublicApiBaseUrl
       ReactNativeArchitectures = $ReactNativeArchitectures
+      IncludeEmulatorAbis = $IncludeEmulatorAbis
       KeepBuildRoot = $KeepBuildRoot
     }
     if (-not [string]::IsNullOrWhiteSpace($BuildRoot)) {

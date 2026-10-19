@@ -14,6 +14,7 @@ import {
   attachRemarkVideoFromCamera,
   attachRemarkVideoFromGallery
 } from "@/services/mediaAttachmentService";
+import { useAppTheme } from "@/features/settings/themePreference";
 import { Card } from "@/ui/Card";
 import { PrimaryButton } from "@/ui/PrimaryButton";
 import { Screen } from "@/ui/Screen";
@@ -21,6 +22,7 @@ import { getLocalMediaStorageWarning } from "@/services/fileStorageService";
 
 export function CameraCaptureScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
   const { assignmentId, pointId, remarkId, mediaKind, source, restoreMissing, missingClientFileId } = useLocalSearchParams<{
     assignmentId?: string;
     pointId?: string;
@@ -127,14 +129,14 @@ export function CameraCaptureScreen() {
       subtitle="Файл сохранится локально и отправится на сервер при синхронизации."
     >
       <Card>
-        <Text style={styles.title}>{captureKind === "video" ? "Добавить видео" : "Добавить фото"}</Text>
-        <Text style={styles.text}>
+        <Text style={[styles.title, { color: colors.text }]}>{captureKind === "video" ? "Добавить видео" : "Добавить фото"}</Text>
+        <Text style={[styles.text, { color: colors.mutedText }]}>
           Используйте камеру Android или выберите файл из галереи. Видео ограничено по размеру, чтобы отчет можно было стабильно отправить через мобильную сеть.
         </Text>
       </Card>
 
-      {storageWarning ? <Text style={styles.warning}>{storageWarning}</Text> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {storageWarning ? <Text style={[styles.warning, { color: colors.warning }]}>{storageWarning}</Text> : null}
+      {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
       {isBusy ? <ActivityIndicator /> : null}
       <View style={styles.actions}>
         <PrimaryButton
@@ -155,22 +157,18 @@ const styles = StyleSheet.create({
     gap: 10
   },
   title: {
-    color: "#0f1a2b",
     fontSize: 20,
     fontWeight: "700"
   },
   text: {
-    color: "#6b7280",
     fontSize: 15,
     lineHeight: 21
   },
   warning: {
-    color: "#b45309",
     fontSize: 14,
     lineHeight: 20
   },
   error: {
-    color: "#ef4444",
     fontSize: 14,
     lineHeight: 20
   }
