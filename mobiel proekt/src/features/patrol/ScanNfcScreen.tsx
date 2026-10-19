@@ -30,6 +30,8 @@ import {
   startNfcReaderSession,
   stopNfcReaderSession
 } from '@/services/nfcService';
+import { claimNfcScanScreen } from '@/services/nfcGuardService';
+import { nfcReadMemory } from '@/services/nfcReadMemory';
 import { playScanFeedback } from '@/services/scanFeedback';
 import { requestPatrolSync } from '@/sync/PatrolSyncCoordinator';
 import { PrimaryButton } from '@/ui/PrimaryButton';
@@ -52,11 +54,6 @@ type NfcStatus =
   | 'routeUnavailable'
   | 'error';
 
-type LastTag = {
-  key: string;
-  at: number;
-};
-
 const readPrompt = 'Поднесите телефон к NFC-метке';
 const rereadMessage = 'Метка не дочиталась. Не убирайте телефон — читаем ещё раз';
 /** After a silent re-arm with no tag in the field, fall back to the normal prompt. */
@@ -76,7 +73,6 @@ export function ScanNfcScreen() {
   const armReaderRef = useRef<(quiet?: boolean) => Promise<void>>(async () => undefined);
   const progressReadRef = useRef(0);
   const routeCanScanRef = useRef(false);
-  const lastTagRef = useRef<LastTag | null>(null);
   const readRetryRef = useRef(createNfcReadRetryTracker());
   const readerStartFailuresRef = useRef(0);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -144,12 +140,10 @@ export function ScanNfcScreen() {
     }
     const incompleteRead = isIncompleteNdefRead(tag);
 
-    const tagKey = [...nfcCodes].sort().join('|');
-    const previousTag = lastTagRef.current;
-    if (previousTag && previousTag.key === tagKey && Date.now() - previousTag.at < 2000) {
-      return;
-    }
-    lastTagRef.current = { key: tagKey, at: Date.now() };
+    // A second report of the same touch keeps the outcome on screen; a later touch
+    // of a marked point gets the repository's "already marked" outcome.
+    if (nfcReadMemory.isDuplicate(nfcCodes)) return;
+    nfcReadMemory.recordRead(nfcCodes);
 
     const ownerEpoch = screenEpochRef.current;
     const isCurrent = () => screenActiveRef.current && appActiveRef.current && routeCanScanRef.current && screenEpochRef.current === ownerEpoch;
@@ -163,7 +157,7 @@ export function ScanNfcScreen() {
       }
       if (outcome.kind === 'unknown' && incompleteRead) {
         // Re-read the same tag instead of calling a half-read route tag foreign.
-        lastTagRef.current = null;
+        nfcReadMemory.forget(nfcCodes);
         handleReadFailure('tagLost');
         return;
       }
@@ -172,6 +166,9 @@ export function ScanNfcScreen() {
       const view = presentScanOutcome(outcome, 'nfc');
       playScanFeedback(view.feedback);
       logScanMatchFailure(assignmentId, 'nfc', outcome);
+      if (outcome.kind === 'confirmed' || outcome.kind === 'alreadyScanned' || outcome.kind === 'alreadyCompleted') {
+        nfcReadMemory.markTag(nfcCodes);
+      }
       // Duplicate, wrong-point and unknown tags leave the route unchanged; the reader stays armed.
       if (outcome.kind !== 'confirmed') {
         show(outcome.kind === 'alreadyScanned' || outcome.kind === 'alreadyCompleted' ? 'alreadyHandled' : 'unmatched',
@@ -186,6 +183,7 @@ export function ScanNfcScreen() {
       if (!isCurrent()) return;
       router.replace(`/patrol/assignment/${assignmentId}/point/${outcome.point.pointId}/fill`);
     } catch (error) {
+      nfcReadMemory.forget(nfcCodes);
       if (!isCurrent()) {
         return;
       }
@@ -329,6 +327,9 @@ export function ScanNfcScreen() {
       screenEpochRef.current++;
       screenActiveRef.current = true;
       routeCanScanRef.current = false;
+      const releaseScanClaim = claimNfcScanScreen();
+      nfcReadMemory.setScope(assignmentId);
+      nfcReadMemory.clearRecentRead();
       readRetryRef.current.reset();
       readerStartFailuresRef.current = 0;
       setStatus('idle');
@@ -383,6 +384,7 @@ export function ScanNfcScreen() {
 
       return () => {
         isMounted = false;
+        releaseScanClaim();
         appStateSubscription.remove();
         removeAdapterListener();
         removeSyncListener();
