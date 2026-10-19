@@ -4,6 +4,7 @@ import { TextField as TextInput } from "@/ui/TextField";
 import { SelectField } from "@/ui/SelectField";
 
 import { Ionicons } from "@expo/vector-icons";
+import type { ReactNode } from "react";
 
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -69,23 +70,12 @@ export function TaskModal({
   taskText: string;
 }) {
   const styles = useWorkAccountingStyles();
-  const reducedMotion = useReducedMotion();
-  const insets = useSafeAreaInsets();
   const hasUnsavedChanges = modal?.mode === "create" ? taskText.trim().length > 0 : Boolean(modal?.task && (taskText !== modal.task.title || taskEmployeeId !== (modal.task.employeeId ?? "") || taskSectionId !== (modal.task.sectionId ?? "")));
 
   return (
-    <Modal statusBarTranslucent navigationBarTranslucent animationType={reducedMotion ? "none" : "slide"} onRequestClose={() => requestModalClose(hasUnsavedChanges, loading, onClose)} transparent visible={Boolean(modal)}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
-        style={[styles.modalBackdrop, { paddingTop: insets.top + 68, paddingBottom: insets.bottom + 12 }]}
-      >
-        <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + 8, right: 16, left: 16 }}><TransientNotice message={draftNotice} /></View>
-        <View accessibilityViewIsModal style={styles.modalCard}>
-          <FormHeader title={modal?.mode === "edit" ? "Изменить работу" : modal?.repeated ? "Повторить работу" : "Создать работу"} loading={loading} onClose={onClose} onDelete={onDeleteDraft} />
-
-          {onRetry ? <PrimaryButton variant="secondary" label="Повторить сохранение" onPress={onRetry} /> : null}
-          {error ? <View style={{ paddingHorizontal: 18 }}><StatusMessage message={error} tone="danger" /></View> : null}
+    <FormModalShell visible={Boolean(modal)} title={modal?.mode === "edit" ? "Изменить работу" : modal?.repeated ? "Повторить работу" : "Создать работу"}
+      loading={loading} hasUnsavedChanges={hasUnsavedChanges} draftNotice={draftNotice} onClose={onClose} onDeleteDraft={onDeleteDraft}>
+          <FormFeedback error={error} onRetry={onRetry} />
           <ScrollView
             contentContainerStyle={styles.modalScrollContent}
             keyboardShouldPersistTaps="handled"
@@ -102,9 +92,7 @@ export function TaskModal({
             <PrimaryButton disabled={loading} label={modal?.mode === "edit" ? "Сохранить изменения" : "Создать и начать"} onPress={onSave} />
           </View>
           </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+    </FormModalShell>
   );
 }
 
@@ -148,23 +136,12 @@ export function RemarkModal({
   setRemarkSectionId: (value: string) => void;
 }) {
   const styles = useWorkAccountingStyles();
-  const reducedMotion = useReducedMotion();
-  const insets = useSafeAreaInsets();
   const hasUnsavedChanges = remarkComment.trim().length > 0 || remarkAttachmentAfterSave !== "later";
 
   return (
-    <Modal statusBarTranslucent navigationBarTranslucent animationType={reducedMotion ? "none" : "slide"} onRequestClose={() => requestModalClose(hasUnsavedChanges, loading, onClose)} transparent visible={open}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
-        style={[styles.modalBackdrop, { paddingTop: insets.top + 68, paddingBottom: insets.bottom + 12 }]}
-      >
-        <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + 8, right: 16, left: 16 }}><TransientNotice message={draftNotice} /></View>
-        <View accessibilityViewIsModal style={styles.modalCard}>
-          <FormHeader title="Новое замечание" loading={loading} onClose={onClose} onDelete={onDeleteDraft} />
-
-          {onRetry ? <PrimaryButton variant="secondary" label="Повторить сохранение" onPress={onRetry} /> : null}
-          {error ? <View style={{ paddingHorizontal: 18 }}><StatusMessage message={error} tone="danger" /></View> : null}
+    <FormModalShell visible={open} title="Новое замечание"
+      loading={loading} hasUnsavedChanges={hasUnsavedChanges} draftNotice={draftNotice} onClose={onClose} onDeleteDraft={onDeleteDraft}>
+          <FormFeedback error={error} onRetry={onRetry} />
           <ScrollView
             contentContainerStyle={styles.modalScrollContent}
             keyboardShouldPersistTaps="handled"
@@ -187,9 +164,7 @@ export function RemarkModal({
             <PrimaryButton disabled={loading} label="Создать замечание" onPress={onSave} />
           </View>
           </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+    </FormModalShell>
   );
 }
 
@@ -217,23 +192,12 @@ export function CompleteTaskModal({
   task: WorkTaskDto | null;
 }) {
   const styles = useWorkAccountingStyles();
-  const reducedMotion = useReducedMotion();
-  const insets = useSafeAreaInsets();
 
   const hasUnsavedChanges = comment.trim().length > 0;
   return (
-    <Modal statusBarTranslucent navigationBarTranslucent animationType={reducedMotion ? "none" : "slide"} onRequestClose={() => requestModalClose(hasUnsavedChanges, loading, onClose)} transparent visible={Boolean(task)}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
-        style={[styles.modalBackdrop, { paddingTop: insets.top + 68, paddingBottom: insets.bottom + 12 }]}
-      >
-        <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + 8, right: 16, left: 16 }}><TransientNotice message={draftNotice} /></View>
-        <View accessibilityViewIsModal style={styles.modalCard}>
-          <FormHeader title="Завершить работу" loading={loading} onClose={onClose} onDelete={onDeleteDraft} />
-
-          {onRetry ? <PrimaryButton variant="secondary" label="Повторить сохранение" onPress={onRetry} /> : null}
-          {error ? <View style={{ paddingHorizontal: 18 }}><StatusMessage message={error} tone="danger" /></View> : null}
+    <FormModalShell visible={Boolean(task)} title="Завершить работу"
+      loading={loading} hasUnsavedChanges={hasUnsavedChanges} draftNotice={draftNotice} onClose={onClose} onDeleteDraft={onDeleteDraft}>
+          <FormFeedback error={error} onRetry={onRetry} />
           <ScrollView
             contentContainerStyle={styles.modalScrollContent}
             keyboardShouldPersistTaps="handled"
@@ -260,9 +224,7 @@ export function CompleteTaskModal({
             <PrimaryButton disabled={loading} icon="checkmark-circle-outline" label="Завершить работу" onPress={onSave} />
           </View>
           </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+    </FormModalShell>
   );
 }
 
@@ -294,8 +256,6 @@ export function ParticipationModal({
   setReason: (value: string) => void;
 }) {
   const styles = useWorkAccountingStyles();
-  const reducedMotion = useReducedMotion();
-  const insets = useSafeAreaInsets();
   const previousOptions = action?.item.actualParticipants
     .filter((participant) => !participant.finishedAt && !participant.isCurrentMobileEmployee)
     .map((participant) => ({ id: participant.employeeId, label: participant.fullName })) ?? [];
@@ -307,12 +267,9 @@ export function ParticipationModal({
   const hasUnsavedChanges = Boolean(reason.trim() || previousEmployeeId);
 
   return (
-    <Modal statusBarTranslucent navigationBarTranslucent animationType={reducedMotion ? "none" : "slide"} onRequestClose={() => requestModalClose(hasUnsavedChanges, loading, onClose)} transparent visible={Boolean(action)}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.modalBackdrop, { paddingTop: insets.top + 68, paddingBottom: insets.bottom + 12 }]}>
-        <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + 8, right: 16, left: 16 }}><TransientNotice message={draftNotice} /></View>
-        <View accessibilityViewIsModal style={styles.modalCard}>
-          <FormHeader title={title} loading={loading} onClose={onClose} onDelete={onDeleteDraft} />
-
+    <FormModalShell visible={Boolean(action)} title={title}
+      loading={loading} hasUnsavedChanges={hasUnsavedChanges} draftNotice={draftNotice} onClose={onClose} onDeleteDraft={onDeleteDraft}>
+          {/* This form shows the error above the retry button, unlike the others. */}
           {error ? <StatusMessage message={error} tone="danger" /> : null}
           {onRetry ? <PrimaryButton label="Повторить сохранение" onPress={onRetry} variant="secondary" /> : null}
           <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} keyboardShouldPersistTaps="handled">
@@ -345,9 +302,7 @@ export function ParticipationModal({
             <PrimaryButton disabled={loading} label={action?.mode === "replace" ? "Заменить участника" : action?.mode === "join" ? "Присоединиться" : "Начать работу"} onPress={onSave} />
           </View>
           </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+    </FormModalShell>
   );
 }
 
@@ -358,6 +313,46 @@ export function ChoiceButton({ active, label, onPress }: { active: boolean; labe
       <Text style={[styles.choiceText, active ? styles.choiceTextActive : null]}>{label}</Text>
     </Pressable>
   );
+}
+
+/** Bottom-sheet frame shared by the work forms: draft notice, title, «Действия» and «Закрыть». */
+function FormModalShell({ visible, title, loading, hasUnsavedChanges, draftNotice, onClose, onDeleteDraft, children }: {
+  visible: boolean;
+  title: string;
+  loading: boolean;
+  hasUnsavedChanges: boolean;
+  draftNotice: string | null;
+  onClose: () => void;
+  onDeleteDraft: () => void;
+  children: ReactNode;
+}) {
+  const styles = useWorkAccountingStyles();
+  const reducedMotion = useReducedMotion();
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal statusBarTranslucent navigationBarTranslucent animationType={reducedMotion ? "none" : "slide"} onRequestClose={() => requestModalClose(hasUnsavedChanges, loading, onClose)} transparent visible={visible}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
+        style={[styles.modalBackdrop, { paddingTop: insets.top + 68, paddingBottom: insets.bottom + 12 }]}
+      >
+        <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + 8, right: 16, left: 16 }}><TransientNotice message={draftNotice} /></View>
+        <View accessibilityViewIsModal style={styles.modalCard}>
+          <FormHeader title={title} loading={loading} onClose={onClose} onDelete={onDeleteDraft} />
+
+          {children}
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+/** «Повторить сохранение» after a failed draft save, then the form error. */
+function FormFeedback({ error, onRetry }: { error: string | null; onRetry?: () => void }) {
+  return <>
+    {onRetry ? <PrimaryButton variant="secondary" label="Повторить сохранение" onPress={onRetry} /> : null}
+    {error ? <View style={{ paddingHorizontal: 18 }}><StatusMessage message={error} tone="danger" /></View> : null}
+  </>;
 }
 
 function FormHeader({ title, loading, onClose, onDelete }: { title: string; loading: boolean; onClose: () => void; onDelete: () => void }) {
