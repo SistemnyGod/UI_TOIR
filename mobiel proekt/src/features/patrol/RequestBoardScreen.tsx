@@ -1,6 +1,6 @@
 import { TextField as TextInput } from "@/ui/TextField";
 import { useFocusEffect, useRouter, useLocalSearchParams } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { FlatList, ListRenderItem, StyleSheet, Text, View } from "react-native";
 
 import { listRequestBoard, getAssignmentById, getAssignmentProgress, RequestBoardItem } from "@/db/repositories/patrolRepository";
@@ -139,7 +139,8 @@ export function RequestBoardScreen() {
     }
   }
 
-  async function openRequest(item: RequestBoardItem) {
+  // Stable, so a reload re-renders only the cards whose request changed.
+  const openRequest = useCallback(async (item: RequestBoardItem) => {
     if (starting.current) return;
     if (!['available', 'assigned', 'accepted', 'inProgress', 'paused'].includes(item.status)
       || ((item.status === 'available' || item.status === 'assigned') && (!item.assignedEmployeeId || item.performerSelectionAvailable))) {
@@ -162,7 +163,7 @@ export function RequestBoardScreen() {
       starting.current = false;
       setStartingId(null);
     }
-  }
+  }, [router]);
 
   const summary = useMemo(
     () => ({
@@ -178,12 +179,15 @@ export function RequestBoardScreen() {
     const source = activeTab === "history" ? items.filter((item) => historyStatuses.has(item.status))
       : activeTab === "inProgress" ? items.filter((item) => item.status === "inProgress" || item.status === "paused")
       : items.filter((item) => !historyStatuses.has(item.status));
-    return source.filter(item => item.requestId !== selectedRequestId).filter((item) => `${item.routeName} ${item.assignedFullName ?? ""}`.toLocaleLowerCase("ru-RU").includes(query.trim().toLocaleLowerCase("ru-RU"))).sort(compareRequestDatesNewestFirst);
+    const needle = query.trim().toLocaleLowerCase("ru-RU");
+    return source.filter(item => item.requestId !== selectedRequestId).filter((item) => !needle || `${item.routeName} ${item.assignedFullName ?? ""}`.toLocaleLowerCase("ru-RU").includes(needle)).sort(compareRequestDatesNewestFirst);
   }, [activeTab, items, query, selectedRequestId]);
 
-  const renderItem: ListRenderItem<RequestBoardItem> = ({ item }) => (
-    <RequestCard item={item} busy={startingId === item.requestId} disabled={startingId !== null} onPress={() => void openRequest(item)} />
-  );
+  const selectedItem = useMemo(() => items.find(item => item.requestId === selectedRequestId) ?? null, [items, selectedRequestId]);
+
+  const renderItem = useCallback<ListRenderItem<RequestBoardItem>>(({ item }) => (
+    <RequestCard item={item} busy={startingId === item.requestId} disabled={startingId !== null} onOpen={openRequest} />
+  ), [openRequest, startingId]);
 
   return (
     <ScreenList
@@ -207,11 +211,14 @@ export function RequestBoardScreen() {
         <EmptyState icon="file-tray-outline" title="В этой вкладке пока пусто" text="Потяните экран вниз для обновления или выберите другую вкладку." />
       )}
       renderItem={renderItem}
+      initialNumToRender={6}
+      maxToRenderPerBatch={6}
+      windowSize={7}
       title={selectedRequestId ? "" : "Обход"}
       headerContent={
         <>
-          {items.find(item => item.requestId === selectedRequestId) ? <View style={{ gap: 8 }}>
-            <RequestCard progressLabel={progressLabel} item={items.find(item => item.requestId === selectedRequestId)!} busy={startingId === selectedRequestId} disabled={startingId !== null} onPress={() => void openRequest(items.find(item => item.requestId === selectedRequestId)!)} />
+          {selectedItem ? <View style={{ gap: 8 }}>
+            <RequestCard progressLabel={progressLabel} item={selectedItem} busy={startingId === selectedItem.requestId} disabled={startingId !== null} onOpen={openRequest} />
           </View> : null}
 
           <SelectionTabs<RequestTab>
@@ -234,8 +241,9 @@ export function RequestBoardScreen() {
   );
 }
 
-function RequestCard({ item, onPress, busy, disabled, progressLabel }: { item: RequestBoardItem; onPress: () => void; busy: boolean; disabled: boolean; progressLabel?: string }) {
+const RequestCard = memo(function RequestCard({ item, onOpen, busy, disabled, progressLabel }: { item: RequestBoardItem; onOpen: (item: RequestBoardItem) => Promise<void>; busy: boolean; disabled: boolean; progressLabel?: string }) {
   const { colors } = useAppTheme();
+  const onPress = () => void onOpen(item);
   const active = ['inProgress', 'paused'].includes(item.status);
   const actionLabel = active ? 'Продолжить' : ['assigned', 'accepted', 'available'].includes(item.status) ? 'Начать обход' : 'Открыть результаты';
   const actionIcon = active ? 'play-outline' : 'arrow-forward-outline';
@@ -296,7 +304,7 @@ function RequestCard({ item, onPress, busy, disabled, progressLabel }: { item: R
       </Card>
     </Rise>
   );
-}
+});
 
 function statusLabel(status: string) {
   switch (status) {
@@ -342,13 +350,17 @@ function statusTone(status: string) {
 }
 
 
+// Building an Intl formatter is costly on Hermes; one instance serves every card.
+let dateTimeFormat: Intl.DateTimeFormat | null = null;
+
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", {
+  dateTimeFormat ??= new Intl.DateTimeFormat("ru-RU", {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     month: "2-digit"
-  }).format(new Date(value));
+  });
+  return dateTimeFormat.format(new Date(value));
 }
 
 const styles = StyleSheet.create({

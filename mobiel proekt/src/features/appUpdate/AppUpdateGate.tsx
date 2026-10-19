@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { AppState, Modal, View } from "react-native";
 
+import { runAfterFirstRender } from "@/core/afterFirstRender";
 import { AppUpdateBanner } from "@/features/appUpdate/AppUpdateBanner";
 import { UpdateRequiredScreen } from "@/features/appUpdate/UpdateRequiredScreen";
 import { isAppUpdateBlockingState, shouldShowAppUpdateBanner } from "@/services/appUpdate/appUpdateController";
@@ -16,11 +17,15 @@ export function AppUpdateGate({ children }: { children: ReactNode }) {
   const state = useAppUpdateState();
 
   useEffect(() => {
-    void appUpdateController.checkForUpdates("start");
+    // The start check is a network call; let the first screen draw first.
+    const cancelStartCheck = runAfterFirstRender(() => { void appUpdateController.checkForUpdates("start"); });
     const subscription = AppState.addEventListener("change", (appState) => {
       if (appState === "active") void appUpdateController.checkForUpdates("foreground");
     });
-    return () => subscription.remove();
+    return () => {
+      cancelStartCheck();
+      subscription.remove();
+    };
   }, []);
 
   const blocking = isAppUpdateBlockingState(state);

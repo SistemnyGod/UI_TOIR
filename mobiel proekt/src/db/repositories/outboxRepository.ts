@@ -63,6 +63,8 @@ export async function listPendingOutboxCommands(ownerUserId: string, limit = 25,
       FROM outbox_commands candidate
       WHERE candidate.owner_user_id = ?
         AND candidate.contour_id = ?
+        -- Redundant with the OR below; lets SQLite use ix_outbox_commands_dispatchable.
+        AND candidate.status IN ('pending', 'retryLater')
         AND (
           candidate.status = 'pending'
           OR (
