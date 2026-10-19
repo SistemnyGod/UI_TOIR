@@ -14,11 +14,11 @@ export function ScanActionBar({ onPoints, onManual, onMore }: {
   const buttonStyle = [{ backgroundColor: colors.card, borderColor: colors.cardBorder }, softShadow(colors.shadow, 1)];
   return <View style={styles.bar}>
     <View style={[styles.actions, stacked && styles.stacked]}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Все метки" onPress={onPoints} style={[styles.action, stacked ? { flex: 0, flexBasis: "auto", flexShrink: 0 } : null, buttonStyle]}>
+      <Pressable testID="scan-all-points" accessibilityRole="button" accessibilityLabel="Все метки" onPress={onPoints} style={[styles.action, stacked ? { flex: 0, flexBasis: "auto", flexShrink: 0 } : null, buttonStyle]}>
         <View style={[styles.tile, { backgroundColor: colors.tile }]}><Ionicons name="list-outline" size={18} color={colors.primary} /></View>
         <Text style={[styles.label, font(800), { color: colors.text }]}>Все метки</Text>
       </Pressable>
-      {onManual ? <Pressable accessibilityRole="button" accessibilityLabel="Метка недоступна" onPress={onManual} style={[styles.action, stacked ? { flex: 0, flexBasis: "auto", flexShrink: 0 } : null, buttonStyle]}>
+      {onManual ? <Pressable testID="scan-tag-unavailable" accessibilityRole="button" accessibilityLabel="Метка недоступна" onPress={onManual} style={[styles.action, stacked ? { flex: 0, flexBasis: "auto", flexShrink: 0 } : null, buttonStyle]}>
         <View style={[styles.tile, { backgroundColor: colors.warningSurface }]}><Ionicons name="warning-outline" size={18} color={colors.warning} /></View>
         <Text style={[styles.label, font(800), { color: colors.text }]}>Метка недоступна</Text>
       </Pressable> : null}

@@ -13,9 +13,11 @@ type PrimaryButtonProps = {
   icon?: keyof typeof Ionicons.glyphMap;
   size?: "normal" | "large";
   variant?: "primary" | "secondary" | "danger" | "ghost" | "inverse";
+  /** Stable e2e selector (Maestro `id:`); see e2e/README.md. */
+  testID?: string;
 };
 
-export function PrimaryButton({ label, onPress, disabled, disabledReason, loading = false, icon, size = "normal", variant = "primary" }: PrimaryButtonProps) {
+export function PrimaryButton({ label, onPress, disabled, disabledReason, loading = false, icon, size = "normal", variant = "primary", testID }: PrimaryButtonProps) {
   const { colors } = useAppTheme();
   const isPrimary = variant === "primary";
   const isDanger = variant === "danger";
@@ -25,6 +27,7 @@ export function PrimaryButton({ label, onPress, disabled, disabledReason, loadin
   return (
     <View style={{ gap: 6, minWidth: 0 }}>
     <Pressable
+      testID={testID}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!blocked, busy: loading }}
       accessibilityHint={disabled ? disabledReason : undefined}

@@ -289,6 +289,7 @@ export function SubmitReportScreen() {
       bottomActionBackground='transparent'
       bottomAction={
         <PrimaryButton
+          testID="report-primary-action"
           disabled={primaryAction.disabled}
           disabledReason={delivery?.status === 'sending' ? undefined : primaryAction.disabledReason}
           loading={sendBusy || delivery?.status === 'sending'}
@@ -315,7 +316,7 @@ export function SubmitReportScreen() {
         {presentation.action !== 'openProblems' ? <View accessibilityLiveRegion='polite' style={[styles.deliveryHeader, { backgroundColor: stateColors.background }]}>
           <Ionicons color={stateColors.foreground} name={presentation.icon} size={26} />
           <View style={styles.deliveryText}>
-            <Text style={[styles.sectionTitle, { color: stateColors.foreground }]}>{presentation.title}</Text>
+            <Text testID="report-delivery-title" style={[styles.sectionTitle, { color: stateColors.foreground }]}>{presentation.title}</Text>
             {presentation.detail ? <Text style={[styles.text, { color: colors.mutedText }]}>{presentation.detail}</Text> : null}
           </View>
         </View> : null}

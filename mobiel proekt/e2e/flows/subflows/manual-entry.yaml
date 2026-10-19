@@ -1,0 +1,16 @@
+# «Метка недоступна» -> reason «Метка повреждена» -> «Продолжить».
+appId: ru.patrol360.mobile
+---
+- tapOn:
+    id: scan-tag-unavailable
+- extendedWaitUntil:
+    visible: "Осмотр без NFC"
+    timeout: 15000
+- tapOn: "Причина \*: Выбрать"
+- tapOn: "Метка повреждена"
+- tapOn:
+    id: point-manual-continue
+- extendedWaitUntil:
+    visible:
+      id: point-status-ok
+    timeout: 15000

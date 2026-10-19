@@ -13,7 +13,7 @@ const sourceDirty = resolveSourceDirty();
 
 const googleServicesFile = "./secrets/google-services.json";
 const appIconFile = "./assets/app-icon.png";
-const supportedDefaultEnvironments = new Set(["dev", "test", "local-enterprise", "production"]);
+const supportedDefaultEnvironments = new Set(["dev", "test", "local-enterprise", "production", "e2e"]);
 const configuredEnvironment = process.env.PATROL360_ENVIRONMENT
   ?? process.env.EXPO_PUBLIC_PATROL360_ENVIRONMENT;
 const isReleaseBuild = process.env.NODE_ENV === "production"
@@ -40,10 +40,20 @@ if (configuredDefaultEnvironment === "production" && !configuredProductionApiBas
 if (configuredDefaultEnvironment === "production" && !configuredProductionApiBaseUrl.startsWith("https://")) {
   throw new Error("PATROL360_PRODUCTION_API_URL must use HTTPS for a production build.");
 }
+// e2e: emulator-only contour that talks to exactly one mock server
+// (PATROL360_PUBLIC_API_URL) and never fails over to the LAN pilot server.
+if (configuredDefaultEnvironment === "e2e" && isReleaseBuild) {
+  throw new Error("PATROL360_ENVIRONMENT=e2e is for emulator debug builds only.");
+}
+if (configuredDefaultEnvironment === "e2e" && !configuredPublicApiBaseUrl) {
+  throw new Error("PATROL360_PUBLIC_API_URL must point at the e2e mock server (for example http://10.0.2.2:18360).");
+}
 
 const allowLocalCleartext = configuredDefaultEnvironment === "dev"
   || configuredDefaultEnvironment === "local-enterprise";
-const localCleartextHosts = allowLocalCleartext
+const localCleartextHosts = configuredDefaultEnvironment === "e2e"
+  ? [new URL(configuredPublicApiBaseUrl).hostname]
+  : allowLocalCleartext
   ? uniqueValues([
       "192.168.2.194",
       "localhost",

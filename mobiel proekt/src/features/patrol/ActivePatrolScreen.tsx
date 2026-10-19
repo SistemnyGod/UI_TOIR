@@ -293,6 +293,8 @@ function ActivePatrolContent({ assignmentId }: { assignmentId: string }) {
 
         <PrimaryButton
 
+          testID="patrol-primary-action"
+
           disabled={isActing || progress.total === 0}
 
           icon={isReadyForReview ? "document-text-outline" : scanPolicy.nfcEnabled ? "scan-outline" : "list-outline"}
@@ -442,6 +444,8 @@ function ActivePatrolContent({ assignmentId }: { assignmentId: string }) {
       {isAccepted || isPaused ? (
 
         <PrimaryButton
+
+          testID="patrol-start"
 
           disabled={isActing || progress.total === 0}
 

@@ -1,0 +1,16 @@
+# Step 3: point 1 via the manual path, result «Исправно».
+appId: ru.patrol360.mobile
+name: 03 Manual point marked OK
+---
+- runFlow: subflows/manual-entry.yaml
+- assertVisible: "Метка — E2E насос 1"
+- tapOn:
+    id: point-status-ok
+- tapOn:
+    id: point-save
+# Saving moves on to the next point: back to the NFC scan screen.
+- extendedWaitUntil:
+    visible:
+      id: scan-tag-unavailable
+    timeout: 20000
+- takeScreenshot: 03-after-ok-point

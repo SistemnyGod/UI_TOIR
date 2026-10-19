@@ -2,7 +2,7 @@ param(
   [ValidateSet("Debug", "Release")]
   [string]$Configuration = "Release",
 
-  [ValidateSet("dev", "test", "local-enterprise", "production")]
+  [ValidateSet("dev", "test", "local-enterprise", "production", "e2e")]
   [string]$Patrol360Environment = $env:PATROL360_ENVIRONMENT,
 
   [string]$PublicApiBaseUrl = $env:PATROL360_PUBLIC_API_URL,

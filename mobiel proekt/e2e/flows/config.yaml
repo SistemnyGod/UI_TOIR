@@ -1,0 +1,13 @@
+# Maestro workspace config. run-e2e.ps1 runs the numbered flows one by one
+# (it switches the emulator network between them), so nothing is auto-collected.
+flows:
+  - "0*.yaml"
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:
+    - 01-login
+    - 02-start-patrol
+    - 03-manual-point-ok
+    - 04-faulty-point
+    - 05-offline-submit
+    - 06-online-delivered

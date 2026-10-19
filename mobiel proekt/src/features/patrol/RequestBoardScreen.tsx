@@ -258,7 +258,7 @@ function RequestCard({ item, onPress, busy, disabled, progressLabel }: { item: R
           </View>
           <Text style={[font(600), styles.heroText]}>{item.assignedFullName ?? "сотрудник не выбран"} · План: {formatDateTime(item.plannedStartAt)}</Text>
           <View accessibilityLabel={`Пройдено ${progressLabel}`} style={styles.heroTrack}><View style={[styles.heroFill, { width: `${Math.round(share * 100)}%` }]} /></View>
-          <PrimaryButton variant="inverse" loading={busy} disabled={disabled} icon={actionIcon} label={actionLabel} onPress={onPress} />
+          <PrimaryButton testID="request-card-action" variant="inverse" loading={busy} disabled={disabled} icon={actionIcon} label={actionLabel} onPress={onPress} />
         </View>
       </Rise>
     );
@@ -282,7 +282,7 @@ function RequestCard({ item, onPress, busy, disabled, progressLabel }: { item: R
               {item.displayNumber ? <Text style={[font(600), styles.displayNumber, { color: colors.faintText }]}>№ {item.displayNumber}</Text> : null}
             </View>
             <View style={{ flexShrink: 1, maxWidth: "60%" }}>
-              <PrimaryButton variant="secondary" loading={busy} disabled={disabled} icon={actionIcon} label={actionLabel} onPress={onPress} />
+              <PrimaryButton testID="request-card-action" variant="secondary" loading={busy} disabled={disabled} icon={actionIcon} label={actionLabel} onPress={onPress} />
             </View>
           </View>
         </View>
