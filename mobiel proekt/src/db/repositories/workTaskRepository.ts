@@ -14,7 +14,8 @@ import { LocalMobileFile } from "@/domain/files/fileTypes";
 import { WorkTaskRow, createWorkTaskOutboxCommand, mapWorkItemRow, mapWorkTaskRow, statusForPendingAction } from "@/db/repositories/workTaskMappers";
 import { insertOutboxCommandInTransaction, type SqlExecutor } from "@/db/repositories/outboxSql";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
-import { deleteWorkDraftInTransaction } from "@/db/repositories/workDraftRepository";
+import { deleteWorkDraftInTransaction, saveWorkDraftForContext } from "@/db/repositories/workDraftRepository";
+import { buildRepeatWorkPrefill, canRepeatWorkItem } from "@/domain/emu/repeatWorkPolicy";
 
 export async function saveWorkItems(
   items: WorkItemDto[],
@@ -545,7 +546,31 @@ export async function createWorkTaskLocally(input: CreateWorkTaskInput) {
   return taskId;
 }
 
-type ParticipationDraft = { key: string; kind: "workStart" | "workJoin" | "workReplace"; entityId: string };
+/**
+ * "Повторить работу": saves a new create-work draft pre-filled from a past item
+ * of the same owner. The draft is an ordinary "task"/"new" draft under a fresh
+ * key; saving it goes through createWorkTaskLocally, which assigns a new task
+ * id and a new clientOperationId.
+ */
+export async function createRepeatWorkDraft(context: DataOwnerContext, sourceItemId: string) {
+  await assertDataOwnerContext(context);
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<WorkTaskRow>("SELECT * FROM work_tasks WHERE task_id = ? AND owner_user_id = ?", [sourceItemId, context.ownerUserId]);
+  if (!row) throw new Error("Работа не найдена на телефоне.");
+  const source = mapWorkItemRow(row);
+  if (!canRepeatWorkItem(source)) throw new Error("Повторить можно только завершённую работу с описанием.");
+  const employees = await db.getAllAsync<MobileEmployeeDto>(
+    "SELECT employee_id AS employeeId, full_name AS fullName, position, department FROM mobile_employees WHERE owner_user_id = ? ORDER BY full_name ASC",
+    [context.ownerUserId]
+  );
+  const { prefill, dropped } = buildRepeatWorkPrefill(source, employees, await listEmuSections());
+  const draftKey = `form:${Crypto.randomUUID()}`;
+  await assertDataOwnerContext(context);
+  await saveWorkDraftForContext(context, draftKey, "task", prefill, "new");
+  return { draftKey, payload: prefill, dropped };
+}
+
+type ParticipationDraft ={ key: string; kind: "workStart" | "workJoin" | "workReplace"; entityId: string };
 
 export async function startPlannedWorkLocally(item: WorkItemDto, employee: MobileEmployeeDto, draft?: ParticipationDraft) {
   if (item.kind !== "planTask" || !item.planTaskId) {

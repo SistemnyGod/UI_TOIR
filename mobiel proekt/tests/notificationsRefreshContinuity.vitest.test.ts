@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-const state = vi.hoisted(() => ({ owner: 'a', rows: [] as any[], read: vi.fn(), api: vi.fn(), save: vi.fn(), mark: vi.fn(), localMark: vi.fn() }));
+const state = vi.hoisted(() => ({ owner: 'a', rows: [] as any[], read: vi.fn(), api: vi.fn(), save: vi.fn(), mark: vi.fn(), localMark: vi.fn(), markAll: vi.fn() }));
 vi.mock('expo-router', async () => {
   const R = await import('react'); const router = { push: vi.fn(), back: vi.fn() };
   return { useRouter: () => router, useFocusEffect: (cb: () => (() => void) | void) => R.useEffect(cb, [cb]) };
@@ -21,6 +21,7 @@ vi.mock('@/auth/dataOwnerContext', () => ({
 }));
 vi.mock('@/api/notificationApi', () => ({ listNotifications: state.api, markNotificationRead: state.mark, registerPushToken: vi.fn() }));
 vi.mock('@/db/repositories/notificationRepository', () => ({ listLocalNotifications: state.read, saveNotifications: state.save,
+  countUnreadNotifications: async () => state.rows.filter(row => !row.readAt).length, markAllLocalNotificationsRead: state.markAll,
   listPendingNotificationReads: async () => [], markLocalNotificationRead: state.localMark, saveDevicePushToken: vi.fn() }));
 import NotificationsRoute from '../app/settings/notifications';
 import { emitSyncEvent, subscribeToSyncEvents } from '@/sync/syncEvents';
@@ -80,4 +81,18 @@ it('opening a notification saves read state immediately even when the acknowledg
   expect(state.localMark).toHaveBeenCalledOnce();
   expect(state.localMark.mock.calls[0]).toEqual(['1', expect.any(String), true, { ownerUserId: 'a', contourId: 'test', generation: 1 }]);
   expect(list().props.data[0].readAt).toBeTruthy();
+});
+
+it('"Прочитать все" appears only with unread rows and reports reads that wait for the network', async () => {
+  state.mark.mockRejectedValue(new Error('offline'));
+  state.markAll.mockImplementation(async (date: string) => { const ids = state.rows.filter(row => !row.readAt).map(row => row.id); state.rows = state.rows.map(row => ({ ...row, readAt: row.readAt ?? date })); return ids; });
+  await act(async () => { screen = create(React.createElement(NotificationsRoute)); });
+  const markAllButton = () => screen!.root.findAllByType('PrimaryButton' as any).find(node => String(node.props.label).startsWith('Прочитать все'));
+  expect(markAllButton()!.props.label).toBe('Прочитать все (1)');
+  await act(async () => { markAllButton()!.props.onPress(); markAllButton()!.props.onPress(); });
+  expect(state.markAll).toHaveBeenCalledOnce();
+  expect(markAllButton()).toBeUndefined();
+  expect(list().props.data[0].readAt).toBeTruthy();
+  expect(screen!.root.findAllByType('StatusMessage' as any).map(node => node.props.message))
+    .toContain('Отмечено прочитанным на телефоне. Отметка отправится на сервер, когда появится связь.');
 });

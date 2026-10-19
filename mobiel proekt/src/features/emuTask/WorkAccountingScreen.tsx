@@ -13,7 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, FlatList, Pressable, Text, View } from "react-native";
 
 import { createShiftRemarkLocally, listShiftRemarksPage, ShiftRemark } from "@/db/repositories/shiftRemarkRepository";
-import { completeWorkTaskLocally, createWorkTaskLocally, joinWorkTaskLocally, getWorkListVisibleLimit, listEmuSections, listLocalWorkItemsPage, listMobileEmployees, pauseWorkTaskLocally, replaceWorkTaskParticipantLocally, resumeWorkTaskLocally, setWorkListVisibleLimit, startPlannedWorkLocally, updateWorkTaskLocally } from "@/db/repositories/workTaskRepository";
+import { completeWorkTaskLocally, createRepeatWorkDraft, createWorkTaskLocally, joinWorkTaskLocally, getWorkListVisibleLimit, listEmuSections, listLocalWorkItemsPage, listMobileEmployees, pauseWorkTaskLocally, replaceWorkTaskParticipantLocally, resumeWorkTaskLocally, setWorkListVisibleLimit, startPlannedWorkLocally, updateWorkTaskLocally } from "@/db/repositories/workTaskRepository";
 import { MobileEmployeeDto, MobileEmuSectionDto, WorkItemDto, WorkTaskDto } from "@/domain/emu/emuTypes";
 import type { LocalWorkItemsFilter } from "@/db/repositories/workTaskRepository";
 
@@ -26,6 +26,7 @@ import { subscribeToSyncEvents } from "@/sync/syncEvents";
 import { assertDataOwnerContext, captureDataOwnerContext, type DataOwnerContext } from "@/auth/dataOwnerContext";
 import { deleteWorkDraftForContext, invalidateWorkDraftForContext, listWorkDraftsForContext, type WorkDraftKind, saveWorkDraftForContext, waitForWorkDraftForContext } from "@/db/repositories/workDraftRepository";
 import { retainEqualItems } from "@/sync/retainEqualItems";
+import { repeatWorkDroppedNotice } from "@/domain/emu/repeatWorkPolicy";
 import { ActionSheet, type ActionSheetItem } from "@/ui/ActionSheet";
 
 import { Card } from "@/ui/Card";
@@ -60,7 +61,7 @@ export function WorkAccountingScreen() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
-  const [taskModal, setTaskModal] = useState<{ mode: "create" | "edit"; task?: WorkTaskDto } | null>(null);
+  const [taskModal, setTaskModal] = useState<{ mode: "create" | "edit"; task?: WorkTaskDto; repeated?: boolean } | null>(null);
   const [remarkModalOpen, setRemarkModalOpen] = useState(false);
   const [menuTask, setMenuTask] = useState<WorkItemDto | null>(null);
   const [completeTask, setCompleteTask] = useState<WorkTaskDto | null>(null);
@@ -296,6 +297,28 @@ export function WorkAccountingScreen() {
       setTaskText(draft?.text ?? ""); setTaskModal({ mode: "create" });
       installDraft("task", "new", key, context, { employeeId: draft?.employeeId ?? defaultEmployeeId(), sectionId: draft?.sectionId ?? defaultSectionId(), text: draft?.text ?? "" });
     });
+  }
+
+  // A repeat always opens its own new draft; it never reuses or overwrites a
+  // saved "Создать работу" draft.
+  async function openRepeatTask(item: WorkItemDto) {
+    if (openingDraftRef.current) return;
+    openingDraftRef.current = true;
+    const focus = draftFocusRef.current;
+    try {
+      const context = await captureDataOwnerContext();
+      const repeat = await createRepeatWorkDraft(context, item.itemId);
+      await assertDataOwnerContext(context);
+      if (focus !== draftFocusRef.current) return;
+      setMenuTask(null);
+      setTaskEmployeeId(repeat.payload.employeeId); setTaskSectionId(repeat.payload.sectionId); setTaskText(repeat.payload.text);
+      setTaskDraftKey(repeat.draftKey); setTaskDraftContext(context);
+      setTaskModal({ mode: "create", repeated: true });
+      installDraft("task", "new", repeat.draftKey, context, { ...repeat.payload });
+      setDraftNotice(repeatWorkDroppedNotice(repeat.dropped));
+    } catch (error) {
+      if (focus === draftFocusRef.current) setMessage(error instanceof Error ? error.message : "Не удалось повторить работу.");
+    } finally { if (focus === draftFocusRef.current) openingDraftRef.current = false; }
   }
 
   async function openEditTask(task: WorkTaskDto) {
@@ -882,6 +905,7 @@ export function WorkAccountingScreen() {
           setAttachmentTask(task);
         }}
         onReplace={(task) => openParticipationAction("replace", task)}
+        onRepeat={(task) => void openRepeatTask(task)}
         onStart={(task) => openParticipationAction("start", task)}
         task={menuTask}
       />

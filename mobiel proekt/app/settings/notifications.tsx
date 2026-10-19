@@ -3,8 +3,8 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { Fragment, useCallback, useRef, useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 import { captureDataOwnerContext, assertDataOwnerContext } from "@/auth/dataOwnerContext";
-import { listLocalNotifications } from "@/db/repositories/notificationRepository";
-import { markMobileNotificationRead, syncMobileNotifications } from "@/services/notificationService";
+import { countUnreadNotifications, listLocalNotifications } from "@/db/repositories/notificationRepository";
+import { markAllMobileNotificationsRead, markMobileNotificationRead, syncMobileNotifications } from "@/services/notificationService";
 import { subscribeToSyncEvents } from "@/sync/syncEvents";
 import { MobileNotificationDto } from "@/domain/patrol/patrolTypes";
 import { useAppTheme } from "@/features/settings/themePreference";
@@ -15,13 +15,14 @@ import { PrimaryButton } from "@/ui/PrimaryButton";
 import { StatusMessage } from "@/ui/StatusMessage";
 export default function NotificationsRoute() {
   const router = useRouter(); const { colors } = useAppTheme(); const [rows, setRows] = useState<MobileNotificationDto[]>([]); const [limit, setLimit] = useState(25); const [more, setMore] = useState(false); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
+  const [unread, setUnread] = useState(0); const [markingAll, setMarkingAll] = useState(false); const [notice, setNotice] = useState<string | null>(null); const markAllLock = useRef(false);
   const epoch = useRef(0); const lock = useRef<number | null>(null); const pendingLocal = useRef(false);
   const load = useCallback(async (network: boolean, run: number) => {
     if (lock.current === run) { pendingLocal.current = true; return; }
     lock.current = run;
     if (network) setBusy(true);
     try { const scope = await captureDataOwnerContext();
-      const read = async () => { const data = await listLocalNotifications(limit + 1); await assertDataOwnerContext(scope); if (epoch.current === run) { setRows(previous => retainEqualItems(previous, data.slice(0, limit), item => item.id)); setMore(data.length > limit); } };
+      const read = async () => { const [data, unreadCount] = await Promise.all([listLocalNotifications(limit + 1), countUnreadNotifications(scope)]); await assertDataOwnerContext(scope); if (epoch.current === run) { setRows(previous => retainEqualItems(previous, data.slice(0, limit), item => item.id)); setMore(data.length > limit); setUnread(unreadCount); } };
       pendingLocal.current = false;
       await read();
       if (epoch.current !== run) return;
@@ -31,6 +32,16 @@ export default function NotificationsRoute() {
     } catch { if (epoch.current === run) setError("Не удалось обновить уведомления. Сохранённые записи доступны."); }
     finally { if (epoch.current === run && lock.current === run) { lock.current = null; setBusy(false); } }
   }, [limit]);
+  const markAll = useCallback(async () => {
+    if (markAllLock.current) return;
+    markAllLock.current = true; setMarkingAll(true); setNotice(null);
+    const run = epoch.current;
+    try {
+      const result = await markAllMobileNotificationsRead();
+      if (epoch.current === run) setNotice(result.pending > 0 ? "Отмечено прочитанным на телефоне. Отметка отправится на сервер, когда появится связь." : null);
+    } catch { if (epoch.current === run) setNotice("Не удалось отметить уведомления прочитанными. Повторите попытку."); }
+    finally { markAllLock.current = false; setMarkingAll(false); if (epoch.current === run) void load(false, run); }
+  }, [load]);
   useFocusEffect(useCallback(() => {
     const run = ++epoch.current;
     void load(true, run);
@@ -43,7 +54,9 @@ export default function NotificationsRoute() {
     maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
     headerContent={<>
     {error ? <StatusMessage message={error} tone="warning" /> : null}
+    {notice ? <StatusMessage message={notice} tone="neutral" /> : null}
     <PrimaryButton label="Обновить" loading={busy} variant="secondary" onPress={() => void load(true, epoch.current)} />
+    {unread > 0 ? <PrimaryButton label={`Прочитать все (${unread})`} loading={markingAll} variant="secondary" onPress={() => void markAll()} /> : null}
     </>}
     ListEmptyComponent={<Text style={{ color: colors.mutedText, fontSize: 16 }}>{busy ? 'Загружаем уведомления…' : 'После назначения обхода уведомления появятся здесь.'}</Text>}
     ListFooterComponent={more ? <PrimaryButton label="Загрузить ещё" disabled={busy} variant="secondary" onPress={() => setLimit(value => value + 25)} /> : null}

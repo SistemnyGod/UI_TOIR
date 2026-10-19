@@ -1,10 +1,12 @@
 import { navigateAfterFormSave } from "@/services/formNavigationGuard";
 import { Tabs } from "expo-router";
 import { NavigationBar, navigationItems } from "@/ui/NavigationBar";
+import { unreadBadgeLabel, useUnreadNotificationCount } from "@/features/profile/useUnreadNotificationCount";
 
 export default function TabsLayout() {
+  const unread = useUnreadNotificationCount(); const unreadLabel = unreadBadgeLabel(unread);
   return <Tabs detachInactiveScreens={false} screenOptions={{ headerShown: false, lazy: true, animation: "none", tabBarHideOnKeyboard: true }}
-    tabBar={({ state, navigation }) => <NavigationBar active={state.routes[state.index].name} onSelect={name => {
+    tabBar={({ state, navigation }) => <NavigationBar active={state.routes[state.index].name} badges={{ profile: unreadLabel ? { label: unreadLabel, accessibilityLabel: `${unread} непрочитанных уведомлений` } : null }} onSelect={name => {
       const route = state.routes.find(item => item.name === name);
       if (!route) return;
       const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });

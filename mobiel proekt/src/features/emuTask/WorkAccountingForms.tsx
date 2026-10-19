@@ -56,7 +56,7 @@ export function TaskModal({
   onRetry?: () => void;
   employees: MobileEmployeeDto[];
   loading: boolean;
-  modal: { mode: "create" | "edit"; task?: WorkTaskDto } | null;
+  modal: { mode: "create" | "edit"; task?: WorkTaskDto; repeated?: boolean } | null;
   onClose: () => void;
   onDeleteDraft: () => void;
   onSave: () => void;
@@ -82,7 +82,7 @@ export function TaskModal({
       >
         <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + 8, right: 16, left: 16 }}><TransientNotice message={draftNotice} /></View>
         <View accessibilityViewIsModal style={styles.modalCard}>
-          <FormHeader title={modal?.mode === "edit" ? "Изменить работу" : "Создать работу"} loading={loading} onClose={onClose} onDelete={onDeleteDraft} />
+          <FormHeader title={modal?.mode === "edit" ? "Изменить работу" : modal?.repeated ? "Повторить работу" : "Создать работу"} loading={loading} onClose={onClose} onDelete={onDeleteDraft} />
 
           {onRetry ? <PrimaryButton variant="secondary" label="Повторить сохранение" onPress={onRetry} /> : null}
           {error ? <View style={{ paddingHorizontal: 18 }}><StatusMessage message={error} tone="danger" /></View> : null}

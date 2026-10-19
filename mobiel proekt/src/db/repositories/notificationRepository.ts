@@ -153,3 +153,37 @@ export async function listPendingNotificationReads() {
     [ownerUserId]
   );
 }
+
+export async function countUnreadNotifications(context?: DataOwnerContext) {
+  const scope = context ?? await captureDataOwnerContext();
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ count: number }>(
+    "SELECT COUNT(*) AS count FROM mobile_notifications WHERE owner_user_id = ? AND read_at IS NULL",
+    [scope.ownerUserId]
+  );
+  await assertDataOwnerContext(scope);
+  return row?.count ?? 0;
+}
+
+/**
+ * Marks every unread notification of the owner as read on the phone and leaves
+ * each one pending delivery, exactly like a single local read. Returns the ids
+ * that changed so the caller can acknowledge them on the server.
+ */
+export async function markAllLocalNotificationsRead(readAt: string, context?: DataOwnerContext) {
+  const scope = context ?? await captureDataOwnerContext();
+  await assertDataOwnerContext(scope);
+  const db = await getDatabase();
+  return withSqliteBusyRetry(() => withOwnerExclusiveTransactionAsync(db, scope, async tx => {
+    const rows = await tx.getAllAsync<{ notificationId: string }>(
+      "SELECT notification_id AS notificationId FROM mobile_notifications WHERE owner_user_id = ? AND read_at IS NULL ORDER BY created_at DESC",
+      [scope.ownerUserId]
+    );
+    if (rows.length === 0) return [];
+    await tx.runAsync(
+      "UPDATE mobile_notifications SET read_at = ?, read_sync_pending = 1 WHERE owner_user_id = ? AND read_at IS NULL",
+      [readAt, scope.ownerUserId]
+    );
+    return rows.map(row => row.notificationId);
+  }));
+}

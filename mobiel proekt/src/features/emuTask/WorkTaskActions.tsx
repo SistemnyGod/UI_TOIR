@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WorkItemDto } from "@/domain/emu/emuTypes";
 
 import { canAttachEmuMedia, canCompleteEmuTask, canEditEmuTask, canPauseEmuTask, canResumeEmuTask, canStartEmuTask } from "@/domain/emu/emuStateMachine";
+import { canRepeatWorkItem } from "@/domain/emu/repeatWorkPolicy";
 import { statusLabel, useWorkAccountingStyles } from "@/features/emuTask/WorkAccountingPresentation";
 import { useAppTheme } from "@/features/settings/themePreference";
 
@@ -25,6 +26,7 @@ export function TaskMenu({
   onJoin,
   onAttach,
   onReplace,
+  onRepeat,
   onStart,
   task
 }: {
@@ -37,6 +39,7 @@ export function TaskMenu({
   onJoin: (task: WorkItemDto) => void;
   onAttach: (task: WorkItemDto) => void;
   onReplace: (task: WorkItemDto) => void;
+  onRepeat?: (task: WorkItemDto) => void;
   onStart: (task: WorkItemDto) => void;
   task: WorkItemDto | null;
 }) {
@@ -47,7 +50,8 @@ export function TaskMenu({
     onAttach,
     onEdit,
     onPause,
-    onReplace
+    onReplace,
+    onRepeat
   }) : [];
 
   return (
@@ -84,6 +88,7 @@ type TaskMenuCallbackMap = {
   onJoin: (task: WorkItemDto) => void;
   onPause: (task: WorkItemDto) => void;
   onReplace: (task: WorkItemDto) => void;
+  onRepeat?: (task: WorkItemDto) => void;
   onResume: (task: WorkItemDto) => void;
   onStart: (task: WorkItemDto) => void;
 };
@@ -109,7 +114,7 @@ export function getTaskPrimaryAction(
 
 export function getTaskSecondaryActions(
   task: WorkItemDto,
-  handlers: Pick<TaskMenuCallbackMap, "onAttach" | "onEdit" | "onPause" | "onReplace">
+  handlers: Pick<TaskMenuCallbackMap, "onAttach" | "onEdit" | "onPause" | "onReplace" | "onRepeat">
 ) {
   const actions: {
     danger?: boolean;
@@ -129,6 +134,10 @@ export function getTaskSecondaryActions(
   }
   if (task.kind === "workSession" && canAttachEmuMedia(task.status)) {
     actions.push({ icon: "attach-outline", label: "Добавить вложение", onPress: () => handlers.onAttach(task) });
+  }
+  const onRepeat = handlers.onRepeat;
+  if (onRepeat && canRepeatWorkItem(task)) {
+    actions.push({ icon: "copy-outline", label: "Повторить работу", onPress: () => onRepeat(task) });
   }
   return actions;
 }
