@@ -24,6 +24,7 @@ import { requestPatrolSync } from '@/sync/PatrolSyncCoordinator';
 import { queuePatrolReport } from '@/features/patrol/reportSubmissionCoordinator';
 import { ReportSendDialog } from '@/features/patrol/ReportSendDialog';
 import { ReportPreviewCard } from '@/features/patrol/ReportPreviewCard';
+import { AutoSubmitCountdown } from '@/features/patrol/AutoSubmitCountdown';
 import { buildReportPreview, type ReportPreviewRow } from '@/features/patrol/reportPreviewPresentation';
 import { Card } from '@/ui/Card';
 import { ActionSheet } from '@/ui/ActionSheet';
@@ -356,6 +357,7 @@ export function SubmitReportScreen() {
         </Card>
       ) : null}
 
+      <AutoSubmitCountdown assignmentId={assignmentId} />
       {syncNotice ? <StatusMessage message={syncNotice} /> : null}
       {actionError ? <StatusMessage message={actionError} tone='danger' /> : null}
       {loadError ? <StatusMessage message={loadError} tone="danger" /> : null}

@@ -4,7 +4,7 @@ vi.mock('@/auth/tokenStorage', () => ({ getStoredOwnerUserId: async () => s.owne
 vi.mock('@/auth/sessionGeneration', () => ({ getSessionGeneration: () => s.generation }));
 vi.mock('@/core/environments', () => ({ currentContourId: 'test' }));
 vi.mock('@/core/network', () => ({ hasUsableNetwork: async () => s.online }));
-vi.mock('@/api/serverHealthApi', () => ({ checkServerConnection: s.health }));
+vi.mock('@/api/serverHealthApi', () => ({ invalidateServerHealthFailures: vi.fn(), checkServerConnection: s.health }));
 vi.mock('@/api/httpClient', () => ({ refreshStoredAccessToken: async () => 'token', refreshStoredAccessTokenIfNeeded: async () => 'token' }));
 vi.mock('@/api/mobileApi', () => ({ postOutbox: s.post, getOutboxResult: s.receipt }));
 vi.mock('@/api/fileApi', () => ({ uploadMobileFile: vi.fn() }));
@@ -16,7 +16,7 @@ vi.mock('@/db/repositories/filesRepository', () => ({ listFilesByClientIds: s.fi
 vi.mock('@/sync/outboxProcessor', () => ({ getPendingOutboxBatch: s.batch }));
 vi.mock('@/sync/outboxRetryScheduler', () => ({ scheduleNextOutboxRetry: async () => {} }));
 vi.mock('@/db/repositories/outboxRepository', () => {
-  const names = ['activateNetworkRecoveredOutboxCommands', 'activateRetryableOutboxCommandsForImmediateRetry', 'activateRetryableReportCommands', 'activateWaitingAuthOutboxCommands', 'activateWrongContourOutboxCommands', 'applyOutboxResponses', 'markPendingOutboxCommandsAuthRequired', 'markPendingOutboxCommandsWaitingNetwork', 'markPendingOutboxCommandsWrongContour', 'markOutboxCommandsWrongContour', 'markOutboxCommandsRejected', 'markOutboxCommandsRetryLater', 'markPendingOutboxCommandsRetryLater', 'reactivateRecoverableRejectedPointCommands', 'reactivateRecoverableRejectedStartCommands', 'resetSendingOutboxCommandsForProcessRestart', 'resetStaleSendingOutboxCommands'];
+  const names = ['activateNetworkRecoveredOutboxCommands', 'activateRetryableOutboxCommandsForImmediateRetry', 'activateRetryableReportCommands', 'activateWaitingAuthOutboxCommands', 'activateWaitingNetworkOutboxCommands', 'activateWrongContourOutboxCommands', 'applyOutboxResponses', 'markPendingOutboxCommandsAuthRequired', 'markPendingOutboxCommandsWaitingNetwork', 'markPendingOutboxCommandsWrongContour', 'markOutboxCommandsWrongContour', 'markOutboxCommandsRejected', 'markOutboxCommandsRetryLater', 'markPendingOutboxCommandsRetryLater', 'reactivateRecoverableRejectedPointCommands', 'reactivateRecoverableRejectedStartCommands', 'resetSendingOutboxCommandsForProcessRestart', 'resetStaleSendingOutboxCommands'];
   return { ...Object.fromEntries(names.map(name => [name, vi.fn(async () => {})])),
     applyOutboxResponses: s.applied, markOutboxCommandsSending: s.claim, countRetryableOutboxCommands: async () => 0, countOutboxDeliveryProblems: async () => 0,
     finalizeAcceptedCompleteReportCommands: async () => ({ finalized: 0 }), getNextOutboxRetryAt: async () => null,

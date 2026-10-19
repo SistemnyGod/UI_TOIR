@@ -40,6 +40,7 @@ import { subscribeToSyncEvents } from "@/sync/syncEvents";
 import { requestMobileDataRefresh } from "@/sync/syncTriggers";
 
 import { requestPatrolSync } from "@/sync/PatrolSyncCoordinator";
+import { AutoSubmitCountdown } from "@/features/patrol/AutoSubmitCountdown";
 
 import { ActionSheet } from "@/ui/ActionSheet";
 
@@ -390,6 +391,8 @@ function ActivePatrolContent({ assignmentId }: { assignmentId: string }) {
 
 
 
+      {isInProgress ? <AutoSubmitCountdown assignmentId={assignment.assignmentId} /> : null}
+
       {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
 
 
@@ -414,7 +417,7 @@ function ActivePatrolContent({ assignmentId }: { assignmentId: string }) {
 
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Отчет сохранен на телефоне</Text>
 
-          <Text style={[styles.text, { color: colors.mutedText }]}>Отчёт отправляется только после ручного подтверждения. Если он сохранён офлайн, очередь доставит его после подключения.</Text>
+          <Text style={[styles.text, { color: colors.mutedText }]}>Отчёт сохранён и уйдёт на сервер сам, как только появится связь — даже если приложение закрыто.</Text>
 
         </Card>
 

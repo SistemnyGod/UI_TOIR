@@ -5,7 +5,9 @@ const mocks = vi.hoisted(() => ({
   pending: vi.fn(), owner: 'owner', generation: 1,
   recordBackgroundSyncResult: vi.fn(),
   triggerDailyDiagnosticReportUpload: vi.fn(),
-  triggerPendingDiagnosticReportUpload: vi.fn()
+  triggerPendingDiagnosticReportUpload: vi.fn(),
+  evaluateReportAutoSubmits: vi.fn(),
+  runReportDeliveryNotices: vi.fn()
 }));
 
 vi.mock("expo-background-task", () => ({
@@ -23,6 +25,10 @@ vi.mock("expo-task-manager", () => ({
 }));
 
 vi.mock("@/db/database", () => ({ initializeDatabase: vi.fn() }));
+vi.mock("@/services/reportAutoSubmitService", () => ({
+  evaluateReportAutoSubmits: mocks.evaluateReportAutoSubmits,
+  runReportDeliveryNotices: mocks.runReportDeliveryNotices
+}));
 vi.mock('@/auth/tokenStorage', () => ({ getStoredOwnerUserId: async () => mocks.owner }));
 vi.mock('@/auth/sessionGeneration', () => ({ getSessionGeneration: () => mocks.generation }));
 vi.mock('@/core/environments', () => ({ currentContourId: 'test' }));
@@ -46,6 +52,8 @@ beforeEach(() => {
   vi.resetAllMocks(); mocks.owner = 'owner'; mocks.generation = 1;
   mocks.recordBackgroundSyncResult.mockResolvedValue(undefined);
   mocks.pending.mockResolvedValue(true);
+  mocks.evaluateReportAutoSubmits.mockResolvedValue({ submitted: [], armed: [] });
+  mocks.runReportDeliveryNotices.mockResolvedValue({ reports: [], needsDelivery: false });
   mocks.runBackgroundOutboxSync.mockResolvedValue({ skipped: null, outcome: 'complete', hasMore: false });
 });
 

@@ -12,7 +12,7 @@ import { finalizeCancelledAssignmentInTransaction } from "@/db/repositories/patr
 import { MobileEntityType, OutboxCommand, OutboxCommandStatus, OutboxCommandType } from "@/domain/sync/syncTypes";
 
 import { extractAssignmentId, isPatrolAssignmentCommand, parsePatrolPointConflictIdentity, resolvePatrolAssignmentIdentity } from "@/db/repositories/outboxPolicies";
-import { resolveRetryDelaySeconds } from "@/sync/outboxRetryPolicy";
+import { resolveRetryDelaySeconds, resolveServerUnreachableDelaySeconds } from "@/sync/outboxRetryPolicy";
 import { parseOutboxPayloadRows } from "@/sync/outboxPayloadParser";
 import { applyRejectedCancellationTransition, applyServerWinsTransition, ConflictServerSnapshot } from "@/domain/sync/conflictResolutionPolicy";
 import { requestSyncAfterMutation } from "@/sync/mutationSyncRequest";
@@ -322,7 +322,7 @@ export async function markOutboxCommandsRetryLater(
     const nowMs = Date.now();
 
     for (const row of rows) {
-      const delaySeconds = resolveRetryDelaySeconds(retryAfterSeconds, row.attempt_count);
+      const delaySeconds = resolveRetryDelaySeconds(retryAfterSeconds, row.attempt_count, retryReason);
       const nextAttemptAt = new Date(nowMs + delaySeconds * 1000).toISOString();
       await tx.runAsync(
         `
@@ -395,7 +395,12 @@ export async function markPendingOutboxCommandsRetryLater(
       const updatedAtLocal = new Date(nowMs).toISOString();
 
       for (const row of rows) {
-        const computedNextAttemptMs = nowMs + resolveRetryDelaySeconds(null, row.attempt_count) * 1000;
+        // No command was sent, so attempt_count does not grow. A failed health
+        // check waits for the connection monitor instead of a tight loop.
+        const delaySeconds = retryReason === "server"
+          ? resolveServerUnreachableDelaySeconds()
+          : resolveRetryDelaySeconds(null, row.attempt_count, retryReason);
+        const computedNextAttemptMs = nowMs + delaySeconds * 1000;
         const existingNextAttemptMs = row.next_attempt_at ? Date.parse(row.next_attempt_at) : Number.NaN;
         const nextAttemptAt = new Date(
           Math.max(
@@ -441,20 +446,23 @@ export async function markPendingOutboxCommandsWaitingNetwork(
     [lastError, updatedAtLocal, ownerUserId, currentContourId, ...(aggregateKey ? [aggregateKey] : [])]
   ));
 }
-export async function activateWaitingNetworkOutboxCommands(ownerUserId: string) {
+/** Called once the server answered a health check: offline-parked commands can go now. */
+export async function activateWaitingNetworkOutboxCommands(ownerUserId: string, aggregateKey?: string) {
   const db = await getDatabase();
   const updatedAtLocal = new Date().toISOString();
+  const scope = getAggregateActivationScope(aggregateKey);
   await withSqliteBusyRetry(() => db.runAsync(
     "UPDATE outbox_commands SET status = 'pending', next_attempt_at = NULL, retry_reason = NULL, updated_at_local = ? " +
-    "WHERE owner_user_id = ? AND contour_id = ? AND status = 'waiting_network'",
-    [updatedAtLocal, ownerUserId, currentContourId]
+    "WHERE owner_user_id = ? AND contour_id = ? AND status = 'waiting_network'" + scope.filter,
+    [updatedAtLocal, ownerUserId, currentContourId, ...scope.params]
   ));
 }
 
 /**
  * A new network route or a server that answers again is a fresh chance to
- * deliver: commands parked because the server was unreachable or slow run now.
- * Server-directed Retry-After (rateLimit) and unknown failures keep their backoff.
+ * deliver: commands parked because the server was unreachable, slow, or failed
+ * for a reason the client could not classify run now. Only a server-directed
+ * Retry-After (rateLimit) keeps its delay; terminal rejections never reach here.
  */
 export async function activateNetworkRecoveredOutboxCommands(ownerUserId: string) {
   const db = await getDatabase();
@@ -470,7 +478,7 @@ export async function activateNetworkRecoveredOutboxCommands(ownerUserId: string
         AND contour_id = ?
         AND (
           status = 'waiting_network'
-          OR (status = 'retryLater' AND retry_reason IN ('network', 'timeout', 'server'))
+          OR (status = 'retryLater' AND COALESCE(retry_reason, 'unknown') <> 'rateLimit')
         )
     `,
     [updatedAtLocal, ownerUserId, currentContourId]
@@ -517,7 +525,7 @@ export async function activateRetryableOutboxCommandsForImmediateRetry(ownerUser
         AND contour_id = ?
         AND (
           status = 'waiting_network'
-          OR (status = 'retryLater' AND retry_reason IN ('network', 'timeout'))
+          OR (status = 'retryLater' AND COALESCE(retry_reason, 'unknown') <> 'rateLimit')
         )
     `,
     [updatedAtLocal, ownerUserId, currentContourId]

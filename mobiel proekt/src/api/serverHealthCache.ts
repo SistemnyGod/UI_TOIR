@@ -4,7 +4,9 @@ export type HealthProbeValue = {
 };
 
 export const serverHealthSuccessTtlMs = 30_000;
-export const serverHealthFailureTtlMs = 30_000;
+// A failure is remembered only briefly: on a field network the next attempt a
+// few seconds later may already succeed, and a reconnect drops it at once.
+export const serverHealthFailureTtlMs = 5_000;
 
 type CacheEntry<TValue> = {
   value: TValue;
@@ -44,6 +46,14 @@ export class ServerHealthCache<TValue extends HealthProbeValue> {
 
     this.inFlight.set(key, request);
     return request;
+  }
+
+  /** Forgets cached failures (and probes still in flight) but keeps fresh successes. */
+  invalidateFailures() {
+    for (const [key, entry] of this.entries) {
+      if (!entry.value.ok) this.entries.delete(key);
+    }
+    this.inFlight.clear();
   }
 
   invalidate(key?: string) {

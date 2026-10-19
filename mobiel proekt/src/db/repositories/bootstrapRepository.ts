@@ -548,6 +548,7 @@ async function clearLocalUserTablesInTransaction(executor: SqlExecutor) {
   await executor.runAsync("DELETE FROM outbox_commands");
   await executor.runAsync("DELETE FROM files");
   await executor.runAsync("DELETE FROM point_results");
+  await executor.runAsync("DELETE FROM report_auto_submit");
   await executor.runAsync("DELETE FROM assignment_route_points");
   await executor.runAsync("DELETE FROM patrol_assignments");
   await executor.runAsync("DELETE FROM patrol_request_board");

@@ -1372,7 +1372,9 @@ export async function reopenInvalidCompletionReportLocally(assignmentId: string)
 
   return { reopened };
 }
-export async function completeAssignmentLocally(assignmentId: string) {
+export type CompletionSubmissionMode = "manual" | "auto";
+
+export async function completeAssignmentLocally(assignmentId: string, options: { submissionMode?: CompletionSubmissionMode } = {}) {
   const context = await captureDataOwnerContext();
   const db = await getDatabase();
   const ownerUserId = context.ownerUserId;
@@ -1427,7 +1429,10 @@ export async function completeAssignmentLocally(assignmentId: string) {
         skippedCount: readiness.progress.skipped,
         photoCount
       },
-      pointResults
+      pointResults,
+      // Recorded for the dispatcher; the server ignores unknown fields and the
+      // report fingerprint covers point results only.
+      ...(options.submissionMode === "auto" ? { submissionMode: "auto" } : {})
     },
     createdAtLocal: completedAtLocal,
     attemptCount: 0,

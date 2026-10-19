@@ -18,6 +18,7 @@ vi.mock('expo-router', async () => {
 });
 vi.mock('react-native', () => ({ View: 'View', Text: 'Text', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', StyleSheet: { create: (s: any) => s } }));
 vi.mock('@expo/vector-icons', () => ({ Ionicons: 'Icon' }));
+vi.mock('@/features/patrol/AutoSubmitCountdown', () => ({ AutoSubmitCountdown: () => null }));
 vi.mock('@/features/settings/themePreference', () => ({ useAppTheme: () => ({ colors: { text: 'text', mutedText: 'muted', primary: 'primary', backgroundAccent: 'neutral', warning: 'warning', warningSurface: 'warnSurface', success: 'success', successSurface: 'successSurface', danger: 'danger', dangerSurface: 'dangerSurface' } }) }));
 vi.mock('@/ui/Card', () => ({ Card: 'Card' }));
 vi.mock('@/ui/PrimaryButton', () => ({ PrimaryButton: 'PrimaryButton' }));

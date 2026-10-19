@@ -38,7 +38,7 @@ it('a network change reactivates commands parked because the server was unreacha
   await activateNetworkRecoveredOutboxCommands('alice');
   const rows = Object.fromEntries(selectAll<{ client_operation_id: string; status: string }>(raw, 'SELECT client_operation_id, status FROM outbox_commands')
     .map(row => [row.client_operation_id, row.status]));
-  expect(rows).toEqual({ waiting: 'pending', server: 'pending', timeout: 'pending', 'rate-limited': 'retryLater', unknown: 'retryLater' });
+  expect(rows).toEqual({ waiting: 'pending', server: 'pending', timeout: 'pending', 'rate-limited': 'retryLater', unknown: 'pending' });
 });
 
 it('report status checks skip never-sent reports and respect the scheduled retry time', async () => {

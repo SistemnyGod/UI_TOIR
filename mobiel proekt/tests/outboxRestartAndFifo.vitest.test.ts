@@ -27,7 +27,7 @@ vi.mock('@/db/encryptedDatabase', () => ({ openProtectedDatabase: vi.fn(), openP
 vi.mock('@/api/fileApi', () => ({ uploadMobileFile: vi.fn() }));
 vi.mock('@/api/httpClient', () => ({ refreshStoredAccessToken: vi.fn(), refreshStoredAccessTokenIfNeeded: vi.fn() }));
 vi.mock('@/api/mobileApi', () => ({ getOutboxResult: vi.fn(), postOutbox: vi.fn() }));
-vi.mock('@/api/serverHealthApi', () => ({ checkServerConnection: vi.fn() }));
+vi.mock('@/api/serverHealthApi', () => ({ invalidateServerHealthFailures: vi.fn(), checkServerConnection: vi.fn() }));
 vi.mock('@/core/network', () => ({ hasUsableNetwork: async () => false }));
 vi.mock('@/services/mobileErrorReporter', () => ({ logMobileError: vi.fn() }));
 vi.mock('@/services/diagnosticReportService', () => ({ triggerReportDeliveryDiagnostic: vi.fn() }));

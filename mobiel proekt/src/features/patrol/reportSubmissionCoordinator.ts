@@ -1,4 +1,4 @@
-import { completeAssignmentLocally } from '@/db/repositories/patrolRepository';
+import { completeAssignmentLocally, type CompletionSubmissionMode } from '@/db/repositories/patrolRepository';
 import { requestPatrolSync } from '@/sync/PatrolSyncCoordinator';
 
 export type QueuedReportResult = {
@@ -14,8 +14,13 @@ export type QueuedReportResult = {
  * in the background so a slow connection cannot turn one confirmation into a
  * second visible send step.
  */
-export async function queuePatrolReport(assignmentId: string): Promise<QueuedReportResult> {
-  const completion = await completeAssignmentLocally(assignmentId);
+export async function queuePatrolReport(
+  assignmentId: string,
+  options: { submissionMode?: CompletionSubmissionMode } = {}
+): Promise<QueuedReportResult> {
+  // The duplicate check inside completeAssignmentLocally's exclusive
+  // transaction makes a manual tap and the auto-submit timer race-safe.
+  const completion = await completeAssignmentLocally(assignmentId, options);
 
   const deliveryAttempt = requestPatrolSync({ mode: 'manualReport', assignmentId }).catch(() => undefined);
 

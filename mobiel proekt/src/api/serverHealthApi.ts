@@ -110,9 +110,14 @@ export function invalidateServerHealthCache(serverBaseUrl?: string, expectedCont
   healthCache.invalidate(serverBaseUrl ? healthCacheKey(serverBaseUrl, expectedContourId) : undefined);
 }
 
+/** A new network route: an earlier "server unreachable" no longer says anything. */
+export function invalidateServerHealthFailures() {
+  healthCache.invalidateFailures();
+}
+
 export async function checkServerConnection(
   rawServerBaseUrl?: string,
-  options: { useCache?: boolean; persist?: boolean } = {}
+  options: { useCache?: boolean; persist?: boolean; timeoutMs?: number } = {}
 ): Promise<ServerConnectionCheckResult> {
   let serverBaseUrls: string[];
 
@@ -142,8 +147,9 @@ export async function checkServerConnection(
   let lastExpectedContourId: string | undefined;
 
   const startedAt = Date.now();
+  const budgetMs = Math.min(serverConnectionProbeBudgetMs, options.timeoutMs ?? serverConnectionProbeBudgetMs);
   for (const serverBaseUrl of serverBaseUrls) {
-    const remainingMs = serverConnectionProbeBudgetMs - (Date.now() - startedAt);
+    const remainingMs = budgetMs - (Date.now() - startedAt);
     if (remainingMs <= 0) {
       lastProblem ??= "Превышено общее время проверки серверов.";
       break;
