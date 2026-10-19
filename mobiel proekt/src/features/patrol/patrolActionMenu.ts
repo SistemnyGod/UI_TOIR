@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import type { ActionSheetItem } from '@/ui/ActionSheet';
 
 type PatrolActionMenuInput = {
@@ -8,6 +9,8 @@ type PatrolActionMenuInput = {
   onContinue?: () => void;
   onQr?: () => void;
   onSwitch?: () => void;
+  /** Defaults to the handover screen; pass null to hide the action. */
+  onHandover?: (() => void) | null;
   onPoints?: () => void;
   onSubmit?: () => void;
   onAppeal?: () => void;
@@ -21,9 +24,17 @@ export function buildPatrolActionMenu(input: PatrolActionMenuInput): ActionSheet
     ...(input.onPause && (!input.status || input.status === 'inProgress') ? [{ label: 'Приостановить', icon: 'pause-outline' as const, onPress: input.onPause }] : []),
     ...(input.onQr ? [{ label: 'QR', icon: 'qr-code-outline' as const, onPress: input.onQr }] : []),
     ...(input.onSwitch && (!input.capabilities || input.capabilities.patrolSwitch !== false) && (!input.status || ['accepted', 'inProgress', 'paused'].includes(input.status)) ? [{ label: 'Сменить маршрут', icon: 'swap-horizontal-outline' as const, onPress: input.onSwitch }] : []),
+    ...(handoverAction(input)),
     ...(input.onPoints ? [{ label: 'Посмотреть точки', icon: 'list-outline' as const, onPress: input.onPoints }] : []),
     ...(input.onSubmit && (!input.status || ['inProgress', 'completedLocal'].includes(input.status)) ? [{ label: 'Завершить маршрут', icon: 'checkmark-circle-outline' as const, onPress: input.onSubmit }] : []),
     ...(input.onAppeal && (!input.capabilities || input.capabilities.patrolAppeals !== false) && !['completedServer', 'cancelledServer'].includes(input.status ?? '') ? [{ label: 'Связаться с диспетчером', icon: 'chatbubble-outline' as const, onPress: input.onAppeal }] : []),
     ...(input.onCancel && (!input.capabilities || input.capabilities.patrolAppeals !== false) && ['accepted', 'inProgress', 'paused', 'syncError', 'authRequired'].includes(input.status ?? 'inProgress') ? [{ label: 'Запросить отмену', icon: 'alert-circle-outline' as const, danger: true, onPress: input.onCancel }] : [])
   ];
+}
+
+/** Hand the unfinished patrol to a colleague of the shift (docs/patrol-handover-2026-10-19.md). */
+function handoverAction(input: PatrolActionMenuInput): ActionSheetItem[] {
+  if (input.onHandover === null || !['inProgress', 'paused'].includes(input.status ?? 'inProgress')) return [];
+  const onPress = input.onHandover ?? (() => router.push(`/patrol/assignment/${input.assignmentId}/handover` as never));
+  return [{ label: 'Передать коллеге', icon: 'people-outline', onPress }];
 }

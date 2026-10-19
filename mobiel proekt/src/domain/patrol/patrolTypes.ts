@@ -91,6 +91,21 @@ export type PatrolAssignmentDto = {
   revision: number;
   routeVersionNo: number;
   routeSnapshot?: { route: PatrolRouteDto; points: PatrolPointDto[] } | null;
+  /** Points filled by an earlier performer on another phone before a handover. */
+  transferredPointResults?: TransferredPointResultDto[];
+};
+
+export type TransferredPointResultDto = {
+  pointId: string;
+  status: string;
+  comment: string | null;
+  issueTypeId: string | null;
+  confirmationType: string | null;
+  manualReason: string | null;
+  completedAtLocal: string | null;
+  performerEmployeeId: string;
+  performerName: string;
+  photoCount: number;
 };
 
 export type PatrolRouteDto = {
@@ -154,6 +169,8 @@ export type BootstrapDto = {
   boundEmployeesComplete?: boolean;
   patrolSnapshotManifests?: PatrolSnapshotManifestDto[];
   patrolAppeals?: PatrolAppeal[];
+  /** transferPatrolAssignment and the transfer-candidates endpoint are available. */
+  patrolTransfer?: boolean;
   user: MobileUserDto;
   device: MobileDeviceDto;
   boundEmployees: MobileEmployeeDto[];

@@ -723,6 +723,17 @@ async function migrateInTransaction(db: SQLite.SQLiteDatabase) {
     await runLocalMigration(tx, "20261019_hot_query_indexes", async () => {
       await ensureHotQueryIndexes(tx);
     });
+    // Server support for handing an unfinished patrol to a colleague.
+    await runLocalMigration(tx, "20261019_patrol_transfer_state", async () => {
+      await tx.execAsync(`
+        CREATE TABLE IF NOT EXISTS patrol_transfer_state (
+          owner_user_id TEXT NOT NULL,
+          contour_id TEXT NOT NULL,
+          available INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (owner_user_id, contour_id)
+        );
+      `);
+    });
   });
 }
 

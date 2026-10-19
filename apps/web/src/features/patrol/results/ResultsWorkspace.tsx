@@ -25,6 +25,7 @@ import { ResultMediaViewer } from "./ResultMediaViewer";
 import { FoundRemarksView } from "./FoundRemarksView";
 import { PatrolAppealsView } from "./PatrolAppealsView";
 import { LateReportsView } from "./LateReportsView";
+import { PatrolTransfersView } from "./PatrolTransfersView";
 import { PatrolRequestHistory } from "./PatrolRequestHistory";
 import type { ResultGroup } from "./resultTypes";
 import { Button, CompactTable, PageHeader, SectionTabs, type CompactTableColumn } from "../../../shared/ui";
@@ -140,7 +141,7 @@ export function ResultsWorkspace({
     previousDetailOwnerRef.current = detailOwner;
     setOpenGroupId(null);
   }, [detailOwner]);
-  const [activeView, setActiveView] = useState<"results" | "remarks" | "requests" | "appeals" | "late">("results");
+  const [activeView, setActiveView] = useState<"results" | "remarks" | "requests" | "appeals" | "late" | "transfers">("results");
   const [exportInProgress, setExportInProgress] = useState(false);
   const [mutatingGroupId, setMutatingGroupId] = useState<string | null>(null);
   const apiResultsRepository = useMemo(() => createApiResultsRepository(), []);
@@ -478,9 +479,10 @@ export function ResultsWorkspace({
         </button>
         <button className={activeView === "appeals" ? "is-active" : ""} onClick={() => setActiveView("appeals")} type="button">Обращения диспетчеру</button>
         <button className={activeView === "late" ? "is-active" : ""} onClick={() => setActiveView("late")} type="button">Поздние отчёты</button>
+        <button className={activeView === "transfers" ? "is-active" : ""} onClick={() => setActiveView("transfers")} type="button">Передачи обходов</button>
       </nav>
 
-      {activeView === "late" ? <LateReportsView dataSourceMode={dataSourceMode} /> : activeView === "appeals" ? <PatrolAppealsView dataSourceMode={dataSourceMode} /> : activeView === "remarks" ? (
+      {activeView === "late" ? <LateReportsView dataSourceMode={dataSourceMode} /> : activeView === "transfers" ? <PatrolTransfersView dataSourceMode={dataSourceMode} /> : activeView === "appeals" ? <PatrolAppealsView dataSourceMode={dataSourceMode} /> : activeView === "remarks" ? (
         <FoundRemarksView dataSourceMode={dataSourceMode} onNotify={onNotify} />
       ) : activeView === "requests" ? (
         <PatrolRequestHistory

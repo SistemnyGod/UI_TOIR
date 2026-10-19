@@ -668,6 +668,27 @@ export interface PatrolLateReportDto {
   payload?: unknown;
 }
 
+export interface PatrolAssignmentTransferDto {
+  id: string;
+  assignmentId: string;
+  patrolRequestId: string;
+  requestNumber: string;
+  routeName: string;
+  fromEmployeeId: string;
+  fromEmployeeName: string;
+  toEmployeeId: string;
+  toEmployeeName: string;
+  mode: "sameDevice" | "otherDevice" | string;
+  reason: string;
+  accountLogin: string;
+  statusBefore: string;
+  statusAfter: string;
+  carriedPointCount: number;
+  currentAssignmentStatus: string;
+  transferredAtLocal: string;
+  receivedAt: string;
+}
+
 export interface InventoryOverviewDto {
   employeesTotal: number;
   itemsTotal: number;

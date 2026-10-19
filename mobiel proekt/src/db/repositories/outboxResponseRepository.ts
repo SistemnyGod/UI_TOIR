@@ -17,6 +17,7 @@ import { getPointResultSyncUpdate } from "@/domain/patrol/pointResultSyncPolicy"
 import { resolveRemappedAssignmentStatus } from "@/domain/patrol/assignmentIdentityPolicy";
 
 import type { OutboxRetryReason } from './outboxTypes';
+import { applyPatrolTransferResponseInTransaction } from "@/db/repositories/patrolTransferSync";
 
 const maxRecoverableLifecycleAttempts = 6;
 const exhaustedLifecycleMessage = "Сервер не принимает действие: обход уже закрыт или изменён на сервере. Нужно решение диспетчера, локальные данные сохранены.";
@@ -355,6 +356,8 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
           response.clientOperationId
         ]
       );
+
+      await applyPatrolTransferResponseInTransaction(tx, ownerUserId, response);
 
       if (response.status === "accepted" || response.status === "duplicate") {
         const command = await tx.getFirstAsync<{
@@ -861,6 +864,10 @@ export async function applyOutboxResponses(ownerUserId: string, responses: Outbo
             );
             continue;
           }
+          // A refused handover was already given back to the previous
+          // performer (applyPatrolTransferResponseInTransaction); the patrol
+          // itself stays usable.
+          if (command.command_type === "transferPatrolAssignment" && !isCancelledByServer) continue;
           if (assignmentId) {
             if (isCancelledByServer) {
               await finalizeCancelledAssignmentInTransaction(tx, command.owner_user_id, assignmentId);

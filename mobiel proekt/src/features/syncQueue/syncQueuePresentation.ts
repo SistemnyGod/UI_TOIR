@@ -96,6 +96,8 @@ export function commandTitle(command: Pick<SyncQueueCommandItem, "commandType">)
       return "Продолжение обхода";
     case "handoffPatrolAssignment":
       return "Передача диспетчеру";
+    case "transferPatrolAssignment":
+      return "Передача обхода коллеге";
     case "markPatrolPointOk":
       return "Метка исправна";
     case "markPatrolPointIssue":

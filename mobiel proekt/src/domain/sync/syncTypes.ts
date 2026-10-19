@@ -25,6 +25,7 @@ export type OutboxCommandType =
   | "pausePatrolAssignment"
   | "resumePatrolAssignment"
   | "handoffPatrolAssignment"
+  | "transferPatrolAssignment"
   | "scanPatrolPointNfc"
   | "scanPatrolPointQr"
   | "markPatrolPointOk"

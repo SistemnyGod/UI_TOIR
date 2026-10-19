@@ -10,6 +10,7 @@ import { resolveBootstrapAssignmentStatus } from "@/domain/sync/bootstrapResolut
 import { getSnapshotRefreshPlan } from "@/domain/patrol/snapshotPolicy";
 import { resolveAssignmentSnapshot } from "@/domain/patrol/assignmentSnapshot";
 import { isPatrolAssignmentCommand, resolvePatrolAssignmentIdentity } from "@/db/repositories/outboxPolicies";
+import { applyPatrolTransferBootstrapInTransaction } from "@/db/repositories/patrolTransferSync";
 
 const bootstrapScope = `bootstrap:${currentContourId}`;
 
@@ -567,6 +568,7 @@ export const ownerDataTableNames = [
   "users",
   "sync_cursors",
   "mobile_capabilities",
+  "patrol_transfer_state",
   "mobile_employees",
   "emu_sections",
   "work_form_drafts",
@@ -1388,7 +1390,8 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
           preserveLocalStatus ? 1 : 0
         ]
       );
-      await tx.runAsync("UPDATE patrol_assignments SET employee_id = COALESCE(?, employee_id) WHERE assignment_id = ? AND owner_user_id = ? AND contour_id = ?", [assignment.employeeId ?? null, assignment.assignmentId, ownerUserId, currentContourId]);
+      // A queued handover changed the performer locally; keep it until the server answers.
+      await tx.runAsync("UPDATE patrol_assignments SET employee_id = CASE WHEN ? = 1 THEN employee_id ELSE COALESCE(?, employee_id) END WHERE assignment_id = ? AND owner_user_id = ? AND contour_id = ?", [hasUnfinishedCommand ? 1 : 0, assignment.employeeId ?? null, assignment.assignmentId, ownerUserId, currentContourId]);
       await reconcileAssignmentIdentityInTransaction(tx, ownerUserId, assignment);
       if (!preserveLocalStatus && ["accepted", "inProgress", "paused", "completed", "completedServer", "cancelledServer"].includes(assignment.status)) {
         const requestStatus = assignment.status === "completedServer" ? "completed" : assignment.status;
@@ -1576,6 +1579,7 @@ async function saveBootstrapInTransaction(tx: SqlExecutor, bootstrap: BootstrapD
     for (const assignment of bootstrap.assignments) {
       await refreshAssignmentSnapshotInTransaction(tx, assignment, bootstrap);
     }
+    await applyPatrolTransferBootstrapInTransaction(tx, ownerUserId, bootstrap);
     for (const assignment of bootstrap.assignments) {
       if (!["completedServer", "cancelledServer"].includes(assignment.status)) {
         continue;

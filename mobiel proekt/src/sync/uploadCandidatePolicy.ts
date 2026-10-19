@@ -9,7 +9,8 @@ export function extractUploadClientFileIds(command: Pick<OutboxCommand, "command
     return readStringArray(command.payload.photoClientFileIds);
   }
 
-  if (command.commandType === "completePatrolAssignment") {
+  // A handover carries the filled points; their photos must reach the server first.
+  if (command.commandType === "completePatrolAssignment" || command.commandType === "transferPatrolAssignment") {
     const pointResults = command.payload.pointResults;
     if (!Array.isArray(pointResults)) {
       return [];
@@ -47,7 +48,8 @@ export function extractUploadFileReferences(command: OutboxCommand): UploadFileR
     return readStringArray(command.payload.photoClientFileIds).map((clientFileId) => ({ clientFileId, assignmentId, pointId }));
   }
 
-  if (command.commandType === "completePatrolAssignment") {
+  // A handover carries the filled points; their photos must reach the server first.
+  if (command.commandType === "completePatrolAssignment" || command.commandType === "transferPatrolAssignment") {
     const assignmentId = readString(command.payload.assignmentId) ?? entityId;
     const pointResults = command.payload.pointResults;
     if (!Array.isArray(pointResults)) {
